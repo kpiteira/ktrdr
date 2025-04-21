@@ -237,3 +237,20 @@ The AI should:
 2. Find relevant architectural guidance
 3. Generate a prompt following the template above
 4. Proceed with implementation
+5. **Always conclude with a complete Task Completion Report** including verification checklist, testing steps, and minimal working example
+
+## Mandatory Implementation Requirements
+
+Every task implementation **must** include the following elements regardless of task complexity:
+
+1. **Complete implementation** of all subtasks specified in the task breakdown
+2. **Working tests** that validate the implementation
+3. **Clear documentation** with docstrings and comments
+4. **A comprehensive Task Completion Report** that contains:
+   - Detailed verification checklist matching the task's success criteria
+   - Concrete testing steps with exact commands to run
+   - Expected output for each testing step
+   - A self-contained example that proves the functionality works
+   - Any additional troubleshooting guidance
+
+The implementation is not considered complete until the user can successfully verify all functionality using the provided Task Completion Report.

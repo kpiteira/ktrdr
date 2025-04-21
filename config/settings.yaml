@@ -1,0 +1,21 @@
+# Default KTRDR Configuration
+# This file contains the basic settings for the KTRDR application
+
+# Data storage and processing configuration
+data:
+  # Directory path for data storage (will be created if it doesn't exist)
+  directory: "./data"
+  # Default format for data files (csv supported in current version)
+  default_format: "csv"
+
+# Logging configuration
+logging:
+  # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  # Log file path (logs will be stored here if specified)
+  file_path: "./logs/ktrdr.log"
+  # Whether to output logs to console
+  console_output: true
+
+# Global debug flag (enables additional debug features when true)
+debug: false
