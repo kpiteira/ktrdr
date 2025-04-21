@@ -1,0 +1,11 @@
+# requirements.txt
+pandas>=2.0.0
+numpy>=1.24.0
+plotly>=5.13.0
+streamlit>=1.22.0
+torch>=2.0.0
+pydantic>=2.0.0
+typer>=0.9.0
+ib_insync>=0.9.85
+pandas-ta>=0.3.14b0
+pyyaml>=6.0.0
