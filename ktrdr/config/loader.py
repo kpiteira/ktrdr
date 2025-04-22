@@ -6,6 +6,7 @@ YAML files using Pydantic models.
 """
 
 import os
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Type, TypeVar, Union, cast
 
@@ -13,13 +14,21 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from ktrdr.config.models import KtrdrConfig
+from ktrdr.errors import (
+    ConfigurationError, 
+    MissingConfigurationError, 
+    InvalidConfigurationError, 
+    ConfigurationFileError,
+    ErrorHandler,
+    retry_with_backoff,
+    fallback,
+    FallbackStrategy
+)
 
 T = TypeVar('T', bound=BaseModel)
 
-
-class ConfigurationError(Exception):
-    """Exception raised for configuration-related errors."""
-    pass
+# Get module logger
+logger = logging.getLogger(__name__)
 
 
 class ConfigLoader:
@@ -29,6 +38,8 @@ class ConfigLoader:
         """Initialize the ConfigLoader."""
         pass
     
+    @retry_with_backoff(retryable_exceptions=[IOError, OSError], config=None)
+    @ErrorHandler.with_error_handling(logger=logger)
     def load(self, config_path: Union[str, Path], model_type: Type[T] = KtrdrConfig) -> T:
         """
         Load a YAML configuration file and validate it against a Pydantic model.
@@ -41,36 +52,52 @@ class ConfigLoader:
             A validated configuration object of type model_type
             
         Raises:
-            ConfigurationError: If the file cannot be loaded or validation fails
+            ConfigurationFileError: If the file cannot be found or accessed
+            InvalidConfigurationError: If the YAML format is invalid
+            ConfigurationError: If validation fails or another error occurs
         """
+        # Convert to Path object if string
+        if isinstance(config_path, str):
+            config_path = Path(config_path)
+            
+        # Check if file exists
+        if not config_path.exists():
+            raise ConfigurationFileError(
+                message=f"Configuration file not found: {config_path}",
+                error_code="CONF-FileNotFound",
+                details={"path": str(config_path)}
+            )
+            
+        # Load YAML file
         try:
-            # Convert to Path object if string
-            if isinstance(config_path, str):
-                config_path = Path(config_path)
-                
-            # Check if file exists
-            if not config_path.exists():
-                raise ConfigurationError(f"Configuration file not found: {config_path}")
-                
-            # Load YAML file
             with open(config_path, 'r') as file:
                 config_dict = yaml.safe_load(file)
                 
             # Handle empty file case
             if config_dict is None:
+                logger.warning(f"Empty configuration file: {config_path}")
                 config_dict = {}
                 
             # Validate with Pydantic model
-            config_obj = model_type(**config_dict)
-            return config_obj
-            
+            try:
+                config_obj = model_type(**config_dict)
+                logger.info(f"Successfully loaded configuration from {config_path}")
+                return config_obj
+            except ValidationError as e:
+                raise InvalidConfigurationError(
+                    message=f"Configuration validation failed: {e}",
+                    error_code="CONF-ValidationFailed",
+                    details={"validation_errors": e.errors()}
+                )
+                
         except yaml.YAMLError as e:
-            raise ConfigurationError(f"Invalid YAML format: {e}")
-        except ValidationError as e:
-            raise ConfigurationError(f"Configuration validation failed: {e}")
-        except Exception as e:
-            raise ConfigurationError(f"Failed to load configuration: {e}")
+            raise InvalidConfigurationError(
+                message=f"Invalid YAML format in {config_path}: {e}",
+                error_code="CONF-InvalidYaml",
+                details={"yaml_error": str(e)}
+            )
     
+    @fallback(strategy=FallbackStrategy.DEFAULT_VALUE, logger=logger)
     def load_from_env(
         self, 
         env_var: str = "KTRDR_CONFIG", 
@@ -89,15 +116,27 @@ class ConfigLoader:
             A validated configuration object of type model_type
             
         Raises:
-            ConfigurationError: If no valid configuration path is available or loading fails
+            MissingConfigurationError: If no valid configuration path is available
+            ConfigurationError: If loading fails for other reasons
         """
         config_path = os.environ.get(env_var)
         
         # If env var not set, use default path
         if not config_path and default_path is None:
-            raise ConfigurationError(
-                f"Environment variable {env_var} not set and no default path provided"
+            raise MissingConfigurationError(
+                message=f"Environment variable {env_var} not set and no default path provided",
+                error_code="CONF-MissingEnvVar",
+                details={"env_var": env_var}
             )
         
         path_to_use = config_path if config_path else default_path
-        return self.load(path_to_use, model_type)
+        logger.info(f"Loading configuration from {path_to_use} (from env var: {config_path is not None})")
+        try:
+            return self.load(path_to_use, model_type)
+        except ConfigurationError as e:
+            logger.error(f"Failed to load configuration from {path_to_use}: {e}")
+            if config_path and default_path:
+                # Try loading from default path as fallback if we were using env var
+                logger.warning(f"Attempting to load from default path: {default_path}")
+                return self.load(default_path, model_type)
+            raise

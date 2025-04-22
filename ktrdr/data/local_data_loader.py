@@ -6,6 +6,7 @@ with a configurable data directory.
 """
 
 import os
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -13,21 +14,21 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 
 from ktrdr.config import ConfigLoader
+from ktrdr.errors import (
+    DataError,
+    DataFormatError,
+    DataNotFoundError,
+    DataCorruptionError,
+    DataValidationError,
+    ErrorHandler,
+    retry_with_backoff,
+    fallback,
+    FallbackStrategy,
+    with_partial_results
+)
 
-
-class DataError(Exception):
-    """Base exception for data-related errors."""
-    pass
-
-
-class DataFormatError(DataError):
-    """Exception raised when data format is invalid."""
-    pass
-
-
-class DataNotFoundError(DataError):
-    """Exception raised when data file is not found."""
-    pass
+# Get module logger
+logger = logging.getLogger(__name__)
 
 
 class LocalDataLoader:
@@ -58,21 +59,44 @@ class LocalDataLoader:
             data_dir: Path to the directory containing data files.
                       If None, will use the path from configuration.
             default_format: Default file format (default: 'csv')
+                
+        Raises:
+            DataError: If the data directory path exists but is not a directory
         """
         if data_dir is None:
             # Load from configuration
-            config_loader = ConfigLoader()
-            config = config_loader.load('config/settings.yaml')
-            data_dir = config.data.directory
+            try:
+                config_loader = ConfigLoader()
+                config = config_loader.load('config/settings.yaml')
+                data_dir = config.data.directory
+                logger.info(f"Using data directory from config: {data_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to load configuration: {e}")
+                data_dir = "./data"  # Fallback to default
+                logger.info(f"Using fallback data directory: {data_dir}")
         
         self.data_dir = Path(data_dir)
         self.default_format = default_format
         
         # Create data directory if it doesn't exist
-        if not self.data_dir.exists():
-            self.data_dir.mkdir(parents=True)
-        elif not self.data_dir.is_dir():
-            raise DataError(f"Data path exists but is not a directory: {self.data_dir}")
+        try:
+            if not self.data_dir.exists():
+                logger.info(f"Creating data directory: {self.data_dir}")
+                self.data_dir.mkdir(parents=True)
+                logger.debug(f"Data directory created successfully")
+            elif not self.data_dir.is_dir():
+                raise DataError(
+                    message=f"Data path exists but is not a directory: {self.data_dir}",
+                    error_code="DATA-InvalidPath",
+                    details={"path": str(self.data_dir)}
+                )
+        except PermissionError as e:
+            logger.error(f"Permission error when creating data directory: {e}")
+            raise DataError(
+                message=f"Permission denied when creating data directory: {self.data_dir}",
+                error_code="DATA-PermissionDenied",
+                details={"path": str(self.data_dir)}
+            ) from e
     
     def _build_file_path(self, 
                          symbol: str, 
@@ -96,6 +120,15 @@ class LocalDataLoader:
         file_name = f"{symbol}_{timeframe}.{file_format}"
         return self.data_dir / file_name
     
+    @retry_with_backoff(
+        retryable_exceptions=[IOError, OSError],
+        config=None,
+        logger=logger
+    )
+    @fallback(
+        strategy=FallbackStrategy.LAST_KNOWN_GOOD,
+        logger=logger
+    )
     def load(self, 
              symbol: str, 
              timeframe: str, 
@@ -121,9 +154,19 @@ class LocalDataLoader:
             DataError: For other data-related errors
         """
         file_path = self._build_file_path(symbol, timeframe, file_format)
+        logger.info(f"Loading data for {symbol} ({timeframe}) from {file_path}")
         
         if not file_path.exists():
-            raise DataNotFoundError(f"Data file not found: {file_path}")
+            logger.error(f"Data file not found: {file_path}")
+            raise DataNotFoundError(
+                message=f"Data file not found: {file_path}",
+                error_code="DATA-FileNotFound",
+                details={
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "file_path": str(file_path)
+                }
+            )
         
         try:
             # Read the CSV file into a DataFrame
@@ -135,15 +178,36 @@ class LocalDataLoader:
             # Apply date filters if provided
             df = self._apply_date_filters(df, start_date, end_date)
             
+            logger.debug(f"Successfully loaded {len(df)} rows of data for {symbol} ({timeframe})")
             return df
             
         except pd.errors.EmptyDataError:
-            raise DataFormatError(f"Empty data file: {file_path}")
-        except pd.errors.ParserError:
-            raise DataFormatError(f"Invalid CSV format in file: {file_path}")
+            logger.error(f"Empty data file: {file_path}")
+            raise DataFormatError(
+                message=f"Empty data file: {file_path}",
+                error_code="DATA-EmptyFile",
+                details={"file_path": str(file_path)}
+            )
+        except pd.errors.ParserError as e:
+            logger.error(f"Invalid CSV format in file: {file_path}")
+            raise DataFormatError(
+                message=f"Invalid CSV format in file: {file_path}",
+                error_code="DATA-InvalidFormat",
+                details={"file_path": str(file_path), "parser_error": str(e)}
+            )
         except Exception as e:
-            raise DataError(f"Error reading data file {file_path}: {str(e)}")
+            logger.error(f"Error reading data file {file_path}: {str(e)}")
+            raise DataError(
+                message=f"Error reading data file {file_path}: {str(e)}",
+                error_code="DATA-ReadError",
+                details={"file_path": str(file_path), "error": str(e)}
+            )
     
+    @retry_with_backoff(
+        retryable_exceptions=[IOError, OSError],
+        config=None,
+        logger=logger
+    )
     def save(self, 
              df: pd.DataFrame, 
              symbol: str, 
@@ -166,9 +230,14 @@ class LocalDataLoader:
             DataError: For other data-related errors
         """
         # Validate the DataFrame before saving
-        self._validate_dataframe(df)
+        try:
+            self._validate_dataframe(df)
+        except DataFormatError as e:
+            logger.error(f"Cannot save invalid DataFrame: {e}")
+            raise
         
         file_path = self._build_file_path(symbol, timeframe, file_format)
+        logger.info(f"Saving data for {symbol} ({timeframe}) to {file_path}")
         
         try:
             # Create directory if it doesn't exist
@@ -176,11 +245,29 @@ class LocalDataLoader:
             
             # Save DataFrame to CSV
             df.to_csv(file_path)
+            logger.debug(f"Successfully saved {len(df)} rows of data to {file_path}")
             
             return file_path
             
+        except PermissionError as e:
+            logger.error(f"Permission denied when saving data to {file_path}: {e}")
+            raise DataError(
+                message=f"Permission denied when saving data to {file_path}",
+                error_code="DATA-SavePermissionDenied",
+                details={"file_path": str(file_path)}
+            ) from e
         except Exception as e:
-            raise DataError(f"Error saving data to {file_path}: {str(e)}")
+            logger.error(f"Error saving data to {file_path}: {e}")
+            raise DataError(
+                message=f"Error saving data to {file_path}: {str(e)}",
+                error_code="DATA-SaveError",
+                details={
+                    "file_path": str(file_path),
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "rows": len(df) if isinstance(df, pd.DataFrame) else "unknown"
+                }
+            ) from e
     
     def _validate_dataframe(self, df: pd.DataFrame) -> None:
         """
@@ -195,17 +282,30 @@ class LocalDataLoader:
         # Check for required columns
         missing_columns = [col for col in self.REQUIRED_COLUMNS if col not in df.columns]
         if missing_columns:
+            logger.error(f"DataFrame missing required columns: {', '.join(missing_columns)}")
             raise DataFormatError(
-                f"DataFrame missing required columns: {', '.join(missing_columns)}"
+                message=f"DataFrame missing required columns: {', '.join(missing_columns)}",
+                error_code="DATA-MissingColumns",
+                details={"missing_columns": missing_columns, "required_columns": self.REQUIRED_COLUMNS}
             )
         
         # Check that index is datetime
         if not isinstance(df.index, pd.DatetimeIndex):
-            raise DataFormatError("DataFrame index must be a DatetimeIndex")
+            logger.error("DataFrame index must be a DatetimeIndex")
+            raise DataFormatError(
+                message="DataFrame index must be a DatetimeIndex",
+                error_code="DATA-InvalidIndex",
+                details={"index_type": str(type(df.index))}
+            )
         
         # Check that the DataFrame has data
         if df.empty:
-            raise DataFormatError("DataFrame is empty")
+            logger.error("DataFrame is empty")
+            raise DataFormatError(
+                message="DataFrame is empty",
+                error_code="DATA-EmptyDataFrame",
+                details={}
+            )
     
     def _apply_date_filters(self, 
                            df: pd.DataFrame, 
@@ -234,6 +334,11 @@ class LocalDataLoader:
             
         return df
     
+    @fallback(
+        strategy=FallbackStrategy.DEFAULT_VALUE,
+        default_value=[],
+        logger=logger
+    )
     def get_available_data_files(self) -> List[Tuple[str, str]]:
         """
         Get a list of available data files in the data directory.
@@ -243,20 +348,45 @@ class LocalDataLoader:
         """
         result = []
         
-        if not self.data_dir.exists():
+        try:
+            if not self.data_dir.exists():
+                logger.warning(f"Data directory does not exist: {self.data_dir}")
+                return result
+                
+            logger.debug(f"Searching for data files in {self.data_dir}")
+            
+            for file_path in self.data_dir.glob(f"*.{self.default_format}"):
+                filename = file_path.name
+                # Parse the filename to extract symbol and timeframe
+                parts = filename.rsplit('.', 1)[0].split('_')
+                if len(parts) >= 2:
+                    symbol = parts[0]
+                    timeframe = parts[1]
+                    result.append((symbol, timeframe))
+            
+            logger.info(f"Found {len(result)} available data files")
             return result
             
-        for file_path in self.data_dir.glob(f"*.{self.default_format}"):
-            filename = file_path.name
-            # Parse the filename to extract symbol and timeframe
-            parts = filename.rsplit('.', 1)[0].split('_')
-            if len(parts) >= 2:
-                symbol = parts[0]
-                timeframe = parts[1]
-                result.append((symbol, timeframe))
-                
-        return result
+        except PermissionError as e:
+            logger.error(f"Permission error when accessing data directory: {e}")
+            raise DataError(
+                message=f"Permission denied when accessing data directory: {self.data_dir}",
+                error_code="DATA-PermissionDenied",
+                details={"path": str(self.data_dir)}
+            ) from e
+        except Exception as e:
+            logger.error(f"Error getting available data files: {e}")
+            raise DataError(
+                message=f"Error getting available data files: {str(e)}",
+                error_code="DATA-ListError",
+                details={"path": str(self.data_dir)}
+            ) from e
     
+    @retry_with_backoff(
+        retryable_exceptions=[IOError, OSError],
+        config=None,
+        logger=logger
+    )
     def get_data_date_range(self, 
                            symbol: str, 
                            timeframe: str,
@@ -276,8 +406,10 @@ class LocalDataLoader:
             DataFormatError: If the file exists but has invalid format
         """
         file_path = self._build_file_path(symbol, timeframe, file_format)
+        logger.debug(f"Checking date range for {symbol} ({timeframe}) in {file_path}")
         
         if not file_path.exists():
+            logger.debug(f"File does not exist: {file_path}")
             return None
             
         try:
@@ -291,10 +423,12 @@ class LocalDataLoader:
                 
                 # For large files, only read the last chunk
                 if file_size > 10_000:  # If file is larger than 10KB
+                    logger.debug(f"Large file detected ({file_size} bytes), reading only tail portion")
                     last_rows = pd.read_csv(file_path, index_col=0, parse_dates=True, skipfooter=0, 
                                            nrows=5, skiprows=lambda x: 0 < x < max(0, sum(1 for _ in open(file_path)) - 5))
                 else:
                     # For small files, just load everything
+                    logger.debug(f"Small file detected ({file_size} bytes), loading entire file")
                     df = pd.read_csv(file_path, index_col=0, parse_dates=True)
                     first_row = df.iloc[[0]]
                     last_rows = df.iloc[[-1]]
@@ -302,7 +436,27 @@ class LocalDataLoader:
             start_date = first_row.index[0]
             end_date = last_rows.index[-1]
             
+            logger.info(f"Data for {symbol} ({timeframe}) covers period from {start_date.date()} to {end_date.date()}")
             return start_date, end_date
             
+        except pd.errors.EmptyDataError:
+            logger.error(f"Empty data file: {file_path}")
+            raise DataFormatError(
+                message=f"Empty data file: {file_path}",
+                error_code="DATA-EmptyFile",
+                details={"file_path": str(file_path)}
+            )
+        except pd.errors.ParserError as e:
+            logger.error(f"Invalid CSV format in file: {file_path}")
+            raise DataFormatError(
+                message=f"Invalid CSV format in file: {file_path}",
+                error_code="DATA-InvalidFormat",
+                details={"file_path": str(file_path), "parser_error": str(e)}
+            )
         except Exception as e:
-            raise DataFormatError(f"Error extracting date range from {file_path}: {str(e)}")
+            logger.error(f"Error extracting date range from {file_path}: {e}")
+            raise DataFormatError(
+                message=f"Error extracting date range from {file_path}: {str(e)}",
+                error_code="DATA-DateRangeError",
+                details={"file_path": str(file_path), "error": str(e)}
+            )
