@@ -54,12 +54,23 @@ The specific subtasks are:
 Relevant requirements from the product requirements document:
 [paste any specific requirements or acceptance criteria]
 
+Error handling considerations:
+- Error types needed: [list relevant error types]
+- Operations that need retry mechanisms: [list operations]
+- Components that should use graceful degradation: [list components]
+
+Logging requirements:
+- Key events to log: [list important events]
+- Debug information needed: [list debug info]
+
 [Include any specific questions or clarifications needed]
 
 Please help me implement this component following the UV-based structure and project standards, providing:
 1. Directory and file structure
 2. Implementation code with proper typing and docstrings
-3. Basic tests to validate functionality
+3. Error handling with appropriate patterns from ktrdr.errors
+4. Consistent logging using the module-level logger
+5. Basic tests to validate functionality including error cases
 ```
 
 ### Module Interface Template
@@ -92,16 +103,101 @@ Please design a clean, well-typed interface for this module that:
    - Follow PEP 8 conventions
 
 3. **Error Handling**:
-   - Use the custom exception hierarchy defined in Task 1.4
-   - Add appropriate error handling for expected failure conditions
+   - Import from the `ktrdr.errors` package: exception types, decorators, and utilities
+   - Apply the appropriate error handling pattern for each operation type:
+     - File operations: Use retry for transient issues and specific error types (DataError)
+     - Network operations: Use retry with backoff and handle connection failures
+     - Configuration: Use fallbacks where appropriate and validate inputs
+   - Always include error codes and contextual details in exceptions
+   - Log errors before raising them
 
-4. **Testing**:
+4. **Logging**:
+   - Create a module-level logger in each file
+   - Use appropriate log levels based on the information importance
+   - Include relevant context in log messages (IDs, counts, states)
+   - Log at entry/exit points of significant operations
+   - Add debug logging for detailed troubleshooting information
+
+5. **Testing**:
    - Create tests in the appropriate test directory
    - Include both happy path and error case tests
+   - Test error handling and retry mechanisms
+   - Verify appropriate log messages are generated
 
 5. **Configuration**:
    - Use YAML-based configuration as defined in Task 1.2
    - Leverage Pydantic for configuration validation
+
+## Error Handling and Logging Standards
+
+### Error Handling Framework
+
+When implementing any component, follow these error handling standards:
+
+1. **Exception Hierarchy**:
+   - Use the custom exception hierarchy from `ktrdr.errors` 
+   - Choose the appropriate exception type based on the error category:
+     - `DataError`: For issues with missing, corrupt, or invalid data
+     - `ConnectionError`: For network issues, API timeouts, service unavailability
+     - `ConfigurationError`: For invalid settings or configuration problems
+     - `ProcessingError`: For calculation failures or unexpected results
+     - `SystemError`: For resource limitations, crashes, or environment issues
+
+2. **Error Messages and Context**:
+   - Include meaningful error messages with actionable information
+   - Use error codes with appropriate prefixes (e.g., "DATA-FileNotFound")
+   - Include a `details` dictionary with contextual information
+   - Format: `raise ErrorType(message="...", error_code="...", details={...})`
+
+3. **Error Handling Patterns**:
+   - **Retry with Backoff**: Apply to network operations or other potentially transient failures
+     ```python
+     @retry_with_backoff(retryable_exceptions=[ConnectionError], logger=logger)
+     def fetch_data(self):
+         # Implementation
+     ```
+   
+   - **Graceful Degradation**: For non-critical components that should not fail the entire operation
+     ```python
+     @fallback(strategy=FallbackStrategy.DEFAULT_VALUE, default_value=[], logger=logger)
+     def get_recommendations(self):
+         # Implementation
+     ```
+   
+   - **Centralized Error Handling**: For consistent error handling across components
+     ```python
+     @ErrorHandler.with_error_handling(logger=logger)
+     def process_data(self):
+         # Implementation
+     ```
+
+### Logging Standards
+
+All components must implement logging according to these guidelines:
+
+1. **Logger Setup**:
+   - Create a module-level logger: `logger = logging.getLogger(__name__)`
+   - Do not configure loggers in component code (configuration is handled by the logging system)
+
+2. **Log Levels**:
+   - `DEBUG`: Detailed information for diagnosing problems
+   - `INFO`: Confirmation that things are working as expected
+   - `WARNING`: Indication that something unexpected happened, but the program can still work
+   - `ERROR`: Due to a more serious problem, the software couldn't perform a function
+   - `CRITICAL`: A serious error indicating the program may be unable to continue running
+
+3. **Log Format**:
+   - Include context in log messages (e.g., object IDs, parameters, results)
+   - For entry/exit of important methods:
+     ```python
+     logger.info(f"Starting processing of {item_id} with parameters: {params}")
+     # Processing code
+     logger.info(f"Completed processing of {item_id}: {result_summary}")
+     ```
+
+4. **Error Logging**:
+   - Log exceptions before raising them or in except blocks
+   - Include the exception information: `logger.error(f"Failed to process item: {e}", exc_info=True)`
 
 ## Task Success Criteria
 
@@ -245,6 +341,32 @@ The AI should:
 4. Proceed with implementation
 5. **Always conclude with a complete Task Completion Report** including verification checklist, testing steps, and minimal working example
 
+## Verification-First Implementation
+
+A critical part of the AI Director's role is to ensure all tasks are properly verified and wrapped up. To achieve this, always follow the "Verification-First" approach:
+
+1. **Begin With The End In Mind**: 
+   - When starting any task, first identify all success criteria that will need to be verified
+   - Design verification tests BEFORE writing implementation code
+   - Create a draft verification checklist at the beginning of development
+
+2. **Integrated Verification**:
+   - While implementing, continuously update the verification checklist
+   - Write test cases alongside implementation code
+   - Keep track of clean-up steps that will be needed
+
+3. **Comprehensive Task Completion**:
+   - NEVER consider a task complete without the full Task Completion Report
+   - ALL FOUR elements must be present (Verification Checklist, Testing Steps, Working Example, Clean-up Instructions)
+   - The verification must be concrete and actionable (specific commands to run)
+
+4. **Reference Documentation**:
+   - Always refer to `specification/task_completion_checklist.md` for the complete verification requirements
+   - Use the checklist to validate that your Task Completion Report is complete
+   - The task is not complete until all items in the checklist are addressed
+
+As a critical implementation rule, the AI must ALWAYS reserve sufficient context for including the complete Task Completion Report at the end of each implementation. This is a non-negotiable requirement.
+
 ## Mandatory Implementation Requirements
 
 Every task implementation **must** include the following elements regardless of task complexity:
@@ -276,3 +398,23 @@ to:
 ```
 
 The implementation is not considered complete until the user can successfully verify all functionality using the provided Task Completion Report and the task checkboxes have been updated in the task breakdown document.
+
+## Implementation Checklist
+
+Before submitting a task implementation, verify:
+
+### Error Handling
+- [ ] All public methods use appropriate error types from the `ktrdr.errors` package
+- [ ] Error messages are clear and actionable
+- [ ] Error codes follow the established format (CATEGORY-ErrorName)
+- [ ] Detailed context is included in the `details` dictionary
+- [ ] Retry mechanisms are applied to appropriate operations
+- [ ] Fallback strategies are implemented for non-critical functions
+
+### Logging
+- [ ] Module-level logger is defined and used consistently
+- [ ] Appropriate log levels are used for different information
+- [ ] Log messages include relevant context
+- [ ] Entry/exit logs for significant operations
+- [ ] Errors are logged before being raised
+- [ ] No sensitive information is logged (credentials, tokens)
