@@ -171,7 +171,13 @@ At the end of each task implementation, the AI must provide the user with:
 
 3. **Self-Contained Example**:
    - A minimal working example showing the implemented feature in action
-   - This should be copy-pastable into a Python file for immediate testing
+   - This should be copy-pastable into a temporary Python file for immediate testing
+   - Include instructions for cleaning up temporary verification files after testing
+
+4. **Clean-up Instructions**:
+   - Clear directions on how to clean up any temporary verification scripts
+   - Guidance on what artifacts should be kept as part of the project structure
+   - Commands to run for removing temporary testing files
 
 Example completion report for Task 1.2:
 ```
@@ -251,6 +257,22 @@ Every task implementation **must** include the following elements regardless of 
    - Concrete testing steps with exact commands to run
    - Expected output for each testing step
    - A self-contained example that proves the functionality works
+   - Clean-up instructions for temporary verification scripts
    - Any additional troubleshooting guidance
+5. **Update the task checkboxes** in the task breakdown document to mark the task and all subtasks as completed
 
-The implementation is not considered complete until the user can successfully verify all functionality using the provided Task Completion Report.
+After implementation and verification, the AI should provide instructions to update the task breakdown document, changing the task status from:
+```markdown
+- [ ] **Task X.Y**: Task name
+  - [ ] Subtask 1
+  - [ ] Subtask 2
+```
+
+to:
+```markdown
+- [x] **Task X.Y**: Task name
+  - [x] Subtask 1
+  - [x] Subtask 2
+```
+
+The implementation is not considered complete until the user can successfully verify all functionality using the provided Task Completion Report and the task checkboxes have been updated in the task breakdown document.
