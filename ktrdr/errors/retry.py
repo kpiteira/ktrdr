@@ -7,15 +7,20 @@ for handling transient errors in network operations.
 
 import time
 import random
-import logging
 import functools
 from typing import Callable, TypeVar, Any, Optional, Type, Union, List, Tuple, cast
+
+# Import the new logging system
+from ktrdr import get_logger, log_error
 
 from ktrdr.errors.exceptions import RetryableError, MaxRetriesExceededError
 
 
 # Type variable for functions that can be decorated with retry
 T = TypeVar('T')
+
+# Get module logger
+logger = get_logger(__name__)
 
 
 class RetryConfig:
@@ -87,7 +92,7 @@ def retry_with_backoff(
     config: Optional[RetryConfig] = None,
     on_retry: Optional[Callable[[Exception, int, float], None]] = None,
     is_retryable: Optional[Callable[[Exception], bool]] = None,
-    logger: Optional[logging.Logger] = None
+    logger=None
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """
     Decorator for retrying functions with exponential backoff.
@@ -117,7 +122,7 @@ def retry_with_backoff(
         config = RetryConfig()
         
     # Get logger reference
-    log = logger or logging.getLogger()
+    log = logger or get_logger(__name__)
     
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
@@ -162,7 +167,7 @@ def retry_with_backoff(
                     # Calculate delay for this retry attempt
                     delay = calculate_delay(attempt, config)
                     
-                    # Log the retry
+                    # Log the retry using the new logging system
                     log.warning(
                         f"Retrying {func.__name__} due to {type(e).__name__}: {str(e)}. "
                         f"Attempt {attempt+1}/{config.max_retries} after {delay:.2f}s delay."

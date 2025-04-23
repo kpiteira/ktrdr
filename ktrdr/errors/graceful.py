@@ -7,15 +7,20 @@ operating with reduced functionality.
 """
 
 import functools
-import logging
 from enum import Enum, auto
 from typing import Callable, TypeVar, Any, Optional, Dict, List, Union, Tuple, cast
+
+# Import the new logging system
+from ktrdr import get_logger
 
 from ktrdr.errors.exceptions import FallbackNotAvailableError
 
 
 # Type variable for functions that can use fallback strategies
 T = TypeVar('T')
+
+# Get module logger
+logger = get_logger(__name__)
 
 
 class FallbackStrategy(Enum):
@@ -39,7 +44,7 @@ def fallback(
     default_value: Any = None,
     fallback_function: Optional[Callable[..., Any]] = None,
     max_cache_size: int = 10,
-    logger: Optional[logging.Logger] = None
+    logger=None
 ) -> Callable[[Callable[..., T]], Callable[..., Any]]:
     """
     Decorator to add graceful degradation to a function.
@@ -67,7 +72,7 @@ def fallback(
     result_cache: Dict[int, Any] = {}
     
     # Get logger reference
-    log = logger or logging.getLogger()
+    log = logger or get_logger(__name__)
     
     def decorator(func: Callable[..., T]) -> Callable[..., Any]:
         @functools.wraps(func)
@@ -94,7 +99,7 @@ def fallback(
                 return result
             
             except Exception as e:
-                # Log the error
+                # Log the error using the new logging system
                 log.warning(
                     f"Function {func.__name__} failed with {type(e).__name__}: {str(e)}. "
                     f"Applying fallback strategy: {strategy.name}"
@@ -131,7 +136,7 @@ def fallback(
 
 
 def with_partial_results(
-    logger: Optional[logging.Logger] = None
+    logger=None
 ) -> Callable[[Callable[..., List[Any]]], Callable[..., List[Any]]]:
     """
     Decorator for functions that return lists, allowing partial results even if some items fail.
@@ -151,7 +156,7 @@ def with_partial_results(
             return [process_item(item) for item in items]  # Some might fail
     """
     # Get logger reference
-    log = logger or logging.getLogger()
+    log = logger or get_logger(__name__)
     
     def decorator(func: Callable[..., List[Any]]) -> Callable[..., List[Any]]:
         @functools.wraps(func)

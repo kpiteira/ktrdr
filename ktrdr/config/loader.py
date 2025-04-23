@@ -6,12 +6,14 @@ YAML files using Pydantic models.
 """
 
 import os
-import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Type, TypeVar, Union, cast
 
 import yaml
 from pydantic import BaseModel, ValidationError
+
+# Import the new logging system
+from ktrdr import get_logger, log_entry_exit, log_error
 
 from ktrdr.config.models import KtrdrConfig
 from ktrdr.errors import (
@@ -28,7 +30,7 @@ from ktrdr.errors import (
 T = TypeVar('T', bound=BaseModel)
 
 # Get module logger
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ConfigLoader:
@@ -38,8 +40,9 @@ class ConfigLoader:
         """Initialize the ConfigLoader."""
         pass
     
-    @retry_with_backoff(retryable_exceptions=[IOError, OSError], config=None)
+    @retry_with_backoff(retryable_exceptions=[IOError, OSError], logger=logger)
     @ErrorHandler.with_error_handling(logger=logger)
+    @log_entry_exit(logger=logger)
     def load(self, config_path: Union[str, Path], model_type: Type[T] = KtrdrConfig) -> T:
         """
         Load a YAML configuration file and validate it against a Pydantic model.
@@ -98,6 +101,7 @@ class ConfigLoader:
             )
     
     @fallback(strategy=FallbackStrategy.DEFAULT_VALUE, logger=logger)
+    @log_entry_exit(logger=logger, log_result=True)
     def load_from_env(
         self, 
         env_var: str = "KTRDR_CONFIG", 
@@ -134,7 +138,9 @@ class ConfigLoader:
         try:
             return self.load(path_to_use, model_type)
         except ConfigurationError as e:
-            logger.error(f"Failed to load configuration from {path_to_use}: {e}")
+            # Use log_error from our new logging system
+            log_error(e, logger=logger, extra={"path": str(path_to_use)})
+            
             if config_path and default_path:
                 # Try loading from default path as fallback if we were using env var
                 logger.warning(f"Attempting to load from default path: {default_path}")

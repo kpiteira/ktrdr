@@ -6,8 +6,10 @@ and utilities for generating user-friendly error messages.
 """
 
 import traceback
-import logging
 from typing import Dict, Any, Optional, Type, List, Callable, Union, TypeVar
+
+# Import the new logging system
+from ktrdr import get_logger, log_error
 
 from ktrdr.errors.exceptions import (
     KtrdrError,
@@ -20,6 +22,9 @@ from ktrdr.errors.exceptions import (
 
 # Type variable for error handler functions
 T = TypeVar('T')
+
+# Get module logger
+logger = get_logger(__name__)
 
 
 class ErrorHandler:
@@ -111,7 +116,7 @@ class ErrorHandler:
         error: Exception, 
         log_error: bool = True,
         raise_error: bool = True,
-        logger: Optional[logging.Logger] = None
+        logger=None
     ) -> Dict[str, Any]:
         """
         Handle an error according to its type.
@@ -120,7 +125,7 @@ class ErrorHandler:
             error: The exception to handle
             log_error: Whether to log the error
             raise_error: Whether to re-raise the error after handling
-            logger: Optional logger to use, defaults to root logger
+            logger: Optional logger to use, defaults to module logger
             
         Returns:
             Dictionary with error details
@@ -142,12 +147,16 @@ class ErrorHandler:
             'recovery_steps': get_recovery_steps(error)
         }
         
-        # Log error if requested
+        # Log error if requested using the new logging system
         if log_error:
-            log = logger or logging.getLogger()
-            log.error(
-                f"{category.upper()} ERROR: {error_details['message']}", 
-                exc_info=error
+            log = logger or get_logger(__name__)
+            log_error(
+                error,
+                logger=log,
+                extra={
+                    'category': category,
+                    'error_code': error_details['error_code']
+                }
             )
         
         # Re-raise if requested
@@ -159,14 +168,24 @@ class ErrorHandler:
     @classmethod
     def with_error_handling(
         cls,
-        func: Callable[..., T],
+        func: Callable[..., T] = None,
         log_error: bool = True,
         raise_error: bool = True,
-        logger: Optional[logging.Logger] = None,
+        logger=None,
         fallback_value: Optional[Any] = None
-    ) -> Callable[..., Union[T, Any]]:
+    ) -> Union[Callable[..., Union[T, Any]], Callable[[Callable[..., T]], Callable[..., Union[T, Any]]]]:
         """
         Decorator to add error handling to a function.
+        
+        Can be used as a decorator with or without arguments:
+        
+        @ErrorHandler.with_error_handling
+        def my_function():
+            ...
+            
+        @ErrorHandler.with_error_handling(log_error=True, raise_error=False)
+        def my_function():
+            ...
         
         Args:
             func: The function to decorate
@@ -176,21 +195,27 @@ class ErrorHandler:
             fallback_value: Value to return if an error occurs and raise_error is False
             
         Returns:
-            Decorated function with error handling
+            Decorated function with error handling or a decorator
         """
-        def wrapper(*args: Any, **kwargs: Any) -> Union[T, Any]:
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                cls.handle_error(
-                    e, 
-                    log_error=log_error,
-                    raise_error=raise_error,
-                    logger=logger
-                )
-                return fallback_value
-                
-        return wrapper
+        def decorator(func_to_decorate: Callable[..., T]) -> Callable[..., Union[T, Any]]:
+            def wrapper(*args: Any, **kwargs: Any) -> Union[T, Any]:
+                try:
+                    return func_to_decorate(*args, **kwargs)
+                except Exception as e:
+                    cls.handle_error(
+                        e, 
+                        log_error=log_error,
+                        raise_error=raise_error,
+                        logger=logger
+                    )
+                    return fallback_value
+            return wrapper
+            
+        # Handle case where decorator is used without arguments
+        if func is not None:
+            return decorator(func)
+            
+        return decorator
 
 
 def error_to_user_message(error: Exception) -> str:

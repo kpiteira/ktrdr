@@ -6,12 +6,21 @@ with a configurable data directory.
 """
 
 import os
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
+
+# Import the new logging system
+from ktrdr import (
+    get_logger, 
+    log_entry_exit, 
+    log_performance, 
+    log_data_operation, 
+    log_error,
+    with_context
+)
 
 from ktrdr.config import ConfigLoader
 from ktrdr.errors import (
@@ -28,7 +37,7 @@ from ktrdr.errors import (
 )
 
 # Get module logger
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LocalDataLoader:
@@ -91,7 +100,7 @@ class LocalDataLoader:
                     details={"path": str(self.data_dir)}
                 )
         except PermissionError as e:
-            logger.error(f"Permission error when creating data directory: {e}")
+            log_error(e, logger=logger)
             raise DataError(
                 message=f"Permission denied when creating data directory: {self.data_dir}",
                 error_code="DATA-PermissionDenied",
@@ -129,6 +138,8 @@ class LocalDataLoader:
         strategy=FallbackStrategy.LAST_KNOWN_GOOD,
         logger=logger
     )
+    @log_data_operation(operation="load", data_type="price data", logger=logger)
+    @log_entry_exit(logger=logger, log_args=True)
     def load(self, 
              symbol: str, 
              timeframe: str, 
@@ -189,14 +200,14 @@ class LocalDataLoader:
                 details={"file_path": str(file_path)}
             )
         except pd.errors.ParserError as e:
-            logger.error(f"Invalid CSV format in file: {file_path}")
+            log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
                 message=f"Invalid CSV format in file: {file_path}",
                 error_code="DATA-InvalidFormat",
                 details={"file_path": str(file_path), "parser_error": str(e)}
             )
         except Exception as e:
-            logger.error(f"Error reading data file {file_path}: {str(e)}")
+            log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataError(
                 message=f"Error reading data file {file_path}: {str(e)}",
                 error_code="DATA-ReadError",
@@ -208,6 +219,8 @@ class LocalDataLoader:
         config=None,
         logger=logger
     )
+    @log_data_operation(operation="save", data_type="price data", logger=logger)
+    @log_entry_exit(logger=logger, log_args=True)
     def save(self, 
              df: pd.DataFrame, 
              symbol: str, 
@@ -233,7 +246,7 @@ class LocalDataLoader:
         try:
             self._validate_dataframe(df)
         except DataFormatError as e:
-            logger.error(f"Cannot save invalid DataFrame: {e}")
+            log_error(e, logger=logger)
             raise
         
         file_path = self._build_file_path(symbol, timeframe, file_format)
@@ -250,14 +263,14 @@ class LocalDataLoader:
             return file_path
             
         except PermissionError as e:
-            logger.error(f"Permission denied when saving data to {file_path}: {e}")
+            log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataError(
                 message=f"Permission denied when saving data to {file_path}",
                 error_code="DATA-SavePermissionDenied",
                 details={"file_path": str(file_path)}
             ) from e
         except Exception as e:
-            logger.error(f"Error saving data to {file_path}: {e}")
+            log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataError(
                 message=f"Error saving data to {file_path}: {str(e)}",
                 error_code="DATA-SaveError",
@@ -269,6 +282,7 @@ class LocalDataLoader:
                 }
             ) from e
     
+    @with_context(operation_name="validate_dataframe")
     def _validate_dataframe(self, df: pd.DataFrame) -> None:
         """
         Validate that the DataFrame has the required OHLCV structure.
@@ -339,6 +353,7 @@ class LocalDataLoader:
         default_value=[],
         logger=logger
     )
+    @log_entry_exit(logger=logger)
     def get_available_data_files(self) -> List[Tuple[str, str]]:
         """
         Get a list of available data files in the data directory.
@@ -368,14 +383,14 @@ class LocalDataLoader:
             return result
             
         except PermissionError as e:
-            logger.error(f"Permission error when accessing data directory: {e}")
+            log_error(e, logger=logger)
             raise DataError(
                 message=f"Permission denied when accessing data directory: {self.data_dir}",
                 error_code="DATA-PermissionDenied",
                 details={"path": str(self.data_dir)}
             ) from e
         except Exception as e:
-            logger.error(f"Error getting available data files: {e}")
+            log_error(e, logger=logger)
             raise DataError(
                 message=f"Error getting available data files: {str(e)}",
                 error_code="DATA-ListError",
@@ -387,6 +402,7 @@ class LocalDataLoader:
         config=None,
         logger=logger
     )
+    @log_performance(threshold_ms=100, logger=logger)
     def get_data_date_range(self, 
                            symbol: str, 
                            timeframe: str,
@@ -447,14 +463,14 @@ class LocalDataLoader:
                 details={"file_path": str(file_path)}
             )
         except pd.errors.ParserError as e:
-            logger.error(f"Invalid CSV format in file: {file_path}")
+            log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
                 message=f"Invalid CSV format in file: {file_path}",
                 error_code="DATA-InvalidFormat",
                 details={"file_path": str(file_path), "parser_error": str(e)}
             )
         except Exception as e:
-            logger.error(f"Error extracting date range from {file_path}: {e}")
+            log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
                 message=f"Error extracting date range from {file_path}: {str(e)}",
                 error_code="DATA-DateRangeError",
