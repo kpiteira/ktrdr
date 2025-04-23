@@ -176,8 +176,14 @@ When implementing any component, follow these error handling standards:
 All components must implement logging according to these guidelines:
 
 1. **Logger Setup**:
-   - Create a module-level logger: `logger = logging.getLogger(__name__)`
-   - Do not configure loggers in component code (configuration is handled by the logging system)
+   - Import the logging system from the main `ktrdr` package:
+     ```python
+     from ktrdr import get_logger
+     
+     # Create a module-level logger
+     logger = get_logger(__name__)
+     ```
+   - Do not configure loggers in component code (configuration is handled by the centralized system)
 
 2. **Log Levels**:
    - `DEBUG`: Detailed information for diagnosing problems
@@ -186,18 +192,60 @@ All components must implement logging according to these guidelines:
    - `ERROR`: Due to a more serious problem, the software couldn't perform a function
    - `CRITICAL`: A serious error indicating the program may be unable to continue running
 
-3. **Log Format**:
-   - Include context in log messages (e.g., object IDs, parameters, results)
-   - For entry/exit of important methods:
+3. **Logging Helper Decorators**:
+   - Use the provided decorators for common patterns:
      ```python
-     logger.info(f"Starting processing of {item_id} with parameters: {params}")
-     # Processing code
-     logger.info(f"Completed processing of {item_id}: {result_summary}")
+     from ktrdr import log_entry_exit, log_performance, log_data_operation
+     
+     @log_entry_exit(log_args=True, log_result=True)
+     def important_function(param1, param2):
+         # Function code
+         
+     @log_performance(threshold_ms=100)
+     def performance_sensitive_function():
+         # Function code
+         
+     @log_data_operation(operation="load", data_type="price data")
+     def load_prices(symbol):
+         # Function code
      ```
 
-4. **Error Logging**:
-   - Log exceptions before raising them or in except blocks
-   - Include the exception information: `logger.error(f"Failed to process item: {e}", exc_info=True)`
+4. **Context Enrichment**:
+   - Use the context enrichment decorator for complex operations:
+     ```python
+     from ktrdr import with_context
+     
+     @with_context(operation_name="data_processing", include_args=True)
+     def process_data(parameters):
+         # Processing code
+     ```
+
+5. **Error Logging**:
+   - Use the specialized error logging helper:
+     ```python
+     from ktrdr import log_error
+     
+     try:
+         # Operation code
+     except Exception as e:
+         log_error(e, include_traceback=True)
+         raise
+     ```
+
+6. **Debug Mode**:
+   - Use the debug mode utilities for conditional verbose logging:
+     ```python
+     from ktrdr import set_debug_mode, is_debug_mode
+     
+     # Check if debug mode is enabled
+     if is_debug_mode():
+         logger.debug("Detailed diagnostic information")
+         
+     # Enable debug mode for a specific section
+     set_debug_mode(True)
+     # Operations that need debug logging
+     set_debug_mode(False)
+     ```
 
 ## Task Success Criteria
 
