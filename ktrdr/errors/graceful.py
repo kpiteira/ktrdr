@@ -121,14 +121,17 @@ def fallback(
                         log.info(f"Returning last known good result for {func.__name__}")
                         return result_cache[args_hash]
                     else:
-                        log.warning(f"No last known good result available for {func.__name__}")
-                        # Fall through to CONTINUE_WITHOUT if no cached result
+                        log.warning(f"No last known good result available for {func.__name__}, returning default value")
+                        # Return default_value when no cached result is available
+                        return default_value
                 
                 elif strategy == FallbackStrategy.CONTINUE_WITHOUT:
                     return None
                 
-                # If we get here, the strategy is not handled
-                raise ValueError(f"Unhandled fallback strategy: {strategy}")
+                else:
+                    # Log error and raise ValueError for unhandled strategy
+                    log.error(f"Unhandled fallback strategy: {strategy}")
+                    raise ValueError(f"Unhandled fallback strategy: {strategy}")
                 
         return wrapper
         

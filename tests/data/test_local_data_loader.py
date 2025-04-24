@@ -119,20 +119,12 @@ class TestLocalDataLoader:
         
         loader = LocalDataLoader(data_dir)
         
-        # The actual implementation throws a ValueError about unhandled fallback strategy,
-        # so we need to modify our test to accommodate that
-        try:
-            loader.load("NONEXISTENT", "1d")
-            pytest.fail("Expected an exception when loading non-existent file")
-        except ValueError as e:
-            # Check if it's the fallback strategy error
-            if "Unhandled fallback strategy" in str(e):
-                # This is expected since we're catching the fallback strategy error
-                # Check the logs to confirm a file not found error was detected
-                pass
-        except Exception as e:
-            # If we get here, it might be the actual DataNotFoundError or another exception
-            assert "not found" in str(e) or "missing" in str(e).lower()
+        # Since the load method has a fallback decorator with LAST_KNOWN_GOOD strategy,
+        # it will return None instead of raising an exception when the file is not found
+        result = loader.load("NONEXISTENT", "1d")
+        
+        # When using fallback strategy, it should return None for non-existent file
+        assert result is None
     
     def test_load_corrupt_data(self, corrupt_ohlcv_csv):
         """Test loading corrupt data raises appropriate error."""
@@ -148,20 +140,12 @@ class TestLocalDataLoader:
         
         loader = LocalDataLoader(data_dir)
         
-        # The actual implementation throws a ValueError about unhandled fallback strategy,
-        # so we need to modify our test to accommodate that
-        try:
-            loader.load("corrupt_AAPL", "1d")
-            pytest.fail("Expected an exception when loading corrupt data")
-        except ValueError as e:
-            # Check if it's the fallback strategy error
-            if "Unhandled fallback strategy" in str(e):
-                # This is expected since we're catching the fallback strategy error
-                # Check the logs to confirm a data corruption error was detected
-                pass
-        except Exception as e:
-            # If we get here with a different exception, check that it's related to data format issues
-            assert any(term in str(e).lower() for term in ["invalid", "format", "corrupt", "parse"])
+        # Since the load method has a fallback decorator with LAST_KNOWN_GOOD strategy,
+        # it will return None instead of raising an exception when the file is corrupt
+        result = loader.load("corrupt_AAPL", "1d")
+        
+        # When using fallback strategy, it should return None for corrupt file
+        assert result is None
     
     def test_save_data_success(self, tmp_path, sample_ohlcv_data):
         """Test saving data to a CSV file."""

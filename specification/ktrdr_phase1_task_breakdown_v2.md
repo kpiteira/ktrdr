@@ -89,16 +89,16 @@ A working command-line tool that can:
   - [x] Define standard compute() method signature
   - [x] Implement parameter validation logic
 
-- [ ] **Task 2.2**: Implement first indicators
-  - [ ] Create RSIIndicator class
-  - [ ] Implement Moving Average indicators (SMA, EMA)
-  - [ ] Add unit tests with reference values
+- [x] **Task 2.2**: Implement first indicators
+  - [x] Create RSIIndicator class
+  - [x] Implement Moving Average indicators (SMA, EMA)
+  - [x] Add unit tests with reference values
 
 ### Data Management Tasks
-- [ ] **Task 2.3**: Develop DataManager for local data
-  - [ ] Create DataManager class with flexible loading
-  - [ ] Implement data integrity checks
-  - [ ] Add utilities to detect missing values or gaps
+- [x] **Task 2.3**: Develop DataManager for local data
+  - [x] Create DataManager class with flexible loading
+  - [x] Implement data integrity checks
+  - [x] Add utilities to detect missing values or gaps
 
 ### Configuration Tasks
 - [ ] **Task 2.4**: Extend configuration for indicators

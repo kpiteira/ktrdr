@@ -209,32 +209,39 @@ class LocalDataLoader:
         """
         # Validate date parameters if provided
         try:
-            if start_date is not None and isinstance(start_date, str):
-                start_date = InputValidator.validate_date(
-                    start_date, 
-                    min_date="1900-01-01", 
-                    max_date=None
-                )
-                
-            if end_date is not None and isinstance(end_date, str):
-                end_date = InputValidator.validate_date(
-                    end_date, 
-                    min_date="1900-01-01", 
-                    max_date=None
-                )
-                
-            # Ensure end_date is after start_date if both are provided
-            if start_date is not None and end_date is not None:
+            # Convert string dates to datetime objects
+            start_dt = None
+            end_dt = None
+            
+            if start_date is not None:
                 start_dt = pd.to_datetime(start_date) if isinstance(start_date, str) else start_date
+                
+            if end_date is not None:
                 end_dt = pd.to_datetime(end_date) if isinstance(end_date, str) else end_date
                 
+            # Ensure end_date is after start_date if both are provided
+            if start_dt is not None and end_dt is not None:
                 if end_dt < start_dt:
                     raise ValidationError("End date must be after start date")
+                    
+            # Update start_date and end_date with the datetime objects for later use
+            start_date = start_dt
+            end_date = end_dt
+            
         except ValidationError as e:
             logger.error(f"Date validation error: {e}")
             raise DataValidationError(
                 message=f"Invalid date parameter: {e}",
                 error_code="DATA-InvalidDateRange",
+                details={"start_date": str(start_date) if start_date else None, 
+                        "end_date": str(end_date) if end_date else None}
+            )
+        except ValueError as e:
+            # Handle date parsing errors
+            logger.error(f"Date parsing error: {e}")
+            raise DataValidationError(
+                message=f"Invalid date format: {e}",
+                error_code="DATA-InvalidDateFormat",
                 details={"start_date": str(start_date) if start_date else None, 
                         "end_date": str(end_date) if end_date else None}
             )
