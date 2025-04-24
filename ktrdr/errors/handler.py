@@ -9,7 +9,7 @@ import traceback
 from typing import Dict, Any, Optional, Type, List, Callable, Union, TypeVar
 
 # Import the new logging system
-from ktrdr import get_logger, log_error
+from ktrdr import get_logger, log_error as log_exception
 
 from ktrdr.errors.exceptions import (
     KtrdrError,
@@ -124,7 +124,7 @@ class ErrorHandler:
     def handle_error(
         cls, 
         error: Exception, 
-        log_error: bool = True,
+        should_log_error: bool = True,
         raise_error: bool = True,
         logger=None
     ) -> Dict[str, Any]:
@@ -133,7 +133,7 @@ class ErrorHandler:
         
         Args:
             error: The exception to handle
-            log_error: Whether to log the error
+            should_log_error: Whether to log the error
             raise_error: Whether to re-raise the error after handling
             logger: Optional logger to use, defaults to module logger
             
@@ -158,9 +158,9 @@ class ErrorHandler:
         }
         
         # Log error if requested using the new logging system
-        if log_error:
+        if should_log_error:
             log = logger or get_logger(__name__)
-            log_error(
+            log_exception(
                 error,
                 logger=log,
                 extra={
@@ -214,7 +214,7 @@ class ErrorHandler:
                 except Exception as e:
                     cls.handle_error(
                         e, 
-                        log_error=log_error,
+                        should_log_error=log_error,
                         raise_error=raise_error,
                         logger=logger
                     )

@@ -61,10 +61,10 @@ Each vertical slice must:
   - [x] Create utility for secure loading of credentials
 
 ### Testing & CLI
-- [ ] **Task 1.7**: Set up basic testing infrastructure
-  - [ ] Configure pytest directory structure
-  - [ ] Create fixtures for test OHLCV data
-  - [ ] Write initial tests for config and data loading
+- [x] **Task 1.7**: Set up basic testing infrastructure
+  - [x] Configure pytest directory structure
+  - [x] Create fixtures for test OHLCV data
+  - [x] Write initial tests for config and data loading
 
 - [ ] **Task 1.8**: Create simple CLI for data inspection
   - [ ] Set up Typer CLI framework
