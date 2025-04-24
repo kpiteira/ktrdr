@@ -5,7 +5,7 @@ This module defines the structure and validation rules for KTRDR configuration.
 """
 
 from pathlib import Path
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict, Union
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -62,6 +62,35 @@ class SecurityConfig(BaseModel):
     )
 
 
+class IndicatorConfig(BaseModel):
+    """Configuration for a technical indicator."""
+    
+    type: str = Field(..., description="The type/class of indicator")
+    name: Optional[str] = Field(None, description="Custom name for the indicator")
+    params: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parameters for indicator initialization"
+    )
+    
+    @field_validator("type")
+    @classmethod
+    def validate_indicator_type(cls, v: str) -> str:
+        """Validate that the indicator type is not empty."""
+        v = v.strip()
+        if not v:
+            raise ValueError("Indicator type cannot be empty")
+        return v
+
+
+class IndicatorsConfig(BaseModel):
+    """Configuration for all indicators."""
+    
+    indicators: List[IndicatorConfig] = Field(
+        default_factory=list,
+        description="List of indicator configurations"
+    )
+
+
 class KtrdrConfig(BaseModel):
     """Root configuration model for KTRDR."""
     
@@ -69,3 +98,4 @@ class KtrdrConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     debug: bool = Field(False, description="Global debug flag")
+    indicators: Optional[IndicatorsConfig] = Field(None, description="Indicator configurations")

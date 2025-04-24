@@ -101,10 +101,10 @@ A working command-line tool that can:
   - [x] Add utilities to detect missing values or gaps
 
 ### Configuration Tasks
-- [ ] **Task 2.4**: Extend configuration for indicators
-  - [ ] Add indicator configuration schema
-  - [ ] Implement IndicatorFactory class
-  - [ ] Create sample indicator configurations
+- [x] **Task 2.4**: Extend configuration for indicators
+  - [x] Add indicator configuration schema
+  - [x] Implement IndicatorFactory class
+  - [x] Create sample indicator configurations
 
 ### CLI Enhancement
 - [ ] **Task 2.5**: Extend CLI for indicators

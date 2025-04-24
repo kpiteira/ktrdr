@@ -8,10 +8,12 @@ used for trading analysis and decision making.
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.rsi_indicator import RSIIndicator
 from ktrdr.indicators.ma_indicators import SimpleMovingAverage, ExponentialMovingAverage
+from ktrdr.indicators.indicator_factory import IndicatorFactory
 
 __all__ = [
     'BaseIndicator',
     'RSIIndicator',
     'SimpleMovingAverage', 
-    'ExponentialMovingAverage'
+    'ExponentialMovingAverage',
+    'IndicatorFactory'
 ]

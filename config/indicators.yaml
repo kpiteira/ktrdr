@@ -1,0 +1,62 @@
+# Sample indicator configurations for KTRDR
+#
+# This file contains examples of how to configure technical indicators.
+# Each indicator requires a 'type' specifying the indicator class
+# and optional 'params' for initialization parameters.
+
+indicators:
+  - type: RSI
+    params:
+      period: 14
+      source: close
+
+  - type: RSI
+    name: RSI_Short
+    params:
+      period: 7
+      source: close
+
+  - type: SMA
+    params:
+      period: 10
+      source: close
+
+  - type: SMA
+    name: SMA_Long
+    params:
+      period: 50
+      source: close
+
+  - type: EMA
+    params:
+      period: 12
+      source: close
+
+  - type: EMA
+    name: EMA_Long
+    params:
+      period: 26
+      source: close
+      adjust: true
+
+# Example showing a more complex configuration with multiple indicators
+# of different types. This demonstrates how to define a strategy
+# with multiple indicators.
+#
+# strategy:
+#   name: Simple Moving Average Crossover
+#   indicators:
+#     - type: SMA
+#       name: Fast
+#       params:
+#         period: 10
+#         source: close
+#     - type: SMA
+#       name: Slow
+#       params:
+#         period: 50
+#         source: close
+#     - type: RSI
+#       params:
+#         period: 14
+#         source: close
