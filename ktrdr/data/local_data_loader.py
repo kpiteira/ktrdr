@@ -22,7 +22,7 @@ from ktrdr import (
     with_context
 )
 
-from ktrdr.config import ConfigLoader
+from ktrdr.config import ConfigLoader, InputValidator, sanitize_parameter
 from ktrdr.errors import (
     DataError,
     DataFormatError,
@@ -33,7 +33,8 @@ from ktrdr.errors import (
     retry_with_backoff,
     fallback,
     FallbackStrategy,
-    with_partial_results
+    with_partial_results,
+    ValidationError
 )
 
 # Get module logger
@@ -71,7 +72,21 @@ class LocalDataLoader:
                 
         Raises:
             DataError: If the data directory path exists but is not a directory
+            ValidationError: If the default_format is invalid
         """
+        # Validate default_format using the new validation utilities
+        try:
+            default_format = InputValidator.validate_string(
+                default_format, 
+                allowed_values={"csv"}
+            )
+        except ValidationError as e:
+            raise DataError(
+                message=f"Invalid file format: {e.message}",
+                error_code="DATA-InvalidFormat",
+                details={"format": default_format}
+            )
+            
         if data_dir is None:
             # Load from configuration
             try:
@@ -84,6 +99,8 @@ class LocalDataLoader:
                 data_dir = "./data"  # Fallback to default
                 logger.info(f"Using fallback data directory: {data_dir}")
         
+        # Sanitize data_dir path
+        data_dir = sanitize_parameter("data_dir", data_dir)
         self.data_dir = Path(data_dir)
         self.default_format = default_format
         
@@ -121,13 +138,38 @@ class LocalDataLoader:
             
         Returns:
             Path object representing the file path
-        """
-        if file_format is None:
-            file_format = self.default_format
             
-        # Create a standardized file name: symbol_timeframe.format
-        file_name = f"{symbol}_{timeframe}.{file_format}"
-        return self.data_dir / file_name
+        Raises:
+            ValidationError: If inputs fail validation
+        """
+        # Validate inputs using the new validation utilities
+        try:
+            symbol = InputValidator.validate_string(
+                symbol, 
+                min_length=1, 
+                max_length=20, 
+                pattern=r'^[A-Za-z0-9_\-\.]+$'
+            )
+            
+            timeframe = InputValidator.validate_string(
+                timeframe, 
+                min_length=1, 
+                max_length=10, 
+                pattern=r'^[0-9]+[mhdwM]$|^[1-9][0-9]*\s+[a-zA-Z]+$'
+            )
+            
+            if file_format is not None:
+                file_format = InputValidator.validate_string(
+                    file_format, 
+                    allowed_values={"csv"}
+                )
+        except ValidationError as e:
+            logger.error(f"Validation error in _build_file_path: {e}")
+            raise
+        
+        format_to_use = file_format if file_format is not None else self.default_format
+        filename = f"{symbol}_{timeframe}.{format_to_use}"
+        return self.data_dir / filename
     
     @retry_with_backoff(
         retryable_exceptions=[IOError, OSError],
@@ -163,7 +205,40 @@ class LocalDataLoader:
             DataNotFoundError: If the data file is not found
             DataFormatError: If the data format is invalid
             DataError: For other data-related errors
+            ValidationError: If input validation fails
         """
+        # Validate date parameters if provided
+        try:
+            if start_date is not None and isinstance(start_date, str):
+                start_date = InputValidator.validate_date(
+                    start_date, 
+                    min_date="1900-01-01", 
+                    max_date=None
+                )
+                
+            if end_date is not None and isinstance(end_date, str):
+                end_date = InputValidator.validate_date(
+                    end_date, 
+                    min_date="1900-01-01", 
+                    max_date=None
+                )
+                
+            # Ensure end_date is after start_date if both are provided
+            if start_date is not None and end_date is not None:
+                start_dt = pd.to_datetime(start_date) if isinstance(start_date, str) else start_date
+                end_dt = pd.to_datetime(end_date) if isinstance(end_date, str) else end_date
+                
+                if end_dt < start_dt:
+                    raise ValidationError("End date must be after start date")
+        except ValidationError as e:
+            logger.error(f"Date validation error: {e}")
+            raise DataValidationError(
+                message=f"Invalid date parameter: {e}",
+                error_code="DATA-InvalidDateRange",
+                details={"start_date": str(start_date) if start_date else None, 
+                        "end_date": str(end_date) if end_date else None}
+            )
+                
         file_path = self._build_file_path(symbol, timeframe, file_format)
         logger.info(f"Loading data for {symbol} ({timeframe}) from {file_path}")
         

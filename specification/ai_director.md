@@ -247,6 +247,86 @@ All components must implement logging according to these guidelines:
      set_debug_mode(False)
      ```
 
+## Security Implementation Standards
+
+When implementing any new component or enhancing existing ones, follow these security standards:
+
+1. **Input Validation**:
+   - Always validate user-provided inputs using the `InputValidator` class from `ktrdr.config.validation`
+   - Apply appropriate validation rules based on the input type:
+     ```python
+     from ktrdr.config import InputValidator, sanitize_parameter
+     
+     # Validate string inputs
+     validated_string = InputValidator.validate_string(
+         input_string,
+         min_length=1,
+         max_length=100,
+         pattern=r'^[A-Za-z0-9_\-\.]+$'  # Example pattern
+     )
+     
+     # Validate date inputs
+     validated_date = InputValidator.validate_date(
+         input_date,
+         min_date="1900-01-01",
+         max_date=None  # No upper limit
+     )
+     
+     # Sanitize path parameters to prevent path traversal
+     safe_path = sanitize_parameter("path_param", user_provided_path)
+     ```
+
+2. **Path Security**:
+   - Sanitize all file paths to prevent path traversal attacks
+   - Validate file extensions for uploaded or processed files
+   - Use absolute paths when dealing with configuration or data files
+   - Example for secure path handling:
+     ```python
+     from pathlib import Path
+     from ktrdr.config import sanitize_parameter
+     
+     # Convert to absolute path and sanitize
+     raw_path = user_input
+     safe_path = sanitize_parameter("file_path", raw_path)
+     path_obj = Path(safe_path)
+     
+     # Ensure path is within allowed directories
+     allowed_dir = Path("/allowed/directory")
+     if not path_obj.is_relative_to(allowed_dir):
+         raise SecurityError("Path traversal attempt detected")
+     ```
+
+3. **Environment Variable Security**:
+   - Validate environment variable names against injection attempts
+   - Use pattern matching to ensure only valid characters are used
+   - Example:
+     ```python
+     env_var = InputValidator.validate_string(
+         env_var_name,
+         pattern=r'^[A-Za-z0-9_]+$'  # Only alphanumeric and underscore
+     )
+     ```
+
+4. **Error Handling for Security Issues**:
+   - Use specific error types for security-related failures
+   - Include informative but non-revealing error messages
+   - Log security incidents with appropriate severity
+   - Example:
+     ```python
+     try:
+         # Operation with security implications
+         validated_input = InputValidator.validate_string(user_input)
+     except ValidationError as e:
+         log_error(e, logger=logger, extra={"security_relevance": "high"})
+         raise SecurityError(
+             message="Input validation failed",
+             error_code="SEC-InputValidation",
+             details={"validation_type": "string"}  # Don't include the actual input
+         )
+     ```
+
+Follow these security guidelines for all new code and when updating existing components, especially those that handle user inputs, file paths, or environment variables.
+
 ## Task Success Criteria
 
 For each implemented task, clearly define and verify the following success criteria:
@@ -285,6 +365,11 @@ For each implemented task, clearly define and verify the following success crite
 6. **Task 1.6 - Security Measures**:
    - Credentials load securely from environment
    - Input validation prevents invalid data
+     - String validation with length and pattern restrictions
+     - Date validation with appropriate range checks
+     - Path validation to prevent traversal attacks
+   - Parameter sanitization for potentially dangerous inputs
+   - Environment variable name validation against injection
    - Sensitive files excluded via .gitignore
    - Credential loading utility works
 
@@ -466,3 +551,18 @@ Before submitting a task implementation, verify:
 - [ ] Entry/exit logs for significant operations
 - [ ] Errors are logged before being raised
 - [ ] No sensitive information is logged (credentials, tokens)
+
+### Security
+- [ ] All user inputs are validated using `InputValidator` utilities
+- [ ] String inputs are validated with appropriate patterns, min/max lengths
+- [ ] Numerical inputs have proper range validation
+- [ ] Date inputs are validated with appropriate range checks
+- [ ] File paths are sanitized to prevent path traversal attacks
+- [ ] Environment variable names are validated against injection
+- [ ] Security-related errors are logged with high severity
+- [ ] Security errors provide informative but non-revealing messages
+- [ ] No sensitive information is included in error details
+- [ ] Credentials are loaded from secure sources (environment variables)
+- [ ] No hardcoded secrets or credentials in the code
+- [ ] File operations are restricted to allowed directories
+- [ ] Security-sensitive operations have appropriate access controls

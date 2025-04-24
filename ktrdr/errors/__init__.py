@@ -11,8 +11,18 @@ from ktrdr.errors.exceptions import (
     DataError, 
     DataFormatError,
     DataNotFoundError,
+    DataCorruptionError,
+    DataValidationError,
+    ValidationError,
+    SecurityError,
+    PathTraversalError,
+    InvalidInputError,
+    UnauthorizedAccessError,
     ConnectionError, 
     ConfigurationError, 
+    MissingConfigurationError,
+    InvalidConfigurationError,
+    ConfigurationFileError,
     ProcessingError, 
     SystemError
 )
@@ -34,7 +44,8 @@ from ktrdr.errors.retry import (
 from ktrdr.errors.graceful import (
     fallback,
     FallbackStrategy,
-    FallbackNotAvailableError
+    FallbackNotAvailableError,
+    with_partial_results
 )
 
 __all__ = [
@@ -45,8 +56,18 @@ __all__ = [
     'DataError',
     'DataFormatError',
     'DataNotFoundError',
+    'DataCorruptionError',
+    'DataValidationError',
+    'ValidationError',
+    'SecurityError',
+    'PathTraversalError',
+    'InvalidInputError',
+    'UnauthorizedAccessError',
     'ConnectionError',
     'ConfigurationError',
+    'MissingConfigurationError',
+    'InvalidConfigurationError',
+    'ConfigurationFileError',
     'ProcessingError',
     'SystemError',
     
@@ -65,5 +86,6 @@ __all__ = [
     # Graceful degradation
     'fallback',
     'FallbackStrategy',
-    'FallbackNotAvailableError'
+    'FallbackNotAvailableError',
+    'with_partial_results'
 ]

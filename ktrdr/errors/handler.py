@@ -17,7 +17,8 @@ from ktrdr.errors.exceptions import (
     ConnectionError,
     ConfigurationError,
     ProcessingError,
-    SystemError
+    SystemError,
+    SecurityError
 )
 
 # Type variable for error handler functions
@@ -41,7 +42,8 @@ class ErrorHandler:
         'connection': ConnectionError,
         'configuration': ConfigurationError,
         'processing': ProcessingError,
-        'system': SystemError
+        'system': SystemError,
+        'security': SecurityError
     }
     
     # User-friendly error message templates
@@ -50,7 +52,8 @@ class ErrorHandler:
         ConnectionError: "Connection error: {message}",
         ConfigurationError: "Configuration error: {message}",
         ProcessingError: "Processing error: {message}",
-        SystemError: "System error: {message}"
+        SystemError: "System error: {message}",
+        SecurityError: "Security issue detected: {message}"
     }
     
     # Error code prefixes for each error class
@@ -59,7 +62,8 @@ class ErrorHandler:
         ConnectionError: "CONN",
         ConfigurationError: "CONF",
         ProcessingError: "PROC",
-        SystemError: "SYS"
+        SystemError: "SYS",
+        SecurityError: "SEC"
     }
     
     # Recovery steps for each error class
@@ -88,6 +92,12 @@ class ErrorHandler:
             "Restart the application",
             "Check system resources (memory, disk space)",
             "Contact support for assistance"
+        ],
+        SecurityError: [
+            "Verify input data follows expected patterns",
+            "Check permissions on files and directories",
+            "Ensure credentials are properly configured",
+            "Contact administrator if this issue persists"
         ]
     }
     

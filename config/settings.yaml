@@ -17,5 +17,19 @@ logging:
   # Whether to output logs to console
   console_output: true
 
+# Security configuration
+security:
+  # List of credential providers to initialize (e.g., interactive_brokers)
+  credential_providers: []
+  # Whether to validate user-provided parameters
+  validate_user_input: true
+  # Patterns for files that should be protected and not committed to git
+  sensitive_file_patterns:
+    - "*.key"
+    - "*.pem"
+    - "*.env"
+    - "*_credentials*"
+    - "*.cert"
+
 # Global debug flag (enables additional debug features when true)
 debug: false

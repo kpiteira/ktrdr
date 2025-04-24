@@ -73,6 +73,45 @@ class DataValidationError(DataError):
     pass
 
 
+# --- Validation Errors ---
+
+class ValidationError(KtrdrError):
+    """
+    Exception raised when input validation fails.
+    
+    This class is used for validating user-provided parameters 
+    and other input validation purposes.
+    """
+    pass
+
+
+# --- Security Errors ---
+
+class SecurityError(KtrdrError):
+    """
+    Base class for security-related errors.
+    
+    This class of errors covers security violations, unauthorized access attempts,
+    path traversal attacks, and other security concerns.
+    """
+    pass
+
+
+class PathTraversalError(SecurityError):
+    """Exception raised when a path traversal attempt is detected."""
+    pass
+
+
+class InvalidInputError(SecurityError):
+    """Exception raised when input validation fails for security reasons."""
+    pass
+
+
+class UnauthorizedAccessError(SecurityError):
+    """Exception raised when an unauthorized access attempt is detected."""
+    pass
+
+
 # --- Connection Errors ---
 
 class ConnectionError(KtrdrError):

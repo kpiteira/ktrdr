@@ -56,3 +56,15 @@ config/*.secret.yaml
 logs/
 .DS_Store
 *.log
+
+# Security-related files
+*.key
+*.pem
+*.env
+*_credentials*
+*.cert
+.secrets/
+.env
+credentials.json
+auth_tokens.json
+config/*_secure.yaml

@@ -16,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 from ktrdr import get_logger, log_entry_exit, log_error
 
 from ktrdr.config.models import KtrdrConfig
+from ktrdr.config.validation import InputValidator, sanitize_parameter
 from ktrdr.errors import (
     ConfigurationError, 
     MissingConfigurationError, 
@@ -59,10 +60,36 @@ class ConfigLoader:
             InvalidConfigurationError: If the YAML format is invalid
             ConfigurationError: If validation fails or another error occurs
         """
-        # Convert to Path object if string
-        if isinstance(config_path, str):
-            config_path = Path(config_path)
+        # Validate and sanitize the config path to prevent path traversal attacks
+        try:
+            # Convert to string if it's a Path object
+            path_str = str(config_path) if isinstance(config_path, Path) else config_path
             
+            # Validate the path string
+            path_str = InputValidator.validate_string(
+                path_str,
+                min_length=1,
+                max_length=1024
+            )
+            
+            # Sanitize the path
+            path_str = sanitize_parameter("config_path", path_str)
+            
+            # Convert back to Path object
+            config_path = Path(path_str)
+            
+            # Check if path is absolute
+            if not config_path.is_absolute():
+                # Convert to absolute path relative to current working directory
+                config_path = Path.cwd() / config_path
+                
+        except ValidationError as e:
+            raise ConfigurationError(
+                message=f"Invalid configuration path: {e}",
+                error_code="CONF-InvalidPath",
+                details={"path": str(config_path), "error": str(e)}
+            )
+        
         # Check if file exists
         if not config_path.exists():
             raise ConfigurationFileError(
@@ -123,6 +150,21 @@ class ConfigLoader:
             MissingConfigurationError: If no valid configuration path is available
             ConfigurationError: If loading fails for other reasons
         """
+        # Validate env_var against injection attempts
+        try:
+            env_var = InputValidator.validate_string(
+                env_var,
+                min_length=1,
+                max_length=100,
+                pattern=r'^[A-Za-z0-9_]+$'  # Allow only alphanumeric and underscore
+            )
+        except ValidationError as e:
+            raise ConfigurationError(
+                message=f"Invalid environment variable name: {e}",
+                error_code="CONF-InvalidEnvVar",
+                details={"env_var": env_var, "error": str(e)}
+            )
+            
         config_path = os.environ.get(env_var)
         
         # If env var not set, use default path
