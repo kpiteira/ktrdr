@@ -66,10 +66,10 @@ Each vertical slice must:
   - [x] Create fixtures for test OHLCV data
   - [x] Write initial tests for config and data loading
 
-- [ ] **Task 1.8**: Create simple CLI for data inspection
-  - [ ] Set up Typer CLI framework
-  - [ ] Implement basic `show-data` command
-  - [ ] Add parameter validation
+- [x] **Task 1.8**: Create simple CLI for data inspection
+  - [x] Set up Typer CLI framework
+  - [x] Implement basic `show-data` command
+  - [x] Add parameter validation
 
 ### Deliverable
 A working command-line tool that can:
@@ -84,10 +84,10 @@ A working command-line tool that can:
 **Value delivered:** Ability to compute technical indicators on historical data and verify their correctness.
 
 ### Indicator Tasks
-- [ ] **Task 2.1**: Define indicator interface
-  - [ ] Create BaseIndicator abstract class
-  - [ ] Define standard compute() method signature
-  - [ ] Implement parameter validation logic
+- [x] **Task 2.1**: Define indicator interface
+  - [x] Create BaseIndicator abstract class
+  - [x] Define standard compute() method signature
+  - [x] Implement parameter validation logic
 
 - [ ] **Task 2.2**: Implement first indicators
   - [ ] Create RSIIndicator class
