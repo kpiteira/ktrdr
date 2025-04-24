@@ -96,6 +96,59 @@ Expected output: [Describe what the user should see when running the example]
 - [ ] User interactions work as expected
 - [ ] Visual elements match design requirements
 
+## Indicator Implementation Checklist
+
+When implementing new technical indicators, ensure the following requirements are met:
+
+### Indicator Class Structure
+- [ ] Class properly inherits from `BaseIndicator`
+- [ ] `__init__` method defines all parameters with appropriate defaults
+- [ ] `_validate_params` method includes comprehensive validation
+- [ ] `compute` method has proper DataFrame input and Series output typing
+- [ ] Consistent naming convention is followed for the indicator
+
+### Indicator Implementation
+- [ ] Vectorized calculations using pandas/numpy where possible
+- [ ] Proper handling of warmup period (NaN values at the beginning)
+- [ ] Edge cases handled (insufficient data, constant values, etc.)
+- [ ] Performance optimized for large datasets (10,000+ data points)
+- [ ] Consistent output name format using `get_column_name()` method
+
+### Testing Integration
+- [ ] Reference values created in `tests/indicators/reference_datasets.py`
+- [ ] Different parameter configurations tested
+- [ ] Reference values cover key patterns (trends, reversals, plateaus)
+- [ ] Indicator registered in `tests/indicators/indicator_registry.py`
+- [ ] Appropriate tolerance value defined in `TOLERANCES` dictionary
+- [ ] Special edge cases added if needed in registration
+
+### Validation Requirements
+- [ ] Automated tests validate calculation accuracy
+- [ ] Tests for invalid parameter handling
+- [ ] Tests for edge case behavior
+- [ ] Tests for consistent output format
+- [ ] All tests pass when running `pytest tests/indicators/`
+
+### Documentation
+- [ ] Comprehensive class docstring includes:
+  - [ ] Purpose and calculation description
+  - [ ] Formula or algorithm
+  - [ ] Common use cases
+  - [ ] Parameter descriptions
+  - [ ] References to standard definitions
+  - [ ] Any implementation notes or limitations
+- [ ] Method docstrings for all public methods
+- [ ] Inline comments for complex calculations
+
+### Error Handling & Logging
+- [ ] Data validation uses `validate_input_data` and `validate_sufficient_data`
+- [ ] Appropriate error types from `ktrdr.errors` for parameter validation
+- [ ] Clear error messages with descriptive codes
+- [ ] Appropriate logging at key points
+- [ ] Try/except blocks around calculation logic with proper error wrapping
+
+Verify all checklist items are complete before considering an indicator implementation finished. This ensures consistent, well-tested, and properly integrated indicators that work with the validation framework implemented in Task 2.6.
+
 ## Rules for Task Completion
 
 1. **No Exceptions**: Every task implementation must include the full Task Completion Report, regardless of task complexity.

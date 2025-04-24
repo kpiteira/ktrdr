@@ -113,10 +113,10 @@ A working command-line tool that can:
   - [x] Add simple text-based output formatting
 
 ### Testing
-- [ ] **Task 2.6**: Enhance testing framework
-  - [ ] Create reference datasets with known indicator values
-  - [ ] Implement validation functions for indicators
-  - [ ] Test all implemented indicators against references
+- [x] **Task 2.6**: Enhance testing framework
+  - [x] Create reference datasets with known indicator values
+  - [x] Implement validation functions for indicators
+  - [x] Test all implemented indicators against references
 
 ### Deliverable
 A command-line tool that can:

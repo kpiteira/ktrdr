@@ -41,7 +41,7 @@ def test_show_data_basic(runner, sample_data):
     # Mock the LocalDataLoader.load method
     with patch('ktrdr.data.local_data_loader.LocalDataLoader.load', 
                return_value=sample_data):
-        result = runner.invoke(cli_app, ["AAPL"])
+        result = runner.invoke(cli_app, ["show-data", "AAPL"])
         
         # Check for successful execution
         assert result.exit_code == 0
@@ -55,7 +55,7 @@ def test_show_data_with_rows(runner, sample_data):
     """Test the CLI with a custom number of rows."""
     with patch('ktrdr.data.local_data_loader.LocalDataLoader.load', 
                return_value=sample_data):
-        result = runner.invoke(cli_app, ["AAPL", "--rows", "2"])
+        result = runner.invoke(cli_app, ["show-data", "AAPL", "--rows", "2"])
         
         assert result.exit_code == 0
         assert "Data for AAPL" in result.stdout
@@ -74,7 +74,7 @@ def test_show_data_with_tail(runner, sample_data):
     """Test the CLI with the tail option."""
     with patch('ktrdr.data.local_data_loader.LocalDataLoader.load', 
                return_value=sample_data):
-        result = runner.invoke(cli_app, ["AAPL", "--tail"])
+        result = runner.invoke(cli_app, ["show-data", "AAPL", "--tail"])
         
         assert result.exit_code == 0
         
@@ -92,7 +92,7 @@ def test_show_data_with_columns(runner, sample_data):
     """Test the CLI with specific columns."""
     with patch('ktrdr.data.local_data_loader.LocalDataLoader.load', 
                return_value=sample_data):
-        result = runner.invoke(cli_app, ["AAPL", "--columns", "open", "--columns", "close"])
+        result = runner.invoke(cli_app, ["show-data", "AAPL", "--columns", "open", "--columns", "close"])
         
         assert result.exit_code == 0
         
@@ -111,7 +111,7 @@ def test_show_data_not_found(runner):
     """Test the CLI when no data is found."""
     with patch('ktrdr.data.local_data_loader.LocalDataLoader.load', 
                return_value=pd.DataFrame()):
-        result = runner.invoke(cli_app, ["XYZ"])
+        result = runner.invoke(cli_app, ["show-data", "XYZ"])
         
         assert result.exit_code == 0
         assert "No data found for XYZ" in result.stdout
@@ -121,7 +121,7 @@ def test_show_data_error_handling(runner):
     """Test the CLI error handling."""
     with patch('ktrdr.data.local_data_loader.LocalDataLoader.load', 
                side_effect=DataError("Test error", error_code="DATA-NotFound")):
-        result = runner.invoke(cli_app, ["AAPL"])
+        result = runner.invoke(cli_app, ["show-data", "AAPL"])
         
         assert result.exit_code == 1
         # With mix_stderr=False, the error message is in stderr

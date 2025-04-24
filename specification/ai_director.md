@@ -327,6 +327,180 @@ When implementing any new component or enhancing existing ones, follow these sec
 
 Follow these security guidelines for all new code and when updating existing components, especially those that handle user inputs, file paths, or environment variables.
 
+## Indicator Implementation Guide
+
+When implementing new indicators for the KTRDR system, follow this comprehensive guide to ensure consistent, well-tested, and validated implementations that automatically leverage the enhanced testing framework.
+
+### Indicator Implementation Template
+
+```
+I'm implementing a new [INDICATOR NAME] indicator for KTRDR as part of Task [X.Y]. This indicator [brief description of indicator purpose and calculation method].
+
+This technical indicator calculates [specific calculation description]:
+[Include mathematical formula or algorithm description]
+
+According to the architecture and the enhanced testing framework from Task 2.6, I need to:
+1. Implement the indicator class inheriting from BaseIndicator
+2. Add proper parameter validation
+3. Create reference data for testing
+4. Register the indicator with the validation system
+
+Please help me create a well-structured implementation that:
+1. Follows the established indicator pattern
+2. Includes comprehensive parameter validation
+3. Has optimized calculation logic
+4. Integrates with the testing framework from Task 2.6
+5. Includes appropriate error handling and logging
+```
+
+### Step-by-Step Indicator Implementation Procedure
+
+All indicators should be implemented following these strict steps:
+
+1. **Class Definition**:
+   - Create a new class that inherits from `BaseIndicator`
+   - Implement `__init__`, `_validate_params`, and `compute` methods
+   - Define clear parameter defaults and ranges in `__init__`
+   - Use proper typing and comprehensive docstrings
+
+2. **Parameter Validation**:
+   - Implement thorough parameter validation in `_validate_params`
+   - Check parameter types, ranges, and combinations
+   - Use appropriate error types from `ktrdr.errors`
+   - Include descriptive error messages with error codes
+
+3. **Computation Implementation**:
+   - Use vectorized operations when possible (pandas, numpy)
+   - Follow the indicators industry standard calculation methods
+   - Include proper error handling for edge cases
+   - Add appropriate logging for debugging
+
+4. **Reference Value Creation**:
+   - Calculate reference values for standard datasets
+   - Include values for different parameter combinations
+   - Cover key data patterns (trends, reversals, plateaus)
+
+5. **Testing Integration**:
+   - Register the indicator in `tests/indicators/indicator_registry.py`
+   - Update reference datasets in `tests/indicators/reference_datasets.py`
+   - Define appropriate tolerance values for validation
+   - Include specialized edge cases if needed
+
+### Indicator Testing Requirements
+
+Every indicator implementation **MUST** include comprehensive testing that verifies:
+
+1. **Calculation Accuracy**:
+   - Test against known reference values
+   - Verify behavior with multiple parameter sets
+   - Validate across different data patterns
+
+2. **Parameter Validation**:
+   - Test with invalid parameter types
+   - Test with out-of-range parameters
+   - Verify appropriate errors are raised
+
+3. **Edge Case Handling**:
+   - Test with insufficient data points
+   - Test with constant price values
+   - Test with extreme values (zeros, very large numbers)
+   - Test with missing values (NaN)
+
+4. **Performance Characteristics**:
+   - Verify calculation efficiency for large datasets
+   - Test memory usage is appropriate
+
+5. **Auto-Registration**:
+   - Verify the indicator works with the automated testing system
+   - Confirm it passes all standard indicator tests
+
+### Example Indicator Registration
+
+When registering a new indicator with the testing framework, follow this pattern:
+
+```python
+# In tests/indicators/indicator_registry.py:
+from ktrdr.indicators import MyNewIndicator
+
+# Register your indicator
+register_indicator(
+    indicator_class=MyNewIndicator,
+    default_params={'period': 14, 'source': 'close'},
+    reference_datasets=['reference_dataset_1', 'reference_dataset_2'],
+    reference_values=REFERENCE_VALUES.get('MY_INDICATOR', {}),
+    tolerance=1.0,  # Appropriate tolerance for your indicator
+    known_edge_cases=[
+        # Add any indicator-specific edge cases
+        {
+            'name': 'constant_values',
+            'data': pd.DataFrame({'close': [100] * 20}),
+            'should_raise': False,
+            'expected_values': {14: 50.0}  # Expected output at index 14
+        }
+    ]
+)
+```
+
+### Indicator Performance Guidelines
+
+For optimal indicator performance, follow these guidelines:
+
+1. Use vectorized operations with pandas and numpy
+2. Minimize loops and iterations
+3. Pre-allocate result Series for better performance
+4. Consider using numba for computationally intensive calculations
+5. Add caching for repeated calculations if appropriate
+6. Test with realistic dataset sizes (10,000+ data points)
+
+### Indicator Validation Checklist
+
+Before considering an indicator implementation complete, verify:
+
+- [ ] Indicator class properly inherits from BaseIndicator
+- [ ] All required methods are implemented
+- [ ] Parameter validation is comprehensive and accurate
+- [ ] Calculation logic follows standard definitions
+- [ ] Error handling covers edge cases
+- [ ] Appropriate logging is included
+- [ ] Reference values are provided for testing
+- [ ] Indicator is registered with the testing framework
+- [ ] All automated tests pass
+- [ ] Performance is optimized for large datasets
+- [ ] Documentation and docstrings are complete
+
+### Completed Example Documentation
+
+Include the following mandatory information in the indicator class docstring:
+
+```python
+class MyNewIndicator(BaseIndicator):
+    """
+    My New Indicator (MNI) implementation.
+    
+    This indicator calculates [description of what it does and measures].
+    Formula: [Include mathematical formula or algorithm description]
+    
+    Common uses:
+    - [Use case 1]
+    - [Use case 2]
+    
+    Parameters:
+        period (int): The lookback period for calculation (default: 14)
+        source (str): The price data column to use (default: 'close')
+        [any other parameters]
+    
+    References:
+        - [Author/paper that defined the indicator]
+        - [Link to industry standard definition]
+    
+    Notes:
+        - [Any implementation notes or limitations]
+        - [Performance considerations]
+    """
+```
+
+Always adhere to this indicator implementation guide when creating new indicators to ensure consistency, correct behavior, and comprehensive testing integration.
+
 ## Task Success Criteria
 
 For each implemented task, clearly define and verify the following success criteria:
