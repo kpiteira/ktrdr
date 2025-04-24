@@ -107,10 +107,10 @@ A working command-line tool that can:
   - [x] Create sample indicator configurations
 
 ### CLI Enhancement
-- [ ] **Task 2.5**: Extend CLI for indicators
-  - [ ] Add `compute-indicator` command
-  - [ ] Implement indicator parameter options
-  - [ ] Add simple text-based output formatting
+- [x] **Task 2.5**: Extend CLI for indicators
+  - [x] Add `compute-indicator` command
+  - [x] Implement indicator parameter options
+  - [x] Add simple text-based output formatting
 
 ### Testing
 - [ ] **Task 2.6**: Enhance testing framework
