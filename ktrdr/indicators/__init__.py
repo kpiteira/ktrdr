@@ -6,5 +6,12 @@ used for trading analysis and decision making.
 """
 
 from ktrdr.indicators.base_indicator import BaseIndicator
+from ktrdr.indicators.rsi_indicator import RSIIndicator
+from ktrdr.indicators.ma_indicators import SimpleMovingAverage, ExponentialMovingAverage
 
-__all__ = ['BaseIndicator']
+__all__ = [
+    'BaseIndicator',
+    'RSIIndicator',
+    'SimpleMovingAverage', 
+    'ExponentialMovingAverage'
+]
