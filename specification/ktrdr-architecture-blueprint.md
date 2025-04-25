@@ -483,56 +483,87 @@ fuzzy_sets:
   GeeksforGeeks]{.underline}](https://www.geeksforgeeks.org/types-of-membership-functions-in-fuzzy-logic/)
 
 ### 5.  **Visualization Subsystem**
-**Long-Term Vision Reflection:** The Visualization Subsystem isintentionally structured to be future-proof. While Phase 1 relies onStreamlit or Jupyter to view outputs locally, the Visualizer module isdesigned as a reusable, backend-agnostic core component. This meansthat in future phases:
-- The Visualizer can return Plotly figures or data JSON instead of
-  rendering directly.
-- A web frontend (e.g., React) can call an API that either delivers
-  rendered images or chart data.
-- We can later expose a visualization REST API (e.g., GET
-  /plot/strategy1) that serves dynamic, frontend-consumable visuals.
 
-This design minimizes throwaway code while enabling a seamlesstransition from CLI/notebook usage to full-stack deployment.
-The visualization subsystem enables rich, interactive insight intoprice data, indicators, fuzzy logic, and trade decisions. It supportsvalidation during development and experimentation by renderingincremental outputs from each module.
+The visualization subsystem enables rich, interactive insight into price data, indicators, fuzzy logic, and trade decisions. It supports validation during development and experimentation by rendering incremental outputs from each module.
 
 #### **Core Goals:**
 - Visual validation of each module (e.g., indicators, fuzzy logic)
 - Correlate multiple signals visually (e.g., RSI + trades + fuzzy bands)
-- Inspect behaviors over time with interactivity (e.g., zoom, pan,
-  hover)
+- Inspect behaviors over time with interactivity (e.g., zoom, pan, hover)
+
 #### **Design Approach:**
-- Use **Plotly** for interactive charts (zoom/pan/hover)
-- Host via **Streamlit** or Jupyter (Phase 1)
-- Build reusable Visualizer module with callable methods (UI is a thin
-  host)
+- Use **TradingView's lightweight-charts** for interactive financial charts
+- Implement a layered architecture with clean separation between Python and JS
+- Easily integrate with **Streamlit** or Jupyter (Phase 1)
+- Build reusable Visualizer module with a clean, intuitive API
+
+#### **Architecture Layers:**
+1. **Python API Layer** (Visualizer, ChartBuilder)
+   - Provides an intuitive, high-level interface for chart creation
+   - Manages chart layouts and component relationships
+
+2. **Data Transformation Layer** (DataAdapter, IndicatorTransformer)
+   - Converts pandas DataFrames to lightweight-charts compatible JSON format
+   - Handles indicator-specific data transformations
+
+3. **Chart Configuration Generator** (TemplateManager, ConfigBuilder)
+   - Creates chart-specific configuration objects
+   - Manages chart templates and layouts
+
+4. **HTML/JS Output Generator** (Renderer, ThemeManager)
+   - Produces self-contained HTML files with embedded JavaScript
+   - Manages theming and styling options
+
 #### **Key Visual Components:**
-- **Candlestick Chart**: Main OHLC price display
-- **Indicator Overlays**: Plot overlays like EMA, Bollinger on the same
-  axis
-- **Auxiliary Plots**: RSI, MACD, or Volume on separate subplots
-- **Fuzzy Highlight Bands**: Shade fuzzy activation zones (e.g., high
-  RSI)
-- **Trade Markers**: Entry/exit signals plotted with annotations
-#### **Structure Proposal:**
+- **Candlestick Chart**: Main OHLC price display with customizable styling
+- **Indicator Overlays**: EMA, SMA, and other overlays on price charts
+- **Separate Panels**: RSI, MACD, Volume in properly spaced panels
+- **Fuzzy Highlight Bands**: Shade regions where fuzzy sets are activated (e.g., high RSI zone)
+- **Trade Markers**: Clear entry/exit signals with customizable markers and annotations
+- **Range Slider**: Compact slider for navigating large datasets
+- **Interactive Features**: Zoom, pan, and tooltips built-in
+- **Custom Annotations**: Support for additional markers, lines, and labels
+
+#### **Structure:**
+
 ```python
 class Visualizer:
-def plot_price(self, df): ...
-def plot_indicators(self, df, indicators): ...
-def plot_fuzzy_sets(self, fuzzy_cfg, df): ...
-def plot_trades(self, trades): ...
-def plot_summary(self, all_data): ... # Composite layout
+    def __init__(self, theme="dark"):
+        """Initialize the visualizer with theme settings."""
+        
+    def create_chart(self, data, title=None, chart_type="candlestick"):
+        """Create a new base chart with the specified data."""
+        
+    def add_indicator_overlay(self, chart, indicator_data, type, **options):
+        """Add an indicator as an overlay on the price chart."""
+        
+    def add_indicator_panel(self, chart, indicator_data, type, **options):
+        """Add a separate panel for an indicator below the main chart."""
+        
+    def configure_range_slider(self, chart, height=40, show=True):
+        """Configure the range slider for the chart."""
+        
+    def save(self, chart, filename):
+        """Save the chart to an HTML file."""
+        
+    def show(self, chart):
+        """Display the chart (in Jupyter or return HTML for Streamlit)."""
 ```
+
+#### **Extension Points:**
+- Plugin system for custom indicator visualization
+- Custom chart types beyond standard candlestick/OHLC
+- Layout templates for different visualization needs
+
 #### **Architectural Note:**
-- Composite plots (price + indicator) will be aligned by date axis
-- Each component is individually callable for incremental testing
-#### **Interactivity Priority:**
-- Interactive plots are essential: hover, zoom, and pan will be built-in
-  from the start
-- Static export (e.g., PNG) is **not** a priority in Phase 1 ---
-  screenshots can be taken manually
+- The visualization module is completely independent of data sources
+- Chart panels are properly aligned and sized with appropriate spacing
+- Interactive features are built-in by default
+
 #### **Looking Ahead:**
-- Phase 1 visualizer will serve local use only
-- Architecture intentionally separates rendering logic from UI so it can
-  evolve into a browser-based system later (e.g., served over API)
+- Phase 1 visualizer will be focused on local development use
+- The architecture separates rendering logic from UI to support future web integration
+- Later phases can expose visualization as a service with a REST API
 
 ### 6.  **UI Interface (Dev-Only)**
 The UI module in Phase 1 acts as a thin orchestration layer, allowinga developer to interactively inspect results from the system'ssubsystems. It is implemented using Streamlit and presents asimplified, single-page interface.

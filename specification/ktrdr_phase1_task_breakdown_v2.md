@@ -131,33 +131,47 @@ A command-line tool that can:
 **Value delivered:** Visual representation of price data and indicators for analysis and debugging.
 
 ### Visualization Tasks
-- [ ] **Task 3.1**: Implement basic visualization framework
-  - [ ] Create Visualizer class with modular plotting methods
-  - [ ] Implement plot_price() method using Plotly
-  - [ ] Add date range selection capabilities
-  - [ ] Implement hover information with OHLCV details
+- [ ] **Task 3.1**: Implement core visualization framework
+  - [ ] Create directory structure for visualization module
+  - [ ] Implement `DataAdapter` class for transforming DataFrame data
+  - [ ] Add methods to convert OHLCV, line, and histogram data
+  - [ ] Create `ConfigBuilder` for chart configuration
+  - [ ] Implement `TemplateManager` for HTML templates
+  - [ ] Create `Renderer` class for HTML/JS output generation
 
-- [ ] **Task 3.2**: Add indicator visualization
-  - [ ] Implement plot_indicator_overlay() for price-aligned indicators
-  - [ ] Create plot_indicator_subplot() for separate indicators
-  - [ ] Add basic styling options
+- [ ] **Task 3.2**: Implement basic Visualizer API
+  - [ ] Create `Visualizer` class with core functionality
+  - [ ] Implement `create_chart()` for basic chart creation
+  - [ ] Add `add_indicator_overlay()` for price-aligned indicators
+  - [ ] Create `add_indicator_panel()` for separate panels
+  - [ ] Implement `save()` and `show()` methods
+
+- [ ] **Task 3.3**: Add essential chart types
+  - [ ] Implement candlestick chart for price data
+  - [ ] Add line charts for indicator overlays
+  - [ ] Create histogram charts for volume
+  - [ ] Implement basic theme support (dark/light)
 
 ### CLI Enhancement
-- [ ] **Task 3.3**: Add visualization commands to CLI
+- [ ] **Task 3.4**: Add visualization commands to CLI
   - [ ] Implement `plot` command with indicator options
-  - [ ] Add options to save plots as HTML or images
+  - [ ] Add options to save plots as HTML files
   - [ ] Create combined price and indicator plot command
 
 ### Testing
-- [ ] **Task 3.4**: Create visual testing framework
-  - [ ] Implement smoke tests for visualization components
-  - [ ] Add validation for plot data integrity
+- [ ] **Task 3.5**: Create visual testing framework
+  - [ ] Create test fixtures with sample data
+  - [ ] Implement tests for data transformations
+  - [ ] Add tests for HTML/JS generation
+  - [ ] Create smoke tests for visualization components
 
 ### Deliverable
 A command-line tool that can:
-- Generate interactive visualizations of price data
+- Generate interactive visualizations of price data using TradingView's lightweight-charts
+- Display price data with candlestick charts
 - Overlay technical indicators on charts
-- Export visualizations as files
+- Add separate panels for indicators like RSI
+- Export visualizations as HTML files
 
 ---
 
@@ -209,7 +223,7 @@ A command-line tool that can:
 
 ## Slice 5: Visualization Enhancement & UI Foundation (v1.0.5)
 
-**Value delivered:** Interactive UI for exploring data, indicators, and fuzzy logic outputs.
+**Value delivered:** Interactive UI for exploring data, indicators, and fuzzy logic outputs with specialized neuro-fuzzy visualization components.
 
 ### UI Tasks
 - [ ] **Task 5.1**: Set up Streamlit UI scaffold
@@ -224,27 +238,31 @@ A command-line tool that can:
   - [ ] Implement dynamic subplot layouts
   - [ ] Add synchronized zooming/panning
 
-- [ ] **Task 5.3**: Add fuzzy visualization
-  - [ ] Implement plot_fuzzy_bands() method
-  - [ ] Add colored shading for fuzzy regions
-  - [ ] Create hover info showing membership degrees
+- [ ] **Task 5.3**: Add fuzzy visualization components
+  - [ ] Implement `add_fuzzy_highlight_band()` method for showing fuzzy set activations
+  - [ ] Add colored shading for fuzzy regions with configurable opacity
+  - [ ] Create tooltips showing membership degrees
+  - [ ] Add visualization for fuzzy set boundaries
 
 ### Integration Tasks
 - [ ] **Task 5.4**: Integrate data pipeline with UI
   - [ ] Add data loading controls (symbol, timeframe)
   - [ ] Implement indicator selection dropdown
   - [ ] Create fuzzy set visualization toggles
+  - [ ] Add real-time visualization of fuzzy membership activation
 
 ### Testing
 - [ ] **Task 5.5**: Create UI testing framework
   - [ ] Implement smoke tests for UI components
   - [ ] Add validation for UI integration points
+  - [ ] Create tests for fuzzy visualization components
 
 ### Deliverable
 An interactive Streamlit application that can:
 - Load and visualize price data
 - Apply and display technical indicators
-- Show fuzzy membership functions and outputs
+- Show fuzzy membership functions as colored bands on charts
+- Display fuzzy membership activation levels interactively
 
 ---
 
@@ -411,9 +429,59 @@ An application that can:
 
 ---
 
-## CI/CD & Documentation (Ongoing)
+## Slice 9: Trade Visualization System (v1.0.9)
 
-These tasks can be integrated into each slice as appropriate:
+**Value delivered:** Advanced visualization of trade decisions, fuzzy logic activations, and system performance.
+
+### Trade Visualization Components
+- [ ] **Task 9.1**: Implement trade marker system
+  - [ ] Create trade marker visualization for entry points
+  - [ ] Add exit marker visualization with profit/loss coloring
+  - [ ] Implement hover tooltips with trade details
+  - [ ] Add stop loss and take profit level visualization
+
+- [ ] **Task 9.2**: Add fuzzy activation visualization
+  - [ ] Complete fuzzy highlight bands for all indicator types
+  - [ ] Implement opacity gradients for partial activations
+  - [ ] Add interactive toggles for band visibility
+  - [ ] Create legend for fuzzy set activations
+
+- [ ] **Task 9.3**: Develop performance visualization
+  - [ ] Implement drawdown visualization
+  - [ ] Create equity curve with markers for significant events
+  - [ ] Add benchmark comparison visualization
+  - [ ] Implement heat map for signal strength
+
+### UI Enhancement
+- [ ] **Task 9.4**: Create advanced visualization dashboard
+  - [ ] Implement multi-panel dashboard layout
+  - [ ] Add configurable visualization widgets
+  - [ ] Create saved layout functionality
+  - [ ] Implement visualization export options
+
+### Integration Tasks
+- [ ] **Task 9.5**: Connect visualization to decision system
+  - [ ] Link DecisionInterpreter outputs to visualization
+  - [ ] Add real-time update capability
+  - [ ] Implement trade simulation visualization
+  - [ ] Connect fuzzy engine outputs to highlight bands
+
+### Testing
+- [ ] **Task 9.6**: Create visual regression tests
+  - [ ] Implement screenshot-based visual testing
+  - [ ] Add tests for trade marker accuracy
+  - [ ] Create tests for interactive elements
+
+### Deliverable
+An enhanced visualization system that can:
+- Display entry and exit points with profit/loss information
+- Show fuzzy logic activations as colored highlight bands
+- Visualize system performance with equity curves and drawdowns
+- Provide an interactive dashboard for exploring trading decisions
+
+---
+
+## CI/CD & Documentation (Ongoing)
 
 ### CI/CD Tasks
 - [ ] Set up basic GitHub Actions workflow
@@ -450,5 +518,13 @@ These capabilities have been intentionally deferred to maintain development velo
 - Complex retry policies beyond basic exponential backoff
 - Error aggregation and pattern recognition
 - Comprehensive error reporting dashboards
+
+### Advanced Visualization Features
+- Performance optimization for large datasets (downsampling, progressive loading)
+- Extended chart annotation capabilities (trend lines, text annotations, price levels)
+- Multi-instrument comparison features and synchronized charts
+- Comprehensive visualization documentation and example gallery
+- Advanced layout systems for complex dashboard creation
+- Demo notebooks for educational and presentation purposes
 
 These concerns will be revisited in future development phases once the core functionality has been validated.
