@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Simple candlestick chart example for KTRDR visualization module.
+Volume histogram chart example for KTRDR visualization module.
 """
 
 import pandas as pd
@@ -12,10 +12,10 @@ from ktrdr.visualization import Visualizer
 # Set up output directory
 output_dir = Path("output")
 os.makedirs(output_dir, exist_ok=True)
-output_path = output_dir / "simple_candlestick_example.html"
+output_path = output_dir / "volume_histogram_example.html"
 
 def main():
-    """Run the example to create a simple candlestick chart."""
+    """Run the example to create a candlestick chart with volume histogram."""
     # Load sample data
     data_path = Path("data") / "AAPL_1d.csv"
     if not data_path.exists():
@@ -29,8 +29,8 @@ def main():
     # Convert date strings to datetime objects
     df['date'] = pd.to_datetime(df['date'])
     
-    # Take only last 90 days for better visualization
-    df = df.tail(90)
+    # Take only last 60 days for better visualization
+    df = df.tail(60)
     
     print(f"Loaded {len(df)} days of price data")
     print(f"Data range: {df['date'].min().date()} to {df['date'].max().date()}")
@@ -38,13 +38,27 @@ def main():
     # Create visualizer with dark theme
     visualizer = Visualizer(theme="dark")
     
-    # Create a simple candlestick chart
+    # Create a candlestick chart
     chart = visualizer.create_chart(
         data=df,
-        title="AAPL Daily Price",
+        title="AAPL Price with Volume",
         chart_type="candlestick",
-        height=500
+        height=400
     )
+    
+    # Add volume as a separate histogram panel
+    chart = visualizer.add_indicator_panel(
+        chart=chart,
+        data=df,
+        column="volume",
+        panel_type="histogram",
+        height=150,
+        color="#26a69a",  # Green color for volume bars
+        title="Volume"
+    )
+    
+    # Add range slider for easier navigation
+    chart = visualizer.configure_range_slider(chart, height=60, show=True)
     
     # Save the chart
     output_file = visualizer.save(chart, output_path, overwrite=True)
