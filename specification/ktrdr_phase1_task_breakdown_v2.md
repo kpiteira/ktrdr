@@ -131,13 +131,13 @@ A command-line tool that can:
 **Value delivered:** Visual representation of price data and indicators for analysis and debugging.
 
 ### Visualization Tasks
-- [ ] **Task 3.1**: Implement core visualization framework
-  - [ ] Create directory structure for visualization module
-  - [ ] Implement `DataAdapter` class for transforming DataFrame data
-  - [ ] Add methods to convert OHLCV, line, and histogram data
-  - [ ] Create `ConfigBuilder` for chart configuration
-  - [ ] Implement `TemplateManager` for HTML templates
-  - [ ] Create `Renderer` class for HTML/JS output generation
+- [x] **Task 3.1**: Implement core visualization framework
+  - [x] Create directory structure for visualization module
+  - [x] Implement `DataAdapter` class for transforming DataFrame data
+  - [x] Add methods to convert OHLCV, line, and histogram data
+  - [x] Create `ConfigBuilder` for chart configuration
+  - [x] Implement `TemplateManager` for HTML templates
+  - [x] Create `Renderer` class for HTML/JS output generation
 
 - [ ] **Task 3.2**: Implement basic Visualizer API
   - [ ] Create `Visualizer` class with core functionality

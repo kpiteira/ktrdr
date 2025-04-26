@@ -57,6 +57,10 @@ logs/
 .DS_Store
 *.log
 
+# Output files
+output/
+examples/*.html
+
 # Security-related files
 *.key
 *.pem
