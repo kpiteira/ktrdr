@@ -139,12 +139,12 @@ A command-line tool that can:
   - [x] Implement `TemplateManager` for HTML templates
   - [x] Create `Renderer` class for HTML/JS output generation
 
-- [ ] **Task 3.2**: Implement basic Visualizer API
-  - [ ] Create `Visualizer` class with core functionality
-  - [ ] Implement `create_chart()` for basic chart creation
-  - [ ] Add `add_indicator_overlay()` for price-aligned indicators
-  - [ ] Create `add_indicator_panel()` for separate panels
-  - [ ] Implement `save()` and `show()` methods
+- [x] **Task 3.2**: Implement basic Visualizer API
+  - [x] Create `Visualizer` class with core functionality
+  - [x] Implement `create_chart()` for basic chart creation
+  - [x] Add `add_indicator_overlay()` for price-aligned indicators
+  - [x] Create `add_indicator_panel()` for separate panels
+  - [x] Implement `save()` and `show()` methods
 
 - [ ] **Task 3.3**: Add essential chart types
   - [ ] Implement candlestick chart for price data
