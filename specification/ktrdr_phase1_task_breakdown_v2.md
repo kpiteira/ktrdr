@@ -146,17 +146,17 @@ A command-line tool that can:
   - [x] Create `add_indicator_panel()` for separate panels
   - [x] Implement `save()` and `show()` methods
 
-- [ ] **Task 3.3**: Add essential chart types
-  - [ ] Implement candlestick chart for price data
-  - [ ] Add line charts for indicator overlays
-  - [ ] Create histogram charts for volume
-  - [ ] Implement basic theme support (dark/light)
+- [x] **Task 3.3**: Add essential chart types
+  - [x] Implement candlestick chart for price data
+  - [x] Add line charts for indicator overlays
+  - [x] Create histogram charts for volume
+  - [x] Implement basic theme support (dark/light)
 
 ### CLI Enhancement
-- [ ] **Task 3.4**: Add visualization commands to CLI
-  - [ ] Implement `plot` command with indicator options
-  - [ ] Add options to save plots as HTML files
-  - [ ] Create combined price and indicator plot command
+- [x] **Task 3.4**: Add visualization commands to CLI
+  - [x] Implement `plot` command with indicator options
+  - [x] Add options to save plots as HTML files
+  - [x] Create combined price and indicator plot command
 
 ### Testing
 - [ ] **Task 3.5**: Create visual testing framework

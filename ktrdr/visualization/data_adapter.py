@@ -28,6 +28,51 @@ class DataAdapter:
     """
     
     @staticmethod
+    def _ensure_date_column(df: pd.DataFrame, time_column: str = "date") -> pd.DataFrame:
+        """
+        Ensure the DataFrame has a date column, handling common date column issues.
+        
+        This helper method handles:
+        1. Date as index
+        2. Case-insensitive date column names
+        3. "Date" vs "date" naming inconsistencies
+        
+        Args:
+            df: DataFrame to process
+            time_column: Expected name of the time column
+            
+        Returns:
+            DataFrame with guaranteed time column
+            
+        Raises:
+            DataError: If no suitable date column can be found
+        """
+        # Make a copy to avoid modifying the original
+        df = df.copy()
+        
+        # Check if the index is a DatetimeIndex and add as a column if needed
+        if isinstance(df.index, pd.DatetimeIndex):
+            logger.debug(f"Found DatetimeIndex in DataFrame, using as '{time_column}' column")
+            df[time_column] = df.index
+            return df
+        
+        # Check for case-insensitive match (date vs Date)
+        col_map = {col.lower(): col for col in df.columns}
+        if time_column.lower() in col_map:
+            actual_column = col_map[time_column.lower()]
+            if actual_column != time_column:
+                logger.debug(f"Found case-insensitive match for '{time_column}': '{actual_column}'")
+                df[time_column] = df[actual_column]
+            return df
+            
+        # If we still don't have a date column, report the error
+        raise DataError(
+            message=f"No suitable date column found. Expected '{time_column}' or similar.",
+            error_code="DATA-MissingTimeColumn",
+            details={"available_columns": list(df.columns)}
+        )
+    
+    @staticmethod
     def transform_ohlc(
         df: pd.DataFrame, 
         time_column: str = "date", 
@@ -56,15 +101,27 @@ class DataAdapter:
         try:
             logger.debug(f"Transforming OHLC data with shape {df.shape}")
             
-            # Check if required columns exist
-            required_cols = [time_column, open_col, high_col, low_col, close_col]
-            missing_cols = [col for col in required_cols if col not in df.columns]
+            # Ensure date column is available
+            df = DataAdapter._ensure_date_column(df, time_column)
             
+            # Handle case-insensitive matching for OHLC columns
+            col_map = {col.lower(): col for col in df.columns}
+            ohlc_cols = {}
+            for col_name, expected in [(open_col, "open"), (high_col, "high"), 
+                                      (low_col, "low"), (close_col, "close")]:
+                if col_name.lower() in col_map:
+                    ohlc_cols[expected] = col_map[col_name.lower()]
+                else:
+                    ohlc_cols[expected] = col_name
+            
+            # Check if all required columns exist
+            missing_cols = [col for col, mapped_col in ohlc_cols.items() 
+                            if mapped_col not in df.columns]
             if missing_cols:
                 raise DataError(
                     message=f"Missing required columns for OHLC transformation: {missing_cols}",
                     error_code="DATA-MissingColumns",
-                    details={"available_columns": list(df.columns), "required_columns": required_cols}
+                    details={"available_columns": list(df.columns)}
                 )
             
             # Convert timestamps to UNIX timestamps (seconds for lightweight-charts v4.1.1)
@@ -89,13 +146,13 @@ class DataAdapter:
                         details={"timestamp_type": str(type(time_value))}
                     )
                 
-                # Create OHLC entry
+                # Create OHLC entry using the mapped column names
                 entry = {
                     "time": unix_time,  # Unix timestamp in seconds
-                    "open": float(row[open_col]),
-                    "high": float(row[high_col]),
-                    "low": float(row[low_col]),
-                    "close": float(row[close_col])
+                    "open": float(row[ohlc_cols["open"]]),
+                    "high": float(row[ohlc_cols["high"]]),
+                    "low": float(row[ohlc_cols["low"]]),
+                    "close": float(row[ohlc_cols["close"]])
                 }
                 result.append(entry)
             
@@ -133,15 +190,19 @@ class DataAdapter:
         try:
             logger.debug(f"Transforming line data with shape {df.shape}")
             
-            # Check if required columns exist
-            required_cols = [time_column, value_column]
-            missing_cols = [col for col in required_cols if col not in df.columns]
+            # Ensure date column is available
+            df = DataAdapter._ensure_date_column(df, time_column)
             
-            if missing_cols:
+            # Handle case-insensitive matching for value column
+            col_map = {col.lower(): col for col in df.columns}
+            actual_value_col = col_map.get(value_column.lower(), value_column)
+            
+            # Check if required columns exist (after case-insensitive matching)
+            if actual_value_col not in df.columns:
                 raise DataError(
-                    message=f"Missing required columns for line transformation: {missing_cols}",
+                    message=f"Missing required column for line transformation: {value_column}",
                     error_code="DATA-MissingColumns",
-                    details={"available_columns": list(df.columns), "required_columns": required_cols}
+                    details={"available_columns": list(df.columns), "required_column": value_column}
                 )
             
             # Convert timestamps to UNIX timestamps (seconds for lightweight-charts v4.1.1)
@@ -166,7 +227,7 @@ class DataAdapter:
                     )
                 
                 # Create line series entry
-                value = row[value_column]
+                value = row[actual_value_col]
                 # Handle NaN values
                 if pd.isna(value):
                     logger.debug(f"Skipping NaN value at timestamp {time_value}")
@@ -220,21 +281,28 @@ class DataAdapter:
         try:
             logger.debug(f"Transforming histogram data with shape {df.shape}")
             
-            # Check if required columns exist
-            required_cols = [time_column, value_column]
-            missing_cols = [col for col in required_cols if col not in df.columns]
+            # Ensure date column is available
+            df = DataAdapter._ensure_date_column(df, time_column)
             
-            if missing_cols:
+            # Handle case-insensitive matching for value column
+            col_map = {col.lower(): col for col in df.columns}
+            actual_value_col = col_map.get(value_column.lower(), value_column)
+            
+            # Check if required columns exist (after case-insensitive matching)
+            if actual_value_col not in df.columns:
                 raise DataError(
-                    message=f"Missing required columns for histogram transformation: {missing_cols}",
+                    message=f"Missing required column for histogram transformation: {value_column}",
                     error_code="DATA-MissingColumns",
-                    details={"available_columns": list(df.columns), "required_columns": required_cols}
+                    details={"available_columns": list(df.columns), "required_column": value_column}
                 )
             
-            # If color_column is specified, make sure it exists
-            if color_column and color_column not in df.columns:
-                logger.warning(f"Color column '{color_column}' not found, using value-based coloring instead")
-                color_column = None
+            # If color_column is specified, try case-insensitive match
+            actual_color_col = None
+            if color_column:
+                actual_color_col = col_map.get(color_column.lower(), color_column)
+                if actual_color_col not in df.columns:
+                    logger.warning(f"Color column '{color_column}' not found, using value-based coloring instead")
+                    actual_color_col = None
             
             # Convert timestamps to UNIX timestamps (seconds for lightweight-charts v4.1.1)
             result = []
@@ -258,7 +326,7 @@ class DataAdapter:
                     )
                 
                 # Create histogram entry
-                value = row[value_column]
+                value = row[actual_value_col]
                 # Handle NaN values
                 if pd.isna(value):
                     logger.debug(f"Skipping NaN value at timestamp {time_value}")
@@ -271,14 +339,14 @@ class DataAdapter:
                 }
                 
                 # Determine color
-                if color_column:
+                if actual_color_col:
                     # Ensure the color is a proper string for LightweightCharts
-                    if isinstance(row[color_column], bool):
+                    if isinstance(row[actual_color_col], bool):
                         # Handle boolean values for color selection
-                        entry["color"] = positive_color if row[color_column] else negative_color
-                    elif isinstance(row[color_column], str):
+                        entry["color"] = positive_color if row[actual_color_col] else negative_color
+                    elif isinstance(row[actual_color_col], str):
                         # Use string color directly
-                        entry["color"] = row[color_column]
+                        entry["color"] = row[actual_color_col]
                     else:
                         # For other types, default to value-based coloring
                         if value > 0:

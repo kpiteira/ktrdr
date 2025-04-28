@@ -7,6 +7,7 @@ This module defines the CLI commands for interacting with the KTRDR application.
 import sys
 import json
 import yaml
+import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 
@@ -22,6 +23,7 @@ from ktrdr.config.validation import InputValidator
 from ktrdr.config.models import IndicatorConfig, IndicatorsConfig
 from ktrdr.indicators import IndicatorFactory, BaseIndicator
 from ktrdr.errors import DataError, ValidationError, ConfigurationError
+from ktrdr.visualization import Visualizer
 
 # Create a Typer application with help text
 cli_app = typer.Typer(
@@ -370,6 +372,477 @@ def compute_indicator(
                 # to ensure only the JSON content is displayed with no formatting
                 print(json_data)
                 
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except DataError as e:
+        error_console.print(f"[bold red]Data error:[/bold red] {str(e)}")
+        logger.error(f"Data error: {str(e)}")
+        sys.exit(1)
+    except ConfigurationError as e:
+        error_console.print(f"[bold red]Configuration error:[/bold red] {str(e)}")
+        logger.error(f"Configuration error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+@cli_app.command("plot")
+def plot(
+    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
+    
+    # Chart options
+    chart_type: str = typer.Option(
+        "candlestick", 
+        "--chart-type", 
+        "-c",
+        help="Chart type (candlestick, line, histogram)"
+    ),
+    theme: str = typer.Option(
+        "dark",
+        "--theme", 
+        help="Chart theme (dark, light)"
+    ),
+    height: int = typer.Option(
+        500,
+        "--height",
+        help="Chart height in pixels"
+    ),
+    
+    # Indicator options
+    indicator_type: Optional[str] = typer.Option(
+        None,
+        "--indicator", 
+        "-i",
+        help="Indicator type to add (e.g., SMA, EMA, RSI, MACD)"
+    ),
+    period: int = typer.Option(
+        20,
+        "--period", 
+        "-p",
+        help="Period for the indicator calculation"
+    ),
+    source: str = typer.Option(
+        "close",
+        "--source", 
+        "-s",
+        help="Source column for calculation (default: close)"
+    ),
+    panel: bool = typer.Option(
+        False,
+        "--panel",
+        help="Add indicator as a separate panel (default: overlay)"
+    ),
+    
+    # Range slider
+    range_slider: bool = typer.Option(
+        True,
+        "--range-slider/--no-range-slider",
+        help="Add a range slider for chart navigation"
+    ),
+    
+    # Additional data display options
+    volume: bool = typer.Option(
+        True,
+        "--volume/--no-volume",
+        help="Add volume panel to the chart"
+    ),
+    
+    # Output options
+    output_file: Optional[str] = typer.Option(
+        None,
+        "--output", 
+        "-o",
+        help="Save output to file (specify path), defaults to symbol_timeframe.html"
+    ),
+    data_dir: Optional[str] = typer.Option(
+        None,
+        "--data-dir", 
+        "-d",
+        help="Data directory path"
+    )
+):
+    """
+    Create and save interactive price charts.
+    
+    This command generates interactive visualizations of price data,
+    optionally including indicators and volume data.
+    """
+    logger.info(f"Creating chart for {symbol} ({timeframe})")
+    
+    try:
+        # Validate inputs
+        symbol = InputValidator.validate_string(
+            symbol,
+            min_length=1,
+            max_length=20,
+            pattern=r'^[A-Za-z0-9\-\.]+$'
+        )
+        
+        timeframe = InputValidator.validate_string(
+            timeframe,
+            min_length=1,
+            max_length=5,
+            pattern=r'^[0-9]+[dhm]$'
+        )
+        
+        chart_type = InputValidator.validate_string(
+            chart_type,
+            allowed_values=["candlestick", "line", "histogram"]
+        )
+        
+        theme = InputValidator.validate_string(
+            theme,
+            allowed_values=["dark", "light"]
+        )
+        
+        height = InputValidator.validate_numeric(
+            height,
+            min_value=100,
+            max_value=2000
+        )
+        
+        # Create a DataManager instance
+        data_manager = DataManager(data_dir=data_dir)
+        
+        # Load the data
+        logger.info(f"Loading data for {symbol} ({timeframe})")
+        df = data_manager.load_data(symbol, timeframe)
+        
+        if df is None or df.empty:
+            error_console.print(f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})")
+            return
+        
+        # Create visualizer with selected theme
+        visualizer = Visualizer(theme=theme)
+        
+        # Create chart
+        console.print(f"Creating {chart_type} chart for {symbol} ({timeframe})...")
+        chart = visualizer.create_chart(
+            data=df,
+            title=f"{symbol} ({timeframe})",
+            chart_type=chart_type,
+            height=height
+        )
+        
+        # Add indicator if specified
+        if indicator_type:
+            # Create and compute the indicator
+            indicator_config = IndicatorConfig(
+                type=indicator_type,
+                params={"period": period, "source": source}
+            )
+            factory = IndicatorFactory([indicator_config])
+            indicators = factory.build()
+            
+            if not indicators:
+                error_console.print(f"[bold red]Error:[/bold red] Failed to create indicator {indicator_type}")
+            else:
+                indicator = indicators[0]
+                # Calculate indicator values
+                try:
+                    indicator_name = indicator.get_column_name()
+                    df[indicator_name] = indicator.compute(df)
+                    
+                    # Colors for common indicators
+                    if indicator_type.lower() in ["sma", "ma"]:
+                        color = "#2962FF"  # Blue
+                    elif indicator_type.lower() == "ema":
+                        color = "#FF6D00"  # Orange
+                    elif indicator_type.lower() == "rsi":
+                        color = "#9C27B0"  # Purple
+                    else:
+                        color = "#2962FF"  # Default blue
+                    
+                    # Add indicator to chart (as panel or overlay)
+                    if panel:
+                        console.print(f"Adding {indicator_name} as panel...")
+                        chart = visualizer.add_indicator_panel(
+                            chart=chart,
+                            data=df,
+                            column=indicator_name,
+                            color=color,
+                            title=indicator_name
+                        )
+                    else:
+                        console.print(f"Adding {indicator_name} as overlay...")
+                        chart = visualizer.add_indicator_overlay(
+                            chart=chart,
+                            data=df,
+                            column=indicator_name,
+                            color=color,
+                            title=indicator_name
+                        )
+                except Exception as e:
+                    error_console.print(f"[bold red]Error computing {indicator_type}:[/bold red] {str(e)}")
+                    logger.error(f"Error computing {indicator_type}: {str(e)}")
+        
+        # Add volume if requested
+        if volume:
+            console.print("Adding volume panel...")
+            chart = visualizer.add_indicator_panel(
+                chart=chart,
+                data=df,
+                column="volume",
+                panel_type="histogram",
+                color="#00BCD4",  # Cyan
+                title="Volume"
+            )
+        
+        # Add range slider if requested
+        if range_slider:
+            console.print("Adding range slider...")
+            chart = visualizer.configure_range_slider(chart, height=60, show=True)
+        
+        # Determine output path if not provided
+        if not output_file:
+            output_dir = Path("output")
+            os.makedirs(output_dir, exist_ok=True)
+            output_file = output_dir / f"{symbol.lower()}_{timeframe}_{chart_type}.html"
+        
+        # Save the chart
+        output_path = visualizer.save(chart, output_file, overwrite=True)
+        console.print(f"\n[green]Chart saved to:[/green] {output_path}")
+        console.print(f"Open this file in your web browser to view the interactive chart.")
+        
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except DataError as e:
+        error_console.print(f"[bold red]Data error:[/bold red] {str(e)}")
+        logger.error(f"Data error: {str(e)}")
+        sys.exit(1)
+    except ConfigurationError as e:
+        error_console.print(f"[bold red]Configuration error:[/bold red] {str(e)}")
+        logger.error(f"Configuration error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+@cli_app.command("plot-indicators")
+def plot_indicators(
+    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
+    
+    # Indicators configuration
+    config_file: Optional[str] = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to indicator configuration YAML file"
+    ),
+    
+    # Chart options
+    theme: str = typer.Option(
+        "dark",
+        "--theme",
+        help="Chart theme (dark, light)"
+    ),
+    separate_panels: bool = typer.Option(
+        True,
+        "--separate-panels/--overlays",
+        help="Whether to place each indicator in a separate panel"
+    ),
+    
+    # Output options
+    output_file: Optional[str] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Save output to file (specify path)"
+    ),
+    data_dir: Optional[str] = typer.Option(
+        None,
+        "--data-dir", 
+        "-d",
+        help="Data directory path"
+    )
+):
+    """
+    Create multi-indicator charts with combined price and indicator plots.
+    
+    This command generates comprehensive trading visualizations with
+    multiple indicators based on a configuration file.
+    """
+    logger.info(f"Creating multi-indicator chart for {symbol} ({timeframe})")
+    
+    try:
+        # Validate inputs
+        symbol = InputValidator.validate_string(
+            symbol,
+            min_length=1,
+            max_length=20,
+            pattern=r'^[A-Za-z0-9\-\.]+$'
+        )
+        
+        timeframe = InputValidator.validate_string(
+            timeframe,
+            min_length=1,
+            max_length=5,
+            pattern=r'^[0-9]+[dhm]$'
+        )
+        
+        theme = InputValidator.validate_string(
+            theme,
+            allowed_values=["dark", "light"]
+        )
+        
+        # Check that config file exists if specified
+        if config_file:
+            config_path = Path(config_file)
+            if not config_path.exists():
+                raise ConfigurationError(
+                    message=f"Configuration file not found: {config_file}",
+                    error_code="CONFIG-FileNotFound",
+                    details={"file_path": config_file}
+                )
+        
+        # Create a DataManager instance
+        data_manager = DataManager(data_dir=data_dir)
+        
+        # Load the data
+        logger.info(f"Loading data for {symbol} ({timeframe})")
+        df = data_manager.load_data(symbol, timeframe)
+        
+        if df is None or df.empty:
+            error_console.print(f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})")
+            return
+        
+        # Load indicator configuration
+        indicators = []
+        if config_file:
+            try:
+                with open(config_path, 'r') as f:
+                    config_data = yaml.safe_load(f)
+                
+                indicators_config = IndicatorsConfig(**config_data)
+                factory = IndicatorFactory(indicators_config)
+                indicators = factory.build()
+            except Exception as e:
+                logger.error(f"Failed to load indicator configuration: {str(e)}")
+                raise ConfigurationError(
+                    message=f"Failed to load indicator configuration: {str(e)}",
+                    error_code="CONFIG-LoadError",
+                    details={"file_path": config_file, "error": str(e)}
+                )
+        else:
+            # Default indicators if no config provided
+            indicators_config = IndicatorsConfig(
+                indicators=[
+                    IndicatorConfig(type="SMA", params={"period": 20, "source": "close"}),
+                    IndicatorConfig(type="SMA", params={"period": 50, "source": "close"}),
+                    IndicatorConfig(type="RSI", params={"period": 14, "source": "close"})
+                ]
+            )
+            factory = IndicatorFactory(indicators_config)
+            indicators = factory.build()
+        
+        # Create visualizer with selected theme
+        visualizer = Visualizer(theme=theme)
+        
+        # Create chart
+        console.print(f"Creating chart for {symbol} ({timeframe})...")
+        chart = visualizer.create_chart(
+            data=df,
+            title=f"{symbol} ({timeframe}) Technical Analysis",
+            chart_type="candlestick",
+            height=500
+        )
+        
+        # Process indicators
+        result_df = df.copy()
+        
+        # Define a color palette for indicators
+        color_palette = [
+            "#2962FF",  # Blue
+            "#FF6D00",  # Orange
+            "#9C27B0",  # Purple
+            "#4CAF50",  # Green
+            "#F44336",  # Red
+            "#00BCD4",  # Cyan
+            "#FFC107",  # Amber
+        ]
+        
+        # Add computed indicators to the chart
+        overlay_count = 0
+        panel_count = 0
+        
+        for i, indicator in enumerate(indicators):
+            indicator_name = indicator.get_column_name()
+            try:
+                # Compute indicator
+                console.print(f"Computing {indicator.name} indicator...")
+                result_df[indicator_name] = indicator.compute(df)
+                
+                # Determine color (cycle through palette)
+                color = color_palette[i % len(color_palette)]
+                
+                # For some indicators, always use a separate panel
+                force_panel = indicator.name.upper() in ["RSI", "MACD", "STOCH", "ADX", "CCI", "ATR"]
+                
+                # Add indicator to chart
+                if separate_panels or force_panel:
+                    panel_type = "histogram" if "MACD_HIST" in indicator_name else "line"
+                    console.print(f"Adding {indicator_name} as panel...")
+                    chart = visualizer.add_indicator_panel(
+                        chart=chart,
+                        data=result_df,
+                        column=indicator_name,
+                        panel_type=panel_type,
+                        color=color,
+                        title=f"{indicator.name} ({indicator.params.get('period', '')})"
+                    )
+                    panel_count += 1
+                else:
+                    console.print(f"Adding {indicator_name} as overlay...")
+                    chart = visualizer.add_indicator_overlay(
+                        chart=chart,
+                        data=result_df,
+                        column=indicator_name,
+                        color=color,
+                        title=f"{indicator.name} ({indicator.params.get('period', '')})"
+                    )
+                    overlay_count += 1
+                    
+            except Exception as e:
+                error_console.print(f"[bold red]Error computing {indicator.name}:[/bold red] {str(e)}")
+                logger.error(f"Error computing {indicator.name}: {str(e)}")
+        
+        # Add volume panel
+        console.print("Adding volume panel...")
+        chart = visualizer.add_indicator_panel(
+            chart=chart,
+            data=df,
+            column="volume",
+            panel_type="histogram",
+            color="#00BCD4",  # Cyan
+            title="Volume"
+        )
+        
+        # Add range slider
+        console.print("Adding range slider...")
+        chart = visualizer.configure_range_slider(chart, height=60, show=True)
+        
+        # Determine output path if not provided
+        if not output_file:
+            output_dir = Path("output")
+            os.makedirs(output_dir, exist_ok=True)
+            output_file = output_dir / f"{symbol.lower()}_{timeframe}_analysis.html"
+        
+        # Save the chart
+        output_path = visualizer.save(chart, output_file, overwrite=True)
+        console.print(f"\n[green]Chart saved to:[/green] {output_path}")
+        console.print(f"Open this file in your web browser to view the interactive chart.")
+        console.print(f"Chart contains {overlay_count} overlay indicators and {panel_count} panel indicators.")
+        
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         logger.error(f"Validation error: {str(e)}")
