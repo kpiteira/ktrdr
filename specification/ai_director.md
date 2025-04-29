@@ -505,43 +505,49 @@ Always adhere to this indicator implementation guide when creating new indicator
 
 For each implemented task, clearly define and verify the following success criteria:
 
-### Slice 3 - Basic Visualization (v1.0.3)
+### Slice 4 - Fuzzy Logic Foundation (v1.0.4)
 
-1. **Task 3.1 - Core Visualization Framework**:
-   - Directory structure for visualization module is correctly created
-   - `DataAdapter` class successfully transforms DataFrame data to lightweight-charts format
-   - Conversion methods for OHLCV, line, and histogram data are implemented
-   - `ConfigBuilder` correctly generates chart configuration
-   - `TemplateManager` properly handles HTML templates
-   - `Renderer` class generates proper HTML/JS output
+1. **Task 4.1 - Define fuzzy set configurations**:
+   - Pydantic model for fuzzy configuration is implemented correctly
+   - Schema for triangular membership functions is properly defined
+   - Validation rules for membership function parameters work as expected
+   - Configuration loading from YAML functions correctly
+   - Invalid configurations are properly rejected with clear error messages
 
-2. **Task 3.2 - Basic Visualizer API**:
-   - `Visualizer` class implements core functionality
-   - `create_chart()` method creates a basic chart
-   - `add_indicator_overlay()` method adds price-aligned indicators
-   - `add_indicator_panel()` method adds separate panels for indicators
-   - `save()` method exports charts to HTML files
-   - `show()` method displays charts (e.g., in Jupyter notebooks or returned for Streamlit)
+2. **Task 4.2 - Implement membership functions**:
+   - `MembershipFunction` abstract base class is properly defined
+   - `TriangularMF` class correctly implements the membership function interface
+   - Evaluation methods handle boundary conditions properly
+   - Vectorized evaluation works correctly for pandas Series inputs
+   - Edge cases (zeros, NaN values, extreme values) are properly handled
 
-3. **Task 3.3 - Essential Chart Types**:
-   - Candlestick chart correctly displays price data
-   - Line charts properly show indicator overlays
-   - Histogram charts successfully visualize volume data
-   - Dark/light theme support works correctly
-   - Charts maintain proper proportions and layout
+3. **Task 4.3 - Develop FuzzyEngine core**:
+   - `FuzzyEngine` class initializes correctly with configuration
+   - `fuzzify()` method properly converts indicator values to membership degrees
+   - Naming conventions for fuzzy outputs are consistent
+   - Performance is optimized for large datasets
+   - Appropriate error handling and logging is implemented
 
-4. **Task 3.4 - CLI Enhancement for Visualization**:
-   - `plot` command works with indicator options
-   - Options to save plots as HTML files function correctly
-   - Combined price and indicator plot command works as expected
-   - CLI help provides clear guidance on visualization options
+4. **Task 4.4 - Extend configuration for fuzzy logic**:
+   - Fuzzy set configuration schema integrates with the existing configuration system
+   - Sample fuzzy configurations work with common indicators
+   - Configuration loader correctly handles fuzzy set definitions
+   - Validation rules properly enforce valid fuzzy set parameters
+   - Coherent error messages are provided for configuration issues
 
-5. **Task 3.5 - Visual Testing Framework**:
-   - Test fixtures with sample data are created
-   - Tests for data transformations validate correct output
-   - Tests for HTML/JS generation confirm proper rendering
-   - Smoke tests verify basic visualization component functionality
-   - Test coverage is comprehensive for core visualization features
+5. **Task 4.5 - Test fuzzy logic implementation**:
+   - Test cases with known indicator values and expected memberships pass
+   - Numerical validation functions work correctly
+   - Edge case tests validate proper behavior with extreme values
+   - Performance tests confirm efficient operation with large datasets
+   - Test coverage is comprehensive for all fuzzy logic components
+
+6. **Task 4.6 - Add fuzzy logic to CLI**:
+   - `fuzzify` command works correctly with indicator data
+   - Options to display fuzzy membership values function as expected
+   - CLI help provides clear guidance on fuzzy logic options
+   - Error handling is appropriate for edge cases
+   - Output formatting is clear and informative
 
 When implementing any task, define clear verification steps and include minimal demo code to prove functionality. After implementation, verify all success criteria are met before considering the task complete.
 
@@ -726,3 +732,40 @@ Before submitting a task implementation, verify:
 - [ ] No hardcoded secrets or credentials in the code
 - [ ] File operations are restricted to allowed directories
 - [ ] Security-sensitive operations have appropriate access controls
+
+## Version Management
+
+Ensuring proper version control is essential for tracking project progress. The project follows semantic versioning with additional guidelines:
+
+1. **Version Number Format**: The project uses semantic versioning (MAJOR.MINOR.PATCH.BUILD):
+   - MAJOR: Incremented for major architectural changes (1.X.Y.Z → [1+1].0.0.0)
+   - MINOR: Incremented for each completed vertical slice (1.0.X.Y → 1.0.[X+1].0)
+   - PATCH: Incremented for each completed task within a slice (1.0.X.Y → 1.0.X.[Y+1])
+   - BUILD: Incremented for bug fixes (1.0.X.Y.Z → 1.0.X.Y.[Z+1])
+
+2. **Version Update Timing**:
+   - **Slice Completion**: When all tasks within a slice are complete, increment the MINOR version
+   - **Task Completion**: When a task is completed, increment the PATCH version
+   - **Bug Fixes**: When fixing bugs in an existing implementation, increment the BUILD version
+
+3. **Update Location**: The version number must be updated in:
+   - `pyproject.toml`: The canonical source of the project version
+
+4. **Versioning Process**:
+   - At the beginning of implementing a new task, verify the current project version
+   - Upon task completion, increment the PATCH version in pyproject.toml
+   - Upon completion of the final task in a slice, reset the PATCH version to 0 and increment the MINOR version
+   - Include the version update in the Task Completion Report
+
+5. **Version Verification**: Before marking a task as complete:
+   - Verify that the version number in `pyproject.toml` has been updated
+   - Ensure the version follows the pattern 1.0.X.Y where X is the slice number and Y is the task number within the slice
+   - Document the version update in the Task Completion Report
+
+6. **Example Version Progression**:
+   - Starting Slice 4, Task 4.1: Version 1.0.4.0
+   - Complete Task 4.1: Version 1.0.4.1
+   - Complete Task 4.2: Version 1.0.4.2
+   - Complete all tasks in Slice 4: Version 1.0.5.0 (increment MINOR, reset PATCH)
+
+This versioning approach provides clear tracking of both slice and task progress, with each increment representing a complete, working implementation.

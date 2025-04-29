@@ -27,7 +27,8 @@ KTRDR will be developed using a vertical slice approach, where each development 
 
 The versioning strategy follows semantic versioning with these additional guidelines:
 - Each completed vertical slice increments the minor version (1.0.X → 1.0.[X+1])
-- Bug fixes within a slice increment the patch version (1.0.X.Y → 1.0.X.[Y+1])
+- Each completed task within a slice increments the patch version (1.0.X.Y → 1.0.X.[Y+1])
+- Bug fixes increment the build version (1.0.X.Y.Z → 1.0.X.Y.[Z+1])
 - Major architectural changes would increment the major version (1.X.Y → [1+1].0.0)
 
 ### Quality Gates
