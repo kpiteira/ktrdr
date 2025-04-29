@@ -185,11 +185,11 @@ A command-line tool that can:
   - [x] Define schema for triangular membership functions
   - [x] Add validation rules for membership function parameters
 
-- [ ] **Task 4.2**: Implement membership functions
-  - [ ] Create MembershipFunction abstract base class
-  - [ ] Implement TriangularMF class
-  - [ ] Add evaluation methods with boundary handling
-  - [ ] Create vectorized evaluation for Series inputs
+- [x] **Task 4.2**: Implement membership functions
+  - [x] Create MembershipFunction abstract base class
+  - [x] Implement TriangularMF class
+  - [x] Add evaluation methods with boundary handling
+  - [x] Create vectorized evaluation for Series inputs
 
 - [ ] **Task 4.3**: Develop FuzzyEngine core
   - [ ] Create FuzzyEngine class with configuration

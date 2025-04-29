@@ -12,7 +12,7 @@ from ktrdr.fuzzy.config import (
     MembershipFunctionConfig,
     TriangularMFConfig,
 )
-from ktrdr.fuzzy.membership import MembershipFunction
+from ktrdr.fuzzy.membership import MembershipFunction, TriangularMF
 
 __all__ = [
     'FuzzyConfig',
@@ -21,4 +21,5 @@ __all__ = [
     'MembershipFunctionConfig',
     'TriangularMFConfig',
     'MembershipFunction',
+    'TriangularMF',
 ]
