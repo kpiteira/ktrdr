@@ -2,7 +2,7 @@
 KTRDR - Automated trading agent with neuro-fuzzy decision engine.
 """
 
-__version__ = "1.0.1"  # Following vertical slice versioning from task breakdown
+__version__ = "1.0.4.4"  # Reflecting completion of Task 4.4: Extend configuration for fuzzy logic
 
 # Import logging system for easy access
 from ktrdr.logging import (
