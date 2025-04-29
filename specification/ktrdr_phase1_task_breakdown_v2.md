@@ -209,9 +209,9 @@ A command-line tool that can:
   - [x] Add edge case tests
 
 ### CLI Enhancement
-- [ ] **Task 4.6**: Add fuzzy logic to CLI
-  - [ ] Implement `fuzzify` command
-  - [ ] Add options to display fuzzy membership values
+- [x] **Task 4.6**: Add fuzzy logic to CLI
+  - [x] Implement `fuzzify` command
+  - [x] Add options to display fuzzy membership values
 
 ### Deliverable
 A command-line tool that can:

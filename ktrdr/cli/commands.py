@@ -24,6 +24,8 @@ from ktrdr.config.models import IndicatorConfig, IndicatorsConfig
 from ktrdr.indicators import IndicatorFactory, BaseIndicator
 from ktrdr.errors import DataError, ValidationError, ConfigurationError
 from ktrdr.visualization import Visualizer
+from ktrdr.fuzzy.config import FuzzyConfigLoader, FuzzyConfig
+from ktrdr.fuzzy.engine import FuzzyEngine
 
 # Create a Typer application with help text
 cli_app = typer.Typer(
@@ -862,10 +864,275 @@ def plot_indicators(
         sys.exit(1)
 
 
-def main():
-    """Entry point for the CLI application."""
-    cli_app()
-
-
-if __name__ == "__main__":
-    main()
+@cli_app.command("fuzzify")
+def fuzzify(
+    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
+    
+    # Indicator options
+    indicator_type: str = typer.Option(..., "--indicator", "-i", help="Indicator type to fuzzify (e.g., RSI, MACD)"),
+    period: int = typer.Option(14, "--period", "-p", help="Period for the indicator calculation"),
+    source: str = typer.Option("close", "--source", "-s", help="Source column for indicator calculation"),
+    
+    # Fuzzy configuration options
+    fuzzy_config: Optional[str] = typer.Option(None, "--fuzzy-config", "-f", 
+                                              help="Path to fuzzy configuration YAML file (default: config/fuzzy.yaml)"),
+    strategy: Optional[str] = typer.Option(None, "--strategy", 
+                                          help="Strategy name to use for fuzzy configuration overrides"),
+    
+    # Output options
+    rows: int = typer.Option(10, "--rows", "-r", help="Number of rows to display"),
+    data_dir: Optional[str] = typer.Option(None, "--data-dir", "-d", help="Data directory path"),
+    tail: bool = typer.Option(False, "--tail", help="Show the last N rows instead of the first N"),
+    format: str = typer.Option("table", "--format", help="Output format (table, csv, json)"),
+    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="Save output to file (specify path)"),
+    show_original: bool = typer.Option(True, "--show-original/--hide-original", 
+                                      help="Include original indicator values in output"),
+    normalize: bool = typer.Option(False, "--normalize", help="Normalize membership values (sum to 1.0)"),
+    colorize: bool = typer.Option(True, "--colorize/--no-color", help="Colorize the output table")
+):
+    """
+    Apply fuzzy membership functions to indicator values.
+    
+    This command calculates indicator values and applies fuzzy membership functions
+    to transform them into fuzzy membership degrees (values between 0 and 1).
+    """
+    logger.info(f"Fuzzifying {indicator_type} for {symbol} ({timeframe})")
+    
+    try:
+        # Validate inputs
+        symbol = InputValidator.validate_string(
+            symbol,
+            min_length=1,
+            max_length=20,
+            pattern=r'^[A-Za-z0-9\-\.]+$'
+        )
+        
+        timeframe = InputValidator.validate_string(
+            timeframe,
+            min_length=1,
+            max_length=5,
+            pattern=r'^[0-9]+[dhm]$'
+        )
+        
+        indicator_type = InputValidator.validate_string(
+            indicator_type,
+            min_length=1,
+            max_length=20
+        )
+        
+        period = InputValidator.validate_numeric(
+            period,
+            min_value=1,
+            max_value=1000
+        )
+        
+        rows = InputValidator.validate_numeric(
+            rows,
+            min_value=1,
+            max_value=1000
+        )
+        
+        format = InputValidator.validate_string(
+            format,
+            allowed_values=["table", "csv", "json"]
+        )
+        
+        # Create a DataManager instance (using LocalDataLoader)
+        data_manager = DataManager(data_dir=data_dir)
+        
+        # Load the data
+        logger.info(f"Loading data for {symbol} ({timeframe})")
+        df = data_manager.load_data(symbol, timeframe)
+        
+        if df is None or df.empty:
+            error_console.print(f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})")
+            return
+        
+        # Create and compute the indicator
+        indicator_config = IndicatorConfig(
+            type=indicator_type,  # Don't convert to lowercase here
+            params={"period": period, "source": source}
+        )
+        factory = IndicatorFactory([indicator_config])
+        indicators = factory.build()
+        
+        if not indicators:
+            error_console.print(f"[bold red]Error:[/bold red] Failed to create indicator {indicator_type}")
+            return
+        
+        indicator = indicators[0]
+        indicator_name = indicator.get_column_name()
+        
+        # Compute indicator values
+        logger.info(f"Computing {indicator_name} indicator")
+        try:
+            indicator_values = indicator.compute(df)
+        except DataError as e:
+            error_console.print(f"[bold red]Error computing {indicator_name}:[/bold red] {str(e)}")
+            return
+        
+        # Load fuzzy configuration
+        logger.info("Loading fuzzy configuration")
+        
+        # Fix: Use absolute path to the config file instead of relative path
+        config_dir = Path.cwd() / "config"
+        fuzzy_loader = FuzzyConfigLoader(config_dir=config_dir)
+        
+        try:
+            if fuzzy_config:
+                # Load from specified file
+                fuzzy_config_obj = fuzzy_loader.load_from_yaml(fuzzy_config)
+            else:
+                # Load default with optional strategy override
+                fuzzy_config_obj = fuzzy_loader.load_with_strategy_override(strategy)
+        except (ConfigurationError, FileNotFoundError) as e:
+            error_console.print(f"[bold red]Error loading fuzzy configuration:[/bold red] {str(e)}")
+            return
+        
+        # Create fuzzy engine
+        fuzzy_engine = FuzzyEngine(fuzzy_config_obj)
+        
+        # Check if the indicator is available in fuzzy configuration
+        available_indicators = fuzzy_engine.get_available_indicators()
+        if indicator_type.lower() not in available_indicators:
+            error_console.print(f"[bold red]Error:[/bold red] Indicator '{indicator_type}' not found in fuzzy configuration.")
+            error_console.print(f"Available indicators: {', '.join(available_indicators)}")
+            return
+        
+        # Apply fuzzy membership functions
+        logger.info(f"Applying fuzzy membership functions to {indicator_name}")
+        fuzzy_result = fuzzy_engine.fuzzify(indicator_type.lower(), indicator_values)
+        
+        # Normalize if requested
+        if normalize:
+            logger.info("Normalizing membership values")
+            row_sums = fuzzy_result.sum(axis=1)
+            row_sums = row_sums.replace(0, 1)  # Avoid division by zero
+            fuzzy_result = fuzzy_result.div(row_sums, axis=0)
+        
+        # Create combined result DataFrame
+        result_df = pd.DataFrame({indicator_name: indicator_values}, index=df.index)
+        result_df = pd.concat([result_df, fuzzy_result], axis=1)
+        
+        # Get the data to display (head or tail)
+        display_df = result_df.tail(rows) if tail else result_df.head(rows)
+        
+        # Hide original indicator values if requested
+        if not show_original:
+            display_df = display_df.drop(columns=[indicator_name])
+        
+        # Format the output
+        if format == "table":
+            # Display information about the data
+            console.print(f"\n[bold]Fuzzy membership values for {indicator_type} ({symbol}, {timeframe}):[/bold]")
+            console.print(f"Total rows: {len(result_df)}")
+            console.print(f"Date range: {result_df.index.min()} to {result_df.index.max()}")
+            if strategy:
+                console.print(f"Using strategy: {strategy}")
+            
+            # Create a Rich table for better formatting
+            table = Table(title=f"{indicator_type} Fuzzy Membership Values")
+            
+            # Add the index column
+            table.add_column("Date", style="cyan")
+            
+            # Add original indicator column if requested
+            if show_original:
+                table.add_column(indicator_name, style="green")
+            
+            # Add fuzzy set columns
+            fuzzy_sets = fuzzy_engine.get_fuzzy_sets(indicator_type.lower())
+            
+            # Define colors for fuzzy sets
+            fuzzy_colors = {
+                "low": "blue",
+                "negative": "blue",
+                "below": "blue",
+                "bearish": "blue",
+                "neutral": "yellow",
+                "medium": "yellow",
+                "high": "red",
+                "positive": "red",
+                "above": "red",
+                "bullish": "red",
+            }
+            
+            # Default color for any set not in the predefined map
+            default_color = "white"
+            
+            for fuzzy_set in fuzzy_sets:
+                output_name = f"{indicator_type.lower()}_{fuzzy_set}"
+                # Choose color based on set name if colorize is enabled
+                style = fuzzy_colors.get(fuzzy_set, default_color) if colorize else default_color
+                table.add_column(fuzzy_set, style=style)
+            
+            # Add rows
+            for idx, row in display_df.iterrows():
+                # Format values
+                values = [idx.strftime('%Y-%m-%d')]
+                
+                if show_original:
+                    orig_value = row[indicator_name]
+                    values.append(f"{orig_value:.4f}" if not pd.isna(orig_value) else "N/A")
+                
+                # Add formatted fuzzy membership values
+                for fuzzy_set in fuzzy_sets:
+                    output_name = f"{indicator_type.lower()}_{fuzzy_set}"
+                    membership = row[output_name]
+                    values.append(f"{membership:.4f}" if not pd.isna(membership) else "N/A")
+                
+                table.add_row(*values)
+            
+            # Print the table
+            console.print(table)
+            
+            # Print fuzzy set definitions
+            console.print("\n[bold]Fuzzy Set Definitions:[/bold]")
+            for fuzzy_set in fuzzy_sets:
+                # Get the membership function parameters
+                mf_config = fuzzy_config_obj.root[indicator_type.lower()].root[fuzzy_set]
+                params = mf_config.parameters
+                console.print(f"- {fuzzy_set}: [{params[0]}, {params[1]}, {params[2]}]")
+                
+        elif format == "csv":
+            output = display_df.to_csv()
+            if output_file:
+                with open(output_file, 'w') as f:
+                    f.write(output)
+                console.print(f"Output saved to {output_file}")
+            else:
+                console.print(output)
+                
+        elif format == "json":
+            # Convert to JSON - need to handle the index
+            json_data = display_df.reset_index().to_json(
+                orient="records",
+                date_format="iso"
+            )
+            
+            if output_file:
+                with open(output_file, 'w') as f:
+                    f.write(json_data)
+                console.print(f"Output saved to {output_file}")
+            else:
+                # For JSON format, we use print() instead of console.print()
+                # to ensure only the JSON content is displayed with no formatting
+                print(json_data)
+                
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except DataError as e:
+        error_console.print(f"[bold red]Data error:[/bold red] {str(e)}")
+        logger.error(f"Data error: {str(e)}")
+        sys.exit(1)
+    except ConfigurationError as e:
+        error_console.print(f"[bold red]Configuration error:[/bold red] {str(e)}")
+        logger.error(f"Configuration error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
