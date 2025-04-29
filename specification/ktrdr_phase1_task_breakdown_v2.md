@@ -159,11 +159,11 @@ A command-line tool that can:
   - [x] Create combined price and indicator plot command
 
 ### Testing
-- [ ] **Task 3.5**: Create visual testing framework
-  - [ ] Create test fixtures with sample data
-  - [ ] Implement tests for data transformations
-  - [ ] Add tests for HTML/JS generation
-  - [ ] Create smoke tests for visualization components
+- [x] **Task 3.5**: Create visual testing framework
+  - [x] Create test fixtures with sample data
+  - [x] Implement tests for data transformations
+  - [x] Add tests for HTML/JS generation
+  - [x] Create smoke tests for visualization components
 
 ### Deliverable
 A command-line tool that can:

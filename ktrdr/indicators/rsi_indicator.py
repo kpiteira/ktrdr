@@ -38,7 +38,7 @@ class RSIIndicator(BaseIndicator):
             period (int): The period for RSI calculation, typically 14
             source (str): The column name from DataFrame to use for calculations
         """
-        super().__init__(name="RSI", period=period, source=source)
+        super().__init__(name="RSI", display_as_overlay=False, period=period, source=source)
         logger.debug(f"Initialized RSI indicator with period {period} using {source} prices")
     
     def _validate_params(self, params):

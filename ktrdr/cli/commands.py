@@ -785,11 +785,12 @@ def plot_indicators(
                 # Determine color (cycle through palette)
                 color = color_palette[i % len(color_palette)]
                 
-                # For some indicators, always use a separate panel
-                force_panel = indicator.name.upper() in ["RSI", "MACD", "STOCH", "ADX", "CCI", "ATR"]
+                # Check if this indicator should be a separate panel
+                # Use the indicator's own preference unless overridden by user
+                should_use_panel = separate_panels or not indicator.display_as_overlay
                 
                 # Add indicator to chart
-                if separate_panels or force_panel:
+                if should_use_panel:
                     panel_type = "histogram" if "MACD_HIST" in indicator_name else "line"
                     console.print(f"Adding {indicator_name} as panel...")
                     chart = visualizer.add_indicator_panel(

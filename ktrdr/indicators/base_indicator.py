@@ -28,14 +28,20 @@ class BaseIndicator(ABC):
     Attributes:
         name (str): The name of the indicator (e.g., "RSI", "SMA")
         params (Dict[str, Any]): Dictionary of parameters for the indicator
+        display_as_overlay (bool): Whether this indicator can be displayed as an overlay
+                                  on price charts by default. Indicators with different
+                                  scale than price (like RSI) should set this to False.
     """
     
-    def __init__(self, name: str, **params):
+    def __init__(self, name: str, display_as_overlay: bool = True, **params):
         """
         Initialize a new indicator with its parameters.
         
         Args:
             name (str): The name of the indicator
+            display_as_overlay (bool): Whether this indicator should be displayed as an overlay
+                                     on price charts by default. Set to False for indicators with
+                                     a different scale than price (like RSI, Stochastic).
             **params: Variable keyword arguments for indicator parameters
         """
         self.name = InputValidator.validate_string(
@@ -45,6 +51,7 @@ class BaseIndicator(ABC):
             pattern=r'^[A-Za-z0-9_]+$'  # alphanumeric and underscore only
         )
         self.params = self._validate_params(params)
+        self.display_as_overlay = display_as_overlay
         
         logger.info(f"Initialized {self.name} indicator with parameters: {self.params}")
     
