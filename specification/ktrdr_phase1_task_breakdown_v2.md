@@ -180,10 +180,10 @@ A command-line tool that can:
 **Value delivered:** Ability to transform indicator values into fuzzy membership degrees using configurable membership functions.
 
 ### Fuzzy Logic Tasks
-- [ ] **Task 4.1**: Define fuzzy set configurations
-  - [ ] Create Pydantic model for fuzzy configuration
-  - [ ] Define schema for triangular membership functions
-  - [ ] Add validation rules for membership function parameters
+- [x] **Task 4.1**: Define fuzzy set configurations
+  - [x] Create Pydantic model for fuzzy configuration
+  - [x] Define schema for triangular membership functions
+  - [x] Add validation rules for membership function parameters
 
 - [ ] **Task 4.2**: Implement membership functions
   - [ ] Create MembershipFunction abstract base class

@@ -1,0 +1,44 @@
+# Fuzzy set definitions for common indicators
+# These serve as default templates that can be overridden in specific strategies
+
+# Each indicator has a set of fuzzy sets (e.g., "low", "neutral", "high")
+# Each fuzzy set is defined by a membership function type and its parameters
+
+# In Phase 1, only triangular membership functions are supported
+# Triangular MF parameters: [a, b, c] where:
+#  - a: start point (membership = 0)
+#  - b: peak point (membership = 1)
+#  - c: end point (membership = 0)
+
+rsi:
+  low:
+    type: triangular
+    parameters: [0, 30, 45]
+  neutral:
+    type: triangular
+    parameters: [30, 50, 70]
+  high:
+    type: triangular
+    parameters: [55, 70, 100]
+
+macd:
+  negative:
+    type: triangular
+    parameters: [-10, -2, 0]
+  neutral:
+    type: triangular
+    parameters: [-1, 0, 1]
+  positive:
+    type: triangular
+    parameters: [0, 2, 10]
+
+ema:
+  below:
+    type: triangular
+    parameters: [-100, -5, 0]
+  neutral:
+    type: triangular
+    parameters: [-2, 0, 2]
+  above:
+    type: triangular
+    parameters: [0, 5, 100]
