@@ -178,7 +178,7 @@ class TestFuzzyConfigLoader:
             }
         }
         
-        config = FuzzyConfigLoader.load(config_dict)
+        config = FuzzyConfigLoader.load_from_dict(config_dict)
         assert "rsi" in config.root
         assert "low" in config.root["rsi"].root
         assert "high" in config.root["rsi"].root
@@ -188,12 +188,12 @@ class TestFuzzyConfigLoader:
         """Test that an error is raised for invalid configuration."""
         # Empty configuration
         with pytest.raises(ConfigurationError) as exc_info:
-            FuzzyConfigLoader.load({})
+            FuzzyConfigLoader.load_from_dict({})
         assert "Failed to load fuzzy configuration" in str(exc_info.value)
         
         # Invalid parameters
         with pytest.raises(ConfigurationError):
-            FuzzyConfigLoader.load({
+            FuzzyConfigLoader.load_from_dict({
                 "rsi": {
                     "low": {
                         "type": "triangular",
