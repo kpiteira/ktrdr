@@ -84,6 +84,9 @@ class TemplateManager:
             align-items: center;
             gap: 5px;
         }}
+        .legend-item input {{
+            margin: 0;
+        }}
         .legend-color {{
             width: 10px;
             height: 10px;
@@ -137,6 +140,12 @@ class TemplateManager:
                 width: 100%;
             }}
         }}
+        .legend-clickable {{
+            cursor: pointer;
+        }}
+        .legend-clickable:hover {{
+            opacity: 0.8;
+        }}
     </style>
 </head>
 <body>
@@ -173,6 +182,8 @@ class TemplateManager:
             
             // Create all charts and keep references for theme switching
             const charts = [];
+            // Store all series for toggling visibility
+            const allSeries = {{}};
             
             {chart_scripts}
             
@@ -245,6 +256,68 @@ class TemplateManager:
             // Handle zoom fit button
             zoomFitBtn.addEventListener('click', () => {{
                 {zoom_fit_handlers}
+            }});
+            
+            // Function to toggle series visibility
+            function toggleSeries(seriesId, visible) {{
+                const series = allSeries[seriesId];
+                if (series) {{
+                    if (visible === undefined) {{
+                        // Toggle current state
+                        const newVisibility = !series.options.visible;
+                        series.applyOptions({{ visible: newVisibility }});
+                        return newVisibility;
+                    }} else {{
+                        // Set to specified state
+                        series.applyOptions({{ visible: visible }});
+                        return visible;
+                    }}
+                }}
+                return false;
+            }}
+            
+            // Function to update dynamic panel layout when indicators are toggled
+            function updatePanelLayouts() {{
+                // Recalculate heights based on visible panels
+                charts.forEach(chart => {{
+                    if (chart && chart.resize) {{
+                        chart.resize(chart.clientWidth, chart.clientHeight);
+                    }}
+                }});
+            }}
+            
+            // Set up event handlers for legend items with toggle functionality
+            document.querySelectorAll('.legend-toggle').forEach(toggle => {{
+                toggle.addEventListener('change', (e) => {{
+                    const seriesId = e.target.dataset.seriesId;
+                    const isVisible = e.target.checked;
+                    toggleSeries(seriesId, isVisible);
+                    
+                    // If this is a panel (not an overlay), adjust layout
+                    if (e.target.dataset.isPanel === 'true') {{
+                        const panelId = e.target.dataset.panelId;
+                        const panelEl = document.getElementById(panelId);
+                        if (panelEl) {{
+                            panelEl.style.display = isVisible ? 'block' : 'none';
+                            updatePanelLayouts();
+                        }}
+                    }}
+                }});
+            }});
+            
+            // Add click handlers for legend items without checkboxes
+            document.querySelectorAll('.legend-clickable').forEach(item => {{
+                item.addEventListener('click', (e) => {{
+                    const seriesId = e.currentTarget.dataset.seriesId;
+                    const newState = toggleSeries(seriesId);
+                    
+                    // Update visual feedback
+                    if (newState) {{
+                        e.currentTarget.style.opacity = '1';
+                    }} else {{
+                        e.currentTarget.style.opacity = '0.5';
+                    }}
+                }});
             }});
             
             {sync_scripts}
@@ -336,9 +409,14 @@ class TemplateManager:
             chart_title = config.get("title", f"{chart_type.capitalize()} Chart")
             chart_height = config.get("height", 400)
             
+            # Handle visibility states for dynamic layouts
+            is_panel = config.get("is_panel", False) or chart_id.endswith("_panel")
+            is_range_slider = config.get("is_range_slider", False)
+            visibility_style = "" if not is_panel else config.get("visible", True) and "block" or "none"
+            
             # Create chart container div with the correct height
             chart_containers += f"""
-        <div class="chart-container">
+        <div class="chart-container" id="{chart_id}_container" style="display:{visibility_style}">
             <div class="chart-inner">
                 <div class="chart-title">
                     <h2>{chart_title}</h2>
@@ -410,14 +488,21 @@ class TemplateManager:
         }});
         {overlay_id}.setData({json.dumps(overlay_data)});
         
-        // Add to legend
+        // Register series for toggling
+        allSeries['{overlay_id}'] = {overlay_id};
+        
+        // Add to legend with toggle checkbox
         const {overlay_id}_legend = document.createElement('div');
-        {overlay_id}_legend.className = 'legend-item';
+        {overlay_id}_legend.className = 'legend-item legend-clickable';
+        {overlay_id}_legend.dataset.seriesId = '{overlay_id}';
+        
         const {overlay_id}_color = document.createElement('div');
         {overlay_id}_color.className = 'legend-color';
         {overlay_id}_color.style.backgroundColor = '{color}';
+        
         const {overlay_id}_label = document.createElement('span');
         {overlay_id}_label.textContent = '{title}';
+        
         {overlay_id}_legend.appendChild({overlay_id}_color);
         {overlay_id}_legend.appendChild({overlay_id}_label);
         document.getElementById('{chart_id}_legend').appendChild({overlay_id}_legend);
@@ -580,6 +665,9 @@ class TemplateManager:
         const {chart_id}_series = {chart_id}.{method_name}({{
             {', '.join([f'{k}: "{v}"' if isinstance(v, str) else f'{k}: {str(v).lower()}' if isinstance(v, bool) else f'{k}: {v}' for k, v in series_options.items()])}
         }});
+        
+        // Register main series for toggling
+        allSeries['{chart_id}_main'] = {chart_id}_series;
         
         // Set data for {chart_id}
         {chart_id}_series.setData({json.dumps(data)});

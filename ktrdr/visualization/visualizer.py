@@ -277,7 +277,8 @@ class Visualizer:
                           panel_type: str = "line",
                           height: int = 150,
                           color: str = "#9C27B0",
-                          title: Optional[str] = None) -> Dict[str, Any]:
+                          title: Optional[str] = None,
+                          visible: bool = True) -> Dict[str, Any]:
         """
         Add an indicator as a separate panel below the main chart.
         
@@ -291,6 +292,7 @@ class Visualizer:
             color (str): The color to use for the indicator. Default is "#9C27B0".
             title (Optional[str]): The title for the panel. If None, the column name
                 will be used.
+            visible (bool): Whether the panel should be visible initially. Default is True.
         
         Returns:
             Dict[str, Any]: The updated chart dictionary.
@@ -368,7 +370,9 @@ class Visualizer:
             "height": height,
             "options": chart_options,
             "series_options": series_options,
-            "sync": {"target": main_chart_id}
+            "sync": {"target": main_chart_id},
+            "is_panel": True,
+            "visible": visible
         }
         
         # Add panel configuration to chart configs
@@ -384,10 +388,174 @@ class Visualizer:
             "type": panel_type,
             "color": color,
             "title": title,
-            "height": height
+            "height": height,
+            "visible": visible
         })
         
-        logger.info(f"Added {title} indicator panel to chart")
+        logger.info(f"Added {title} indicator panel to chart with visibility: {visible}")
+        return chart
+    
+    def set_panel_visibility(self,
+                           chart: Dict[str, Any],
+                           panel_id: str,
+                           visible: bool = True) -> Dict[str, Any]:
+        """
+        Set the visibility of an indicator panel.
+        
+        Args:
+            chart (Dict[str, Any]): The chart dictionary returned by create_chart.
+            panel_id (str): The ID of the panel to adjust visibility for.
+            visible (bool): Whether the panel should be visible. Default is True.
+        
+        Returns:
+            Dict[str, Any]: The updated chart dictionary.
+            
+        Raises:
+            ConfigurationError: If the input chart is invalid or panel is not found.
+        """
+        # Validate chart format
+        if not isinstance(chart, dict) or "configs" not in chart or "data" not in chart:
+            raise ConfigurationError(
+                "Invalid chart format. Use the output of create_chart().",
+                "CONFIG-InvalidChart",
+                {"chart": chart}
+            )
+        
+        # Find the panel in the configuration
+        panel_config = None
+        for config in chart["configs"]:
+            if config.get("id") == panel_id:
+                panel_config = config
+                break
+        
+        if not panel_config:
+            raise ConfigurationError(
+                f"Panel with ID '{panel_id}' not found in chart.",
+                "CONFIG-PanelNotFound",
+                {"panel_id": panel_id}
+            )
+        
+        # Update visibility in config
+        panel_config["visible"] = visible
+        
+        # Update visibility in panel reference
+        for panel in chart["panels"]:
+            if panel.get("id") == panel_id:
+                panel["visible"] = visible
+                break
+        
+        logger.info(f"Set panel {panel_id} visibility to: {visible}")
+        return chart
+    
+    def toggle_overlay_visibility(self,
+                                chart: Dict[str, Any],
+                                overlay_id: str) -> Dict[str, Any]:
+        """
+        Toggle the visibility of an indicator overlay.
+        
+        Args:
+            chart (Dict[str, Any]): The chart dictionary returned by create_chart.
+            overlay_id (str): The ID of the overlay to toggle.
+        
+        Returns:
+            Dict[str, Any]: The updated chart dictionary.
+            
+        Raises:
+            ConfigurationError: If the input chart is invalid or overlay is not found.
+        """
+        # Validate chart format
+        if not isinstance(chart, dict) or "configs" not in chart or "data" not in chart:
+            raise ConfigurationError(
+                "Invalid chart format. Use the output of create_chart().",
+                "CONFIG-InvalidChart",
+                {"chart": chart}
+            )
+        
+        # Find the overlay in the chart overlays
+        overlay = None
+        for ovr in chart.get("overlay_series", []):
+            if ovr.get("id") == overlay_id:
+                overlay = ovr
+                break
+        
+        if not overlay:
+            raise ConfigurationError(
+                f"Overlay with ID '{overlay_id}' not found in chart.",
+                "CONFIG-OverlayNotFound",
+                {"overlay_id": overlay_id}
+            )
+        
+        # Toggle visibility state
+        current_state = overlay.get("visible", True)
+        overlay["visible"] = not current_state
+        
+        logger.info(f"Toggled overlay {overlay_id} visibility to: {not current_state}")
+        return chart
+        
+    def reorganize_panels(self,
+                        chart: Dict[str, Any],
+                        order: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Reorganize indicator panels in the specified order.
+        
+        Args:
+            chart (Dict[str, Any]): The chart dictionary returned by create_chart.
+            order (Optional[List[str]]): List of panel IDs in the desired order.
+                If None, all panels will be sorted by their creation order.
+        
+        Returns:
+            Dict[str, Any]: The updated chart dictionary.
+            
+        Raises:
+            ConfigurationError: If the input chart is invalid or any panel ID is not found.
+        """
+        # Validate chart format
+        if not isinstance(chart, dict) or "configs" not in chart or "data" not in chart:
+            raise ConfigurationError(
+                "Invalid chart format. Use the output of create_chart().",
+                "CONFIG-InvalidChart",
+                {"chart": chart}
+            )
+        
+        # Get the main chart (first panel) and any range slider
+        main_chart = chart["configs"][0]
+        range_slider = next((c for c in chart["configs"] if c.get("is_range_slider", False)), None)
+        
+        # Filter out panels (not the main chart or range slider)
+        panel_configs = [c for c in chart["configs"] 
+                      if c.get("id") != main_chart.get("id") and not c.get("is_range_slider", False)]
+        
+        if not panel_configs:
+            # No panels to reorganize
+            return chart
+        
+        # If no order specified, use the existing order
+        if order is None:
+            # Keep existing order
+            pass
+        else:
+            # Validate the provided order
+            for panel_id in order:
+                if not any(c.get("id") == panel_id for c in panel_configs):
+                    raise ConfigurationError(
+                        f"Panel with ID '{panel_id}' not found in chart.",
+                        "CONFIG-PanelNotFound",
+                        {"panel_id": panel_id}
+                    )
+            
+            # Sort panels according to the specified order
+            panel_configs.sort(key=lambda c: order.index(c.get("id")) 
+                            if c.get("id") in order else float('inf'))
+        
+        # Reconstruct the chart configs in the correct order
+        new_configs = [main_chart]
+        new_configs.extend(panel_configs)
+        if range_slider:
+            new_configs.append(range_slider)
+        
+        chart["configs"] = new_configs
+        
+        logger.info(f"Reorganized {len(panel_configs)} panels in chart")
         return chart
     
     def configure_range_slider(self,
