@@ -125,7 +125,8 @@ def main():
         data=data,
         column="MACD_SIGNAL",
         color="#FF5722",
-        title="Signal"
+        title="Signal",
+        panel_id="MACD"  # Specify the MACD panel
     )
     
     chart = visualizer.add_indicator_overlay(
@@ -133,7 +134,8 @@ def main():
         data=data,
         column="MACD_HIST",
         color="#4CAF50",
-        title="Histogram"
+        title="Histogram",
+        panel_id="MACD"  # Specify the MACD panel
     )
     
     # Save chart

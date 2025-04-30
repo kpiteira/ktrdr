@@ -163,9 +163,10 @@ class Visualizer:
                             column: str,
                             color: str = "#2962FF", 
                             title: Optional[str] = None,
-                            line_width: float = 1.5) -> Dict[str, Any]:
+                            line_width: float = 1.5,
+                            panel_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Add an indicator as an overlay on the price chart.
+        Add an indicator as an overlay on the price chart or a specific panel.
         
         Args:
             chart (Dict[str, Any]): The chart dictionary returned by create_chart.
@@ -175,6 +176,8 @@ class Visualizer:
             title (Optional[str]): The title for the indicator. If None, the column
                 name will be used.
             line_width (float): The width of the indicator line. Default is 1.5.
+            panel_id (Optional[str]): The ID of the panel to add the overlay to.
+                If None, adds to the main chart (first panel).
         
         Returns:
             Dict[str, Any]: The updated chart dictionary.
@@ -218,13 +221,35 @@ class Visualizer:
             title=title
         )
         
-        # Add overlay to the main chart (assuming the first chart is always the main chart)
-        main_chart_config = chart["configs"][0]
-        if "overlay_series" not in main_chart_config:
-            main_chart_config["overlay_series"] = []
+        # Find the target panel to add the overlay to
+        target_config = None
+        
+        if panel_id:
+            # Look for the specified panel by ID
+            for config in chart["configs"]:
+                if config.get("id") == panel_id:
+                    target_config = config
+                    break
+            
+            if not target_config:
+                # If specified panel ID was not found, look for panels that contain the target ID in their name
+                # This helps with finding a panel like "macd_panel" when looking for "macd"
+                for config in chart["configs"]:
+                    config_id = config.get("id", "")
+                    if panel_id.lower() in config_id.lower():
+                        target_config = config
+                        break
+        
+        # If no panel specified or not found, default to main chart (first panel)
+        if not target_config:
+            target_config = chart["configs"][0]
+        
+        # Add overlay to the target panel
+        if "overlay_series" not in target_config:
+            target_config["overlay_series"] = []
         
         # Add overlay configuration
-        main_chart_config["overlay_series"].append({
+        target_config["overlay_series"].append({
             "id": overlay_id,
             "type": "line",
             "options": series_options
@@ -238,10 +263,11 @@ class Visualizer:
             "id": overlay_id,
             "column": column,
             "color": color,
-            "title": title
+            "title": title,
+            "panel_id": target_config.get("id", "main")  # Record which panel this was added to
         })
         
-        logger.info(f"Added {title} indicator overlay to chart")
+        logger.info(f"Added {title} indicator overlay to {target_config.get('id', 'chart')}")
         return chart
     
     def add_indicator_panel(self, 

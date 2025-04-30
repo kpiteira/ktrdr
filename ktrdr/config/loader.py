@@ -188,3 +188,49 @@ class ConfigLoader:
                 logger.warning(f"Attempting to load from default path: {default_path}")
                 return self.load(default_path, model_type)
             raise
+
+    @log_entry_exit(logger=logger)
+    def load_fuzzy_defaults(self) -> Dict[str, Any]:
+        """
+        Load fuzzy logic default configurations from config/fuzzy.yaml.
+        
+        Returns:
+            Dictionary containing fuzzy logic configurations
+            
+        Raises:
+            ConfigurationError: If the file cannot be loaded or is invalid
+        """
+        try:
+            # Define the default path to fuzzy.yaml
+            fuzzy_config_path = Path("config") / "fuzzy.yaml"
+            
+            if not fuzzy_config_path.exists():
+                logger.warning(f"Fuzzy configuration file not found at {fuzzy_config_path}")
+                return {}
+                
+            # Load YAML file without using a specific Pydantic model
+            with open(fuzzy_config_path, 'r') as file:
+                config_dict = yaml.safe_load(file)
+                
+            # Handle empty file case
+            if config_dict is None:
+                logger.warning(f"Empty fuzzy configuration file: {fuzzy_config_path}")
+                return {}
+                
+            logger.info(f"Successfully loaded fuzzy configurations from {fuzzy_config_path}")
+            return config_dict
+            
+        except yaml.YAMLError as e:
+            logger.error(f"Invalid YAML format in {fuzzy_config_path}: {e}")
+            raise InvalidConfigurationError(
+                message=f"Invalid YAML format in fuzzy configuration: {e}",
+                error_code="CONF-InvalidYaml",
+                details={"yaml_error": str(e)}
+            )
+        except Exception as e:
+            logger.error(f"Failed to load fuzzy configuration: {e}")
+            raise ConfigurationError(
+                message=f"Failed to load fuzzy configuration: {e}",
+                error_code="CONF-FuzzyLoadFailed",
+                details={"error": str(e)}
+            )

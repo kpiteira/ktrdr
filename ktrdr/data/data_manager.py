@@ -213,6 +213,55 @@ class DataManager:
         return df
     
     @log_entry_exit(logger=logger, log_args=True)
+    def load(
+        self,
+        symbol: str,
+        interval: str,
+        start_date: Optional[Union[str, datetime]] = None,
+        end_date: Optional[Union[str, datetime]] = None,
+        days: Optional[int] = None,
+        validate: bool = True,
+        repair: bool = False
+    ) -> pd.DataFrame:
+        """
+        Load data with simpler parameter naming for backward compatibility.
+        
+        This is a wrapper around load_data with parameter names aligned with the UI expectations.
+        
+        Args:
+            symbol: The trading symbol (e.g., 'EURUSD', 'AAPL')
+            interval: The timeframe of the data (e.g., '1h', '1d'), same as timeframe
+            start_date: Optional start date for filtering data
+            end_date: Optional end date for filtering data
+            days: Optional number of days to load from end_date going backwards
+            validate: Whether to validate data integrity (default: True)
+            repair: Whether to repair any detected issues (default: False)
+            
+        Returns:
+            DataFrame containing validated (and optionally repaired) OHLCV data
+        """
+        # Handle the days parameter to calculate start_date if provided
+        if days is not None and end_date is None:
+            # If end_date is not provided, use current date
+            end_date = datetime.now()
+            
+        if days is not None:
+            # Calculate start_date based on days going backwards from end_date
+            if isinstance(end_date, str):
+                end_date = pd.to_datetime(end_date)
+            start_date = end_date - timedelta(days=days)
+        
+        # Call the original load_data method with the processed parameters
+        return self.load_data(
+            symbol=symbol,
+            timeframe=interval,  # interval is the same as timeframe
+            start_date=start_date,
+            end_date=end_date,
+            validate=validate,
+            repair=repair
+        )
+    
+    @log_entry_exit(logger=logger, log_args=True)
     def check_data_integrity(self, df: pd.DataFrame, timeframe: str, is_post_repair: bool = False) -> List[str]:
         """
         Check for common data integrity issues.
