@@ -141,6 +141,41 @@ The UV-based approach already provides good dependency management:
 - Periodically review and update dependencies
 - Minimize third-party dependencies to reduce complexity
 
+### CI/CD & Containerization (Medium Priority)
+
+The CI/CD and containerization strategy follows a progressive implementation approach that aligns with the vertical slice methodology:
+
+#### CI/CD Implementation (After Slice 5)
+
+After completing the UI Foundation slice, a basic CI/CD pipeline will be implemented to:
+
+- **Enforce Quality Gates**: Automatically run tests, linting, and style checks
+- **Validate PRs**: Ensure all changes meet project standards before merge
+- **Manage Versioning**: Support the semantic versioning strategy
+- **Generate Documentation**: Build and publish documentation artifacts
+
+The initial CI implementation will use GitHub Actions with these workflows:
+1. **Test & Validate**: Run pytest, linting, and type checking
+2. **Build & Package**: Create distributable packages when needed
+3. **Version Management**: Tag releases according to versioning strategy
+
+#### Docker Containerization (After Slice 6)
+
+Following the Interactive Brokers Integration slice, Docker containerization will be implemented to:
+
+- **Isolate Components**: Package backend services in separate containers
+- **Simplify Development**: Provide consistent development environments
+- **Enable Scalability**: Support independent scaling of components
+- **Facilitate Testing**: Create reproducible environments for testing IB integration
+
+The Docker implementation will include:
+1. **Development Environment**: `docker-compose.yml` for local development
+2. **Backend API Container**: Python backend with API endpoints
+3. **Database Container**: For persistent data when needed
+4. **CI Integration**: Building and testing containers in CI pipeline
+
+This phased approach ensures infrastructure evolves alongside application capabilities, rather than being implemented all at once late in development.
+
 ## Development Environment
 
 ### Package Management
@@ -615,6 +650,19 @@ def main():
   st.plotly_chart(fig)
 ```
 This modular evolution will mirror development, supporting visualfeedback at each step.
+
+## UI Architecture
+
+The user interface layer follows a dedicated architecture outlined in [`specification/ui_architecture_blueprint.md`](./ui_architecture_blueprint.md). This document provides detailed guidance for implementing a maintainable, modular Streamlit application with:
+
+- **Core Principles**: Separation of concerns, modular structure, predictable state management, component-based design, and error resilience
+- **Directory Structure**: Organized into logical modules with tabs, components, and utilities
+- **State Management**: Structured approach to Streamlit's session state
+- **Component Design Patterns**: Standard patterns for UI components and tabs
+- **Error Handling**: Consistent error handling patterns with user-friendly messages
+- **Testing Strategy**: Component, integration, and visual testing approaches
+
+The UI architecture complements this main architecture blueprint by providing specific guidance for the presentation layer, while ensuring it integrates properly with the core system components.
 
 ### 7.  **Test Suite & CLI Entrypoints**
 The testing and CLI infrastructure supports validation, rapiditeration, and modular confidence.
