@@ -210,7 +210,7 @@ ktrdr2/
 │   ├── fuzzy/             # Fuzzy logic engine modules
 │   ├── neural/            # Neural network modules
 │   ├── visualization/     # Visualization components
-│   └── ui/                # Streamlit UI components
+│   └── ui/                # UI components with FastAPI backend
 ├── tests/                 # Test suite
 ├── scripts/               # Utility scripts
 └── docs/                  # Documentation
@@ -530,7 +530,7 @@ The visualization subsystem enables rich, interactive insight into price data, i
 #### **Design Approach:**
 - Use **TradingView's lightweight-charts** for interactive financial charts
 - Implement a layered architecture with clean separation between Python and JS
-- Easily integrate with **Streamlit** or Jupyter (Phase 1)
+- Easily integrate with FastAPI backend for API-driven visualization
 - Build reusable Visualizer module with a clean, intuitive API
 
 #### **Architecture Layers:**
@@ -823,7 +823,7 @@ Config[YAML Config Loader] --> IBLoader[IB Data Loader]
 IBLoader --> CSVStore[CSV File Store]
 CSVStore --> Indicators[Indicator Engine]
 Indicators --> Fuzzy[Fuzzy Engine]
-Fuzzy --> Visualizer[Streamlit / Notebook UI]
+Fuzzy --> Visualizer[React UI / FastAPI Backend]
 CSVStore --> Visualizer
 Indicators --> Visualizer
 ```
@@ -845,59 +845,52 @@ State is primarily managed in memory (e.g., `TradeManager`'s position) or implic
 
 ### **Long-Term Architectural Reflection**
 
-While this document describes Phase 1 implementation focused on local
-validation and modular simplicity, several architectural decisions have
-been made with the explicit goal of evolving into a full system.
+While this document describes Phase 1 implementation focused on local validation and modular simplicity, several architectural decisions have been made with the explicit goal of evolving into a full system.
 
   ------------------------------------------------------------------------
   **Phase**   **Role of Visualizer** **Output Format**   **Hosted via**
   ----------- ---------------------- ------------------- -----------------
-  **Phase 1** Internal plotting      In-process visuals  Jupyter /
-              (Plotly objects)                           Streamlit
+  **Phase 1** Internal plotting      In-process visuals  CLI / Local Dev
+              (Plotly objects)                           Environment
 
-  **Phase 2** Exposed as callable    Plotly JSON or      Backend + CLI
-              module                 images              
+  **Phase 2** Exposed as callable    JSON data for       FastAPI Backend
+              module                 frontend rendering  
 
-  **Phase 3+  Refactored as          REST API (data/plot FastAPI + Web
-  (web)**     rendering service      JSON)               Frontend
+  **Phase 3+  API-driven             REST API endpoints  FastAPI + React
+  (web)**     visualization service                      Frontend
   ------------------------------------------------------------------------
 
   ------------------------------------------------------------------------------
   **Component**   **Replace?**   **With what?**
   --------------- -------------- -----------------------------------------------
-  Streamlit UI    ✅             A full frontend framework
+  CLI UI          ✅             A React/TypeScript frontend application
 
   Jupyter         ✅             Discarded in production
   notebooks                      
 
-  Visualizer      ❌             Retained and extended
+  Visualizer      ❌             Retained and extended as API service
   logic                          
 
-  Plotly          ❓             Possibly refactored for JS-native rendering
-                                 (e.g., Recharts)
+  Plotly          ❓             TradingView Lightweight Charts (client-side)
+                                 for interactive visualization
   ------------------------------------------------------------------------------
 
-This table reflects our architectural intent: most core logic (data
-loading, indicators, fuzzy engine, and visualization logic) will carry
-forward. Temporary tools like Jupyter or Streamlit are only stepping
-stones.
+This table reflects our architectural intent: most core logic (data loading, indicators, fuzzy engine, and visualization logic) will carry forward. Temporary tools like CLI and Jupyter are only stepping stones.
 
-→ Because our Visualizer is modular and stateless, we can evolve it
-into:
-- A **server-side chart generator** (e.g., GET /plot/strategy1)
-- Or just serve **data arrays** to let frontend do the drawing
+→ Because our Visualizer is modular and stateless, we can evolve it into:
+- A **backend visualization API** (e.g., GET /api/v1/charts/render)
+- Or just serve **structured data** to let the React frontend do the rendering
 
 We're not locked in. ✅
 
-1.  ✅ **Keep the `` logic cleanly separated** from Streamlit.
+1.  ✅ **Keep the visualization logic cleanly separated** from UI frameworks.
 
-2.  ✅ **Use Plotly** and return figures (not render directly).
+2.  ✅ **Structure data for frontend consumption** rather than rendering directly.
 
-3.  🛠 In the future, refactor Visualizer to return:
+3.  🛠 In the future, refactor Visualizer to:
 
-    - Either raw plotly JSON (fig.to_json())
-
-    - Or high-level data (candles, indicators, trades)
+    - Provide JSON data through FastAPI endpoints
+    - Support React frontend with TradingView Lightweight Charts
 
 ## **Summary**
 
