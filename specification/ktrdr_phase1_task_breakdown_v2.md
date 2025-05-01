@@ -221,338 +221,112 @@ A command-line tool that can:
 
 ---
 
-## Slice 5: UI Foundation & Basic Data Visualization (v1.0.5)
+## Slice 5: Backend API Foundation (FastAPI) (v1.0.5)
 
-**Value delivered:** A modular UI framework with basic data loading and visualization functionality.
+**Value delivered:** A robust API layer that exposes core KTRDR functionality, enabling the future development of a modern frontend.
 
-### Infrastructure Tasks
-- [ ] **Task 5.1**: Create UI module structure
-  - [ ] Set up directory structure following UI blueprint
-  - [ ] Create package `__init__.py` files with proper imports
-  - [ ] Configure UI-specific dependencies in pyproject.toml
-  - [ ] Set up UI environment variables and configuration helpers
+### API Infrastructure Tasks
+- [ ] **Task 5.1**: Set up FastAPI backend structure
+  - [ ] Create `api` module within KTRDR package with proper directory structure
+  - [ ] Set up API dependencies in requirements.txt (FastAPI, Uvicorn, Pydantic)
+  - [ ] Implement main API application entry point (`main.py`)
+  - [ ] Create API configuration module with environment variable support
+  - [ ] Set up CORS middleware with appropriate security settings
+  - [ ] Implement basic error handling middleware
+  - [ ] Create API version prefix structure
 
-- [ ] **Task 5.2**: Implement session state management
-  - [ ] Create `session.py` with state initialization functions
-  - [ ] Implement `update_state_item` and other state management utilities
-  - [ ] Add state version tracking for change detection
-  - [ ] Create debug helpers for state inspection
-  - [ ] Build session preservation mechanism between page reloads
+- [ ] **Task 5.2**: Implement API models with Pydantic
+  - [ ] Create base models for common data structures (responses, pagination)
+  - [ ] Implement OHLCV data models with proper validation
+  - [ ] Create indicator configuration models with parameter validation
+  - [ ] Add fuzzy set configuration models
+  - [ ] Implement error response models with detailed fields
+  - [ ] Create response envelope pattern for consistent responses
 
-### Core UI Components
-- [ ] **Task 5.3**: Implement application bootstrap
-  - [ ] Create main entry point that initializes application
-  - [ ] Implement configuration loading for UI
-  - [ ] Set up UI logging with appropriate levels
-  - [ ] Create tab container with navigation
-  - [ ] Implement theme management (light/dark modes)
+### Core API Endpoints
+- [ ] **Task 5.3**: Implement data API endpoints
+  - [ ] Create `/api/v1/symbols` endpoint to list available symbols
+  - [ ] Implement `/api/v1/timeframes` endpoint to list available timeframes
+  - [ ] Add `/api/v1/data/load` endpoint for OHLCV data loading
+  - [ ] Create parameter validation with detailed error messages
+  - [ ] Implement proper response formats with metadata
+  - [ ] Add example requests in endpoint documentation
 
-- [ ] **Task 5.4**: Develop UI helper utilities
-  - [ ] Create `safe_render` decorator for error handling
-  - [ ] Implement UI-specific logging utilities
-  - [ ] Add component registry system
-  - [ ] Create layout helper functions
-  - [ ] Implement notification system for user feedback
+- [ ] **Task 5.4**: Develop indicator API endpoints
+  - [ ] Create `/api/v1/indicators` endpoint to list available indicators
+  - [ ] Implement `/api/v1/indicators/calculate` endpoint for indicator computation
+  - [ ] Add parameter validation for indicator configurations
+  - [ ] Create efficient data transformation between internal and API formats
+  - [ ] Implement example requests with documentation
+  - [ ] Add response pagination for large datasets
 
-### Data Visualization
-- [ ] **Task 5.5**: Implement basic chart components
-  - [ ] Create `charts.py` module with rendering functions
-  - [ ] Implement candlestick chart renderer
-  - [ ] Add line chart component for indicators
-  - [ ] Create histogram chart for volume data
-  - [ ] Implement synchronized multi-chart layouts
+### Service Layer Implementation
+- [ ] **Task 5.5**: Create service adapters for core modules
+  - [ ] Implement `DataService` to bridge API with existing data modules
+  - [ ] Create `IndicatorService` to adapt indicator engine for API use
+  - [ ] Add `FuzzyService` to expose fuzzy logic through the API
+  - [ ] Implement proper error handling and translation
+  - [ ] Create service logging with appropriate detail levels
+  - [ ] Add performance tracking for service operations
 
-- [ ] **Task 5.6**: Develop data loading UI components
-  - [ ] Create the data tab module with proper structure
-  - [ ] Implement data source selector (local/remote)
-  - [ ] Add file browser for local data
-  - [ ] Create symbol and timeframe selectors
-  - [ ] Implement data preview component
+### Documentation and Testing
+- [ ] **Task 5.6**: Implement API documentation
+  - [ ] Set up OpenAPI documentation with detailed descriptions
+  - [ ] Add example requests and responses for each endpoint
+  - [ ] Create API usage guide with common patterns
+  - [ ] Implement Redoc alternative documentation
+  - [ ] Add schema validation examples
 
-### Testing
-- [ ] **Task 5.7**: Set up UI testing framework
-  - [ ] Configure testing directory structure for UI
-  - [ ] Create mock data providers for testing
-  - [ ] Implement component test utilities
-  - [ ] Add snapshot testing capability
-  - [ ] Create smoke tests for basic UI functions
+- [ ] **Task 5.7**: Create API tests
+  - [ ] Implement unit tests for all API endpoints
+  - [ ] Add integration tests for service adapters
+  - [ ] Create test fixtures for API testing
+  - [ ] Implement test client for API validation
+  - [ ] Add performance tests for critical endpoints
+
+- [ ] **Task 5.8**: Document API components
+  - [ ] Create detailed documentation for API structure and patterns
+  - [ ] Implement comprehensive API endpoint reference docs
+  - [ ] Add sequence diagrams for common API workflows
+  - [ ] Create examples and code snippets for client integration
+  - [ ] Implement troubleshooting guide for common API errors
+  - [ ] Add performance recommendations for API consumers
 
 ### Deliverable
-A working UI application that can:
-- Load and display local price data
-- Visualize data in different chart formats
-- Maintain state between interactions
-- Handle errors gracefully with useful feedback
+A working API layer that:
+- Exposes KTRDR functionality through a well-defined RESTful interface
+- Provides proper data validation and error handling
+- Includes comprehensive documentation with examples
+- Serves as a foundation for the future frontend application
+- Can be tested independently with proper validation
+
+Example API session:
+```
+# List available symbols
+GET /api/v1/symbols
+Response: ["AAPL", "MSFT", "EURUSD", ...]
+
+# Load price data
+POST /api/v1/data/load
+Request: {"symbol": "AAPL", "timeframe": "1d", "start_date": "2023-01-01", "end_date": "2023-01-31"}
+Response: {
+  "success": true,
+  "data": {
+    "dates": ["2023-01-01", "2023-01-02", ...],
+    "ohlcv": [[175.5, 177.8, 174.2, 177.1, 2354120], ...],
+    "metadata": {"symbol": "AAPL", "timeframe": "1d", "points": 21}
+  }
+}
+```
 
 ---
 
-## Slice 6: CI/CD Pipeline Implementation (v1.0.6)
+## Slice 6: Docker Containerization & CI/CD (v1.0.6)
 
-**Value delivered:** Automated testing, validation, and release processes that enforce quality standards and streamline development workflows.
-
-### Pipeline Infrastructure Tasks
-- [ ] **Task 6.1**: Implement GitHub Actions workflow foundation
-  - [ ] Create `.github/workflows` directory structure
-  - [ ] Implement basic workflow trigger configurations (push, PR, manual)
-  - [ ] Set up appropriate permissions and secure GitHub Actions configuration
-  - [ ] Create reusable workflow components for code composition
-  - [ ] Implement caching for dependencies to speed up workflow execution
-
-- [ ] **Task 6.2**: Develop comprehensive testing workflows
-  - [ ] Create `test.yml` workflow for automated test execution
-  - [ ] Implement test matrix for multiple Python versions (3.9, 3.10, 3.11)
-  - [ ] Add OS matrix for cross-platform validation (Ubuntu, macOS, Windows)
-  - [ ] Configure pytest with comprehensive reporting and test coverage
-  - [ ] Implement artifact generation for test reports and coverage data
-  - [ ] Create test failure notification system with detailed diagnostics
-
-### Quality Enforcement Tasks
-- [ ] **Task 6.3**: Implement code quality workflows
-  - [ ] Create `quality.yml` workflow for linting and formatting
-  - [ ] Configure ruff, black, isort, and mypy with appropriate rulesets
-  - [ ] Implement automated fix suggestions for common issues
-  - [ ] Add complexity analysis with appropriate thresholds
-  - [ ] Create quality metrics reporting with trends over time
-  - [ ] Implement PR annotations for quality issues with context
-
-- [ ] **Task 6.4**: Set up documentation workflows
-  - [ ] Create `docs.yml` workflow for documentation building
-  - [ ] Configure automatic API documentation generation
-  - [ ] Implement documentation deployment to GitHub Pages
-  - [ ] Add link checking for documentation references
-  - [ ] Create preview environments for documentation changes in PRs
-  - [ ] Implement versioned documentation for different releases
-
-### Release Management Tasks
-- [ ] **Task 6.5**: Develop version management automation
-  - [ ] Create semantic versioning scripts with appropriate rules
-  - [ ] Implement automated CHANGELOG generation from commits
-  - [ ] Add release tagging for completed slices and tasks
-  - [ ] Create release notes generation with feature highlights
-  - [ ] Implement version bumping in relevant package files
-  - [ ] Configure dependency update checks and alerts
-
-- [ ] **Task 6.6**: Implement release workflows
-  - [ ] Create `release.yml` workflow for package building and publishing
-  - [ ] Configure PyPI deployment for package distribution
-  - [ ] Implement release validation checks before publishing
-  - [ ] Add GitHub release creation with appropriate assets
-  - [ ] Create consistency checks between version numbers and tags
-  - [ ] Implement signed releases for security verification
-
-### PR and Branch Management
-- [ ] **Task 6.7**: Set up PR validation workflow
-  - [ ] Create pull request templates with appropriate sections
-  - [ ] Implement required checks for PRs with status gates
-  - [ ] Add automated code review comments for common issues
-  - [ ] Create PR size limits with enforced breaking down of large PRs
-  - [ ] Implement branch protection rules for main development branches
-  - [ ] Configure merge strategies for clean commit history
-
-### Security and Compliance
-- [ ] **Task 6.8**: Implement security scanning
-  - [ ] Add dependency vulnerability scanning with Dependabot
-  - [ ] Configure security advisories for project dependencies
-  - [ ] Implement basic SAST (Static Application Security Testing)
-  - [ ] Create secret scanning prevention for accidental credential commits
-  - [ ] Add compliance checking for license compatibility
-  - [ ] Implement security report generation for auditing
-
-### Testing
-- [ ] **Task 6.9**: Test CI/CD implementation
-  - [ ] Create test PRs to validate workflow functionality
-  - [ ] Add workflow simulation tests for complex scenarios
-  - [ ] Implement performance benchmarks for CI/CD pipelines
-  - [ ] Create validation tests for artifact generation
-  - [ ] Add failure recovery testing for CI reliability
-
-### Deliverable
-A comprehensive CI/CD system that can:
-- Automatically validate all code changes against quality standards
-- Run the complete test suite on multiple platforms and Python versions
-- Generate and publish documentation with each successful merge
-- Manage version numbers according to semantic versioning rules
-- Create properly tagged releases with changelogs and artifacts
-- Enforce security and compliance standards across the codebase
-
----
-
-## Slice 7: Indicator Configuration & Visualization (v1.0.7)
-
-**Value delivered:** Enhanced visualization and configuration capabilities for indicators.
-
-### Indicator Configuration Tasks
-- [ ] **Task 7.1**: Implement indicator configuration UI
-  - [ ] Create UI components for selecting indicators
-  - [ ] Add parameter configuration controls for each indicator
-  - [ ] Implement validation for indicator parameters
-  - [ ] Create a preview feature to visualize indicator configurations
-
-### Indicator Visualization Tasks
-- [ ] **Task 7.2**: Develop indicator visualization components
-  - [ ] Create reusable chart components for indicators
-  - [ ] Implement overlay visualization for indicators on price charts
-  - [ ] Add separate panel visualization for indicators like RSI
-  - [ ] Create interactive tooltips for indicator values
-
-### Integration Tasks
-- [ ] **Task 7.3**: Integrate indicator configuration with backend
-  - [ ] Connect UI components to the IndicatorEngine
-  - [ ] Implement data flow from configuration to visualization
-  - [ ] Add support for saving and loading indicator configurations
-
-### Testing
-- [ ] **Task 7.4**: Test indicator configuration and visualization
-  - [ ] Create unit tests for UI components
-  - [ ] Add integration tests for configuration and visualization
-  - [ ] Implement end-to-end tests for indicator workflows
-
-### Deliverable
-A UI application that can:
-- Configure indicators with customizable parameters
-- Visualize indicators as overlays or in separate panels
-- Save and load indicator configurations for reuse
-
----
-
-## Slice 8: Fuzzy Logic Visualization & Configuration (v1.0.8)
-
-**Value delivered:** Interactive configuration and visualization of fuzzy logic components.
-
-### Fuzzy Logic UI Components
-- [ ] **Task 8.1**: Implement membership function editor
-  - [ ] Create visual membership function designer
-  - [ ] Implement drag-and-drop adjustment of function points
-  - [ ] Add membership function templates (triangular, trapezoidal, etc.)
-  - [ ] Create multi-function set editor
-  - [ ] Implement function overlap visualization
-
-- [ ] **Task 8.2**: Develop fuzzy rule editor
-  - [ ] Create rule composition interface
-  - [ ] Implement antecedent and consequent editors
-  - [ ] Add logical operators (AND, OR) with visual representation
-  - [ ] Create rule priority/weight adjustment
-  - [ ] Implement rule validation with feedback
-
-### Fuzzy Visualization Components
-- [ ] **Task 8.3**: Implement fuzzy visualization system
-  - [ ] Create `add_fuzzy_highlight_band()` method
-  - [ ] Implement color gradients for membership degree
-  - [ ] Add interactive tooltips showing membership values
-  - [ ] Create animation for fuzzy transitions over time
-  - [ ] Implement rule activation visualization
-
-- [ ] **Task 8.4**: Develop fuzzy tab module
-  - [ ] Create fuzzy tab structure following architecture
-  - [ ] Implement fuzzy set configuration sidebar
-  - [ ] Add rule management component
-  - [ ] Create fuzzy output visualization
-  - [ ] Implement fuzzy inference debugger
-
-### Integration Components
-- [ ] **Task 8.5**: Create fuzzy-indicator integration
-  - [ ] Implement binding between indicators and fuzzy inputs
-  - [ ] Create automated membership function suggestion
-  - [ ] Add synchronized highlighting between indicator and fuzzy views
-  - [ ] Implement real-time fuzzy evaluation on indicator changes
-  - [ ] Create fuzzy output history tracker
-
-### Testing
-- [ ] **Task 8.6**: Implement fuzzy UI testing
-  - [ ] Create test fixtures for fuzzy configurations
-  - [ ] Implement visual tests for fuzzy components
-  - [ ] Add interaction tests for fuzzy editors
-  - [ ] Create integration tests for fuzzy-indicator binding
-  - [ ] Implement fuzzy inference validation tests
-
-### Deliverable
-A UI application that can:
-- Create and edit fuzzy membership functions visually
-- Define fuzzy rules through an intuitive interface
-- Visualize fuzzy memberships as colored bands on charts
-- Show real-time fuzzy inference results
-- Allow experimentation with different fuzzy configurations
-
----
-
-## Slice 9: Interactive Brokers Integration Backend (v1.0.9)
-
-**Value delivered:** Ability to fetch live and historical data from Interactive Brokers with a robust API layer.
-
-### IB Integration Tasks
-- [ ] **Task 9.1**: Implement IBDataLoader
-  - [ ] Create IBDataLoader class with ib_insync integration
-  - [ ] Implement connection management with reconnection logic
-  - [ ] Add contract creation helpers for various instrument types
-  - [ ] Implement historical data request methods with proper parameter handling
-  - [ ] Add error handling specific to IB API issues with detailed error codes
-  - [ ] Create connection status monitoring system with event callbacks
-
-- [ ] **Task 9.2**: Enhance DataManager for hybrid data sources
-  - [ ] Update DataManager to support IBDataLoader as a data source
-  - [ ] Implement sophisticated gap detection algorithm for time series
-  - [ ] Add logic to intelligently fill gaps from IB when needed
-  - [ ] Create data merging logic that prioritizes highest quality sources
-  - [ ] Add function to save merged data to CSV with proper metadata
-  - [ ] Implement data quality scoring system
-
-- [ ] **Task 9.3**: Add robust rate limiting system
-  - [ ] Create RateLimiter class with configurable request pacing
-  - [ ] Implement token bucket algorithm for precise rate control
-  - [ ] Add adaptive backoff logic that responds to API feedback
-  - [ ] Create rate limit monitoring and reporting system
-  - [ ] Implement priority queuing for different request types
-  - [ ] Add intelligent retry logic with variable backoff strategies
-
-- [ ] **Task 9.4**: Implement resumable fetching for large datasets
-  - [ ] Add batch processing for large date ranges with checkpointing
-  - [ ] Create checkpoint saving logic with serializable state
-  - [ ] Implement resumption logic that verifies data consistency
-  - [ ] Add clean interruption handling with proper resource cleanup
-  - [ ] Create progress tracking and estimation system
-  - [ ] Implement parallel request capabilities with proper synchronization
-
-### Configuration Enhancement
-- [ ] **Task 9.5**: Extend configuration for IB connectivity
-  - [ ] Add comprehensive IB connection parameters with secure credential handling
-  - [ ] Create detailed contract specification schema for different instrument types
-  - [ ] Add rate limiting configuration with presets for different account types
-  - [ ] Implement connection strategy configuration (paper/live, TWS/Gateway)
-  - [ ] Create data quality control parameters
-
-### Testing Infrastructure
-- [ ] **Task 9.6**: Create IB testing infrastructure
-  - [ ] Implement comprehensive mock classes for IB API with realistic behaviors
-  - [ ] Add tests for IBDataLoader with mocks that simulate various scenarios
-  - [ ] Create integration tests for DataManager with IB data sources
-  - [ ] Add response simulation for different data types and error conditions
-  - [ ] Implement connection failure and recovery testing
-  - [ ] Create rate limit testing that verifies pacing behavior
-
-### UI Integration
-- [ ] **Task 9.7**: Implement basic UI hooks for IB functionality
-  - [ ] Create data source selection mechanism that includes IB
-  - [ ] Add connection status indicators with visual feedback
-  - [ ] Implement simple contract specification controls
-  - [ ] Create progress reporting for long-running operations
-  - [ ] Add error display for IB-specific issues
-
-### Deliverable
-A robust backend system that can:
-- Connect to Interactive Brokers with comprehensive error handling
-- Fetch historical price data with intelligent rate limiting
-- Merge local and remote data with gap detection and filling
-- Store data locally for offline use with proper metadata
-- Provide a clean API for the UI layer to consume
-
----
-
-## Slice 10: Docker Containerization (v1.0.10)
-
-**Value delivered:** Containerized application components with reproducible environments, simplified deployment, and efficient development workflow.
+**Value delivered:** Containerized application components with reproducible environments and an automated CI/CD pipeline for testing and deployment.
 
 ### Container Development Tasks
-- [ ] **Task 10.1**: Create base Docker infrastructure
+- [ ] **Task 6.1**: Create base Docker infrastructure
   - [ ] Create structured Dockerfile for Python backend with multi-stage builds
   - [ ] Implement .dockerignore file with comprehensive patterns
   - [ ] Add container health checks with appropriate thresholds
@@ -561,198 +335,1073 @@ A robust backend system that can:
   - [ ] Add container user management for security (non-root execution)
   - [ ] Create container logging configuration for centralized log access
 
-- [ ] **Task 10.2**: Develop specialized application containers
+- [ ] **Task 6.2**: Develop application containers
   - [ ] Create API service container with proper entrypoints
-  - [ ] Implement database container with volume management for data persistence
-  - [ ] Add specialized worker containers for background processing
-  - [ ] Create containers for Interactive Brokers integration with proper network isolation
-  - [ ] Implement Redis container for caching and message queuing
-  - [ ] Add Nginx container for reverse proxy and static content serving
+  - [ ] Implement frontend container with Nginx for serving
+  - [ ] Add database container with volume management for persistence
+  - [ ] Create Redis container for caching and message queuing
+  - [ ] Implement container networking with security considerations
+  - [ ] Add environment configuration for different deployment scenarios
+  - [ ] Create startup dependency management with health checks
 
-### Orchestration Tasks
-- [ ] **Task 10.3**: Implement docker-compose configuration
-  - [ ] Create comprehensive docker-compose.yml with service definitions
-  - [ ] Implement environment configuration with .env templates
-  - [ ] Add volume management for persistent data
-  - [ ] Create network configuration with proper segmentation
-  - [ ] Implement resource limits for containers (CPU, memory)
-  - [ ] Add container dependency management with health checks
-  - [ ] Create specialized profiles for different environments (dev, test, prod)
+### Docker Compose Setup
+- [ ] **Task 6.3**: Implement Docker Compose configuration
+  - [ ] Create development-focused docker-compose.yml
+  - [ ] Implement service definitions with proper dependencies
+  - [ ] Add volume mappings for development workflows
+  - [ ] Create environment variable configuration
+  - [ ] Implement health check integration
+  - [ ] Add network configuration with security considerations
+  - [ ] Create documentation for Docker Compose usage
 
-- [ ] **Task 10.4**: Develop container management scripts
-  - [ ] Create container initialization scripts for first-run setup
-  - [ ] Implement backup and restore utilities for container data
-  - [ ] Add container monitoring script integration
-  - [ ] Create container update mechanisms with version management
-  - [ ] Implement container log aggregation and rotation
-  - [ ] Add container debugging tools and utilities
+### Local Development Experience
+- [ ] **Task 6.4**: Enhance local development workflow
+  - [ ] Create dev container configuration for VS Code
+  - [ ] Implement hot-reload capabilities for development
+  - [ ] Add debugging support within containers
+  - [ ] Create convenience scripts for common operations
+  - [ ] Implement log aggregation for multi-container setups
+  - [ ] Add shell completion for custom commands
+  - [ ] Create development-specific optimizations
 
-### Development Environment Tasks
-- [ ] **Task 10.5**: Create containerized development environment
-  - [ ] Implement dev container configuration for VS Code integration
-  - [ ] Create hot-reload mechanism for code changes during development
-  - [ ] Add development-specific tooling in containers
-  - [ ] Implement shared volume mounts for efficient development workflow
-  - [ ] Create development-specific environment variables
-  - [ ] Add development database seeding scripts
-  - [ ] Implement mock service containers for external dependencies
+### CI/CD Implementation Tasks
+- [ ] **Task 6.5**: Implement GitHub Actions workflows
+  - [ ] Create CI workflow for automated testing
+  - [ ] Implement CD workflow for automated deployment
+  - [ ] Add code quality checks (linting, formatting)
+  - [ ] Create security scanning for vulnerabilities
+  - [ ] Implement version management automation
+  - [ ] Add documentation generation and publishing
+  - [ ] Create deployment notifications and reports
 
-### CI/CD Integration Tasks
-- [ ] **Task 10.6**: Integrate containers with CI/CD pipeline
-  - [ ] Create container build workflow in GitHub Actions
-  - [ ] Implement container testing with appropriate frameworks
-  - [ ] Add container scanning for vulnerabilities and compliance
-  - [ ] Create container registry publication with tagging strategy
-  - [ ] Implement container signing for security verification
-  - [ ] Add deployment automation hooks for container publishing
-  - [ ] Create container versioning aligned with application versioning
-
-### Security Tasks
-- [ ] **Task 10.7**: Implement container security measures
-  - [ ] Create container security scanning in CI pipeline
-  - [ ] Implement container image hardening techniques
-  - [ ] Add secrets management for container environments
-  - [ ] Create network security policies for container communication
-  - [ ] Implement container update policies for security patches
-  - [ ] Add container security documentation and guidelines
+- [ ] **Task 6.6**: Develop testing automation
+  - [ ] Implement unit test automation for all components
+  - [ ] Create integration test workflow with service dependencies
+  - [ ] Add end-to-end test automation with browser testing
+  - [ ] Implement performance benchmark automation
+  - [ ] Create visual regression testing for UI components
+  - [ ] Add code coverage reports with trending
+  - [ ] Implement test failure analysis and reporting
 
 ### Testing
-- [ ] **Task 10.8**: Create container testing framework
-  - [ ] Implement container integration tests
-  - [ ] Create container performance benchmarks
-  - [ ] Add container security testing
-  - [ ] Implement container orchestration tests
-  - [ ] Create container resource utilization tests
-  - [ ] Add container startup/shutdown testing for reliability
+- [ ] **Task 6.7**: Create container and CI/CD tests
+  - [ ] Implement container build verification tests
+  - [ ] Add container startup and health check tests
+  - [ ] Create workflow validation tests for CI/CD
+  - [ ] Implement security and compliance tests
+  - [ ] Add deployment verification tests
+  - [ ] Create rollback testing for deployment failures
+  - [ ] Implement environment validation tests
+
+### Documentation Foundation
+- [ ] **Task 6.8**: Implement early documentation structure
+  - [ ] Create standardized documentation templates for components
+  - [ ] Implement automated API documentation generation setup
+  - [ ] Add basic CLI reference documentation framework
+  - [ ] Create configuration schema documentation with examples
+  - [ ] Implement developer setup and onboarding guide
+  - [ ] Add simple quickstart tutorial with examples
+  - [ ] Create documentation style guide and conventions
 
 ### Deliverable
-A comprehensive containerization system that:
+A comprehensive containerization and CI/CD system that:
 - Provides isolated, reproducible environments for all application components
 - Enables simple local development with proper tooling
-- Supports CI/CD pipeline integration with automated builds and tests
+- Supports automated testing with comprehensive coverage
+- Facilitates automated deployment to various environments
 - Ensures security through proper container configuration and scanning
-- Facilitates easy deployment in various environments
-- Includes comprehensive documentation for container management
+- Includes comprehensive documentation for container management and developer onboarding
 
 ---
 
-## Slice 11: Interactive Brokers Integration UI (v1.0.11)
+## Slice 7: Frontend Foundation (React/TypeScript) (v1.0.7)
 
-**Value delivered:** Comprehensive user interface for Interactive Brokers connectivity and data management.
+**Value delivered:** A modern frontend application foundation with basic API integration and essential UI components.
 
-### IB Connection UI Components
-- [ ] **Task 11.1**: Implement IB connection management
-  - [ ] Create connection configuration component
-  - [ ] Implement connection status indicators
-  - [ ] Add authentication management
-  - [ ] Create connection troubleshooting tools
-  - [ ] Implement connection logging and history
+### Frontend Infrastructure Tasks
+- [ ] **Task 7.1**: Set up React/TypeScript frontend structure
+  - [ ] Create frontend project using Vite with TypeScript template
+  - [ ] Set up directory structure following the UI architecture blueprint
+  - [ ] Configure linting and formatting (ESLint, Prettier)
+  - [ ] Create TypeScript configuration with strict mode
+  - [ ] Set up build and development scripts
+  - [ ] Implement environment configuration for development/production
+  - [ ] Create Docker setup for frontend development
 
-- [ ] **Task 11.2**: Develop IB data request UI
-  - [ ] Create contract specification component
-  - [ ] Implement request parameter controls
-  - [ ] Add request progress indicators
+- [ ] **Task 7.2**: Implement core UI components
+  - [ ] Create layout components (MainLayout, Header, Sidebar)
+  - [ ] Implement theme provider with dark/light mode support
+  - [ ] Add responsive design components with breakpoints
+  - [ ] Create common UI components (Button, Select, Card, etc.)
+  - [ ] Implement loading indicators and error states
+  - [ ] Add notification system for user feedback
+  - [ ] Create developer mode indicators and tools
+
+### API Integration
+- [ ] **Task 7.3**: Implement API client
+  - [ ] Create API client using Axios with TypeScript types
+  - [ ] Implement request/response interceptors for error handling
+  - [ ] Add request authentication framework
+  - [ ] Create request caching system
+  - [ ] Implement retry logic for failed requests
+  - [ ] Add response transformation utilities
+  - [ ] Create TypeScript interfaces for all API responses
+
+- [ ] **Task 7.4**: Develop data access layer
+  - [ ] Create data module with API hooks for symbols and timeframes
+  - [ ] Implement data loading hooks with caching
+  - [ ] Add types for all data structures
+  - [ ] Create error handling for data operations
+  - [ ] Implement client-side data transformation utilities
+  - [ ] Add loading state management for all data operations
+
+### State Management
+- [ ] **Task 7.5**: Implement Redux state management
+  - [ ] Set up Redux store with Redux Toolkit
+  - [ ] Create data slice for OHLCV data
+  - [ ] Implement UI slice for application state
+  - [ ] Add custom Redux hooks for simplified state access
+  - [ ] Create Redux middleware for side effects
+  - [ ] Implement selectors for efficient state access
+  - [ ] Add Redux DevTools configuration for development
+
+### Basic UI
+- [ ] **Task 7.6**: Create data selection components
+  - [ ] Implement symbol selector component
+  - [ ] Create timeframe selector with validation
+  - [ ] Add date range picker for historical data
+  - [ ] Implement data loading button with status feedback
   - [ ] Create data preview component
-  - [ ] Implement request history tracker
-
-### Data Management Components
-- [ ] **Task 11.3**: Enhance data manager integration
-  - [ ] Create UI controls for data merging options
-  - [ ] Implement gap detection visualization
-  - [ ] Add data quality indicators
-  - [ ] Create data save/export options
-  - [ ] Implement data source switching (local/IB)
-
-- [ ] **Task 11.4**: Implement real-time data components
-  - [ ] Create real-time data subscription UI
-  - [ ] Implement auto-updating charts
-  - [ ] Add streaming data indicators
-  - [ ] Create data rate controls
-  - [ ] Implement performance optimization for live data
-
-### Rate Limiting UI
-- [ ] **Task 11.5**: Add rate limiting controls
-  - [ ] Create visual rate limit indicators
-  - [ ] Implement request throttling controls
-  - [ ] Add rate limit override options with warnings
-  - [ ] Create batch request scheduling UI
-  - [ ] Implement estimation for large data requests
+  - [ ] Add error display for data loading issues
+  - [ ] Implement loading state indicators
 
 ### Testing
-- [ ] **Task 11.6**: Implement IB integration testing
+- [ ] **Task 7.7**: Set up frontend testing
+  - [ ] Configure testing framework (Vitest)
+  - [ ] Add component testing utilities
+  - [ ] Create mock API responses for testing
+  - [ ] Implement tests for Redux slices
+  - [ ] Add snapshot tests for UI components
+  - [ ] Create integration tests for data flow
+  - [ ] Implement accessibility testing
+
+### Documentation
+- [ ] **Task 7.8**: Document frontend foundation
+  - [ ] Create frontend architecture documentation with diagrams
+  - [ ] Implement component usage guide with examples
+  - [ ] Add state management patterns and best practices
+  - [ ] Create API integration documentation for frontend
+  - [ ] Implement developer setup instructions
+  - [ ] Add troubleshooting guide for common issues
+  - [ ] Create coding standards and patterns documentation
+
+### Deliverable
+A functioning frontend application that:
+- Provides a clean, responsive user interface
+- Connects to the backend API to retrieve data
+- Manages application state with Redux
+- Allows selection of symbols and timeframes
+- Displays loading and error states appropriately
+- Can be built for production deployment
+
+Example frontend component:
+```jsx
+// SymbolSelector.tsx
+import React from 'react';
+import { useGetSymbolsQuery } from '../api/dataApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { setCurrentSymbol } from '../store/dataSlice';
+import { Select, ErrorMessage, LoadingSpinner } from '../components/common';
+
+export const SymbolSelector: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const currentSymbol = useAppSelector(state => state.data.currentSymbol);
+  const { data: symbols, isLoading, error } = useGetSymbolsQuery();
+  
+  if (isLoading) return <LoadingSpinner size="small" />;
+  if (error) return <ErrorMessage message="Failed to load symbols" />;
+  
+  return (
+    <Select
+      value={currentSymbol}
+      options={symbols.map(s => ({ value: s, label: s }))}
+      onChange={value => dispatch(setCurrentSymbol(value))}
+      placeholder="Select a symbol"
+    />
+  );
+};
+```
+
+---
+
+## Slice 8: Chart Visualization Components (v1.0.8)
+
+**Value delivered:** Interactive financial charts integrated with the frontend application, allowing users to visualize OHLCV data and indicators.
+
+### Chart Infrastructure Tasks
+- [ ] **Task 8.1**: Implement TradingView chart integration
+  - [ ] Add Lightweight Charts library integration with TypeScript types
+  - [ ] Create chart container component with responsive sizing
+  - [ ] Implement chart theme synchronization with application theme
+  - [ ] Add chart configuration utilities for common settings
+  - [ ] Create reusable chart factory functions
+  - [ ] Implement chart destruction and cleanup on unmount
+  - [ ] Add performance optimizations for chart rendering
+
+- [ ] **Task 8.2**: Develop chart data transformation utilities
+  - [ ] Create data adapters for OHLCV to chart format conversion
+  - [ ] Implement time scale formatting utilities
+  - [ ] Add data preprocessing for missing values
+  - [ ] Create data series helpers for various chart types
+  - [ ] Implement efficient update methods for streaming data
+  - [ ] Add data validation to prevent chart errors
+  - [ ] Create debug utilities for chart data inspection
+
+### Chart Components
+- [ ] **Task 8.3**: Implement core chart components
+  - [ ] Create CandlestickChart component with customizable options
+  - [ ] Implement ChartControls for user interaction
+  - [ ] Add time navigation controls (zoom, pan, reset)
+  - [ ] Create ChartLegend component with dynamic data
+  - [ ] Implement CrosshairInfo component for value display
+  - [ ] Add chart resize handling with performance optimization
+  - [ ] Create ChartOptions component for visual customization
+
+- [ ] **Task 8.4**: Develop indicator visualization
+  - [ ] Create IndicatorSeries component for line-based indicators
+  - [ ] Implement IndicatorPanel for separate indicator panels
+  - [ ] Add support for histogram indicators (volume, MACD)
+  - [ ] Create indicator parameter controls
+  - [ ] Implement indicator visibility toggles
+  - [ ] Add color and style customization for indicators
+  - [ ] Create indicator tooltip components with detailed values
+
+### Chart Layout System
+- [ ] **Task 8.5**: Implement multi-panel chart system
+  - [ ] Create ChartLayout component for managing multiple panels
+  - [ ] Implement panel synchronization for crosshair and time range
+  - [ ] Add panel resize capabilities with proper redraw
+  - [ ] Create panel addition/removal with animation
+  - [ ] Implement panel configuration saving/loading
+  - [ ] Add panel title and legend components
+  - [ ] Create layout templates for common configurations
+
+### Interactivity and UX
+- [ ] **Task 8.6**: Enhance chart interactivity
+  - [ ] Implement zoom and pan gestures with touch support
+  - [ ] Create detailed tooltips with comprehensive data
+  - [ ] Add keyboard navigation support
+  - [ ] Implement marker click handlers for interactive elements
+  - [ ] Create context menu with chart-specific actions
+  - [ ] Add accessibility enhancements for chart elements
+  - [ ] Implement performance monitoring for interaction smoothness
+
+### Testing
+- [ ] **Task 8.7**: Implement chart testing
+  - [ ] Create chart component unit tests
+  - [ ] Add visual regression tests for chart rendering
+  - [ ] Implement data transformation tests
+  - [ ] Create interaction simulation tests
+  - [ ] Add performance benchmarks for rendering
+  - [ ] Implement browser compatibility tests
+  - [ ] Create example-based tests with screenshots
+
+### Documentation
+- [ ] **Task 8.8**: Document chart visualization components
+  - [ ] Create chart component API documentation with usage examples
+  - [ ] Implement chart customization guide with screenshots
+  - [ ] Add chart architecture documentation with component diagrams
+  - [ ] Create interactive examples for common chart configurations
+  - [ ] Implement troubleshooting guide for chart rendering issues
+  - [ ] Add performance optimization recommendations
+  - [ ] Create chart integration patterns for custom components
+
+### Deliverable
+A comprehensive chart visualization system that:
+- Renders professional-quality financial charts
+- Supports multiple chart types (candlestick, line, histogram)
+- Displays indicators as overlays or in separate panels
+- Provides rich interactivity with crosshairs and tooltips
+- Synchronizes multiple chart panels for complex analysis
+- Maintains performance with large datasets
+
+Example chart component:
+```jsx
+// CandlestickChart.tsx
+import React, { useRef, useEffect, useState } from 'react';
+import { createChart, IChartApi, ISeriesApi, CandlestickData } from 'lightweight-charts';
+import { formatOhlcvData } from '../utils/chartDataUtils';
+import { useTheme } from '../hooks/useTheme';
+import { ChartContainer, ChartControls } from '../components/chart';
+
+interface CandlestickChartProps {
+  data: OHLCVData;
+  width?: number;
+  height?: number;
+  onCrosshairMove?: (param: any) => void;
+}
+
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({
+  data,
+  width = 800,
+  height = 400,
+  onCrosshairMove
+}) => {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [chart, setChart] = useState<IChartApi | null>(null);
+  const [series, setSeries] = useState<ISeriesApi<'Candlestick'> | null>(null);
+  const { theme } = useTheme();
+  
+  // Create chart on mount and handle theme changes
+  useEffect(() => {
+    if (chartContainerRef.current) {
+      const newChart = createChart(chartContainerRef.current, {
+        width,
+        height,
+        layout: {
+          background: { type: 'solid', color: theme === 'dark' ? '#1E1E1E' : '#FFFFFF' },
+          textColor: theme === 'dark' ? '#D9D9D9' : '#191919',
+        },
+        grid: {
+          vertLines: { color: theme === 'dark' ? '#2B2B43' : '#E6E6E6' },
+          horzLines: { color: theme === 'dark' ? '#2B2B43' : '#E6E6E6' },
+        },
+        timeScale: {
+          timeVisible: true,
+          secondsVisible: false,
+          borderColor: theme === 'dark' ? '#2B2B43' : '#E6E6E6',
+        },
+      });
+      
+      const newSeries = newChart.addCandlestickSeries();
+      
+      if (onCrosshairMove) {
+        newChart.subscribeCrosshairMove(onCrosshairMove);
+      }
+      
+      setChart(newChart);
+      setSeries(newSeries);
+      
+      // Cleanup on unmount
+      return () => {
+        newChart.unsubscribeCrosshairMove(onCrosshairMove);
+        newChart.remove();
+      };
+    }
+  }, [theme]);
+  
+  // Update data when it changes
+  useEffect(() => {
+    if (series && data) {
+      const formattedData = formatOhlcvData(data);
+      series.setData(formattedData);
+      chart?.timeScale().fitContent();
+    }
+  }, [data, series]);
+  
+  // Handle resize
+  useEffect(() => {
+    if (chart) {
+      chart.resize(width, height);
+    }
+  }, [width, height]);
+  
+  return (
+    <div className="candlestick-chart">
+      <div ref={chartContainerRef} />
+      <ChartControls chart={chart} />
+    </div>
+  );
+};
+```
+
+---
+
+## Slice 9: Indicator Configuration & API (v1.0.9)
+
+**Value delivered:** Comprehensive indicator configuration and calculation capabilities exposed through the API and frontend.
+
+### Indicator API Enhancement
+- [ ] **Task 9.1**: Expand indicator API endpoints
+  - [ ] Create `/api/v1/indicators/metadata` endpoint for detailed indicator information
+  - [ ] Implement `/api/v1/indicators/parameters` endpoint for parameter validation
+  - [ ] Add `/api/v1/indicators/presets` endpoint for common configurations
+  - [ ] Create batch calculation endpoint for multiple indicators
+  - [ ] Implement efficient calculation with caching
+  - [ ] Add parameter validation with detailed error messages
+  - [ ] Create examples and documentation for all endpoints
+
+- [ ] **Task 9.2**: Develop indicator service enhancements
+  - [ ] Implement advanced parameter validation in service layer
+  - [ ] Create service methods for indicator metadata retrieval
+  - [ ] Add caching for frequently used indicator calculations
+  - [ ] Implement efficient data transformation between formats
+  - [ ] Create performance tracking for calculation times
+  - [ ] Add detailed logging for debugging calculations
+  - [ ] Implement error recovery strategies for calculation failures
+
+### Frontend Indicator Components
+- [ ] **Task 9.3**: Create indicator configuration UI
+  - [ ] Implement IndicatorSelector component with search
+  - [ ] Create IndicatorParameters component for configuration
+  - [ ] Add parameter validation with instant feedback
+  - [ ] Implement IndicatorPresets for common configurations
+  - [ ] Create drag-and-drop reordering of indicators
+  - [ ] Add indicator group management
+  - [ ] Implement configuration persistence in state
+
+- [ ] **Task 9.4**: Develop indicator state management
+  - [ ] Create indicators slice in Redux store
+  - [ ] Implement async thunks for indicator calculation
+  - [ ] Add indicator selection actions and reducers
+  - [ ] Create parameter update logic with validation
+  - [ ] Implement indicator removal and reordering
+  - [ ] Add preset management with saving/loading
+  - [ ] Create error handling for indicator operations
+
+### Indicator Visualization
+- [ ] **Task 9.5**: Enhance chart integration with indicators
+  - [ ] Create indicator series mapping for different visualization types
+  - [ ] Implement indicator visibility toggles with state persistence
+  - [ ] Add indicator color and style customization
+  - [ ] Create indicator value tooltips with detailed information
+  - [ ] Implement automatic scaling for indicator panels
+  - [ ] Add indicator overlay transparency controls
+  - [ ] Create synchronized highlighting between indicators
+
+### Indicator Management
+- [ ] **Task 9.6**: Implement indicator management features
+  - [ ] Create saved indicator configurations with naming
+  - [ ] Implement import/export of indicator settings
+  - [ ] Add indicator comparison tools
+  - [ ] Create indicator template system
+  - [ ] Implement batch indicator configuration
+  - [ ] Add indicator documentation display
+  - [ ] Create indicator performance metrics
+
+### Testing
+- [ ] **Task 9.7**: Implement indicator testing
+  - [ ] Create API endpoint tests with known values
+  - [ ] Add service layer tests for indicator calculations
+  - [ ] Implement UI component tests for indicator configuration
+  - [ ] Create integration tests for the complete indicator flow
+  - [ ] Add performance benchmarks for indicator calculations
+  - [ ] Implement visual tests for indicator rendering
+  - [ ] Create test fixtures for common indicator patterns
+
+### Deliverable
+A comprehensive indicator system that:
+- Provides detailed metadata about available indicators
+- Allows flexible configuration of indicator parameters
+- Calculates indicator values efficiently with proper validation
+- Displays indicators in various visualization formats
+- Offers preset configurations for common scenarios
+- Provides a smooth user experience for indicator management
+
+Example indicator configuration:
+```tsx
+// IndicatorConfiguration.tsx
+import React, { useState } from 'react';
+import { useGetIndicatorsMetadataQuery } from '../api/indicatorsApi';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { addIndicator, updateIndicatorParams } from '../store/indicatorsSlice';
+import { Card, Select, Input, Button, Tabs } from '../components/common';
+
+export const IndicatorConfiguration: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const selectedIndicators = useAppSelector(state => state.indicators.selected);
+  const { data: indicatorsMetadata, isLoading } = useGetIndicatorsMetadataQuery();
+  const [selectedType, setSelectedType] = useState<string>('');
+  const [parameters, setParameters] = useState<Record<string, any>>({});
+  
+  if (isLoading || !indicatorsMetadata) return <div>Loading indicators...</div>;
+  
+  const currentMetadata = indicatorsMetadata.find(i => i.name === selectedType);
+  
+  const handleAddIndicator = () => {
+    if (selectedType && currentMetadata) {
+      dispatch(addIndicator({
+        id: Date.now().toString(),
+        type: selectedType,
+        parameters: { ...parameters }
+      }));
+      // Reset form
+      setSelectedType('');
+      setParameters({});
+    }
+  };
+  
+  return (
+    <Card title="Indicator Configuration">
+      <Tabs 
+        tabs={[
+          { key: 'new', label: 'Add New', content: (
+            <>
+              <Select
+                label="Indicator Type"
+                value={selectedType}
+                onChange={setSelectedType}
+                options={indicatorsMetadata.map(i => ({ value: i.name, label: i.displayName }))}
+              />
+              
+              {currentMetadata && (
+                <div className="parameters">
+                  <h4>Parameters</h4>
+                  {currentMetadata.parameters.map(param => (
+                    <Input
+                      key={param.name}
+                      label={param.displayName}
+                      type={param.type === 'number' ? 'number' : 'text'}
+                      value={parameters[param.name] ?? param.defaultValue}
+                      onChange={value => setParameters({...parameters, [param.name]: value })}
+                      help={param.description}
+                    />
+                  ))}
+                  <Button onClick={handleAddIndicator}>Add Indicator</Button>
+                </div>
+              )}
+            </>
+          )},
+          { key: 'active', label: 'Active Indicators', content: (
+            <div className="active-indicators">
+              {selectedIndicators.map(indicator => (
+                <div key={indicator.id} className="indicator-item">
+                  <h4>{indicatorsMetadata.find(i => i.name === indicator.type)?.displayName}</h4>
+                  <div className="parameters">
+                    {/* Parameter editing UI for active indicators */}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        ]}
+      />
+    </Card>
+  );
+};
+```
+
+---
+
+## Slice 10: Fuzzy Logic Integration (v1.0.10)
+
+**Value delivered:** Integration of fuzzy logic capabilities into the API and frontend, allowing visualization and configuration of fuzzy sets.
+
+### Fuzzy Logic API
+- [ ] **Task 10.1**: Implement fuzzy logic API endpoints
+  - [ ] Create `/api/v1/fuzzy/sets` endpoint for fuzzy set metadata
+  - [ ] Implement `/api/v1/fuzzy/evaluate` endpoint for fuzzy evaluation
+  - [ ] Add `/api/v1/fuzzy/presets` endpoint for common fuzzy configurations
+  - [ ] Create parameter validation for fuzzy set parameters
+  - [ ] Implement detailed documentation with examples
+  - [ ] Add error handling specific to fuzzy calculations
+  - [ ] Create batch processing for efficient evaluation
+
+- [ ] **Task 10.2**: Develop fuzzy service layer
+  - [ ] Create FuzzyService with comprehensive adapter methods
+  - [ ] Implement fuzzy set parameter validation
+  - [ ] Add efficient evaluation with vectorized operations
+  - [ ] Create caching for repeated fuzzy evaluations
+  - [ ] Implement result formatting with proper metadata
+  - [ ] Add comprehensive logging for debugging
+  - [ ] Create performance tracking for evaluations
+
+### Fuzzy Logic Frontend Components
+- [ ] **Task 10.3**: Implement fuzzy set management UI
+  - [ ] Create FuzzySetEditor component for visual editing
+  - [ ] Implement MembershipFunctionGraph for visualization
+  - [ ] Add parameter inputs with instant preview
+  - [ ] Create preset management with saving/loading
+  - [ ] Implement set combination previews
+  - [ ] Add export/import functionality for configurations
+  - [ ] Create documentation integration for fuzzy concepts
+
+- [ ] **Task 10.4**: Develop fuzzy state management
+  - [ ] Create fuzzy slice in Redux store
+  - [ ] Implement actions for fuzzy set configuration
+  - [ ] Add async thunks for fuzzy evaluation
+  - [ ] Create selectors for fuzzy state access
+  - [ ] Implement middleware for side effects
+  - [ ] Add persistence for fuzzy configurations
+  - [ ] Create error handling for fuzzy operations
+
+### Fuzzy Visualization
+- [ ] **Task 10.5**: Implement fuzzy visualization components
+  - [ ] Create FuzzyHighlightBand component for chart integration
+  - [ ] Implement color gradient visualization for membership degrees
+  - [ ] Add interactive hover tooltips with fuzzy values
+  - [ ] Create time-series visualization of fuzzy membership
+  - [ ] Implement membership function graph component
+  - [ ] Add synchronized highlighting across charts
+  - [ ] Create visualization settings for customization
+
+- [ ] **Task 10.6**: Develop fuzzy-indicator integration
+  - [ ] Create binding between indicators and fuzzy inputs
+  - [ ] Implement real-time fuzzy evaluation on indicator changes
+  - [ ] Add visual linking between indicators and fuzzy sets
+  - [ ] Create transition animations for membership changes
+  - [ ] Implement intelligent layout for fuzzy visualizations
+  - [ ] Add combined view of indicators and fuzzy memberships
+  - [ ] Create detailed tooltips with combined information
+
+### Testing
+- [ ] **Task 10.7**: Create fuzzy logic tests
+  - [ ] Implement unit tests for API endpoints
+  - [ ] Add service layer tests with known values
+  - [ ] Create component tests for fuzzy UI elements
+  - [ ] Implement integration tests for fuzzy evaluation flow
+  - [ ] Add visual tests for fuzzy visualization components
+  - [ ] Create performance benchmarks for fuzzy operations
+  - [ ] Implement comprehensive test fixtures for fuzzy sets
+
+### Deliverable
+A comprehensive fuzzy logic system that:
+- Allows creation and configuration of fuzzy membership functions
+- Visualizes fuzzy sets with interactive graphs
+- Evaluates indicator values through fuzzy logic
+- Displays fuzzy membership as color bands on charts
+- Provides preset configurations for common scenarios
+- Offers educational resources about fuzzy logic concepts
+
+Example fuzzy set editor:
+```tsx
+// FuzzySetEditor.tsx
+import React, { useState } from 'react';
+import { useGetFuzzySetsQuery, useUpdateFuzzySetMutation } from '../api/fuzzyApi';
+import { MembershipFunctionGraph } from './MembershipFunctionGraph';
+import { Card, Select, RangeSlider, Button } from '../components/common';
+
+interface FuzzySetEditorProps {
+  indicatorId: string;
+}
+
+export const FuzzySetEditor: React.FC<FuzzySetEditorProps> = ({ indicatorId }) => {
+  const { data: fuzzySets, isLoading } = useGetFuzzySetsQuery(indicatorId);
+  const [updateFuzzySet] = useUpdateFuzzySetMutation();
+  const [selectedSet, setSelectedSet] = useState<string>('');
+  const [parameters, setParameters] = useState<number[]>([]);
+  
+  if (isLoading || !fuzzySets) return <div>Loading fuzzy sets...</div>;
+  
+  const currentSet = fuzzySets.find(set => set.name === selectedSet);
+  
+  const handleParameterChange = (index: number, value: number) => {
+    const newParams = [...parameters];
+    newParams[index] = value;
+    setParameters(newParams);
+  };
+  
+  const handleSave = () => {
+    if (selectedSet && parameters.length > 0) {
+      updateFuzzySet({
+        indicatorId,
+        setName: selectedSet,
+        parameters
+      });
+    }
+  };
+  
+  return (
+    <Card title="Fuzzy Set Configuration">
+      <Select
+        label="Fuzzy Set"
+        value={selectedSet}
+        onChange={(value) => {
+          setSelectedSet(value);
+          const set = fuzzySets.find(s => s.name === value);
+          if (set) setParameters([...set.parameters]);
+        }}
+        options={fuzzySets.map(set => ({ value: set.name, label: set.displayName }))}
+      />
+      
+      {currentSet && (
+        <>
+          <MembershipFunctionGraph
+            type={currentSet.type}
+            parameters={parameters}
+            width={400}
+            height={200}
+          />
+          
+          <div className="parameters">
+            {parameters.map((param, index) => (
+              <RangeSlider
+                key={index}
+                label={`Parameter ${index + 1}`}
+                min={0}
+                max={100}
+                value={param}
+                onChange={(value) => handleParameterChange(index, value)}
+              />
+            ))}
+          </div>
+          
+          <Button onClick={handleSave}>Save Configuration</Button>
+        </>
+      )}
+    </Card>
+  );
+};
+```
+
+---
+
+## Slice 11: Interactive Brokers Integration Backend (v1.0.11)
+
+**Value delivered:** Ability to fetch live and historical data from Interactive Brokers with a robust API layer.
+
+### IB Integration Tasks
+- [ ] **Task 11.1**: Implement IBDataLoader
+  - [ ] Create IBDataLoader class with ib_insync integration
+  - [ ] Implement connection management with reconnection logic
+  - [ ] Add contract creation helpers for various instrument types
+  - [ ] Implement historical data request methods with proper parameter handling
+  - [ ] Add error handling specific to IB API issues with detailed error codes
+  - [ ] Create connection status monitoring system with event callbacks
+
+- [ ] **Task 11.2**: Enhance DataManager for hybrid data sources
+  - [ ] Update DataManager to support IBDataLoader as a data source
+  - [ ] Implement sophisticated gap detection algorithm for time series
+  - [ ] Add logic to intelligently fill gaps from IB when needed
+  - [ ] Create data merging logic that prioritizes highest quality sources
+  - [ ] Add function to save merged data to CSV with proper metadata
+  - [ ] Implement data quality scoring system
+
+### Data Fetching and Management
+- [ ] **Task 11.3**: Implement data fetching capabilities
+  - [ ] Create contract search functionality with filtering
+  - [ ] Implement multi-timeframe data retrieval
+  - [ ] Add data quality validation for received data
+  - [ ] Create intelligent rate limit handling
+  - [ ] Implement retry strategies for transient failures
+  - [ ] Add progress tracking for long-running requests
+  - [ ] Create batch processing for multiple symbols
+
+- [ ] **Task 11.4**: Develop connection management
+  - [ ] Implement connection state tracking
+  - [ ] Create automatic reconnection with exponential backoff
+  - [ ] Add event system for connection status changes
+  - [ ] Create connection pooling for multiple clients
+  - [ ] Implement graceful shutdown procedures
+  - [ ] Add diagnostic tools for connection issues
+  - [ ] Create detailed logging for connection lifecycle
+
+### Error Handling and Recovery
+- [ ] **Task 11.5**: Create robust error handling
+  - [ ] Implement error classification for IB-specific errors
+  - [ ] Create readable error messages from error codes
+  - [ ] Add contextual information to error responses
+  - [ ] Implement error recovery strategies
+  - [ ] Create fallback mechanisms for critical operations
+  - [ ] Add detailed error logging with diagnostics
+  - [ ] Implement rate limit detection and avoidance
+
+- [ ] **Task 11.6**: Develop data integrity mechanisms
+  - [ ] Create data validation for incoming records
+  - [ ] Implement data repair for common issues
+  - [ ] Add gap detection and reporting
+  - [ ] Create data quality metrics
+  - [ ] Implement anomaly detection in price data
+  - [ ] Add data normalization for consistency
+  - [ ] Create audit trail for data modifications
+
+### Testing
+- [ ] **Task 11.7**: Implement IB integration testing
   - [ ] Create mock IB server for testing
   - [ ] Add connection sequence tests
   - [ ] Implement data request tests
   - [ ] Create error handling tests
   - [ ] Add performance tests for large data sets
+  - [ ] Implement integration tests with DataManager
+  - [ ] Create realistic scenario tests with simulated failures
 
 ### Deliverable
-A UI application that can:
-- Connect to Interactive Brokers with status feedback
-- Fetch historical and real-time data with progress indicators
-- Visualize live data updates
-- Manage data quality and completeness
-- Handle API rate limits with appropriate feedback
+A robust backend system that can:
+- Connect to Interactive Brokers with comprehensive error handling
+- Fetch historical price data with intelligent rate limiting
+- Merge local and remote data with gap detection and filling
+- Store data locally for offline use with proper metadata
+- Handle connection issues gracefully with automatic recovery
+- Validate and ensure data quality for downstream components
+- Provide a clean API for the UI layer to consume
 
 ---
 
-## Slice 12: Neural Network Foundation Backend (v1.0.12)
+## Slice 12: IB Integration Frontend & API (v1.0.12)
+
+**Value delivered:** Frontend components and API endpoints for Interactive Brokers connectivity, data management, and real-time updates.
+
+### IB API Endpoints
+- [ ] **Task 12.1**: Implement IB connection API
+  - [ ] Create `/api/v1/broker/connect` endpoint for establishing connection
+  - [ ] Implement `/api/v1/broker/status` endpoint for connection status
+  - [ ] Add `/api/v1/broker/disconnect` endpoint for clean shutdown
+  - [ ] Create security measures for credential handling
+  - [ ] Implement detailed error responses for connection issues
+  - [ ] Add connection logging with appropriate privacy measures
+  - [ ] Create connection recovery endpoints
+
+- [ ] **Task 12.2**: Develop data request API
+  - [ ] Create `/api/v1/broker/contracts` endpoint for contract search
+  - [ ] Implement `/api/v1/broker/historical` endpoint for historical data
+  - [ ] Add `/api/v1/broker/realtime/subscribe` endpoint for market data
+  - [ ] Create rate limit awareness in API responses
+  - [ ] Implement progress tracking for long-running requests
+  - [ ] Add cancellation endpoints for ongoing operations
+  - [ ] Create data validation with quality indicators
+
+### IB Service Layer
+- [ ] **Task 12.3**: Create IB service adapters
+  - [ ] Implement IBConnectionService for connection management
+  - [ ] Create IBContractService for contract operations
+  - [ ] Add IBDataService for data retrieval operations
+  - [ ] Implement connection pooling for multiple clients
+  - [ ] Create event system for status updates
+  - [ ] Add error transformation for client-friendly messages
+  - [ ] Implement resource cleanup for unused connections
+
+### IB Frontend Components
+- [ ] **Task 12.4**: Implement IB connection UI
+  - [ ] Create IBConnectionPanel for connection management
+  - [ ] Implement connection status indicators with visual feedback
+  - [ ] Add connection parameter inputs with validation
+  - [ ] Create connection troubleshooting assistant
+  - [ ] Implement session management with reconnection
+  - [ ] Add connection history tracking
+  - [ ] Create secure credential handling
+
+- [ ] **Task 12.5**: Develop data request UI
+  - [ ] Create ContractSearch component with typeahead
+  - [ ] Implement DataRequestForm with parameter validation
+  - [ ] Add progress indicators for long-running requests
+  - [ ] Create data preview component with quality indicators
+  - [ ] Implement request history and favorites
+  - [ ] Add intelligent defaults based on previous requests
+  - [ ] Create batch request scheduling
+
+### Real-Time Data Components
+- [ ] **Task 12.6**: Implement real-time data handling
+  - [ ] Create WebSocket integration for streaming data
+  - [ ] Implement real-time chart updates with efficient rendering
+  - [ ] Add subscription management with bandwidth optimization
+  - [ ] Create data rate indicators and controls
+  - [ ] Implement time synchronization for accurate timestamps
+  - [ ] Add pause/resume controls for data streams
+  - [ ] Create snapshot comparison functionality
+
+### Testing
+- [ ] **Task 12.7**: Create IB frontend tests
+  - [ ] Implement component tests for IB UI elements
+  - [ ] Add API endpoint tests with mocked responses
+  - [ ] Create integration tests for connection flow
+  - [ ] Implement WebSocket tests for real-time data
+  - [ ] Add performance tests for data rendering
+  - [ ] Create end-to-end tests for complete workflows
+  - [ ] Implement visual validation for status indicators
+
+### Deliverable
+A comprehensive IB integration that:
+- Provides a clean UI for connecting to Interactive Brokers
+- Displays connection status with helpful feedback
+- Allows searching and selecting financial instruments
+- Retrieves historical and real-time data with progress feedback
+- Handles connection errors gracefully with recovery options
+- Optimizes data requests with rate limiting awareness
+
+Example IB connection component:
+```tsx
+// IBConnectionPanel.tsx
+import React, { useState, useEffect } from 'react';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { connect, disconnect, checkStatus } from '../store/ibSlice';
+import { Card, Input, Button, StatusIndicator, Tabs } from '../components/common';
+
+export const IBConnectionPanel: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const { status, error, lastConnected } = useAppSelector(state => state.ib);
+  const [host, setHost] = useState('127.0.0.1');
+  const [port, setPort] = useState('7496');
+  const [clientId, setClientId] = useState('1');
+  
+  // Check status periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      dispatch(checkStatus());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const handleConnect = () => {
+    dispatch(connect({ host, port: parseInt(port), clientId: parseInt(clientId) }));
+  };
+  
+  const handleDisconnect = () => {
+    dispatch(disconnect());
+  };
+  
+  return (
+    <Card title="Interactive Brokers Connection">
+      <div className="connection-status">
+        <StatusIndicator 
+          status={status === 'connected' ? 'success' : status === 'connecting' ? 'warning' : 'error'} 
+          label={status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting...' : 'Disconnected'} 
+        />
+        
+        {status === 'connected' && lastConnected && (
+          <div className="connected-since">
+            Connected since: {new Date(lastConnected).toLocaleString()}
+          </div>
+        )}
+        
+        {error && (
+          <div className="connection-error">
+            Error: {error}
+          </div>
+        )}
+      </div>
+      
+      <Tabs
+        tabs={[
+          { key: 'connection', label: 'Connection', content: (
+            <div className="connection-form">
+              <Input
+                label="Host"
+                value={host}
+                onChange={setHost}
+                disabled={status === 'connected' || status === 'connecting'}
+              />
+              <Input
+                label="Port"
+                type="number"
+                value={port}
+                onChange={setPort}
+                disabled={status === 'connected' || status === 'connecting'}
+              />
+              <Input
+                label="Client ID"
+                type="number"
+                value={clientId}
+                onChange={setClientId}
+                disabled={status === 'connected' || status === 'connecting'}
+              />
+              
+              {status === 'connected' ? (
+                <Button onClick={handleDisconnect} variant="danger">Disconnect</Button>
+              ) : (
+                <Button onClick={handleConnect} disabled={status === 'connecting'}>
+                  {status === 'connecting' ? 'Connecting...' : 'Connect'}
+                </Button>
+              )}
+            </div>
+          )},
+          { key: 'troubleshooting', label: 'Troubleshooting', content: (
+            <div className="troubleshooting">
+              <h4>Connection Troubleshooting</h4>
+              <ul>
+                <li>Ensure TWS or IB Gateway is running</li>
+                <li>Check that API connections are enabled in TWS settings</li>
+                <li>Verify the port matches your TWS/Gateway configuration</li>
+                <li>Make sure the Client ID is not already in use</li>
+              </ul>
+            </div>
+          )}
+        ]}
+      />
+    </Card>
+  );
+};
+```
+
+---
+
+## Slice 13: Neural Network Foundation Backend (v1.0.13)
 
 **Value delivered:** Robust neural network infrastructure for processing fuzzy inputs with comprehensive training and inference capabilities.
 
 ### Neural Network Core Tasks
-- [ ] **Task 12.1**: Define comprehensive neural network configuration
-  - [ ] Create detailed Pydantic model for neural network configuration
-  - [ ] Implement validation for model architecture parameters with compatibility checks
+- [ ] **Task 13.1**: Define neural network configuration
+  - [ ] Create Pydantic model for neural network configuration
+  - [ ] Implement validation for model architecture parameters
   - [ ] Design optimizer and loss function configuration schema
   - [ ] Create hyperparameter specification with range validation
-  - [ ] Implement model serialization format with version control
+  - [ ] Implement model serialization format
   - [ ] Add cross-validation configuration options
 
-- [ ] **Task 12.2**: Implement sophisticated neural training system
+- [ ] **Task 13.2**: Implement neural training system
   - [ ] Create NeuralTrainer class with configurable training loop
-  - [ ] Implement advanced data preparation for fuzzy inputs with normalization
-  - [ ] Design flexible PyTorch model class with configurable layers
-  - [ ] Add early stopping with multiple monitoring metrics
-  - [ ] Implement model checkpoint saving with metadata
-  - [ ] Create detailed training history tracking
+  - [ ] Implement data preparation for fuzzy inputs
+  - [ ] Design flexible PyTorch model class
+  - [ ] Add early stopping with multiple metrics
+  - [ ] Implement model checkpoint saving
+  - [ ] Create training history tracking
   - [ ] Add gradient clipping and other training stabilization techniques
-  - [ ] Implement transfer learning capabilities for pre-trained models
 
-- [ ] **Task 12.3**: Develop comprehensive inference logic
-  - [ ] Create NeuralInference class with extensive evaluation capabilities
-  - [ ] Implement efficient model loading with version validation
-  - [ ] Add vectorized batch prediction for historical data
-  - [ ] Create accuracy and performance metrics calculation
-  - [ ] Implement confidence estimation for predictions
-  - [ ] Add feature importance analysis
-  - [ ] Create advanced inference-time preprocessing pipeline
+### Neural Model Implementation
+- [ ] **Task 13.3**: Create neural network architecture
+  - [ ] Implement feedforward neural network base class
+  - [ ] Create customizable hidden layer structure
+  - [ ] Add support for various activation functions
+  - [ ] Implement dropout for regularization
+  - [ ] Create flexible input and output layer configuration
+  - [ ] Add weight initialization strategies
+  - [ ] Implement model complexity analysis
 
-### Data Pipeline Tasks
-- [ ] **Task 12.4**: Create robust end-to-end pipeline
-  - [ ] Implement data → indicators → fuzzy → neural pipeline with validation
-  - [ ] Add data splitting utilities with proper temporal awareness
-  - [ ] Create feature selection capabilities with importance ranking
-  - [ ] Implement data augmentation techniques for training
-  - [ ] Add automated hyperparameter tuning capabilities
-  - [ ] Create pipeline caching mechanism for intermediate results
+- [ ] **Task 13.4**: Develop data preprocessing
+  - [ ] Create data normalization for fuzzy inputs
+  - [ ] Implement data split for training/validation/test
+  - [ ] Add data augmentation techniques
+  - [ ] Create feature selection utilities
+  - [ ] Implement dataset creation from indicator data
+  - [ ] Add data filtering options
+  - [ ] Create data integrity validation
 
-### Validation and Testing
-- [ ] **Task 12.5**: Implement comprehensive neural network testing
-  - [ ] Create test fixtures for neural network configurations
-  - [ ] Implement tests for data preparation and normalization
-  - [ ] Add model validation tests with known inputs/outputs
-  - [ ] Create integration tests for the full machine learning pipeline
-  - [ ] Add performance benchmarks for training and inference
-  - [ ] Implement overfitting detection tests
+### Training and Evaluation
+- [ ] **Task 13.5**: Implement training infrastructure
+  - [ ] Create configurable loss functions for different prediction types
+  - [ ] Implement optimization algorithms (Adam, SGD, etc.)
+  - [ ] Add learning rate scheduling
+  - [ ] Create batch processing with prefetching
+  - [ ] Implement validation during training
+  - [ ] Add training progress visualization data
+  - [ ] Create training resumption from checkpoints
 
-### Basic UI Integration
-- [ ] **Task 12.6**: Create minimal UI hooks for neural network functionality
-  - [ ] Add model selection mechanism in UI
-  - [ ] Implement basic training parameter controls
-  - [ ] Create simple visualization for training progress
-  - [ ] Add inference result display integration
-  - [ ] Implement error reporting for neural network operations
+- [ ] **Task 13.6**: Develop model evaluation
+  - [ ] Implement comprehensive metrics calculation
+  - [ ] Create confusion matrix for classification tasks
+  - [ ] Add precision-recall analysis
+  - [ ] Implement ROC curve generation
+  - [ ] Create walk-forward validation
+  - [ ] Add cross-validation utilities
+  - [ ] Implement model comparison tools
+
+### Inference and Serialization
+- [ ] **Task 13.7**: Create inference engine
+  - [ ] Implement efficient inference with batching
+  - [ ] Create prediction confidence estimation
+  - [ ] Add model output interpretation
+  - [ ] Implement threshold adjustment for binary decisions
+  - [ ] Create inference caching for repeated inputs
+  - [ ] Add performance monitoring for inference
+  - [ ] Implement hardware acceleration support
+
+- [ ] **Task 13.8**: Develop model persistence
+  - [ ] Create model serialization with metadata
+  - [ ] Implement version tracking for models
+  - [ ] Add model loading with validation
+  - [ ] Create model repository structure
+  - [ ] Implement export/import functionality
+  - [ ] Add model metadata storage
+  - [ ] Create model documentation generation
+
+### Testing
+- [ ] **Task 13.9**: Implement neural network testing
+  - [ ] Create unit tests for neural models
+  - [ ] Implement validation tests with known datasets
+  - [ ] Add performance benchmarks for training
+  - [ ] Create inference speed tests
+  - [ ] Implement model saving/loading tests
+  - [ ] Add integration tests with fuzzy inputs
+  - [ ] Create regression tests for model improvements
 
 ### Deliverable
 A powerful neural network backend that can:
@@ -760,417 +1409,954 @@ A powerful neural network backend that can:
 - Train neural networks with sophisticated configurations
 - Evaluate model performance with comprehensive metrics
 - Make predictions with confidence estimation
-- Provide clean APIs for UI integration
+- Save and load models with proper versioning
+- Provide comprehensive training history for analysis
+- Offer clean APIs for UI integration
 
 ---
 
-## Slice 13: Neural Network UI (v1.0.13)
+## Slice 14: Neural Network API & Frontend (v1.0.14)
 
-**Value delivered:** Comprehensive user interface for neural network configuration, training, and visualization.
+**Value delivered:** API endpoints and frontend components for neural network configuration, training, and visualization.
 
-### Model Configuration UI
-- [ ] **Task 13.1**: Implement model configuration components
-  - [ ] Create neural network architecture designer
-  - [ ] Implement layer configuration controls
-  - [ ] Add hyperparameter tuning interface
-  - [ ] Create model templates system
-  - [ ] Implement model validation tools
+### Neural Network API Endpoints
+- [ ] **Task 14.1**: Implement neural network API
+  - [ ] Create `/api/v1/neural/models` endpoint for model management
+  - [ ] Implement `/api/v1/neural/train` endpoint for training operations
+  - [ ] Add `/api/v1/neural/predict` endpoint for inference
+  - [ ] Create `/api/v1/neural/evaluate` endpoint for performance metrics
+  - [ ] Implement `/api/v1/neural/hyperparameters` endpoint for tuning
+  - [ ] Add versioning for model artifacts
+  - [ ] Create detailed documentation with examples
 
-- [ ] **Task 13.2**: Develop training configuration UI
-  - [ ] Create dataset selection and splitting controls
-  - [ ] Implement training parameter controls
-  - [ ] Add validation strategy configuration
-  - [ ] Create early stopping and checkpoint controls
-  - [ ] Implement resource utilization indicators
+- [ ] **Task 14.2**: Develop neural service layer
+  - [ ] Create NeuralService for API integration
+  - [ ] Implement model management with version control
+  - [ ] Add asynchronous training with progress tracking
+  - [ ] Create efficient inference with batching
+  - [ ] Implement hyperparameter validation and normalization
+  - [ ] Add comprehensive logging for debugging
+  - [ ] Create error handling strategies
 
-### Training Visualization
-- [ ] **Task 13.3**: Implement training visualization components
-  - [ ] Create real-time training progress charts
-  - [ ] Implement loss and metric visualizations
-  - [ ] Add layer activation visualization
-  - [ ] Create confusion matrix and performance metrics
-  - [ ] Implement training history comparison tools
+### Neural Network Frontend Components
+- [ ] **Task 14.3**: Implement model configuration UI
+  - [ ] Create NeuralModelDesigner with layer configuration
+  - [ ] Implement hyperparameter controls with validation
+  - [ ] Add model template system with presets
+  - [ ] Create model validation tools
+  - [ ] Implement model visualization
+  - [ ] Add model comparison functionality
+  - [ ] Create model documentation integration
 
-- [ ] **Task 13.4**: Develop model management UI
-  - [ ] Create model registry component
+- [ ] **Task 14.4**: Develop training UI
+  - [ ] Create TrainingConfigurator with parameter settings
+  - [ ] Implement dataset selection and splitting controls
+  - [ ] Add real-time training progress visualization
+  - [ ] Create early stopping configuration
+  - [ ] Implement checkpoint management
+  - [ ] Add hardware resource allocation
+  - [ ] Create training history and logs display
+
+### Model Management & Visualization
+- [ ] **Task 14.5**: Implement model management UI
+  - [ ] Create ModelRegistry with versioning and metadata
   - [ ] Implement model loading and saving controls
   - [ ] Add model comparison tools
-  - [ ] Create model documentation component
-  - [ ] Implement model sharing capabilities
+  - [ ] Create model export and sharing
+  - [ ] Implement model documentation editor
+  - [ ] Add model search and filtering
+  - [ ] Create model usage tracking
 
-### Inference UI
-- [ ] **Task 13.5**: Implement inference visualization
-  - [ ] Create prediction visualization on charts
-  - [ ] Implement confidence interval visualization
+- [ ] **Task 14.6**: Develop inference visualization
+  - [ ] Create PredictionVisualizer with chart integration
+  - [ ] Implement confidence visualization
   - [ ] Add feature importance indicators
-  - [ ] Create backtesting visualization
-  - [ ] Implement scenario analysis tools
+  - [ ] Create what-if analysis tools
+  - [ ] Implement comparative prediction views
+  - [ ] Add time-series prediction visualization
+  - [ ] Create annotation tools for predictions
 
 ### Testing
-- [ ] **Task 13.6**: Create neural network UI testing
-  - [ ] Implement model configuration tests
-  - [ ] Add training interaction tests
-  - [ ] Create visualization validation tests
-  - [ ] Implement performance tests for large models
-  - [ ] Add integration tests for full ML pipeline
+- [ ] **Task 14.7**: Create neural network testing
+  - [ ] Implement API endpoint tests
+  - [ ] Add service layer tests with mock models
+  - [ ] Create component tests for UI elements
+  - [ ] Implement integration tests for training workflow
+  - [ ] Add performance benchmarks for model inference
+  - [ ] Create visual tests for visualization components
+  - [ ] Implement end-to-end tests for complete ML pipeline
 
 ### Deliverable
-A UI application that can:
-- Configure neural network models through an intuitive interface
-- Train models with real-time feedback on progress
-- Visualize model performance and predictions
-- Compare different model configurations
-- Apply models to historical data for backtesting
+A comprehensive neural network UI system that:
+- Allows designing and configuring neural network models
+- Provides real-time feedback during training
+- Visualizes model performance with detailed metrics
+- Enables model comparison and selection
+- Integrates predictions with market data visualization
+- Offers educational tools about neural networks
+
+Example model design component:
+```tsx
+// NeuralModelDesigner.tsx
+import React, { useState } from 'react';
+import { useCreateModelMutation } from '../api/neuralApi';
+import { Card, Button, Select, Input, IconButton } from '../components/common';
+import { LayerConfig, ModelConfig } from '../types/neural';
+
+export const NeuralModelDesigner: React.FC = () => {
+  const [createModel] = useCreateModelMutation();
+  const [modelName, setModelName] = useState('');
+  const [layers, setLayers] = useState<LayerConfig[]>([
+    { type: 'input', neurons: 10 },
+    { type: 'hidden', neurons: 16, activation: 'relu' },
+    { type: 'output', neurons: 2, activation: 'softmax' }
+  ]);
+  
+  const handleAddLayer = () => {
+    setLayers([...layers, { type: 'hidden', neurons: 16, activation: 'relu' }]);
+  };
+  
+  const handleRemoveLayer = (index: number) => {
+    if (index !== 0 && index !== layers.length - 1) { // Preserve input and output
+      const newLayers = [...layers];
+      newLayers.splice(index, 1);
+      setLayers(newLayers);
+    }
+  };
+  
+  const handleUpdateLayer = (index: number, field: string, value: any) => {
+    const newLayers = [...layers];
+    newLayers[index] = { ...newLayers[index], [field]: value };
+    setLayers(newLayers);
+  };
+  
+  const handleSaveModel = () => {
+    if (!modelName) return;
+    
+    const modelConfig: ModelConfig = {
+      name: modelName,
+      layers,
+      optimizer: { type: 'adam', learningRate: 0.001 },
+      loss: 'cross_entropy'
+    };
+    
+    createModel(modelConfig);
+  };
+  
+  return (
+    <Card title="Neural Network Model Designer">
+      <Input
+        label="Model Name"
+        value={modelName}
+        onChange={setModelName}
+        placeholder="Enter a name for your model"
+      />
+      
+      <div className="layers-container">
+        <h4>Network Layers</h4>
+        {layers.map((layer, index) => (
+          <div key={index} className="layer-config">
+            <div className="layer-header">
+              <span>Layer {index + 1} ({layer.type})</span>
+              {index !== 0 && index !== layers.length - 1 && (
+                <IconButton icon="trash" onClick={() => handleRemoveLayer(index)} />
+              )}
+            </div>
+            
+            <Input
+              label="Neurons"
+              type="number"
+              value={layer.neurons.toString()}
+              onChange={(value) => handleUpdateLayer(index, 'neurons', parseInt(value))}
+              min={1}
+            />
+            
+            {layer.type !== 'input' && (
+              <Select
+                label="Activation"
+                value={layer.activation || ''}
+                onChange={(value) => handleUpdateLayer(index, 'activation', value)}
+                options={[
+                  { value: 'relu', label: 'ReLU' },
+                  { value: 'sigmoid', label: 'Sigmoid' },
+                  { value: 'tanh', label: 'Tanh' },
+                  { value: 'softmax', label: 'Softmax' }
+                ]}
+              />
+            )}
+          </div>
+        ))}
+        
+        <Button variant="secondary" onClick={handleAddLayer}>Add Hidden Layer</Button>
+      </div>
+      
+      <div className="model-actions">
+        <Button onClick={handleSaveModel} disabled={!modelName}>Save Model</Button>
+      </div>
+    </Card>
+  );
+};
+```
 
 ---
 
-## Slice 14: Decision Logic & Backtesting Foundation (v1.0.14)
+## Slice 15: Decision Logic & Backtesting Foundation (v1.0.15)
 
 **Value delivered:** Robust trading decision framework with comprehensive backtesting capabilities.
 
 ### Decision Logic Core Tasks
-- [ ] **Task 14.1**: Implement sophisticated decision interpreter
+- [ ] **Task 15.1**: Implement decision interpreter
   - [ ] Create DecisionInterpreter class with configurable signal generation
-  - [ ] Implement multi-factor decision logic with weighted inputs
-  - [ ] Add confidence filtering with adjustable thresholds
-  - [ ] Create decision boundary calculation with hysteresis
-  - [ ] Implement state machine for entry/exit decision logic
+  - [ ] Implement multi-factor decision logic
+  - [ ] Add confidence filtering with thresholds
+  - [ ] Create decision boundary calculation
+  - [ ] Implement state machine for entry/exit logic
   - [ ] Add time-based filters and conditions
   - [ ] Create multi-timeframe decision reconciliation
 
-- [ ] **Task 14.2**: Develop comprehensive trade manager
-  - [ ] Create TradeManager class with sophisticated position tracking
-  - [ ] Implement update() method for processing signals with state management
-  - [ ] Add position sizing logic with multiple strategies
-  - [ ] Create risk management rules with stop loss handling
-  - [ ] Implement comprehensive P&L tracking with realized/unrealized tracking
-  - [ ] Add multi-asset portfolio management capabilities
-  - [ ] Create trade execution simulation with slippage models
+- [ ] **Task 15.2**: Develop trade manager
+  - [ ] Create TradeManager class with position tracking
+  - [ ] Implement update() method for processing signals
+  - [ ] Add position sizing logic
+  - [ ] Create risk management rules
+  - [ ] Implement comprehensive P&L tracking
+  - [ ] Add multi-asset portfolio management
+  - [ ] Create trade execution simulation
 
-- [ ] **Task 14.3**: Build detailed trade logging system
-  - [ ] Define extensible trade log data structure with complete event history
-  - [ ] Implement structured CSV-based logging with proper formatting
-  - [ ] Add comprehensive trade summary statistics calculation
-  - [ ] Create performance metrics calculation for various timeframes
-  - [ ] Implement drawdown and recovery analysis
-  - [ ] Add benchmark comparison capabilities
-  - [ ] Create trade journal with reason coding
+### Signal Generation and Processing
+- [ ] **Task 15.3**: Create signal generation system
+  - [ ] Implement rule-based signal generation
+  - [ ] Create neural network signal integration
+  - [ ] Add fuzzy logic signal processing
+  - [ ] Implement signal combination strategies
+  - [ ] Create signal strength calculation
+  - [ ] Add signal filtering and debouncing
+  - [ ] Implement signal metadata and annotations
 
-### Backtesting Engine Tasks
-- [ ] **Task 14.4**: Implement backtesting engine core
-  - [ ] Create BacktestEngine class with event-driven architecture
-  - [ ] Implement historical data replay with proper event sequencing
-  - [ ] Add commission models for different brokers
-  - [ ] Create slippage models with volume-based adjustments
-  - [ ] Implement margin requirement calculation
-  - [ ] Add support for multi-asset backtesting
-  - [ ] Create benchmark comparison system
+- [ ] **Task 15.4**: Develop order management
+  - [ ] Create order types (market, limit, stop)
+  - [ ] Implement order lifecycle tracking
+  - [ ] Add order modification capabilities
+  - [ ] Create order validation rules
+  - [ ] Implement order execution simulation
+  - [ ] Add order event system
+  - [ ] Create order history tracking
 
-- [ ] **Task 14.5**: Develop performance analysis system
-  - [ ] Implement comprehensive performance metrics calculation
-  - [ ] Add risk-adjusted return measures (Sharpe, Sortino, etc.)
-  - [ ] Create drawdown analysis with duration statistics
-  - [ ] Implement benchmark comparison with statistical significance
-  - [ ] Add trade clustering analysis
-  - [ ] Create correlation analysis with market factors
-  - [ ] Implement scenario analysis capabilities
+### Backtesting Engine
+- [ ] **Task 15.5**: Implement backtesting engine
+  - [ ] Create event-driven backtesting architecture
+  - [ ] Implement realistic price simulation
+  - [ ] Add transaction cost modeling
+  - [ ] Create market impact simulation
+  - [ ] Implement multi-asset backtesting
+  - [ ] Add custom date range support
+  - [ ] Create deterministic replay capability
 
-### Optimization Framework
-- [ ] **Task 14.6**: Create strategy optimization framework
-  - [ ] Implement parameter sweep capabilities with efficient search
-  - [ ] Add genetic algorithm for parameter optimization
-  - [ ] Create objective function framework with multi-criteria support
-  - [ ] Implement parallel optimization execution
-  - [ ] Add optimization results analysis and visualization
-  - [ ] Create walkforward testing capabilities for validation
+- [ ] **Task 15.6**: Develop performance analytics
+  - [ ] Create standard performance metrics calculation
+  - [ ] Implement drawdown analysis
+  - [ ] Add risk-adjusted return metrics
+  - [ ] Create benchmark comparison
+  - [ ] Implement trade statistics calculation
+  - [ ] Add equity curve generation
+  - [ ] Create performance attribution analysis
 
-### Basic UI Integration
-- [ ] **Task 14.7**: Implement minimal UI hooks for backtesting
-  - [ ] Add strategy configuration controls in UI
-  - [ ] Create simple backtest execution interface
-  - [ ] Implement basic results display
-  - [ ] Add trade list visualization
-  - [ ] Create simple performance metrics display
+### Strategy Management
+- [ ] **Task 15.7**: Create strategy framework
+  - [ ] Implement strategy class hierarchy
+  - [ ] Create parameter management with validation
+  - [ ] Add strategy initialization and lifecycle methods
+  - [ ] Implement optimization-ready interface
+  - [ ] Create strategy metadata storage
+  - [ ] Add strategy comparison capabilities
+  - [ ] Implement strategy versioning
+
+- [ ] **Task 15.8**: Develop optimization framework
+  - [ ] Create parameter space definition
+  - [ ] Implement grid search optimization
+  - [ ] Add genetic algorithm optimization
+  - [ ] Create walk-forward optimization
+  - [ ] Implement optimization metric selection
+  - [ ] Add optimization result storage
+  - [ ] Create optimization visualization data
+
+### Testing
+- [ ] **Task 15.9**: Implement backtesting tests
+  - [ ] Create unit tests for decision components
+  - [ ] Implement integration tests for trade execution
+  - [ ] Add validation tests with known outcomes
+  - [ ] Create performance tests for optimization
+  - [ ] Implement regression tests for strategies
+  - [ ] Add end-to-end backtesting tests
+  - [ ] Create benchmark comparison tests
 
 ### Deliverable
 A comprehensive backtesting system that can:
 - Generate sophisticated trading signals based on various inputs
+- Process signals into trading decisions with appropriate filtering
 - Simulate realistic trading with position sizing and risk management
 - Calculate detailed performance metrics for strategy evaluation
+- Compare strategy performance against benchmarks
 - Optimize strategy parameters for improved performance
 - Provide clean APIs for UI integration
 
 ---
 
-## Slice 15: Decision Logic & Backtesting UI (v1.0.15)
+## Slice 16: Backtesting API & Frontend (v1.0.16)
 
-**Value delivered:** Comprehensive user interface for strategy configuration, backtesting, and performance analysis.
+**Value delivered:** API endpoints and frontend components for strategy configuration, backtesting, and performance analysis.
 
-### Trading Strategy UI
-- [ ] **Task 15.1**: Implement strategy configuration components
-  - [ ] Create strategy builder with rule-based interface
-  - [ ] Implement parameter configuration for strategies
-  - [ ] Add strategy templates and presets
-  - [ ] Create strategy validation tools
-  - [ ] Implement strategy documentation viewer
+### Backtesting API Endpoints
+- [ ] **Task 16.1**: Implement backtesting API
+  - [ ] Create `/api/v1/strategies` endpoint for strategy management
+  - [ ] Implement `/api/v1/backtest/run` endpoint for test execution
+  - [ ] Add `/api/v1/backtest/results` endpoint for performance metrics
+  - [ ] Create `/api/v1/backtest/trades` endpoint for trade details
+  - [ ] Implement `/api/v1/backtest/optimize` endpoint for parameter tuning
+  - [ ] Add parameter validation with detailed feedback
+  - [ ] Create comprehensive documentation with examples
 
-- [ ] **Task 15.2**: Develop decision visualization
-  - [ ] Create signal generation visualization
-  - [ ] Implement decision boundary visualization
-  - [ ] Add confidence level indicators
-  - [ ] Create what-if analysis tools
-  - [ ] Implement multi-timeframe decision view
+- [ ] **Task 16.2**: Develop backtesting service layer
+  - [ ] Create BacktestService with strategy execution
+  - [ ] Implement performance calculation with comprehensive metrics
+  - [ ] Add efficient data handling for large datasets
+  - [ ] Create progress tracking for long-running tests
+  - [ ] Implement result caching and retrieval
+  - [ ] Add detailed logging with performance annotations
+  - [ ] Create error handling with diagnostic information
 
-### Backtesting Components
-- [ ] **Task 15.3**: Implement backtesting controls
-  - [ ] Create backtest parameter configuration
-  - [ ] Implement date range selectors
-  - [ ] Add position sizing controls
-  - [ ] Create commission and slippage models
-  - [ ] Implement risk management settings
+### Strategy Configuration UI
+- [ ] **Task 16.3**: Implement strategy builder
+  - [ ] Create StrategyBuilder component with modular design
+  - [ ] Implement parameter configuration with validation
+  - [ ] Add rule creation interface with visual editor
+  - [ ] Create strategy templates and presets
+  - [ ] Implement strategy documentation tools
+  - [ ] Add strategy validation with feedback
+  - [ ] Create strategy comparison functionality
 
-- [ ] **Task 15.4**: Develop performance analysis UI
-  - [ ] Create performance metrics dashboard
+- [ ] **Task 16.4**: Develop backtest configuration UI
+  - [ ] Create BacktestConfigurator with date selection
+  - [ ] Implement asset selection with multi-instrument support
+  - [ ] Add position sizing and risk parameter controls
+  - [ ] Create execution settings (slippage, commission)
+  - [ ] Implement benchmark selection for comparison
+  - [ ] Add batch backtest scheduling
+  - [ ] Create backtest scenario management
+
+### Performance Analysis UI
+- [ ] **Task 16.5**: Implement performance dashboard
+  - [ ] Create PerformanceDashboard with key metrics
   - [ ] Implement equity curve visualization
-  - [ ] Add drawdown analysis tools
-  - [ ] Create trade list and statistics
-  - [ ] Implement benchmark comparison
+  - [ ] Add drawdown analysis with statistics
+  - [ ] Create trade list with filtering and sorting
+  - [ ] Implement benchmark comparison charts
+  - [ ] Add risk-adjusted return metrics
+  - [ ] Create performance attribution analysis
 
-### Optimization UI
-- [ ] **Task 15.5**: Create strategy optimization components
-  - [ ] Implement parameter sweep interface
-  - [ ] Create genetic algorithm configuration
-  - [ ] Add optimization progress visualization
-  - [ ] Implement results comparison matrix
-  - [ ] Create optimal frontier visualization
+- [ ] **Task 16.6**: Develop trade visualization
+  - [ ] Create TradeVisualizer with marker overlay
+  - [ ] Implement trade details on hover
+  - [ ] Add trade sequence visualization
+  - [ ] Create profit/loss visualization with color coding
+  - [ ] Implement trade clustering analysis
+  - [ ] Add position sizing visualization
+  - [ ] Create trade context display with market conditions
 
 ### Testing
-- [ ] **Task 15.6**: Implement backtesting UI tests
-  - [ ] Create strategy configuration tests
-  - [ ] Add backtesting execution tests
-  - [ ] Implement performance calculation validation
-  - [ ] Create visualization accuracy tests
-  - [ ] Add optimization algorithm tests
+- [ ] **Task 16.7**: Create backtesting tests
+  - [ ] Implement API endpoint tests with known strategies
+  - [ ] Add service layer tests for performance calculation
+  - [ ] Create component tests for UI elements
+  - [ ] Implement integration tests for complete workflow
+  - [ ] Add performance benchmarks for large backtests
+  - [ ] Create visual tests for performance visualization
+  - [ ] Implement end-to-end tests for strategy creation and testing
 
 ### Deliverable
-A UI application that can:
-- Configure trading strategies through visual builders
-- Run backtests with detailed performance metrics
-- Visualize trading performance through interactive charts
-- Compare multiple strategy variations
-- Optimize strategy parameters automatically
+A comprehensive backtesting UI system that:
+- Allows creating and configuring trading strategies
+- Executes backtests with detailed performance metrics
+- Visualizes trading performance through interactive charts
+- Displays individual trades with context and analysis
+- Compares strategy performance against benchmarks
+- Optimizes strategy parameters for improved results
+
+Example backtest results component:
+```tsx
+// BacktestResults.tsx
+import React, { useState } from 'react';
+import { useGetBacktestResultsQuery } from '../api/backtestApi';
+import { EquityCurve, DrawdownChart, TradeList, MetricsTable } from '../components/backtest';
+import { Card, Tabs, Button, DateRange } from '../components/common';
+
+interface BacktestResultsProps {
+  backtestId: string;
+}
+
+export const BacktestResults: React.FC<BacktestResultsProps> = ({ backtestId }) => {
+  const { data: results, isLoading } = useGetBacktestResultsQuery(backtestId);
+  const [dateRange, setDateRange] = useState<[Date, Date] | null>(null);
+  
+  if (isLoading || !results) return <div>Loading backtest results...</div>;
+  
+  const filteredResults = dateRange 
+    ? filterResultsByDateRange(results, dateRange) 
+    : results;
+  
+  return (
+    <div className="backtest-results">
+      <div className="results-header">
+        <h2>{results.strategy.name} Backtest Results</h2>
+        <div className="date-range">
+          <DateRange
+            value={dateRange}
+            onChange={setDateRange}
+            startDate={new Date(results.metadata.startDate)}
+            endDate={new Date(results.metadata.endDate)}
+          />
+          {dateRange && (
+            <Button variant="text" onClick={() => setDateRange(null)}>
+              Reset Filter
+            </Button>
+          )}
+        </div>
+      </div>
+      
+      <div className="performance-summary">
+        <Card className="metrics-card">
+          <MetricsTable metrics={filteredResults.metrics} />
+        </Card>
+      </div>
+      
+      <Tabs
+        tabs={[
+          { key: 'equity', label: 'Equity Curve', content: (
+            <Card>
+              <EquityCurve 
+                data={filteredResults.equityCurve}
+                benchmark={filteredResults.benchmark}
+                height={400}
+              />
+            </Card>
+          )},
+          { key: 'drawdown', label: 'Drawdown Analysis', content: (
+            <Card>
+              <DrawdownChart
+                data={filteredResults.drawdowns}
+                height={400}
+              />
+            </Card>
+          )},
+          { key: 'trades', label: 'Trades', content: (
+            <Card>
+              <TradeList
+                trades={filteredResults.trades}
+                onTradeClick={(trade) => {/* Handle trade click */}}
+              />
+            </Card>
+          )}
+        ]}
+      />
+    </div>
+  );
+};
+```
 
 ---
 
-## Slice 16: Advanced Visualization & Export (v1.0.16)
+## Slice 17: Advanced Visualization & Integration (v1.0.17)
 
-**Value delivered:** Comprehensive visualization of all system components with customizable layouts and export capabilities.
+**Value delivered:** Comprehensive visualization of trading signals, system components, and integrated dashboards.
 
 ### Advanced Visualization Components
-- [ ] **Task 16.1**: Implement advanced chart components
-  - [ ] Create multi-chart synchronization
-  - [ ] Implement custom indicator formulas
-  - [ ] Add advanced annotation tools
+- [ ] **Task 17.1**: Implement advanced chart features
+  - [ ] Create multi-chart synchronization with shared crosshair
+  - [ ] Implement custom indicator formulas with editor
+  - [ ] Add advanced annotation tools (trend lines, patterns)
   - [ ] Create pattern recognition visualization
   - [ ] Implement multi-timeframe comparison charts
+  - [ ] Add zoom synchronization across panels
+  - [ ] Create chart templates and presets
 
-- [ ] **Task 16.2**: Develop custom layout system
-  - [ ] Create drag-and-drop layout designer
-  - [ ] Implement layout templates and presets
-  - [ ] Add layout saving and sharing
-  - [ ] Create responsive layout adaptation
-  - [ ] Implement full-screen and presentation modes
+- [ ] **Task 17.2**: Develop trade visualization system
+  - [ ] Create sophisticated trade marker system
+  - [ ] Implement interactive hover tooltips for trades
+  - [ ] Add stop loss and take profit visualization
+  - [ ] Create trade sequence linking
+  - [ ] Implement trade rationale display
+  - [ ] Add profit/loss visualization with analytics
+  - [ ] Create position sizing visualization
 
-### Integration & Dashboard Components
-- [ ] **Task 16.3**: Create comprehensive dashboard
-  - [ ] Implement customizable widget system
-  - [ ] Create summary statistics panels
-  - [ ] Add alert and notification center
-  - [ ] Implement portfolio overview components
-  - [ ] Create system health monitors
+### Dashboard & Integration
+- [ ] **Task 17.3**: Implement dashboard system
+  - [ ] Create flexible dashboard layout with grid system
+  - [ ] Implement widget framework for dashboard components
+  - [ ] Add layout customization with drag-and-drop
+  - [ ] Create dashboard templates and presets
+  - [ ] Implement dashboard saving and sharing
+  - [ ] Add responsive design for different screen sizes
+  - [ ] Create print/export functionality
 
-- [ ] **Task 16.4**: Develop report generation system
-  - [ ] Create PDF report templates
-  - [ ] Implement automated report generation
-  - [ ] Add interactive web report export
-  - [ ] Create data export in multiple formats
-  - [ ] Implement scheduled reporting
+- [ ] **Task 17.4**: Develop system integration
+  - [ ] Create unified navigation with consistent UX
+  - [ ] Implement data flow between components
+  - [ ] Add cross-component event system
+  - [ ] Create unified state management
+  - [ ] Implement comprehensive error handling
+  - [ ] Add application-wide theming
+  - [ ] Create user preference system
 
-### Collaboration Features
-- [ ] **Task 16.5**: Implement sharing capabilities
-  - [ ] Create configuration sharing system
-  - [ ] Implement strategy export/import
-  - [ ] Add collaboration annotations
-  - [ ] Create user profile management
-  - [ ] Implement permissions system for shared content
+### Performance & UX Enhancements
+- [ ] **Task 17.5**: Implement performance optimizations
+  - [ ] Create data virtualization for large datasets
+  - [ ] Implement progressive loading for charts
+  - [ ] Add WebWorker usage for heavy calculations
+  - [ ] Create bundle optimizations with code splitting
+  - [ ] Implement intelligent caching strategies
+  - [ ] Add memory usage optimization
+  - [ ] Create performance monitoring and reporting
+
+- [ ] **Task 17.6**: Develop UX improvements
+  - [ ] Create comprehensive keyboard shortcuts
+  - [ ] Implement context menus for common actions
+  - [ ] Add guided tours and onboarding
+  - [ ] Create help documentation integration
+  - [ ] Implement accessibility enhancements
+  - [ ] Add internationalization framework
+  - [ ] Create user feedback mechanisms
 
 ### Testing
-- [ ] **Task 16.6**: Create comprehensive UI testing
-  - [ ] Implement full system integration tests
-  - [ ] Add performance tests for complex dashboards
-  - [ ] Create visual consistency tests across devices
-  - [ ] Implement accessibility testing
-  - [ ] Add security testing for collaborative features
+- [ ] **Task 17.7**: Create comprehensive testing
+  - [ ] Implement visual regression tests for components
+  - [ ] Add performance benchmarks with thresholds
+  - [ ] Create cross-browser compatibility tests
+  - [ ] Implement accessibility compliance tests
+  - [ ] Add end-to-end tests for complex workflows
+  - [ ] Create user scenario tests
+  - [ ] Implement load testing for concurrent users
 
 ### Deliverable
-A UI application that can:
-- Create highly customized visualization layouts
-- Generate professional reports and exports
-- Share configurations and strategies between users
-- Provide comprehensive system dashboards
-- Support collaborative analysis
+An advanced visualization and integration system that:
+- Displays sophisticated charts with multiple indicators and timeframes
+- Visualizes trades with comprehensive context and analysis
+- Provides customizable dashboards for different use cases
+- Integrates all system components with consistent UX
+- Performs efficiently with large datasets
+- Offers a polished, professional user experience
 
 ---
 
-## Slice 17: Trade Visualization System (v1.0.17)
+## Slice 18: Emergency Stop & Risk Controls UI (v1.0.18)
 
-**Value delivered:** Advanced visualization of trade decisions, fuzzy logic activations, and system performance.
+**Value delivered:** Critical safety controls for trading operations with comprehensive risk management features to prevent catastrophic losses and ensure regulatory compliance.
 
-### Trade Visualization Components
-- [ ] **Task 17.1**: Implement comprehensive trade marker system
-  - [ ] Create sophisticated trade marker visualization for entry points with signal strength
-  - [ ] Add detailed exit marker visualization with profit/loss coloring and categories
-  - [ ] Implement interactive hover tooltips with comprehensive trade details
-  - [ ] Add stop loss and take profit level visualization with adjustment history
-  - [ ] Create multi-timeframe trade visualization with proper alignment
-  - [ ] Implement trade sequence linking for related entries/exits
-  - [ ] Add trade rationale display with signal composition
+### Emergency Stop System
+- [ ] **Task 18.1**: Implement core emergency stop mechanism
+  - [ ] Create EmergencyStopService with multiple trigger methods
+  - [ ] Implement global trading kill switch with immediate execution
+  - [ ] Add position liquidation options (immediate vs. gradual)
+  - [ ] Create service status monitoring with heartbeat
+  - [ ] Implement authorization controls for emergency actions
+  - [ ] Add audit logging for all emergency events
+  - [ ] Create multi-level escalation procedures
 
-- [ ] **Task 17.2**: Develop fuzzy activation visualization system
-  - [ ] Complete fuzzy highlight bands for all indicator types with accuracy control
-  - [ ] Implement sophisticated opacity gradients for partial activations with thresholds
-  - [ ] Add interactive toggles for band visibility with grouping capability
-  - [ ] Create detailed legend for fuzzy set activations with hierarchy
-  - [ ] Implement rule activation flow visualization
-  - [ ] Add historical activation strength tracking
-  - [ ] Create fuzzy set interaction visualization
+- [ ] **Task 18.2**: Develop emergency stop UI
+  - [ ] Create prominent EmergencyStopPanel with confirmation
+  - [ ] Implement visual status indicators for trading status
+  - [ ] Add quick action buttons for common emergency scenarios
+  - [ ] Create customizable emergency stop conditions
+  - [ ] Implement mobile-accessible emergency controls
+  - [ ] Add audio alerts for triggered conditions
+  - [ ] Create comprehensive status dashboard
 
-- [ ] **Task 17.3**: Build advanced performance visualization
-  - [ ] Implement detailed drawdown visualization with recovery paths
-  - [ ] Create equity curve with annotated markers for significant events
-  - [ ] Add comprehensive benchmark comparison visualization with statistical tests
-  - [ ] Implement heat map for signal strength across multiple dimensions
-  - [ ] Create performance attribution analysis visualization
-  - [ ] Add regime detection and visualization
-  - [ ] Implement correlation visualization with market factors
+### Automated Risk Controls
+- [ ] **Task 18.3**: Implement risk monitoring system
+  - [ ] Create real-time position risk calculator
+  - [ ] Implement P&L monitoring with threshold alerts
+  - [ ] Add drawdown tracking with percentage-based limits
+  - [ ] Create exposure monitoring by asset and sector
+  - [ ] Implement volatility-adjusted position sizing enforcement
+  - [ ] Add correlation monitoring for portfolio concentration
+  - [ ] Create automated alert generation for risk thresholds
 
-### Dashboard Components
-- [ ] **Task 17.4**: Create advanced visualization dashboard
-  - [ ] Implement flexible multi-panel dashboard layout with resizing
-  - [ ] Add extensively configurable visualization widgets with presets
-  - [ ] Create comprehensive saved layout functionality with profiles
-  - [ ] Implement advanced visualization export options with customization
-  - [ ] Add time-synced visualization across multiple panels
-  - [ ] Create cross-filtering capabilities between visualizations
+- [ ] **Task 18.4**: Develop risk limits framework
+  - [ ] Create configurable risk limits system with multiple tiers
+  - [ ] Implement per-symbol position limits
+  - [ ] Add daily loss limits with automated enforcement
+  - [ ] Create maximum order size controls
+  - [ ] Implement trading frequency limitations
+  - [ ] Add strategy-specific risk parameters
+  - [ ] Create time-of-day based risk adjustments
 
-### Integration Components
-- [ ] **Task 17.5**: Implement comprehensive system integration 
-  - [ ] Link all decision system outputs to visualization with full context
-  - [ ] Add real-time update capability with configurable frequency
-  - [ ] Implement complete trade simulation visualization with market replay
-  - [ ] Connect fuzzy engine outputs to highlight bands with rule tracing
-  - [ ] Create event system for coordinated visualization updates
-  - [ ] Add annotation capability with storing/loading
+### Risk Visualization
+- [ ] **Task 18.5**: Implement risk visualization components
+  - [ ] Create RiskDashboard with critical metrics
+  - [ ] Implement heat maps for exposure visualization
+  - [ ] Add real-time P&L visualization with thresholds
+  - [ ] Create position size visualization with limits
+  - [ ] Implement risk metrics trend analysis
+  - [ ] Add what-if scenario modeling for risk assessment
+  - [ ] Create risk-adjusted return visualization
+
+- [ ] **Task 18.6**: Develop compliance monitoring
+  - [ ] Create trade frequency monitoring for pattern day trading
+  - [ ] Implement overnight exposure tracking
+  - [ ] Add order type compliance validation
+  - [ ] Create trading hours enforcement
+  - [ ] Implement restricted instrument filtering
+  - [ ] Add margin requirement monitoring
+  - [ ] Create regulatory reporting preparation
+
+### Notification System
+- [ ] **Task 18.7**: Implement multi-channel alert system
+  - [ ] Create in-application alert center
+  - [ ] Implement email notification system
+  - [ ] Add SMS/text message alerts for critical events
+  - [ ] Create mobile push notifications
+  - [ ] Implement webhook integration for external systems
+  - [ ] Add escalation procedures for unacknowledged alerts
+  - [ ] Create alert acknowledgment and resolution tracking
+
+### Recovery & Troubleshooting
+- [ ] **Task 18.8**: Develop recovery procedures
+  - [ ] Create trading resumption workflows with safety checks
+  - [ ] Implement position reconciliation after emergency stops
+  - [ ] Add system state recovery mechanisms
+  - [ ] Create incident reporting tools
+  - [ ] Implement post-mortem analysis utilities
+  - [ ] Add automated recovery testing
+  - [ ] Create comprehensive recovery documentation
 
 ### Testing
-- [ ] **Task 17.6**: Develop comprehensive visual testing framework
-  - [ ] Implement sophisticated screenshot-based visual testing with tolerance
-  - [ ] Add detailed tests for trade marker accuracy across scenarios
-  - [ ] Create comprehensive tests for interactive elements with simulation
-  - [ ] Implement performance testing for complex visualizations
-  - [ ] Add animation smoothness testing
-  - [ ] Create accessibility testing for visualizations
+- [ ] **Task 18.9**: Create risk control testing framework
+  - [ ] Implement emergency stop simulation tests
+  - [ ] Add limit breach simulation testing
+  - [ ] Create stress testing scenarios for risk systems
+  - [ ] Implement recovery procedure validation
+  - [ ] Add notification delivery testing
+  - [ ] Create performance testing under emergency conditions
+  - [ ] Implement security validation for critical controls
 
 ### Deliverable
-An advanced visualization system that can:
-- Display entry and exit points with comprehensive trade context
-- Show fuzzy logic activations with detailed rule tracing
-- Visualize system performance with sophisticated analytical tools
-- Provide a highly interactive dashboard for exploring trading decisions
-- Export professional-quality visualizations for reporting
+A comprehensive risk management system that:
+- Provides immediate trading cessation capabilities
+- Monitors risk exposures in real-time with visual indicators
+- Enforces configurable risk limits across multiple dimensions
+- Alerts users through multiple channels when thresholds are reached
+- Offers clear recovery procedures after emergency events
+- Ensures compliance with regulatory requirements
+- Documents all risk-related events for audit purposes
+
+Example emergency stop panel:
+```tsx
+// EmergencyStopPanel.tsx
+import React, { useState } from 'react';
+import { useEmergencyStop } from '../hooks/useEmergencyStop';
+import { useTradingStatus } from '../hooks/useTradingStatus';
+import { Card, Button, Alert, ConfirmDialog, StatusIndicator } from '../components/common';
+
+export const EmergencyStopPanel: React.FC = () => {
+  const { 
+    isTrading, 
+    riskLevel, 
+    positionCount, 
+    openOrderCount, 
+    dailyPnL 
+  } = useTradingStatus();
+  
+  const { 
+    triggerEmergencyStop, 
+    cancelAllOrders, 
+    liquidateAllPositions,
+    resumeTrading
+  } = useEmergencyStop();
+  
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  
+  const handleEmergencyAction = (action: string) => {
+    setPendingAction(action);
+    setShowConfirmDialog(true);
+  };
+  
+  const executeAction = () => {
+    switch (pendingAction) {
+      case 'stop':
+        triggerEmergencyStop();
+        break;
+      case 'cancel':
+        cancelAllOrders();
+        break;
+      case 'liquidate':
+        liquidateAllPositions();
+        break;
+      case 'resume':
+        resumeTrading();
+        break;
+    }
+    setShowConfirmDialog(false);
+  };
+  
+  return (
+    <Card 
+      title="Emergency Controls" 
+      className={`emergency-panel ${riskLevel}`}
+    >
+      <div className="status-section">
+        <StatusIndicator 
+          status={isTrading ? 'success' : 'error'} 
+          size="large"
+          label={isTrading ? 'TRADING ACTIVE' : 'TRADING HALTED'}
+        />
+        
+        <div className="risk-level">
+          Risk Level: <span className={riskLevel}>{riskLevel.toUpperCase()}</span>
+        </div>
+        
+        <div className="position-summary">
+          <div>Open Positions: {positionCount}</div>
+          <div>Pending Orders: {openOrderCount}</div>
+          <div>Daily P&L: <span className={dailyPnL >= 0 ? 'positive' : 'negative'}>
+            ${dailyPnL.toFixed(2)}
+          </span></div>
+        </div>
+      </div>
+      
+      <div className="action-buttons">
+        {isTrading ? (
+          <>
+            <Button 
+              variant="danger" 
+              size="large"
+              onClick={() => handleEmergencyAction('stop')}
+              className="emergency-button"
+            >
+              EMERGENCY STOP
+            </Button>
+            
+            <div className="secondary-actions">
+              <Button 
+                variant="warning"
+                onClick={() => handleEmergencyAction('cancel')}
+              >
+                Cancel All Orders
+              </Button>
+              
+              <Button 
+                variant="warning"
+                onClick={() => handleEmergencyAction('liquidate')}
+              >
+                Liquidate All Positions
+              </Button>
+            </div>
+          </>
+        ) : (
+          <Button 
+            variant="success" 
+            size="large"
+            onClick={() => handleEmergencyAction('resume')}
+          >
+            Resume Trading
+          </Button>
+        )}
+      </div>
+      
+      {riskLevel === 'high' && (
+        <Alert 
+          type="warning" 
+          title="High Risk Warning"
+          message="Your current trading activity has triggered high risk alerts. Consider reducing position sizes or exposure."
+        />
+      )}
+      
+      <ConfirmDialog
+        isOpen={showConfirmDialog}
+        title={`Confirm ${pendingAction === 'resume' ? 'Resume' : 'Emergency Action'}`}
+        message={`Are you sure you want to ${
+          pendingAction === 'stop' ? 'HALT ALL TRADING ACTIVITY' :
+          pendingAction === 'cancel' ? 'cancel all pending orders' :
+          pendingAction === 'liquidate' ? 'liquidate all open positions' :
+          'resume trading operations'
+        }?`}
+        confirmText={pendingAction === 'resume' ? 'Resume Trading' : 'Confirm'}
+        cancelText="Cancel"
+        onConfirm={executeAction}
+        onCancel={() => setShowConfirmDialog(false)}
+      />
+    </Card>
+  );
+};
+```
 
 ---
 
-## Slice 18: Production Deployment & Performance (v1.0.18)
+## Slice 19: Documentation & Onboarding (v1.0.19)
+
+**Value delivered:** Comprehensive documentation and training materials enabling efficient user onboarding, developer contribution, and system administration.
+
+### User Documentation
+- [ ] **Task 19.1**: Create comprehensive user guides
+  - [ ] Develop end-user documentation with workflows and examples
+  - [ ] Create quickstart tutorials for common use cases
+  - [ ] Implement interactive guides for key features
+  - [ ] Add troubleshooting sections with common issues
+  - [ ] Create video tutorials for complex workflows
+  - [ ] Implement searchable knowledge base
+  - [ ] Add printable reference cards and cheat sheets
+
+### Developer Documentation
+- [ ] **Task 19.2**: Develop technical documentation
+  - [ ] Create comprehensive API reference with examples
+  - [ ] Implement OpenAPI/Swagger documentation with playground
+  - [ ] Add CLI command documentation with examples
+  - [ ] Create SDK usage guides and examples
+  - [ ] Implement code contribution guidelines
+  - [ ] Add architecture documentation with diagrams
+  - [ ] Create plugin development guide
+
+### Configuration & Administration
+- [ ] **Task 19.3**: Implement configuration documentation
+  - [ ] Create YAML schema documentation with validation rules
+  - [ ] Implement configuration examples for common scenarios
+  - [ ] Add environment variable reference
+  - [ ] Create deployment configuration guides
+  - [ ] Implement security configuration best practices
+  - [ ] Add performance tuning recommendations
+  - [ ] Create backup and recovery documentation
+
+### Training Materials
+- [ ] **Task 19.4**: Develop training resources
+  - [ ] Create self-paced training modules
+  - [ ] Implement interactive tutorials
+  - [ ] Add sample data sets for learning
+  - [ ] Create workshop materials for team training
+  - [ ] Implement certification criteria and tests
+  - [ ] Add trader education on system concepts
+  - [ ] Create administrator training materials
+
+### Documentation Infrastructure
+- [ ] **Task 19.5**: Implement documentation systems
+  - [ ] Create documentation site with versioning
+  - [ ] Implement search functionality
+  - [ ] Add automated documentation generation from code
+  - [ ] Create documentation testing for broken links/examples
+  - [ ] Implement feedback mechanism for documentation
+  - [ ] Add documentation analytics
+  - [ ] Create documentation update workflow
+
+### Deliverable
+A comprehensive documentation ecosystem that:
+- Enables new users to quickly become productive
+- Provides developers with clear API references and examples
+- Offers administrators detailed configuration and management guidance
+- Includes training materials for different user roles
+- Maintains accuracy through automated testing and updates
+
+---
+
+## Slice 20: Production Deployment & Multi-User Support (v1.0.20)
 
 **Value delivered:** Production-ready system with optimized performance, security, and multi-user support.
 
-### Performance Optimization
-- [ ] **Task 18.1**: Implement UI performance enhancements
-  - [ ] Create data downsampling for large datasets
-  - [ ] Implement progressive loading for charts
-  - [ ] Add lazy loading for UI components
-  - [ ] Create caching strategies for computations
-  - [ ] Implement bundle optimization
+### Production Deployment Tasks
+- [ ] **Task 20.1**: Implement production deployment infrastructure
+  - [ ] Create comprehensive deployment documentation
+  - [ ] Implement production-ready Docker Compose setup
+  - [ ] Add production environment configuration
+  - [ ] Create backup and restore procedures
+  - [ ] Implement health monitoring system
+  - [ ] Add automated scaling capabilities
+  - [ ] Create disaster recovery procedures
 
-- [ ] **Task 18.2**: Develop resource management
-  - [ ] Create memory usage monitors
-  - [ ] Implement background processing for heavy tasks
-  - [ ] Add resource throttling for multi-user environments
-  - [ ] Create cleanup utilities for temporary data
-  - [ ] Implement offline mode capabilities
+- [ ] **Task 20.2**: Develop security enhancements
+  - [ ] Create security hardening for production
+  - [ ] Implement authentication with JWT
+  - [ ] Add role-based access control
+  - [ ] Create audit logging system
+  - [ ] Implement sensitive data protection
+  - [ ] Add security headers and CORS configuration
+  - [ ] Create penetration testing and vulnerability scanning
 
 ### Multi-User Support
-- [ ] **Task 18.3**: Implement user management system
-  - [ ] Create user authentication components
-  - [ ] Implement role-based access controls
-  - [ ] Add user preference management
+- [ ] **Task 20.3**: Implement user management
+  - [ ] Create user registration system
+  - [ ] Implement profile management
+  - [ ] Add user preference storage
   - [ ] Create user activity logging
-  - [ ] Implement user quota management
+  - [ ] Implement user quotas and limits
+  - [ ] Add account recovery mechanisms
+  - [ ] Create user deletion and data export
 
-- [ ] **Task 18.4**: Develop session management
-  - [ ] Create session persistence mechanism
-  - [ ] Implement multi-device synchronization
-  - [ ] Add session recovery tools
-  - [ ] Create concurrent session handling
-  - [ ] Implement session timeout management
+- [ ] **Task 20.4**: Develop resource isolation
+  - [ ] Create multi-tenant data isolation
+  - [ ] Implement resource quotas per user
+  - [ ] Add data ownership and permissions
+  - [ ] Create shared resource management
+  - [ ] Implement concurrent access handling
+  - [ ] Add user-specific configurations
+  - [ ] Create usage analytics and reporting
 
-### Deployment Components
-- [ ] **Task 18.5**: Create deployment utilities
-  - [ ] Implement containerization setup
-  - [ ] Create environment configuration tools
-  - [ ] Add health check endpoints
-  - [ ] Implement version management UI
-  - [ ] Create system backup and restore tools
+### Performance & Reliability
+- [ ] **Task 20.5**: Implement performance monitoring
+  - [ ] Create comprehensive metrics collection
+  - [ ] Implement performance dashboards
+  - [ ] Add alerting for performance issues
+  - [ ] Create trend analysis for metrics
+  - [ ] Implement automated scaling triggers
+  - [ ] Add resource utilization reports
+  - [ ] Create performance testing automation
 
-- [ ] **Task 18.6**: Develop monitoring dashboard
-  - [ ] Create system performance monitors
-  - [ ] Implement error tracking and alerting
-  - [ ] Add usage statistics visualization
-  - [ ] Create infrastructure status displays
-  - [ ] Implement automated diagnostic tools
+- [ ] **Task 20.6**: Develop reliability enhancements
+  - [ ] Create graceful degradation strategies
+  - [ ] Implement circuit breakers for external services
+  - [ ] Add advanced retry strategies
+  - [ ] Create distributed locking mechanisms
+  - [ ] Implement request throttling
+  - [ ] Add request prioritization
+  - [ ] Create comprehensive error recovery
 
 ### Testing
-- [ ] **Task 18.7**: Implement production testing
-  - [ ] Create load testing framework
-  - [ ] Implement stress tests for UI components
+- [ ] **Task 20.7**: Create production validation tests
+  - [ ] Implement load testing with realistic scenarios
   - [ ] Add security penetration tests
-  - [ ] Create cross-browser compatibility tests
-  - [ ] Implement upgrade path testing
+  - [ ] Create disaster recovery tests
+  - [ ] Implement multi-user concurrency tests
+  - [ ] Add data isolation verification
+  - [ ] Create long-running stability tests
+  - [ ] Implement performance regression tests
 
 ### Deliverable
-A production-ready UI system that can:
-- Handle large datasets with optimal performance
-- Support multiple concurrent users
-- Provide secure authentication and authorization
-- Be deployed in containerized environments
-- Monitor its own health and performance
+A production-ready system that:
+- Supports multiple users with proper isolation
+- Performs efficiently under load
+- Provides comprehensive security measures
+- Offers reliable operation with monitoring
+- Handles failures gracefully with recovery
+- Scales to accommodate growing usage
+- Maintains data integrity and privacy
 
 ---
 
 ## CI/CD & Documentation (Ongoing)
 
 ### CI/CD Tasks
-- [ ] Set up basic GitHub Actions workflow
-- [ ] Add automated testing for each PR
-- [ ] Implement version bumping automation
+- [ ] Set up GitHub Actions workflow for automated testing
+- [ ] Implement automated deployment for frontend and backend
 - [ ] Add code quality checks (linting, formatting)
+- [ ] Create security scanning for dependencies
+- [ ] Implement version management automation
+- [ ] Add documentation generation
+- [ ] Create release management process
 
 ### Documentation Tasks
-- [ ] Create README with setup instructions
-- [ ] Add docstrings for all classes and methods
-- [ ] Generate API documentation
-- [ ] Create user guide for the application
+- [ ] Create comprehensive API documentation
+- [ ] Implement interactive API playground
+- [ ] Add user guide for the application
+- [ ] Create developer documentation for the frontend
+- [ ] Implement architecture documentation
+- [ ] Add deployment and operations guide
+- [ ] Create troubleshooting and FAQ documentation
 
 ---
 
@@ -1178,30 +2364,22 @@ A production-ready UI system that can:
 
 These capabilities have been intentionally deferred to maintain development velocity while focusing on core functionality:
 
-### Observability & Monitoring
-- Advanced metrics collection beyond basic logging
-- Performance dashboards and visualization
-- Automated alerting system
-- Resource utilization tracking
-
 ### Advanced Security Measures
 - Comprehensive credential rotation
-- Access control for multi-user scenarios
-- Audit logging for security events
+- Advanced threat detection
+- Security event monitoring
 - Automated security scanning
 
-### Advanced Error Handling
-- Circuit breaker implementation for external services
-- Complex retry policies beyond basic exponential backoff
-- Error aggregation and pattern recognition
-- Comprehensive error reporting dashboards
+### Advanced Collaboration Features
+- Real-time collaborative editing
+- Commenting and annotations
+- Sharing and permissions management
+- Activity feeds and notifications
 
-### Advanced Visualization Features
-- Performance optimization for large datasets (downsampling, progressive loading)
-- Extended chart annotation capabilities (trend lines, text annotations, price levels)
-- Multi-instrument comparison features and synchronized charts
-- Comprehensive visualization documentation and example gallery
-- Advanced layout systems for complex dashboard creation
-- Demo notebooks for educational and presentation purposes
+### Advanced Data Management
+- Big data processing for large backtests
+- Data warehousing for analytics
+- Advanced caching strategies
+- Automated data quality checks
 
 These concerns will be revisited in future development phases once the core functionality has been validated.

@@ -448,7 +448,7 @@ This ensures indicators are easy to test, reuse, and debug in isolation.
   ```python
   class IndicatorFactory:
     def __init__(self, strategy_cfg): ...
-    def build(self) -> list[Indicator]: ...
+    def build() -> list[Indicator]: ...
   ```
 This ensures indicator logic remains isolated and testable.
 
@@ -601,68 +601,35 @@ class Visualizer:
 - The architecture separates rendering logic from UI to support future web integration
 - Later phases can expose visualization as a service with a REST API
 
-### 6.  **UI Interface (Dev-Only)**
-The UI module in Phase 1 acts as a thin orchestration layer, allowinga developer to interactively inspect results from the system'ssubsystems. It is implemented using Streamlit and presents asimplified, single-page interface.
-#### **Design Philosophy:**
-- Keep the UI logic-free; all computation and visualization are
-  delegated to DataManager, IndicatorEngine, FuzzyEngine, and Visualizer
-- Modular structure allows parts of the UI to evolve independently with
-  system maturity
-- The UI evolves along with Phase 1: starts minimal with data loading,
-  expands to support indicator and fuzzy visualization, and eventually
-  overlays trades
-#### **UI Evolution in Phase 1:**
-- **Stage 1 (Data Loading)**:
+### 6.  **UI Interface**
 
-  - Instrument selector (e.g., symbol, type)
+The user interface layer provides a modern, responsive, and maintainable interface for interacting with KTRDR's core functionality. A comprehensive dedicated architecture is outlined in [`specification/ui_architecture_blueprint.md`](./ui_architecture_blueprint.md).
 
-  - Date range picker
+#### **Key Architectural Highlights:**
 
-  - Toggle for local-only vs. remote (IB) data fetching
+1. **Frontend-Backend Separation**: 
+   - Modern React/TypeScript frontend application
+   - FastAPI-based REST backend
+   - Well-defined API contract between layers
 
-  - Output: Price chart only
-- **Stage 2 (Indicators)**:
+2. **Core Components**:
+   - **Backend API Layer**: Structured endpoints using FastAPI and Pydantic models
+   - **Frontend Application**: Component-based SPA with TypeScript and Redux
+   - **Service Adapters**: Bridge existing KTRDR modules with API interfaces
 
-  - Strategy config loader (YAML selector)
+3. **Implementation Approach**:
+   - Phased migration strategy (infrastructure, feature parity, enhancements)
+   - Reuse of core KTRDR modules via service adapter pattern
+   - Emphasis on performance for financial visualization
 
-  - Display of indicator overlays on price chart
+4. **Technical Stack**:
+   - **Backend**: FastAPI, Pydantic, Python 3.11+
+   - **Frontend**: React, TypeScript, Redux Toolkit, TradingView Lightweight Charts
+   - **Development**: Vite, Modern ESLint, TypeScript strict mode
 
-  - Tabbed or split layout to include RSI, volume, MACD, etc.
-- **Stage 3 (Fuzzy Logic)**:
+The UI architecture complements this main architecture blueprint by providing specific guidance for the presentation layer, while ensuring it integrates properly with the core system components described in other sections.
 
-  - Display fuzzy membership bands over indicators
-
-  - Separate fuzzy membership intensity chart (optional)
-- **Stage 4 (Trade Visuals)**:
-
-  - Entry/exit markers on chart (backtest phase)
-
-  - Optional log or debug panel
-#### **Structure Overview:**
-```python
-# streamlit_ui.py
-def main():
-  config = load_config()
-  data = DataManager(...).load(...)
-  indicators = IndicatorEngine(...).apply(data)
-  fuzzy = FuzzyEngine(...).apply(indicators)
-  fig = Visualizer(...).plot_summary(...)
-  st.plotly_chart(fig)
-```
-This modular evolution will mirror development, supporting visualfeedback at each step.
-
-## UI Architecture
-
-The user interface layer follows a dedicated architecture outlined in [`specification/ui_architecture_blueprint.md`](./ui_architecture_blueprint.md). This document provides detailed guidance for implementing a maintainable, modular Streamlit application with:
-
-- **Core Principles**: Separation of concerns, modular structure, predictable state management, component-based design, and error resilience
-- **Directory Structure**: Organized into logical modules with tabs, components, and utilities
-- **State Management**: Structured approach to Streamlit's session state
-- **Component Design Patterns**: Standard patterns for UI components and tabs
-- **Error Handling**: Consistent error handling patterns with user-friendly messages
-- **Testing Strategy**: Component, integration, and visual testing approaches
-
-The UI architecture complements this main architecture blueprint by providing specific guidance for the presentation layer, while ensuring it integrates properly with the core system components.
+For complete details on the UI architecture including component structure, state management, API contract, and implementation roadmap, refer to the dedicated [UI Architecture Blueprint](./ui_architecture_blueprint.md).
 
 ### 7.  **Test Suite & CLI Entrypoints**
 The testing and CLI infrastructure supports validation, rapiditeration, and modular confidence.
