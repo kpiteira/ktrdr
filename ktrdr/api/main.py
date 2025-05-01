@@ -5,10 +5,13 @@ This module initializes the FastAPI application and serves as the main entry poi
 for the KTRDR API backend.
 """
 import logging
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.openapi.utils import get_openapi
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from ktrdr.api.config import APIConfig
 from ktrdr.api.middleware import add_middleware
@@ -21,6 +24,10 @@ from ktrdr.errors import (
 
 # Setup module-level logger
 logger = logging.getLogger(__name__)
+
+# Set up templates directory
+templates_dir = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(templates_dir))
 
 def create_application() -> FastAPI:
     """
@@ -39,7 +46,8 @@ def create_application() -> FastAPI:
         description=config.description,
         version=config.version,
         docs_url=f"{config.api_prefix}/docs",
-        redoc_url=f"{config.api_prefix}/redoc",
+        # We'll use custom redoc route instead of the default
+        redoc_url=None,
         openapi_url=f"{config.api_prefix}/openapi.json",
     )
     
@@ -147,10 +155,33 @@ def create_application() -> FastAPI:
     from ktrdr.api.endpoints import api_router
     app.include_router(api_router, prefix=config.api_prefix)
     
+    # Custom Redoc route
+    @app.get(f"{config.api_prefix}/redoc", include_in_schema=False)
+    async def custom_redoc(request: Request):
+        """Custom Redoc documentation with enhanced styling."""
+        from ktrdr.api.docs_config import docs_config
+        
+        return templates.TemplateResponse(
+            "redoc.html",
+            {
+                "request": request,
+                "title": app.title,
+                "description": app.description,
+                "version": app.version,
+                "openapi_url": app.openapi_url,
+                "api_prefix": config.api_prefix,
+                "branding": docs_config.branding,
+                "organization": docs_config.organization
+            }
+        )
+    
     # Custom OpenAPI schema generator
     def custom_openapi():
         if app.openapi_schema:
             return app.openapi_schema
+        
+        # Import docs configuration
+        from ktrdr.api.docs_config import docs_config
         
         openapi_schema = get_openapi(
             title=app.title,
@@ -159,7 +190,150 @@ def create_application() -> FastAPI:
             routes=app.routes,
         )
         
-        # Add custom schema components here if needed
+        # Add API metadata
+        openapi_schema["info"]["x-logo"] = {
+            "url": docs_config.branding.logo_url,
+            "altText": docs_config.branding.logo_alt
+        }
+        
+        openapi_schema["info"]["contact"] = {
+            "name": f"{docs_config.organization.name} API Support",
+            "email": docs_config.organization.email,
+            "url": docs_config.organization.docs_url
+        }
+        
+        # Add custom tags with descriptions for better organization
+        openapi_schema["tags"] = [
+            {
+                "name": "Data",
+                "description": "Operations related to market data retrieval and management.",
+                "externalDocs": {
+                    "description": "Data API Documentation",
+                    "url": f"{config.api_prefix}/redoc#tag/Data"
+                }
+            },
+            {
+                "name": "indicators",
+                "description": "Operations related to technical indicators calculation and configuration.",
+                "externalDocs": {
+                    "description": "Indicators API Documentation",
+                    "url": f"{config.api_prefix}/redoc#tag/indicators"
+                }
+            },
+            {
+                "name": "Fuzzy",
+                "description": "Operations related to fuzzy logic and fuzzy set evaluation.",
+                "externalDocs": {
+                    "description": "Fuzzy Logic API Documentation",
+                    "url": f"{config.api_prefix}/redoc#tag/Fuzzy"
+                }
+            }
+        ]
+        
+        # Add security schemes
+        openapi_schema["components"] = openapi_schema.get("components", {})
+        openapi_schema["components"]["securitySchemes"] = {
+            "APIKeyHeader": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key",
+                "description": "API key to authorize requests. Will be required in future versions."
+            }
+        }
+        
+        # Add response examples
+        if "components" not in openapi_schema:
+            openapi_schema["components"] = {}
+        
+        if "examples" not in openapi_schema["components"]:
+            openapi_schema["components"]["examples"] = {}
+        
+        # Add error response examples
+        openapi_schema["components"]["examples"]["ValidationError"] = {
+            "summary": "Validation Error Example",
+            "value": {
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Invalid input parameters",
+                    "details": {
+                        "symbol": "Symbol is required",
+                        "timeframe": "Timeframe must be one of ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d', '1w', '1M']"
+                    }
+                }
+            }
+        }
+        
+        openapi_schema["components"]["examples"]["DataError"] = {
+            "summary": "Data Error Example",
+            "value": {
+                "success": False,
+                "error": {
+                    "code": "DATA-NotFound",
+                    "message": "No data available for UNKNOWN (1d)",
+                    "details": {
+                        "symbol": "UNKNOWN",
+                        "timeframe": "1d"
+                    }
+                }
+            }
+        }
+        
+        # Override specific endpoint documentation
+        for path in openapi_schema["paths"]:
+            for method in openapi_schema["paths"][path]:
+                if method.lower() != "get" and method.lower() != "post":
+                    continue
+                
+                # Add authentication information to all endpoints
+                if "security" not in openapi_schema["paths"][path][method]:
+                    openapi_schema["paths"][path][method]["security"] = []
+                
+                # Add standard error responses to all operations
+                if "responses" not in openapi_schema["paths"][path][method]:
+                    openapi_schema["paths"][path][method]["responses"] = {}
+                
+                responses = openapi_schema["paths"][path][method]["responses"]
+                
+                # Add validation error response
+                if "422" not in responses:
+                    responses["422"] = {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "ValidationError": {
+                                        "$ref": "#/components/examples/ValidationError"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                
+                # Add server error response
+                if "500" not in responses:
+                    responses["500"] = {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {"type": "boolean", "example": False},
+                                        "error": {
+                                            "type": "object",
+                                            "properties": {
+                                                "code": {"type": "string", "example": "INTERNAL_SERVER_ERROR"},
+                                                "message": {"type": "string", "example": "An unexpected error occurred"},
+                                                "details": {"type": "object"}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+        
         app.openapi_schema = openapi_schema
         return app.openapi_schema
     

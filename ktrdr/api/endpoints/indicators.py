@@ -26,8 +26,12 @@ router = APIRouter(prefix="/indicators", tags=["indicators"])
 @router.get(
     "/",
     response_model=IndicatorsListResponse,
-    summary="List available indicators",
-    description="Returns a list of all available indicators with their metadata."
+    summary="List available technical indicators",
+    description="""
+    Returns a list of all available technical indicators with their metadata, including parameters,
+    default values, allowed ranges, and descriptions. Use this endpoint to discover what indicators
+    are available for calculation.
+    """
 )
 async def list_indicators(
     indicator_service: IndicatorService = Depends(get_indicator_service)
@@ -40,6 +44,70 @@ async def list_indicators(
     
     Returns:
         IndicatorsListResponse: Response containing a list of indicator metadata.
+        
+    Example response:
+        ```json
+        {
+          "success": true,
+          "data": [
+            {
+              "id": "RSIIndicator",
+              "name": "Relative Strength Index",
+              "description": "Momentum oscillator that measures the speed and change of price movements",
+              "type": "momentum",
+              "parameters": [
+                {
+                  "name": "period",
+                  "type": "int",
+                  "description": "Lookback period",
+                  "default": 14,
+                  "min_value": 2,
+                  "max_value": 100,
+                  "options": null
+                },
+                {
+                  "name": "source",
+                  "type": "str",
+                  "description": "Source price data to use",
+                  "default": "close",
+                  "min_value": null,
+                  "max_value": null,
+                  "options": ["close", "open", "high", "low"]
+                }
+              ]
+            },
+            {
+              "id": "SimpleMovingAverage",
+              "name": "Simple Moving Average",
+              "description": "Average of prices over the specified period",
+              "type": "trend",
+              "parameters": [
+                {
+                  "name": "period",
+                  "type": "int",
+                  "description": "Lookback period",
+                  "default": 20,
+                  "min_value": 2,
+                  "max_value": 500,
+                  "options": null
+                },
+                {
+                  "name": "source",
+                  "type": "str",
+                  "description": "Source price data to use",
+                  "default": "close",
+                  "min_value": null,
+                  "max_value": null,
+                  "options": ["close", "open", "high", "low"]
+                }
+              ]
+            }
+          ]
+        }
+        ```
+        
+    Errors:
+        - 500: Server error while retrieving indicator metadata
     """
     try:
         indicators = await indicator_service.get_available_indicators()
@@ -78,8 +146,11 @@ async def list_indicators(
 @router.post(
     "/calculate",
     response_model=IndicatorCalculateResponse,
-    summary="Calculate indicators",
-    description="Calculates indicator values for the given symbol and timeframe."
+    summary="Calculate technical indicators",
+    description="""
+    Calculates indicator values for the given symbol and timeframe. You can request multiple indicators
+    in a single call, each with custom parameters. Results are paginated to handle large datasets efficiently.
+    """
 )
 async def calculate_indicators(
     request: IndicatorCalculateRequest,
@@ -91,7 +162,7 @@ async def calculate_indicators(
     Calculate indicators for the given symbol and timeframe.
     
     This endpoint loads OHLCV data for the specified symbol and timeframe,
-    calculates the requested indicators, and returns the results.
+    calculates the requested indicators, and returns the results with pagination support.
     
     Args:
         request: Request model containing the calculation parameters.
@@ -100,6 +171,65 @@ async def calculate_indicators(
         
     Returns:
         IndicatorCalculateResponse: Response containing the calculated indicator values.
+    
+    Example request:
+        ```json
+        {
+          "symbol": "AAPL",
+          "timeframe": "1d",
+          "indicators": [
+            {
+              "id": "RSIIndicator",
+              "parameters": {
+                "period": 14,
+                "source": "close"
+              },
+              "output_name": "RSI_14"
+            },
+            {
+              "id": "SimpleMovingAverage",
+              "parameters": {
+                "period": 20,
+                "source": "close"
+              },
+              "output_name": "SMA_20"
+            }
+          ],
+          "start_date": "2023-01-01T00:00:00",
+          "end_date": "2023-01-31T23:59:59"
+        }
+        ```
+    
+    Example response:
+        ```json
+        {
+          "success": true,
+          "dates": ["2023-01-03", "2023-01-04", "2023-01-05"],
+          "indicators": {
+            "RSI_14": [48.35, 52.67, 46.89],
+            "SMA_20": [126.25, 126.45, 126.32]
+          },
+          "metadata": {
+            "symbol": "AAPL",
+            "timeframe": "1d",
+            "start_date": "2023-01-03",
+            "end_date": "2023-01-05",
+            "points": 3,
+            "total_items": 3,
+            "total_pages": 1,
+            "current_page": 1,
+            "page_size": 1000,
+            "has_next": false,
+            "has_prev": false
+          }
+        }
+        ```
+        
+    Errors:
+        - 400: Invalid indicator configuration
+        - 404: Data not found for the specified symbol and timeframe
+        - 422: Validation error in the request parameters
+        - 500: Server error during calculation
     """
     try:
         # Call the service to calculate indicators

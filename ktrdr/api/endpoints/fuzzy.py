@@ -26,7 +26,10 @@ router = APIRouter(prefix="/fuzzy", tags=["Fuzzy"])
     "/indicators",
     response_model=Dict[str, Any],
     summary="List available fuzzy indicators",
-    description="Returns a list of indicators available for fuzzy operations with their fuzzy sets."
+    description="""
+    Returns a list of indicators that have fuzzy set configurations available, along with their 
+    fuzzy sets and membership functions. These indicators can be used with the fuzzy evaluation endpoints.
+    """
 )
 async def list_fuzzy_indicators(
     fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
@@ -39,6 +42,30 @@ async def list_fuzzy_indicators(
     
     Returns:
         Dict with success flag and list of fuzzy indicators
+        
+    Example response:
+        ```json
+        {
+          "success": true,
+          "data": [
+            {
+              "id": "rsi",
+              "name": "RSI",
+              "fuzzy_sets": ["low", "medium", "high"],
+              "output_columns": ["rsi_low", "rsi_medium", "rsi_high"]
+            },
+            {
+              "id": "macd",
+              "name": "MACD",
+              "fuzzy_sets": ["negative", "neutral", "positive"],
+              "output_columns": ["macd_negative", "macd_neutral", "macd_positive"]
+            }
+          ]
+        }
+        ```
+        
+    Errors:
+        - 500: Server error while retrieving fuzzy indicator information
     """
     try:
         indicators = await fuzzy_service.get_available_indicators()
@@ -78,7 +105,11 @@ async def list_fuzzy_indicators(
     "/sets/{indicator}",
     response_model=Dict[str, Any],
     summary="Get fuzzy sets for indicator",
-    description="Returns detailed information about fuzzy sets for a specific indicator."
+    description="""
+    Returns detailed information about the fuzzy sets configured for a specific indicator,
+    including membership function types and parameters. This provides insight into how
+    indicator values are converted to fuzzy membership degrees.
+    """
 )
 async def get_fuzzy_sets(
     indicator: str,
@@ -92,6 +123,31 @@ async def get_fuzzy_sets(
         
     Returns:
         Dict with success flag and fuzzy sets information
+        
+    Example response:
+        ```json
+        {
+          "success": true,
+          "data": {
+            "low": {
+              "type": "triangular",
+              "parameters": [0, 0, 30]
+            },
+            "medium": {
+              "type": "triangular",
+              "parameters": [20, 50, 80]
+            },
+            "high": {
+              "type": "triangular",
+              "parameters": [70, 100, 100]
+            }
+          }
+        }
+        ```
+        
+    Errors:
+        - 400: Invalid indicator name or configuration error
+        - 500: Server error while retrieving fuzzy set information
     """
     try:
         fuzzy_sets = await fuzzy_service.get_fuzzy_sets(indicator)
@@ -144,7 +200,11 @@ async def get_fuzzy_sets(
     "/evaluate",
     response_model=Dict[str, Any],
     summary="Fuzzify indicator values",
-    description="Applies fuzzy membership functions to indicator values."
+    description="""
+    Applies fuzzy membership functions to convert numeric indicator values into fuzzy membership degrees.
+    This endpoint is useful for converting raw indicator values into fuzzy logic inputs that represent
+    linguistic variables like "low", "medium", or "high".
+    """
 )
 async def fuzzify_values(
     data: Dict[str, Any],
@@ -158,6 +218,36 @@ async def fuzzify_values(
             
     Returns:
         Dict with success flag and fuzzified values
+        
+    Example request:
+        ```json
+        {
+          "indicator": "rsi",
+          "values": [30.5, 45.2, 68.7, 82.1],
+          "dates": ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]
+        }
+        ```
+        
+    Example response:
+        ```json
+        {
+          "success": true,
+          "data": {
+            "indicator": "rsi",
+            "fuzzy_sets": ["low", "medium", "high"],
+            "values": {
+              "rsi_low": [0.78, 0.24, 0.05, 0.0],
+              "rsi_medium": [0.22, 0.76, 0.56, 0.12],
+              "rsi_high": [0.0, 0.0, 0.39, 0.88]
+            },
+            "points": 4
+          }
+        }
+        ```
+        
+    Errors:
+        - 400: Invalid indicator or missing required fields
+        - 500: Server error during fuzzification
     """
     try:
         indicator = data.get("indicator")
@@ -240,7 +330,11 @@ async def fuzzify_values(
     "/data",
     response_model=Dict[str, Any],
     summary="Fuzzify indicator data",
-    description="Loads data, calculates indicators, and applies fuzzy membership functions."
+    description="""
+    Loads market data, calculates indicators, and applies fuzzy membership functions in a single operation.
+    This is a convenience endpoint that combines data loading, indicator calculation, and fuzzy evaluation
+    in one request, making it ideal for applications that need to process OHLCV data through fuzzy logic.
+    """
 )
 async def fuzzify_data(
     data: Dict[str, Any],
@@ -254,6 +348,60 @@ async def fuzzify_data(
             
     Returns:
         Dict with success flag and fuzzified data
+        
+    Example request:
+        ```json
+        {
+          "symbol": "AAPL",
+          "timeframe": "1d",
+          "indicators": [
+            {
+              "name": "rsi",
+              "source_column": "close"
+            },
+            {
+              "name": "macd",
+              "source_column": "macd_line"
+            }
+          ],
+          "start_date": "2023-01-01T00:00:00",
+          "end_date": "2023-01-31T23:59:59"
+        }
+        ```
+        
+    Example response:
+        ```json
+        {
+          "success": true,
+          "data": {
+            "symbol": "AAPL",
+            "timeframe": "1d",
+            "dates": ["2023-01-03", "2023-01-04", "2023-01-05"],
+            "indicators": {
+              "rsi": {
+                "rsi_low": [0.78, 0.24, 0.05],
+                "rsi_medium": [0.22, 0.76, 0.56],
+                "rsi_high": [0.0, 0.0, 0.39]
+              },
+              "macd": {
+                "macd_negative": [0.85, 0.62, 0.31],
+                "macd_neutral": [0.15, 0.38, 0.69],
+                "macd_positive": [0.0, 0.0, 0.0]
+              }
+            },
+            "metadata": {
+              "start_date": "2023-01-03",
+              "end_date": "2023-01-05",
+              "points": 3
+            }
+          }
+        }
+        ```
+        
+    Errors:
+        - 400: Invalid request parameters or configuration error
+        - 404: Data not found for the specified symbol and timeframe
+        - 500: Server error during processing
     """
     try:
         symbol = data.get("symbol")
