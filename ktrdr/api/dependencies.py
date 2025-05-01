@@ -10,6 +10,7 @@ from fastapi import Depends
 from ktrdr.api.config import APIConfig
 from ktrdr.api.services.data_service import DataService
 from ktrdr.api.services.indicator_service import IndicatorService
+from ktrdr.api.services.fuzzy_service import FuzzyService
 
 
 def get_api_config() -> APIConfig:
@@ -47,7 +48,19 @@ def get_indicator_service() -> IndicatorService:
     return IndicatorService()
 
 
+# Fuzzy service dependency
+def get_fuzzy_service() -> FuzzyService:
+    """
+    Dependency for providing the fuzzy service.
+    
+    Returns:
+        FuzzyService: Initialized fuzzy service instance
+    """
+    return FuzzyService()
+
+
 # Define common dependencies with annotations for usage in route functions
 ConfigDep = Annotated[APIConfig, Depends(get_api_config)]
 DataServiceDep = Annotated[DataService, Depends(get_data_service)]
 IndicatorServiceDep = Annotated[IndicatorService, Depends(get_indicator_service)]
+FuzzyServiceDep = Annotated[FuzzyService, Depends(get_fuzzy_service)]

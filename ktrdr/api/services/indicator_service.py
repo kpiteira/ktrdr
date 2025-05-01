@@ -19,12 +19,13 @@ from ktrdr.api.models.indicators import (
     IndicatorMetadata, IndicatorParameter, IndicatorType,
     IndicatorConfig, IndicatorCalculateRequest
 )
+from ktrdr.api.services.base import BaseService
 
 # Create module-level logger
 logger = get_logger(__name__)
 
 
-class IndicatorService:
+class IndicatorService(BaseService):
     """
     Service for indicator-related operations.
     
@@ -34,8 +35,9 @@ class IndicatorService:
     
     def __init__(self):
         """Initialize the indicator service."""
+        super().__init__()  # Initialize BaseService
         self.data_manager = DataManager()
-        logger.info("Initialized IndicatorService")
+        self.logger.info("Initialized IndicatorService")
     
     async def get_available_indicators(self) -> List[IndicatorMetadata]:
         """
@@ -321,3 +323,30 @@ class IndicatorService:
                 error_code="PROC-UnexpectedError",
                 details={"error": str(e)}
             ) from e
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Perform a health check on the indicator service.
+        
+        Returns:
+            Dict[str, Any]: Health check information
+        """
+        try:
+            # Check available indicators
+            indicator_count = len(BUILT_IN_INDICATORS)
+            
+            # Get a list of indicator names
+            indicator_names = list(BUILT_IN_INDICATORS.keys())
+            
+            return {
+                "status": "healthy",
+                "available_indicators": indicator_count,
+                "first_5_indicators": indicator_names[:5] if indicator_names else [],
+                "message": "Indicator service is functioning normally"
+            }
+        except Exception as e:
+            self.logger.error(f"Health check failed: {str(e)}")
+            return {
+                "status": "unhealthy",
+                "message": f"Indicator service health check failed: {str(e)}"
+            }

@@ -323,3 +323,45 @@ def test_get_data_range_not_found(mock_data_manager):
     
     # Verify the mock was called
     mock_data_manager.get_data_summary.assert_called_once()
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_health_check_healthy(mock_data_manager):
+    """Test health check when service is healthy."""
+    # Set up mock to return some available files
+    mock_data_manager.data_loader.data_dir = "/path/to/data"
+    mock_data_manager.data_loader.get_available_data_files.return_value = [
+        ("AAPL", "1d"), ("AAPL", "1h"), ("MSFT", "1d")
+    ]
+    
+    service = DataService()
+    result = await service.health_check()
+    
+    # Verify result structure
+    assert isinstance(result, dict)
+    assert result["status"] == "healthy"
+    assert "data_directory" in result
+    assert "available_files" in result
+    assert result["available_files"] == 3
+    assert "message" in result
+    
+    # Verify the mock was called
+    mock_data_manager.data_loader.get_available_data_files.assert_called_once()
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_health_check_unhealthy(mock_data_manager):
+    """Test health check when service encounters errors."""
+    # Set up mock to raise an exception
+    mock_data_manager.data_loader.get_available_data_files.side_effect = Exception("Test error")
+    
+    service = DataService()
+    result = await service.health_check()
+    
+    # Verify result structure
+    assert isinstance(result, dict)
+    assert result["status"] == "unhealthy"
+    assert "message" in result
+    assert "Test error" in result["message"]

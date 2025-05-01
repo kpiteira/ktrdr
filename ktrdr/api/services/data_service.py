@@ -17,11 +17,12 @@ from ktrdr.errors import (
     retry_with_backoff,
     RetryConfig
 )
+from ktrdr.api.services.base import BaseService
 
 # Setup module-level logger
 logger = get_logger(__name__)
 
-class DataService:
+class DataService(BaseService):
     """
     Service for accessing and managing OHLCV data.
     
@@ -36,8 +37,9 @@ class DataService:
         Args:
             data_dir: Optional path to the data directory
         """
+        super().__init__()  # Initialize BaseService
         self.data_manager = DataManager(data_dir=data_dir)
-        logger.info("DataService initialized")
+        self.logger.info("DataService initialized")
         
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
@@ -343,3 +345,28 @@ class DataService:
                 error_code="DATA-RangeError",
                 details={"symbol": symbol, "timeframe": timeframe}
             ) from e
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Perform a health check on the data service.
+        
+        Returns:
+            Dict[str, Any]: Health check information
+        """
+        try:
+            # Check if we can access the data directory
+            data_dir = self.data_manager.data_loader.data_dir
+            data_files = self.data_manager.data_loader.get_available_data_files()
+            
+            return {
+                "status": "healthy",
+                "data_directory": data_dir,
+                "available_files": len(data_files),
+                "message": "Data service is functioning normally"
+            }
+        except Exception as e:
+            self.logger.error(f"Health check failed: {str(e)}")
+            return {
+                "status": "unhealthy",
+                "message": f"Data service health check failed: {str(e)}"
+            }

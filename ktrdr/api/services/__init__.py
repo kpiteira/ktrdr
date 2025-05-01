@@ -1,14 +1,18 @@
 """
-API services package.
+Service adapters for KTRDR API.
 
-This package contains service adapters that connect the API layer 
-with core KTRDR modules.
+This module provides service adapters that bridge the API layer
+with the core KTRDR modules.
 """
 
-# Export the base service interface
 from ktrdr.api.services.base import BaseService
+from ktrdr.api.services.data_service import DataService
+from ktrdr.api.services.indicator_service import IndicatorService
+from ktrdr.api.services.fuzzy_service import FuzzyService
 
-# Public API
 __all__ = [
-    "BaseService",
+    'BaseService',
+    'DataService',
+    'IndicatorService',
+    'FuzzyService',
 ]

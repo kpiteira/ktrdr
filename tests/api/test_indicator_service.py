@@ -4,7 +4,7 @@ Tests for the indicator service.
 This module contains tests for the indicator service functionality.
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 import pandas as pd
 from datetime import datetime
 
@@ -150,3 +150,38 @@ async def test_calculate_indicators_with_invalid_parameters(indicator_service, m
         # Expecting a ConfigurationError due to invalid parameters
         with pytest.raises(ConfigurationError):
             await indicator_service.calculate_indicators(request)
+
+
+@pytest.mark.asyncio
+async def test_health_check_healthy(indicator_service):
+    """Test health check when service is healthy."""
+    # Mock the BUILT_IN_INDICATORS dictionary
+    with patch('ktrdr.api.services.indicator_service.BUILT_IN_INDICATORS', 
+               {'RSIIndicator': MagicMock(), 'SMAIndicator': MagicMock(), 'MACDIndicator': MagicMock()}):
+        
+        result = await indicator_service.health_check()
+        
+        # Verify result structure
+        assert isinstance(result, dict)
+        assert result["status"] == "healthy"
+        assert "available_indicators" in result
+        assert result["available_indicators"] == 3
+        assert "first_5_indicators" in result
+        assert len(result["first_5_indicators"]) == 3
+        assert "message" in result
+
+
+@pytest.mark.asyncio
+async def test_health_check_error(indicator_service):
+    """Test health check when service encounters errors."""
+    # Mock BUILT_IN_INDICATORS to raise an exception when accessed
+    with patch('ktrdr.api.services.indicator_service.BUILT_IN_INDICATORS', 
+               new_callable=PropertyMock, side_effect=Exception("Test error")):
+        
+        result = await indicator_service.health_check()
+        
+        # Verify result structure
+        assert isinstance(result, dict)
+        assert result["status"] == "unhealthy"
+        assert "message" in result
+        assert "indicator service health check failed" in result["message"].lower()
