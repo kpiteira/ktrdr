@@ -27,13 +27,13 @@ This document outlines the tasks related to the API backend, Docker containeriza
   - [x] Create response envelope pattern for consistent responses
 
 ### Core API Endpoints
-- [ ] **Task 5.3**: Implement data API endpoints
-  - [ ] Create `/api/v1/symbols` endpoint to list available symbols
-  - [ ] Implement `/api/v1/timeframes` endpoint to list available timeframes
-  - [ ] Add `/api/v1/data/load` endpoint for OHLCV data loading
-  - [ ] Create parameter validation with detailed error messages
-  - [ ] Implement proper response formats with metadata
-  - [ ] Add example requests in endpoint documentation
+- [x] **Task 5.3**: Implement data API endpoints
+  - [x] Create `/api/v1/symbols` endpoint to list available symbols
+  - [x] Implement `/api/v1/timeframes` endpoint to list available timeframes
+  - [x] Add `/api/v1/data/load` endpoint for OHLCV data loading
+  - [x] Create parameter validation with detailed error messages
+  - [x] Implement proper response formats with metadata
+  - [x] Add example requests in endpoint documentation
 
 - [ ] **Task 5.4**: Develop indicator API endpoints
   - [ ] Create `/api/v1/indicators` endpoint to list available indicators

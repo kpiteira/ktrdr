@@ -9,6 +9,20 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
+from unittest.mock import patch
+
+
+"""
+Configuration for tests to use mocked components and speedier settings.
+"""
+
+# Apply patch to disable retries globally during tests
+@pytest.fixture(autouse=True, scope="session")
+def disable_retries():
+    """Disable retry decorators across all tests to speed up execution."""
+    with patch('ktrdr.errors.retry.retry_with_backoff', lambda *args, **kwargs: lambda x: x):
+        yield
+
 
 @pytest.fixture
 def sample_ohlcv_data():

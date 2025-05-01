@@ -30,7 +30,7 @@ class APIConfig(BaseModel):
         description="API description displayed in documentation"
     )
     version: str = Field(
-        default="1.0.5.2",
+        default="1.0.5",
         description="API version"
     )
     

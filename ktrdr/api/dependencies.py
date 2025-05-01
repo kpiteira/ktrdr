@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from ktrdr.api.config import APIConfig
+from ktrdr.api.services.data_service import DataService
 
 
 def get_api_config() -> APIConfig:
@@ -20,13 +21,28 @@ def get_api_config() -> APIConfig:
     return APIConfig()
 
 
+# Data service dependency
+def get_data_service() -> DataService:
+    """
+    Dependency for providing the data service.
+    
+    The service is instantiated per-request to ensure fresh configurations
+    are applied and resources are properly managed.
+    
+    Returns:
+        DataService: Initialized data service instance
+    """
+    return DataService()
+
+
 # Define common dependencies with annotations for usage in route functions
 ConfigDep = Annotated[APIConfig, Depends(get_api_config)]
+DataServiceDep = Annotated[DataService, Depends(get_data_service)]
 
 # As additional services are implemented, add them as dependencies here
 # Example:
-# def get_data_service() -> DataService:
-#     """Dependency for providing the data service."""
-#     return DataService()
+# def get_indicator_service() -> IndicatorService:
+#     """Dependency for providing the indicator service."""
+#     return IndicatorService()
 # 
-# DataServiceDep = Annotated[DataService, Depends(get_data_service)]
+# IndicatorServiceDep = Annotated[IndicatorService, Depends(get_indicator_service)]
