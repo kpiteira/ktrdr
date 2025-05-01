@@ -503,46 +503,18 @@ Always adhere to this indicator implementation guide when creating new indicator
 
 ## Task Success Criteria
 
-For each implemented task, clearly define and verify the following success criteria:
+When implementing any task, the AI must:
 
-### Slice 5 - Visualization Enhancement & UI Foundation (v1.0.5)
+1. **Reference the appropriate task file** for that specific slice (e.g., `ktrdr_tasks_05_api_backend.md` for Slice 5)
+2. **Extract the detailed success criteria** from the task breakdown and deliverables section
+3. **Create a verification checklist** based on these criteria
+4. **Ensure all points in the deliverables section** of the task file are addressed
 
-1. **Task 5.1 - Set up Streamlit UI scaffold**:
-   - Main.py entry point is implemented and functional
-   - Sidebar with configuration controls loads and displays correctly
-   - Tab-based navigation system works as expected
-   - Basic state management preserves selections between interactions
-   - UI layout is clean, intuitive, and responsive
+This approach ensures that success criteria are based on the most up-to-date and detailed task descriptions, rather than maintaining duplicate criteria across documents.
 
-2. **Task 5.2 - Enhance indicator visualizations**:
-   - Toggle controls for indicator visibility function correctly
-   - Dynamic subplot layouts adjust based on selected indicators
-   - Synchronized zooming and panning works across all charts
-   - Indicator display is properly aligned with price charts
-   - Performance remains acceptable with multiple indicators
+For example, when implementing a task from Slice 5 (Backend API Foundation), refer to `ktrdr_tasks_05_api_backend.md` for specific deliverables and acceptance criteria rather than relying on potentially outdated criteria in this document.
 
-3. **Task 5.3 - Add fuzzy visualization components**:
-   - `add_fuzzy_highlight_band()` method is implemented correctly
-   - Colored shading for fuzzy regions displays with configurable opacity
-   - Tooltips show accurate membership degrees on hover
-   - Fuzzy set boundaries are clearly visualized
-   - Visualizations accurately represent the fuzzy membership functions
-
-4. **Task 5.4 - Integrate data pipeline with UI**:
-   - Data loading controls function correctly for symbol and timeframe selection
-   - Indicator selection dropdown populates and works as expected
-   - Fuzzy set visualization toggles update the display correctly
-   - Real-time visualization of fuzzy membership activation works
-   - The complete data pipeline (data → indicators → fuzzy) is properly integrated
-
-5. **Task 5.5 - Create UI testing framework**:
-   - Smoke tests for UI components pass successfully
-   - Validation tests for UI integration points function as expected
-   - Tests for fuzzy visualization components verify correct rendering
-   - Test coverage is comprehensive for UI components
-   - Tests are integrated with the main testing framework
-
-When implementing any task, define clear verification steps and include minimal demo code to prove functionality. After implementation, verify all success criteria are met before considering the task complete.
+The task is not considered complete until all criteria specified in the relevant task file have been met and verified.
 
 ## Task Completion Reporting
 

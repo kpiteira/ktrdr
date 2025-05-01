@@ -9,14 +9,14 @@ This document outlines the tasks related to the API backend, Docker containeriza
 **Value delivered:** A robust API layer that exposes core KTRDR functionality, enabling the future development of a modern frontend.
 
 ### API Infrastructure Tasks
-- [ ] **Task 5.1**: Set up FastAPI backend structure
-  - [ ] Create `api` module within KTRDR package with proper directory structure
-  - [ ] Set up API dependencies in requirements.txt (FastAPI, Uvicorn, Pydantic)
-  - [ ] Implement main API application entry point (`main.py`)
-  - [ ] Create API configuration module with environment variable support
-  - [ ] Set up CORS middleware with appropriate security settings
-  - [ ] Implement basic error handling middleware
-  - [ ] Create API version prefix structure
+- [x] **Task 5.1**: Set up FastAPI backend structure
+  - [x] Create `api` module within KTRDR package with proper directory structure
+  - [x] Set up API dependencies in requirements.txt (FastAPI, Uvicorn, Pydantic)
+  - [x] Implement main API application entry point (`main.py`)
+  - [x] Create API configuration module with environment variable support
+  - [x] Set up CORS middleware with appropriate security settings
+  - [x] Implement basic error handling middleware
+  - [x] Create API version prefix structure
 
 - [ ] **Task 5.2**: Implement API models with Pydantic
   - [ ] Create base models for common data structures (responses, pagination)

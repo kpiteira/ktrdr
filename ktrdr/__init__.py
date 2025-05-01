@@ -2,7 +2,7 @@
 KTRDR - Automated trading agent with neuro-fuzzy decision engine.
 """
 
-__version__ = "1.0.4.6" 
+__version__ = "1.0.5.1" 
 
 # Import logging system for easy access
 from ktrdr.logging import (
