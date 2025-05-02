@@ -1,0 +1,64 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Development environment
+.venv/
+.uv/
+venv/
+ENV/
+env/
+.env
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Distribution / packaging
+.eggs/
+*.egg-info/
+*.egg
+build/
+dist/
+wheels/
+
+# Project specific
+tests/
+exploration/
+docs/
+scripts/
+*.md
+!README.md
+examples/
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
+output/
+*.pkl
+
+# Docker files (no need to copy these)
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# Misc
+*.bak
+*.old
+*.orig
