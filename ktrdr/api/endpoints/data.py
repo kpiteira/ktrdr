@@ -74,7 +74,7 @@ async def get_symbols(
         ```
     """
     try:
-        symbols_data = data_service.get_available_symbols()
+        symbols_data = await data_service.get_available_symbols()
         
         # Convert to proper model
         symbols = [SymbolInfo(**s) for s in symbols_data]
@@ -136,7 +136,7 @@ async def get_timeframes(
         ```
     """
     try:
-        timeframes_data = data_service.get_available_timeframes()
+        timeframes_data = await data_service.get_available_timeframes()
         
         # Convert to proper model
         timeframes = [TimeframeInfo(**t) for t in timeframes_data]
@@ -219,7 +219,7 @@ async def load_data(
     try:
         logger.info(f"Loading data for {request.symbol} ({request.timeframe})")
         
-        data = data_service.load_data(
+        data = await data_service.load_data(
             symbol=request.symbol,
             timeframe=request.timeframe,
             start_date=request.start_date,
@@ -307,7 +307,7 @@ async def get_data_range(
     try:
         logger.info(f"Getting date range for {request.symbol} ({request.timeframe})")
         
-        range_data = data_service.get_data_range(
+        range_data = await data_service.get_data_range(
             symbol=request.symbol,
             timeframe=request.timeframe
         )

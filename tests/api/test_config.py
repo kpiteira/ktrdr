@@ -16,7 +16,7 @@ class TestAPIConfig:
         config = APIConfig()
         assert config.title == "KTRDR API"
         assert config.description == "REST API for KTRDR trading system"
-        assert config.version == "1.0.5"
+        assert config.version == "1.0.5.5"
         assert config.host == "127.0.0.1"
         assert config.port == 8000
         assert config.reload is True

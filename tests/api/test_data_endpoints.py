@@ -4,7 +4,7 @@ Unit tests for data-related API endpoints.
 Tests the data endpoints for handling data retrieval operations.
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
 
 from ktrdr.errors import DataNotFoundError, DataError
@@ -23,6 +23,11 @@ def mock_data_service():
     """Create a mock DataService for testing endpoints."""
     with patch('ktrdr.api.dependencies.DataService') as mock_class:
         mock_instance = mock_class.return_value
+        # Set up async methods to return AsyncMock objects
+        mock_instance.get_available_symbols = AsyncMock()
+        mock_instance.get_available_timeframes = AsyncMock()
+        mock_instance.load_data = AsyncMock()
+        mock_instance.get_data_range = AsyncMock()
         yield mock_instance
 
 

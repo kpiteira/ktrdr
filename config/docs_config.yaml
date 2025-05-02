@@ -3,10 +3,10 @@
 # Organization Information
 organization:
   name: "KTRDR"
-  website: "https://ktrdr.example.com"
-  github: "https://github.com/yourusername/ktrdr"
-  email: "support@example.com"
-  docs_url: "https://ktrdr-docs.example.com"
+  website: "https://ktrdr.mynerd.place"
+  github: "https://github.com/kpiteira/ktrdr"
+  email: "karl@mynerd.place"
+  docs_url: "https://ktrdr-docs.mynerd.place"
 
 # API Information
 api:

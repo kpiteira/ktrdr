@@ -32,7 +32,7 @@ class TestMainApplication:
         """Test that the health endpoint returns the expected response."""
         response = self.client.get("/api/v1/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "version": "1.0.5"}
+        assert response.json() == {"status": "ok", "version": "1.0.5.5"}
     
     def test_error_handlers(self):
         """Test all error handlers at once to simplify the test."""
@@ -95,4 +95,4 @@ class TestMainApplication:
         # the basic structure of the OpenAPI spec.
         assert "info" in openapi_spec
         assert openapi_spec["info"]["title"] == "KTRDR API"
-        assert openapi_spec["info"]["version"] == "1.0.5"
+        assert openapi_spec["info"]["version"] == "1.0.5.5"
