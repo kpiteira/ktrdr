@@ -1,0 +1,87 @@
+name: KTRDR Regression Testing
+
+on:
+  # Run regression tests weekly
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  regression-test:
+    name: Regression Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for proper versioning
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv pip install -r requirements.txt
+          uv pip install -r requirements-dev.txt
+          uv pip install pytest-benchmark pytest-xdist
+      
+      - name: Run regression tests
+        run: |
+          # Run tests with regression and performance testing
+          python -m pytest tests/regression/ -v
+      
+      - name: Run performance benchmarks
+        run: |
+          # Run benchmarks
+          python -m pytest tests/performance/ --benchmark-json=benchmark-results.json
+      
+      - name: Compare benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'pytest'
+          output-file-path: benchmark-results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '150%'
+          fail-on-alert: false
+          comment-on-alert: true
+          alert-comment-cc-users: '@ktrdr-maintainers'
+      
+      - name: Generate regression test report
+        run: |
+          # Generate a markdown report of the regression tests
+          echo "# Regression Test Report" > regression-report.md
+          echo "Run date: $(date)" >> regression-report.md
+          echo "\`\`\`" >> regression-report.md
+          python -m pytest tests/regression/ -v --no-header --no-summary >> regression-report.md || true
+          echo "\`\`\`" >> regression-report.md
+          
+          # Add benchmark summary
+          echo "## Benchmark Results" >> regression-report.md
+          echo "\`\`\`" >> regression-report.md
+          python -c "import json; data = json.load(open('benchmark-results.json')); print('\n'.join([f\"{b['name']}: {b['stats']['mean']:.6f} seconds\" for b in data['benchmarks']]))" >> regression-report.md || echo "No benchmark data available" >> regression-report.md
+          echo "\`\`\`" >> regression-report.md
+      
+      - name: Upload regression report
+        uses: actions/upload-artifact@v3
+        with:
+          name: regression-report
+          path: regression-report.md
+          retention-days: 90
+      
+      - name: Notify on regression failures
+        if: failure()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: alerts
+          SLACK_TITLE: "⚠️ Regression Test Failures"
+          SLACK_MESSAGE: "Regression tests failed. Please check the report for details."
+          SLACK_COLOR: danger
+          SLACK_FOOTER: "View workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

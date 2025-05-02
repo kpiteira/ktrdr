@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "KTRDR"
-version = "1.0.6.1"
+version = "1.0.6.4"
 description = "Advanced trading system with fuzzy logic and machine learning capabilities"
 readme = "README.md"
 requires-python = ">=3.9"

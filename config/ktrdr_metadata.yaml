@@ -6,7 +6,7 @@ project:
   name: "KTRDR"
   full_name: "KTRDR Trading System"
   description: "Advanced trading system with fuzzy logic and machine learning capabilities"
-  version: "1.0.6.1"  # Matches current version in pyproject.toml
+  version: "1.0.6.4"  # Matches current version in pyproject.toml
   license: "Proprietary"
   
 # Organization Information

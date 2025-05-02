@@ -1,26 +1,28 @@
-version: '3.8'
-
 services:
-  # FastAPI backend service
+  # FastAPI backend service - Development configuration
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: ktrdr-backend:latest
+      dockerfile: Dockerfile.dev
+    image: ktrdr-backend:dev
     container_name: ktrdr-backend
     restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
-      - ktrdr-data:/home/ktrdr/app/data
-      - ktrdr-logs:/home/ktrdr/app/logs
-      - ./config:/home/ktrdr/app/config:ro
+      # Mount source code for hot-reloading
+      - ./ktrdr:/app/ktrdr
+      # Mount data and logs directories for persistence
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Mount config as read-only
+      - ./config:/app/config:ro
+      # Mount output directory for visualization files
+      - ./output:/app/output
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
-      - PYTHONPATH=/home/ktrdr/app
-      # Add sensitive environment variables via .env file or environment
-      # - IB_API_KEY=${IB_API_KEY}
+      - PYTHONPATH=/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -30,32 +32,8 @@ services:
     networks:
       - ktrdr-network
 
-  # Redis for caching and messaging (optional, uncomment if needed)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: ktrdr-redis
-  #   restart: unless-stopped
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis-data:/data
-  #   command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-ktrdrredis}"]
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #   networks:
-  #     - ktrdr-network
-
 networks:
   ktrdr-network:
     driver: bridge
 
-volumes:
-  ktrdr-data:
-    driver: local
-  ktrdr-logs:
-    driver: local
-  # redis-data:
-  #   driver: local
+volumes: {}

@@ -1,297 +1,159 @@
-# Docker Infrastructure Guide
+# KTRDR Docker Infrastructure Guide
+
+This guide explains how to use the Docker infrastructure for development, testing, and production deployment of KTRDR.
 
 ## Overview
 
-This document provides instructions for working with the KTRDR Docker infrastructure, which containerizes the application components for consistent, reproducible environments across development and deployment scenarios.
+KTRDR's Docker infrastructure is designed to provide:
 
-## Key Components
+1. **Isolated Components**: Separation of backend API and optional Redis services
+2. **Development Workflow**: Hot-reloading, volume mounting, and developer-friendly tooling
+3. **Production Readiness**: Optimized containers with proper security and resource constraints
+4. **Consistent Environments**: Same behavior across development, testing, and production
 
-The Docker infrastructure consists of the following key components:
-
-1. **Dockerfile**: Multi-stage build process that creates an optimized container image
-2. **.dockerignore**: Configures which files are excluded from the Docker build context
-3. **docker-compose.yml**: Defines services, networks, and volumes for the application
-4. **Logging Configuration**: JSON-based logging setup for containerized environments
-
-## Prerequisites
-
-Before using the Docker infrastructure, ensure you have:
-
-1. Docker installed (version 20.10.0 or newer recommended)
-2. Docker Compose installed (version 2.0.0 or newer recommended)
-3. Git (for source code management)
-4. Basic familiarity with Docker commands
-
-## Getting Started
-
-### Building the Docker Image
-
-To build the KTRDR backend Docker image:
+## Quick Start
 
 ```bash
-# From the project root directory
-docker build -t ktrdr-backend .
+# Start development environment (with hot-reloading)
+./docker_dev.sh start
+
+# View container logs
+./docker_dev.sh logs
+
+# Access a shell inside the backend container
+./docker_dev.sh shell
+
+# Stop environment
+./docker_dev.sh stop
 ```
 
-This command builds a multi-stage Docker image that:
-- Compiles dependencies in a builder stage
-- Creates an optimized runtime image
-- Sets up a non-root user for security
-- Configures proper volume mounts and health checks
+## Development Environment
 
-### Starting Services with Docker Compose
+The development environment is optimized for fast iteration with:
 
-To start all the services defined in the Docker Compose file:
+- **Hot-Reloading**: Code changes are immediately reflected without restarts
+- **Volume Mounting**: Source code, data, logs, and outputs are persisted
+- **Developer Tools**: Development dependencies are pre-installed
+
+### Container Configuration
+
+- **Backend Service**: FastAPI application serving the API
+  - Port: 8000 (accessible at http://localhost:8000)
+  - API Documentation: http://localhost:8000/api/docs
+  - Mounted Volumes:
+    - `./ktrdr`: Source code (for hot-reloading)
+    - `./data`: Persistent data volume
+    - `./logs`: Log files
+    - `./config`: Configuration files (read-only)
+    - `./output`: Output files for visualizations
+
+- **Redis Service** (Optional, commented out by default)
+  - Cache and messaging service
+  - Port: 6379
+
+### Helper Script Commands
+
+The `docker_dev.sh` script provides convenient commands:
+
+- `start`: Start the development environment
+- `stop`: Stop the environment
+- `restart`: Restart all containers
+- `logs`: View logs from all containers
+- `shell`: Open a shell in the backend container
+- `rebuild`: Rebuild containers (preserving data)
+- `clean`: Stop containers and remove volumes
+- `test`: Run tests in the backend container
+- `prod`: Start the production environment
+- `health`: Check container health status
+- `help`: Show help message
+
+## Production Environment
+
+The production environment is optimized for stability, security, and performance:
+
+- **Security Enhancements**:
+  - Non-root user execution
+  - No development dependencies
+  - Security options like `no-new-privileges`
+  
+- **Resource Management**:
+  - CPU and memory limits defined
+  - Optimized container size
+  
+- **Reliability Features**:
+  - Health checks on all services
+  - Proper restart policies
+  - Named volumes for data persistence
+
+### Deployment
+
+To deploy for production:
 
 ```bash
-# Start services in detached mode
-docker-compose up -d
+# Start production environment
+docker-compose -f docker-compose.prod.yml up -d
 
-# View logs from all containers
-docker-compose logs
-
-# View logs from a specific service
-docker-compose logs backend
+# Or use the helper script
+./docker_dev.sh prod
 ```
 
-## Container Architecture
+## Environment Variables
 
-### Multi-Stage Build
+Configure the application behavior using environment variables:
 
-The Dockerfile uses a multi-stage build approach for several benefits:
+- `ENVIRONMENT`: Set to `development` or `production`
+- `LOG_LEVEL`: Set logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `REDIS_PASSWORD`: Redis authentication password (if Redis service is enabled)
+- `IB_API_KEY`: Interactive Brokers API key (if needed)
 
-1. **Smaller Final Image**: Only runtime dependencies are included
-2. **Enhanced Security**: Build tools are excluded from the runtime image
-3. **Efficient Caching**: Better layer caching for faster rebuilds
+For sensitive environment variables, create a `.env` file:
 
-### Security Features
-
-The Docker infrastructure includes several security enhancements:
-
-1. **Non-Root User**: The container runs as a non-root user `ktrdr`
-2. **Minimal Base Image**: Uses python:3.11-slim for a smaller attack surface
-3. **Tini Init Process**: Proper signal handling and zombie process reaping
-4. **Health Checks**: Regular verification of application health
-
-### Volume Management
-
-The infrastructure defines persistent volumes for:
-
-1. **Data**: Application data storage (`/home/ktrdr/app/data`)
-2. **Logs**: Centralized logging directory (`/home/ktrdr/app/logs`)
-
-These volumes ensure data persistence across container restarts and updates.
-
-## Configuration
-
-### Environment Variables
-
-The container accepts several environment variables for configuration:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ENVIRONMENT` | Application environment (development, production) | development |
-| `LOG_LEVEL` | Logging verbosity (DEBUG, INFO, WARNING, ERROR) | INFO |
-| `PYTHONPATH` | Python module search path | /home/ktrdr/app |
-
-Example of setting environment variables in docker-compose.yml:
-
-```yaml
-services:
-  backend:
-    environment:
-      - ENVIRONMENT=production
-      - LOG_LEVEL=WARNING
+```
+REDIS_PASSWORD=mystrongpassword
+IB_API_KEY=yourapikey
 ```
 
-### Configuration Files
+## Component Isolation
 
-For more complex configuration, you can mount configuration files:
+The Docker infrastructure implements component isolation as described in the architecture blueprint:
 
-```yaml
-services:
-  backend:
-    volumes:
-      - ./config:/home/ktrdr/app/config:ro
-```
+1. **Backend API Container**:
+   - Serves the FastAPI application
+   - Handles data processing and API endpoints
+   - Properly isolated with non-root user
 
-## Testing and Validation
+2. **Redis Container** (Optional):
+   - Provides caching and messaging capabilities
+   - Isolated with Alpine-based minimal image
+   - Secured with password authentication
 
-### Health Check
+## Volume Management
 
-The container includes a built-in health check that verifies the application is responding correctly:
+KTRDR uses the following Docker volumes for data persistence:
 
-```bash
-# View container health status
-docker ps --format "table {{.Names}}\t{{.Status}}"
+- `ktrdr-data`: For market data, configurations, and application state
+- `ktrdr-logs`: For application logs
+- `redis-data`: For Redis persistence (if enabled)
 
-# Manually test the health check endpoint
-curl http://localhost:8000/api/health
-```
+## Adding New Components
 
-Expected response from health check:
-```json
-{"status":"ok","version":"1.0.5.5"}
-```
+To add additional services (e.g., database, frontend):
 
-### Testing Container Functionality
-
-To verify the container is working properly:
-
-```bash
-# Start the containers
-docker-compose up -d
-
-# Check if the container is running
-docker ps | grep ktrdr-backend
-
-# Test the health check endpoint
-curl http://localhost:8000/api/health
-
-# View the logs to verify logging configuration
-docker-compose logs backend
-
-# Stop the containers when done
-docker-compose down
-```
-
-### Verifying Container Security
-
-To confirm the container is running with the correct security settings:
-
-```bash
-# Check the user the container is running as
-docker exec ktrdr-backend id
-
-# Expected output should show uid and gid for non-root user "ktrdr"
-# Example: uid=1000(ktrdr) gid=1000(ktrdr) groups=1000(ktrdr)
-```
-
-## Common Operations
-
-### Rebuilding After Code Changes
-
-After making changes to the application code:
-
-```bash
-# Rebuild the image
-docker-compose build
-
-# Restart the services
-docker-compose up -d
-```
-
-### Accessing Container Logs
-
-To view container logs:
-
-```bash
-# View logs for all services
-docker-compose logs
-
-# View logs for a specific service
-docker-compose logs backend
-
-# Follow logs in real-time
-docker-compose logs -f backend
-```
-
-### Container Shell Access
-
-To access a shell inside the container:
-
-```bash
-docker exec -it ktrdr-backend /bin/bash
-```
-
-### Cleaning Up Resources
-
-To clean up Docker resources:
-
-```bash
-# Stop and remove containers, networks, and volumes
-docker-compose down -v
-
-# Remove the built image if desired
-docker rmi ktrdr-backend:latest
-```
-
-## Advanced Usage
-
-### Extending the Dockerfile
-
-If you need to customize the Dockerfile for specific use cases, you can create an extended version:
-
-```dockerfile
-# Extend from the base image
-FROM ktrdr-backend:latest
-
-# Add custom dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    your-package-name \
-    && rm -rf /var/lib/apt/lists/*
-
-# Add custom files
-COPY custom_files/ /home/ktrdr/app/custom_files/
-
-# Custom entrypoint or command if needed
-CMD ["custom-command"]
-```
-
-### Custom Docker Compose Setup
-
-For more complex setups, you can create environment-specific docker-compose files:
-
-```bash
-# Create a development setup
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-
-# Create a production setup
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
+1. Define a new service in `docker-compose.yml`
+2. Configure appropriate volumes and networks
+3. Update the helper script to support the new service
 
 ## Troubleshooting
 
-### Common Issues
+Common issues and solutions:
 
-1. **Container fails to start**:
-   - Check logs with `docker-compose logs backend`
-   - Verify port 8000 is not already in use
-   - Check container health with `docker ps --format "{{.Names}}: {{.Status}}"`
-
-2. **Health check fails**:
-   - Verify API is running with `docker exec ktrdr-backend ps aux`
-   - Check logs for application errors
-   - Test endpoint directly with `docker exec ktrdr-backend curl -f http://localhost:8000/api/health`
-
-3. **Permission issues with volumes**:
-   - Check ownership of volume directories
-   - Verify the container user has appropriate permissions
-
-4. **Performance issues**:
-   - Check resource usage with `docker stats`
-   - Verify host system has sufficient resources
-   - Consider adjusting container resource limits
+- **Permission errors**: Docker volume permissions can sometimes cause issues. Run `./docker_dev.sh clean` to reset volumes.
+- **Port conflicts**: If port 8000 is already in use, modify the port mapping in the docker-compose file.
+- **Container health failures**: Check container logs with `./docker_dev.sh logs` to diagnose issues.
 
 ## Best Practices
 
-1. **Use Volumes for Persistence**: Always use named volumes for data that should persist between container restarts.
-
-2. **Version Control Docker Files**: Keep your Dockerfile and docker-compose.yml in version control.
-
-3. **Optimize Build Context**: Use .dockerignore to exclude unnecessary files from the build context.
-
-4. **Update Base Images Regularly**: Periodically rebuild images to incorporate security updates.
-
-5. **Monitor Container Health**: Implement monitoring for container health checks.
-
-6. **Backup Volume Data**: Regularly backup data stored in Docker volumes.
-
-7. **Use Environment-Specific Configs**: Maintain separate configuration files for different environments.
-
-## Further Resources
-
-- [Docker Documentation](https://docs.docker.com/)
-- [Docker Compose Documentation](https://docs.docker.com/compose/)
-- [FastAPI in Containers](https://fastapi.tiangolo.com/deployment/docker/)
-- [Docker Security Best Practices](https://docs.docker.com/develop/security-best-practices/)
+- Use the helper script for all Docker operations to ensure consistency
+- Keep the development and production environments as similar as possible
+- Regularly rebuild the development container to pick up dependency changes
+- Use health checks to verify container readiness

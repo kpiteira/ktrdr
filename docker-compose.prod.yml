@@ -1,0 +1,80 @@
+services:
+  # FastAPI backend service - Production configuration
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_ENV=production
+    image: ktrdr-backend:latest
+    container_name: ktrdr-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount data and logs directories for persistence
+      - ./data:/home/ktrdr/app/data
+      - ./logs:/home/ktrdr/app/logs
+      # Mount config as read-only
+      - ./config:/home/ktrdr/app/config:ro
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=WARNING
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ktrdr-network
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Redis for caching and messaging
+  redis:
+    image: redis:7-alpine
+    container_name: ktrdr-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-strongpassword}"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ktrdr-network
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+networks:
+  ktrdr-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
