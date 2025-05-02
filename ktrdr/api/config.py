@@ -9,7 +9,7 @@ import os
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from dotenv import load_dotenv
-from ktrdr.version import get_version
+from ktrdr import metadata  # Use the new metadata module instead of version
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -31,8 +31,8 @@ class APIConfig(BaseModel):
         description="API description displayed in documentation"
     )
     version: str = Field(
-        default=get_version(),
-        description="API version (from central version management)"
+        default=metadata.VERSION,  # Use the version from the metadata module
+        description="API version (from central metadata management)"
     )
     
     # Server configuration

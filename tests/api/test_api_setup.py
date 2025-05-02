@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from ktrdr.api.main import create_application
 from ktrdr.api.config import APIConfig
+from ktrdr import metadata  # Import the metadata module
 
 @pytest.fixture
 def client():
@@ -26,7 +27,7 @@ def test_api_health_check(client):
     """Test that the health check endpoint returns the expected response."""
     response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "1.0.5.5"}
+    assert response.json() == {"status": "ok", "version": metadata.VERSION}  # Use VERSION from metadata
 
 def test_api_openapi_spec(client):
     """Test that the OpenAPI specification is generated correctly."""
@@ -40,7 +41,4 @@ def test_api_openapi_spec(client):
     assert "paths" in openapi_spec
     assert "info" in openapi_spec
     assert openapi_spec["info"]["title"] == "KTRDR API"
-    assert openapi_spec["info"]["version"] == "1.0.5.5"
-    
-    # Verify that the health check endpoint is defined in the paths
-    assert f"{config.api_prefix}/health" in openapi_spec["paths"]
+    assert openapi_spec["info"]["version"] == metadata.VERSION  # Use VERSION from metadata

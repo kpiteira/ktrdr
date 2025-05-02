@@ -1,11 +1,13 @@
 [build-system]
-requires = ["hatchling"]
+requires = [
+    "hatchling",
+]
 build-backend = "hatchling.build"
 
 [project]
-name = "ktrdr"
+name = "KTRDR"
 version = "1.0.6.1"
-description = "Automated trading agent with neuro-fuzzy decision engine"
+description = "Advanced trading system with fuzzy logic and machine learning capabilities"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

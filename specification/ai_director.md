@@ -734,3 +734,74 @@ Ensuring proper version control is essential for tracking project progress. The 
    - Complete all tasks in Slice 4: Version 1.0.5.0 (increment MINOR, reset PATCH)
 
 This versioning approach provides clear tracking of both slice and task progress, with each increment representing a complete, working implementation.
+
+## Version Management and Central Metadata
+
+Ensuring proper version control and configuration management is essential for tracking project progress and maintaining consistent configuration. The project follows a centralized metadata approach:
+
+1. **Central Metadata System**:
+   - The project uses a centralized metadata system based on YAML configuration in `config/ktrdr_metadata.yaml`
+   - This file serves as the single source of truth for project information, versions, and global settings
+   - Environment-specific overrides are stored in `config/environment/<env>.yaml`
+   - All configuration values can be accessed through the `metadata` module
+
+2. **Accessing Metadata**:
+   - **Direct Property Access**: Use for common properties
+     ```python
+     from ktrdr import metadata
+     
+     # Access version and other core properties directly
+     version = metadata.VERSION
+     name = metadata.NAME
+     description = metadata.DESCRIPTION
+     ```
+   
+   - **Path-Based Access**: Use for nested configuration values
+     ```python
+     from ktrdr import metadata
+     
+     # Use get() with dot notation for nested values
+     db_host = metadata.get("database.host")
+     log_level = metadata.get("logging.level")
+     
+     # With environment override
+     prod_api_url = metadata.get("api.url", environment="production")
+     ```
+   
+   - **Typed Settings Models**: Use for validated configuration
+     ```python
+     from ktrdr.config.settings import get_api_settings, get_database_settings
+     
+     # Get typed, validated settings models
+     api_settings = get_api_settings()
+     db_settings = get_database_settings()
+     ```
+
+3. **Version Update Process**:
+   - The version is maintained in `config/ktrdr_metadata.yaml` under the `version` property
+   - When updating the version, run the sync script: `python scripts/update_metadata.py`
+   - This script will update all derived files (pyproject.toml, version.json, etc.)
+   - For any breaking changes to the metadata structure, ensure to update all relevant tests
+
+4. **Environment-Specific Configuration**:
+   - Use the environment parameter in `metadata.get()` for environment-specific values:
+     ```python
+     # Get production-specific value
+     endpoint_url = metadata.get("services.endpoint", environment="production")
+     
+     # Get the current environment name
+     current_env = metadata.ENVIRONMENT
+     ```
+
+5. **Environment Variable Overrides**:
+   - Configuration values can be overridden with environment variables
+   - Use uppercase with underscores and a prefix matching the section:
+     ```
+     # Override database.host value
+     export DATABASE_HOST=custom-db-host
+     
+     # Override logging.level value
+     export LOGGING_LEVEL=DEBUG
+     ```
+
+When implementing any new component or updating existing ones, always use the central metadata system rather than hardcoded values or separate configuration mechanisms. This ensures consistency across the application and simplifies configuration management.

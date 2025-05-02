@@ -243,13 +243,13 @@ The configuration module is responsible for loading, validating, and providing s
 #### **Responsibilities:**
 - Load YAML config files:
 
-  - `config/general.yaml`: General system settings (data paths,
-environment)
+  - `config/ktrdr_metadata.yaml`: Central project metadata (version, environment settings)
+  
+  - `config/general.yaml`: General system settings (data paths, environment)
 
   - `config/fuzzy.yaml`: Default fuzzy set definitions per indicator
 
-  - `strategies/<strategy_name>.yaml`: Complete strategy configuration
-including:
+  - `strategies/<strategy_name>.yaml`: Complete strategy configuration including:
 
     - List of indicators
 
@@ -260,10 +260,64 @@ including:
     - Reference to model weight files (if pre-trained)
 - Provide a structured interface for:
 
+  - Accessing metadata (version, name, description)
+  
   - General application config
 
   - Strategy config loading and validation
-- Support environment overrides (e.g., dev vs. paper) 
+- Support environment overrides (e.g., dev vs. paper)
+- Support environment variable overrides
+
+#### **Central Metadata System:**
+
+The system implements a centralized configuration and metadata management system that handles:
+
+- **Single Source of Truth**: A central `ktrdr_metadata.yaml` file containing core project metadata
+- **Environment-Specific Overrides**: Support for development, testing, and production environments
+- **Environment Variable Override**: Runtime configuration through environment variables
+- **Efficient Access**: Cached access to metadata through Python module
+
+The metadata system is implemented through these components:
+
+1. **YAML Configuration Files**:
+   - `config/ktrdr_metadata.yaml`: Central metadata source file
+   - `config/environment/<env>.yaml`: Environment-specific override files (development, testing, production)
+
+2. **Python Metadata Module** (`ktrdr.metadata`):
+   - Provides programmatic access to metadata
+   - Handles environment-specific override loading
+   - Supports environment variable overrides
+   - Implements dot-notation path access through `get()` function
+
+3. **Settings Module** (`ktrdr.config.settings`):
+   - Provides Pydantic models for validated settings
+   - Implements efficient caching with `lru_cache`
+   - Supports typed configuration access
+
+4. **Synchronization Script**:
+   - `scripts/update_metadata.py` for keeping derived files in sync
+   - Ensures consistency between metadata files and project files
+
+#### **Metadata Access Examples:**
+
+```python
+# Accessing version directly
+from ktrdr import metadata
+version = metadata.VERSION
+name = metadata.NAME
+
+# Using get() with dot notation
+db_host = metadata.get("database.host")
+log_level = metadata.get("logging.level")
+
+# Accessing with environment override
+prod_api_url = metadata.get("api.url", environment="production")
+
+# Using typed settings models
+from ktrdr.config.settings import get_api_settings
+api_settings = get_api_settings()
+print(api_settings.host, api_settings.port)
+```
 
 #### **Example Strategy Config Structure:**
 ```yaml
@@ -286,7 +340,8 @@ model:
   hidden_layers: [10, 10]
   output_size: 2
   weights: weights/basic_rsi_trend.pt
-  ```
+```
+
 #### **Example Interface:**
 
 ```python
@@ -302,6 +357,7 @@ class ConfigLoader:
     def load_strategy_config(self, name: str) -> StrategyConfig: ...
     def load_fuzzy_defaults(self) -> dict: ...
 ```
+
 #### **Config Structure Philosophy:**
 - Default fuzzy.yaml provides global templates for fuzzy logic levels
   (e.g., low/neutral/high per indicator)

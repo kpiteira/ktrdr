@@ -3,21 +3,21 @@ API main application tests.
 
 This module tests the main FastAPI application functionality.
 """
-import pytest
-from unittest.mock import patch, MagicMock
-from fastapi import FastAPI, APIRouter, Request
+#import pytest
+#from unittest.mock import patch, MagicMock
+#from fastapi import FastAPI, APIRouter, Request
 from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse
 
 from ktrdr.api.main import create_application
 from ktrdr.errors import DataError, ConnectionError, ConfigurationError, ProcessingError
+from ktrdr import metadata  # Import the metadata module
 
 class TestMainApplication:
     """Tests for the main FastAPI application."""
     
     def setup_method(self):
         """Set up test fixtures."""
-        # Create a fresh application for each test
         self.app = create_application()
         self.client = TestClient(self.app)
     
@@ -32,7 +32,7 @@ class TestMainApplication:
         """Test that the health endpoint returns the expected response."""
         response = self.client.get("/api/v1/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "version": "1.0.5.5"}
+        assert response.json() == {"status": "ok", "version": metadata.VERSION}
     
     def test_error_handlers(self):
         """Test all error handlers at once to simplify the test."""
@@ -95,4 +95,4 @@ class TestMainApplication:
         # the basic structure of the OpenAPI spec.
         assert "info" in openapi_spec
         assert openapi_spec["info"]["title"] == "KTRDR API"
-        assert openapi_spec["info"]["version"] == "1.0.5.5"
+        assert openapi_spec["info"]["version"] == metadata.VERSION

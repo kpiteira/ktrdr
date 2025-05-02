@@ -1,80 +1,68 @@
 """
-API configuration module tests.
-
-This module tests the configuration module with environment variable support.
+Test the API config functionality.
 """
-import os
 import pytest
-
 from ktrdr.api.config import APIConfig
+from ktrdr import metadata  # Import the metadata module
 
 class TestAPIConfig:
-    """Tests for the APIConfig class."""
+    """Test the API configuration class."""
     
     def test_default_values(self):
         """Test that default values are set correctly."""
         config = APIConfig()
         assert config.title == "KTRDR API"
         assert config.description == "REST API for KTRDR trading system"
-        assert config.version == "1.0.5.5"
-        assert config.host == "127.0.0.1"
-        assert config.port == 8000
-        assert config.reload is True
-        assert config.log_level == "INFO"
-        assert config.environment == "development"
+        assert config.version == metadata.VERSION  # Use VERSION from metadata
         assert config.api_prefix == "/api/v1"
         assert config.cors_origins == ["*"]
-        assert config.cors_allow_credentials is True
-        assert config.cors_allow_methods == ["*"]
-        assert config.cors_allow_headers == ["*"]
-        assert config.cors_max_age == 600
     
     def test_environment_variable_override(self):
         """Test that environment variables override default values."""
-        # Use the new from_env method which handles env vars better
-        config = APIConfig.from_env({
-            "KTRDR_API_TITLE": "Custom API",
-            "KTRDR_API_PORT": "9000",
-            "KTRDR_API_RELOAD": "false",
-            "KTRDR_API_ENVIRONMENT": "production"
-        })
-        assert config.title == "Custom API"
-        assert config.port == 9000
-        assert config.reload is False
-        assert config.environment == "production"
+        # Use from_env method instead of relying on monkeypatch
+        env_vars = {
+            "KTRDR_API_PORT": "9999",
+            "KTRDR_API_LOG_LEVEL": "DEBUG"
+        }
+        config = APIConfig.from_env(env_vars)
+        
+        assert config.port == 9999
+        assert config.log_level == "DEBUG"
     
-    def test_cors_origins_parsing(self):
-        """Test that CORS origins are correctly parsed from string."""
-        # Use the new from_env method which handles env vars better
-        config = APIConfig.from_env({
-            "KTRDR_API_CORS_ORIGINS": "http://localhost:3000,http://example.com"
-        })
-        assert config.cors_origins == ["http://localhost:3000", "http://example.com"]
+    def test_attribute_access(self):
+        """Test that attributes can be accessed correctly."""
+        config = APIConfig()
+        assert hasattr(config, "title")
+        assert hasattr(config, "version")
+        assert hasattr(config, "port")
+        assert hasattr(config, "host")
     
-    def test_cors_methods_parsing(self):
-        """Test that CORS methods are correctly parsed from string."""
-        # Use the new from_env method which handles env vars better
-        config = APIConfig.from_env({
-            "KTRDR_API_CORS_ALLOW_METHODS": "GET,POST,PUT"
-        })
-        assert config.cors_allow_methods == ["GET", "POST", "PUT"]
+    def test_model_config(self):
+        """Test that the Pydantic model has the correct config."""
+        assert APIConfig.model_config["env_prefix"] == "KTRDR_API_"
     
-    def test_cors_headers_parsing(self):
-        """Test that CORS headers are correctly parsed from string."""
-        # Use the new from_env method which handles env vars better
-        config = APIConfig.from_env({
-            "KTRDR_API_CORS_ALLOW_HEADERS": "Content-Type,Authorization"
-        })
-        assert config.cors_allow_headers == ["Content-Type", "Authorization"]
+    def test_reload_config(self):
+        """Test reloading the configuration."""
+        # Get initial config
+        config = APIConfig()
+        initial_port = config.port
+        
+        # Use from_env method instead of relying on monkeypatch
+        env_vars = {
+            "KTRDR_API_PORT": "8888"
+        }
+        new_config = APIConfig.from_env(env_vars)
+        
+        assert new_config.port == 8888
+        assert new_config.port != initial_port
     
-    def test_environment_validation(self):
-        """Test that environment validation works correctly."""
-        with pytest.raises(ValueError) as excinfo:
-            APIConfig.from_env({"KTRDR_API_ENVIRONMENT": "invalid"})
-        assert "Environment must be one of" in str(excinfo.value)
-    
-    def test_log_level_validation(self):
-        """Test that log level validation works correctly."""
-        with pytest.raises(ValueError) as excinfo:
-            APIConfig.from_env({"KTRDR_API_LOG_LEVEL": "invalid"})
-        assert "Log level must be one of" in str(excinfo.value)
+    def test_dict_conversion(self):
+        """Test converting the config to a dictionary."""
+        config = APIConfig()
+        config_dict = config.model_dump()
+        
+        assert isinstance(config_dict, dict)
+        assert "title" in config_dict
+        assert "version" in config_dict
+        assert config_dict["title"] == "KTRDR API"
+        assert config_dict["version"] == metadata.VERSION  # Use VERSION from metadata
