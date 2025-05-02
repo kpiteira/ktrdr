@@ -42,6 +42,7 @@ jobs:
       - name: Update version files
         run: |
           # Update version in version.json
+          mkdir -p ktrdr
           echo "{\"version\": \"$VERSION\"}" > ktrdr/version.json
           
           # Update version.py
