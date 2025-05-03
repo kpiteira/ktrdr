@@ -1,13 +1,27 @@
 /**
- * Common types for UI components
+ * UI types for KTRDR frontend
+ * Defines types for UI components and theme settings
  */
 
+// Theme mode type
 export type ThemeMode = 'light' | 'dark';
 
 export interface ThemeContextType {
   theme: ThemeMode;
   toggleTheme: () => void;
 }
+
+// Chart settings type
+export interface ChartSettings {
+  height: number;
+  showVolume: boolean;
+  showGridlines: boolean;
+  crosshair: boolean;
+  priceScale: 'right' | 'left' | 'both';
+}
+
+// View types
+export type ViewMode = 'dashboard' | 'chart' | 'scanner' | 'strategy' | 'settings';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
 export type ButtonSize = 'small' | 'medium' | 'large';

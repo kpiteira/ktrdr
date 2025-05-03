@@ -16,5 +16,13 @@ export default defineConfig({
     watch: {
       usePolling: true, // Needed for Docker on some systems
     },
+    // Add proxy configuration to redirect API requests to the backend container
+    proxy: {
+      '/api': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
 });

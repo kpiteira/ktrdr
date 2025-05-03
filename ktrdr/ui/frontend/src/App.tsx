@@ -1,4 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import { Provider } from 'react-redux';
+import { store } from '@/store';
 import { ThemeProvider, MainLayout } from '@/components/layouts';
 import { NotificationProvider, NotificationContainer, DevModeIndicator } from '@/components/common';
 import { Card, Button } from '@/components/common';
@@ -16,58 +18,47 @@ function App() {
       duration: 5000
     });
   };
-  
-  // Debug API configuration
-  useEffect(() => {
-    try {
-      // Log the API configuration
-      console.log('API Configuration:', {
-        baseUrl: config.api.baseUrl || 'Not defined',
-        environment: process.env.NODE_ENV,
-        apiPrefix: config.api.prefix || 'Not defined'
-      });
-    } catch (error) {
-      console.error('Could not load API configuration:', error);
-    }
-  }, []);
 
   return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <MainLayout>
-          <Card 
-            title="Welcome to KTRDR Trading Platform" 
-            subtitle="Frontend infrastructure implementation"
-          >
-            <p>This is the initial setup of the KTRDR frontend application.</p>
-            <p>The following components have been implemented:</p>
-            <ul>
-              <li>Theme system with dark/light mode</li>
-              <li>Layout components (Header, Sidebar, MainLayout)</li>
-              <li>Common UI components (Button, Input, Select, Card, Tabs)</li>
-              <li>Error and loading state components</li>
-              <li>Notification system</li>
-              <li>Developer mode indicators</li>
-              <li>API client and data access layer</li>
-            </ul>
-            <Button 
-              onClick={showSampleNotification}
-              variant="primary"
-              style={{ marginTop: '16px', marginRight: '16px' }}
+    <Provider store={store}>
+      <ThemeProvider>
+        <NotificationProvider>
+          <MainLayout>
+            <Card 
+              title="Welcome to KTRDR Trading Platform" 
+              subtitle="Frontend infrastructure implementation"
             >
-              Show Sample Notification
-            </Button>
-          </Card>
-          
-          {/* API Integration Test Component */}
-          <div style={{ marginTop: '32px' }}>
-            <DataViewer />
-          </div>
-        </MainLayout>
-        <NotificationContainer />
-        <DevModeIndicator position="bottom-right" />
-      </NotificationProvider>
-    </ThemeProvider>
+              <p>This is the initial setup of the KTRDR frontend application.</p>
+              <p>The following components have been implemented:</p>
+              <ul>
+                <li>Theme system with dark/light mode</li>
+                <li>Layout components (Header, Sidebar, MainLayout)</li>
+                <li>Common UI components (Button, Input, Select, Card, Tabs)</li>
+                <li>Error and loading state components</li>
+                <li>Notification system</li>
+                <li>Developer mode indicators</li>
+                <li>API client and data access layer</li>
+                <li>Redux state management</li>
+              </ul>
+              <Button 
+                onClick={showSampleNotification}
+                variant="primary"
+                style={{ marginTop: '16px', marginRight: '16px' }}
+              >
+                Show Sample Notification
+              </Button>
+            </Card>
+            
+            {/* API Integration Test Component */}
+            <div style={{ marginTop: '32px' }}>
+              <DataViewer />
+            </div>
+          </MainLayout>
+          <NotificationContainer />
+          <DevModeIndicator position="bottom-right" />
+        </NotificationProvider>
+      </ThemeProvider>
+    </Provider>
   );
 }
 

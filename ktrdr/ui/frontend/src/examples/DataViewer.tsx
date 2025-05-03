@@ -1,9 +1,9 @@
 /**
  * Example DataViewer component
- * Demonstrates how to use the API client and data hooks
+ * Demonstrates how to use Redux for state management
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Card, 
   Select, 
@@ -11,80 +11,14 @@ import {
   LoadingSpinner, 
   ErrorMessage 
 } from '../components/common';
-import { apiClient } from '../api';
-import { config } from '../config';
 
-// Define proper TypeScript interfaces for better type safety
-interface OHLCVDataParams {
-  symbol: string;
-  timeframe: string;
-  startDate?: string;
-  endDate?: string;
-}
+// Import our Redux hooks
+import {
+  useDataSelection,
+  useOhlcvData
+} from '../store/hooks';
 
-interface OHLCVPoint {
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-interface OHLCVData {
-  dates: string[];
-  ohlcv: number[][];
-  metadata: {
-    symbol: string;
-    timeframe: string;
-    start_date: string;
-    end_date: string;
-    point_count: number;
-  };
-}
-
-// Custom hook implementation with proper typing
-const useOHLCVData = (params: OHLCVDataParams | null) => {
-  const [data, setData] = useState<OHLCVData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<Error | null>(null);
-  
-  useEffect(() => {
-    // Reset state if params are null
-    if (!params) {
-      return;
-    }
-    
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        console.log("📊 API call initiated with params:", params);
-        
-        // Call the API client to get OHLCV data
-        const response = await apiClient.post('data/load', {
-          symbol: params.symbol,
-          timeframe: params.timeframe,
-          start_date: params.startDate,
-          end_date: params.endDate
-        });
-        
-        setData(response);
-        setError(null);
-      } catch (err) {
-        console.error("📊 API call failed:", err);
-        setError(err instanceof Error ? err : new Error('Unknown error occurred'));
-        setData(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchData();
-  }, [params?.symbol, params?.timeframe, params?.startDate, params?.endDate]);
-  
-  return { data, isLoading, error };
-};
-
-// Timeframes fallback data when the API fails
+// Fallback data when the API fails
 const FALLBACK_TIMEFRAMES = [
   { id: '1m', name: '1 Minute' },
   { id: '5m', name: '5 Minutes' },
@@ -97,215 +31,90 @@ const FALLBACK_TIMEFRAMES = [
   { id: '1M', name: 'Monthly' },
 ];
 
-// Helper to get stored data from sessionStorage with typed return value
-const getStoredItem = <T,>(key: string): T | null => {
-  try {
-    const stored = sessionStorage.getItem(key);
-    return stored ? JSON.parse(stored) : null;
-  } catch (e) {
-    console.error(`Error retrieving stored ${key}`, e);
-    return null;
-  }
-};
+const FALLBACK_SYMBOLS = [
+  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'BTC', 'ETH'
+];
 
 /**
- * DataViewer component demonstrates the API integration
- * This shows how to load symbols, timeframes, and OHLCV data
+ * DataViewer component demonstrates the Redux integration
+ * This shows how to load symbols, timeframes, and OHLCV data using Redux
  */
 const DataViewer: React.FC = () => {
-  // Simple flag to show that component is initialized
-  const isInitialized = useRef<boolean>(false);
+  // Add local state to track connection errors
+  const [apiConnectionError, setApiConnectionError] = useState<boolean>(false);
   
-  // State for selected values
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
-  const [selectedTimeframe, setSelectedTimeframe] = useState<string | null>(null);
-  const [dataParams, setDataParams] = useState<OHLCVDataParams | null>(null);
-  
-  // Initialize with stored values if available
-  const [symbols, setSymbols] = useState<any[] | null>(getStoredItem('ktrdr_symbols'));
-  const [symbolsLoading, setSymbolsLoading] = useState<boolean>(!getStoredItem('ktrdr_symbols'));
-  const [symbolsError, setSymbolsError] = useState<Error | null>(null);
-  
-  const [timeframes, setTimeframes] = useState<any[] | null>(getStoredItem('ktrdr_timeframes'));
-  const [timeframesLoading, setTimeframesLoading] = useState<boolean>(!getStoredItem('ktrdr_timeframes'));
-  const [timeframesError, setTimeframesError] = useState<Error | null>(null);
-  
-  // Load symbols only once
-  useEffect(() => {
-    // If already initialized or we have stored data, don't fetch again
-    if (isInitialized.current || getStoredItem('ktrdr_symbols')) {
-      setSymbolsLoading(false);
-      return;
-    }
-    
-    const controller = new AbortController();
-    
-    const loadSymbols = async () => {
-      try {
-        // Request symbols from API
-        const response = await apiClient.get('symbols', undefined, { 
-          signal: controller.signal,
-          cacheTtl: 60000 // Cache for 1 minute
-        });
-        
-        // Store data and update state
-        if (response && Array.isArray(response)) {
-          // Store in sessionStorage for persistence across renders
-          sessionStorage.setItem('ktrdr_symbols', JSON.stringify(response));
-          setSymbols(response);
-        }
-        
-        // Update loading state
-        setSymbolsLoading(false);
-        
-      } catch (error) {
-        console.error("Error loading symbols:", error);
-        setSymbolsError(error instanceof Error ? error : new Error('Unknown error'));
-        setSymbolsLoading(false);
-      }
-    };
-    
-    loadSymbols();
-    isInitialized.current = true;
-    
-    return () => {
-      controller.abort();
-    };
-  }, []);
-  
-  // Load timeframes only once
-  useEffect(() => {
-    // If we have stored data, don't fetch again
-    if (getStoredItem('ktrdr_timeframes')) {
-      setTimeframesLoading(false);
-      return;
-    }
-    
-    const controller = new AbortController();
-    
-    const loadTimeframes = async () => {
-      try {
-        // Request timeframes from API
-        const response = await apiClient.get('timeframes', undefined, { 
-          signal: controller.signal,
-          cacheTtl: 60000 // Cache for 1 minute
-        });
-        
-        // Store data and update state
-        if (response && Array.isArray(response)) {
-          // Store in sessionStorage for persistence across renders
-          sessionStorage.setItem('ktrdr_timeframes', JSON.stringify(response));
-          setTimeframes(response);
-        }
-        
-        // Update loading state
-        setTimeframesLoading(false);
-        
-      } catch (error) {
-        console.error("Error loading timeframes:", error);
-        setTimeframesError(error instanceof Error ? error : new Error('Unknown error'));
-        
-        // Use fallback timeframes data if API fails
-        const fallback = FALLBACK_TIMEFRAMES;
-        sessionStorage.setItem('ktrdr_timeframes', JSON.stringify(fallback));
-        setTimeframes(fallback);
-        
-        setTimeframesLoading(false);
-      }
-    };
-    
-    loadTimeframes();
-    
-    return () => {
-      controller.abort();
-    };
-  }, []);
+  // Use our custom Redux hooks
+  const {
+    symbols,
+    timeframes,
+    currentSymbol,
+    currentTimeframe,
+    hasActiveSelection,
+    loadMetadata,
+    selectSymbol,
+    selectTimeframe
+  } = useDataSelection();
 
-  // Only load OHLCV data when both symbol and timeframe are selected and button is clicked
-  const { 
-    data: ohlcvData, 
-    isLoading: dataLoading, 
-    error: dataError 
-  } = useOHLCVData(dataParams);
+  const {
+    ohlcvData,
+    loadingState,
+    errorMessage,
+    loadData,
+    resetData
+  } = useOhlcvData();
+
+  // Load symbols and timeframes on component mount
+  useEffect(() => {
+    const loadDataWithErrorHandling = async () => {
+      try {
+        await loadMetadata();
+      } catch (error) {
+        console.error('Failed to load metadata:', error);
+        setApiConnectionError(true);
+      }
+    };
+    
+    loadDataWithErrorHandling();
+  }, [loadMetadata]);
 
   // Handle load data button click
   const handleLoadData = () => {
-    if (selectedSymbol && selectedTimeframe) {
-      setDataParams({
-        symbol: selectedSymbol,
-        timeframe: selectedTimeframe,
+    if (currentSymbol && currentTimeframe) {
+      loadData({
         startDate: '2023-01-01',
         endDate: '2023-04-01'
       });
     }
   };
 
-  // Manual reload functions that clear session storage
-  const handleReloadSymbols = () => {
-    sessionStorage.removeItem('ktrdr_symbols');
-    setSymbolsLoading(true);
-    
-    const loadSymbols = async () => {
-      try {
-        const response = await apiClient.get('symbols', undefined, { 
-          cacheTtl: 0 // Don't cache this request
-        });
-        
-        if (response && Array.isArray(response)) {
-          sessionStorage.setItem('ktrdr_symbols', JSON.stringify(response));
-          setSymbols(response);
-        }
-        setSymbolsLoading(false);
-      } catch (error) {
-        console.error("Error reloading symbols:", error);
-        setSymbolsError(error instanceof Error ? error : new Error('Unknown error'));
-        setSymbolsLoading(false);
-      }
-    };
-    
-    loadSymbols();
-  };
-  
-  const handleReloadTimeframes = () => {
-    sessionStorage.removeItem('ktrdr_timeframes');
-    setTimeframesLoading(true);
-    
-    const loadTimeframes = async () => {
-      try {
-        const response = await apiClient.get('timeframes', undefined, { 
-          cacheTtl: 0 // Don't cache this request
-        });
-        
-        if (response && Array.isArray(response)) {
-          sessionStorage.setItem('ktrdr_timeframes', JSON.stringify(response));
-          setTimeframes(response);
-        }
-        setTimeframesLoading(false);
-      } catch (error) {
-        console.error("Error reloading timeframes:", error);
-        setTimeframesError(error instanceof Error ? error : new Error('Unknown error'));
-        const fallback = FALLBACK_TIMEFRAMES;
-        sessionStorage.setItem('ktrdr_timeframes', JSON.stringify(fallback));
-        setTimeframes(fallback);
-        setTimeframesLoading(false);
-      }
-    };
-    
-    loadTimeframes();
+  // Handle reload metadata
+  const handleReloadMetadata = () => {
+    setApiConnectionError(false);
+    loadMetadata();
   };
 
   // Set symbol handler
   const handleSymbolChange = (value: string) => {
-    setSelectedSymbol(value);
+    selectSymbol(value);
   };
   
   // Set timeframe handler
   const handleTimeframeChange = (value: string) => {
-    setSelectedTimeframe(value);
+    selectTimeframe(value);
   };
 
+  // Determine loading states
+  const symbolsLoading = !symbols && loadingState === 'loading';
+  const timeframesLoading = !timeframes && loadingState === 'loading';
+  const dataLoading = loadingState === 'loading';
+  
+  // Determine errors
+  const symbolsError = loadingState === 'failed' || apiConnectionError ? errorMessage : null;
+  const timeframesError = loadingState === 'failed' || apiConnectionError ? errorMessage : null;
+  const dataError = loadingState === 'failed' ? errorMessage : null;
+
   // Determine if the load button should be disabled
-  const isLoadButtonDisabled = !selectedSymbol || !selectedTimeframe || dataLoading;
+  const isLoadButtonDisabled = !currentSymbol || !currentTimeframe || dataLoading;
 
   // Render a summary of the loaded data
   const renderDataSummary = () => {
@@ -320,8 +129,8 @@ const DataViewer: React.FC = () => {
         <h4>Data Summary</h4>
         <p>Symbol: {metadata.symbol}</p>
         <p>Timeframe: {metadata.timeframe}</p>
-        <p>Date Range: {metadata.start_date} to {metadata.end_date}</p>
-        <p>Total Points: {metadata.point_count}</p>
+        <p>Date Range: {metadata.start} to {metadata.end}</p>
+        <p>Total Points: {metadata.points}</p>
         <p>Sample Data (first 3 points):</p>
         <div className="sample-data">
           <table>
@@ -354,7 +163,14 @@ const DataViewer: React.FC = () => {
   };
 
   return (
-    <Card title="Data Viewer Example">
+    <Card title="Data Viewer Example (Redux)">
+      {apiConnectionError && (
+        <div className="api-connection-error" style={{ padding: '10px', backgroundColor: '#fff3cd', color: '#856404', borderRadius: '4px', marginBottom: '15px' }}>
+          <p><strong>Backend Connection Issue:</strong> Could not connect to the backend service. Using fallback data for demonstration.</p>
+          <p>Error: Cannot resolve hostname 'backend:8000'. If running locally outside Docker, try changing the API URL in the config.</p>
+        </div>
+      )}
+      
       <div className="data-selection-container">
         <div className="selection-row">
           <label>Symbol:</label>
@@ -365,13 +181,33 @@ const DataViewer: React.FC = () => {
             </>
           ) : symbolsError ? (
             <>
-              <ErrorMessage message={symbolsError.message || "Failed to load symbols"} />
+              <Select
+                value={currentSymbol || ''}
+                options={FALLBACK_SYMBOLS.map(s => ({ value: s, label: s }))}
+                onChange={handleSymbolChange}
+                placeholder="Select a symbol"
+              />
+              <span className="error-note" style={{ fontSize: '0.8rem', color: 'orange', marginLeft: '8px' }}>
+                Using fallback data
+              </span>
             </>
           ) : symbols && symbols.length > 0 ? (
             <>
               <Select
-                value={selectedSymbol || ''}
-                options={symbols.map(s => ({ value: s.symbol, label: s.name || s.symbol }))}
+                value={currentSymbol || ''}
+                options={symbols.map(s => {
+                  // Handle both string and object formats for symbols
+                  if (typeof s === 'string') {
+                    return { value: s, label: s };
+                  } else if (typeof s === 'object' && s !== null) {
+                    // If symbol is an object, extract the symbol name and use it for both value and label
+                    const symbolId = s.symbol || s.name || JSON.stringify(s);
+                    const symbolLabel = s.name || s.symbol || JSON.stringify(s);
+                    return { value: symbolId, label: symbolLabel };
+                  }
+                  // Fallback for unexpected types
+                  return { value: String(s), label: String(s) };
+                })}
                 onChange={handleSymbolChange}
                 placeholder="Select a symbol"
               />
@@ -381,7 +217,7 @@ const DataViewer: React.FC = () => {
             </>
           ) : (
             <>
-              <div>No symbols available (but API call completed)</div>
+              <div>No symbols available</div>
             </>
           )}
         </div>
@@ -396,8 +232,8 @@ const DataViewer: React.FC = () => {
           ) : timeframesError ? (
             <>
               <Select
-                value={selectedTimeframe || ''}
-                options={timeframes?.map(t => ({ value: t.id, label: t.name })) || []}
+                value={currentTimeframe || ''}
+                options={FALLBACK_TIMEFRAMES.map(t => ({ value: t.id, label: t.name }))}
                 onChange={handleTimeframeChange}
                 placeholder="Select a timeframe"
               />
@@ -408,8 +244,20 @@ const DataViewer: React.FC = () => {
           ) : timeframes && timeframes.length > 0 ? (
             <>
               <Select
-                value={selectedTimeframe || ''}
-                options={timeframes.map(t => ({ value: t.id, label: t.name }))}
+                value={currentTimeframe || ''}
+                options={timeframes.map(t => {
+                  // Handle both string and object formats for timeframes
+                  if (typeof t === 'string') {
+                    return { value: t, label: t };
+                  } else if (typeof t === 'object' && t !== null) {
+                    // If timeframe is an object, extract the id and name
+                    const timeframeId = t.id || t.value || String(t);
+                    const timeframeLabel = t.name || t.label || String(t);
+                    return { value: timeframeId, label: timeframeLabel };
+                  }
+                  // Fallback for unexpected types
+                  return { value: String(t), label: String(t) };
+                })}
                 onChange={handleTimeframeChange}
                 placeholder="Select a timeframe"
               />
@@ -419,7 +267,7 @@ const DataViewer: React.FC = () => {
             </>
           ) : (
             <>
-              <div>No timeframes available (but API call completed)</div>
+              <div>No timeframes available</div>
             </>
           )}
         </div>
@@ -431,19 +279,19 @@ const DataViewer: React.FC = () => {
           {dataLoading ? 'Loading...' : 'Load Data'}
         </Button>
         
-        {/* Added reload buttons for debugging */}
+        {/* Added reload button for debugging */}
         <div style={{ marginTop: '10px' }}>
-          <Button onClick={handleReloadSymbols} size="small" variant="secondary">
-            Reload Symbols
+          <Button onClick={handleReloadMetadata} size="small" variant="secondary">
+            Reload Metadata
           </Button>
-          <Button onClick={handleReloadTimeframes} size="small" variant="secondary" style={{ marginLeft: '8px' }}>
-            Reload Timeframes
+          <Button onClick={resetData} size="small" variant="secondary" style={{ marginLeft: '8px' }}>
+            Clear Data
           </Button>
         </div>
       </div>
 
       {dataError && (
-        <ErrorMessage message={dataError.message} />
+        <ErrorMessage message={dataError} />
       )}
 
       {dataLoading && (

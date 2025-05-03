@@ -1,5 +1,5 @@
 import React from 'react';
-import config from '@/config';
+import { config } from '@/config';
 
 interface DevModeIndicatorProps {
   position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
@@ -8,7 +8,7 @@ interface DevModeIndicatorProps {
 export const DevModeIndicator: React.FC<DevModeIndicatorProps> = ({ 
   position = 'bottom-right'
 }) => {
-  if (!config.debug) {
+  if (!config.features.enableDevTools) {
     return null;
   }
 

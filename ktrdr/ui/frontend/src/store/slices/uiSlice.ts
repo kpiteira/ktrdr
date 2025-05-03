@@ -1,8 +1,8 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { ThemeMode } from '@/types/ui';
+import type { ThemeMode } from '../types/ui';
 
 // Define the UI state interface
-interface UIState {
+export interface UIState {
   theme: ThemeMode;
   sidebarOpen: boolean;
   currentView: string;

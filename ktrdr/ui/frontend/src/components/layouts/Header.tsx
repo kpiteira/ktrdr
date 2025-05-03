@@ -4,6 +4,13 @@ import { config } from '@/config';
 import { useAppDispatch } from '@/store/hooks';
 import { toggleSidebar } from '@/store/slices/uiSlice';
 
+// Info level logging for configuration
+console.log('Config loaded in Header:', config);
+
+// Fallback values for app information if missing in config
+const appName = config.app?.name || 'KTRDR Trading Platform';
+const appVersion = config.app?.version || '0.1.0';
+
 interface HeaderProps {
   onMenuToggle?: () => void;
 }
@@ -28,10 +35,10 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
             <path d="M3 18H21V16H3V18ZM3 13H21V11H3V13ZM3 6V8H21V6H3Z" fill="currentColor" />
           </svg>
         </button>
-        <h1 className="app-title">{config.app.name}</h1>
+        <h1 className="app-title">{appName}</h1>
       </div>
       <div className="header-right">
-        <span className="app-version">v{config.app.version}</span>
+        <span className="app-version">v{appVersion}</span>
         <button 
           className="theme-toggle" 
           onClick={toggleTheme} 
