@@ -567,32 +567,68 @@ class LocalDataLoader:
             return None
             
         try:
-            # Read just the first and last rows to get date range
-            first_row = pd.read_csv(file_path, nrows=1, index_col=0, parse_dates=True)
+            # More efficient approach that doesn't scan the entire file
+            # Read just the first row to get the start date
+            with open(file_path, 'r') as f:
+                # Read the header line
+                header = f.readline().strip()
+                # Read the first data line
+                first_line = f.readline().strip()
             
-            # Use pandas options to read from the end of the file
-            with pd.option_context('display.max_rows', None):
-                # Determine the file size and number of lines
-                file_size = os.path.getsize(file_path)
+            # For the last line, use a more efficient approach
+            last_line = ""
+            with open(file_path, 'rb') as f:
+                # Seek to the end of the file
+                try:
+                    f.seek(-2, os.SEEK_END)  # Go to the 2nd last byte
+                    # Keep seeking backwards until we find a newline
+                    while f.read(1) != b'\n':
+                        f.seek(-2, os.SEEK_CUR)
+                except OSError:
+                    # In case the file is too small, just seek to the beginning
+                    f.seek(0)
                 
-                # For large files, only read the last chunk
-                if file_size > 10_000:  # If file is larger than 10KB
-                    logger.debug(f"Large file detected ({file_size} bytes), reading only tail portion")
-                    last_rows = pd.read_csv(file_path, index_col=0, parse_dates=True, skipfooter=0, 
-                                           nrows=5, skiprows=lambda x: 0 < x < max(0, sum(1 for _ in open(file_path)) - 5))
-                else:
-                    # For small files, just load everything
-                    logger.debug(f"Small file detected ({file_size} bytes), loading entire file")
-                    df = pd.read_csv(file_path, index_col=0, parse_dates=True)
-                    first_row = df.iloc[[0]]
-                    last_rows = df.iloc[[-1]]
+                # Now read the last line
+                last_line = f.readline().decode().strip()
             
-            start_date = first_row.index[0]
-            end_date = last_rows.index[-1]
+            # If we couldn't get the last line, fall back to reading the whole file
+            if not last_line:
+                logger.debug("Couldn't read last line efficiently, falling back to pandas")
+                df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+                return df.index[0], df.index[-1]
             
-            logger.info(f"Data for {symbol} ({timeframe}) covers period from {start_date.date()} to {end_date.date()}")
-            return start_date, end_date
+            # Parse the CSV lines manually
+            # First determine the column index of the date
+            headers = header.split(',')
+            date_col_idx = 0  # Default to first column
             
+            # Get the values from the first and last lines
+            first_values = first_line.split(',')
+            last_values = last_line.split(',')
+            
+            # Parse the dates
+            try:
+                start_date = pd.to_datetime(first_values[date_col_idx])
+                end_date = pd.to_datetime(last_values[date_col_idx])
+                
+                logger.info(f"Data for {symbol} ({timeframe}) covers period from {start_date.date()} to {end_date.date()}")
+                return start_date, end_date
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Error parsing dates from CSV: {e}, falling back to pandas")
+                
+                # Fall back to pandas if we can't parse the dates
+                df = pd.read_csv(file_path, index_col=0, parse_dates=True, nrows=1)
+                first_row = df
+                
+                # For the last row, just read the entire file but only the last row
+                last_row = pd.read_csv(file_path, index_col=0, parse_dates=True, skiprows=lambda x: x > 0 and x < max(0, sum(1 for _ in open(file_path)) - 1))
+                
+                start_date = first_row.index[0]
+                end_date = last_row.index[-1]
+                
+                logger.info(f"Data for {symbol} ({timeframe}) covers period from {start_date.date()} to {end_date.date()}")
+                return start_date, end_date
+                
         except pd.errors.EmptyDataError:
             logger.error(f"Empty data file: {file_path}")
             raise DataFormatError(

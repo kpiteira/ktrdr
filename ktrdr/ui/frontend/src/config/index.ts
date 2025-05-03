@@ -1,28 +1,69 @@
 /**
  * Application configuration
- * Provides type-safe access to environment variables
+ * Central configuration file for the KTRDR frontend application
  */
 
-interface AppConfig {
-  api: {
-    baseUrl: string;
-  };
-  app: {
-    name: string;
-    version: string;
-  };
-  debug: boolean;
-}
-
-export const config: AppConfig = {
-  api: {
-    baseUrl: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+// Environment-specific configurations
+const environments = {
+  development: {
+    api: {
+      baseUrl: 'http://localhost:8000',  // Adjust if your backend runs on a different port
+      prefix: '/api/v1'
+    }
   },
-  app: {
-    name: import.meta.env.VITE_APP_NAME || 'KTRDR Trading Platform',
-    version: import.meta.env.VITE_APP_VERSION || '0.1.0',
+  production: {
+    api: {
+      baseUrl: window.location.origin,  // Use same origin in production
+      prefix: '/api/v1'
+    }
   },
-  debug: import.meta.env.VITE_DEBUG_MODE === 'true',
+  test: {
+    api: {
+      baseUrl: 'http://localhost:8000',
+      prefix: '/api/v1'
+    }
+  }
 };
 
-export default config;
+// Determine current environment
+const currentEnv = process.env.NODE_ENV || 'development';
+
+/**
+ * Global configuration object
+ */
+export const config = {
+  // Environment
+  environment: currentEnv,
+  isDevelopment: currentEnv === 'development',
+  isProduction: currentEnv === 'production',
+  isTest: currentEnv === 'test',
+  
+  // Application information
+  app: {
+    name: 'KTRDR Trading Platform',
+    version: '0.1.0',
+    description: 'Advanced trading platform for technical analysis and algo trading'
+  },
+  
+  // API configuration
+  api: {
+    // Combine base URL and prefix for full API base URL
+    baseUrl: environments[currentEnv as keyof typeof environments].api.baseUrl,
+    prefix: environments[currentEnv as keyof typeof environments].api.prefix,
+    
+    // Timeouts
+    defaultTimeout: 30000,  // 30 seconds
+    
+    // Cache settings
+    defaultCacheTtl: 60 * 1000,  // 1 minute
+  },
+  
+  // Feature flags
+  features: {
+    enableDevTools: currentEnv === 'development',
+    enableApiMocks: false,
+    enablePerformanceMonitoring: currentEnv === 'production'
+  }
+};
+
+export default { config };

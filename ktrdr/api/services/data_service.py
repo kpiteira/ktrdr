@@ -8,6 +8,7 @@ import logging
 from typing import Dict, List, Optional, Union, Any
 from datetime import datetime
 import pandas as pd
+import time
 
 from ktrdr import get_logger, log_entry_exit, log_performance, log_data_operation
 from ktrdr.data import DataManager
@@ -53,7 +54,7 @@ class DataService(BaseService):
         logger=logger,
         is_retryable=lambda e: isinstance(e, DataError) and not isinstance(e, DataNotFoundError)
     )
-    def load_data(
+    async def load_data(
         self,
         symbol: str,
         timeframe: str,
@@ -155,73 +156,74 @@ class DataService(BaseService):
             result["metadata"] = {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "start": df.index.min().isoformat(),
-                "end": df.index.max().isoformat(),
-                "points": len(df)
+                "start_date": df.index.min().isoformat(),
+                "end_date": df.index.max().isoformat(),
+                "point_count": len(df)
             }
             
         return result
     
     @log_entry_exit(logger=logger)
-    def get_available_symbols(self) -> List[Dict[str, Any]]:
+    @log_performance(threshold_ms=100, logger=logger)
+    async def get_available_symbols(self) -> List[Dict[str, Any]]:
         """
         Get list of available symbols with metadata.
         
         Returns:
             List of symbol information dictionaries
         """
+        start_time = time.time()
+        logger.info("Starting get_available_symbols (optimized method)")
+        
         # Get available data files from the data_loader
         available_files = self.data_manager.data_loader.get_available_data_files()
         
         # Extract unique symbols from the available files
         symbols = sorted(set(symbol for symbol, _ in available_files))
         
+        # Create a map of symbol to timeframes
+        symbol_timeframes = {}
+        for symbol, timeframe in available_files:
+            if symbol not in symbol_timeframes:
+                symbol_timeframes[symbol] = []
+            symbol_timeframes[symbol].append(timeframe)
+        
+        # Build result with minimal information (without loading files)
         result = []
         for symbol in symbols:
-            # Get timeframes available for this symbol
-            timeframes = self.get_available_timeframes_for_symbol(symbol)
+            timeframes = sorted(symbol_timeframes.get(symbol, []))
             
-            # Get a sample data file to extract more information
-            sample_timeframe = timeframes[0] if timeframes else None
-            
-            if sample_timeframe:
+            # Get date range using the lightweight method (no full data loading)
+            date_range = None
+            if timeframes:
                 try:
-                    # Try to get summary information
-                    summary = self.data_manager.get_data_summary(symbol, sample_timeframe)
-                    
-                    symbol_info = {
-                        "symbol": symbol,
-                        "name": symbol,  # Using symbol as name for now
-                        "type": "unknown",  # Could be enhanced with symbol type detection
-                        "exchange": "unknown",  # Could be enhanced with exchange information
-                        "available_timeframes": timeframes
-                    }
-                    result.append(symbol_info)
+                    # Use the optimized get_data_date_range method which doesn't load full files
+                    date_range = self.data_manager.data_loader.get_data_date_range(symbol, timeframes[0])
                 except Exception as e:
-                    logger.warning(f"Error getting information for {symbol}: {str(e)}")
-                    # Still include the symbol with minimal information
-                    result.append({
-                        "symbol": symbol,
-                        "name": symbol,
-                        "type": "unknown",
-                        "exchange": "unknown",
-                        "available_timeframes": timeframes
-                    })
-            else:
-                # Include symbol with empty timeframes
-                result.append({
-                    "symbol": symbol,
-                    "name": symbol,
-                    "type": "unknown",
-                    "exchange": "unknown",
-                    "available_timeframes": []
-                })
+                    logger.warning(f"Error getting date range for {symbol}: {str(e)}")
+            
+            symbol_info = {
+                "symbol": symbol,
+                "name": symbol,  # Using symbol as name for now
+                "type": "unknown",  # Could be enhanced with symbol type detection
+                "exchange": "unknown",  # Could be enhanced with exchange information
+                "available_timeframes": timeframes
+            }
+            
+            # Add date range if available
+            if date_range:
+                start_date, end_date = date_range
+                symbol_info["start_date"] = start_date.isoformat()
+                symbol_info["end_date"] = end_date.isoformat()
+            
+            result.append(symbol_info)
         
-        logger.info(f"Retrieved {len(result)} available symbols")
+        elapsed = time.time() - start_time
+        logger.info(f"Retrieved {len(result)} available symbols in {elapsed:.3f}s (optimized)")
         return result
     
     @log_entry_exit(logger=logger)
-    def get_available_timeframes_for_symbol(self, symbol: str) -> List[str]:
+    async def get_available_timeframes_for_symbol(self, symbol: str) -> List[str]:
         """
         Get available timeframes for a specific symbol.
         
@@ -241,7 +243,7 @@ class DataService(BaseService):
         return timeframes
     
     @log_entry_exit(logger=logger)
-    def get_available_timeframes(self) -> List[Dict[str, str]]:
+    async def get_available_timeframes(self) -> List[Dict[str, str]]:
         """
         Get list of available timeframes with metadata.
         
@@ -306,7 +308,8 @@ class DataService(BaseService):
         return timeframes
     
     @log_entry_exit(logger=logger, log_args=True)
-    def get_data_range(self, symbol: str, timeframe: str) -> Dict[str, Any]:
+    @log_performance(threshold_ms=500, logger=logger)
+    async def get_data_range(self, symbol: str, timeframe: str) -> Dict[str, Any]:
         """
         Get the available date range for a symbol and timeframe.
         
@@ -321,15 +324,24 @@ class DataService(BaseService):
             DataNotFoundError: If data is not found
         """
         try:
-            # Get data summary from the data manager
-            summary = self.data_manager.get_data_summary(symbol, timeframe)
+            # Use lightweight date range method instead of full data summary
+            date_range = self.data_manager.data_loader.get_data_date_range(symbol, timeframe)
+            
+            if date_range is None:
+                raise DataNotFoundError(
+                    message=f"Data not found for {symbol} ({timeframe})",
+                    error_code="DATA-FileNotFound",
+                    details={"symbol": symbol, "timeframe": timeframe}
+                )
+                
+            start_date, end_date = date_range
             
             result = {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "start_date": summary["start_date"],
-                "end_date": summary["end_date"],
-                "point_count": summary["rows"]
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "point_count": None  # Note: We don't have the count without loading the full file
             }
             
             logger.info(f"Retrieved date range for {symbol} ({timeframe})")

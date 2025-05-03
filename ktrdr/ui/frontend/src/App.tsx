@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ThemeProvider, MainLayout } from '@/components/layouts';
 import { NotificationProvider, NotificationContainer, DevModeIndicator } from '@/components/common';
 import { Card, Button } from '@/components/common';
 import { useNotification } from '@/components/common';
+import { DataViewer } from '@/examples';
+import { config } from '@/config';
 
 function App() {
   const { addNotification } = useNotification();
@@ -14,6 +16,20 @@ function App() {
       duration: 5000
     });
   };
+  
+  // Debug API configuration
+  useEffect(() => {
+    try {
+      // Log the API configuration
+      console.log('API Configuration:', {
+        baseUrl: config.api.baseUrl || 'Not defined',
+        environment: process.env.NODE_ENV,
+        apiPrefix: config.api.prefix || 'Not defined'
+      });
+    } catch (error) {
+      console.error('Could not load API configuration:', error);
+    }
+  }, []);
 
   return (
     <ThemeProvider>
@@ -32,15 +48,21 @@ function App() {
               <li>Error and loading state components</li>
               <li>Notification system</li>
               <li>Developer mode indicators</li>
+              <li>API client and data access layer</li>
             </ul>
             <Button 
               onClick={showSampleNotification}
               variant="primary"
-              style={{ marginTop: '16px' }}
+              style={{ marginTop: '16px', marginRight: '16px' }}
             >
               Show Sample Notification
             </Button>
           </Card>
+          
+          {/* API Integration Test Component */}
+          <div style={{ marginTop: '32px' }}>
+            <DataViewer />
+          </div>
         </MainLayout>
         <NotificationContainer />
         <DevModeIndicator position="bottom-right" />

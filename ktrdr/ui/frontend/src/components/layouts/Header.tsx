@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTheme } from './ThemeProvider';
-import config from '@/config';
+import { config } from '@/config';
 import { useAppDispatch } from '@/store/hooks';
 import { toggleSidebar } from '@/store/slices/uiSlice';
 
