@@ -88,7 +88,7 @@ VOLUME ["$APP_HOME/data", "$APP_HOME/logs"]
 
 # Configure health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -fs http://localhost:8000/api/health || exit 1
+    CMD curl -fs http://localhost:8000/api/v1/health || exit 1
 
 # Expose the API port
 EXPOSE 8000

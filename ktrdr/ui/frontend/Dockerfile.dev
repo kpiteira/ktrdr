@@ -1,0 +1,18 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies first (for better caching)
+COPY package.json package-lock.json ./
+
+# Use ci for more reproducible builds and clean installation
+RUN npm ci
+
+# Don't copy the source code - it will be mounted as a volume in docker-compose
+# This prevents code changes from forcing npm reinstalls
+
+# Expose port
+EXPOSE 3000
+
+# Start development server with host set to allow external connections
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

@@ -21,7 +21,7 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=WARNING
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -40,6 +40,38 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
+
+  # Frontend React/TypeScript service - Production configuration
+  frontend:
+    build:
+      context: ./ktrdr/ui/frontend
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
+    image: ktrdr-frontend:latest
+    container_name: ktrdr-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"  # Use nginx to serve static files on port 80
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=production
+      - VITE_API_BASE_URL=http://backend:8000/api/v1
+    networks:
+      - ktrdr-network
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   # Redis for caching and messaging
   redis:

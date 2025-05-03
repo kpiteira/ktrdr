@@ -4,6 +4,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+      # Cache from the previously built image for faster rebuilds
+      cache_from:
+        - ktrdr-backend:dev
     image: ktrdr-backend:dev
     container_name: ktrdr-backend
     restart: unless-stopped
@@ -29,11 +32,40 @@ services:
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    networks:
+      - ktrdr-network
+
+  # Frontend React/TypeScript service - Development configuration
+  frontend:
+    build:
+      context: ./ktrdr/ui/frontend
+      dockerfile: Dockerfile.dev
+      # Cache from the previously built image for faster rebuilds
+      cache_from:
+        - ktrdr-frontend:dev
+    image: ktrdr-frontend:dev
+    container_name: ktrdr-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      # Mount source code for hot-reloading
+      - ./ktrdr/ui/frontend:/app
+      # Prevent node_modules from being overwritten by host volume
+      - /app/node_modules
+      # Add npm cache volume for faster npm installs
+      - npm-cache:/root/.npm
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://backend:8000/api/v1
+      - VITE_DEBUG_MODE=true
+    depends_on:
+      - backend
     networks:
       - ktrdr-network
 
@@ -44,3 +76,4 @@ networks:
 volumes:
   pip-cache:
   uv-cache:
+  npm-cache:

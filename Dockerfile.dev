@@ -29,11 +29,11 @@ RUN pip install --no-cache-dir uv
 RUN mkdir -p /root/.cache/pip /root/.cache/uv && \
     chmod -R 777 /root/.cache/pip /root/.cache/uv
 
-# Copy dependency files
+# Copy ONLY dependency files first - this is the key caching optimization
 COPY requirements.txt requirements-dev.txt ./
 
 # Install Python dependencies with UV
-# Use cache directories to speed up subsequent builds
+# This layer will be cached as long as requirements files don't change
 RUN uv pip install --system -r requirements.txt -r requirements-dev.txt
 
 # Create non-root user for better security even in development
@@ -44,15 +44,15 @@ RUN useradd -m ktrdr && \
 RUN mkdir -p /app/logs /app/data /app/output /app/tests && \
     chown -R ktrdr:ktrdr /app/logs /app/data /app/output /app/tests
 
+# We don't copy the application code here - it will be mounted as a volume
+# This way code changes don't trigger rebuilds
+
 # Switch to non-root user
 USER ktrdr
-
-# Copy application code (will be mounted in docker-compose for development)
-COPY --chown=ktrdr:ktrdr . .
 
 # Command to run the application with hot-reload enabled
 CMD ["uvicorn", "ktrdr.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:8000/api/health || exit 1
+  CMD curl -f http://localhost:8000/api/v1/health || exit 1

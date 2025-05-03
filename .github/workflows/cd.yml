@@ -162,7 +162,7 @@ jobs:
           # Wait for the service to start (adjust timeout as needed)
           sleep 30
           # Check if the service is available
-          curl --fail --max-time 10 http://${{ secrets.DEPLOY_HOST }}:8000/api/health || exit 1
+          curl --fail --max-time 10 http://${{ secrets.DEPLOY_HOST }}:8000/api/v1/health || exit 1
       
       - name: Send deployment notification
         uses: rtCamp/action-slack-notify@v2

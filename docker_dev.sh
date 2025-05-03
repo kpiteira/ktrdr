@@ -17,8 +17,14 @@ function print_help() {
     echo -e "  ${GREEN}stop${NC}         Stop development environment"
     echo -e "  ${GREEN}restart${NC}      Restart development environment"
     echo -e "  ${GREEN}logs${NC}         View logs from running containers"
-    echo -e "  ${GREEN}shell${NC}        Open a shell in the backend container"
-    echo -e "  ${GREEN}rebuild${NC}      Rebuild containers (preserving data)"
+    echo -e "  ${GREEN}logs-backend${NC} View logs from backend container"
+    echo -e "  ${GREEN}logs-frontend${NC} View logs from frontend container"
+    echo -e "  ${GREEN}shell-backend${NC} Open a shell in the backend container"
+    echo -e "  ${GREEN}shell-frontend${NC} Open a shell in the frontend container"
+    echo -e "  ${GREEN}rebuild${NC}      Rebuild containers with caching (faster)"
+    echo -e "  ${GREEN}rebuild-nocache${NC} Rebuild containers without cache (clean build)"
+    echo -e "  ${GREEN}rebuild-backend${NC} Rebuild only the backend container"
+    echo -e "  ${GREEN}rebuild-frontend${NC} Rebuild only the frontend container"
     echo -e "  ${GREEN}clean${NC}        Stop containers and remove volumes"
     echo -e "  ${GREEN}test${NC}         Run tests in the backend container"
     echo -e "  ${GREEN}lint${NC}         Run linting checks (flake8, mypy, black)"
@@ -34,6 +40,7 @@ function start_dev() {
     echo -e "${GREEN}Development environment started!${NC}"
     echo -e "API available at: ${YELLOW}http://localhost:8000${NC}"
     echo -e "API docs available at: ${YELLOW}http://localhost:8000/api/docs${NC}"
+    echo -e "Frontend available at: ${YELLOW}http://localhost:3000${NC}"
 }
 
 function stop_dev() {
@@ -54,17 +61,71 @@ function view_logs() {
     docker-compose logs -f
 }
 
-function open_shell() {
+function view_backend_logs() {
+    echo -e "${BLUE}Showing logs from backend container...${NC}"
+    echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
+    docker-compose logs -f backend
+}
+
+function view_frontend_logs() {
+    echo -e "${BLUE}Showing logs from frontend container...${NC}"
+    echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
+    docker-compose logs -f frontend
+}
+
+function open_backend_shell() {
     echo -e "${BLUE}Opening shell in backend container...${NC}"
     docker-compose exec backend bash
 }
 
+function open_frontend_shell() {
+    echo -e "${BLUE}Opening shell in frontend container...${NC}"
+    docker-compose exec frontend sh
+}
+
 function rebuild_containers() {
-    echo -e "${BLUE}Rebuilding KTRDR containers...${NC}"
+    echo -e "${BLUE}Rebuilding KTRDR containers with optimized caching...${NC}"
+    docker-compose down
+    # Use our optimized build script
+    ./build_docker_dev.sh
+    docker-compose up -d
+    echo -e "${GREEN}Containers rebuilt and started!${NC}"
+}
+
+function rebuild_nocache() {
+    echo -e "${BLUE}Rebuilding KTRDR containers without cache (clean build)...${NC}"
     docker-compose down
     docker-compose build --no-cache
     docker-compose up -d
-    echo -e "${GREEN}Containers rebuilt and started!${NC}"
+    echo -e "${GREEN}Containers rebuilt from scratch and started!${NC}"
+}
+
+function rebuild_backend() {
+    echo -e "${BLUE}Rebuilding backend container...${NC}"
+    docker-compose down backend
+    # Build with optimized caching
+    export DOCKER_BUILDKIT=1
+    docker build \
+      --build-arg BUILDKIT_INLINE_CACHE=1 \
+      --cache-from ktrdr-backend:dev \
+      -f Dockerfile.dev \
+      -t ktrdr-backend:dev .
+    docker-compose up -d backend
+    echo -e "${GREEN}Backend container rebuilt and started!${NC}"
+}
+
+function rebuild_frontend() {
+    echo -e "${BLUE}Rebuilding frontend container...${NC}"
+    docker-compose down frontend
+    # Build with optimized caching
+    export DOCKER_BUILDKIT=1
+    docker build \
+      --build-arg BUILDKIT_INLINE_CACHE=1 \
+      --cache-from ktrdr-frontend:dev \
+      -f ktrdr/ui/frontend/Dockerfile.dev \
+      -t ktrdr-frontend:dev ./ktrdr/ui/frontend
+    docker-compose up -d frontend
+    echo -e "${GREEN}Frontend container rebuilt and started!${NC}"
 }
 
 function clean_environment() {
@@ -95,6 +156,9 @@ function run_linting() {
     
     echo -e "${BLUE}Checking code style with black...${NC}"
     docker-compose exec backend python -m black --check ktrdr/
+
+    echo -e "${BLUE}Running frontend linting checks...${NC}"
+    docker-compose exec frontend npm run lint
 }
 
 function run_ci_checks() {
@@ -173,11 +237,29 @@ case "$1" in
     logs)
         view_logs
         ;;
-    shell)
-        open_shell
+    logs-backend)
+        view_backend_logs
+        ;;
+    logs-frontend)
+        view_frontend_logs
+        ;;
+    shell-backend)
+        open_backend_shell
+        ;;
+    shell-frontend)
+        open_frontend_shell
         ;;
     rebuild)
         rebuild_containers
+        ;;
+    rebuild-nocache)
+        rebuild_nocache
+        ;;
+    rebuild-backend)
+        rebuild_backend
+        ;;
+    rebuild-frontend)
+        rebuild_frontend
         ;;
     clean)
         clean_environment

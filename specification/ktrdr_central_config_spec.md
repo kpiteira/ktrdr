@@ -865,7 +865,7 @@ def test_api_health():
     from ktrdr import metadata
     
     try:
-        response = requests.get(f"http://127.0.0.1:8001/api/health")
+        response = requests.get(f"http://127.0.0.1:8001/api/v1/health")
         assert response.status_code == 200
         data = response.json()
         assert data["version"] == metadata.VERSION
