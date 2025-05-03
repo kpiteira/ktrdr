@@ -1,8 +1,9 @@
 name: KTRDR Docker Release
 
 on:
-  release:
-    types: [published]
+  # Removing automated triggers
+  # release:
+  #   types: [published]
   workflow_dispatch:
     inputs:
       version:

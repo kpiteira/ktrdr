@@ -7,7 +7,9 @@ FROM python:3.11-slim as dev
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     ENVIRONMENT=development \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PIP_CACHE_DIR=/root/.cache/pip \
+    UV_CACHE_DIR=/root/.cache/uv
 
 # Set work directory
 WORKDIR /app
@@ -20,19 +22,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install UV for package management
+RUN pip install --no-cache-dir uv
+
+# Create cache directories with appropriate permissions
+RUN mkdir -p /root/.cache/pip /root/.cache/uv && \
+    chmod -R 777 /root/.cache/pip /root/.cache/uv
+
+# Copy dependency files
 COPY requirements.txt requirements-dev.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+# Install Python dependencies with UV
+# Use cache directories to speed up subsequent builds
+RUN uv pip install --system -r requirements.txt -r requirements-dev.txt
 
 # Create non-root user for better security even in development
 RUN useradd -m ktrdr && \
     chown -R ktrdr:ktrdr /app
 
+# Create necessary directories with correct permissions
+RUN mkdir -p /app/logs /app/data /app/output /app/tests && \
+    chown -R ktrdr:ktrdr /app/logs /app/data /app/output /app/tests
+
 # Switch to non-root user
 USER ktrdr
-
-# Create necessary directories with correct permissions
-RUN mkdir -p /app/logs /app/data /app/output
 
 # Copy application code (will be mounted in docker-compose for development)
 COPY --chown=ktrdr:ktrdr . .

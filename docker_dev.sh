@@ -21,6 +21,8 @@ function print_help() {
     echo -e "  ${GREEN}rebuild${NC}      Rebuild containers (preserving data)"
     echo -e "  ${GREEN}clean${NC}        Stop containers and remove volumes"
     echo -e "  ${GREEN}test${NC}         Run tests in the backend container"
+    echo -e "  ${GREEN}lint${NC}         Run linting checks (flake8, mypy, black)"
+    echo -e "  ${GREEN}ci${NC}           Run CI checks locally (linting, tests)"
     echo -e "  ${GREEN}prod${NC}         Start the production environment"
     echo -e "  ${GREEN}health${NC}       Check container health status"
     echo -e "  ${GREEN}help${NC}         Show this help message"
@@ -78,7 +80,72 @@ function clean_environment() {
 
 function run_tests() {
     echo -e "${BLUE}Running tests in backend container...${NC}"
-    docker-compose exec backend pytest
+    docker-compose exec backend python -m pytest
+}
+
+function run_linting() {
+    echo -e "${BLUE}Running linting checks...${NC}"
+    
+    echo -e "${BLUE}Running flake8...${NC}"
+    docker-compose exec backend python -m flake8 ktrdr/ --count --select=E9,F63,F7,F82 --show-source --statistics
+    docker-compose exec backend python -m flake8 ktrdr/ --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
+    
+    echo -e "${BLUE}Running mypy...${NC}"
+    docker-compose exec backend python -m mypy ktrdr/
+    
+    echo -e "${BLUE}Checking code style with black...${NC}"
+    docker-compose exec backend python -m black --check ktrdr/
+}
+
+function run_ci_checks() {
+    echo -e "${BLUE}Running CI checks locally...${NC}"
+    
+    if ! command -v act &> /dev/null; then
+        echo -e "${YELLOW}The 'act' command is not installed. This is needed to run GitHub Actions locally.${NC}"
+        echo -e "${BLUE}You can install it with: brew install act (macOS) or follow instructions at https://github.com/nektos/act${NC}"
+        read -p "Would you like to continue with basic checks instead? [y/N] " response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            echo -e "${BLUE}Running basic checks...${NC}"
+        else
+            exit 1
+        fi
+
+        # Run linting
+        run_linting
+        
+        # Run tests
+        run_tests
+    else
+        echo -e "${BLUE}Running GitHub Actions workflows locally with act...${NC}"
+        
+        # Create cache directories if they don't exist
+        mkdir -p ~/.cache/pip ~/.cache/uv
+        
+        # Detect architecture
+        ARCH=$(uname -m)
+        ARCH_FLAG=""
+        if [[ "$ARCH" == "arm64" ]]; then
+            echo -e "${YELLOW}Detected Apple Silicon (M-series) chip, using appropriate container architecture...${NC}"
+            ARCH_FLAG="--container-architecture linux/amd64"
+        fi
+        
+        echo -e "${BLUE}Using cached dependencies to speed up build...${NC}"
+        
+        # Run act with the workflow file and architecture flag if needed
+        # Important: Specify push event explicitly to prevent -v flag from being interpreted as event
+        if [[ "$ARCH" == "arm64" ]]; then
+            act push -W .github/workflows/ci.yml $ARCH_FLAG
+        else
+            act push -W .github/workflows/ci.yml
+        fi
+            
+        CI_EXIT_CODE=$?
+        if [ $CI_EXIT_CODE -eq 0 ]; then
+            echo -e "${GREEN}CI checks completed successfully!${NC}"
+        else
+            echo -e "${RED}CI checks failed with exit code: $CI_EXIT_CODE${NC}"
+        fi
+    fi
 }
 
 function start_prod() {
@@ -117,6 +184,12 @@ case "$1" in
         ;;
     test)
         run_tests
+        ;;
+    lint)
+        run_linting
+        ;;
+    ci)
+        run_ci_checks
         ;;
     prod)
         start_prod

@@ -73,7 +73,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy from builder stage
+# Copy from builder stage - only what's needed for production
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app/ktrdr $APP_HOME/ktrdr

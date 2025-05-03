@@ -12,6 +12,8 @@ services:
     volumes:
       # Mount source code for hot-reloading
       - ./ktrdr:/app/ktrdr
+      # Mount tests directory for running tests
+      - ./tests:/app/tests
       # Mount data and logs directories for persistence
       - ./data:/app/data
       - ./logs:/app/logs
@@ -19,6 +21,9 @@ services:
       - ./config:/app/config:ro
       # Mount output directory for visualization files
       - ./output:/app/output
+      # Cache directories for pip and uv
+      - pip-cache:/root/.cache/pip
+      - uv-cache:/root/.cache/uv
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
@@ -36,4 +41,6 @@ networks:
   ktrdr-network:
     driver: bridge
 
-volumes: {}
+volumes:
+  pip-cache:
+  uv-cache:
