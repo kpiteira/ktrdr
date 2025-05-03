@@ -34,7 +34,8 @@ jobs:
           source .venv/bin/activate
           uv pip install -r requirements.txt
           uv pip install -r requirements-dev.txt
-          uv pip install mkdocs mkdocs-material mkdocstrings[python] mkdocs-awesome-pages-plugin
+          # Ensure documentation tools are installed directly
+          python -m pip install mkdocs mkdocs-material mkdocstrings[python] mkdocs-awesome-pages-plugin
       
       - name: Generate API documentation
         run: |
@@ -51,7 +52,7 @@ jobs:
           source .venv/bin/activate
           # Check if mkdocs.yml exists
           if [ -f mkdocs.yml ]; then
-            mkdocs build --verbose --site-dir public
+            python -m mkdocs build --verbose --site-dir public
           else
             # Create a basic documentation site if no mkdocs.yml exists
             mkdir -p public

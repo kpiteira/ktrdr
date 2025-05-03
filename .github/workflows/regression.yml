@@ -31,7 +31,8 @@ jobs:
           source .venv/bin/activate
           uv pip install -r requirements.txt
           uv pip install -r requirements-dev.txt
-          uv pip install pytest-benchmark pytest-xdist
+          # Ensure testing tools are installed directly
+          python -m pip install pytest pytest-benchmark pytest-xdist
       
       - name: Run regression tests
         run: |
@@ -73,6 +74,7 @@ jobs:
       
       - name: Generate regression test report
         run: |
+          source .venv/bin/activate
           # Generate a markdown report of the regression tests
           echo "# Regression Test Report" > regression-report.md
           echo "Run date: $(date)" >> regression-report.md

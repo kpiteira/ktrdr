@@ -97,17 +97,19 @@ jobs:
           pip install uv
           uv venv
           source .venv/bin/activate
-          uv pip install safety bandit
+          uv pip install -r requirements.txt
+          # Ensure security tools are installed directly
+          python -m pip install safety bandit
       
       - name: Scan dependencies with safety
         run: |
           source .venv/bin/activate
-          safety check -r requirements.txt --full-report
+          python -m safety check -r requirements.txt --full-report
       
       - name: Scan code with bandit
         run: |
           source .venv/bin/activate
-          bandit -r ktrdr/ -f json -o security-report.json
+          python -m bandit -r ktrdr/ -f json -o security-report.json
       
       - name: Upload security report
         uses: actions/upload-artifact@v3
