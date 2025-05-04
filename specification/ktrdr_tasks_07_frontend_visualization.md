@@ -139,14 +139,14 @@ export const SymbolSelector: React.FC = () => {
   - [x] Implement chart destruction and cleanup on unmount
   - [x] Add performance optimizations for chart rendering
 
-- [ ] **Task 8.2**: Develop chart data transformation utilities
-  - [ ] Create data adapters for OHLCV to chart format conversion
-  - [ ] Implement time scale formatting utilities
-  - [ ] Add data preprocessing for missing values
-  - [ ] Create data series helpers for various chart types
-  - [ ] Implement efficient update methods for streaming data
-  - [ ] Add data validation to prevent chart errors
-  - [ ] Create debug utilities for chart data inspection
+- [x] **Task 8.2**: Develop chart data transformation utilities
+  - [x] Create data adapters for OHLCV to chart format conversion
+  - [x] Implement time scale formatting utilities
+  - [x] Add data preprocessing for missing values
+  - [x] Create data series helpers for various chart types
+  - [x] Implement efficient update methods for streaming data
+  - [x] Add data validation to prevent chart errors
+  - [x] Create debug utilities for chart data inspection
 
 ### Chart Components
 - [ ] **Task 8.3**: Implement core chart components
