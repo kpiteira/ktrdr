@@ -2,36 +2,62 @@ import React, { useState, useEffect } from 'react';
 import { TabItem } from '@/types/ui';
 
 interface TabsProps {
-  tabs: TabItem[];
+  items?: TabItem[];
+  tabs?: TabItem[];  // For backward compatibility
+  activeTab?: string;
   defaultTab?: string;
   onChange?: (key: string) => void;
   className?: string;
 }
 
 export const Tabs: React.FC<TabsProps> = ({
+  items,
   tabs,
+  activeTab: controlledActiveTab,
   defaultTab,
   onChange,
   className = '',
 }) => {
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    return defaultTab || (tabs.length > 0 ? tabs[0].key : '');
+  // Determine which array of tabs to use (support both items and tabs props)
+  const tabItems = items || tabs || [];
+  
+  const [internalActiveTab, setInternalActiveTab] = useState<string>(() => {
+    // If activeTab is controlled from outside, use that
+    if (controlledActiveTab) return controlledActiveTab;
+    // Otherwise use defaultTab or first tab
+    return defaultTab || (tabItems.length > 0 ? tabItems[0].key : '');
   });
 
+  // Update internal active tab when controlled active tab changes
   useEffect(() => {
-    if (defaultTab) {
-      setActiveTab(defaultTab);
+    if (controlledActiveTab !== undefined) {
+      setInternalActiveTab(controlledActiveTab);
     }
-  }, [defaultTab]);
+  }, [controlledActiveTab]);
+
+  // Update internal active tab when default tab changes and not controlled
+  useEffect(() => {
+    if (defaultTab && controlledActiveTab === undefined) {
+      setInternalActiveTab(defaultTab);
+    }
+  }, [defaultTab, controlledActiveTab]);
+
+  // Determine the current active tab (controlled or internal)
+  const currentActiveTab = controlledActiveTab !== undefined 
+    ? controlledActiveTab 
+    : internalActiveTab;
 
   const handleTabClick = (key: string) => {
-    setActiveTab(key);
+    if (controlledActiveTab === undefined) {
+      // Only update internal state if not controlled
+      setInternalActiveTab(key);
+    }
     onChange?.(key);
   };
 
   const getActiveTabContent = () => {
-    const tab = tabs.find(tab => tab.key === activeTab);
-    return tab ? tab.content : null;
+    const tab = tabItems.find(tab => tab.key === currentActiveTab);
+    return tab?.content || null;
   };
 
   const tabsClasses = [
@@ -42,29 +68,31 @@ export const Tabs: React.FC<TabsProps> = ({
   return (
     <div className={tabsClasses}>
       <div className="tabs-header" role="tablist">
-        {tabs.map((tab) => (
+        {tabItems.map((tab) => (
           <button
             key={tab.key}
-            className={`tab ${activeTab === tab.key ? 'tab-active' : ''}`}
+            className={`tab ${currentActiveTab === tab.key ? 'tab-active' : ''}`}
             onClick={() => handleTabClick(tab.key)}
             role="tab"
-            aria-selected={activeTab === tab.key}
+            aria-selected={currentActiveTab === tab.key}
             aria-controls={`panel-${tab.key}`}
             id={`tab-${tab.key}`}
-            tabIndex={activeTab === tab.key ? 0 : -1}
+            tabIndex={currentActiveTab === tab.key ? 0 : -1}
           >
             {tab.label}
           </button>
         ))}
       </div>
-      <div 
-        className="tabs-content"
-        role="tabpanel"
-        id={`panel-${activeTab}`}
-        aria-labelledby={`tab-${activeTab}`}
-      >
-        {getActiveTabContent()}
-      </div>
+      {getActiveTabContent() && (
+        <div 
+          className="tabs-content"
+          role="tabpanel"
+          id={`panel-${currentActiveTab}`}
+          aria-labelledby={`tab-${currentActiveTab}`}
+        >
+          {getActiveTabContent()}
+        </div>
+      )}
     </div>
   );
 };

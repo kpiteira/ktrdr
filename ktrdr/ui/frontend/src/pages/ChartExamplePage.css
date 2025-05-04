@@ -1,0 +1,22 @@
+.chart-example-page {
+  width: 100%;
+}
+
+.chart-example-page h1 {
+  margin-bottom: 8px;
+  font-size: 24px;
+}
+
+.chart-example-page p {
+  margin-bottom: 16px;
+  color: #666;
+}
+
+html[data-theme="dark"] .chart-example-page p {
+  color: #aaa;
+}
+
+.chart-card {
+  width: 100%;
+  margin-top: 16px;
+}

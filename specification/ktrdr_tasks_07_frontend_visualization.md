@@ -130,14 +130,14 @@ export const SymbolSelector: React.FC = () => {
 **Value delivered:** Interactive financial charts integrated with the frontend application, allowing users to visualize OHLCV data and indicators.
 
 ### Chart Infrastructure Tasks
-- [ ] **Task 8.1**: Implement TradingView chart integration
-  - [ ] Add Lightweight Charts library integration with TypeScript types
-  - [ ] Create chart container component with responsive sizing
-  - [ ] Implement chart theme synchronization with application theme
-  - [ ] Add chart configuration utilities for common settings
-  - [ ] Create reusable chart factory functions
-  - [ ] Implement chart destruction and cleanup on unmount
-  - [ ] Add performance optimizations for chart rendering
+- [x] **Task 8.1**: Implement TradingView chart integration
+  - [x] Add Lightweight Charts library integration with TypeScript types
+  - [x] Create chart container component with responsive sizing
+  - [x] Implement chart theme synchronization with application theme
+  - [x] Add chart configuration utilities for common settings
+  - [x] Create reusable chart factory functions
+  - [x] Implement chart destruction and cleanup on unmount
+  - [x] Add performance optimizations for chart rendering
 
 - [ ] **Task 8.2**: Develop chart data transformation utilities
   - [ ] Create data adapters for OHLCV to chart format conversion
