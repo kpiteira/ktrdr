@@ -5,7 +5,7 @@ import { ThemeProvider, MainLayout } from '@/components/layouts';
 import { NotificationProvider, NotificationContainer, DevModeIndicator } from '@/components/common';
 import { Card, Button } from '@/components/common';
 import { useNotification } from '@/components/common';
-import { DataViewer } from '@/examples';
+import { DataSelectionPage } from '@/pages';
 import { config } from '@/config';
 
 function App() {
@@ -39,6 +39,7 @@ function App() {
                 <li>Developer mode indicators</li>
                 <li>API client and data access layer</li>
                 <li>Redux state management</li>
+                <li>Data selection components (Task 7.6)</li>
               </ul>
               <Button 
                 onClick={showSampleNotification}
@@ -49,9 +50,9 @@ function App() {
               </Button>
             </Card>
             
-            {/* API Integration Test Component */}
+            {/* Data Selection Components Implementation */}
             <div style={{ marginTop: '32px' }}>
-              <DataViewer />
+              <DataSelectionPage />
             </div>
           </MainLayout>
           <NotificationContainer />

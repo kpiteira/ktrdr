@@ -57,14 +57,14 @@ This document outlines the tasks related to the frontend implementation, chart v
   - [x] Add Redux DevTools configuration for development
 
 ### Basic UI
-- [ ] **Task 7.6**: Create data selection components
-  - [ ] Implement symbol selector component
-  - [ ] Create timeframe selector with validation
-  - [ ] Add date range picker for historical data
-  - [ ] Implement data loading button with status feedback
-  - [ ] Create data preview component
-  - [ ] Add error display for data loading issues
-  - [ ] Implement loading state indicators
+- [x] **Task 7.6**: Create data selection components
+  - [x] Implement symbol selector component
+  - [x] Create timeframe selector with validation
+  - [x] Add date range picker for historical data
+  - [x] Implement data loading button with status feedback
+  - [x] Create data preview component
+  - [x] Add error display for data loading issues
+  - [x] Implement loading state indicators
 
 ### Testing
 - [ ] **Task 7.7**: Set up frontend testing
