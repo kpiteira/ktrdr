@@ -15,6 +15,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Visualization](user-guides/visualization.md)
 * [Strategy Development](user-guides/strategy-development.md)
 * [Backtesting](user-guides/backtesting.md)
+* [Neural Networks](user-guides/neural-networks.md)
 
 ## API Reference
 
@@ -23,6 +24,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Indicator API](api-reference/indicator-api.md)
 * [Fuzzy Logic API](api-reference/fuzzy-api.md)
 * [Visualization API](api-reference/visualization-api.md)
+* [Neural Network API](api-reference/neural-api.md)
 
 ## CLI Reference
 
@@ -31,6 +33,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Indicator Commands](cli/indicator-commands.md)
 * [Visualization Commands](cli/visualization-commands.md)
 * [Strategy Commands](cli/strategy-commands.md)
+* [Neural Network Commands](cli/neural-commands.md)
 
 ## Configuration
 
@@ -38,6 +41,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Configuration Schema](configuration/schema.md)
 * [Environment Variables](configuration/environment-variables.md)
 * [Example Configurations](configuration/examples.md)
+* [Neural Network Configuration](configuration/neural-config.md)
 
 ## Examples
 
@@ -46,6 +50,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Visualization Examples](examples/visualization-examples.md)
 * [Strategy Examples](examples/strategy-examples.md)
 * [API Integration Examples](examples/api-integration.md)
+* [Neural Network Examples](examples/neural-examples.md)
 
 ## Developer Resources
 
@@ -54,6 +59,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Contributing Guide](developer/contributing.md)
 * [Testing Guide](developer/testing.md)
 * [API Development](developer/api-development.md)
+* [Neural Network Development](developer/neural-development.md)
 
 ## Documentation Guidelines
 
