@@ -104,9 +104,12 @@ const WorkingChart: React.FC = () => {
             grid: '#e6e6e6',
           };
 
+      // Get container width for initial sizing
+      const containerWidth = containerRef.current.clientWidth;
+
       // Create chart with version 4 API
       const chart = window.LightweightCharts.createChart(containerRef.current, {
-        width: containerRef.current.clientWidth,
+        width: containerWidth,
         height: 400,
         layout: {
           background: { color: colors.background },
@@ -171,40 +174,90 @@ const WorkingChart: React.FC = () => {
       // Fit content
       chart.timeScale().fitContent();
 
-      // Add resize handler with proper logic for both expanding and shrinking
+      // Track original width to establish safe resize boundaries
+      let originalWidth = containerWidth;
+      let lastWidth = containerWidth;
+      let resizeTimeout: NodeJS.Timeout | null = null;
+
+      // Add resize handler with safer logic for both expanding and shrinking
       const handleResize = () => {
-        if (containerRef.current) {
-          const containerWidth = containerRef.current.clientWidth;
-          // Both methods are needed for proper resizing
-          chart.resize(containerWidth, 400);
-          chart.applyOptions({
-            width: containerWidth,
-          });
+        // Skip if no container or chart
+        if (!containerRef.current) return;
+        
+        // Clear any pending resize
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
         }
+        
+        // Debounce resize to prevent rapid successive resizing
+        resizeTimeout = setTimeout(() => {
+          const newWidth = containerRef.current.clientWidth;
+          
+          // Define safe boundaries to prevent infinite growth
+          const minWidth = Math.max(100, originalWidth * 0.5); // At least 50% of original or 100px
+          const maxWidth = Math.min(window.innerWidth * 0.95, 3000); // At most 95% of window or 3000px
+          
+          const safeWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+          
+          // Only resize if width changed significantly AND is within safe bounds
+          if (Math.abs(safeWidth - lastWidth) > 5) {
+            console.log(`[WorkingChart] Resizing chart safely: ${lastWidth}px -> ${safeWidth}px`);
+            
+            try {
+              // Resize in one operation
+              chart.resize(safeWidth, 400);
+              
+              // Update tracked width
+              lastWidth = safeWidth;
+              
+              // After resizing, make sure content fits well
+              chart.timeScale().fitContent();
+            } catch (e) {
+              console.error('Error during resize:', e);
+            }
+          }
+        }, 250);
       };
 
-      // Use ResizeObserver for more accurate sizing
-      const resizeObserver = new ResizeObserver(() => {
-        handleResize();
-      });
+      // Use ResizeObserver for more reliable resize detection when available
+      let resizeObserver: ResizeObserver | null = null;
       
-      if (containerRef.current) {
-        resizeObserver.observe(containerRef.current);
+      try {
+        resizeObserver = new ResizeObserver(() => {
+          handleResize();
+        });
+        
+        // Observe the parent element to detect size changes
+        if (containerRef.current.parentElement) {
+          resizeObserver.observe(containerRef.current.parentElement);
+        }
+      } catch (error) {
+        console.warn('ResizeObserver not supported, falling back to window resize events');
+        // Fallback to window resize events
+        window.addEventListener('resize', handleResize);
       }
       
-      // Also add window resize listener as fallback
-      window.addEventListener('resize', handleResize);
-      
-      // Make sure to clean up both event listeners
-      return () => {
-        resizeObserver.disconnect();
-        window.removeEventListener('resize', handleResize);
-        chart.remove();
-      };
-
       // Save chart instance
       setChartInstance(chart);
       console.log('Chart created successfully');
+      
+      // Return cleanup function
+      return () => {
+        // Clean up resize listeners
+        if (resizeObserver) {
+          resizeObserver.disconnect();
+        } else {
+          window.removeEventListener('resize', handleResize);
+        }
+        
+        // Clear timeout if any
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
+        }
+        
+        // Remove chart instance
+        chart.remove();
+      };
     } catch (error) {
       console.error('Error initializing chart:', error);
     }
@@ -212,15 +265,16 @@ const WorkingChart: React.FC = () => {
 
   return (
     <div className="working-chart">
-      {/* Load the library script directly in the component */}
-      <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js" />
-      
       <div 
         ref={containerRef} 
         style={{ 
           width: '100%', 
           height: '400px', 
-          position: 'relative'
+          position: 'relative',
+          maxWidth: '100%',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
+          contain: 'paint layout'
         }} 
       />
     </div>

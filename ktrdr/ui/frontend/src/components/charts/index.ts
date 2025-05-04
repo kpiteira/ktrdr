@@ -1,10 +1,19 @@
 /**
- * Chart components index
+ * Chart components index - Exports reusable chart components and utilities
  */
-export * from './ChartContainer';
-export * from './CandlestickChart';
-export * from './ChartControls';
-export * from './CandlestickTradingView';
-export { default as ChartExampleWithData } from './ChartExampleWithData';
-export { default as WorkingChart } from './WorkingChart';
-export { default as FallbackChart } from './FallbackChart';
+
+// Export core components
+import CandlestickTradingView from './core/CandlestickTradingView';
+export { CandlestickTradingView };
+
+// Export transformers (data utilities)
+import * as dataAdapters from './transformers/dataAdapters';
+import * as timeFormatters from './transformers/timeFormatters';
+export { dataAdapters, timeFormatters };
+
+// Default export for backward compatibility
+export default {
+  CandlestickTradingView,
+  dataAdapters,
+  timeFormatters
+};

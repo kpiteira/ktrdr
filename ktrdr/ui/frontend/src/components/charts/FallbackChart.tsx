@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 /**
  * FallbackChart - A simple canvas-based chart implementation
@@ -6,6 +6,9 @@ import React, { useEffect, useRef } from 'react';
  */
 const FallbackChart: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Track the last known width to prevent resize loops
+  const [lastWidth, setLastWidth] = useState<number>(0);
 
   // Sample data
   const data = [
@@ -28,13 +31,22 @@ const FallbackChart: React.FC = () => {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size
-    canvas.width = canvas.clientWidth;
+    // Set initial canvas size based on container
+    const containerWidth = container.clientWidth;
+    setLastWidth(containerWidth);
+    
+    // Apply size constraints directly to the container to prevent infinite growth
+    container.style.maxWidth = '100%';
+    container.style.boxSizing = 'border-box';
+    
+    // Set canvas size with a maximum width constraint
+    canvas.width = Math.min(containerWidth, window.innerWidth);
     canvas.height = canvas.clientHeight;
 
     // Clear canvas
@@ -43,18 +55,69 @@ const FallbackChart: React.FC = () => {
     // Draw chart
     drawLineChart(ctx, data, canvas.width, canvas.height);
 
-    // Handle resize
+    // Handle resize with ResizeObserver if available, with fallback to window resize events
+    let resizeTimeout: NodeJS.Timeout | null = null;
+    
     const handleResize = () => {
-      if (canvas) {
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-        drawLineChart(ctx, data, canvas.width, canvas.height);
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
       }
+      
+      resizeTimeout = setTimeout(() => {
+        if (canvas && container && ctx) {
+          const newWidth = container.clientWidth;
+          
+          // Define safe boundaries
+          const originalWidth = lastWidth || containerWidth;
+          const minWidth = Math.max(100, originalWidth * 0.5); // At least 50% of original or 100px
+          const maxWidth = Math.min(window.innerWidth * 0.95, 3000); // At most 95% of window or 3000px
+          
+          const safeWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+          
+          // Only redraw if width changed significantly and is within reasonable bounds
+          if (Math.abs(safeWidth - lastWidth) > 5) {
+            console.log(`[FallbackChart] Resizing canvas: ${lastWidth}px -> ${safeWidth}px`);
+            
+            canvas.width = safeWidth;
+            canvas.height = canvas.clientHeight;
+            setLastWidth(safeWidth);
+            
+            // Redraw with new dimensions
+            drawLineChart(ctx, data, canvas.width, canvas.height);
+          }
+        }
+      }, 250);
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    // Use ResizeObserver if available for more reliable resize detection
+    let resizeObserver: ResizeObserver | null = null;
+    
+    try {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      
+      if (container.parentElement) {
+        resizeObserver.observe(container.parentElement);
+      }
+    } catch (error) {
+      console.warn('ResizeObserver not supported, falling back to window resize events');
+      // Fallback to window resize events
+      window.addEventListener('resize', handleResize);
+    }
+    
+    return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', handleResize);
+      }
+      
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+    };
+  }, [lastWidth]);
 
   const drawLineChart = (
     ctx: CanvasRenderingContext2D,
@@ -161,7 +224,17 @@ const FallbackChart: React.FC = () => {
   };
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div 
+      ref={containerRef}
+      className="fallback-chart"
+      style={{ 
+        width: '100%', 
+        maxWidth: '100%',
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+        contain: 'paint layout'
+      }}
+    >
       <canvas 
         ref={canvasRef} 
         style={{ 
@@ -170,7 +243,8 @@ const FallbackChart: React.FC = () => {
           display: 'block',
           boxSizing: 'border-box',
           border: '1px solid #ddd',
-          borderRadius: '4px'
+          borderRadius: '4px',
+          maxWidth: '100%' 
         }} 
       />
     </div>

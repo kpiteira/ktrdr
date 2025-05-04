@@ -1,9 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { useTheme } from '../layouts/ThemeProvider';
-import { OHLCVData } from '../../types/data';
-import { Button } from '../common/Button';
+import { useTheme } from '../../layouts/ThemeProvider';
+import { OHLCVData } from '../../../types/data';
+import { Button } from '../../common/Button';
+import { 
+  formatCandlestickData, 
+  formatVolumeData, 
+  createEmptyChartData,
+  validateChartData 
+} from '../transformers/dataAdapters';
+import { getTimeScaleConfiguration } from '../transformers/timeFormatters';
 
-import './ChartContainer.css';
+import '../../charts/ChartContainer.css';
 
 interface CandlestickTradingViewProps {
   /** The OHLCV data to display */
@@ -50,53 +57,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
   const [isLibraryLoaded, setIsLibraryLoaded] = useState<boolean>(false);
 
   // Create sample data if none provided
-  const chartData = data || {
-    dates: [],
-    ohlcv: [],
-    metadata: {
-      symbol: 'SAMPLE',
-      timeframe: '1D',
-      start: '',
-      end: '',
-      points: 0
-    }
-  };
-
-  // Function to format data for TradingView
-  const formatCandlestickData = (data: OHLCVData) => {
-    if (!data || !data.dates || !data.ohlcv || data.dates.length === 0) {
-      return [];
-    }
-
-    return data.dates.map((date, index) => {
-      const [open, high, low, close, _volume] = data.ohlcv[index];
-      
-      return {
-        time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
-        open,
-        high,
-        low,
-        close,
-      };
-    });
-  };
-
-  // Function to format volume data for TradingView
-  const formatVolumeData = (data: OHLCVData) => {
-    if (!data || !data.dates || !data.ohlcv || data.dates.length === 0) {
-      return [];
-    }
-
-    return data.dates.map((date, index) => {
-      const [open, _high, _low, close, volume] = data.ohlcv[index];
-      
-      return {
-        time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
-        value: volume,
-        color: close >= open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
-      };
-    });
-  };
+  const chartData = data || createEmptyChartData();
 
   // Load the library if not already loaded
   useEffect(() => {
@@ -178,6 +139,12 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
   // Update chart data when data or series change
   useEffect(() => {
     if (!candlestickSeries || !data) return;
+
+    // Validate data before updating
+    const validation = validateChartData(data);
+    if (!validation.valid) {
+      console.warn('Chart data validation failed:', validation.errors);
+    }
 
     const candleData = formatCandlestickData(data);
     candlestickSeries.setData(candleData);
@@ -288,6 +255,10 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
             grid: '#e6e6e6',
           };
 
+      // Get timeframe-specific configuration
+      const timeframe = data?.metadata?.timeframe || '1D';
+      const timeScaleConfig = getTimeScaleConfiguration(timeframe);
+
       // Create chart with fixed dimensions
       const chart = window.LightweightCharts.createChart(containerRef.current, {
         width: chartWidth,
@@ -304,8 +275,8 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
           borderColor: colors.grid,
         },
         timeScale: {
+          ...timeScaleConfig,
           borderColor: colors.grid,
-          timeVisible: true,
         },
       });
 

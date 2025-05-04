@@ -9,6 +9,7 @@ interface CardProps {
   isLoading?: boolean;
   children: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -20,6 +21,7 @@ export const Card: React.FC<CardProps> = ({
   isLoading = false,
   children,
   className = '',
+  style = {},
 }) => {
   const cardClasses = [
     'card',
@@ -27,8 +29,19 @@ export const Card: React.FC<CardProps> = ({
     className
   ].filter(Boolean).join(' ');
 
+  // Apply less aggressive constraining styles to fix layout issues
+  const cardStyle: React.CSSProperties = {
+    ...style,
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    // Less restrictive overflow to avoid hiding content
+    overflowX: 'hidden',
+    // Less aggressive containment that won't break tabs
+    contain: 'paint'
+  };
+
   return (
-    <div className={cardClasses}>
+    <div className={cardClasses} style={cardStyle}>
       {(title || subtitle || actions) && (
         <div className="card-header">
           <div className="card-header-left">
@@ -41,7 +54,7 @@ export const Card: React.FC<CardProps> = ({
           {actions && <div className="card-actions">{actions}</div>}
         </div>
       )}
-      <div className="card-body">
+      <div className="card-body" style={{ maxWidth: '100%', overflowX: 'hidden' }}>
         {isLoading ? (
           <div className="card-loading-spinner">
             <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

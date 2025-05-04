@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '../common/Button';
-import CandlestickTradingView from './CandlestickTradingView';
-import { OHLCVData } from '../../types/data';
+import { Button } from '../../common/Button';
+import { CandlestickTradingView } from '../../charts'; 
+import { OHLCVData } from '../../../types/data';
 import './ChartExampleWithData.css';
 
 /**
