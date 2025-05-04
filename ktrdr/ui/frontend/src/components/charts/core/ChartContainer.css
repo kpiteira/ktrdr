@@ -4,10 +4,6 @@
   border-radius: 4px;
   background-color: var(--chart-bg-color, #ffffff);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  /* Add explicit size constraints */
-  max-width: 100%;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 /* In dark mode, apply different styles */
@@ -21,8 +17,6 @@ html[data-theme="dark"] .chart-container,
   position: absolute;
   left: 0;
   top: 0;
-  /* Ensure canvas elements don't cause container growth */
-  max-width: 100%;
 }
 
 .chart-loading {
@@ -72,10 +66,6 @@ html[data-theme="dark"] .chart-no-data,
   background-color: var(--card-bg, #fff);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  /* Add explicit size constraints */
-  max-width: 100%;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .chart-header {
@@ -118,9 +108,7 @@ html[data-theme="dark"] .chart-no-data,
   box-sizing: border-box;
   overflow: hidden;
   /* Ensure chart doesn't affect layout when its size changes */
-  contain: size layout;
-  /* Explicit max-width to prevent growth */
-  max-width: 100%;
+  contain: strict;
 }
 
 .chart-debug-overlay {
@@ -137,31 +125,6 @@ html[data-theme="dark"] .chart-no-data,
   max-width: 300px;
   max-height: 200px;
   overflow: auto;
-}
-
-/* Add explicit styling for the lightweight-charts container */
-.tv-lightweight-charts {
-  max-width: 100% !important;
-  contain: strict;
-  overflow: hidden;
-}
-
-/* Add style for all chart-related canvas elements */
-canvas.tv-lightweight-charts {
-  max-width: 100% !important;
-  object-fit: contain;
-}
-
-/* Enhanced containment for charts */
-.candlestick-chart-wrapper,
-.chart-example-with-data,
-.working-chart,
-.very-basic-chart,
-.fallback-chart {
-  max-width: 100%;
-  overflow-x: hidden;
-  box-sizing: border-box;
-  contain: layout paint;
 }
 
 /* Dark theme overrides */

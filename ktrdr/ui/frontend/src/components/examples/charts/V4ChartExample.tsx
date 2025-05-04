@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
-import { useTheme } from '../layouts/ThemeProvider';
-import { Card } from '../common/Card';
-import { Button } from '../common/Button';
-import { OHLCVData } from '../../types/data';
+import { useTheme } from '../../layouts/ThemeProvider';
+import { Card } from '../../common/Card';
+import { Button } from '../../common/Button';
+import { OHLCVData } from '../../../types/data';
 
 /**
  * This component is specifically designed to work with Lightweight Charts v4.1.1

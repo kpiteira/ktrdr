@@ -10,7 +10,7 @@ import {
 } from '../transformers/dataAdapters';
 import { getTimeScaleConfiguration } from '../transformers/timeFormatters';
 
-import '../../charts/ChartContainer.css';
+import './ChartContainer.css';
 
 interface CandlestickTradingViewProps {
   /** The OHLCV data to display */

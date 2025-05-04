@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { useTheme } from '../layouts/ThemeProvider';
-import { Button } from '../common/Button';
-import { Card } from '../common/Card';
-import { Select } from '../common/Select';
+import { useTheme } from '../../layouts/ThemeProvider';
+import { Button } from '../../common/Button';
+import { Card } from '../../common/Card';
+import { Select } from '../../common/Select';
 
 // Import chart utilities
 import {
@@ -16,16 +16,16 @@ import {
   chartDebugger,
   ChartUpdater,
   UpdateMode
-} from '../../utils/charts';
+} from '../../../utils/charts';
 
 // Import validation utilities
 import {
   validateOHLCVData,
   fixOHLCVData
-} from '../../utils/charts/dataValidation';
+} from '../../../utils/charts/dataValidation';
 
 // Import common types or interfaces
-import { OHLCVData } from '../../types/data';
+import { OHLCVData } from '../../../types/data';
 
 // Preprocessing methods for the dropdown
 const preprocessingMethods = [

@@ -3,7 +3,7 @@ import { useTheme } from '../layouts/ThemeProvider';
 import { OHLCVData } from '../../types/data';
 import { Button } from '../common/Button';
 
-import './ChartContainer.css';
+import './core/ChartContainer.css';
 
 interface CandlestickTradingViewProps {
   /** The OHLCV data to display */

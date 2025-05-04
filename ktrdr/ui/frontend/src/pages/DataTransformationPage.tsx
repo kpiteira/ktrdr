@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Select, Button } from '@/components/common';
-import DataTransformationExample from '@/components/charts/DataTransformationExample';
-import V4ChartExample from '@/components/charts/V4ChartExample';
+import DataTransformationExample from '@/components/examples/charts/DataTransformationExample';
 
 // Example configuration options
 const dataPoints = [
