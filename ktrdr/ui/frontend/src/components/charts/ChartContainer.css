@@ -7,7 +7,8 @@
 }
 
 /* In dark mode, apply different styles */
-html[data-theme="dark"] .chart-container {
+html[data-theme="dark"] .chart-container,
+:root[data-theme="dark"] .chart-container {
   background-color: var(--chart-bg-color, #1e1e1e);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
@@ -31,7 +32,8 @@ html[data-theme="dark"] .chart-container {
   z-index: 2;
 }
 
-html[data-theme="dark"] .chart-loading {
+html[data-theme="dark"] .chart-loading,
+:root[data-theme="dark"] .chart-loading {
   background-color: rgba(30, 30, 30, 0.8);
 }
 
@@ -50,7 +52,87 @@ html[data-theme="dark"] .chart-loading {
   z-index: 1;
 }
 
-html[data-theme="dark"] .chart-no-data {
+html[data-theme="dark"] .chart-no-data,
+:root[data-theme="dark"] .chart-no-data {
   color: #9ca3af;
   background-color: rgba(30, 30, 30, 0.8);
+}
+
+/* Styles for CandlestickTradingView and DataTransformationExample */
+.chart-wrapper {
+  position: relative;
+  border-radius: 4px;
+  border: 1px solid #e1e4e8;
+  background-color: var(--card-bg, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e1e4e8;
+  background-color: var(--card-bg, #fff);
+}
+
+.chart-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-color, #333);
+}
+
+.chart-symbol {
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+}
+
+.chart-toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 8px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+.chart-container-inner {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* Ensure chart doesn't affect layout when its size changes */
+  contain: strict;
+}
+
+.chart-debug-overlay {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  z-index: 100;
+  max-width: 300px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+/* Dark theme overrides */
+:root[data-theme="dark"] .chart-wrapper {
+  border-color: #2d333b;
+}
+
+:root[data-theme="dark"] .chart-header,
+:root[data-theme="dark"] .chart-legend {
+  border-color: #2d333b;
 }

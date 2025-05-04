@@ -42,6 +42,18 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const legendRef = useRef<HTMLDivElement>(null);
+  // Add dimensions ref outside of the hook
+  const dimensionsRef = useRef<{
+    originalWidth: number;
+    originalHeight: number;
+    lastWidth: number;
+    lastHeight: number;
+  }>({
+    originalWidth: 0,
+    originalHeight: 0,
+    lastWidth: 0,
+    lastHeight: 0
+  });
   const { theme } = useTheme();
   const [chartInstance, setChartInstance] = useState<any>(null);
   const [volumeVisible, setVolumeVisible] = useState<boolean>(showVolume);
@@ -125,15 +137,98 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
     };
   }, []);
 
-  // Initialize chart when library is loaded and container is ready
+  // Initialize chart when library is loaded and container is ready 
   useEffect(() => {
     if (!isLibraryLoaded || !containerRef.current) {
       return;
     }
 
-    initializeChart();
+    console.log('CandlestickTradingView initializing chart with props:', {
+      width: width || 'container width',
+      height: height,
+      autoResize
+    });
 
+    // Use explicit dimensions - either from props or container
+    const containerWidth = containerRef.current.clientWidth;
+    const usedWidth = width || containerWidth;
+    const usedHeight = height;
+    
+    console.log('Using exact dimensions:', usedWidth, 'x', usedHeight);
+    
+    // Store initial dimensions
+    dimensionsRef.current = {
+      originalWidth: usedWidth,
+      originalHeight: usedHeight,
+      lastWidth: usedWidth,
+      lastHeight: usedHeight
+    };
+
+    // Initialize the chart with fixed dimensions
+    const createdChart = initializeChart(usedWidth, usedHeight);
+    
+    // If autoResize is explicitly disabled or we're using a fixed width, skip resize handling
+    if (!autoResize || width) {
+      console.log('Auto-resize disabled, skipping resize handler setup');
+      return () => {
+        // Clean up chart instance on unmount
+        if (chartInstance) {
+          try {
+            chartInstance.remove();
+          } catch (e) {
+            console.error('Error removing chart:', e);
+          }
+        }
+      };
+    }
+    
+    // Otherwise set up resize handling with debounce
+    let resizeTimeout: NodeJS.Timeout | null = null;
+    
+    const handleResize = () => {
+      // Skip if no container or chart
+      if (!chartInstance || !containerRef.current) return;
+      
+      // Clear any pending resize
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      
+      // Debounce resize
+      resizeTimeout = setTimeout(() => {
+        if (!containerRef.current || !chartInstance) return;
+        
+        const newWidth = containerRef.current.clientWidth;
+        
+        // Only resize if width changed significantly
+        if (Math.abs(newWidth - dimensionsRef.current.lastWidth) > 5) { // Increased threshold
+          console.log(`Resizing chart: ${dimensionsRef.current.lastWidth}px -> ${newWidth}px`);
+          
+          try {
+            // Resize in one operation without applying options
+            chartInstance.resize(newWidth, usedHeight);
+            dimensionsRef.current.lastWidth = newWidth;
+          } catch (e) {
+            console.error('Error during resize:', e);
+          }
+        }
+      }, 250); // Longer debounce period
+    };
+    
+    // Add resize listener
+    window.addEventListener('resize', handleResize);
+    
+    // Return cleanup function
     return () => {
+      // Remove resize listener
+      window.removeEventListener('resize', handleResize);
+      
+      // Clear timeout if any
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      
+      // Remove chart instance
       if (chartInstance) {
         try {
           chartInstance.remove();
@@ -142,7 +237,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
         }
       }
     };
-  }, [isLibraryLoaded]);
+  }, [isLibraryLoaded, width, height, autoResize]);
 
   // Update chart data when data or series change
   useEffect(() => {
@@ -177,18 +272,25 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
           grid: '#e6e6e6',
         };
 
-    chartInstance.applyOptions({
-      layout: { 
-        background: { color: colors.background }, 
-        textColor: colors.text 
-      },
-      grid: { 
-        vertLines: { color: colors.grid }, 
-        horzLines: { color: colors.grid } 
-      },
-      rightPriceScale: { borderColor: colors.grid },
-      timeScale: { borderColor: colors.grid }
-    });
+    try {
+      // Only update color-related options to avoid resize loops
+      chartInstance.applyOptions({
+        layout: { 
+          background: { color: colors.background }, 
+          textColor: colors.text 
+        },
+        grid: { 
+          vertLines: { color: colors.grid }, 
+          horzLines: { color: colors.grid } 
+        },
+        rightPriceScale: { borderColor: colors.grid },
+        timeScale: { borderColor: colors.grid }
+      });
+      
+      console.log('Theme updated to:', theme);
+    } catch (e) {
+      console.error('Error applying theme:', e);
+    }
   }, [theme, chartInstance]);
 
   // Toggle volume visibility
@@ -232,13 +334,15 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
     }
   }, [volumeVisible, chartInstance, volumeSeries, candlestickSeries, data]);
 
-  const initializeChart = () => {
-    if (!containerRef.current || !window.LightweightCharts) return;
+  const initializeChart = (chartWidth: number, chartHeight: number) => {
+    if (!containerRef.current || !window.LightweightCharts) return null;
 
     try {
-      // Clear previous chart
+      // Ensure the container is empty
       containerRef.current.innerHTML = '';
 
+      console.log(`Creating chart with fixed dimensions: ${chartWidth}px x ${chartHeight}px`);
+      
       // Set up colors based on theme
       const colors = theme === 'dark' 
         ? {
@@ -252,10 +356,10 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
             grid: '#e6e6e6',
           };
 
-      // Create chart with version 4 API
+      // IMPORTANT: Create chart with FIXED width and height - don't use percentages or auto
       const chart = window.LightweightCharts.createChart(containerRef.current, {
-        width: width || containerRef.current.clientWidth,
-        height: height,
+        width: chartWidth,
+        height: chartHeight,
         layout: {
           background: { color: colors.background },
           textColor: colors.text
@@ -283,7 +387,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
       });
       setCandlestickSeries(candleSeries);
 
-      // Set data
+      // Set data if available
       if (data) {
         const candleData = formatCandlestickData(data);
         candleSeries.setData(candleData);
@@ -321,55 +425,19 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
         setVolumeSeries(volSeries);
       }
 
-      // Fit content if enabled
+      // Fit content if enabled - do this only once during initialization
       if (fitContent) {
         chart.timeScale().fitContent();
-      }
-
-      // Add resize handler if enabled
-      if (autoResize) {
-        const handleResize = () => {
-          if (containerRef.current) {
-            const containerWidth = width || containerRef.current.clientWidth;
-            // Both resize and applyOptions are needed for proper resizing
-            chart.resize(containerWidth, height);
-            chart.applyOptions({
-              width: containerWidth,
-              height: height
-            });
-          }
-        };
-
-        // Create a ResizeObserver for more accurate container size tracking
-        const resizeObserver = new ResizeObserver(() => {
-          handleResize();
-        });
-        
-        // Observe the container element
-        if (containerRef.current) {
-          resizeObserver.observe(containerRef.current);
-        }
-        
-        // Also listen to window resize as a fallback
-        window.addEventListener('resize', handleResize);
-        
-        // Make sure to clean up the observer
-        return () => {
-          resizeObserver.disconnect();
-          window.removeEventListener('resize', handleResize);
-        };
       }
 
       // Save chart instance
       setChartInstance(chart);
       console.log('Chart created successfully');
-
-      // Return cleanup function (the one inside autoResize block will handle resize cleanup)
-      return () => {
-        chart.remove();
-      };
+      
+      return chart;
     } catch (error) {
       console.error('Error initializing chart:', error);
+      return null;
     }
   };
 
@@ -416,9 +484,11 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
         ref={containerRef} 
         className="chart-container-inner"
         style={{ 
-          width: width || '100%', 
-          height: height || 400,
-          position: 'relative'
+          width: width ? `${width}px` : '100%', 
+          height: `${height}px`,
+          position: 'relative',
+          overflow: 'hidden', // Prevent potential overflows
+          boxSizing: 'border-box' // Ensure padding/borders don't affect dimensions
         }} 
       />
       

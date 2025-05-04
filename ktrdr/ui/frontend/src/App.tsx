@@ -5,7 +5,7 @@ import { ThemeProvider, MainLayout } from '@/components/layouts';
 import { NotificationProvider, NotificationContainer, DevModeIndicator } from '@/components/common';
 import { Card, Button, Tabs } from '@/components/common';
 import { useNotification } from '@/components/common';
-import { DataSelectionPage, ChartExamplePage } from '@/pages';
+import { DataSelectionPage, ChartExamplePage, DataTransformationPage } from '@/pages';
 import { config } from '@/config';
 
 function App() {
@@ -24,6 +24,7 @@ function App() {
     { key: 'welcome', label: 'Welcome' },
     { key: 'data', label: 'Data Selection' },
     { key: 'charts', label: 'Chart Example' },
+    { key: 'data-transform', label: 'Data Transformation' },
   ];
 
   // Render the active page based on the selected tab
@@ -48,6 +49,7 @@ function App() {
               <li>Redux state management</li>
               <li>Data selection components (Task 7.6)</li>
               <li>Chart visualization components (Task 8.1)</li>
+              <li>Chart data transformation utilities (Task 8.2)</li>
             </ul>
             <Button 
               onClick={showSampleNotification}
@@ -62,6 +64,8 @@ function App() {
         return <DataSelectionPage />;
       case 'charts':
         return <ChartExamplePage />;
+      case 'data-transform':
+        return <DataTransformationPage />;
       default:
         return null;
     }

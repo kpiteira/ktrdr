@@ -127,14 +127,27 @@ const ChartExampleWithData: React.FC = () => {
       </div>
       
       {data && (
-        <CandlestickTradingView
-          data={data}
-          height={500}
-          title="Sample OHLCV Data"
-          showVolume={true}
-          fitContent={true}
-          autoResize={true}
-        />
+        <div style={{
+          width: '100%',
+          maxWidth: '1200px',
+          height: '500px',
+          position: 'relative',
+          overflow: 'hidden',
+          margin: '0 auto',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          boxSizing: 'border-box'
+        }}>
+          <CandlestickTradingView
+            data={data}
+            width={1200} /* Fixed width prevents resize issues */
+            height={500}  /* Fixed height */
+            title="Sample OHLCV Data"
+            showVolume={true}
+            fitContent={true}
+            autoResize={false} /* Explicitly disable autoResize */
+          />
+        </div>
       )}
     </div>
   );
