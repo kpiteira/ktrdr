@@ -1,7 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ThemeContextType, ThemeMode } from '@/types/ui';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setTheme } from '@/store/slices/uiSlice';
+import { useAppSelector, useAppDispatch } from '../hooks';
+import { setTheme } from './store/uiSlice';
+
+// Define theme modes
+type ThemeMode = 'light' | 'dark';
+
+// Define theme context type
+interface ThemeContextType {
+  theme: ThemeMode;
+  toggleTheme: () => void;
+}
 
 // Create the theme context with default values
 const ThemeContext = createContext<ThemeContextType>({

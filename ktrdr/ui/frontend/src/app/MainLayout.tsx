@@ -1,9 +1,8 @@
 import React, { useRef, useEffect } from 'react';
-import { Header } from '../../app/Header';
-import { Sidebar } from '../../app/Sidebar';
-import { useTheme } from '../../app/ThemeProvider';
-import { useAppSelector, useAppDispatch } from '../../hooks';
-import { toggleSidebar } from '../../store/slices/uiSlice';
+import { Header } from './Header';
+import { Sidebar } from './Sidebar';
+import { useTheme } from './ThemeProvider';
+import { useUI } from './hooks/useUI';
 
 // Create a static flag to track if we're already inside a MainLayout
 // This prevents nested MainLayout components from causing duplicates
@@ -15,8 +14,7 @@ interface MainLayoutProps {
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { theme } = useTheme();
-  const sidebarOpen = useAppSelector(state => state.ui.sidebarOpen);
-  const dispatch = useAppDispatch();
+  const { sidebarOpen, toggleSidebar: toggleSidebarHandler } = useUI();
   const mainContentRef = useRef<HTMLDivElement>(null);
   
   // Flag to determine if this is a nested instance
@@ -33,10 +31,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     }
   }, []);
 
-  const toggleSidebarHandler = () => {
-    dispatch(toggleSidebar());
-  };
-
   // Use a more gentle approach to prevent infinite growth without breaking the layout
   useEffect(() => {
     // Don't use ResizeObserver as it might be too aggressive
@@ -48,8 +42,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       
       // Set a reasonable max-width that prevents infinite growth but allows normal layout
       mainContentRef.current.style.maxWidth = `${safeMaxWidth}px`;
-      
-      console.log('[MainLayout] Setting safe max width:', safeMaxWidth);
     }
     
     // Handle window resize events to update the max-width if needed
@@ -70,7 +62,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // If this is a nested instance, just render the children directly
   // This prevents duplicate headers and sidebars
   if (isNested.current) {
-    console.log('[MainLayout] Detected nested layout, rendering children only');
     return <>{children}</>;
   }
 
@@ -86,7 +77,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           style={{ 
             width: '100%',
             boxSizing: 'border-box',
-            // Less aggressive contain value that won't break normal layout
             contain: 'paint'
           }}
         >

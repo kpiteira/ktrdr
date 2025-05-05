@@ -19,6 +19,7 @@ function print_help() {
     echo -e "  ${GREEN}logs${NC}         View logs from running containers"
     echo -e "  ${GREEN}logs-backend${NC} View logs from backend container"
     echo -e "  ${GREEN}logs-frontend${NC} View logs from frontend container"
+    echo -e "  ${GREEN}logs-clear-frontend${NC} Clear logs and restart frontend container"
     echo -e "  ${GREEN}shell-backend${NC} Open a shell in the backend container"
     echo -e "  ${GREEN}shell-frontend${NC} Open a shell in the frontend container"
     echo -e "  ${GREEN}rebuild${NC}      Rebuild containers with caching (faster)"
@@ -71,6 +72,18 @@ function view_frontend_logs() {
     echo -e "${BLUE}Showing logs from frontend container...${NC}"
     echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
     docker-compose logs -f frontend
+}
+
+function clear_frontend_logs() {
+    echo -e "${BLUE}Clearing frontend container logs and restarting...${NC}"
+    # Stop the frontend container
+    docker-compose stop frontend
+    # Remove the container (which clears its logs)
+    docker-compose rm -f frontend
+    # Start it again
+    docker-compose up -d frontend
+    echo -e "${GREEN}Frontend container restarted with fresh logs!${NC}"
+    echo -e "To view logs, run: ${YELLOW}./docker_dev.sh logs-frontend${NC}"
 }
 
 function open_backend_shell() {
@@ -242,6 +255,9 @@ case "$1" in
         ;;
     logs-frontend)
         view_frontend_logs
+        ;;
+    logs-clear-frontend)
+        clear_frontend_logs
         ;;
     shell-backend)
         open_backend_shell

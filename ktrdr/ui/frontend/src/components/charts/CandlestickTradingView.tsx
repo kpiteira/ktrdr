@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { useTheme } from '../layouts/ThemeProvider';
+// Import transformers from correct location
+import { formatCandlestickData, formatHistogramData } from '../../utils/charts/chartDataUtils';
 import { OHLCVData } from '../../types/data';
+import { useTheme } from '../../app/ThemeProvider';
 import { Button } from '../common/Button';
 
 import './core/ChartContainer.css';
@@ -50,7 +52,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
   const [isLibraryLoaded, setIsLibraryLoaded] = useState<boolean>(false);
 
   // Create sample data if none provided
-  const chartData = data || {
+  const sampleData = data || {
     dates: [],
     ohlcv: [],
     metadata: {
@@ -60,42 +62,6 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
       end: '',
       points: 0
     }
-  };
-
-  // Function to format data for TradingView
-  const formatCandlestickData = (data: OHLCVData) => {
-    if (!data || !data.dates || !data.ohlcv || data.dates.length === 0) {
-      return [];
-    }
-
-    return data.dates.map((date, index) => {
-      const [open, high, low, close, _volume] = data.ohlcv[index];
-      
-      return {
-        time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
-        open,
-        high,
-        low,
-        close,
-      };
-    });
-  };
-
-  // Function to format volume data for TradingView
-  const formatVolumeData = (data: OHLCVData) => {
-    if (!data || !data.dates || !data.ohlcv || data.dates.length === 0) {
-      return [];
-    }
-
-    return data.dates.map((date, index) => {
-      const [open, _high, _low, close, volume] = data.ohlcv[index];
-      
-      return {
-        time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
-        value: volume,
-        color: close >= open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
-      };
-    });
   };
 
   // Load the library if not already loaded
@@ -139,7 +105,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
     console.log('Using dimensions:', usedWidth, 'x', usedHeight);
 
     // Initialize the chart with fixed dimensions
-    const chart = initializeChart(usedWidth, usedHeight);
+    const chartInstance = initializeChart(usedWidth, usedHeight);
     
     // Simple resize handler
     const handleResize = () => {
@@ -179,11 +145,11 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
   useEffect(() => {
     if (!candlestickSeries || !data) return;
 
-    const candleData = formatCandlestickData(data);
+    const candleData = formatCandlestickData(data.ohlcv, data.dates);
     candlestickSeries.setData(candleData);
 
     if (showVolume && volumeSeries) {
-      const volumeData = formatVolumeData(data);
+      const volumeData = formatHistogramData(data.ohlcv, data.dates);
       volumeSeries.setData(volumeData);
     }
 
@@ -256,7 +222,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
 
       // Set data if available
       if (data) {
-        const volumeData = formatVolumeData(data);
+        const volumeData = formatHistogramData(data.ohlcv, data.dates);
         volSeries.setData(volumeData);
       }
 
@@ -321,7 +287,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
 
       // Set data if available
       if (data) {
-        const candleData = formatCandlestickData(data);
+        const candleData = formatCandlestickData(data.ohlcv, data.dates);
         candleSeries.setData(candleData);
       }
 
@@ -350,7 +316,7 @@ const CandlestickTradingView: React.FC<CandlestickTradingViewProps> = ({
 
         // Set data if available
         if (data) {
-          const volumeData = formatVolumeData(data);
+          const volumeData = formatHistogramData(data.ohlcv, data.dates);
           volSeries.setData(volumeData);
         }
 

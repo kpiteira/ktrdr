@@ -1,5 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { ThemeMode } from '../types/ui';
+
+// Define the theme mode type
+export type ThemeMode = 'light' | 'dark';
 
 // Define the UI state interface
 export interface UIState {

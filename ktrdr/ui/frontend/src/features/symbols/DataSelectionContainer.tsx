@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, ErrorMessage } from '../components/common';
+import { Card, Button, ErrorMessage } from '../../components/common';
 import { 
   SymbolSelector, 
   TimeframeSelector, 
   DateRangePicker, 
   DataLoadButton,
   DataPreview
-} from '../components/data';
-import { useThemeControl, useDataSelection, useOhlcvData } from '../hooks';
+} from '../../components/data';
+import { useSymbolSelection } from './hooks/useSymbolSelection';
+import { useChartData } from '../charting/hooks/useChartData';
+import { useTheme } from '../../app/ThemeProvider';
 
 /**
- * DataSelectionContainer provides a clean, integrated example of all data selection components
- * working together in a unified interface.
+ * DataSelectionContainer provides a unified interface for selecting and viewing data
  */
 const DataSelectionContainer: React.FC = () => {
-  const { theme, toggleTheme } = useThemeControl();
-  const { loadMetadata, symbols, timeframes } = useDataSelection();
-  const { errorMessage } = useOhlcvData();
+  const { theme, toggleTheme } = useTheme();
+  const { loadMetadata, symbols, timeframes } = useSymbolSelection();
+  const { errorMessage } = useChartData();
   const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>({
     startDate: '',
     endDate: ''
@@ -39,16 +40,7 @@ const DataSelectionContainer: React.FC = () => {
     };
     
     loadMetadataWithErrorHandling();
-    
-    // Apply theme to document
-    document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [loadMetadata]);
-
-  // Update document theme when theme changes
-  useEffect(() => {
-    console.log("Theme changed:", theme);
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
 
   // Handle date range changes
   const handleDateRangeChange = (range: { startDate: string; endDate: string }) => {

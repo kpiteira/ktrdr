@@ -1,5 +1,5 @@
 import React from 'react';
-import { DataSelectionContainer } from '../containers';
+import DataSelectionContainer from '../features/symbols/DataSelectionContainer';
 import { Card } from '../components/common';
 
 /**

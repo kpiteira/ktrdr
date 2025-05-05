@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTheme } from './ThemeProvider';
-import { useAppSelector, useAppDispatch } from '../../hooks';
-import { toggleSidebar } from '../../store/slices/uiSlice';
+import { useUI } from './hooks/useUI';
 import { Link, useLocation } from 'react-router-dom';
 
 interface MenuItem {
@@ -19,12 +18,11 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const { theme } = useTheme();
-  const isOpen = useAppSelector(state => state.ui.sidebarOpen);
-  const dispatch = useAppDispatch();
+  const { sidebarOpen: isOpen, toggleSidebar } = useUI();
   const location = useLocation();
   
   const handleClose = () => {
-    dispatch(toggleSidebar());
+    toggleSidebar();
     if (onClose) onClose();
   };
   

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { useTheme } from '../../../components/layouts/ThemeProvider';
+import { useTheme } from '../../app/ThemeProvider';
 import { CrosshairContainer, CrosshairData } from './CrosshairInfo';
 import { ChartToolbar, ChartOptions, ChartCustomizableOptions } from './ChartControls';
 import { LegendContainer, LegendItemData } from './ChartLegend';

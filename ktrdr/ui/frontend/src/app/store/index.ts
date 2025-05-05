@@ -1,8 +1,8 @@
 import { configureStore, Middleware } from '@reduxjs/toolkit';
-import uiReducer from '../app/store/uiSlice';
-import chartingReducer from '../features/charting/store/chartingSlice';
-import indicatorReducer from '../features/charting/store/indicatorSlice';
-import symbolsReducer from '../features/symbols/store/symbolsSlice';
+import uiReducer from './uiSlice';
+import chartingReducer from '../../features/charting/store/chartingSlice';
+import indicatorReducer from '../../features/charting/store/indicatorSlice';
+import symbolsReducer from '../../features/symbols/store/symbolsSlice';
 
 // Custom error handling middleware
 const errorMiddleware: Middleware = () => (next) => (action: any) => {

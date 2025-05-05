@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useDataSelection } from '../../store/hooks';
+import { useDataSelection } from '../../hooks';
 import { LoadingSpinner, ErrorMessage, Select } from '../common';
 
 interface SymbolSelectorProps {

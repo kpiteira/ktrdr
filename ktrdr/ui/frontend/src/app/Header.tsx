@@ -1,9 +1,8 @@
 import React from 'react';
 import { useTheme } from './ThemeProvider';
-import { useAppDispatch } from '../../hooks';
-import { toggleSidebar } from '../../store/slices/uiSlice';
+import { useUI } from './hooks/useUI';
 
-// Define fallback values for app information 
+// Define fallback values for app information
 const appName = 'KTRDR Trading Platform';
 const appVersion = '0.1.0';
 
@@ -13,13 +12,13 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { theme, toggleTheme } = useTheme();
-  const dispatch = useAppDispatch();
+  const { toggleSidebar } = useUI();
 
   const handleMenuToggle = () => {
     if (onMenuToggle) {
       onMenuToggle();
     } else {
-      dispatch(toggleSidebar());
+      toggleSidebar();
     }
   };
 

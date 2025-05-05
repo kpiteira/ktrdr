@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders, mockApiResponses } from '../test-utils';
-import DataSelectionContainer from '@/containers/DataSelectionContainer';
+import { DataSelectionContainer } from '@/features/symbols';
 
 // Import the hook directly so we can mock it properly
-import * as hooks from '@/store/hooks';
+import * as hooks from '@/hooks';
 
 // Mock the hooks explicitly
-vi.mock('@/store/hooks', async () => {
-  const originalModule = await vi.importActual('@/store/hooks');
+vi.mock('@/hooks', async () => {
+  const originalModule = await vi.importActual('@/hooks');
   
   return {
     ...originalModule,

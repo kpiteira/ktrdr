@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, LoadingSpinner } from '../common';
-import { useOhlcvData, useDataSelection } from '../../store/hooks';
+import { useOhlcvData, useDataSelection } from '../../hooks';
 
 interface DataLoadButtonProps {
   className?: string;

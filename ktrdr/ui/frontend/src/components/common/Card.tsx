@@ -76,3 +76,6 @@ export const Card: React.FC<CardProps> = ({
     </div>
   );
 };
+
+// Also export as default for more flexible importing
+export default Card;

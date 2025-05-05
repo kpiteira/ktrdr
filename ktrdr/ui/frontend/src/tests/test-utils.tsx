@@ -6,14 +6,16 @@ import userEvent from '@testing-library/user-event';
 
 // Mock root reducer instead of importing the actual one
 const mockRootReducer = {
-  data: (state = {}, action) => state,
+  symbols: (state = {}, action) => state,
+  charting: (state = {}, action) => state,
   ui: (state = {}, action) => state,
   indicators: (state = {}, action) => state
 };
 
 // RootState type that matches our mock reducer
 export interface RootState {
-  data: any;
+  symbols: any;
+  charting: any;
   ui: any;
   indicators: any;
 }

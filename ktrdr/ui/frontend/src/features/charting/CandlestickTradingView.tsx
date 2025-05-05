@@ -1,14 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { useTheme } from '../../layouts/ThemeProvider';
-import { OHLCVData } from '../../../types/data';
-import { Button } from '../../common/Button';
+import { useTheme } from '../../app/ThemeProvider';
+import { OHLCVData } from '../../types/data';
+import { Button } from '../../components/common/Button';
 import { 
   formatCandlestickData, 
   formatVolumeData, 
   createEmptyChartData,
   validateChartData 
-} from '../transformers/dataAdapters';
-import { getTimeScaleConfiguration } from '../transformers/timeFormatters';
+} from './transformers/dataAdapters';
+import { getTimeScaleConfiguration } from './transformers/timeFormatters';
 
 import './ChartContainer.css';
 

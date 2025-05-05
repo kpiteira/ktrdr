@@ -1,6 +1,6 @@
 import React from 'react';
-import { Card, LoadingSpinner } from '../common';
-import { useOhlcvData } from '../../store/hooks';
+import { Table, LoadingSpinner, Card } from '../common';
+import { useOhlcvData } from '../../hooks';
 
 interface DataPreviewProps {
   className?: string;

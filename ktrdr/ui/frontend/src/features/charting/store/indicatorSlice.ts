@@ -1,6 +1,23 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { getIndicators, calculateIndicators } from '../../api/endpoints/indicators';
-import type { IndicatorMetadata, IndicatorConfig } from '../../types/indicators';
+import { getIndicators, calculateIndicators } from '../../../api/endpoints/indicators';
+
+// Define types for indicator metadata and configuration
+export interface IndicatorMetadata {
+  name: string;
+  description: string;
+  defaultParameters: Record<string, any>;
+  category: string;
+  availableSources: string[];
+}
+
+export interface IndicatorConfig {
+  name: string;
+  parameters: Record<string, any>;
+  source?: string;
+  panel?: string;
+  color?: string;
+  visible?: boolean;
+}
 
 // Define types for the indicator state
 export interface IndicatorState {

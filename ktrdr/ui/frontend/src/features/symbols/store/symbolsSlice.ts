@@ -1,54 +1,31 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { loadData, getSymbols, getTimeframes } from '../../api/endpoints/data';
-import type { OHLCVData } from '../../types/data';
+import { getSymbols, getTimeframes } from '../../../api/endpoints/data';
 
-// Define types for the state
-interface DataState {
+// Define types for the symbols state
+export interface SymbolsState {
   symbols: string[];
   timeframes: string[];
   currentSymbol: string | null;
   currentTimeframe: string | null;
-  ohlcvData: OHLCVData | null;
   symbolsStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   timeframesStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
-  dataStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 }
 
 // Initialize the state
-const initialState: DataState = {
+const initialState: SymbolsState = {
   symbols: [],
   timeframes: [],
   currentSymbol: null,
   currentTimeframe: null,
-  ohlcvData: null,
   symbolsStatus: 'idle',
   timeframesStatus: 'idle',
-  dataStatus: 'idle',
   error: null
 };
 
-// Create async thunks for data operations
-export const fetchData = createAsyncThunk(
-  'data/fetchData',
-  async ({ symbol, timeframe, startDate, endDate }: { 
-    symbol: string; 
-    timeframe: string; 
-    startDate?: string; 
-    endDate?: string;
-  }) => {
-    try {
-      const response = await loadData({ symbol, timeframe, startDate, endDate });
-      return response;
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      throw error;
-    }
-  }
-);
-
+// Create async thunks for symbol data operations
 export const fetchSymbols = createAsyncThunk(
-  'data/fetchSymbols',
+  'symbols/fetchSymbols',
   async () => {
     try {
       const symbols = await getSymbols();
@@ -61,7 +38,7 @@ export const fetchSymbols = createAsyncThunk(
 );
 
 export const fetchTimeframes = createAsyncThunk(
-  'data/fetchTimeframes',
+  'symbols/fetchTimeframes',
   async () => {
     try {
       const timeframes = await getTimeframes();
@@ -73,9 +50,9 @@ export const fetchTimeframes = createAsyncThunk(
   }
 );
 
-// Create the data slice
-const dataSlice = createSlice({
-  name: 'data',
+// Create the symbols slice
+const symbolsSlice = createSlice({
+  name: 'symbols',
   initialState,
   reducers: {
     setCurrentSymbol: (state, action: PayloadAction<string | null>) => {
@@ -83,29 +60,9 @@ const dataSlice = createSlice({
     },
     setCurrentTimeframe: (state, action: PayloadAction<string | null>) => {
       state.currentTimeframe = action.payload;
-    },
-    clearData: (state) => {
-      state.ohlcvData = null;
-      state.dataStatus = 'idle';
-      state.error = null;
     }
   },
   extraReducers: (builder) => {
-    // Handle fetchData
-    builder
-      .addCase(fetchData.pending, (state) => {
-        state.dataStatus = 'loading';
-        state.error = null;
-      })
-      .addCase(fetchData.fulfilled, (state, action) => {
-        state.dataStatus = 'succeeded';
-        state.ohlcvData = action.payload;
-      })
-      .addCase(fetchData.rejected, (state, action) => {
-        state.dataStatus = 'failed';
-        state.error = action.error.message || 'Failed to load data';
-      });
-    
     // Handle fetchSymbols
     builder
       .addCase(fetchSymbols.pending, (state) => {
@@ -149,5 +106,5 @@ const dataSlice = createSlice({
 });
 
 // Export actions and reducer
-export const { setCurrentSymbol, setCurrentTimeframe, clearData } = dataSlice.actions;
-export default dataSlice.reducer;
+export const { setCurrentSymbol, setCurrentTimeframe } = symbolsSlice.actions;
+export default symbolsSlice.reducer;

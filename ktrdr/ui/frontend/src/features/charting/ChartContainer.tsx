@@ -7,7 +7,7 @@ import {
   LogicalRangeChangeEventHandler,
   UTCTimestamp
 } from 'lightweight-charts';
-import { useTheme } from '../layouts/ThemeProvider';
+import { useTheme } from '../../app/ThemeProvider';
 import { createChartOptions, handleChartResize, cleanupChart } from '../../utils/charts';
 import { ChartConfig } from '../../types/charts';
 
