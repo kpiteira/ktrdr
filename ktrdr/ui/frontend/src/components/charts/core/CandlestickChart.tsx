@@ -215,11 +215,12 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
         onCrosshairMove(newCrosshairData);
       }
       
-      // Update legend values - using a functional update to avoid stale state
+      // Only update legend items if we actually have candle data and it differs from current
       if (seriesData.candle) {
         const { open, high, low, close } = seriesData.candle;
         
-        setLegendItems([
+        // Create new legend items without triggering unnecessary re-renders
+        const newLegendItems = [
           {
             id: 'o',
             label: 'Open',
@@ -247,15 +248,31 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             value: close,
             color: close >= open ? (chartOptions.upColor || '#26a69a') : (chartOptions.downColor || '#ef5350'),
             isActive: true
-          },
-          ...(seriesData.volume ? [{
+          }
+        ];
+        
+        // Add volume if it exists
+        if (seriesData.volume) {
+          newLegendItems.push({
             id: 'v',
             label: 'Volume',
             value: seriesData.volume.value.toLocaleString(),
             color: 'rgba(150, 150, 150, 0.8)',
             isActive: true
-          }] : [])
-        ]);
+          });
+        }
+        
+        // Use a reference comparison to determine if we need to update state
+        setLegendItems(prev => {
+          // Simple check if the data has changed
+          const hasChanged = prev.some((item, idx) => 
+            idx < newLegendItems.length && 
+            (item.value !== newLegendItems[idx].value || 
+             item.color !== newLegendItems[idx].color)
+          );
+          
+          return hasChanged ? newLegendItems : prev;
+        });
       }
     } catch (error) {
       console.error('Error in crosshair handler:', error);
@@ -285,48 +302,51 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     };
   }, []);
   
-  // Initialize chart once when library is loaded and container is ready
+  // Create or recreate chart when theme/options/dimensions change
   useEffect(() => {
     if (!isLightweightChartsLoaded || !chartContainerRef.current) {
       return;
     }
     
-    // Cleanup function for this effect
-    return () => {
-      // Clean up resize observer
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-      
-      // Clear any pending timeouts
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-        resizeTimeoutRef.current = null;
-      }
-      
-      // Clean up chart instance if it exists
-      if (chartInstanceRef.current) {
-        try {
-          // Unsubscribe from events first
-          chartInstanceRef.current.unsubscribeCrosshairMove(handleCrosshairMove);
+    // Prevent chart recreation if one already exists to avoid update cycles
+    // Only recreate if critical properties have changed
+    const shouldRecreateChart = !chartInstanceRef.current || 
+      // These are the conditions that require a complete chart recreation
+      isDarkTheme !== (chartContainerRef.current?.className || '').includes('dark-theme');
+    
+    if (!shouldRecreateChart) {
+      // Just update chart options without full recreation
+      try {
+        if (chartInstanceRef.current) {
+          // Update candlestick series colors
+          if (candlestickSeriesRef.current) {
+            candlestickSeriesRef.current.applyOptions({
+              upColor: chartOptions.upColor || '#26a69a',
+              downColor: chartOptions.downColor || '#ef5350',
+              wickUpColor: chartOptions.wickUpColor || '#26a69a',
+              wickDownColor: chartOptions.wickDownColor || '#ef5350',
+            });
+          }
           
-          // Then remove the chart
-          chartInstanceRef.current.remove();
-          chartInstanceRef.current = null;
-          candlestickSeriesRef.current = null;
-          volumeSeriesRef.current = null;
-        } catch (error) {
-          console.error('Error during chart cleanup:', error);
+          // Update grid visibility
+          chartInstanceRef.current.applyOptions({
+            grid: {
+              vertLines: { visible: chartOptions.showGrid !== false },
+              horzLines: { visible: chartOptions.showGrid !== false },
+            },
+          });
+          
+          // Update dimensions if needed
+          const containerWidth = chartContainerRef.current.clientWidth;
+          const chartWidth = width || containerWidth;
+          chartInstanceRef.current.resize(chartWidth, height);
+          
+          return; // Skip the rest of the recreation logic
         }
+      } catch (error) {
+        console.error('Error updating chart options:', error);
+        // If updating fails, we'll fall through to recreate the chart
       }
-    };
-  }, [isLightweightChartsLoaded, handleCrosshairMove]);
-  
-  // Create or recreate chart when theme/options/dimensions change
-  useEffect(() => {
-    if (!isLightweightChartsLoaded || !chartContainerRef.current) {
-      return;
     }
     
     try {
@@ -517,7 +537,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
     onChartInit,
     formatCandlestickData,
     formatVolumeData,
-    // Include data only in the initial setup, not in updates
+    data, // It's okay to include data here since we'll only recreate on critical changes
   ]);
   
   // Update data when it changes - using a separate effect for data updates only

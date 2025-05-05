@@ -3,6 +3,7 @@ import { useTheme } from '../../layouts/ThemeProvider';
 import { Button } from '../../common/Button';
 import { Card } from '../../common/Card';
 import { Select } from '../../common/Select';
+import IndicatorPanel from '../../charts/indicators/IndicatorPanel';
 
 // Import chart utilities
 import {
@@ -18,6 +19,12 @@ import {
   UpdateMode
 } from '../../../utils/charts';
 
+// Import indicator calculations
+import {
+  calculateSMA,
+  calculateRSI
+} from '../../../utils/indicators/calculations';
+
 // Import validation utilities
 import {
   validateOHLCVData,
@@ -25,7 +32,7 @@ import {
 } from '../../../utils/charts/dataValidation';
 
 // Import common types or interfaces
-import { OHLCVData } from '../../../types/data';
+import { OHLCVData, IndicatorType } from '../../../types/data';
 
 // Preprocessing methods for the dropdown
 const preprocessingMethods = [
@@ -71,7 +78,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
 }) => {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dimensionsRef = useRef<{
     width: number;
     height: number;
@@ -85,6 +92,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
     volume: null
   });
   const [data, setData] = useState<OHLCVData | null>(null);
+  const [processedData, setProcessedData] = useState<OHLCVData | null>(null);
   const [transformedData, setTransformedData] = useState<any[]>([]);
   const [volumeData, setVolumeData] = useState<any[]>([]);
   const [preprocessMethod, setPreprocessMethod] = useState<string>('none');
@@ -95,6 +103,9 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
   const [isLibraryLoaded, setIsLibraryLoaded] = useState<boolean>(false);
   const updaterRef = useRef<ChartUpdater | null>(null);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
+
+  // New state for indicators
+  const [indicators, setIndicators] = useState<string[]>(['sma']);
 
   // Calculate total container height with enough bottom padding for data summary
   const totalContainerHeight = height + 250; // Add 250px extra space for data summary
@@ -164,7 +175,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
     }
     
     // Store any cleanup function that initializeChart might return
-    let cleanupFunction: (() => void) | void;
+    let cleanupFunction: (() => void) | undefined;
     
     try {
       cleanupFunction = initializeChart();
@@ -193,7 +204,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
         }
       }
     };
-  }, [isLibraryLoaded, theme, width, height, showVolume]);
+  }, [isLibraryLoaded, theme, width, height, showVolume, chartInstance]);
 
   // Update data when it changes or preprocessing method changes
   useEffect(() => {
@@ -301,7 +312,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
   };
 
   // Initialize chart
-  const initializeChart = () => {
+  const initializeChart = (): (() => void) | undefined => {
     if (!containerRef.current || !window.LightweightCharts) return;
 
     try {
@@ -357,11 +368,12 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
       });
 
       // Store series reference
-      setSeries(prev => ({ ...prev, candlestick: candlestickSeries }));
+      setSeries((prev: any) => ({ ...prev, candlestick: candlestickSeries }));
 
       // Add volume series if needed
+      let volumeSeries = null;
       if (showVolume) {
-        const volumeSeries = chart.addHistogramSeries({
+        volumeSeries = chart.addHistogramSeries({
           color: '#26a69a',
           priceFormat: {
             type: 'volume',
@@ -383,7 +395,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
         });
 
         // Store volume series reference
-        setSeries(prev => ({ ...prev, volume: volumeSeries }));
+        setSeries((prev: any) => ({ ...prev, volume: volumeSeries }));
       }
 
       // Store chart instance
@@ -402,7 +414,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
         // If candlestick series exists, add it to the updater
         if (typeof candlestickSeries !== 'undefined' && candlestickSeries !== null) {
           try {
-            updater.addSeries('candlestick', candlestickSeries, 'Candlestick');
+            updater.addSeries('candlestick', candlestickSeries, 'candlestick');
             seriesAdded = true;
           } catch (e) {
             console.warn('Failed to add candlestick series to updater:', e);
@@ -412,7 +424,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
         // If volume series exists and volume is enabled, add it to the updater
         if (showVolume && typeof volumeSeries !== 'undefined' && volumeSeries !== null) {
           try {
-            updater.addSeries('histogram', volumeSeries, 'Volume');
+            updater.addSeries('histogram', volumeSeries, 'histogram');
             seriesAdded = true;
           } catch (e) {
             console.warn('Failed to add volume series to updater:', e);
@@ -480,6 +492,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
       };
     } catch (error) {
       console.error('Error initializing chart:', error);
+      return undefined;
     }
   };
 
@@ -497,6 +510,8 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
         );
       }
       
+      setProcessedData(processedData);
+      
       // Validate data
       try {
         const validationResult = validateData(processedData);
@@ -508,7 +523,8 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
         // Fix data if validation failed
         if (!validationResult.valid) {
           console.log('Fixing invalid data before display');
-          processedData = fixOHLCVData(processedData);
+          const fixedData = fixOHLCVData(processedData, true);
+          processedData = fixedData.data;
         }
       } catch (error) {
         console.error('Error validating data:', error);
@@ -538,6 +554,108 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
       chartInstance.timeScale().fitContent();
     } catch (error) {
       console.error('Error updating chart data:', error);
+    }
+  };
+
+  // Calculate indicator data
+  const calculateIndicatorData = (indicatorId: string, data: OHLCVData): any => {
+    if (!data) return null;
+    
+    let config: any;
+    
+    switch (indicatorId) {
+      case 'sma':
+        config = {
+          id: 'sma',
+          indicatorId: 'sma',
+          parameters: { period: 20, source: 'close' },
+          colors: ['#2196F3'],
+          visible: true
+        };
+        break;
+      case 'rsi':
+        config = {
+          id: 'rsi',
+          indicatorId: 'rsi',
+          parameters: { period: 14, source: 'close' },
+          colors: ['#FF9800'],
+          visible: true
+        };
+        break;
+      default:
+        throw new Error(`Unknown indicator: ${indicatorId}`);
+    }
+    
+    // Convert OHLCV format for calculations
+    const prices = data.ohlcv.map(candle => candle[3]); // Close prices
+    const timestamps = data.dates.map(date => 
+      typeof date === 'string' ? new Date(date).getTime() : date
+    );
+    
+    // Use the imported calculation functions
+    if (indicatorId === 'sma') {
+      const values = calculateSMA(prices, config.parameters.period);
+      
+      return {
+        indicatorId: 'sma',
+        timestamps,
+        values: [values], // Wrapped in array for multi-line support
+        metadata: {
+          name: 'Simple Moving Average',
+          displayFormat: '.2f'
+        }
+      };
+    }
+    
+    if (indicatorId === 'rsi') {
+      return {
+        indicatorId: 'rsi',
+        timestamps,
+        values: [calculateRSI(prices, config.parameters.period)],
+        metadata: {
+          name: 'Relative Strength Index',
+          displayFormat: '.2f'
+        }
+      };
+    }
+    
+    return null;
+  };
+
+  // Get indicator configuration
+  const getIndicatorConfig = (indicatorId: string): any => {
+    switch (indicatorId) {
+      case 'sma':
+        return {
+          id: 'sma',
+          indicatorId: 'sma',
+          name: 'Simple Moving Average',
+          parameters: { period: 20, source: 'close' },
+          colors: ['#2196F3'],
+          visible: true,
+          overlay: true
+        };
+      case 'rsi':
+        return {
+          id: 'rsi',
+          indicatorId: 'rsi',
+          name: 'Relative Strength Index',
+          parameters: { period: 14, source: 'close' },
+          colors: ['#FF9800'],
+          visible: true,
+          overlay: false
+        };
+      default:
+        throw new Error(`Unknown indicator: ${indicatorId}`);
+    }
+  };
+  
+  // Toggle indicator visibility
+  const toggleIndicator = (indicatorId: string) => {
+    if (indicators.includes(indicatorId)) {
+      setIndicators(indicators.filter(id => id !== indicatorId));
+    } else {
+      setIndicators([...indicators, indicatorId]);
     }
   };
 
@@ -592,6 +710,33 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
     );
   };
 
+  // Render indicator panels
+  const renderIndicatorPanels = () => {
+    if (!chartInstance || !processedData) return null;
+    
+    return indicators.map((indicatorId) => {
+      const indicatorData = calculateIndicatorData(indicatorId, processedData);
+      const indicatorConfig = getIndicatorConfig(indicatorId);
+      
+      if (!indicatorConfig.overlay) {
+        return (
+          <IndicatorPanel
+            key={indicatorId}
+            mainChart={chartInstance}
+            data={indicatorData}
+            config={indicatorConfig}
+            type={indicatorId === 'sma' ? IndicatorType.LINE : IndicatorType.LINE}
+            height={120}
+            title={`${indicatorConfig.name} (${indicatorConfig.parameters.period})`}
+            visible={true}
+            onRemove={() => toggleIndicator(indicatorId)}
+          />
+        );
+      }
+      return null;
+    });
+  };
+
   return (
     <div className="data-transformation-example">
       <Card title="Chart Data Transformation Example">
@@ -625,6 +770,20 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
               variant="outline"
             >
               {showDebug ? 'Hide Debug' : 'Show Debug'}
+            </Button>
+
+            <Button 
+              onClick={() => toggleIndicator('sma')} 
+              variant={indicators.includes('sma') ? 'primary' : 'outline'}
+            >
+              {indicators.includes('sma') ? 'Hide SMA' : 'Show SMA'}
+            </Button>
+            
+            <Button 
+              onClick={() => toggleIndicator('rsi')} 
+              variant={indicators.includes('rsi') ? 'primary' : 'outline'}
+            >
+              {indicators.includes('rsi') ? 'Hide RSI' : 'Show RSI'}
             </Button>
           </div>
           
@@ -661,6 +820,9 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
             }}
           />
           
+          {/* Render indicator panels */}
+          {renderIndicatorPanels()}
+          
           {validation && !validation.valid && (
             <div className="validation-errors" style={{ 
               marginTop: '1rem', 
@@ -694,15 +856,7 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
             </p>
             {data && data.dates.length > 0 && (
               <p>
-                Date Range: {formatTimeForDisplay(
-                  new Date(data.dates[0]).getTime() / 1000, 
-                  data.metadata.timeframe,
-                  getTimeFormatForTimeframe(data.metadata.timeframe)
-                )} to {formatTimeForDisplay(
-                  new Date(data.dates[data.dates.length - 1]).getTime() / 1000,
-                  data.metadata.timeframe,
-                  getTimeFormatForTimeframe(data.metadata.timeframe)
-                )}
+                Date Range: {data.dates[0]} to {data.dates[data.dates.length - 1]}
               </p>
             )}
             

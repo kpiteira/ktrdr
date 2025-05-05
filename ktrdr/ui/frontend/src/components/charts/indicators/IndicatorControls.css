@@ -1,0 +1,229 @@
+/* filepath: /Users/karl/Documents/dev/ktrdr2/ktrdr/ui/frontend/src/components/charts/indicators/IndicatorControls.css */
+.indicator-controls {
+  margin: 10px 0;
+  border-radius: 4px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.indicator-controls.dark-theme {
+  --bg-color: #1E1E1E;
+  --border-color: #2B2B43;
+  --text-color: #D9D9D9;
+  --header-bg: #2D2D2D;
+  --control-bg: #333;
+  --control-border: #444;
+  --control-hover: #555;
+  --button-bg: #2196F3;
+  --button-hover: #1976D2;
+  --section-bg: #282828;
+}
+
+.indicator-controls.light-theme {
+  --bg-color: #FFFFFF;
+  --border-color: #E6E6E6;
+  --text-color: #333333;
+  --header-bg: #F5F5F5;
+  --control-bg: #F9F9F9;
+  --control-border: #E0E0E0;
+  --control-hover: #EEEEEE;
+  --button-bg: #2196F3;
+  --button-hover: #1976D2;
+  --section-bg: #F5F5F5;
+}
+
+.indicator-controls-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--header-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.indicator-controls-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.indicator-controls-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.indicator-controls-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-expand-button,
+.remove-button {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  padding: 0;
+}
+
+.toggle-expand-button:hover,
+.remove-button:hover {
+  background-color: var(--control-hover);
+}
+
+.remove-button:hover {
+  color: #F44336;
+}
+
+.indicator-controls-content {
+  background-color: var(--bg-color);
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+}
+
+.indicator-parameters,
+.indicator-styling {
+  margin-bottom: 16px;
+}
+
+.indicator-parameters h4,
+.indicator-styling h4 {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  color: var(--text-color);
+  font-weight: 500;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.indicator-control-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.indicator-control-item label {
+  font-size: 12px;
+  color: var(--text-color);
+}
+
+.indicator-control-item input[type="number"],
+.indicator-control-item select {
+  width: 120px;
+  padding: 4px 8px;
+  border: 1px solid var(--control-border);
+  border-radius: 3px;
+  background-color: var(--control-bg);
+  color: var(--text-color);
+  font-size: 12px;
+}
+
+.indicator-control-item.checkbox {
+  justify-content: flex-start;
+}
+
+.indicator-control-item.checkbox input {
+  margin-right: 8px;
+}
+
+.series-style-control {
+  background-color: var(--section-bg);
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.series-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 6px;
+}
+
+.style-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.color-picker,
+.line-width-control,
+.line-style-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-picker label,
+.line-width-control label,
+.line-style-control label {
+  font-size: 12px;
+  color: var(--text-color);
+}
+
+.color-picker input[type="color"] {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.line-width-control select,
+.line-style-control select {
+  padding: 2px 4px;
+  border: 1px solid var(--control-border);
+  border-radius: 3px;
+  background-color: var(--control-bg);
+  color: var(--text-color);
+  font-size: 12px;
+}
+
+/* Visibility toggle styling */
+.visibility-toggle {
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+
+.visibility-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.visibility-toggle label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  background-color: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.visibility-toggle input:checked + label::after {
+  content: "✓";
+  position: absolute;
+  top: 0;
+  left: 2px;
+  font-size: 12px;
+  color: var(--button-bg);
+}

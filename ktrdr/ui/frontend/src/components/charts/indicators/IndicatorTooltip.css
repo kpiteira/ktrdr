@@ -1,0 +1,87 @@
+/* filepath: /Users/karl/Documents/dev/ktrdr2/ktrdr/ui/frontend/src/components/charts/indicators/IndicatorTooltip.css */
+.indicator-tooltip {
+  position: absolute;
+  min-width: 150px;
+  max-width: 300px;
+  border-radius: 4px;
+  padding: 0;
+  font-size: 12px;
+  pointer-events: none;
+  overflow: hidden;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.24);
+  z-index: 100;
+}
+
+.indicator-tooltip.dark-theme {
+  --tooltip-bg: #1E1E1E;
+  --tooltip-border: #2B2B43;
+  --header-bg: #262626;
+  --title-color: #D9D9D9;
+  --text-color: #BDBDBD;
+  --value-color: #FFFFFF;
+}
+
+.indicator-tooltip.light-theme {
+  --tooltip-bg: #FFFFFF;
+  --tooltip-border: #E6E6E6;
+  --header-bg: #F5F5F5;
+  --title-color: #333333;
+  --text-color: #666666;
+  --value-color: #000000;
+}
+
+.indicator-tooltip.position-left {
+  left: 12px;
+}
+
+.indicator-tooltip.position-right {
+  right: 12px;
+}
+
+.indicator-tooltip-header {
+  padding: 6px 10px;
+  background-color: var(--header-bg);
+  border-bottom: 1px solid var(--tooltip-border);
+}
+
+.tooltip-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--title-color);
+}
+
+.indicator-tooltip-content {
+  padding: 6px 10px;
+  background-color: var(--tooltip-bg);
+}
+
+.indicator-values-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.indicator-value-row:not(:last-child) {
+  margin-bottom: 3px;
+}
+
+.indicator-series-name {
+  color: var(--text-color);
+  padding: 3px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.color-marker {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.indicator-value {
+  text-align: right;
+  font-weight: 500;
+  color: var(--value-color);
+  padding: 3px 0;
+}

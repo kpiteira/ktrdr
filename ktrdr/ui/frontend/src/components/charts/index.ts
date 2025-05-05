@@ -21,20 +21,47 @@ export {
   LegendItem
 };
 
+// Export indicator components
+import IndicatorChart from './indicators/IndicatorChart';
+import { 
+  IndicatorSeries, 
+  IndicatorPanel, 
+  IndicatorControls, 
+  IndicatorTooltip 
+} from './indicators';
+export {
+  IndicatorChart,
+  IndicatorSeries,
+  IndicatorPanel,
+  IndicatorControls,
+  IndicatorTooltip
+};
+
 // Export types
 export type { ChartCustomizableOptions } from './core/ChartControls/ChartOptions';
 export type { CrosshairData } from './core/CrosshairInfo/CrosshairContainer';
 export type { LegendItemData } from './core/ChartLegend/LegendContainer';
+export type { 
+  IndicatorType, 
+  IndicatorDisplay, 
+  IndicatorParameter,
+  IndicatorMetadata, 
+  IndicatorConfig, 
+  IndicatorData 
+} from '../../../types/data';
 
 // Export transformers (data utilities)
 import * as dataAdapters from './transformers/dataAdapters';
 import * as timeFormatters from './transformers/timeFormatters';
-export { dataAdapters, timeFormatters };
+import * as indicatorAdapters from './transformers/indicatorAdapters';
+export { dataAdapters, timeFormatters, indicatorAdapters };
 
 // Default export for backward compatibility
 export default {
   CandlestickTradingView,
   CandlestickChart,
+  IndicatorChart,
   dataAdapters,
-  timeFormatters
+  timeFormatters,
+  indicatorAdapters
 };

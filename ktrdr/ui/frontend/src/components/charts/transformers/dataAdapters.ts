@@ -1,4 +1,5 @@
 import { OHLCVData } from '../../../types/data';
+import { formatDateForChart } from './indicatorAdapters';
 
 /**
  * Transforms OHLCV data into format suitable for TradingView candlestick chart
@@ -15,7 +16,7 @@ export const formatCandlestickData = (data: OHLCVData) => {
     const [open, high, low, close, _volume] = data.ohlcv[index];
     
     return {
-      time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
+      time: formatDateForChart(date),
       open,
       high,
       low,
@@ -39,7 +40,7 @@ export const formatVolumeData = (data: OHLCVData) => {
     const [open, _high, _low, close, volume] = data.ohlcv[index];
     
     return {
-      time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
+      time: formatDateForChart(date),
       value: volume,
       color: close >= open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
     };
