@@ -1,0 +1,39 @@
+.candlestick-chart-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chart-title {
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 8px 0;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.chart-controls {
+  flex-shrink: 0;
+}
+
+.chart-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.chart-wrapper {
+  position: relative;
+  flex-grow: 1;
+  min-height: 0;
+}
+
+/* Dark theme adjustments */
+.candlestick-chart-container.dark-theme .chart-title {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}

@@ -149,14 +149,14 @@ export const SymbolSelector: React.FC = () => {
   - [x] Create debug utilities for chart data inspection
 
 ### Chart Components
-- [ ] **Task 8.3**: Implement core chart components
-  - [ ] Create CandlestickChart component with customizable options
-  - [ ] Implement ChartControls for user interaction
-  - [ ] Add time navigation controls (zoom, pan, reset)
-  - [ ] Create ChartLegend component with dynamic data
-  - [ ] Implement CrosshairInfo component for value display
-  - [ ] Add chart resize handling with performance optimization
-  - [ ] Create ChartOptions component for visual customization
+- [x] **Task 8.3**: Implement core chart components
+  - [x] Create CandlestickChart component with customizable options
+  - [x] Implement ChartControls for user interaction
+  - [x] Add time navigation controls (zoom, pan, reset)
+  - [x] Create ChartLegend component with dynamic data
+  - [x] Implement CrosshairInfo component for value display
+  - [x] Add chart resize handling with performance optimization
+  - [x] Create ChartOptions component for visual customization
 
 - [ ] **Task 8.4**: Develop indicator visualization
   - [ ] Create IndicatorSeries component for line-based indicators

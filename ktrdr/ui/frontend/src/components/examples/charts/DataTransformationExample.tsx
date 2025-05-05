@@ -96,6 +96,9 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
   const updaterRef = useRef<ChartUpdater | null>(null);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
 
+  // Calculate total container height with enough bottom padding for data summary
+  const totalContainerHeight = height + 250; // Add 250px extra space for data summary
+
   // Generate initial test data
   useEffect(() => {
     generateData();
@@ -646,63 +649,66 @@ const DataTransformationExample: React.FC<DataTransformationExampleProps> = ({
           </div>
         </div>
         
-        <div 
-          className="chart-container" 
-          ref={containerRef} 
-          style={{ 
-            height, 
-            width: '100%',
-            position: 'relative'
-          }}
-        />
-        
-        {validation && !validation.valid && (
-          <div className="validation-errors" style={{ 
-            marginTop: '1rem', 
-            padding: '0.5rem', 
-            backgroundColor: 'rgba(255, 0, 0, 0.1)',
-            borderRadius: '4px'
-          }}>
-            <h4>Validation Errors:</h4>
-            <ul>
-              {Array.isArray(validation.issues) && validation.issues.slice(0, 5).map((issue: any, index: number) => (
-                <li key={index}>
-                  {typeof issue === 'string' 
-                    ? issue 
-                    : (issue.message || JSON.stringify(issue))}
-                  {issue?.index !== undefined && ` (at index ${issue.index})`}
-                </li>
-              ))}
-              {Array.isArray(validation.issues) && validation.issues.length > 5 && (
-                <li>...and {validation.issues.length - 5} more errors</li>
-              )}
-            </ul>
-          </div>
-        )}
-        
-        <div className="data-info" style={{ marginTop: '1rem' }}>
-          <h4>Data Summary:</h4>
-          <p>
-            Symbol: {data?.metadata.symbol}, 
-            Timeframe: {data?.metadata.timeframe}, 
-            Points: {data?.dates.length || 0}
-          </p>
-          {data && data.dates.length > 0 && (
-            <p>
-              Date Range: {formatTimeForDisplay(
-                new Date(data.dates[0]).getTime() / 1000, 
-                data.metadata.timeframe,
-                getTimeFormatForTimeframe(data.metadata.timeframe)
-              )} to {formatTimeForDisplay(
-                new Date(data.dates[data.dates.length - 1]).getTime() / 1000,
-                data.metadata.timeframe,
-                getTimeFormatForTimeframe(data.metadata.timeframe)
-              )}
-            </p>
+        <div style={{ height: totalContainerHeight, position: 'relative', marginBottom: '30px' }}>
+          <div 
+            className="chart-container" 
+            ref={containerRef} 
+            style={{ 
+              height: height, 
+              width: '100%',
+              position: 'relative',
+              marginBottom: '20px'
+            }}
+          />
+          
+          {validation && !validation.valid && (
+            <div className="validation-errors" style={{ 
+              marginTop: '1rem', 
+              padding: '0.5rem', 
+              backgroundColor: 'rgba(255, 0, 0, 0.1)',
+              borderRadius: '4px'
+            }}>
+              <h4>Validation Errors:</h4>
+              <ul>
+                {Array.isArray(validation.issues) && validation.issues.slice(0, 5).map((issue: any, index: number) => (
+                  <li key={index}>
+                    {typeof issue === 'string' 
+                      ? issue 
+                      : (issue.message || JSON.stringify(issue))}
+                    {issue?.index !== undefined && ` (at index ${issue.index})`}
+                  </li>
+                ))}
+                {Array.isArray(validation.issues) && validation.issues.length > 5 && (
+                  <li>...and {validation.issues.length - 5} more errors</li>
+                )}
+              </ul>
+            </div>
           )}
           
-          {/* Render data sample */}
-          {transformedData.length > 0 && renderDataSummary()}
+          <div className="data-info" style={{ marginTop: '1rem' }}>
+            <h4>Data Summary:</h4>
+            <p>
+              Symbol: {data?.metadata.symbol}, 
+              Timeframe: {data?.metadata.timeframe}, 
+              Points: {data?.dates.length || 0}
+            </p>
+            {data && data.dates.length > 0 && (
+              <p>
+                Date Range: {formatTimeForDisplay(
+                  new Date(data.dates[0]).getTime() / 1000, 
+                  data.metadata.timeframe,
+                  getTimeFormatForTimeframe(data.metadata.timeframe)
+                )} to {formatTimeForDisplay(
+                  new Date(data.dates[data.dates.length - 1]).getTime() / 1000,
+                  data.metadata.timeframe,
+                  getTimeFormatForTimeframe(data.metadata.timeframe)
+                )}
+              </p>
+            )}
+            
+            {/* Render data sample */}
+            {transformedData.length > 0 && renderDataSummary()}
+          </div>
         </div>
       </Card>
     </div>

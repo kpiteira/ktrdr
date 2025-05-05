@@ -1,0 +1,75 @@
+.time-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 4px 8px;
+  background-color: rgba(240, 240, 240, 0.9);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.zoom-controls, .pan-controls, .additional-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.zoom-button, .pan-button, .reset-button, .fit-content-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 28px;
+  border: 1px solid #ddd;
+  background-color: #fff;
+  color: #333;
+  border-radius: 3px;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 8px;
+  transition: all 0.2s ease;
+}
+
+.zoom-button:hover, .pan-button:hover, .reset-button:hover, .fit-content-button:hover {
+  background-color: #f0f0f0;
+  border-color: #ccc;
+}
+
+.zoom-button:active, .pan-button:active, .reset-button:active, .fit-content-button:active {
+  background-color: #e6e6e6;
+  transform: translateY(1px);
+}
+
+.additional-controls button {
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+/* Dark theme adjustments */
+:global(.dark-theme) .time-navigation {
+  background-color: rgba(50, 50, 60, 0.9);
+}
+
+:global(.dark-theme) .zoom-button, 
+:global(.dark-theme) .pan-button, 
+:global(.dark-theme) .reset-button, 
+:global(.dark-theme) .fit-content-button {
+  background-color: #2a2a3c;
+  border-color: #3a3a4c;
+  color: #e0e0e0;
+}
+
+:global(.dark-theme) .zoom-button:hover, 
+:global(.dark-theme) .pan-button:hover, 
+:global(.dark-theme) .reset-button:hover, 
+:global(.dark-theme) .fit-content-button:hover {
+  background-color: #3a3a4c;
+  border-color: #4a4a5c;
+}
+
+:global(.dark-theme) .zoom-button:active, 
+:global(.dark-theme) .pan-button:active, 
+:global(.dark-theme) .reset-button:active, 
+:global(.dark-theme) .fit-content-button:active {
+  background-color: #303045;
+}

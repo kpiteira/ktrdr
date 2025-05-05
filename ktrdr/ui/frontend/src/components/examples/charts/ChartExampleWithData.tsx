@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../common/Button';
-import { CandlestickTradingView } from '../../charts'; 
+import { CandlestickChart } from '../../charts'; 
 import { OHLCVData } from '../../../types/data';
 import './ChartExampleWithData.css';
 
 /**
  * ChartExampleWithData component
  * 
- * Demonstrates the CandlestickTradingView component with sample data
+ * Demonstrates the CandlestickChart component with sample data
  */
 const ChartExampleWithData: React.FC = () => {
   const [data, setData] = useState<OHLCVData | null>(null);
@@ -72,6 +72,12 @@ const ChartExampleWithData: React.FC = () => {
     setTimeframe(tf);
   };
 
+  // Handle crosshair move
+  const handleCrosshairMove = (crosshairData: any) => {
+    // You can add custom handling for crosshair data here
+    // console.log('Crosshair data:', crosshairData);
+  };
+
   return (
     <div className="chart-example-with-data">
       <div className="chart-controls">
@@ -127,23 +133,15 @@ const ChartExampleWithData: React.FC = () => {
       </div>
       
       {data && (
-        <div style={{
-          width: '100%',
-          height: '500px',
-          position: 'relative',
-          overflow: 'hidden',
-          margin: '0 auto',
-          border: '1px solid #ddd',
-          borderRadius: '4px',
-          boxSizing: 'border-box'
-        }}>
-          <CandlestickTradingView
+        <div className="chart-container">
+          <CandlestickChart
             data={data}
             height={500}
             title="Sample OHLCV Data"
             showVolume={true}
             fitContent={true}
             autoResize={true}
+            onCrosshairMove={handleCrosshairMove}
           />
         </div>
       )}

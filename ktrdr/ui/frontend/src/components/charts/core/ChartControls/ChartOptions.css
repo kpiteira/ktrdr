@@ -1,0 +1,208 @@
+.chart-options-panel {
+  position: absolute;
+  right: 16px;
+  top: 50px;
+  width: 280px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  overflow: hidden;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.options-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f6f6f6;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.options-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button:hover {
+  color: #333;
+}
+
+.options-section {
+  padding: 10px 15px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.options-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.option-row {
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.option-row label {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.option-row input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+.color-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.color-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.color-option label {
+  font-size: 12px;
+  color: #555;
+}
+
+.color-option input[type="color"] {
+  width: 100%;
+  height: 24px;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.options-actions {
+  padding: 10px 15px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.reset-button {
+  padding: 6px 12px;
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reset-button:hover {
+  background-color: #e6e6e6;
+}
+
+.chart-options-toggle {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  padding: 6px 12px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 5;
+  transition: all 0.2s ease;
+}
+
+.chart-options-toggle:hover {
+  background-color: #f0f0f0;
+}
+
+/* Dark theme adjustments */
+:global(.dark-theme) .chart-options-panel {
+  background-color: rgba(40, 40, 50, 0.95);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+:global(.dark-theme) .options-header {
+  background-color: #2a2a3c;
+  border-bottom-color: #3a3a4c;
+}
+
+:global(.dark-theme) .options-header h3 {
+  color: #e0e0e0;
+}
+
+:global(.dark-theme) .close-button {
+  color: #aaa;
+}
+
+:global(.dark-theme) .close-button:hover {
+  color: #ddd;
+}
+
+:global(.dark-theme) .options-section {
+  border-bottom-color: #3a3a4c;
+}
+
+:global(.dark-theme) .options-section h4 {
+  color: #aaa;
+}
+
+:global(.dark-theme) .option-row label,
+:global(.dark-theme) .color-option label {
+  color: #ccc;
+}
+
+:global(.dark-theme) .color-option input[type="color"] {
+  border-color: #3a3a4c;
+  background-color: #2a2a3c;
+}
+
+:global(.dark-theme) .reset-button {
+  background-color: #2a2a3c;
+  border-color: #3a3a4c;
+  color: #e0e0e0;
+}
+
+:global(.dark-theme) .reset-button:hover {
+  background-color: #3a3a4c;
+}
+
+:global(.dark-theme) .chart-options-toggle {
+  background-color: rgba(40, 40, 50, 0.9);
+  border-color: #3a3a4c;
+  color: #e0e0e0;
+}
+
+:global(.dark-theme) .chart-options-toggle:hover {
+  background-color: #2a2a3c;
+}
