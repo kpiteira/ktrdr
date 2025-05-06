@@ -1,5 +1,4 @@
 import { ReactNode } from 'react';
-import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from './ThemeProvider';
 import { MainLayout } from './MainLayout';
 import { NotificationProvider, NotificationContainer, DevModeIndicator } from '../components/common';
@@ -15,18 +14,13 @@ interface LayoutProps {
  */
 export const Layout = ({ children }: LayoutProps) => {
   return (
-    <BrowserRouter>
-      <ThemeProvider>
-        <NotificationProvider>
-          <MainLayout>
-            <Router />
-            {children}
-          </MainLayout>
-          <NotificationContainer />
-          <DevModeIndicator position="bottom-right" />
-        </NotificationProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <NotificationProvider>
+        <Router />
+        <NotificationContainer />
+        <DevModeIndicator position="bottom-right" />
+      </NotificationProvider>
+    </ThemeProvider>
   );
 };
 

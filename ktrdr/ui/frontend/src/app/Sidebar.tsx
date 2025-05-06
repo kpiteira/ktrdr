@@ -28,7 +28,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   };
   
   // Convert routes to menu items
-  const menuItems: MenuItem[] = routes;
+  const menuItems: MenuItem[] = [
+    {
+      id: 'home',
+      label: 'Home',
+      path: '/',
+    },
+    {
+      id: 'symbols',
+      label: 'Symbols',
+      path: '/symbols',
+    },
+    {
+      id: 'charts',
+      label: 'Charts',
+      path: '/charts', // This will be a parent category
+    }
+  ];
 
   const renderMenuItem = (item: MenuItem, depth = 0) => {
     const hasSubMenu = item.items && item.items.length > 0;

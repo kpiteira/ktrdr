@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { useTheme } from './ThemeProvider';
@@ -9,7 +10,7 @@ import { useUIStore } from './hooks/useUIStore';
 let isMainLayoutRendered = false;
 
 interface MainLayoutProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
@@ -62,7 +63,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // If this is a nested instance, just render the children directly
   // This prevents duplicate headers and sidebars
   if (isNested.current) {
-    return <>{children}</>;
+    return <>{children || <Outlet />}</>;
   }
 
   // Otherwise render the full layout
@@ -80,7 +81,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             contain: 'paint'
           }}
         >
-          {children}
+          {children || <Outlet />}
         </main>
       </div>
     </div>

@@ -1,48 +1,33 @@
 import React from 'react';
-import { HomeIcon, ChartIcon, DataIcon, StrategyIcon } from './icons';
+import { RouteObject } from 'react-router-dom';
+import { MainLayout } from './MainLayout';
 
-// Define the MenuItem type which is used by the Sidebar
-export interface MenuItem {
-  id: string;
-  label: string;
-  icon?: React.ReactNode;
-  path?: string;
-  items?: MenuItem[];
-}
+// Lazy-loaded components
+const HomePage = React.lazy(() => import('../features/home/HomePage'));
+const SymbolListPage = React.lazy(() => import('../features/symbols/SymbolListPage'));
+const ChartPage = React.lazy(() => import('../features/charting/ChartPage'));
 
-// Define the routes for sidebar navigation
-export const routes: MenuItem[] = [
+// Define routes with React Router v6 format
+export const routes: RouteObject[] = [
   {
-    id: 'home',
-    label: 'Home',
-    path: '/home',
-    icon: <HomeIcon />,
-  },
-  {
-    id: 'symbols',
-    label: 'Symbols',
-    path: '/symbols',
-    icon: <ChartIcon />,
-  },
-  {
-    id: 'charts',
-    label: 'Charts',
-    path: '/charts',
-    icon: <ChartIcon />,
-  },
-  {
-    id: 'data-transform',
-    label: 'Data Transformation',
-    path: '/data-transform',
-    icon: <DataIcon />,
-  },
-  {
-    id: 'strategies',
-    label: 'Strategies',
-    path: '/strategies',
-    icon: <StrategyIcon />,
+    path: '/',
+    element: <MainLayout />,
+    children: [
+      {
+        path: '/',
+        element: <HomePage />,
+      },
+      {
+        path: '/symbols',
+        element: <SymbolListPage />,
+      },
+      {
+        path: '/charts/:symbol',
+        element: <ChartPage />,
+      },
+      // Add additional routes as needed
+    ],
   },
 ];
 
-// Future tasks will add more routes
 export default routes;
