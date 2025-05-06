@@ -5,6 +5,7 @@ You are contributing to the frontend of **KTRDR**, a trading research app using:
 - React Router for navigation
 - A fully working backend API
 - Real feature-based vertical slicing (no examples or mocks)
+- All the frontend code is inside ktrdr/ui/frontend/: path given may be relative to this folder
 
 Your job is to implement **one feature slice**. For this task, you must:
 

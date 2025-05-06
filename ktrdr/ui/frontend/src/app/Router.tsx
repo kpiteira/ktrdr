@@ -2,10 +2,12 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { HomePage } from '../features/home/HomePage';
 
+// Import new feature-based pages
+import SymbolListPage from '../features/symbols/SymbolListPage';
+
 // Import existing pages
 import DataSelectionPage from '../pages/DataSelectionPage';
 import ChartPage from '../pages/ChartPage';
-import SymbolsPage from '../pages/SymbolsPage';
 import DataTransformPage from '../pages/DataTransformPage';
 import StrategiesPage from '../pages/StrategiesPage';
 
@@ -22,9 +24,12 @@ export const Router: React.FC = () => {
       {/* Home route */}
       <Route path="/home" element={<HomePage />} />
       
+      {/* Feature-based routes */}
+      <Route path="/symbols" element={<SymbolListPage />} />
+      
       {/* Connect existing pages from the application */}
-      <Route path="/symbols" element={<SymbolsPage />} />
       <Route path="/charts" element={<ChartPage />} />
+      <Route path="/charts/:symbol" element={<ChartPage />} />
       <Route path="/data-selection" element={<DataSelectionPage />} />
       <Route path="/data-transform" element={<DataTransformPage />} />
       <Route path="/strategies" element={<StrategiesPage />} />

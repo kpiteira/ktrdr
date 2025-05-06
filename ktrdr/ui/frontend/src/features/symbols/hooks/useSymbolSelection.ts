@@ -1,4 +1,5 @@
 import { useDispatch, useSelector } from 'react-redux';
+import { useCallback } from 'react';
 import { RootState } from '../../../app/store';
 import { 
   fetchSymbols, 
@@ -23,26 +24,30 @@ export const useSymbolSelection = () => {
     error
   } = useSelector((state: RootState) => state.symbols);
 
-  const loadMetadata = async () => {
+  // Memoize the loadMetadata function to prevent infinite loops
+  const loadMetadata = useCallback(async () => {
     try {
-      await Promise.all([
-        dispatch(fetchSymbols()).unwrap(),
-        dispatch(fetchTimeframes()).unwrap()
-      ]);
+      // Only fetch new data if we're not already loading
+      if (symbolsStatus !== 'loading' && timeframesStatus !== 'loading') {
+        await Promise.all([
+          dispatch(fetchSymbols()).unwrap(),
+          dispatch(fetchTimeframes()).unwrap()
+        ]);
+      }
       return true;
     } catch (error) {
       console.error('Error loading metadata:', error);
       throw error;
     }
-  };
+  }, [dispatch, symbolsStatus, timeframesStatus]);
 
-  const selectSymbol = (symbol: string | null) => {
+  const selectSymbol = useCallback((symbol: string | null) => {
     dispatch(setCurrentSymbol(symbol));
-  };
+  }, [dispatch]);
 
-  const selectTimeframe = (timeframe: string | null) => {
+  const selectTimeframe = useCallback((timeframe: string | null) => {
     dispatch(setCurrentTimeframe(timeframe));
-  };
+  }, [dispatch]);
 
   const hasActiveSelection = Boolean(currentSymbol && currentTimeframe);
 
