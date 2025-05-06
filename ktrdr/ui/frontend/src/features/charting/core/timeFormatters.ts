@@ -55,47 +55,6 @@ export const formatTimeForDisplay = (date: string | number | Date, timeframe: st
 };
 
 /**
- * Formats time range for chart description
- * 
- * @param startDate Start date
- * @param endDate End date
- * @param timeframe Chart timeframe
- * @returns Formatted time range string
- */
-export const formatTimeRange = (
-  startDate: string | number | Date, 
-  endDate: string | number | Date, 
-  timeframe: string
-): string => {
-  return `${formatTimeForDisplay(startDate, timeframe)} to ${formatTimeForDisplay(endDate, timeframe)}`;
-};
-
-/**
- * Formats timeframe string for display
- * 
- * @param timeframe Timeframe code (e.g., '1d', '4h', '15m')
- * @returns Formatted timeframe string
- */
-export const formatTimeframeForDisplay = (timeframe: string): string => {
-  if (!timeframe) return 'Unknown';
-  
-  const match = timeframe.match(/(\d+)([mhdwMy])/i);
-  if (!match) return timeframe.toUpperCase();
-  
-  const [_, value, unit] = match;
-  
-  switch (unit.toLowerCase()) {
-    case 'm': return `${value} Minute${value !== '1' ? 's' : ''}`;
-    case 'h': return `${value} Hour${value !== '1' ? 's' : ''}`;
-    case 'd': return `${value} Day${value !== '1' ? 's' : ''}`;
-    case 'w': return `${value} Week${value !== '1' ? 's' : ''}`;
-    case 'M': return `${value} Month${value !== '1' ? 's' : ''}`;
-    case 'y': return `${value} Year${value !== '1' ? 's' : ''}`;
-    default: return timeframe.toUpperCase();
-  }
-};
-
-/**
  * Gets appropriate tick marks based on timeframe for chart time scale
  * 
  * @param timeframe Chart timeframe
@@ -114,35 +73,15 @@ export const getTimeScaleConfiguration = (timeframe: string): any => {
           date.getMinutes() + '';
       }
     };
-  } else if (timeframe.toLowerCase().includes('h')) {
-    // For hour timeframes
-    return {
-      timeVisible: true,
-      secondsVisible: false,
-      tickMarkFormatter: (time: number) => {
-        const date = new Date(time * 1000);
-        return date.getHours() + ':00';
-      }
-    };
-  } else if (timeframe.toLowerCase().includes('d')) {
-    // For daily timeframes
-    return {
-      timeVisible: true,
-      secondsVisible: false,
-      tickMarkFormatter: (time: number) => {
-        const date = new Date(time * 1000);
-        return `${date.getMonth() + 1}/${date.getDate()}`;
-      }
-    };
-  } else {
-    // For weekly or larger timeframes
-    return {
-      timeVisible: true,
-      secondsVisible: false,
-      tickMarkFormatter: (time: number) => {
-        const date = new Date(time * 1000);
-        return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-      }
-    };
-  }
+  } 
+  
+  // For other timeframes
+  return {
+    timeVisible: true,
+    secondsVisible: false,
+    tickMarkFormatter: (time: number) => {
+      const date = new Date(time * 1000);
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }
+  };
 };

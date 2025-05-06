@@ -4,10 +4,10 @@ import { HomePage } from '../features/home/HomePage';
 
 // Import new feature-based pages
 import SymbolListPage from '../features/symbols/SymbolListPage';
+import ChartPage from '../features/charting/ChartPage';
 
 // Import existing pages
 import DataSelectionPage from '../pages/DataSelectionPage';
-import ChartPage from '../pages/ChartPage';
 import DataTransformPage from '../pages/DataTransformPage';
 import StrategiesPage from '../pages/StrategiesPage';
 

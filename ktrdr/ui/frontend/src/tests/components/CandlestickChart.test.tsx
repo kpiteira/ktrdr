@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { vi, describe, test, expect, beforeEach } from 'vitest';
-import CandlestickChart from '../../features/charting/components/CandlestickChart';
+import CandlestickChart from '../../features/charting/CandlestickChart';
 
 // Mock the ThemeProvider hook
 vi.mock('../../app/ThemeProvider', () => ({
@@ -15,13 +15,13 @@ vi.mock('../../components/common/Button', () => ({
 }));
 
 // Mock the formatCandlestickData and formatHistogramData functions
-vi.mock('../../features/charting/components/transformers/dataAdapters', () => ({
+vi.mock('../../features/charting/core/dataAdapters', () => ({
   formatCandlestickData: () => [],
   formatHistogramData: () => [],
 }));
 
 // Mock the indicator adapters to fix the import error
-vi.mock('../../features/charting/components/transformers/indicatorAdapters', () => ({
+vi.mock('../../features/charting/core/indicatorAdapters', () => ({
   formatIndicatorData: () => [],
   IndicatorType: {
     SMA: 'sma',

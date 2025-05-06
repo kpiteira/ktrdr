@@ -1,7 +1,8 @@
+// filepath: /Users/karl/Documents/dev/ktrdr2/ktrdr/ui/frontend/src/features/charting/ChartPanel.tsx
 import React, { useRef, useEffect } from 'react';
 import { createChart, IChartApi } from 'lightweight-charts';
-import { useTheme } from '../../../app/ThemeProvider';
-import '../ChartContainer.css';
+import { useTheme } from '../../app/ThemeProvider';
+import './ChartContainer.css';
 
 interface ChartPanelProps {
   children?: React.ReactNode;

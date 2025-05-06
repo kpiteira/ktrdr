@@ -1,399 +1,270 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+// Import transformers from the new core location
+import { formatCandlestickData, formatVolumeData } from './core/dataAdapters';
+import { OHLCVData } from '../../types/data';
 import { useTheme } from '../../app/ThemeProvider';
-import { CrosshairContainer, CrosshairData } from './CrosshairInfo';
-import { ChartToolbar, ChartOptions, ChartCustomizableOptions } from './ChartControls';
-import { LegendContainer, LegendItemData } from './ChartLegend';
-import { OHLCVData } from '../../../types/data';
-import './CandlestickChart.css';
+import { Button } from '../../components/common/Button';
 
-export interface CandlestickChartProps {
-  /** OHLCV data for the chart */
-  data: OHLCVData;
-  /** Height of the chart in pixels */
-  height?: number;
-  /** Width of the chart in pixels, defaults to container width */
+import './ChartContainer.css';
+
+interface CandlestickChartProps {
+  /** The OHLCV data to display */
+  data?: OHLCVData;
+  /** Chart width (defaults to container width) */
   width?: number;
-  /** Chart title */
-  title?: string;
+  /** Chart height */
+  height?: number;
   /** Whether to show volume */
   showVolume?: boolean;
-  /** Whether to fit content on load and data change */
-  fitContent?: boolean;
-  /** Whether to resize the chart when container size changes */
-  autoResize?: boolean;
-  /** Initial chart options */
-  initialOptions?: ChartCustomizableOptions;
-  /** Callback when crosshair position changes */
-  onCrosshairMove?: (data: CrosshairData | null) => void;
-  /** Callback when the chart is initialized */
-  onChartInit?: (chart: any) => void;
+  /** Title to display above the chart */
+  title?: string;
   /** CSS class name for additional styling */
   className?: string;
-  /** Additional padding at the bottom of the chart (in pixels) */
-  bottomPadding?: number;
+  /** Whether to fit the chart content initially */
+  fitContent?: boolean;
+  /** Whether to automatically resize when window changes */
+  autoResize?: boolean;
 }
 
 /**
  * CandlestickChart component
  * 
- * Advanced chart component for displaying OHLCV data with interactive features
+ * A candlestick chart using TradingView Lightweight Charts v4.1.1
  */
 const CandlestickChart: React.FC<CandlestickChartProps> = ({
   data,
-  height = 400,
   width,
-  title,
+  height = 400,
   showVolume = true,
+  title = 'Candlestick Chart',
+  className = '',
   fitContent = true,
   autoResize = true,
-  initialOptions,
-  onCrosshairMove,
-  onChartInit,
-  className = '',
-  bottomPadding = 150 // Increased default bottom padding
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
-  const isDarkTheme = theme === 'dark';
-  
-  // Refs
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const chartInstanceRef = useRef<any>(null);
-  const candlestickSeriesRef = useRef<any>(null);
-  const volumeSeriesRef = useRef<any>(null);
-  
-  // Calculate the actual chart height (leaving space for other elements)
-  const chartHeight = height;
-  // Calculate the total container height with padding
-  const totalHeight = height + bottomPadding;
-  
-  // State
-  const [crosshairData, setCrosshairData] = useState<CrosshairData | null>(null);
-  const [isCrosshairVisible, setIsCrosshairVisible] = useState<boolean>(false);
-  const [legendItems, setLegendItems] = useState<LegendItemData[]>([]);
-  const [isOptionsVisible, setIsOptionsVisible] = useState<boolean>(false);
-  const [chartOptions, setChartOptions] = useState<ChartCustomizableOptions>(initialOptions || {
-    showGrid: true,
-    showVolume: showVolume,
-    upColor: isDarkTheme ? '#26a69a' : '#26a69a',
-    downColor: isDarkTheme ? '#ef5350' : '#ef5350',
-    wickUpColor: isDarkTheme ? '#26a69a' : '#26a69a',
-    wickDownColor: isDarkTheme ? '#ef5350' : '#ef5350',
-  });
-  
-  // Memoize the library loading state to avoid re-renders
-  const [isLightweightChartsLoaded, setIsLightweightChartsLoaded] = useState<boolean>(
-    typeof window !== 'undefined' && typeof window.LightweightCharts !== 'undefined'
-  );
-  
-  // Format OHLCV data for chart (memoized)
-  const formatCandlestickData = useCallback((ohlcvData: OHLCVData) => {
-    if (!ohlcvData || !ohlcvData.dates || !ohlcvData.ohlcv || ohlcvData.dates.length !== ohlcvData.ohlcv.length) {
-      console.error('Invalid OHLCV data');
-      return [];
+  const [chartInstance, setChartInstance] = useState<any>(null);
+  const [volumeVisible, setVolumeVisible] = useState<boolean>(showVolume);
+  const [volumeSeries, setVolumeSeries] = useState<any>(null);
+  const [candlestickSeries, setCandlestickSeries] = useState<any>(null);
+  const [isLibraryLoaded, setIsLibraryLoaded] = useState<boolean>(false);
+
+  // Create sample data if none provided
+  const sampleData = data || {
+    dates: [],
+    ohlcv: [],
+    metadata: {
+      symbol: 'SAMPLE',
+      timeframe: '1D',
+      start: '',
+      end: '',
+      points: 0
     }
-    
-    return ohlcvData.dates.map((date, index) => {
-      const [open, high, low, close, volume] = ohlcvData.ohlcv[index];
-      return {
-        time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
-        open,
-        high, 
-        low,
-        close
-      };
-    });
-  }, []);
-  
-  // Format volume data for chart (memoized)
-  const formatVolumeData = useCallback((ohlcvData: OHLCVData) => {
-    if (!ohlcvData || !ohlcvData.dates || !ohlcvData.ohlcv || ohlcvData.dates.length !== ohlcvData.ohlcv.length) {
-      console.error('Invalid OHLCV data');
-      return [];
-    }
-    
-    return ohlcvData.dates.map((date, index) => {
-      const [open, high, low, close, volume] = ohlcvData.ohlcv[index];
-      const isUp = close >= open;
-      return {
-        time: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0],
-        value: volume,
-        color: isUp ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
-      };
-    });
-  }, []);
-  
-  // Handle chart resize with debouncing
-  const handleResize = useCallback(() => {
-    if (!chartInstanceRef.current || !chartContainerRef.current) return;
-    
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current);
-    }
-    
-    resizeTimeoutRef.current = setTimeout(() => {
-      try {
-        const containerWidth = chartContainerRef.current?.clientWidth || 0;
-        const newWidth = width || containerWidth;
-        
-        if (chartInstanceRef.current) {
-          chartInstanceRef.current.resize(newWidth, height);
-        }
-      } catch (error) {
-        console.error('Error resizing chart:', error);
-      }
-    }, 100);
-  }, [height, width]);
-  
-  // Memoized crosshair handler to prevent recreation on every render
-  const handleCrosshairMove = useCallback((param: any) => {
-    if (!param || !param.point || param.point.x === undefined || param.point.y === undefined) {
-      setIsCrosshairVisible(false);
-      setCrosshairData(null);
-      
-      if (onCrosshairMove) {
-        onCrosshairMove(null);
-      }
-      
-      // Reset legend values - using a callback to avoid stale state
-      setLegendItems(prevItems => 
-        prevItems.map(item => ({
-          ...item,
-          value: '-'
-        }))
-      );
-      
-      return;
-    }
-    
-    setIsCrosshairVisible(true);
-    
-    if (!param.time) {
-      return;
-    }
-    
-    try {
-      // Find data point at crosshair
-      const seriesData: any = {};
-      const prices: any = {};
-      
-      if (candlestickSeriesRef.current) {
-        const candleData = param.seriesData.get(candlestickSeriesRef.current);
-        if (candleData) {
-          seriesData.candle = candleData;
-          prices.candle = {
-            value: candleData.close,
-            color: chartOptions.upColor || '#26a69a',
-            seriesName: 'Price'
-          };
-        }
-      }
-      
-      if (volumeSeriesRef.current) {
-        const volData = param.seriesData.get(volumeSeriesRef.current);
-        if (volData) {
-          seriesData.volume = volData;
-          prices.volume = {
-            value: volData.value,
-            color: 'rgba(150, 150, 150, 0.8)',
-            seriesName: 'Volume'
-          };
-        }
-      }
-      
-      // Create crosshair data object
-      const newCrosshairData: CrosshairData = {
-        time: param.time,
-        prices,
-        additionalData: seriesData
-      };
-      
-      setCrosshairData(newCrosshairData);
-      
-      if (onCrosshairMove) {
-        onCrosshairMove(newCrosshairData);
-      }
-      
-      // Only update legend items if we actually have candle data and it differs from current
-      if (seriesData.candle) {
-        const { open, high, low, close } = seriesData.candle;
-        
-        // Create new legend items without triggering unnecessary re-renders
-        const newLegendItems = [
-          {
-            id: 'o',
-            label: 'Open',
-            value: open,
-            color: chartOptions.upColor || '#26a69a',
-            isActive: true
-          },
-          {
-            id: 'h',
-            label: 'High',
-            value: high,
-            color: chartOptions.upColor || '#26a69a',
-            isActive: true
-          },
-          {
-            id: 'l',
-            label: 'Low',
-            value: low,
-            color: chartOptions.downColor || '#ef5350',
-            isActive: true
-          },
-          {
-            id: 'c',
-            label: 'Close',
-            value: close,
-            color: close >= open ? (chartOptions.upColor || '#26a69a') : (chartOptions.downColor || '#ef5350'),
-            isActive: true
-          }
-        ];
-        
-        // Add volume if it exists
-        if (seriesData.volume) {
-          newLegendItems.push({
-            id: 'v',
-            label: 'Volume',
-            value: seriesData.volume.value.toLocaleString(),
-            color: 'rgba(150, 150, 150, 0.8)',
-            isActive: true
-          });
-        }
-        
-        // Use a reference comparison to determine if we need to update state
-        setLegendItems(prev => {
-          // Simple check if the data has changed
-          const hasChanged = prev.some((item, idx) => 
-            idx < newLegendItems.length && 
-            (item.value !== newLegendItems[idx].value || 
-             item.color !== newLegendItems[idx].color)
-          );
-          
-          return hasChanged ? newLegendItems : prev;
-        });
-      }
-    } catch (error) {
-      console.error('Error in crosshair handler:', error);
-    }
-  }, [chartOptions.upColor, chartOptions.downColor, onCrosshairMove]);
-  
-  // Load Lightweight Charts library if not already loaded
+  };
+
+  // Load the library if not already loaded
   useEffect(() => {
-    // Skip if already loaded
-    if (typeof window !== 'undefined' && typeof window.LightweightCharts !== 'undefined') {
-      setIsLightweightChartsLoaded(true);
+    if (typeof window.LightweightCharts !== 'undefined') {
+      setIsLibraryLoaded(true);
       return;
     }
-    
-    console.log('Loading Lightweight Charts library');
+
     const script = document.createElement('script');
     script.src = 'https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js';
     script.async = true;
     script.onload = () => {
-      console.log('Lightweight Charts loaded successfully');
-      setIsLightweightChartsLoaded(true);
+      console.log('Lightweight Charts v4.1.1 library loaded!');
+      setIsLibraryLoaded(true);
+    };
+    script.onerror = (error) => {
+      console.error('Error loading Lightweight Charts library:', error);
     };
     document.head.appendChild(script);
-    
+
     return () => {
-      // We don't remove the script on unmount as it may be used by other components
+      // Remove script when component unmounts if it was added
+      if (document.head.contains(script)) {
+        document.head.removeChild(script);
+      }
     };
   }, []);
-  
-  // Create or recreate chart when theme/options/dimensions change
+
+  // Initialize chart when library is loaded and container is ready 
   useEffect(() => {
-    if (!isLightweightChartsLoaded || !chartContainerRef.current) {
+    if (!isLibraryLoaded || !containerRef.current) {
       return;
     }
+
+    // Get container width for initial sizing
+    const containerWidth = containerRef.current.clientWidth;
+    const usedWidth = width || containerWidth;
+    const usedHeight = height;
     
-    // Prevent chart recreation if one already exists to avoid update cycles
-    // Only recreate if critical properties have changed
-    const shouldRecreateChart = !chartInstanceRef.current || 
-      // These are the conditions that require a complete chart recreation
-      isDarkTheme !== (chartContainerRef.current?.className || '').includes('dark-theme');
+    console.log('Using dimensions:', usedWidth, 'x', usedHeight);
+
+    // Initialize the chart with fixed dimensions
+    const chartInstance = initializeChart(usedWidth, usedHeight);
     
-    if (!shouldRecreateChart) {
-      // Just update chart options without full recreation
-      try {
-        if (chartInstanceRef.current) {
-          // Update candlestick series colors
-          if (candlestickSeriesRef.current) {
-            candlestickSeriesRef.current.applyOptions({
-              upColor: chartOptions.upColor || '#26a69a',
-              downColor: chartOptions.downColor || '#ef5350',
-              wickUpColor: chartOptions.wickUpColor || '#26a69a',
-              wickDownColor: chartOptions.wickDownColor || '#ef5350',
-            });
-          }
-          
-          // Update grid visibility
-          chartInstanceRef.current.applyOptions({
-            grid: {
-              vertLines: { visible: chartOptions.showGrid !== false },
-              horzLines: { visible: chartOptions.showGrid !== false },
-            },
-          });
-          
-          // Update dimensions if needed
-          const containerWidth = chartContainerRef.current.clientWidth;
-          const chartWidth = width || containerWidth;
-          chartInstanceRef.current.resize(chartWidth, height);
-          
-          return; // Skip the rest of the recreation logic
-        }
-      } catch (error) {
-        console.error('Error updating chart options:', error);
-        // If updating fails, we'll fall through to recreate the chart
+    // Simple resize handler
+    const handleResize = () => {
+      if (!chartInstance || !containerRef.current) return;
+      
+      const newWidth = containerRef.current.clientWidth;
+      chartInstance.resize(newWidth, usedHeight);
+      
+      // After resizing, make sure content fits well
+      if (fitContent) {
+        chartInstance.timeScale().fitContent();
       }
+    };
+
+    // Add resize listener
+    if (autoResize) {
+      window.addEventListener('resize', handleResize);
     }
     
-    try {
-      // Clean up previous chart if it exists
-      if (chartInstanceRef.current) {
-        try {
-          chartInstanceRef.current.unsubscribeCrosshairMove(handleCrosshairMove);
-          chartInstanceRef.current.remove();
-          chartInstanceRef.current = null;
-          candlestickSeriesRef.current = null;
-          volumeSeriesRef.current = null;
-        } catch (error) {
-          console.error('Error removing previous chart:', error);
-        }
+    // Return cleanup function
+    return () => {
+      if (autoResize) {
+        window.removeEventListener('resize', handleResize);
       }
       
-      // Calculate width
-      const containerWidth = chartContainerRef.current.clientWidth;
-      const chartWidth = width || containerWidth;
+      if (chartInstance) {
+        try {
+          chartInstance.remove();
+        } catch (e) {
+          console.error('Error removing chart:', e);
+        }
+      }
+    };
+  }, [isLibraryLoaded, width, height, autoResize, fitContent]);
+
+  // Update chart data when data or series change
+  useEffect(() => {
+    if (!candlestickSeries || !data) return;
+
+    const candleData = formatCandlestickData(data);
+    candlestickSeries.setData(candleData);
+
+    if (showVolume && volumeSeries) {
+      const volumeData = formatVolumeData(data);
+      volumeSeries.setData(volumeData);
+    }
+
+    if (fitContent && chartInstance) {
+      chartInstance.timeScale().fitContent();
+    }
+  }, [data, candlestickSeries, volumeSeries, chartInstance, showVolume, fitContent]);
+
+  // Update theme when it changes
+  useEffect(() => {
+    if (!chartInstance) return;
+
+    const colors = theme === 'dark' 
+      ? {
+          background: '#151924',
+          text: '#d1d4dc',
+          grid: '#2a2e39',
+        }
+      : {
+          background: '#ffffff',
+          text: '#333333',
+          grid: '#e6e6e6',
+        };
+
+    try {
+      // Only update color-related options
+      chartInstance.applyOptions({
+        layout: { 
+          background: { color: colors.background }, 
+          textColor: colors.text 
+        },
+        grid: { 
+          vertLines: { color: colors.grid }, 
+          horzLines: { color: colors.grid } 
+        },
+        rightPriceScale: { borderColor: colors.grid },
+        timeScale: { borderColor: colors.grid }
+      });
+    } catch (e) {
+      console.error('Error applying theme:', e);
+    }
+  }, [theme, chartInstance]);
+
+  // Toggle volume visibility
+  useEffect(() => {
+    if (!chartInstance || !candlestickSeries) return;
+
+    if (volumeVisible && !volumeSeries) {
+      // Create volume series
+      const volSeries = chartInstance.addHistogramSeries({
+        color: '#26a69a',
+        priceFormat: {
+          type: 'volume',
+        },
+        priceScaleId: 'volume',
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+      });
+
+      // Configure the price scale
+      chartInstance.priceScale('volume').applyOptions({
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+        borderVisible: false,
+      });
+
+      // Set data if available
+      if (data) {
+        const volumeData = formatVolumeData(data);
+        volSeries.setData(volumeData);
+      }
+
+      setVolumeSeries(volSeries);
+    } else if (!volumeVisible && volumeSeries) {
+      // Remove volume series
+      chartInstance.removeSeries(volumeSeries);
+      setVolumeSeries(null);
+    }
+  }, [volumeVisible, chartInstance, volumeSeries, candlestickSeries, data]);
+
+  const initializeChart = (chartWidth: number, chartHeight: number) => {
+    if (!containerRef.current || !window.LightweightCharts) return null;
+
+    try {
+      // Ensure the container is empty
+      containerRef.current.innerHTML = '';
       
       // Set up colors based on theme
-      const colors = isDarkTheme
+      const colors = theme === 'dark' 
         ? {
-            background: '#1E1E1E',
-            text: '#D9D9D9',
-            grid: '#2B2B43',
+            background: '#151924',
+            text: '#d1d4dc',
+            grid: '#2a2e39',
           }
         : {
-            background: '#FFFFFF',
-            text: '#191919',
-            grid: '#E6E6E6',
+            background: '#ffffff',
+            text: '#333333',
+            grid: '#e6e6e6',
           };
-      
-      // Create chart
-      const newChart = window.LightweightCharts.createChart(chartContainerRef.current, {
+
+      // Create chart with fixed dimensions
+      const chart = window.LightweightCharts.createChart(containerRef.current, {
         width: chartWidth,
-        height: height,
+        height: chartHeight,
         layout: {
-          background: { type: 'solid', color: colors.background },
-          textColor: colors.text,
+          background: { color: colors.background },
+          textColor: colors.text
         },
         grid: {
-          vertLines: { color: colors.grid, visible: chartOptions.showGrid !== false },
-          horzLines: { color: colors.grid, visible: chartOptions.showGrid !== false },
-        },
-        crosshair: {
-          mode: window.LightweightCharts.CrosshairMode.Normal,
+          vertLines: { color: colors.grid },
+          horzLines: { color: colors.grid }
         },
         rightPriceScale: {
           borderColor: colors.grid,
@@ -401,36 +272,29 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
         timeScale: {
           borderColor: colors.grid,
           timeVisible: true,
-          secondsVisible: false,
         },
       });
-      
-      // Store chart instance in ref
-      chartInstanceRef.current = newChart;
-      
-      // Subscribe to crosshair move
-      newChart.subscribeCrosshairMove(handleCrosshairMove);
-      
+
       // Add candlestick series
-      const newCandlestickSeries = newChart.addCandlestickSeries({
-        upColor: chartOptions.upColor || '#26a69a',
-        downColor: chartOptions.downColor || '#ef5350',
-        wickUpColor: chartOptions.wickUpColor || '#26a69a',
-        wickDownColor: chartOptions.wickDownColor || '#ef5350',
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
         borderVisible: false,
       });
-      
-      // Store series in ref
-      candlestickSeriesRef.current = newCandlestickSeries;
-      
-      // Format and set candlestick data
-      const formattedData = formatCandlestickData(data);
-      newCandlestickSeries.setData(formattedData);
-      
-      // Add volume series if needed
-      if (showVolume) {
-        const newVolumeSeries = newChart.addHistogramSeries({
-          color: 'rgba(38, 166, 154, 0.5)',
+      setCandlestickSeries(candleSeries);
+
+      // Set data if available
+      if (data) {
+        const candleData = formatCandlestickData(data);
+        candleSeries.setData(candleData);
+      }
+
+      // Add volume series if enabled
+      if (volumeVisible) {
+        const volSeries = chart.addHistogramSeries({
+          color: '#26a69a',
           priceFormat: {
             type: 'volume',
           },
@@ -440,220 +304,107 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({
             bottom: 0,
           },
         });
-        
-        // Store volume series in ref
-        volumeSeriesRef.current = newVolumeSeries;
-        
-        // Format and set volume data
-        const volumeData = formatVolumeData(data);
-        newVolumeSeries.setData(volumeData);
-        
+
         // Configure the price scale
-        newChart.priceScale('volume').applyOptions({
+        chart.priceScale('volume').applyOptions({
           scaleMargins: {
             top: 0.8,
             bottom: 0,
           },
           borderVisible: false,
         });
-      }
-      
-      // Initial legend setup
-      setLegendItems([
-        {
-          id: 'o',
-          label: 'Open',
-          value: '-',
-          color: chartOptions.upColor || '#26a69a',
-          isActive: true
-        },
-        {
-          id: 'h',
-          label: 'High',
-          value: '-',
-          color: chartOptions.upColor || '#26a69a',
-          isActive: true
-        },
-        {
-          id: 'l',
-          label: 'Low',
-          value: '-',
-          color: chartOptions.downColor || '#ef5350',
-          isActive: true
-        },
-        {
-          id: 'c',
-          label: 'Close',
-          value: '-',
-          color: chartOptions.upColor || '#26a69a',
-          isActive: true
-        },
-        ...(showVolume ? [{
-          id: 'v',
-          label: 'Volume',
-          value: '-',
-          color: 'rgba(150, 150, 150, 0.8)',
-          isActive: true
-        }] : [])
-      ]);
-      
-      // Fit content if required
-      if (fitContent) {
-        newChart.timeScale().fitContent();
-      }
-      
-      // Notify parent component
-      if (onChartInit) {
-        onChartInit(newChart);
-      }
-      
-      // Set up resize observer if auto resize is enabled
-      if (autoResize) {
-        if (resizeObserverRef.current) {
-          resizeObserverRef.current.disconnect();
+
+        // Set data if available
+        if (data) {
+          const volumeData = formatVolumeData(data);
+          volSeries.setData(volumeData);
         }
-        
-        resizeObserverRef.current = new ResizeObserver(handleResize);
-        resizeObserverRef.current.observe(chartContainerRef.current);
+
+        setVolumeSeries(volSeries);
       }
+
+      // Fit content if enabled
+      if (fitContent) {
+        chart.timeScale().fitContent();
+      }
+
+      // Save chart instance
+      setChartInstance(chart);
+      
+      return chart;
     } catch (error) {
       console.error('Error initializing chart:', error);
+      return null;
     }
-  }, [
-    isLightweightChartsLoaded,
-    isDarkTheme,
-    height,
-    width,
-    showVolume,
-    chartOptions.showGrid,
-    chartOptions.upColor,
-    chartOptions.downColor,
-    chartOptions.wickUpColor,
-    chartOptions.wickDownColor,
-    handleCrosshairMove,
-    handleResize,
-    fitContent,
-    autoResize,
-    onChartInit,
-    formatCandlestickData,
-    formatVolumeData,
-    data, // It's okay to include data here since we'll only recreate on critical changes
-  ]);
-  
-  // Update data when it changes - using a separate effect for data updates only
-  useEffect(() => {
-    if (!chartInstanceRef.current) return;
-    
-    try {
-      // Update candlestick data
-      if (candlestickSeriesRef.current) {
-        const formattedData = formatCandlestickData(data);
-        candlestickSeriesRef.current.setData(formattedData);
-      }
-      
-      // Update volume data if it exists
-      if (volumeSeriesRef.current) {
-        const volumeData = formatVolumeData(data);
-        volumeSeriesRef.current.setData(volumeData);
-      }
-      
-      // Fit content if required
-      if (fitContent && chartInstanceRef.current) {
-        chartInstanceRef.current.timeScale().fitContent();
-      }
-    } catch (error) {
-      console.error('Error updating chart data:', error);
+  };
+
+  // Handle volume toggle
+  const handleVolumeToggle = () => {
+    setVolumeVisible(!volumeVisible);
+  };
+
+  // Handle fit content button
+  const handleFitContent = () => {
+    if (chartInstance) {
+      chartInstance.timeScale().fitContent();
     }
-  }, [data, formatCandlestickData, formatVolumeData, fitContent]);
-  
-  // Handle options change
-  const handleOptionsChange = useCallback((newOptions: ChartCustomizableOptions) => {
-    setChartOptions(newOptions);
-  }, []);
-  
-  // Handle legend item click
-  const handleLegendItemClick = useCallback((itemId: string) => {
-    // Toggle item active state using a functional update
-    setLegendItems(prevItems =>
-      prevItems.map(item => 
-        item.id === itemId
-          ? { ...item, isActive: !item.isActive }
-          : item
-      )
-    );
-  }, []);
-  
+  };
+
   return (
-    <div 
-      className={`candlestick-chart-container ${isDarkTheme ? 'dark-theme' : 'light-theme'} ${className}`}
-      style={{ 
-        height: `${totalHeight}px`, 
-        marginBottom: '30px', 
-        position: 'relative',
-        overflow: 'visible', // Allow content to overflow for crosshair display
-        paddingBottom: `${bottomPadding}px`,
-        boxSizing: 'content-box' // Ensure padding is added to the specified height
-      }}
-    >
-      {title && <div className="chart-title">{title}</div>}
-      
-      <div className="chart-controls">
-        <ChartToolbar
-          chart={chartInstanceRef.current}
-          showOptionsButton={true}
-          onOptionsClick={() => setIsOptionsVisible(!isOptionsVisible)}
-        />
-      </div>
-      
-      <div className="chart-content" style={{ 
-        position: 'relative', 
-        height: `${chartHeight}px`,
-        marginBottom: '20px' // Add space between chart and legend
-      }}>
-        <div 
-          className="chart-wrapper" 
-          ref={chartContainerRef}
-          style={{ 
-            height: '100%',
-            width: '100%', 
-            position: 'relative'
-          }}
-        >
-          {isCrosshairVisible && crosshairData && (
-            <CrosshairContainer
-              data={crosshairData}
-              visible={isCrosshairVisible}
-              formatTime={(time) => {
-                if (typeof time === 'string') {
-                  return time;
-                }
-                return new Date(time).toLocaleDateString();
-              }}
-            />
-          )}
+    <div className={`chart-wrapper ${className}`}>
+      <div className="chart-header">
+        <div className="chart-title">{title}</div>
+        <div className="chart-symbol">
+          {data?.metadata?.symbol} - {data?.metadata?.timeframe}
+        </div>
+        <div className="chart-toolbar" ref={toolbarRef}>
+          <Button 
+            variant="outline" 
+            size="small" 
+            onClick={handleVolumeToggle}
+          >
+            {volumeVisible ? 'Hide Volume' : 'Show Volume'}
+          </Button>
+          <Button 
+            variant="outline" 
+            size="small" 
+            onClick={handleFitContent}
+          >
+            Fit All
+          </Button>
         </div>
       </div>
       
-      <div style={{ position: 'absolute', bottom: '10px', left: '0', right: '0' }}>
-        <LegendContainer
-          items={legendItems}
-          position="top"
-          onItemClick={handleLegendItemClick}
-        />
-      </div>
+      <div className="chart-legend" ref={legendRef}></div>
       
-      <ChartOptions
-        chart={chartInstanceRef.current}
-        isVisible={isOptionsVisible}
-        onVisibilityChange={setIsOptionsVisible}
-        defaultOptions={chartOptions}
-        onOptionsChange={handleOptionsChange}
+      <div 
+        ref={containerRef} 
+        className="chart-container-inner"
+        style={{ 
+          width: '100%', 
+          height: `${height}px`,
+          position: 'relative',
+          overflow: 'hidden',
+          boxSizing: 'border-box'
+        }} 
       />
+      
+      {!isLibraryLoaded && (
+        <div className="chart-loading">
+          Loading chart library...
+        </div>
+      )}
+      
+      {!data?.dates?.length && (
+        <div className="chart-no-data">
+          No data available
+        </div>
+      )}
     </div>
   );
 };
 
-// Add a TypeScript interface for the LightweightCharts global
+// Add the LightweightCharts type to the Window interface
 declare global {
   interface Window {
     LightweightCharts: any;
