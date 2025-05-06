@@ -3,7 +3,7 @@ import { Header } from '../../app/Header';
 import { Sidebar } from '../../app/Sidebar';
 import { useTheme } from '../../app/ThemeProvider';
 import { useAppSelector, useAppDispatch } from '../../hooks';
-import { toggleSidebar } from '../../store/slices/uiSlice';
+import { toggleSidebar } from '../../app/store/uiSlice';
 
 // Create a static flag to track if we're already inside a MainLayout
 // This prevents nested MainLayout components from causing duplicates
