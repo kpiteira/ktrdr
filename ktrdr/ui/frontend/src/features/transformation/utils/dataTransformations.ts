@@ -3,7 +3,7 @@
  * Provides functions for transforming API data into formats suitable for UI components
  */
 
-import { OHLCVData, IndicatorData } from '../types';
+import { OHLCVData, IndicatorData } from '../../../api/types';
 
 /**
  * Candlestick data point for charts

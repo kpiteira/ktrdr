@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTheme } from './ThemeProvider';
-import { useUI } from './hooks/useUI';
+import { useUIStore } from './hooks/useUIStore';
 
 // Define fallback values for app information
 const appName = 'KTRDR Trading Platform';
@@ -12,7 +12,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { theme, toggleTheme } = useTheme();
-  const { toggleSidebar } = useUI();
+  const { toggleSidebar } = useUIStore();
 
   const handleMenuToggle = () => {
     if (onMenuToggle) {

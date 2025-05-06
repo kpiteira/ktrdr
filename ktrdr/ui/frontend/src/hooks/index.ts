@@ -12,7 +12,7 @@ import type { RootState, AppDispatch } from '../store';
 import { useSymbolSelection } from '../features/symbols/hooks/useSymbolSelection';
 import { useChartData } from '../features/charting/hooks/useChartData';
 import { useIndicators } from '../features/charting/hooks/useIndicators';
-import { useUI } from '../app/hooks/useUI';
+import { useUIStore } from '../app/hooks/useUIStore';
 
 // Use these typed versions throughout the app instead of plain useDispatch and useSelector
 export const useAppDispatch: () => AppDispatch = useDispatch;
@@ -23,10 +23,10 @@ export {
   useSymbolSelection,
   useChartData,
   useIndicators,
-  useUI
+  useUIStore
 };
 
 // Renamed for backward compatibility
 export const useDataSelection = useSymbolSelection;
 export const useOhlcvData = useChartData;
-export const useThemeControl = useUI;
+export const useThemeControl = useUIStore;

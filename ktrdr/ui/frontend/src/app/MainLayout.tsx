@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { useTheme } from './ThemeProvider';
-import { useUI } from './hooks/useUI';
+import { useUIStore } from './hooks/useUIStore';
 
 // Create a static flag to track if we're already inside a MainLayout
 // This prevents nested MainLayout components from causing duplicates
@@ -14,7 +14,7 @@ interface MainLayoutProps {
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { theme } = useTheme();
-  const { sidebarOpen, toggleSidebar: toggleSidebarHandler } = useUI();
+  const { sidebarOpen, toggleSidebar: toggleSidebarHandler } = useUIStore();
   const mainContentRef = useRef<HTMLDivElement>(null);
   
   // Flag to determine if this is a nested instance

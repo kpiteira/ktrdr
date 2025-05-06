@@ -3,9 +3,9 @@ import { RootState, AppDispatch } from '../store';
 import { setTheme, toggleSidebar, setCurrentView, updateChartSettings, ThemeMode } from '../store/uiSlice';
 
 /**
- * Hook for accessing and managing UI state
+ * Hook for accessing and managing UI state from Redux store
  */
-export const useUI = () => {
+export const useUIStore = () => {
   const dispatch = useDispatch<AppDispatch>();
   const {
     theme,

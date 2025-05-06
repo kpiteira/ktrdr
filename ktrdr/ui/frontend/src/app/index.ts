@@ -10,10 +10,10 @@ export { default as Header } from './Header';
 export { default as Sidebar } from './Sidebar';
 
 import { ThemeProvider, useTheme } from './ThemeProvider';
-import { useUI } from './hooks/useUI';
+import { useUIStore } from './hooks/useUIStore';
 
 export {
   ThemeProvider,
   useTheme,
-  useUI
+  useUIStore
 };
