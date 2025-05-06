@@ -1,26 +1,27 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { Layout } from '../../app/Layout';
+import { vi, describe, test, expect } from 'vitest';
 
 // Mock the components and providers used by Layout
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   BrowserRouter: ({ children }: { children: React.ReactNode }) => <div data-testid="browser-router">{children}</div>,
 }));
 
-jest.mock('../../app/ThemeProvider', () => ({
+vi.mock('../../app/ThemeProvider', () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => <div data-testid="theme-provider">{children}</div>,
 }));
 
-jest.mock('../../app/MainLayout', () => ({
+vi.mock('../../app/MainLayout', () => ({
   MainLayout: ({ children }: { children: React.ReactNode }) => <div data-testid="main-layout">{children}</div>,
 }));
 
-jest.mock('../../app/Router', () => ({
+vi.mock('../../app/Router', () => ({
   __esModule: true,
   default: () => <div data-testid="router">Router Content</div>,
 }));
 
-jest.mock('../../components/common', () => ({
+vi.mock('../../components/common', () => ({
   NotificationProvider: ({ children }: { children: React.ReactNode }) => <div data-testid="notification-provider">{children}</div>,
   NotificationContainer: () => <div data-testid="notification-container">Notifications</div>,
   DevModeIndicator: () => <div data-testid="dev-mode-indicator">Dev Mode</div>,

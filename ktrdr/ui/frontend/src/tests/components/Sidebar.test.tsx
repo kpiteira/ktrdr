@@ -2,24 +2,29 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { Sidebar } from '../../app/Sidebar';
 import { MemoryRouter } from 'react-router-dom';
+import { vi, describe, test, expect } from 'vitest';
 
 // Mock the hooks used by Sidebar
-jest.mock('../../app/ThemeProvider', () => ({
+vi.mock('../../app/ThemeProvider', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));
 
-jest.mock('../../app/hooks/useUIStore', () => ({
+vi.mock('../../app/hooks/useUIStore', () => ({
   useUIStore: () => ({
     sidebarOpen: true,
-    toggleSidebar: jest.fn(),
+    toggleSidebar: vi.fn(),
   }),
 }));
 
-// Mock useLocation from react-router-dom
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useLocation: () => ({ pathname: '/symbols' }),
-}));
+// Mock react-router-dom with a more complete mock
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useLocation: () => ({ pathname: '/symbols' }),
+    Navigate: ({ to }: { to: string }) => <div data-testid="navigate" data-to={to}>Navigate to {to}</div>,
+  };
+});
 
 describe('Sidebar Component', () => {
   test('renders sidebar with menu items', () => {

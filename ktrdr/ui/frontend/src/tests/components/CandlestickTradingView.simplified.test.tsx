@@ -1,9 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CandlestickTradingView from '@/components/charts/CandlestickTradingView';
 import { renderWithProviders } from '../test-utils';
 import { OHLCVData } from '@/types/data';
+
+// Mock the CSS import that's causing issues
+vi.mock('@/features/charting/ChartContainer.css', () => ({}));
 
 // Sample OHLCV data for testing
 const sampleData: OHLCVData = {
@@ -63,7 +66,8 @@ beforeEach(() => {
       }),
       applyOptions: vi.fn(),
       resize: vi.fn(),
-      remove: vi.fn()
+      remove: vi.fn(),
+      removeSeries: vi.fn() // Add the missing removeSeries function
     })
   };
 });

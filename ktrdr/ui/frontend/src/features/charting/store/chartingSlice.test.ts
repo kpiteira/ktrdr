@@ -4,7 +4,7 @@ import chartingReducer, {
   fetchOHLCVData,
   clearOHLCVData
 } from '@/features/charting/store/chartingSlice';
-import { mockApiResponses } from '../../tests/test-utils';
+import { mockApiResponses } from '@/tests/test-utils';
 import { loadData } from '@/api/endpoints/data';
 
 // Mock the API endpoints

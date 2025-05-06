@@ -5,7 +5,8 @@ import { OHLCVData } from '../../types/data';
 import { useTheme } from '../../app/ThemeProvider';
 import { Button } from '../common/Button';
 
-import './core/ChartContainer.css';
+// Update CSS import to use the new path
+import '../../features/charting/ChartContainer.css';
 
 interface CandlestickTradingViewProps {
   /** The OHLCV data to display */

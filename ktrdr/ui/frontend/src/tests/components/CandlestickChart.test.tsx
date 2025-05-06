@@ -1,43 +1,56 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import CandlestickChart from '../../features/charting/components/CandlestickChart';
 
 // Mock the ThemeProvider hook
-jest.mock('../../app/ThemeProvider', () => ({
+vi.mock('../../app/ThemeProvider', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));
 
 // Mock the Button component
-jest.mock('../../components/common/Button', () => ({
+vi.mock('../../components/common/Button', () => ({
   Button: ({ children, onClick }: { children: React.ReactNode, onClick?: () => void }) => 
     <button onClick={onClick} data-testid="mock-button">{children}</button>
 }));
 
 // Mock the formatCandlestickData and formatHistogramData functions
-jest.mock('../../features/charting/components/transformers/dataAdapters', () => ({
+vi.mock('../../features/charting/components/transformers/dataAdapters', () => ({
   formatCandlestickData: () => [],
   formatHistogramData: () => [],
 }));
 
+// Mock the indicator adapters to fix the import error
+vi.mock('../../features/charting/components/transformers/indicatorAdapters', () => ({
+  formatIndicatorData: () => [],
+  IndicatorType: {
+    SMA: 'sma',
+    EMA: 'ema',
+    RSI: 'rsi',
+    MACD: 'macd',
+    BBANDS: 'bbands'
+  }
+}));
+
 // Mock the window.LightweightCharts
 global.LightweightCharts = {
-  createChart: jest.fn().mockReturnValue({
-    applyOptions: jest.fn(),
-    resize: jest.fn(),
-    timeScale: jest.fn().mockReturnValue({
-      fitContent: jest.fn(),
+  createChart: vi.fn().mockReturnValue({
+    applyOptions: vi.fn(),
+    resize: vi.fn(),
+    timeScale: vi.fn().mockReturnValue({
+      fitContent: vi.fn(),
     }),
-    priceScale: jest.fn().mockReturnValue({
-      applyOptions: jest.fn(),
+    priceScale: vi.fn().mockReturnValue({
+      applyOptions: vi.fn(),
     }),
-    addCandlestickSeries: jest.fn().mockReturnValue({
-      setData: jest.fn(),
+    addCandlestickSeries: vi.fn().mockReturnValue({
+      setData: vi.fn(),
     }),
-    addHistogramSeries: jest.fn().mockReturnValue({
-      setData: jest.fn(),
+    addHistogramSeries: vi.fn().mockReturnValue({
+      setData: vi.fn(),
     }),
-    removeSeries: jest.fn(),
-    remove: jest.fn(),
+    removeSeries: vi.fn(),
+    remove: vi.fn(),
   }),
 };
 
@@ -59,7 +72,7 @@ const mockData = {
 
 describe('CandlestickChart Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('renders chart with title and controls', () => {

@@ -9,7 +9,7 @@ import indicatorReducer, {
   calculateIndicatorData,
   IndicatorConfig
 } from '@/features/charting/store/indicatorSlice';
-import { mockApiResponses } from '../../tests/test-utils';
+import { mockApiResponses } from '@/tests/test-utils';
 
 // Mock API endpoints for indicators
 vi.mock('@/api/endpoints/indicators', () => ({
