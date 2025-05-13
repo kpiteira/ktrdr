@@ -7,7 +7,7 @@ This task plan is optimized for AI-assisted implementation using LLMs. It reflec
 ## 🧠 Architectural Overview
 
 * **Framework**: React + TypeScript + TailwindCSS + Redux Toolkit
-* **Routing**: React Router (defined in `src/app/routes.tsx`)
+* **Routing**: React Router using `createBrowserRouter` and `RouterProvider` (in `src/app/Router.tsx`, configured via `routes.tsx`)
 * **Layout**: Provided via `MainLayout`, `Header`, `Sidebar` in `src/app/`
 * **API Access**: All data must be fetched via real API endpoints using the working method from `DataSelection` (see `api/hooks/useData.ts`, etc.)
 * **State Management**: Redux is used, but only for UI/global layout state (in `uiSlice.ts`). Feature-specific state should be local or via hooks.
@@ -30,6 +30,23 @@ src/
 ```
 
 **🚫 Do not use:** mock data, demo-only pages, factories, or extra abstractions unless required.
+
+---
+
+## 🔧 Task 1.1.1 – Router Duplication Cleanup (Retroactive Fix)
+
+**Goal:** Eliminate leftover or conflicting routing logic (e.g., `BrowserRouter` in `MainLayout.tsx`) that predates the migration to `createBrowserRouter`.
+
+### Instructions:
+
+* ✅ Search for and remove any usage of `<BrowserRouter>` in `MainLayout.tsx`, `App.tsx`, or anywhere else outside of `Router.tsx`
+* ✅ Ensure the only active routing logic is through `RouterProvider` using the centralized `routes.tsx` configuration
+* ✅ Confirm `MainLayout` simply renders `Outlet` where appropriate
+* ✅ Refactor any custom route guards or wrappers to integrate cleanly with `createBrowserRouter` if needed
+
+### Tests:
+
+* Run full app navigation and route switch tests (e.g. `Layout.test.tsx`, `Sidebar.test.tsx`) to ensure nothing regressed
 
 ---
 
@@ -74,13 +91,17 @@ features/charting/
 
 ---
 
-## ✅ Task 1.1 – App Shell & Navigation (Extend Existing)
+## ✅ Task 1.1 – App Shell & Navigation (Extend Existing Router Setup)
 
 **Goal:** Establish the base layout and routing shell for the real app.
 
 ### Instructions:
 
 This task builds on the **existing app shell and navigation**, not from scratch.
+
+Your app now uses `createBrowserRouter` and `RouterProvider` in `Router.tsx`, along with route definitions in `routes.tsx`. Continue using that approach — do not revert to `BrowserRouter` or fragment it across multiple routers.
+
+If you find any older leftover routing code (e.g., `BrowserRouter` in `MainLayout.tsx`), remove it as part of this task.
 
 * **Do not recreate** `MainLayout`, `Sidebar`, or `Router` from scratch
 * Review `MainLayout.tsx` and `Sidebar.tsx` to ensure they are correctly consuming and rendering entries from the new `routes.tsx`
