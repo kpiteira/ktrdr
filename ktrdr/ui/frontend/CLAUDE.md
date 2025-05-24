@@ -90,28 +90,24 @@ The project uses Lightweight Charts v5.0.7 as an ES module. Import directly from
 ```typescript
 import { 
   createChart, 
-  CandlestickSeries, 
-  HistogramSeries, 
-  LineSeries,
-  createSeriesMarkers,
-  createTextWatermark 
+  IChartApi,
+  ISeriesApi,
+  CandlestickData,
+  UTCTimestamp
 } from 'lightweight-charts';
 ```
 
-### Breaking Changes from v4 to v5
+### v5 API (Backward Compatible)
 
-**1. Unified Series Creation API:**
+**Good news: v5 maintains v4 API compatibility:**
 ```typescript
-// ❌ v4 approach (deprecated)
+// ✅ v4/v5 compatible approach (works in both versions)
 const candlestickSeries = chart.addCandlestickSeries(options);
 const volumeSeries = chart.addHistogramSeries(options);
 const lineSeries = chart.addLineSeries(options);
-
-// ✅ v5 approach (correct)
-const candlestickSeries = chart.addSeries(CandlestickSeries, options);
-const volumeSeries = chart.addSeries(HistogramSeries, options);
-const lineSeries = chart.addSeries(LineSeries, options);
 ```
+
+**Note:** The documented "unified API" (`chart.addSeries(SeriesType, options)`) and series type exports (`CandlestickSeries`, `LineSeries`, etc.) are not available in the standard v5.0.7 distribution. The v4-style API remains the working approach.
 
 **2. Series Markers (now separate primitives):**
 ```typescript
