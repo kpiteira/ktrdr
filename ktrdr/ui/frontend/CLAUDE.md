@@ -1,88 +1,159 @@
-# KTRDR Frontend Development Notes
+# KTRDR Frontend Development Guide
+
+## Project Overview
+
+**MVP Goal**: Research Phase trading UI for visualizing instrument data, indicators, and fuzzy sets.
+
+**Architecture**: React + TypeScript with TradingView Lightweight Charts, following vertical slice development approach.
 
 ## Environment Setup
 
-- Use Docker for development: `./docker_dev.sh` from the root directory
-- Commands should be run inside the Docker container, not on the host machine
+- Use Docker for development: `./docker_dev.sh start` from the root directory
+- Frontend runs on port 5173 (Vite dev server)
+- Backend API available at `http://localhost:8000/api/v1`
+- Commands should be run inside the Docker container
 
 ## Library Versions
 
-- **TradingView Lightweight Charts**: v4.1.1
-  - Working examples are found in the WorkingChart.tsx component
+- **TradingView Lightweight Charts**: v5.0.7
+  - Uses ES2020 modules with improved tree-shaking
+  - Working examples should be created following v5 API patterns
 
-## Common Tasks
+## Architecture Overview
 
-- **Starting Development Server**:
+### Component Hierarchy (from trading-ui-architecture.md)
+```
+App
+├── Layout
+│   ├── Header (current mode title only)
+│   ├── LeftSidebar (collapsible - mode selection)
+│   ├── RightSidebar (collapsible - indicator management)
+│   │   ├── InstrumentSelector
+│   │   ├── ActiveIndicatorsList
+│   │   ├── AddIndicatorButton
+│   │   └── FuzzySetControls
+│   └── MainContent
+│       └── ResearchView
+│           └── ChartContainer
+│               ├── PriceChart (main candlestick + overlays)
+│               └── IndicatorChart[] (RSI, MACD, etc.)
+```
+
+### State Management
+- **MVP Approach**: React Context + useReducer (avoid Redux for MVP)
+- **Data Flow**: API client → Context → Components
+- **Error Handling**: Centralized error boundary and API error handling
+
+## Development Workflow
+
+### Vertical Slice Approach (8 slices total)
+Development follows incremental slices, each delivering working functionality:
+
+1. **Slice 1**: Basic candlestick chart with hardcoded EURUSD data
+2. **Slice 2**: Symbol selection dropdown
+3. **Slice 3**: First indicator (SMA overlay)
+4. **Slice 4**: Indicator management sidebar
+5. **Slice 5**: Second chart type (RSI in separate panel)
+6. **Slice 6**: Parameter controls
+7. **Slice 7**: Full sidebar layout with collapsible panels
+8. **Slice 8**: Error & loading polish
+
+### Common Tasks
+
+- **Start Development**:
   ```bash
-  ./docker_dev.sh
-  # Inside the container
-  npm run dev
+  ./docker_dev.sh start
+  ./docker_dev.sh shell-frontend
+  npm run dev  # Runs on port 5173
   ```
 
-- **Building for Production**:
+- **API Testing**:
   ```bash
-  ./docker_dev.sh
-  # Inside the container
+  # Test backend connectivity
+  curl http://localhost:8000/api/v1/symbols
+  ```
+
+- **Build & Test**:
+  ```bash
   npm run build
-  ```
-
-- **Running Tests**:
-  ```bash
-  ./docker_dev.sh
-  # Inside the container
   npm run test
+  npm run lint
+  npm run typecheck
   ```
 
-## Lightweight Charts v4.1.1 Usage
+## Lightweight Charts v5.0.7 Usage
 
-### Important: Library Loading and Global Object
+### ES2020 Module Imports
 
-The project uses Lightweight Charts v4.1.1 loaded from a CDN rather than through ES modules. Any chart component should:
-
-1. Include the script tag to load the library or check that it's loaded:
-   ```html
-   <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
-   ```
-
-2. Access the library through the global `window.LightweightCharts` object:
-   ```typescript
-   // Add type declaration for TypeScript
-   declare global {
-     interface Window {
-       LightweightCharts: any;
-     }
-   }
-   
-   // Use the global object
-   const chart = window.LightweightCharts.createChart(container, options);
-   ```
-
-3. Don't import from the module directly:
-   ```typescript
-   // ❌ Don't do this - it will cause errors
-   import { createChart } from 'lightweight-charts';
-   ```
-
-### API Method Reference
-
-The correct API methods for v4.1.1 are:
-
-- `chart.addCandlestickSeries(options)` - For creating candlestick charts
-- `chart.addHistogramSeries(options)` - For creating histogram/volume charts
-- `chart.addLineSeries(options)` - For creating line charts
-
-Example usage:
+The project uses Lightweight Charts v5.0.7 as an ES module. Import directly from the package:
 
 ```typescript
+import { 
+  createChart, 
+  CandlestickSeries, 
+  HistogramSeries, 
+  LineSeries,
+  createSeriesMarkers,
+  createTextWatermark 
+} from 'lightweight-charts';
+```
+
+### Breaking Changes from v4 to v5
+
+**1. Unified Series Creation API:**
+```typescript
+// ❌ v4 approach (deprecated)
+const candlestickSeries = chart.addCandlestickSeries(options);
+const volumeSeries = chart.addHistogramSeries(options);
+const lineSeries = chart.addLineSeries(options);
+
+// ✅ v5 approach (correct)
+const candlestickSeries = chart.addSeries(CandlestickSeries, options);
+const volumeSeries = chart.addSeries(HistogramSeries, options);
+const lineSeries = chart.addSeries(LineSeries, options);
+```
+
+**2. Series Markers (now separate primitives):**
+```typescript
+// ✅ v5 approach
+import { createSeriesMarkers } from 'lightweight-charts';
+const seriesMarkers = createSeriesMarkers(series, [
+    {
+        time: '2019-04-09',
+        position: 'aboveBar',
+        color: 'black',
+        shape: 'arrowDown'
+    }
+]);
+```
+
+**3. Watermarks (now plugins):**
+```typescript
+// ✅ v5 approach
+import { createTextWatermark } from 'lightweight-charts';
+const firstPane = chart.panes()[0];
+createTextWatermark(firstPane, {
+    lines: [{
+        text: 'Watermark Text',
+        color: 'rgba(255,0,0,0.5)'
+    }]
+});
+```
+
+### Complete v5 Example
+
+```typescript
+import { createChart, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
+
 // Create chart
-const chart = window.LightweightCharts.createChart(container, {
+const chart = createChart(container, {
   width: 800,
   height: 400,
   // other options...
 });
 
-// Add a candlestick series
-const candlestickSeries = chart.addCandlestickSeries({
+// Add a candlestick series (v5 unified API)
+const candlestickSeries = chart.addSeries(CandlestickSeries, {
   upColor: '#26a69a',
   downColor: '#ef5350',
   wickUpColor: '#26a69a',
@@ -90,39 +161,39 @@ const candlestickSeries = chart.addCandlestickSeries({
   borderVisible: false,
 });
 
-// Add volume series
-const volumeSeries = chart.addHistogramSeries({
+// Add volume series (v5 unified API)
+const volumeSeries = chart.addSeries(HistogramSeries, {
   color: '#26a69a',
   priceFormat: { type: 'volume' },
   priceScaleId: 'volume',
   scaleMargins: { top: 0.8, bottom: 0 },
 });
 
-// Set data
+// Set data (unchanged)
 candlestickSeries.setData(candleData);
 volumeSeries.setData(volumeData);
 
-// Configure scales
+// Configure scales (unchanged)
 chart.priceScale('volume').applyOptions({
   scaleMargins: { top: 0.8, bottom: 0 },
   borderVisible: false,
 });
 
-// Fit chart to content
+// Fit chart to content (unchanged)
 chart.timeScale().fitContent();
 ```
 
 ### Lessons Learned
 
-1. **ES Modules vs. Global CDN**: When using Lightweight Charts, check how it's loaded in the project first. Our project uses the global CDN version rather than the ES module version.
+1. **ES2020 Modules**: v5 uses ES2020 modules with improved tree-shaking. No longer supports CommonJS or global CDN loading.
 
-2. **API Version Differences**: Be careful with API references from the web - v5.x (and possibly v3.x) have different APIs than v4.1.1.
+2. **Unified API**: v5 uses `chart.addSeries(SeriesType, options)` instead of individual methods like `addCandlestickSeries()`.
 
 3. **Chart Lifecycle**: Always handle chart cleanup properly in the component's unmount/cleanup function.
 
 4. **Error Handling**: Use proper try/catch blocks around chart operations, as they can throw errors that might crash the app.
 
-5. **Reference Components**: When making new chart components, start by examining the working examples in the codebase like `WorkingChart.tsx`.
+5. **Migration Required**: Any existing v4 components need to be updated to use the new v5 API.
 
 6. **Preventing Resize Loops**: When implementing resize handling:
    - Use a debounce function to prevent rapid successive resizes
@@ -139,10 +210,146 @@ chart.timeScale().fitContent();
    - Props changes (explicit width/height)
    - Be careful when implementing multiple resize handlers to ensure they don't conflict
 
+## API Integration
+
+### Available Backend Endpoints
+Your FastAPI backend provides these endpoints (confirmed working):
+
+```typescript
+// Data Management
+GET  /api/v1/symbols                 // List available symbols
+GET  /api/v1/timeframes              // List available timeframes  
+POST /api/v1/data/load               // Load OHLCV data
+
+// Indicators
+GET  /api/v1/indicators              // List available indicators
+POST /api/v1/indicators/calculate    // Calculate indicators on data
+GET  /api/v1/indicators/defaults     // Get default parameters
+GET  /api/v1/indicators/{name}/info  // Get indicator details
+
+// Future: Fuzzy Sets (to be implemented)
+GET  /api/v1/fuzzy/{symbol}          // Get fuzzy sets for symbol
+POST /api/v1/fuzzy/calculate         // Calculate fuzzy sets
+```
+
+### API Client Usage
+Use the existing API client in `src/api/client.ts`:
+
+```typescript
+import { apiClient } from '../api/client';
+
+// Get symbols
+const symbols = await apiClient.get('symbols');
+
+// Load data
+const data = await apiClient.post('data/load', {
+  symbol: 'EURUSD',
+  timeframe: '1d',
+  start_date: '2024-01-01',
+  end_date: '2024-12-31'
+});
+```
+
+### Data Transformation
+Transform backend data for TradingView charts:
+
+```typescript
+// Backend OHLCV → TradingView CandlestickData
+const transformOHLCVData = (backendData: OHLCVPoint[]): CandlestickData[] => {
+  return backendData.map(point => ({
+    time: new Date(point.timestamp).getTime() / 1000 as UTCTimestamp,
+    open: point.open,
+    high: point.high,
+    low: point.low,
+    close: point.close
+  }));
+};
+```
+
+## MVP Requirements Summary
+
+### Core Features (Research Phase)
+- ✅ Instrument selection and data loading
+- ✅ Main candlestick chart with TradingView
+- ✅ Technical indicators (overlay + oscillator types)
+- 🔄 Fuzzy set visualization (backend integration needed)
+- ✅ Synchronized chart interactions
+- ✅ Collapsible sidebar layout
+
+### Success Criteria
+- Load EURUSD 1H data and display candlestick chart
+- Add SMA(20) overlay on price chart
+- Add RSI(14) in separate synchronized panel
+- Charts stay synchronized when panning/zooming
+- Professional loading states and error handling
+
 ### Working Examples
 
-- `/ktrdr/ui/frontend/src/components/charts/WorkingChart.tsx` - Basic chart example
-- `/ktrdr/ui/frontend/src/components/charts/DataTransformationExample.tsx` - More complex chart with data transformation
+Start with Slice 1: Create a basic chart component using v5 API patterns above.
+
+## Directory Structure (recommended)
+
+```
+src/
+├── components/
+│   ├── charts/
+│   │   ├── PriceChart.tsx
+│   │   ├── IndicatorChart.tsx
+│   │   ├── ChartContainer.tsx
+│   │   └── fuzzy/
+│   │       ├── FuzzyOverlay.tsx
+│   │       └── FuzzyLegend.tsx
+│   ├── sidebar/
+│   │   ├── LeftSidebar.tsx (mode selection)
+│   │   ├── RightSidebar.tsx (indicator management)
+│   │   ├── InstrumentSelector.tsx
+│   │   ├── ActiveIndicatorsList.tsx
+│   │   ├── IndicatorItem.tsx
+│   │   ├── AddIndicatorButton.tsx
+│   │   └── FuzzySetControls.tsx
+│   ├── layout/
+│   │   ├── Header.tsx
+│   │   ├── Layout.tsx
+│   │   └── CollapsibleSidebar.tsx
+│   └── common/
+│       ├── LoadingSpinner.tsx
+│       ├── ErrorBoundary.tsx
+│       └── Modal.tsx
+├── hooks/
+│   ├── useChartSync.ts
+│   ├── useIndicators.ts
+│   ├── useInstrumentData.ts
+│   ├── useFuzzyData.ts
+│   └── useSidebarCollapse.ts
+├── context/  (state management)
+│   ├── AppContext.tsx
+│   ├── AppReducer.ts
+│   └── types.ts
+├── utils/
+│   ├── dataTransform.ts
+│   ├── colorUtils.ts
+│   └── constants.ts
+└── views/
+    ├── ResearchView.tsx
+    ├── TrainView.tsx (placeholder)
+    └── RunView.tsx (placeholder)
+```
+
+## Development Guidelines
+
+### Code Style
+- **TypeScript**: Required for all components with proper typing
+- **React Hooks**: Use functional components with hooks
+- **State Management**: React Context + useReducer (avoid Redux for MVP)
+- **Testing**: Write unit tests for all new functionality
+- **Error Handling**: Use centralized error boundaries
+
+### Performance Considerations
+- Use TradingView's built-in virtualization for large datasets
+- Implement data windowing for very large historical datasets
+- Debounce API calls during rapid user interactions
+- Cache indicator calculations when parameters haven't changed
+- Clean up chart instances when components unmount
 
 ## Known Issues and Solutions
 

@@ -50,6 +50,29 @@ coverage.xml
 *.iml
 *.iws
 
+# TypeScript / JavaScript
+ktrdr/ui/frontend/node_modules/
+**/node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnpm-debug.log
+.npm
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+
+# Vite
+ktrdr/ui/frontend/.vite/
+**/dist-ssr/
+
+# Frontend Frameworks & Build Tools
+ktrdr/ui/frontend/.turbo
+**/out/
+**/.next/
+**/.nuxt
+**/.svelte-kit
+
 # Project specific
 data/*.csv
 config/*.secret.yaml
