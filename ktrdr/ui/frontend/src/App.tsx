@@ -1,7 +1,7 @@
 import { FC, useState } from 'react';
-import BasicChart from './components/BasicChart';
+import BasicChart, { SMAData } from './components/BasicChart';
 import SymbolSelector from './components/SymbolSelector';
-import SMAControls from './components/SMAControls';
+import IndicatorSidebar from './components/IndicatorSidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
@@ -9,7 +9,11 @@ const App: FC = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
   const [smaToAdd, setSmaToAdd] = useState<number | null>(null);
+  const [smaToRemove, setSmaToRemove] = useState<string | null>(null);
+  const [smaToToggle, setSmaToToggle] = useState<string | null>(null);
   const [smaLoading, setSmaLoading] = useState(false);
+  const [smaList, setSmaList] = useState<SMAData[]>([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleSymbolChange = (symbol: string, timeframe: string) => {
     console.log('[App] handleSymbolChange called:', { symbol, timeframe });
@@ -36,10 +40,12 @@ const App: FC = () => {
     console.log('[App] State update completed for:', { symbol, timeframe: actualTimeframe });
   };
 
-  const handleAddSMA = (period: number) => {
-    console.log('[App] Adding SMA with period:', period);
-    setSmaLoading(true);
-    setSmaToAdd(period);
+  const handleAddIndicator = (type: string, period: number) => {
+    console.log('[App] Adding indicator:', { type, period });
+    if (type === 'SMA') {
+      setSmaLoading(true);
+      setSmaToAdd(period);
+    }
   };
 
   const handleSMAAdded = () => {
@@ -48,31 +54,94 @@ const App: FC = () => {
     setSmaToAdd(null);
   };
 
+  const handleRemoveIndicator = (id: string) => {
+    console.log('[App] Removing indicator:', id);
+    setSmaToRemove(id);
+  };
+
+  const handleSMARemoved = () => {
+    console.log('[App] SMA removed successfully');
+    setSmaToRemove(null);
+  };
+
+  const handleToggleIndicator = (id: string) => {
+    console.log('[App] Toggling indicator:', id);
+    setSmaToToggle(id);
+  };
+
+  const handleSMAToggled = () => {
+    console.log('[App] SMA toggled successfully');
+    setSmaToToggle(null);
+  };
+
+  const handleSMAListChange = (newSmaList: SMAData[]) => {
+    setSmaList(newSmaList);
+  };
+
   return (
     <ErrorBoundary>
-      <div className="App">
-        <header className="App-header">
-          <h1>KTRDR Trading Research - MVP Slice 3</h1>
-        </header>
-        <main className="App-main">
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'flex-start' }}>
+      <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <header className="App-header" style={{ 
+          padding: '0.75rem 1rem', 
+          backgroundColor: '#1976d2', 
+          color: 'white',
+          borderBottom: '1px solid #e0e0e0',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h1 style={{ margin: 0, fontSize: '1.25rem' }}>KTRDR Trading Research - MVP Slice 4</h1>
             <SymbolSelector 
               selectedSymbol={selectedSymbol}
               onSymbolChange={handleSymbolChange}
             />
-            <SMAControls 
-              onAddSMA={handleAddSMA}
-              isLoading={smaLoading}
-            />
           </div>
-          <ErrorBoundary>
-            <BasicChart 
-              symbol={selectedSymbol} 
-              timeframe={selectedTimeframe}
-              smaToAdd={smaToAdd}
-              onSMAAdded={handleSMAAdded}
-            />
-          </ErrorBoundary>
+        </header>
+        
+        <main style={{ 
+          display: 'flex', 
+          height: 'calc(100vh - 60px)', 
+          overflow: 'hidden'
+        }}>
+          {/* Indicator Sidebar */}
+          <IndicatorSidebar
+            indicators={smaList.map(sma => ({
+              id: sma.id,
+              type: 'SMA',
+              period: sma.period,
+              color: sma.color,
+              visible: sma.visible
+            }))}
+            onAddIndicator={handleAddIndicator}
+            onRemoveIndicator={handleRemoveIndicator}
+            onToggleIndicator={handleToggleIndicator}
+            isCollapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            isLoading={smaLoading}
+          />
+          
+          {/* Chart Area */}
+          <div style={{ 
+            flex: 1, 
+            padding: '1rem',
+            overflow: 'auto',
+            backgroundColor: '#fafafa'
+          }}>
+            <ErrorBoundary>
+              <BasicChart 
+                symbol={selectedSymbol} 
+                timeframe={selectedTimeframe}
+                smaToAdd={smaToAdd}
+                onSMAAdded={handleSMAAdded}
+                smaToRemove={smaToRemove}
+                onSMARemoved={handleSMARemoved}
+                smaToToggle={smaToToggle}
+                onSMAToggled={handleSMAToggled}
+                onSMAListChange={handleSMAListChange}
+                width={sidebarCollapsed ? 920 : 800}
+                height={500}
+              />
+            </ErrorBoundary>
+          </div>
         </main>
       </div>
     </ErrorBoundary>

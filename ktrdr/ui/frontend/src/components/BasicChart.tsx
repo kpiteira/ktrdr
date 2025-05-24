@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, FC } from 'react';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, UTCTimestamp, LineData } from 'lightweight-charts';
 
-interface SMAData {
+export interface SMAData {
+  id: string;
   period: number;
   data: LineData[];
   color: string;
+  visible: boolean;
 }
 
 interface BasicChartProps {
@@ -14,6 +16,11 @@ interface BasicChartProps {
   timeframe: string;
   smaToAdd?: number | null;
   onSMAAdded?: () => void;
+  smaToRemove?: string | null;
+  onSMARemoved?: () => void;
+  smaToToggle?: string | null;
+  onSMAToggled?: () => void;
+  onSMAListChange?: (smaList: SMAData[]) => void;
 }
 
 const BasicChart: FC<BasicChartProps> = ({ 
@@ -22,14 +29,19 @@ const BasicChart: FC<BasicChartProps> = ({
   symbol,
   timeframe,
   smaToAdd,
-  onSMAAdded
+  onSMAAdded,
+  smaToRemove,
+  onSMARemoved,
+  smaToToggle,
+  onSMAToggled,
+  onSMAListChange
 }) => {
-  console.log('[BasicChart] Props received:', { symbol, timeframe, width, height, smaToAdd });
+  console.log('[BasicChart] Props received:', { symbol, timeframe, width, height, smaToAdd, smaToRemove, smaToToggle });
   
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const smaSeriesRef = useRef<Map<number, ISeriesApi<'Line'>>>(new Map());
+  const smaSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dataInfo, setDataInfo] = useState<{startDate: string, endDate: string, pointCount: number} | null>(null);
@@ -46,6 +58,33 @@ const BasicChart: FC<BasicChartProps> = ({
       });
     }
   }, [smaToAdd]);
+
+  // Handle SMA removal requests
+  useEffect(() => {
+    if (smaToRemove) {
+      removeSMAData(smaToRemove);
+      if (onSMARemoved) {
+        onSMARemoved();
+      }
+    }
+  }, [smaToRemove]);
+
+  // Handle SMA visibility toggle requests
+  useEffect(() => {
+    if (smaToToggle) {
+      toggleSMAVisibility(smaToToggle);
+      if (onSMAToggled) {
+        onSMAToggled();
+      }
+    }
+  }, [smaToToggle]);
+
+  // Notify parent when SMA list changes
+  useEffect(() => {
+    if (onSMAListChange) {
+      onSMAListChange(smaList);
+    }
+  }, [smaList, onSMAListChange]);
 
   useEffect(() => {
     console.log('[BasicChart] useEffect triggered with:', { symbol, timeframe, width, height });
@@ -345,14 +384,19 @@ const BasicChart: FC<BasicChartProps> = ({
 
         smaSeries.setData(smaData);
         
+        // Generate unique ID for this SMA
+        const smaId = `SMA_${period}_${Date.now()}`;
+        
         // Store series reference
-        smaSeriesRef.current.set(period, smaSeries);
+        smaSeriesRef.current.set(smaId, smaSeries);
 
         // Update SMA list
         setSmaList(prev => [...prev, {
+          id: smaId,
           period,
           data: smaData,
-          color
+          color,
+          visible: true
         }]);
 
         console.log('[BasicChart] Added SMA overlay:', { period, color, dataPoints: smaData.length });
@@ -362,6 +406,42 @@ const BasicChart: FC<BasicChartProps> = ({
       console.error('[BasicChart] Error loading SMA data:', err);
       // Don't show error to user for SMA failures, just log it
     }
+  };
+
+  const removeSMAData = (smaId: string) => {
+    console.log('[BasicChart] Removing SMA:', smaId);
+    
+    // Remove series from chart
+    const series = smaSeriesRef.current.get(smaId);
+    if (series && chartRef.current) {
+      (chartRef.current as any).removeSeries(series);
+      smaSeriesRef.current.delete(smaId);
+    }
+    
+    // Remove from SMA list
+    setSmaList(prev => prev.filter(sma => sma.id !== smaId));
+    
+    console.log('[BasicChart] SMA removed:', smaId);
+  };
+
+  const toggleSMAVisibility = (smaId: string) => {
+    console.log('[BasicChart] Toggling SMA visibility:', smaId);
+    
+    const series = smaSeriesRef.current.get(smaId);
+    if (series) {
+      // Update SMA list visibility
+      setSmaList(prev => prev.map(sma => {
+        if (sma.id === smaId) {
+          const newVisible = !sma.visible;
+          // Hide/show series by updating its visibility
+          (series as any).applyOptions({ visible: newVisible });
+          return { ...sma, visible: newVisible };
+        }
+        return sma;
+      }));
+    }
+    
+    console.log('[BasicChart] SMA visibility toggled:', smaId);
   };
 
   if (loading) {
@@ -415,11 +495,11 @@ const BasicChart: FC<BasicChartProps> = ({
             {' '}({dataInfo.pointCount} points: {dataInfo.startDate} to {dataInfo.endDate})
           </span>
         )}
-        {smaList.length > 0 && (
+        {smaList.filter(sma => sma.visible).length > 0 && (
           <div style={{ fontSize: '0.75em', marginTop: '0.25rem' }}>
             <span style={{ color: '#666' }}>Overlays: </span>
-            {smaList.map((sma, index) => (
-              <span key={sma.period} style={{ color: sma.color, marginRight: '0.75rem' }}>
+            {smaList.filter(sma => sma.visible).map((sma) => (
+              <span key={sma.id} style={{ color: sma.color, marginRight: '0.75rem' }}>
                 SMA({sma.period})
               </span>
             ))}
