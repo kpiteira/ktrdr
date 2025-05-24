@@ -21,6 +21,7 @@ interface BasicChartProps {
   smaToToggle?: string | null;
   onSMAToggled?: () => void;
   onSMAListChange?: (smaList: SMAData[]) => void;
+  onDateRangeChange?: (dateRange: {start: string, end: string} | null) => void;
 }
 
 const BasicChart: FC<BasicChartProps> = ({ 
@@ -34,7 +35,8 @@ const BasicChart: FC<BasicChartProps> = ({
   onSMARemoved,
   smaToToggle,
   onSMAToggled,
-  onSMAListChange
+  onSMAListChange,
+  onDateRangeChange
 }) => {
   console.log('[BasicChart] Props received:', { symbol, timeframe, width, height, smaToAdd, smaToRemove, smaToToggle });
   
@@ -50,12 +52,20 @@ const BasicChart: FC<BasicChartProps> = ({
 
   // Handle SMA addition requests
   useEffect(() => {
-    if (smaToAdd && !smaList.some(sma => sma.period === smaToAdd)) {
-      loadSMAData(smaToAdd).then(() => {
+    if (smaToAdd) {
+      if (!smaList.some(sma => sma.period === smaToAdd)) {
+        loadSMAData(smaToAdd).then(() => {
+          if (onSMAAdded) {
+            onSMAAdded();
+          }
+        });
+      } else {
+        // Indicator already exists, just reset the loading state
+        console.log(`[BasicChart] SMA(${smaToAdd}) already exists, skipping`);
         if (onSMAAdded) {
           onSMAAdded();
         }
-      });
+      }
     }
   }, [smaToAdd]);
 
@@ -146,6 +156,17 @@ const BasicChart: FC<BasicChartProps> = ({
       chartRef.current = chart;
       seriesRef.current = candlestickSeries;
 
+      // Add time scale event listener for chart synchronization
+      chart.timeScale().subscribeVisibleTimeRangeChange((timeRange) => {
+        if (timeRange && onDateRangeChange) {
+          // Convert timestamp range back to date strings
+          const startDate = new Date(timeRange.from * 1000).toISOString().split('T')[0];
+          const endDate = new Date(timeRange.to * 1000).toISOString().split('T')[0];
+          console.log('[BasicChart] Time range changed:', { startDate, endDate });
+          onDateRangeChange({ start: startDate, end: endDate });
+        }
+      });
+
       console.log('[BasicChart] Chart created, loading data...');
       // Load data
       loadChartData();
@@ -194,26 +215,26 @@ const BasicChart: FC<BasicChartProps> = ({
       const { start_date, end_date, point_count } = rangeData.data;
       console.log('[BasicChart] Available data:', { start_date, end_date, point_count });
       
-      // Step 2: Calculate date range for last 100 points (or all if less than 100)
-      const maxPoints = 100;
+      // Step 2: Request enough calendar time to get 200+ trading data points
+      // For hourly data: ~6.5 hours/day * 5 days/week = ~32.5 points/week
+      // To get 200 points: 200/32.5 = ~6 weeks, use 8 weeks to be safe
+      const targetPoints = 200;
       let requestStartDate: string;
       let requestEndDate: string = end_date;
       
-      if (point_count <= maxPoints) {
+      if (point_count <= targetPoints) {
         // Use all available data
         requestStartDate = start_date;
         console.log('[BasicChart] Using all available data points:', point_count);
       } else {
-        // Calculate approximate start date for last 100 points
-        // This is a simple approach - for more accuracy we could calculate based on timeframe
+        // Go back enough calendar days to get sufficient trading data
         const endDateTime = new Date(end_date);
-        const startDateTime = new Date(start_date);
-        const totalDuration = endDateTime.getTime() - startDateTime.getTime();
-        const pointDuration = totalDuration / point_count;
-        const last100Duration = pointDuration * maxPoints;
-        const requestStartDateTime = new Date(endDateTime.getTime() - last100Duration);
+        const weeksNeeded = timeframe === '1h' ? 8 : 
+                          timeframe === '1d' ? 40 : // 200 trading days ~ 40 weeks
+                          12; // Default to 12 weeks for other timeframes
+        const requestStartDateTime = new Date(endDateTime.getTime() - (weeksNeeded * 7 * 24 * 60 * 60 * 1000));
         requestStartDate = requestStartDateTime.toISOString().split('T')[0];
-        console.log('[BasicChart] Using last ~100 points from:', requestStartDate);
+        console.log(`[BasicChart] Requesting ${weeksNeeded} weeks of data from:`, requestStartDate);
       }
       
       // Step 3: Load the actual data
@@ -300,10 +321,16 @@ const BasicChart: FC<BasicChartProps> = ({
       
       // Store date range for SMA calculations
       if (data.dates.length > 0) {
-        setDateRange({
+        const newDateRange = {
           start: data.dates[0],
           end: data.dates[data.dates.length - 1]
-        });
+        };
+        setDateRange(newDateRange);
+        
+        // Notify parent about date range change for RSI chart sync
+        if (onDateRangeChange) {
+          onDateRangeChange(newDateRange);
+        }
       }
     } catch (err) {
       console.error('[BasicChart] Error loading data:', err);

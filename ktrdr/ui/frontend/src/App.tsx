@@ -1,5 +1,6 @@
 import { FC, useState } from 'react';
 import BasicChart, { SMAData } from './components/BasicChart';
+import RSIChart, { RSIData } from './components/RSIChart';
 import SymbolSelector from './components/SymbolSelector';
 import IndicatorSidebar from './components/IndicatorSidebar';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -13,7 +14,13 @@ const App: FC = () => {
   const [smaToToggle, setSmaToToggle] = useState<string | null>(null);
   const [smaLoading, setSmaLoading] = useState(false);
   const [smaList, setSmaList] = useState<SMAData[]>([]);
+  const [rsiToAdd, setRsiToAdd] = useState<number | null>(null);
+  const [rsiToRemove, setRsiToRemove] = useState<string | null>(null);
+  const [rsiToToggle, setRsiToToggle] = useState<string | null>(null);
+  const [rsiLoading, setRsiLoading] = useState(false);
+  const [rsiList, setRsiList] = useState<RSIData[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null);
 
   const handleSymbolChange = (symbol: string, timeframe: string) => {
     console.log('[App] handleSymbolChange called:', { symbol, timeframe });
@@ -45,6 +52,9 @@ const App: FC = () => {
     if (type === 'SMA') {
       setSmaLoading(true);
       setSmaToAdd(period);
+    } else if (type === 'RSI') {
+      setRsiLoading(true);
+      setRsiToAdd(period);
     }
   };
 
@@ -56,7 +66,11 @@ const App: FC = () => {
 
   const handleRemoveIndicator = (id: string) => {
     console.log('[App] Removing indicator:', id);
-    setSmaToRemove(id);
+    if (id.startsWith('SMA_')) {
+      setSmaToRemove(id);
+    } else if (id.startsWith('RSI_')) {
+      setRsiToRemove(id);
+    }
   };
 
   const handleSMARemoved = () => {
@@ -64,9 +78,24 @@ const App: FC = () => {
     setSmaToRemove(null);
   };
 
+  const handleRSIAdded = () => {
+    console.log('[App] RSI added successfully');
+    setRsiLoading(false);
+    setRsiToAdd(null);
+  };
+
+  const handleRSIRemoved = () => {
+    console.log('[App] RSI removed successfully');
+    setRsiToRemove(null);
+  };
+
   const handleToggleIndicator = (id: string) => {
     console.log('[App] Toggling indicator:', id);
-    setSmaToToggle(id);
+    if (id.startsWith('SMA_')) {
+      setSmaToToggle(id);
+    } else if (id.startsWith('RSI_')) {
+      setRsiToToggle(id);
+    }
   };
 
   const handleSMAToggled = () => {
@@ -74,8 +103,21 @@ const App: FC = () => {
     setSmaToToggle(null);
   };
 
+  const handleRSIToggled = () => {
+    console.log('[App] RSI toggled successfully');
+    setRsiToToggle(null);
+  };
+
   const handleSMAListChange = (newSmaList: SMAData[]) => {
     setSmaList(newSmaList);
+  };
+
+  const handleRSIListChange = (newRsiList: RSIData[]) => {
+    setRsiList(newRsiList);
+  };
+
+  const handleDateRangeChange = (newDateRange: {start: string, end: string} | null) => {
+    setDateRange(newDateRange);
   };
 
   return (
@@ -89,7 +131,7 @@ const App: FC = () => {
           flexShrink: 0
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1 style={{ margin: 0, fontSize: '1.25rem' }}>KTRDR Trading Research - MVP Slice 4</h1>
+            <h1 style={{ margin: 0, fontSize: '1.25rem' }}>KTRDR Trading Research - MVP Slice 5</h1>
             <SymbolSelector 
               selectedSymbol={selectedSymbol}
               onSymbolChange={handleSymbolChange}
@@ -104,19 +146,28 @@ const App: FC = () => {
         }}>
           {/* Indicator Sidebar */}
           <IndicatorSidebar
-            indicators={smaList.map(sma => ({
-              id: sma.id,
-              type: 'SMA',
-              period: sma.period,
-              color: sma.color,
-              visible: sma.visible
-            }))}
+            indicators={[
+              ...smaList.map(sma => ({
+                id: sma.id,
+                type: 'SMA',
+                period: sma.period,
+                color: sma.color,
+                visible: sma.visible
+              })),
+              ...rsiList.map(rsi => ({
+                id: rsi.id,
+                type: 'RSI',
+                period: rsi.period,
+                color: rsi.color,
+                visible: rsi.visible
+              }))
+            ]}
             onAddIndicator={handleAddIndicator}
             onRemoveIndicator={handleRemoveIndicator}
             onToggleIndicator={handleToggleIndicator}
             isCollapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            isLoading={smaLoading}
+            isLoading={smaLoading || rsiLoading}
           />
           
           {/* Chart Area */}
@@ -124,8 +175,11 @@ const App: FC = () => {
             flex: 1, 
             padding: '1rem',
             overflow: 'auto',
-            backgroundColor: '#fafafa'
+            backgroundColor: '#fafafa',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
+            {/* Main Price Chart */}
             <ErrorBoundary>
               <BasicChart 
                 symbol={selectedSymbol} 
@@ -137,8 +191,27 @@ const App: FC = () => {
                 smaToToggle={smaToToggle}
                 onSMAToggled={handleSMAToggled}
                 onSMAListChange={handleSMAListChange}
+                onDateRangeChange={handleDateRangeChange}
                 width={sidebarCollapsed ? 920 : 800}
-                height={500}
+                height={400}
+              />
+            </ErrorBoundary>
+
+            {/* RSI Oscillator Chart */}
+            <ErrorBoundary>
+              <RSIChart
+                symbol={selectedSymbol}
+                timeframe={selectedTimeframe}
+                rsiToAdd={rsiToAdd}
+                onRSIAdded={handleRSIAdded}
+                rsiToRemove={rsiToRemove}
+                onRSIRemoved={handleRSIRemoved}
+                rsiToToggle={rsiToToggle}
+                onRSIToggled={handleRSIToggled}
+                onRSIListChange={handleRSIListChange}
+                dateRange={dateRange}
+                width={sidebarCollapsed ? 920 : 800}
+                height={200}
               />
             </ErrorBoundary>
           </div>
