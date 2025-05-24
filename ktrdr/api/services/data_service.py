@@ -336,12 +336,24 @@ class DataService(BaseService):
                 
             start_date, end_date = date_range
             
+            # Calculate estimated point count based on timeframe and date range
+            duration = end_date - start_date
+            if timeframe == "1h":
+                estimated_points = duration.total_seconds() / 3600
+            elif timeframe == "1d":
+                estimated_points = duration.days
+            elif timeframe == "1m":
+                estimated_points = duration.total_seconds() / 60
+            else:
+                # Default fallback for unknown timeframes
+                estimated_points = max(1, duration.days)
+            
             result = {
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
-                "point_count": None  # Note: We don't have the count without loading the full file
+                "point_count": int(estimated_points)  # Use estimated count
             }
             
             logger.info(f"Retrieved date range for {symbol} ({timeframe})")
