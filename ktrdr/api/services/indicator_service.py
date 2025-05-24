@@ -299,8 +299,19 @@ class IndicatorService(BaseService):
                     if hasattr(indicator, 'output_name') and output_name.startswith(indicator.name):
                         output_name = indicator.output_name
                         break
+                
+                # Convert to list and handle NaN/Inf values for JSON compatibility
+                values = result_df[col].tolist()
+                # Replace NaN and Inf values with None for JSON serialization
+                import math
+                clean_values = []
+                for val in values:
+                    if pd.isna(val) or math.isinf(val):
+                        clean_values.append(None)
+                    else:
+                        clean_values.append(val)
                         
-                indicator_values[output_name] = result_df[col].tolist()
+                indicator_values[output_name] = clean_values
             
             # Create metadata
             metadata = {

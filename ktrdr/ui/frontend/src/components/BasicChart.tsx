@@ -1,28 +1,51 @@
 import { useEffect, useRef, useState, FC } from 'react';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, UTCTimestamp } from 'lightweight-charts';
-import { loadData } from '../api/endpoints/data';
+import { createChart, IChartApi, ISeriesApi, CandlestickData, UTCTimestamp, LineData } from 'lightweight-charts';
+
+interface SMAData {
+  period: number;
+  data: LineData[];
+  color: string;
+}
 
 interface BasicChartProps {
   width?: number;
   height?: number;
   symbol: string;
   timeframe: string;
+  smaToAdd?: number | null;
+  onSMAAdded?: () => void;
 }
 
 const BasicChart: FC<BasicChartProps> = ({ 
   width = 800, 
   height = 400,
   symbol,
-  timeframe
+  timeframe,
+  smaToAdd,
+  onSMAAdded
 }) => {
-  console.log('[BasicChart] Props received:', { symbol, timeframe, width, height });
+  console.log('[BasicChart] Props received:', { symbol, timeframe, width, height, smaToAdd });
   
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const smaSeriesRef = useRef<Map<number, ISeriesApi<'Line'>>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dataInfo, setDataInfo] = useState<{startDate: string, endDate: string, pointCount: number} | null>(null);
+  const [smaList, setSmaList] = useState<SMAData[]>([]);
+  const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null);
+
+  // Handle SMA addition requests
+  useEffect(() => {
+    if (smaToAdd && !smaList.some(sma => sma.period === smaToAdd)) {
+      loadSMAData(smaToAdd).then(() => {
+        if (onSMAAdded) {
+          onSMAAdded();
+        }
+      });
+    }
+  }, [smaToAdd]);
 
   useEffect(() => {
     console.log('[BasicChart] useEffect triggered with:', { symbol, timeframe, width, height });
@@ -30,6 +53,9 @@ const BasicChart: FC<BasicChartProps> = ({
     // Reset states when props change
     setLoading(true);
     setError(null);
+    setSmaList([]);
+    setDateRange(null);
+    smaSeriesRef.current.clear();
     
     // Add a small delay to ensure the DOM element is mounted
     const timer = setTimeout(() => {
@@ -68,8 +94,8 @@ const BasicChart: FC<BasicChartProps> = ({
         },
       });
 
-      // Add candlestick series using legacy API (v4 compatibility)
-      const candlestickSeries = chart.addCandlestickSeries({
+      // Add candlestick series using v4 API (still works in v5)
+      const candlestickSeries = (chart as any).addCandlestickSeries({
         upColor: '#26a69a',
         downColor: '#ef5350',
         borderDownColor: '#ef5350',
@@ -232,10 +258,109 @@ const BasicChart: FC<BasicChartProps> = ({
 
       console.log('[BasicChart] Loading complete, setting loading to false');
       setLoading(false);
+      
+      // Store date range for SMA calculations
+      if (data.dates.length > 0) {
+        setDateRange({
+          start: data.dates[0],
+          end: data.dates[data.dates.length - 1]
+        });
+      }
     } catch (err) {
       console.error('[BasicChart] Error loading data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load chart data');
       setLoading(false);
+    }
+  };
+
+  const loadSMAData = async (period: number) => {
+    if (!dateRange) {
+      console.error('[BasicChart] No date range available for SMA calculation');
+      return;
+    }
+
+    try {
+      console.log('[BasicChart] Loading SMA data for period:', period);
+      
+      const actualTimeframe = (timeframe && timeframe !== 'undefined') ? timeframe : '1h';
+      
+      const response = await fetch('/api/v1/indicators/calculate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symbol: symbol,
+          timeframe: actualTimeframe,
+          start_date: dateRange.start,
+          end_date: dateRange.end,
+          indicators: [
+            {
+              id: 'SimpleMovingAverage',
+              parameters: {
+                period: period,
+                source: 'close'
+              },
+              output_name: `SMA_${period}`
+            }
+          ]
+        })
+      });
+
+      const responseData = await response.json();
+      console.log('[BasicChart] SMA API response:', responseData);
+
+      if (!responseData.success || !responseData.indicators) {
+        throw new Error(`Failed to calculate SMA(${period})`);
+      }
+
+      // Transform SMA data to TradingView format
+      const smaValues = responseData.indicators[`SMA_${period}`] || responseData.indicators[`sma_${period}`];
+      if (!smaValues) {
+        throw new Error(`SMA_${period} data not found in response`);
+      }
+
+      const smaData: LineData[] = [];
+      responseData.dates.forEach((dateStr: string, index: number) => {
+        const smaValue = smaValues[index];
+        if (smaValue !== null && smaValue !== undefined) {
+          smaData.push({
+            time: (new Date(dateStr).getTime() / 1000) as UTCTimestamp,
+            value: smaValue
+          });
+        }
+      });
+
+      // Generate a color for this SMA (cycle through colors)
+      const colors = ['#2196F3', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#00BCD4'];
+      const color = colors[smaList.length % colors.length];
+
+      // Add SMA line series to chart
+      if (chartRef.current) {
+        const smaSeries = (chartRef.current as any).addLineSeries({
+          color: color,
+          lineWidth: 2,
+          title: `SMA(${period})`
+        });
+
+        smaSeries.setData(smaData);
+        
+        // Store series reference
+        smaSeriesRef.current.set(period, smaSeries);
+
+        // Update SMA list
+        setSmaList(prev => [...prev, {
+          period,
+          data: smaData,
+          color
+        }]);
+
+        console.log('[BasicChart] Added SMA overlay:', { period, color, dataPoints: smaData.length });
+      }
+
+    } catch (err) {
+      console.error('[BasicChart] Error loading SMA data:', err);
+      // Don't show error to user for SMA failures, just log it
     }
   };
 
@@ -289,6 +414,16 @@ const BasicChart: FC<BasicChartProps> = ({
           <span style={{ fontSize: '0.8em', color: '#666', fontWeight: 'normal' }}>
             {' '}({dataInfo.pointCount} points: {dataInfo.startDate} to {dataInfo.endDate})
           </span>
+        )}
+        {smaList.length > 0 && (
+          <div style={{ fontSize: '0.75em', marginTop: '0.25rem' }}>
+            <span style={{ color: '#666' }}>Overlays: </span>
+            {smaList.map((sma, index) => (
+              <span key={sma.period} style={{ color: sma.color, marginRight: '0.75rem' }}>
+                SMA({sma.period})
+              </span>
+            ))}
+          </div>
         )}
       </h3>
       <div 

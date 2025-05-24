@@ -1,12 +1,15 @@
 import { FC, useState } from 'react';
 import BasicChart from './components/BasicChart';
 import SymbolSelector from './components/SymbolSelector';
+import SMAControls from './components/SMAControls';
 import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 const App: FC = () => {
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
+  const [smaToAdd, setSmaToAdd] = useState<number | null>(null);
+  const [smaLoading, setSmaLoading] = useState(false);
 
   const handleSymbolChange = (symbol: string, timeframe: string) => {
     console.log('[App] handleSymbolChange called:', { symbol, timeframe });
@@ -33,21 +36,42 @@ const App: FC = () => {
     console.log('[App] State update completed for:', { symbol, timeframe: actualTimeframe });
   };
 
+  const handleAddSMA = (period: number) => {
+    console.log('[App] Adding SMA with period:', period);
+    setSmaLoading(true);
+    setSmaToAdd(period);
+  };
+
+  const handleSMAAdded = () => {
+    console.log('[App] SMA added successfully');
+    setSmaLoading(false);
+    setSmaToAdd(null);
+  };
+
   return (
     <ErrorBoundary>
       <div className="App">
         <header className="App-header">
-          <h1>KTRDR Trading Research - MVP Slice 2</h1>
+          <h1>KTRDR Trading Research - MVP Slice 3</h1>
         </header>
         <main className="App-main">
-          <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'flex-start' }}>
             <SymbolSelector 
               selectedSymbol={selectedSymbol}
               onSymbolChange={handleSymbolChange}
             />
+            <SMAControls 
+              onAddSMA={handleAddSMA}
+              isLoading={smaLoading}
+            />
           </div>
           <ErrorBoundary>
-            <BasicChart symbol={selectedSymbol} timeframe={selectedTimeframe} />
+            <BasicChart 
+              symbol={selectedSymbol} 
+              timeframe={selectedTimeframe}
+              smaToAdd={smaToAdd}
+              onSMAAdded={handleSMAAdded}
+            />
           </ErrorBoundary>
         </main>
       </div>
