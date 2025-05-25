@@ -22,6 +22,7 @@ interface RSIChartProps {
   onRSIToggled?: () => void;
   onRSIListChange?: (rsiList: RSIData[]) => void;
   dateRange?: {start: string, end: string} | null;
+  rsiList?: RSIData[];
 }
 
 const RSIChart: FC<RSIChartProps> = ({
@@ -36,13 +37,16 @@ const RSIChart: FC<RSIChartProps> = ({
   rsiToToggle,
   onRSIToggled,
   onRSIListChange,
-  dateRange
+  dateRange,
+  rsiList: propsRsiList
 }) => {
   console.log('[RSIChart] Props received:', { symbol, timeframe, width, height, rsiToAdd, rsiToRemove, rsiToToggle });
   
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const rsiSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const previousRsiListRef = useRef<RSIData[]>([]);
+  const updatingFromPropsRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rsiList, setRsiList] = useState<RSIData[]>([]);
@@ -92,12 +96,75 @@ const RSIChart: FC<RSIChartProps> = ({
     }
   }, [rsiToToggle]);
 
-  // Notify parent when RSI list changes
+  // Notify parent when RSI list changes (but not during prop updates)
   useEffect(() => {
-    if (onRSIListChange) {
+    if (onRSIListChange && !updatingFromPropsRef.current) {
+      console.log('[RSIChart] Notifying parent of RSI list change:', rsiList.length, 'indicators');
       onRSIListChange(rsiList);
+    } else if (updatingFromPropsRef.current) {
+      console.log('[RSIChart] Skipping parent notification during prop update');
     }
   }, [rsiList, onRSIListChange]);
+
+  // Handle real-time RSI parameter updates from props
+  useEffect(() => {
+    if (!propsRsiList) return;
+    
+    const previousList = previousRsiListRef.current;
+    console.log('[RSIChart] RSI list changed, checking for parameter updates:', propsRsiList);
+    
+    // Set flag to prevent circular updates
+    updatingFromPropsRef.current = true;
+    
+    propsRsiList.forEach(rsi => {
+      const series = rsiSeriesRef.current.get(rsi.id);
+      const previousRsi = previousList.find(r => r.id === rsi.id);
+      
+      if (series && chartRef.current && previousRsi) {
+        // Check if color or visibility changed
+        if (rsi.color !== previousRsi.color || rsi.visible !== previousRsi.visible) {
+          console.log(`[RSIChart] Updating color/visibility for ${rsi.id}`, {
+            oldColor: previousRsi.color,
+            newColor: rsi.color,
+            oldVisible: previousRsi.visible,
+            newVisible: rsi.visible
+          });
+          try {
+            (series as any).applyOptions({
+              color: rsi.color,
+              visible: rsi.visible
+            });
+            console.log(`[RSIChart] Color/visibility update applied successfully for ${rsi.id}`);
+          } catch (err) {
+            console.error(`[RSIChart] Error applying color/visibility update for ${rsi.id}:`, err);
+          }
+        }
+        
+        // Check if period changed - if so, need to reload data
+        if (rsi.period !== previousRsi.period) {
+          console.log(`[RSIChart] Period changed for ${rsi.id} from ${previousRsi.period} to ${rsi.period}, reloading...`);
+          // Remove old series and reload with new period
+          (chartRef.current as any).removeSeries(series);
+          rsiSeriesRef.current.delete(rsi.id);
+          
+          // Reload RSI with new period
+          loadRSIDataForUpdate(rsi.id, rsi.period, rsi.color);
+        }
+      }
+    });
+    
+    // Sync internal state with props
+    setRsiList([...propsRsiList]);
+    
+    // Update previous list reference
+    previousRsiListRef.current = [...propsRsiList];
+    
+    // Reset flag immediately after processing
+    setTimeout(() => {
+      updatingFromPropsRef.current = false;
+      console.log('[RSIChart] Reset updating flag, can notify parent again');
+    }, 10);
+  }, [propsRsiList]);
 
   // Initialize chart when component mounts
   useEffect(() => {
@@ -317,6 +384,108 @@ const RSIChart: FC<RSIChartProps> = ({
     } catch (err) {
       console.error('[RSIChart] Error loading RSI data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load RSI data');
+      setLoading(false);
+    }
+  };
+
+  const loadRSIDataForUpdate = async (rsiId: string, period: number, color: string) => {
+    if (!dateRange) {
+      console.error('[RSIChart] No date range available for RSI calculation');
+      return;
+    }
+
+    try {
+      console.log('[RSIChart] Loading updated RSI data for period:', period);
+      setLoading(true);
+      
+      const actualTimeframe = (timeframe && timeframe !== 'undefined') ? timeframe : '1h';
+      
+      const response = await fetch('/api/v1/indicators/calculate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symbol: symbol,
+          timeframe: actualTimeframe,
+          start_date: dateRange.start,
+          end_date: dateRange.end,
+          indicators: [
+            {
+              id: 'RSIIndicator',
+              parameters: {
+                period: period,
+                source: 'close'
+              },
+              output_name: `RSI_${period}`
+            }
+          ]
+        })
+      });
+
+      const responseData = await response.json();
+      console.log('[RSIChart] Updated RSI API response:', responseData);
+
+      if (!responseData.success || !responseData.indicators) {
+        throw new Error(`Failed to calculate updated RSI(${period})`);
+      }
+
+      // Transform RSI data to TradingView format
+      const rsiValues = responseData.indicators[`RSI_${period}`] || responseData.indicators[`rsi_${period}`];
+      if (!rsiValues) {
+        throw new Error(`RSI_${period} data not found in response`);
+      }
+
+      const rsiData: LineData[] = [];
+      responseData.dates.forEach((dateStr: string, index: number) => {
+        const rsiValue = rsiValues[index];
+        if (rsiValue !== null && rsiValue !== undefined) {
+          rsiData.push({
+            time: (new Date(dateStr).getTime() / 1000) as UTCTimestamp,
+            value: rsiValue
+          });
+        }
+      });
+
+      // Add RSI line series to chart with updated parameters
+      if (chartRef.current && chartInitialized) {
+        const rsiSeries = (chartRef.current as any).addLineSeries({
+          color: color,
+          lineWidth: 2,
+          title: `RSI(${period})`,
+        });
+
+        rsiSeries.setData(rsiData);
+        
+        // Store series reference with existing ID
+        rsiSeriesRef.current.set(rsiId, rsiSeries);
+
+        // Update RSI list with new data but keep existing ID
+        setRsiList(prev => prev.map(rsi => 
+          rsi.id === rsiId 
+            ? { ...rsi, period, data: rsiData, color }
+            : rsi
+        ));
+
+        // Enable auto-scaling to show RSI data properly
+        chartRef.current.priceScale('right').applyOptions({
+          autoScale: true,
+          scaleMargins: {
+            top: 0.2,
+            bottom: 0.2,
+          },
+        });
+        
+        // Fit content to show the data
+        chartRef.current.timeScale().fitContent();
+
+        console.log('[RSIChart] Updated RSI overlay:', { rsiId, period, color, dataPoints: rsiData.length });
+      }
+
+      setLoading(false);
+    } catch (err) {
+      console.error('[RSIChart] Error loading updated RSI data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load updated RSI data');
       setLoading(false);
     }
   };

@@ -22,6 +22,7 @@ interface BasicChartProps {
   onSMAToggled?: () => void;
   onSMAListChange?: (smaList: SMAData[]) => void;
   onDateRangeChange?: (dateRange: {start: string, end: string} | null) => void;
+  smaList?: SMAData[];
 }
 
 const BasicChart: FC<BasicChartProps> = ({ 
@@ -36,7 +37,8 @@ const BasicChart: FC<BasicChartProps> = ({
   smaToToggle,
   onSMAToggled,
   onSMAListChange,
-  onDateRangeChange
+  onDateRangeChange,
+  smaList: propsSmaList
 }) => {
   console.log('[BasicChart] Props received:', { symbol, timeframe, width, height, smaToAdd, smaToRemove, smaToToggle });
   
@@ -44,6 +46,8 @@ const BasicChart: FC<BasicChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const smaSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const previousSmaListRef = useRef<SMAData[]>([]);
+  const updatingFromPropsRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dataInfo, setDataInfo] = useState<{startDate: string, endDate: string, pointCount: number} | null>(null);
@@ -89,12 +93,75 @@ const BasicChart: FC<BasicChartProps> = ({
     }
   }, [smaToToggle]);
 
-  // Notify parent when SMA list changes
+  // Notify parent when SMA list changes (but not during prop updates)
   useEffect(() => {
-    if (onSMAListChange) {
+    if (onSMAListChange && !updatingFromPropsRef.current) {
+      console.log('[BasicChart] Notifying parent of SMA list change:', smaList.length, 'indicators');
       onSMAListChange(smaList);
+    } else if (updatingFromPropsRef.current) {
+      console.log('[BasicChart] Skipping parent notification during prop update');
     }
   }, [smaList, onSMAListChange]);
+
+  // Handle real-time SMA parameter updates from props
+  useEffect(() => {
+    if (!propsSmaList) return;
+    
+    const previousList = previousSmaListRef.current;
+    console.log('[BasicChart] SMA list changed, checking for parameter updates:', propsSmaList);
+    
+    // Set flag to prevent circular updates
+    updatingFromPropsRef.current = true;
+    
+    propsSmaList.forEach(sma => {
+      const series = smaSeriesRef.current.get(sma.id);
+      const previousSma = previousList.find(s => s.id === sma.id);
+      
+      if (series && chartRef.current && previousSma) {
+        // Check if color or visibility changed
+        if (sma.color !== previousSma.color || sma.visible !== previousSma.visible) {
+          console.log(`[BasicChart] Updating color/visibility for ${sma.id}`, {
+            oldColor: previousSma.color,
+            newColor: sma.color,
+            oldVisible: previousSma.visible,
+            newVisible: sma.visible
+          });
+          try {
+            (series as any).applyOptions({
+              color: sma.color,
+              visible: sma.visible
+            });
+            console.log(`[BasicChart] Color/visibility update applied successfully for ${sma.id}`);
+          } catch (err) {
+            console.error(`[BasicChart] Error applying color/visibility update for ${sma.id}:`, err);
+          }
+        }
+        
+        // Check if period changed - if so, need to reload data
+        if (sma.period !== previousSma.period) {
+          console.log(`[BasicChart] Period changed for ${sma.id} from ${previousSma.period} to ${sma.period}, reloading...`);
+          // Remove old series and reload with new period
+          (chartRef.current as any).removeSeries(series);
+          smaSeriesRef.current.delete(sma.id);
+          
+          // Reload SMA with new period
+          loadSMADataForUpdate(sma.id, sma.period, sma.color);
+        }
+      }
+    });
+    
+    // Sync internal state with props
+    setSmaList([...propsSmaList]);
+    
+    // Update previous list reference
+    previousSmaListRef.current = [...propsSmaList];
+    
+    // Reset flag immediately after processing
+    setTimeout(() => {
+      updatingFromPropsRef.current = false;
+      console.log('[BasicChart] Reset updating flag, can notify parent again');
+    }, 10);
+  }, [propsSmaList]);
 
   useEffect(() => {
     console.log('[BasicChart] useEffect triggered with:', { symbol, timeframe, width, height });
@@ -432,6 +499,92 @@ const BasicChart: FC<BasicChartProps> = ({
     } catch (err) {
       console.error('[BasicChart] Error loading SMA data:', err);
       // Don't show error to user for SMA failures, just log it
+    }
+  };
+
+  const loadSMADataForUpdate = async (smaId: string, period: number, color: string) => {
+    if (!dateRange) {
+      console.error('[BasicChart] No date range available for SMA calculation');
+      return;
+    }
+
+    try {
+      console.log('[BasicChart] Loading updated SMA data for period:', period);
+      
+      const actualTimeframe = (timeframe && timeframe !== 'undefined') ? timeframe : '1h';
+      
+      const response = await fetch('/api/v1/indicators/calculate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          symbol: symbol,
+          timeframe: actualTimeframe,
+          start_date: dateRange.start,
+          end_date: dateRange.end,
+          indicators: [
+            {
+              id: 'SimpleMovingAverage',
+              parameters: {
+                period: period,
+                source: 'close'
+              },
+              output_name: `SMA_${period}`
+            }
+          ]
+        })
+      });
+
+      const responseData = await response.json();
+      console.log('[BasicChart] Updated SMA API response:', responseData);
+
+      if (!responseData.success || !responseData.indicators) {
+        throw new Error(`Failed to calculate updated SMA(${period})`);
+      }
+
+      // Transform SMA data to TradingView format
+      const smaValues = responseData.indicators[`SMA_${period}`] || responseData.indicators[`sma_${period}`];
+      if (!smaValues) {
+        throw new Error(`SMA_${period} data not found in response`);
+      }
+
+      const smaData: LineData[] = [];
+      responseData.dates.forEach((dateStr: string, index: number) => {
+        const smaValue = smaValues[index];
+        if (smaValue !== null && smaValue !== undefined) {
+          smaData.push({
+            time: (new Date(dateStr).getTime() / 1000) as UTCTimestamp,
+            value: smaValue
+          });
+        }
+      });
+
+      // Add SMA line series to chart with updated parameters
+      if (chartRef.current) {
+        const smaSeries = (chartRef.current as any).addLineSeries({
+          color: color,
+          lineWidth: 2,
+          title: `SMA(${period})`,
+        });
+
+        smaSeries.setData(smaData);
+        
+        // Store series reference with existing ID
+        smaSeriesRef.current.set(smaId, smaSeries);
+
+        // Update SMA list with new data but keep existing ID
+        setSmaList(prev => prev.map(sma => 
+          sma.id === smaId 
+            ? { ...sma, period, data: smaData, color }
+            : sma
+        ));
+
+        console.log('[BasicChart] Updated SMA overlay:', { smaId, period, color, dataPoints: smaData.length });
+      }
+
+    } catch (err) {
+      console.error('[BasicChart] Error loading updated SMA data:', err);
     }
   };
 

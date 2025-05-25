@@ -120,6 +120,22 @@ const App: FC = () => {
     setDateRange(newDateRange);
   };
 
+  const handleUpdateIndicator = (id: string, updates: Partial<{ id: string; type: string; period: number; color: string; visible: boolean; }>) => {
+    console.log('[App] Updating indicator:', id, updates);
+    
+    if (id.startsWith('SMA_')) {
+      // Update SMA indicator
+      setSmaList(prev => prev.map(sma => 
+        sma.id === id ? { ...sma, ...updates } : sma
+      ));
+    } else if (id.startsWith('RSI_')) {
+      // Update RSI indicator
+      setRsiList(prev => prev.map(rsi => 
+        rsi.id === id ? { ...rsi, ...updates } : rsi
+      ));
+    }
+  };
+
   return (
     <ErrorBoundary>
       <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -165,6 +181,7 @@ const App: FC = () => {
             onAddIndicator={handleAddIndicator}
             onRemoveIndicator={handleRemoveIndicator}
             onToggleIndicator={handleToggleIndicator}
+            onUpdateIndicator={handleUpdateIndicator}
             isCollapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             isLoading={smaLoading || rsiLoading}
@@ -192,6 +209,7 @@ const App: FC = () => {
                 onSMAToggled={handleSMAToggled}
                 onSMAListChange={handleSMAListChange}
                 onDateRangeChange={handleDateRangeChange}
+                smaList={smaList}
                 width={sidebarCollapsed ? 920 : 800}
                 height={400}
               />
@@ -210,6 +228,7 @@ const App: FC = () => {
                 onRSIToggled={handleRSIToggled}
                 onRSIListChange={handleRSIListChange}
                 dateRange={dateRange}
+                rsiList={rsiList}
                 width={sidebarCollapsed ? 920 : 800}
                 height={200}
               />
