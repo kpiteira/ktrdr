@@ -24,7 +24,8 @@
 - **HTTP Client**: Fetch API with custom wrapper
 - **Styling**: Modern CSS (Grid/Flexbox), CSS Modules or Styled Components
 - **Build Tool**: Vite (recommended) or Create React App
-- **State Management**: React Context + useReducer (avoid Redux for MVP)
+- **State Management**: Container/Presentation Pattern with Custom Hooks (avoid Redux for MVP)
+- **Architecture Pattern**: Container/Presentation Components for scalable state management
 
 #### Integration Layer
 - **API Client**: Custom TypeScript client matching backend schema
@@ -35,21 +36,103 @@
 
 ### Component Hierarchy
 
+#### Container/Presentation Architecture Pattern
+
+To address fragility issues and improve maintainability, the frontend follows a strict Container/Presentation pattern:
+
+**Container Components** (Smart Components):
+- Manage all state and business logic
+- Handle API calls and data fetching
+- Contain custom hooks for reusable logic
+- Pass data and callbacks to Presentation components
+
+**Presentation Components** (Dumb Components):
+- Receive props and render UI
+- No direct state management or API calls
+- Focus purely on rendering and user interactions
+- Highly reusable and testable
+
 ```
-App
-├── Layout
-│   ├── Header (current mode title only)
-│   ├── LeftSidebar (collapsible - mode selection)
-│   ├── RightSidebar (collapsible - indicator management)
-│   │   ├── InstrumentSelector
-│   │   ├── ActiveIndicatorsList
-│   │   ├── AddIndicatorButton
-│   │   └── FuzzySetControls
-│   └── MainContent
-│       └── ResearchView
-│           └── ChartContainer
-│               ├── PriceChart (main candlestick + overlays)
-│               └── IndicatorChart[] (RSI, MACD, etc.)
+App (Container)
+├── Layout (Presentation)
+│   ├── Header (Presentation - current mode title only)
+│   ├── LeftSidebar (Presentation - mode selection)
+│   ├── IndicatorSidebarContainer (Container)
+│   │   └── IndicatorSidebar (Presentation)
+│   │       ├── InstrumentSelector (Presentation)
+│   │       ├── ActiveIndicatorsList (Presentation)
+│   │       ├── AddIndicatorButton (Presentation)
+│   │       └── ParameterControls (Presentation)
+│   └── MainContent (Presentation)
+│       └── ResearchView (Presentation)
+│           ├── BasicChartContainer (Container)
+│           │   └── BasicChart (Presentation)
+│           └── RSIChartContainer (Container)
+│               └── RSIChart (Presentation)
+```
+
+#### Custom Hooks for Reusable Logic
+
+- **useIndicatorManager**: Manages indicator state, CRUD operations, and parameter updates
+- **useChartSynchronizer**: Handles time scale and crosshair synchronization between charts
+- **useApiClient**: Provides typed API methods with error handling and caching
+- **useLocalState**: Manages local UI state to prevent circular updates
+
+### Generic Indicator System
+
+#### Indicator Registry Pattern
+
+To eliminate hardcoded indicator logic and improve scalability:
+
+```typescript
+// Generic indicator configuration system
+interface IndicatorConfig {
+  name: string
+  displayName: string
+  category: string
+  chartType: 'overlay' | 'separate'
+  defaultParameters: Record<string, any>
+  parameterDefinitions: ParameterDefinition[]
+  colorOptions: string[]
+}
+
+interface ParameterDefinition {
+  name: string
+  type: 'number' | 'string' | 'boolean' | 'select'
+  min?: number
+  max?: number
+  step?: number
+  options?: string[]
+  default: any
+}
+
+// Centralized indicator registry
+const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
+  sma: {
+    name: 'sma',
+    displayName: 'Simple Moving Average',
+    category: 'Moving Averages',
+    chartType: 'overlay',
+    defaultParameters: { period: 20, color: '#2196F3' },
+    parameterDefinitions: [
+      { name: 'period', type: 'number', min: 1, max: 200, step: 1, default: 20 },
+      { name: 'color', type: 'select', options: ['#2196F3', '#FF5722', '#4CAF50'], default: '#2196F3' }
+    ],
+    colorOptions: ['#2196F3', '#FF5722', '#4CAF50', '#9C27B0', '#FF9800']
+  },
+  rsi: {
+    name: 'rsi',
+    displayName: 'Relative Strength Index',
+    category: 'Oscillators',
+    chartType: 'separate',
+    defaultParameters: { period: 14, color: '#FF5722' },
+    parameterDefinitions: [
+      { name: 'period', type: 'number', min: 2, max: 100, step: 1, default: 14 },
+      { name: 'color', type: 'select', options: ['#FF5722', '#2196F3', '#4CAF50'], default: '#FF5722' }
+    ],
+    colorOptions: ['#FF5722', '#2196F3', '#4CAF50', '#9C27B0', '#FF9800']
+  }
+}
 ```
 
 ### Core Modules
@@ -345,35 +428,43 @@ interface FuzzySet {
 ```
 src/
 ├── components/
-│   ├── charts/
-│   │   ├── PriceChart.tsx
-│   │   ├── IndicatorChart.tsx
-│   │   ├── ChartContainer.tsx
-│   │   └── fuzzy/
-│   │       ├── FuzzyOverlay.tsx
-│   │       └── FuzzyLegend.tsx
-│   ├── sidebar/
-│   │   ├── LeftSidebar.tsx (mode selection)
-│   │   ├── RightSidebar.tsx (indicator management)
-│   │   ├── InstrumentSelector.tsx
-│   │   ├── ActiveIndicatorsList.tsx
-│   │   ├── IndicatorItem.tsx
-│   │   ├── AddIndicatorButton.tsx
-│   │   └── FuzzySetControls.tsx
-│   ├── layout/
-│   │   ├── Header.tsx
-│   │   ├── Layout.tsx
-│   │   └── CollapsibleSidebar.tsx
+│   ├── containers/               # Smart components with state
+│   │   ├── IndicatorSidebarContainer.tsx
+│   │   ├── BasicChartContainer.tsx
+│   │   ├── RSIChartContainer.tsx
+│   │   └── AppContainer.tsx
+│   ├── presentation/             # Dumb components, pure UI
+│   │   ├── charts/
+│   │   │   ├── BasicChart.tsx
+│   │   │   ├── RSIChart.tsx
+│   │   │   └── fuzzy/
+│   │   │       ├── FuzzyOverlay.tsx
+│   │   │       └── FuzzyLegend.tsx
+│   │   ├── sidebar/
+│   │   │   ├── IndicatorSidebar.tsx
+│   │   │   ├── InstrumentSelector.tsx
+│   │   │   ├── ActiveIndicatorsList.tsx
+│   │   │   ├── IndicatorItem.tsx
+│   │   │   ├── AddIndicatorButton.tsx
+│   │   │   ├── ParameterControls.tsx
+│   │   │   └── FuzzySetControls.tsx
+│   │   └── layout/
+│   │       ├── Header.tsx
+│   │       ├── Layout.tsx
+│   │       ├── LeftSidebar.tsx
+│   │       └── CollapsibleSidebar.tsx
 │   └── common/
 │       ├── LoadingSpinner.tsx
 │       ├── ErrorBoundary.tsx
 │       └── Modal.tsx
 ├── hooks/
-│   ├── useChartSync.ts
-│   ├── useIndicators.ts
-│   ├── useInstrumentData.ts
-│   ├── useFuzzyData.ts
-│   └── useSidebarCollapse.ts
+│   ├── useIndicatorManager.ts     # Core indicator state management
+│   ├── useChartSynchronizer.ts    # Chart sync logic
+│   ├── useApiClient.ts           # Typed API client with caching
+│   ├── useLocalState.ts          # Local UI state management
+│   ├── useInstrumentData.ts      # Symbol/timeframe data
+│   ├── useFuzzyData.ts          # Fuzzy set data
+│   └── useSidebarCollapse.ts     # Sidebar state
 ├── services/
 │   ├── api/
 │   │   ├── client.ts
@@ -385,9 +476,10 @@ src/
 │       ├── chartUtils.ts
 │       └── fuzzyRenderer.ts
 ├── store/
-│   ├── context.ts
-│   ├── reducer.ts
-│   └── types.ts
+│   ├── context.ts                # React Context for global state
+│   ├── reducer.ts               # State reducer functions
+│   ├── types.ts                # State type definitions
+│   └── indicatorRegistry.ts     # Centralized indicator configs
 ├── utils/
 │   ├── dataTransform.ts
 │   ├── colorUtils.ts

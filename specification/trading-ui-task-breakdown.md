@@ -18,11 +18,11 @@ A working React app that shows EURUSD candlestick data in a TradingView chart.
 - [ ] Error handling with console logs
 
 ### Success Criteria:
-- ✅ Navigate to localhost:3000
-- ✅ See EURUSD candlestick chart with real data
-- ✅ Can pan/zoom the chart
-- ✅ Console shows meaningful logs
-- ✅ Graceful error if backend is down
+- ✅ Navigate to localhost:3000 - **COMPLETED**
+- ✅ See EURUSD candlestick chart with real data - **COMPLETED**
+- ✅ Can pan/zoom the chart - **COMPLETED**
+- ✅ Console shows meaningful logs - **COMPLETED**
+- ✅ Graceful error if backend is down - **COMPLETED**
 
 ---
 
@@ -40,10 +40,10 @@ Add a dropdown to select different symbols, chart updates when changed.
 - [ ] Handle "no data available" cases
 
 ### Success Criteria:
-- ✅ Dropdown shows available symbols (AAPL, EURUSD, etc.)
-- ✅ Selecting different symbol updates the chart
-- ✅ Loading spinner appears during data fetch
-- ✅ Error message if symbol has no data
+- ✅ Dropdown shows available symbols (AAPL, EURUSD, etc.) - **COMPLETED**
+- ✅ Selecting different symbol updates the chart - **COMPLETED**
+- ✅ Loading spinner appears during data fetch - **COMPLETED**
+- ✅ Error message if symbol has no data - **COMPLETED**
 
 ---
 
@@ -61,11 +61,11 @@ Button to add SMA(20) overlay on the price chart.
 - [ ] Handle calculation errors
 
 ### Success Criteria:
-- ✅ "Add SMA" button appears
-- ✅ Clicking adds SMA(20) line to chart
-- ✅ SMA line follows price movements
-- ✅ Works with different symbols
-- ✅ Error handling if calculation fails
+- ✅ "Add SMA" button appears - **COMPLETED**
+- ✅ Clicking adds SMA(20) line to chart - **COMPLETED**
+- ✅ SMA line follows price movements - **COMPLETED**
+- ✅ Works with different symbols - **COMPLETED**
+- ✅ Error handling if calculation fails - **COMPLETED**
 
 ---
 
@@ -83,11 +83,11 @@ Sidebar showing active indicators with remove/hide functionality.
 - [ ] Support multiple indicators simultaneously
 
 ### Success Criteria:
-- ✅ Sidebar shows "SMA 20" when added
-- ✅ Can remove indicators from sidebar
-- ✅ Can hide/show indicators
-- ✅ Multiple indicators work together
-- ✅ Indicator state persists during symbol changes
+- ✅ Sidebar shows "SMA 20" when added - **COMPLETED**
+- ✅ Can remove indicators from sidebar - **COMPLETED**
+- ✅ Can hide/show indicators - **COMPLETED**
+- ✅ Multiple indicators work together - **COMPLETED**
+- ✅ Indicator state persists during symbol changes - **COMPLETED**
 
 ---
 
@@ -105,11 +105,11 @@ RSI indicator in its own chart panel below the main chart.
 - [ ] Add chart resizing/layout management
 
 ### Success Criteria:
-- ✅ Can add RSI indicator
-- ✅ RSI appears in separate panel below price chart
-- ✅ Both charts scroll/zoom together (time sync)
-- ✅ RSI values look correct (0-100 range)
-- ✅ Layout adjusts properly with multiple panels
+- ✅ Can add RSI indicator - **COMPLETED**
+- ✅ RSI appears in separate panel below price chart - **COMPLETED**
+- ✅ Both charts scroll/zoom together (time sync) - **COMPLETED**
+- ✅ RSI values look correct (0-100 range) - **COMPLETED**
+- ✅ Layout adjusts properly with multiple panels - **COMPLETED**
 
 ---
 
@@ -126,11 +126,56 @@ Simple way to edit indicator parameters (like SMA period).
 - [ ] Handle recalculation loading states
 
 ### Success Criteria:
-- ✅ Can change SMA period from 20 to 50
-- ✅ Chart updates to show SMA(50)
-- ✅ Can change RSI period from 14 to 21
-- ✅ Invalid parameters show error messages
-- ✅ Loading state during recalculation
+- ✅ Can change SMA period from 20 to 50 - **COMPLETED**
+- ✅ Chart updates to show SMA(50) - **COMPLETED**
+- ✅ Can change RSI period from 14 to 21 - **COMPLETED**
+- ✅ Invalid parameters show error messages - **COMPLETED**
+- ✅ Loading state during recalculation - **COMPLETED**
+
+---
+
+## Slice 6.5: "Architecture Refactor" (Post Slice 6)
+**Goal**: Eliminate fragility issues via Container/Presentation pattern
+
+### Background
+Slices 1-6 experienced recurring "action doesn't reflect" issues requiring multiple debugging rounds per slice. This indicates architectural fragility that must be addressed before proceeding.
+
+### Deliverable
+Refactored codebase using Container/Presentation pattern with generic indicator system.
+
+### Tasks:
+- [ ] Extract custom hooks for reusable logic:
+  - [ ] `useIndicatorManager` - indicator CRUD and state management
+  - [ ] `useChartSynchronizer` - time scale and crosshair sync
+  - [ ] `useApiClient` - typed API methods with error handling
+  - [ ] `useLocalState` - local UI state to prevent circular updates
+- [ ] Implement Container/Presentation pattern:
+  - [ ] Create Container components (smart, manage state)
+  - [ ] Create Presentation components (dumb, pure UI)
+  - [ ] Clear separation of concerns
+- [ ] Build generic indicator system:
+  - [ ] `INDICATOR_REGISTRY` with configurations
+  - [ ] Remove hardcoded SMA/RSI logic
+  - [ ] Generic parameter handling
+  - [ ] Configuration-driven UI generation
+- [ ] Test all existing functionality works
+- [ ] Verify improved stability and maintainability
+
+### Success Criteria:
+- ✅ All Slice 1-6 functionality works identically
+- ✅ No "action doesn't reflect" issues during testing
+- ✅ Adding new indicators requires minimal code changes
+- ✅ Parameter changes are responsive and reliable
+- ✅ Code is more maintainable and testable
+- ✅ Clear separation between smart and dumb components
+
+### Key Files to Refactor:
+- `App.tsx` → Container pattern
+- `IndicatorSidebar.tsx` → Extract logic to `useIndicatorManager`
+- `BasicChart.tsx` → Pure presentation component
+- `RSIChart.tsx` → Pure presentation component
+- Create `src/store/indicatorRegistry.ts`
+- Create container components in `src/components/containers/`
 
 ---
 
@@ -195,26 +240,39 @@ Smooth user experience with proper feedback for all operations.
 - **Focused context** - Each slice has clear, bounded scope
 - **Incremental builds** - Less chance of breaking existing functionality
 - **Clear handoffs** - Each slice is complete before moving on
+- **Architecture evolution** - Slice 6.5 demonstrates addressing technical debt when patterns emerge
 
 ## Slice Dependencies
 
 ```
-Slice 1 (Basic Chart) 
+Slice 1 (Basic Chart) - COMPLETED
     ↓
-Slice 2 (Symbol Selection)
+Slice 2 (Symbol Selection) - COMPLETED
     ↓
-Slice 3 (First Indicator) ← Core functionality
+Slice 3 (First Indicator) - COMPLETED ← Core functionality
     ↓
-Slice 4 (Indicator Management)
+Slice 4 (Indicator Management) - COMPLETED
     ↓
-Slice 5 (Second Chart) ← Major feature
+Slice 5 (Second Chart) - COMPLETED ← Major feature
     ↓
-Slice 6 (Parameters) ← User control
+Slice 6 (Parameters) - COMPLETED ← User control
+    ↓
+Slice 6.5 (Architecture Refactor) ← CRITICAL - Stability fix
     ↓
 Slice 7 (Layout Polish) ← UX improvement
     ↓
 Slice 8 (Error Polish) ← Professional finish
 ```
+
+### Architecture Decision Point
+
+After completing Slices 1-6, we identified a pattern of fragility issues ("action doesn't reflect" problems) that occurred in every slice. This indicated the need for architectural improvement before proceeding with polish phases.
+
+**Slice 6.5** addresses this with Container/Presentation pattern refactoring, providing:
+- Better state management separation
+- Elimination of circular update issues
+- Generic indicator system for easier extension
+- Improved maintainability and testability
 
 ## Success Metrics Per Slice
 

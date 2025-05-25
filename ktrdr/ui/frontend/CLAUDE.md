@@ -4,7 +4,7 @@
 
 **MVP Goal**: Research Phase trading UI for visualizing instrument data, indicators, and fuzzy sets.
 
-**Architecture**: React + TypeScript with TradingView Lightweight Charts, following vertical slice development approach.
+**Architecture**: React + TypeScript with TradingView Lightweight Charts, following Container/Presentation pattern and vertical slice development approach.
 
 ## Environment Setup
 
@@ -21,42 +21,75 @@
 
 ## Architecture Overview
 
-### Component Hierarchy (from trading-ui-architecture.md)
+### Container/Presentation Architecture
+
+After Slice 6, we identified fragility issues requiring architectural improvement. The frontend now follows Container/Presentation pattern:
+
+**Container Components** (Smart):
+- Manage state and business logic
+- Handle API calls and data fetching
+- Use custom hooks for reusable logic
+- Pass data and callbacks to presentation components
+
+**Presentation Components** (Dumb):
+- Receive props and render UI only
+- No direct state management or API calls
+- Highly reusable and testable
+
+### Component Hierarchy (Container/Presentation)
 ```
-App
-├── Layout
-│   ├── Header (current mode title only)
-│   ├── LeftSidebar (collapsible - mode selection)
-│   ├── RightSidebar (collapsible - indicator management)
-│   │   ├── InstrumentSelector
-│   │   ├── ActiveIndicatorsList
-│   │   ├── AddIndicatorButton
-│   │   └── FuzzySetControls
-│   └── MainContent
-│       └── ResearchView
-│           └── ChartContainer
-│               ├── PriceChart (main candlestick + overlays)
-│               └── IndicatorChart[] (RSI, MACD, etc.)
+App (Container)
+├── Layout (Presentation)
+│   ├── Header (Presentation)
+│   ├── LeftSidebar (Presentation)
+│   ├── IndicatorSidebarContainer (Container)
+│   │   └── IndicatorSidebar (Presentation)
+│   │       ├── InstrumentSelector (Presentation)
+│   │       ├── ActiveIndicatorsList (Presentation)
+│   │       ├── AddIndicatorButton (Presentation)
+│   │       └── ParameterControls (Presentation)
+│   └── MainContent (Presentation)
+│       └── ResearchView (Presentation)
+│           ├── BasicChartContainer (Container)
+│           │   └── BasicChart (Presentation)
+│           └── RSIChartContainer (Container)
+│               └── RSIChart (Presentation)
 ```
 
 ### State Management
-- **MVP Approach**: React Context + useReducer (avoid Redux for MVP)
-- **Data Flow**: API client → Context → Components
+- **Architecture**: Container/Presentation pattern with custom hooks
+- **Global State**: React Context + useReducer (avoid Redux for MVP)
+- **Local State**: Custom hooks for UI state management
+- **Data Flow**: API client → Custom Hooks → Container Components → Presentation Components
 - **Error Handling**: Centralized error boundary and API error handling
+
+### Custom Hooks for Reusable Logic
+- **useIndicatorManager**: Core indicator CRUD and state management
+- **useChartSynchronizer**: Time scale and crosshair synchronization
+- **useApiClient**: Typed API methods with error handling and caching
+- **useLocalState**: Local UI state to prevent circular updates
 
 ## Development Workflow
 
-### Vertical Slice Approach (8 slices total)
+### Vertical Slice Approach (9 slices total)
 Development follows incremental slices, each delivering working functionality:
 
-1. **Slice 1**: Basic candlestick chart with hardcoded EURUSD data
-2. **Slice 2**: Symbol selection dropdown
-3. **Slice 3**: First indicator (SMA overlay)
-4. **Slice 4**: Indicator management sidebar
-5. **Slice 5**: Second chart type (RSI in separate panel)
-6. **Slice 6**: Parameter controls
-7. **Slice 7**: Full sidebar layout with collapsible panels
-8. **Slice 8**: Error & loading polish
+1. **Slice 1**: Basic candlestick chart with hardcoded EURUSD data - ✅ **COMPLETED**
+2. **Slice 2**: Symbol selection dropdown - ✅ **COMPLETED**
+3. **Slice 3**: First indicator (SMA overlay) - ✅ **COMPLETED**
+4. **Slice 4**: Indicator management sidebar - ✅ **COMPLETED**
+5. **Slice 5**: Second chart type (RSI in separate panel) - ✅ **COMPLETED**
+6. **Slice 6**: Parameter controls - ✅ **COMPLETED**
+7. **Slice 6.5**: Architecture refactor (Container/Presentation pattern) - 🔄 **NEXT**
+8. **Slice 7**: Full sidebar layout with collapsible panels
+9. **Slice 8**: Error & loading polish
+
+### Architecture Stability (Slice 6.5)
+After completing Slices 1-6, recurring "action doesn't reflect" issues indicated architectural fragility. Slice 6.5 addresses this with:
+- Container/Presentation pattern separation
+- Generic indicator system with INDICATOR_REGISTRY
+- Custom hooks for state management
+- Elimination of circular update issues
 
 ### Common Tasks
 
@@ -279,48 +312,101 @@ const transformOHLCVData = (backendData: OHLCVPoint[]): CandlestickData[] => {
 - Charts stay synchronized when panning/zooming
 - Professional loading states and error handling
 
+### Generic Indicator System
+
+To eliminate hardcoded indicator logic and improve maintainability:
+
+```typescript
+// Centralized indicator registry
+interface IndicatorConfig {
+  name: string
+  displayName: string
+  category: string
+  chartType: 'overlay' | 'separate'
+  defaultParameters: Record<string, any>
+  parameterDefinitions: ParameterDefinition[]
+  colorOptions: string[]
+}
+
+const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
+  sma: {
+    name: 'sma',
+    displayName: 'Simple Moving Average',
+    category: 'Moving Averages',
+    chartType: 'overlay',
+    defaultParameters: { period: 20, color: '#2196F3' },
+    parameterDefinitions: [
+      { name: 'period', type: 'number', min: 1, max: 200, step: 1, default: 20 },
+      { name: 'color', type: 'select', options: ['#2196F3', '#FF5722', '#4CAF50'], default: '#2196F3' }
+    ],
+    colorOptions: ['#2196F3', '#FF5722', '#4CAF50', '#9C27B0', '#FF9800']
+  },
+  rsi: {
+    name: 'rsi',
+    displayName: 'Relative Strength Index',
+    category: 'Oscillators',
+    chartType: 'separate',
+    defaultParameters: { period: 14, color: '#FF5722' },
+    parameterDefinitions: [
+      { name: 'period', type: 'number', min: 2, max: 100, step: 1, default: 14 },
+      { name: 'color', type: 'select', options: ['#FF5722', '#2196F3', '#4CAF50'], default: '#FF5722' }
+    ],
+    colorOptions: ['#FF5722', '#2196F3', '#4CAF50', '#9C27B0', '#FF9800']
+  }
+}
+```
+
 ### Working Examples
 
-Start with Slice 1: Create a basic chart component using v5 API patterns above.
+Current implementation supports Slices 1-6. Next: Implement Slice 6.5 Container/Presentation refactor.
 
 ## Directory Structure (recommended)
 
 ```
 src/
 ├── components/
-│   ├── charts/
-│   │   ├── PriceChart.tsx
-│   │   ├── IndicatorChart.tsx
-│   │   ├── ChartContainer.tsx
-│   │   └── fuzzy/
-│   │       ├── FuzzyOverlay.tsx
-│   │       └── FuzzyLegend.tsx
-│   ├── sidebar/
-│   │   ├── LeftSidebar.tsx (mode selection)
-│   │   ├── RightSidebar.tsx (indicator management)
-│   │   ├── InstrumentSelector.tsx
-│   │   ├── ActiveIndicatorsList.tsx
-│   │   ├── IndicatorItem.tsx
-│   │   ├── AddIndicatorButton.tsx
-│   │   └── FuzzySetControls.tsx
-│   ├── layout/
-│   │   ├── Header.tsx
-│   │   ├── Layout.tsx
-│   │   └── CollapsibleSidebar.tsx
+│   ├── containers/               # Smart components with state
+│   │   ├── IndicatorSidebarContainer.tsx
+│   │   ├── BasicChartContainer.tsx
+│   │   ├── RSIChartContainer.tsx
+│   │   └── AppContainer.tsx
+│   ├── presentation/             # Dumb components, pure UI
+│   │   ├── charts/
+│   │   │   ├── BasicChart.tsx
+│   │   │   ├── RSIChart.tsx
+│   │   │   └── fuzzy/
+│   │   │       ├── FuzzyOverlay.tsx
+│   │   │       └── FuzzyLegend.tsx
+│   │   ├── sidebar/
+│   │   │   ├── IndicatorSidebar.tsx
+│   │   │   ├── InstrumentSelector.tsx
+│   │   │   ├── ActiveIndicatorsList.tsx
+│   │   │   ├── IndicatorItem.tsx
+│   │   │   ├── AddIndicatorButton.tsx
+│   │   │   ├── ParameterControls.tsx
+│   │   │   └── FuzzySetControls.tsx
+│   │   └── layout/
+│   │       ├── Header.tsx
+│   │       ├── Layout.tsx
+│   │       ├── LeftSidebar.tsx
+│   │       └── CollapsibleSidebar.tsx
 │   └── common/
 │       ├── LoadingSpinner.tsx
 │       ├── ErrorBoundary.tsx
 │       └── Modal.tsx
-├── hooks/
-│   ├── useChartSync.ts
-│   ├── useIndicators.ts
-│   ├── useInstrumentData.ts
-│   ├── useFuzzyData.ts
-│   └── useSidebarCollapse.ts
-├── context/  (state management)
-│   ├── AppContext.tsx
-│   ├── AppReducer.ts
-│   └── types.ts
+├── hooks/                        # Custom hooks for reusable logic
+│   ├── useIndicatorManager.ts    # Core indicator state management
+│   ├── useChartSynchronizer.ts   # Chart sync logic
+│   ├── useApiClient.ts          # Typed API client with caching
+│   ├── useLocalState.ts         # Local UI state management
+│   ├── useInstrumentData.ts     # Symbol/timeframe data
+│   ├── useFuzzyData.ts         # Fuzzy set data
+│   └── useSidebarCollapse.ts    # Sidebar state
+├── store/                        # State management
+│   ├── context.ts               # React Context for global state
+│   ├── reducer.ts              # State reducer functions
+│   ├── types.ts                # State type definitions
+│   └── indicatorRegistry.ts    # Centralized indicator configs
 ├── utils/
 │   ├── dataTransform.ts
 │   ├── colorUtils.ts
@@ -336,9 +422,17 @@ src/
 ### Code Style
 - **TypeScript**: Required for all components with proper typing
 - **React Hooks**: Use functional components with hooks
-- **State Management**: React Context + useReducer (avoid Redux for MVP)
+- **Architecture**: Strict Container/Presentation pattern separation
+- **State Management**: Custom hooks + React Context + useReducer
+- **Generic Systems**: Use INDICATOR_REGISTRY for scalable indicator management
 - **Testing**: Write unit tests for all new functionality
 - **Error Handling**: Use centralized error boundaries
+
+### Architecture Guidelines
+- **Container Components**: Handle state, API calls, and business logic
+- **Presentation Components**: Pure UI, receive props only
+- **Custom Hooks**: Extract reusable logic for state management
+- **Generic Patterns**: Avoid hardcoded indicator logic, use configuration-driven approaches
 
 ### Performance Considerations
 - Use TradingView's built-in virtualization for large datasets
