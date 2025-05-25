@@ -1,29 +1,39 @@
-import { FC, useState } from 'react';
-import BasicChart, { SMAData } from './components/BasicChart';
-import RSIChart, { RSIData } from './components/RSIChart';
+import React, { FC, useState, useCallback } from 'react';
+import { useChartSynchronizer } from './hooks/useChartSynchronizer';
+import IndicatorSidebarContainer from './components/containers/IndicatorSidebarContainer';
+import BasicChartContainer from './components/containers/BasicChartContainer';
+import RSIChartContainer from './components/containers/RSIChartContainer';
 import SymbolSelector from './components/SymbolSelector';
-import IndicatorSidebar from './components/IndicatorSidebar';
 import ErrorBoundary from './components/ErrorBoundary';
+import { IndicatorInfo } from './store/indicatorRegistry';
 import './App.css';
 
+/**
+ * Main application component using Container/Presentation architecture
+ * 
+ * This component orchestrates the overall application state and coordinates
+ * between the different container components. It uses the chart synchronizer
+ * to keep charts in sync and manages the global application state.
+ */
+
 const App: FC = () => {
+  // Core application state
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
-  const [smaToAdd, setSmaToAdd] = useState<number | null>(null);
-  const [smaToRemove, setSmaToRemove] = useState<string | null>(null);
-  const [smaToToggle, setSmaToToggle] = useState<string | null>(null);
-  const [smaLoading, setSmaLoading] = useState(false);
-  const [smaList, setSmaList] = useState<SMAData[]>([]);
-  const [rsiToAdd, setRsiToAdd] = useState<number | null>(null);
-  const [rsiToRemove, setRsiToRemove] = useState<string | null>(null);
-  const [rsiToToggle, setRsiToToggle] = useState<string | null>(null);
-  const [rsiLoading, setRsiLoading] = useState(false);
-  const [rsiList, setRsiList] = useState<RSIData[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null);
+  
+  // Chart synchronization
+  const chartSynchronizer = useChartSynchronizer();
+  
+  // Time range synchronization between charts
+  const [timeRange, setTimeRange] = useState<{ start: string; end: string } | null>(null);
+  
+  // Indicator state for coordination between sidebar and charts
+  const [indicators, setIndicators] = useState<IndicatorInfo[]>([]);
 
-  const handleSymbolChange = (symbol: string, timeframe: string) => {
-    console.log('[App] handleSymbolChange called:', { symbol, timeframe });
+  // Handle symbol changes from the symbol selector
+  const handleSymbolChange = useCallback((symbol: string, timeframe: string) => {
+    console.log('[App] Symbol change requested:', { symbol, timeframe });
     
     // Ensure we always have a valid timeframe
     let actualTimeframe = timeframe;
@@ -38,107 +48,68 @@ const App: FC = () => {
       console.log('[App] Fixed undefined/invalid timeframe to:', actualTimeframe);
     }
     
-    console.log('[App] Setting state with:', { symbol, timeframe: actualTimeframe });
+    console.log('[App] Setting new symbol and timeframe:', { symbol, timeframe: actualTimeframe });
     
-    // Update both states in a single batch
+    // Update state
     setSelectedSymbol(symbol);
     setSelectedTimeframe(actualTimeframe);
     
-    console.log('[App] State update completed for:', { symbol, timeframe: actualTimeframe });
-  };
-
-  const handleAddIndicator = (type: string, period: number) => {
-    console.log('[App] Adding indicator:', { type, period });
-    if (type === 'SMA') {
-      setSmaLoading(true);
-      setSmaToAdd(period);
-    } else if (type === 'RSI') {
-      setRsiLoading(true);
-      setRsiToAdd(period);
-    }
-  };
-
-  const handleSMAAdded = () => {
-    console.log('[App] SMA added successfully');
-    setSmaLoading(false);
-    setSmaToAdd(null);
-  };
-
-  const handleRemoveIndicator = (id: string) => {
-    console.log('[App] Removing indicator:', id);
-    if (id.startsWith('SMA_')) {
-      setSmaToRemove(id);
-    } else if (id.startsWith('RSI_')) {
-      setRsiToRemove(id);
-    }
-  };
-
-  const handleSMARemoved = () => {
-    console.log('[App] SMA removed successfully');
-    setSmaToRemove(null);
-  };
-
-  const handleRSIAdded = () => {
-    console.log('[App] RSI added successfully');
-    setRsiLoading(false);
-    setRsiToAdd(null);
-  };
-
-  const handleRSIRemoved = () => {
-    console.log('[App] RSI removed successfully');
-    setRsiToRemove(null);
-  };
-
-  const handleToggleIndicator = (id: string) => {
-    console.log('[App] Toggling indicator:', id);
-    if (id.startsWith('SMA_')) {
-      setSmaToToggle(id);
-    } else if (id.startsWith('RSI_')) {
-      setRsiToToggle(id);
-    }
-  };
-
-  const handleSMAToggled = () => {
-    console.log('[App] SMA toggled successfully');
-    setSmaToToggle(null);
-  };
-
-  const handleRSIToggled = () => {
-    console.log('[App] RSI toggled successfully');
-    setRsiToToggle(null);
-  };
-
-  const handleSMAListChange = (newSmaList: SMAData[]) => {
-    setSmaList(newSmaList);
-  };
-
-  const handleRSIListChange = (newRsiList: RSIData[]) => {
-    setRsiList(newRsiList);
-  };
-
-  const handleDateRangeChange = (newDateRange: {start: string, end: string} | null) => {
-    setDateRange(newDateRange);
-  };
-
-  const handleUpdateIndicator = (id: string, updates: Partial<{ id: string; type: string; period: number; color: string; visible: boolean; }>) => {
-    console.log('[App] Updating indicator:', id, updates);
+    // Clear time range when symbol changes
+    setTimeRange(null);
     
-    if (id.startsWith('SMA_')) {
-      // Update SMA indicator
-      setSmaList(prev => prev.map(sma => 
-        sma.id === id ? { ...sma, ...updates } : sma
-      ));
-    } else if (id.startsWith('RSI_')) {
-      // Update RSI indicator
-      setRsiList(prev => prev.map(rsi => 
-        rsi.id === id ? { ...rsi, ...updates } : rsi
-      ));
-    }
-  };
+    console.log('[App] Symbol change completed');
+  }, []);
+
+  // Handle time range changes from the main chart
+  const handleTimeRangeChange = useCallback((range: { start: string; end: string }) => {
+    console.log('[App] Time range changed:', range);
+    setTimeRange(range);
+  }, []);
+
+  // Handle indicator addition from the sidebar
+  const handleIndicatorAdded = useCallback((indicator: IndicatorInfo) => {
+    console.log('[App] Indicator added:', indicator);
+    setIndicators(prev => {
+      // Check if indicator already exists
+      const exists = prev.some(ind => ind.id === indicator.id);
+      if (exists) {
+        console.log('[App] Indicator already exists, updating instead of adding');
+        return prev.map(ind => ind.id === indicator.id ? indicator : ind);
+      }
+      return [...prev, indicator];
+    });
+  }, []);
+
+  // Handle indicator removal from the sidebar
+  const handleIndicatorRemoved = useCallback((indicatorId: string) => {
+    console.log('[App] Indicator removed:', indicatorId);
+    setIndicators(prev => prev.filter(ind => ind.id !== indicatorId));
+  }, []);
+
+  // Handle indicator updates from the sidebar
+  const handleIndicatorUpdated = useCallback((indicatorId: string, updates: Partial<IndicatorInfo>) => {
+    console.log('[App] Indicator updated:', indicatorId, updates);
+    setIndicators(prev => prev.map(ind => 
+      ind.id === indicatorId ? { ...ind, ...updates } : ind
+    ));
+  }, []);
+
+  // Handle indicator visibility toggle from the sidebar
+  const handleIndicatorToggled = useCallback((indicatorId: string, visible: boolean) => {
+    console.log('[App] Indicator toggled:', indicatorId, visible);
+    setIndicators(prev => prev.map(ind => 
+      ind.id === indicatorId ? { ...ind, visible } : ind
+    ));
+  }, []);
+
+  // Get indicators by chart type for passing to appropriate chart containers
+  const overlayIndicators = indicators.filter(ind => ind.chartType === 'overlay');
+  const separateIndicators = indicators.filter(ind => ind.chartType === 'separate');
 
   return (
     <ErrorBoundary>
       <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
         <header className="App-header" style={{ 
           padding: '0.75rem 1rem', 
           backgroundColor: '#1976d2', 
@@ -147,7 +118,9 @@ const App: FC = () => {
           flexShrink: 0
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1 style={{ margin: 0, fontSize: '1.25rem' }}>KTRDR Trading Research - MVP Slice 5</h1>
+            <h1 style={{ margin: 0, fontSize: '1.25rem' }}>
+              KTRDR Trading Research - Slice 6.5 (Container/Presentation)
+            </h1>
             <SymbolSelector 
               selectedSymbol={selectedSymbol}
               onSymbolChange={handleSymbolChange}
@@ -155,37 +128,23 @@ const App: FC = () => {
           </div>
         </header>
         
+        {/* Main content area */}
         <main style={{ 
           display: 'flex', 
           height: 'calc(100vh - 60px)', 
           overflow: 'hidden'
         }}>
-          {/* Indicator Sidebar */}
-          <IndicatorSidebar
-            indicators={[
-              ...smaList.map(sma => ({
-                id: sma.id,
-                type: 'SMA',
-                period: sma.period,
-                color: sma.color,
-                visible: sma.visible
-              })),
-              ...rsiList.map(rsi => ({
-                id: rsi.id,
-                type: 'RSI',
-                period: rsi.period,
-                color: rsi.color,
-                visible: rsi.visible
-              }))
-            ]}
-            onAddIndicator={handleAddIndicator}
-            onRemoveIndicator={handleRemoveIndicator}
-            onToggleIndicator={handleToggleIndicator}
-            onUpdateIndicator={handleUpdateIndicator}
-            isCollapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            isLoading={smaLoading || rsiLoading}
-          />
+          {/* Indicator Sidebar Container */}
+          <ErrorBoundary>
+            <IndicatorSidebarContainer
+              isCollapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+              onIndicatorAdded={handleIndicatorAdded}
+              onIndicatorRemoved={handleIndicatorRemoved}
+              onIndicatorUpdated={handleIndicatorUpdated}
+              onIndicatorToggled={handleIndicatorToggled}
+            />
+          </ErrorBoundary>
           
           {/* Chart Area */}
           <div style={{ 
@@ -194,45 +153,66 @@ const App: FC = () => {
             overflow: 'auto',
             backgroundColor: '#fafafa',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            gap: '1rem'
           }}>
-            {/* Main Price Chart */}
+            {/* Main Price Chart Container */}
             <ErrorBoundary>
-              <BasicChart 
-                symbol={selectedSymbol} 
+              <BasicChartContainer
+                symbol={selectedSymbol}
                 timeframe={selectedTimeframe}
-                smaToAdd={smaToAdd}
-                onSMAAdded={handleSMAAdded}
-                smaToRemove={smaToRemove}
-                onSMARemoved={handleSMARemoved}
-                smaToToggle={smaToToggle}
-                onSMAToggled={handleSMAToggled}
-                onSMAListChange={handleSMAListChange}
-                onDateRangeChange={handleDateRangeChange}
-                smaList={smaList}
+                indicators={overlayIndicators}
+                chartSynchronizer={chartSynchronizer}
+                chartId="main-chart"
                 width={sidebarCollapsed ? 920 : 800}
                 height={400}
+                onTimeRangeChange={handleTimeRangeChange}
+                onError={(error) => console.error('[App] Main chart error:', error)}
               />
             </ErrorBoundary>
 
-            {/* RSI Oscillator Chart */}
-            <ErrorBoundary>
-              <RSIChart
-                symbol={selectedSymbol}
-                timeframe={selectedTimeframe}
-                rsiToAdd={rsiToAdd}
-                onRSIAdded={handleRSIAdded}
-                rsiToRemove={rsiToRemove}
-                onRSIRemoved={handleRSIRemoved}
-                rsiToToggle={rsiToToggle}
-                onRSIToggled={handleRSIToggled}
-                onRSIListChange={handleRSIListChange}
-                dateRange={dateRange}
-                rsiList={rsiList}
-                width={sidebarCollapsed ? 920 : 800}
-                height={200}
-              />
-            </ErrorBoundary>
+            {/* RSI Chart Container (only show if there are RSI indicators) */}
+            {separateIndicators.some(ind => ind.name === 'rsi') && (
+              <ErrorBoundary>
+                <RSIChartContainer
+                  symbol={selectedSymbol}
+                  timeframe={selectedTimeframe}
+                  indicators={separateIndicators}
+                  chartSynchronizer={chartSynchronizer}
+                  chartId="rsi-chart"
+                  timeRange={timeRange}
+                  width={sidebarCollapsed ? 920 : 800}
+                  height={200}
+                  onError={(error) => console.error('[App] RSI chart error:', error)}
+                />
+              </ErrorBoundary>
+            )}
+
+            {/* Chart instructions for empty state */}
+            {indicators.length === 0 && (
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                color: '#666',
+                fontSize: '1rem'
+              }}>
+                <div>
+                  <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📈</div>
+                  <div style={{ marginBottom: '0.5rem', fontWeight: '500' }}>
+                    Welcome to KTRDR Trading Research
+                  </div>
+                  <div style={{ fontSize: '0.9rem' }}>
+                    Add indicators from the sidebar to start analyzing {selectedSymbol} data
+                  </div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: '#999' }}>
+                    Try adding an SMA or RSI indicator to get started
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
