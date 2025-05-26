@@ -37,14 +37,17 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
   // Use the indicator manager hook for all state and operations
   const indicatorManager = useIndicatorManager({
     onIndicatorCalculated: useCallback((indicator: IndicatorInfo, data: number[]) => {
-      console.log('[IndicatorSidebarContainer] Indicator calculated:', indicator.id, data.length, 'points');
+      console.log('[IndicatorSidebarContainer] onIndicatorCalculated called:', indicator.displayName, 'data length:', data.length);
       
       // Update the indicator with calculated data
       indicatorManager.updateIndicator(indicator.id, { data });
       
       // Notify parent if callback provided
       if (onIndicatorAdded) {
+        console.log('[IndicatorSidebarContainer] Calling onIndicatorAdded for:', indicator.displayName);
         onIndicatorAdded({ ...indicator, data });
+      } else {
+        console.warn('[IndicatorSidebarContainer] No onIndicatorAdded callback provided');
       }
     }, [onIndicatorAdded]),
     

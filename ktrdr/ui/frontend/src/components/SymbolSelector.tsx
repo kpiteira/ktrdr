@@ -1,4 +1,5 @@
 import { FC, useEffect, useState } from 'react';
+import LoadingSpinner from './common/LoadingSpinner';
 
 interface Symbol {
   symbol: string;
@@ -14,7 +15,6 @@ interface SymbolSelectorProps {
 }
 
 const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChange }) => {
-  console.log('[SymbolSelector] Component render with props:', { selectedSymbol });
   const [symbols, setSymbols] = useState<Symbol[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,6 @@ const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChang
         throw new Error('Failed to fetch symbols');
       }
 
-      console.log('[SymbolSelector] Fetched symbols:', data.data);
       setSymbols(data.data);
       setLoading(false);
     } catch (err) {
@@ -49,9 +48,22 @@ const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChang
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <label htmlFor="symbol-select">Symbol:</label>
-        <select disabled style={{ padding: '0.5rem', minWidth: '120px' }}>
-          <option>Loading...</option>
-        </select>
+        <div style={{ 
+          padding: '0.5rem', 
+          minWidth: '120px',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          backgroundColor: '#f9f9f9',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <LoadingSpinner 
+            size="small" 
+            message="Loading..." 
+            inline={true}
+          />
+        </div>
       </div>
     );
   }
@@ -88,15 +100,8 @@ const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChang
         id="symbol-select"
         value={selectedSymbol}
         onChange={(e) => {
-          console.log('[SymbolSelector] onChange fired with value:', e.target.value);
           const symbol = e.target.value;
           const symbolData = symbols.find(s => s.symbol === symbol);
-          console.log('[SymbolSelector] Symbol change debug:', { 
-            symbol, 
-            symbolData, 
-            available_timeframes: symbolData?.available_timeframes,
-            allSymbols: symbols 
-          });
           
           // More robust timeframe selection
           let timeframe = '1h'; // Default fallback
@@ -108,7 +113,6 @@ const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChang
             timeframe = '1h'; // Known timeframe for MSFT
           }
           
-          console.log('[SymbolSelector] Final timeframe selected:', timeframe);
           onSymbolChange(symbol, timeframe);
         }}
         style={{

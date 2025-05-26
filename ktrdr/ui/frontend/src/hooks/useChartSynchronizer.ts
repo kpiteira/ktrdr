@@ -22,6 +22,7 @@ export interface UseChartSynchronizerReturn {
   fitAllChartsContent: () => void;
   setAllChartsVisibleRange: (from: number, to: number) => void;
   getRegisteredCharts: () => ChartReference[];
+  syncAllToChart: (sourceChartId: string) => void;
 }
 
 export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
@@ -30,30 +31,32 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
 
   // Register a chart for synchronization
   const registerChart = useCallback((id: string, chart: IChartApi, name?: string) => {
-    console.log('[useChartSynchronizer] Registering chart:', id, name);
-    
     const chartRef: ChartReference = { id, chart, name };
     chartsRef.current.set(id, chartRef);
 
-    // Set up automatic synchronization listeners
+    // Set up time scale synchronization only (no crosshair sync)
+    let timeoutId: number | null = null;
     chart.timeScale().subscribeVisibleTimeRangeChange(() => {
       if (!syncInProgressRef.current) {
-        synchronizeTimeScale(id);
+        try {
+          // Only sync if we have more than one chart registered
+          const registeredCharts = chartsRef.current.size;
+          if (registeredCharts > 1) {
+            // Debounce rapid changes to prevent loops
+            if (timeoutId) clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+              synchronizeTimeScale(id);
+            }, 100); // Quick sync for responsive feel
+          }
+        } catch (error) {
+          console.error('[useChartSynchronizer] Error in time range change listener:', error);
+        }
       }
     });
-
-    chart.subscribeCrosshairMove(param => {
-      if (!syncInProgressRef.current) {
-        synchronizeCrosshair(id, param);
-      }
-    });
-
-    console.log('[useChartSynchronizer] Chart registered with listeners:', id);
   }, []);
 
   // Unregister a chart
   const unregisterChart = useCallback((id: string) => {
-    console.log('[useChartSynchronizer] Unregistering chart:', id);
     chartsRef.current.delete(id);
   }, []);
 
@@ -61,112 +64,116 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
   const synchronizeTimeScale = useCallback((sourceChartId: string) => {
     const sourceChart = chartsRef.current.get(sourceChartId);
     if (!sourceChart) {
-      console.warn('[useChartSynchronizer] Source chart not found:', sourceChartId);
       return;
     }
 
-    const sourceTimeScale = sourceChart.chart.timeScale();
-    const visibleRange = sourceTimeScale.getVisibleRange();
-    
-    if (!visibleRange) {
-      console.warn('[useChartSynchronizer] No visible range available from source chart');
-      return;
-    }
-
-    console.log('[useChartSynchronizer] Synchronizing time scale from:', sourceChartId, visibleRange);
-    
-    // Set flag to prevent infinite sync loops
+    // Set flag to prevent infinite sync loops first
     syncInProgressRef.current = true;
 
     try {
-      chartsRef.current.forEach((chartRef, chartId) => {
-        if (chartId !== sourceChartId) {
-          try {
-            chartRef.chart.timeScale().setVisibleRange(visibleRange);
-            console.log('[useChartSynchronizer] Time scale synchronized for:', chartId);
-          } catch (error) {
-            console.error('[useChartSynchronizer] Error synchronizing time scale for:', chartId, error);
+      const sourceTimeScale = sourceChart.chart.timeScale();
+      let visibleRange;
+      
+      // Safely get visible range with error handling
+      try {
+        visibleRange = sourceTimeScale.getVisibleRange();
+      } catch (rangeError) {
+        console.warn('[useChartSynchronizer] Could not get visible range:', rangeError);
+        return;
+      }
+      
+      // Defensive check - if no visible range, skip sync
+      if (!visibleRange || !visibleRange.from || !visibleRange.to) {
+        return;
+      }
+
+      // Validate range values - skip if invalid
+      if (isNaN(visibleRange.from) || isNaN(visibleRange.to) || visibleRange.from >= visibleRange.to) {
+        return;
+      }
+
+      // Additional safety: check if range is reasonable (not too far in the future)
+      const now = Date.now() / 1000; // Current time in seconds
+      const maxFutureTime = now + (365 * 24 * 60 * 60); // 1 year from now
+      if (visibleRange.to > maxFutureTime) {
+        // Don't sync ranges that are too far in the future
+        return;
+      }
+
+      // Only log when we have multiple charts to sync
+      const targetCharts = Array.from(chartsRef.current.entries()).filter(([id]) => id !== sourceChartId);
+      if (targetCharts.length === 0) {
+        return;
+      }
+
+      targetCharts.forEach(([chartId, chartRef]) => {
+        try {
+          const targetTimeScale = chartRef.chart.timeScale();
+          // Additional safety check before setting range
+          if (targetTimeScale && typeof targetTimeScale.setVisibleRange === 'function') {
+            targetTimeScale.setVisibleRange(visibleRange);
           }
+        } catch (error) {
+          console.error('[useChartSynchronizer] Sync failed for:', chartId, error);
         }
       });
+    } catch (error) {
+      console.error('[useChartSynchronizer] Error during sync operation:', error);
     } finally {
-      // Reset flag after a short delay to allow for chart updates
+      // Reset flag after sync operations complete
       setTimeout(() => {
         syncInProgressRef.current = false;
-      }, 50);
+      }, 150);
     }
   }, []);
 
-  // Synchronize crosshair position across all charts
-  const synchronizeCrosshair = useCallback((sourceChartId: string, point: any) => {
-    if (!point || !point.time) {
-      return;
-    }
-
-    console.log('[useChartSynchronizer] Synchronizing crosshair from:', sourceChartId, point.time);
-    
-    // Set flag to prevent infinite sync loops
-    syncInProgressRef.current = true;
-
-    try {
-      chartsRef.current.forEach((chartRef, chartId) => {
-        if (chartId !== sourceChartId) {
-          try {
-            // Create a crosshair position for the target chart
-            chartRef.chart.setCrosshairPosition(point.time, point.seriesData?.get(point.seriesData.keys().next().value));
-            console.log('[useChartSynchronizer] Crosshair synchronized for:', chartId);
-          } catch (error) {
-            console.error('[useChartSynchronizer] Error synchronizing crosshair for:', chartId, error);
-          }
-        }
-      });
-    } finally {
-      // Reset flag after a short delay
-      setTimeout(() => {
-        syncInProgressRef.current = false;
-      }, 10);
-    }
+  // Crosshair synchronization disabled for simplicity
+  const synchronizeCrosshair = useCallback((_sourceChartId: string, _point: any) => {
+    // Crosshair sync disabled - only time scale sync is active
   }, []);
 
   // Fit content for all charts
   const fitAllChartsContent = useCallback(() => {
-    console.log('[useChartSynchronizer] Fitting content for all charts');
-    
-    chartsRef.current.forEach((chartRef, chartId) => {
+    chartsRef.current.forEach((chartRef) => {
       try {
         chartRef.chart.timeScale().fitContent();
-        console.log('[useChartSynchronizer] Content fitted for:', chartId);
       } catch (error) {
-        console.error('[useChartSynchronizer] Error fitting content for:', chartId, error);
+        console.error('[useChartSynchronizer] Error fitting content:', error);
       }
     });
   }, []);
 
   // Set visible range for all charts
   const setAllChartsVisibleRange = useCallback((from: number, to: number) => {
-    console.log('[useChartSynchronizer] Setting visible range for all charts:', { from, to });
-    
     syncInProgressRef.current = true;
 
     try {
-      chartsRef.current.forEach((chartRef, chartId) => {
+      chartsRef.current.forEach((chartRef) => {
         try {
           chartRef.chart.timeScale().setVisibleRange({ from, to });
-          console.log('[useChartSynchronizer] Visible range set for:', chartId);
         } catch (error) {
-          console.error('[useChartSynchronizer] Error setting visible range for:', chartId, error);
+          console.error('[useChartSynchronizer] Error setting visible range:', error);
         }
       });
     } finally {
       setTimeout(() => {
         syncInProgressRef.current = false;
-      }, 50);
+      }, 200);
     }
   }, []);
 
   // Get all registered charts (for debugging/inspection)
   const getRegisteredCharts = useCallback((): ChartReference[] => {
     return Array.from(chartsRef.current.values());
+  }, []);
+
+  // Manual sync method to force sync all charts to a specific chart's time range
+  const syncAllToChart = useCallback((sourceChartId: string) => {
+    // Temporarily disable the sync flag to allow manual sync
+    const wasSyncing = syncInProgressRef.current;
+    syncInProgressRef.current = false;
+    synchronizeTimeScale(sourceChartId);
+    syncInProgressRef.current = wasSyncing;
   }, []);
 
   return {
@@ -176,7 +183,8 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
     synchronizeCrosshair,
     fitAllChartsContent,
     setAllChartsVisibleRange,
-    getRegisteredCharts
+    getRegisteredCharts,
+    syncAllToChart
   };
 };
 

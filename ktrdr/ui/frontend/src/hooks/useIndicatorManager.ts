@@ -89,7 +89,7 @@ export const useIndicatorManager = (
         throw new Error(`Unknown indicator: ${name}`);
       }
 
-      // Create indicator instance
+      // Create indicator instance (but don't add it yet)
       const id = generateIndicatorId(name);
       const instance = createIndicatorInstance(name, id, customParameters);
       
@@ -103,13 +103,24 @@ export const useIndicatorManager = (
         throw new Error(`Invalid parameters: ${validation.errors.join(', ')}`);
       }
 
+      // Check for duplicates before adding
+      const isDuplicate = indicators.some(existing => 
+        existing.name === instance.name && 
+        JSON.stringify(existing.parameters) === JSON.stringify(instance.parameters)
+      );
+
+      if (isDuplicate) {
+        console.warn(`[useIndicatorManager] Ignoring duplicate indicator: ${instance.displayName} with parameters:`, instance.parameters);
+        return; // Exit early
+      }
+
       // Add to indicators list
+      console.log('[useIndicatorManager] Adding new indicator:', instance.displayName);
       setIndicators(prev => [...prev, instance]);
-      
-      // Trigger calculation if callback provided
+
+      // Trigger calculation callback
       if (onIndicatorCalculated) {
-        // This would typically call the API to calculate the indicator
-        // For now, we'll simulate with empty data
+        console.log('[useIndicatorManager] Triggering onIndicatorCalculated callback for:', instance.displayName);
         onIndicatorCalculated(instance, []);
       }
       
@@ -123,7 +134,7 @@ export const useIndicatorManager = (
     } finally {
       setIsLoading(false);
     }
-  }, [onIndicatorCalculated, onError]);
+  }, [indicators, onIndicatorCalculated, onError]);
 
   // Remove indicator
   const removeIndicator = useCallback((id: string) => {

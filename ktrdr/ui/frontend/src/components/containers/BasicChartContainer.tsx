@@ -61,11 +61,28 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
 
   // Load price data from API
   const loadPriceData = useCallback(async (symbol: string, timeframe: string) => {
-    console.log('[BasicChartContainer] Loading price data:', { symbol, timeframe });
     setIsLoading(true);
     setError(null);
 
     try {
+      // Calculate date range to get approximately 500 trading points
+      const targetPoints = 500;
+      const now = new Date();
+      let weeksNeeded;
+      
+      // For hourly data: ~6.5 hours/day * 5 days/week = ~32.5 points/week  
+      // For daily data: ~5 trading days/week
+      if (timeframe === '1h') {
+        weeksNeeded = Math.ceil(targetPoints / 32.5); // ~15 weeks for 500 points
+      } else if (timeframe === '1d') {
+        weeksNeeded = Math.ceil(targetPoints / 5); // ~100 weeks for 500 points  
+      } else {
+        weeksNeeded = 20; // Default fallback
+      }
+      
+      const startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - (weeksNeeded * 7));
+      
       const response = await fetch('/api/v1/data/load', {
         method: 'POST',
         headers: {
@@ -74,7 +91,9 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
         body: JSON.stringify({
           symbol,
           timeframe,
-          source: 'auto'
+          source: 'auto',
+          start_date: startDate.toISOString().split('T')[0],
+          end_date: now.toISOString().split('T')[0]
         }),
       });
 
@@ -83,24 +102,47 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       }
 
       const result = await response.json();
-      console.log('[BasicChartContainer] API response received:', result);
 
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to load data');
       }
 
       // Transform OHLCV data to TradingView format
-      const candlestickData: CandlestickData[] = result.data.ohlcv.map((point: any) => ({
-        time: new Date(point.timestamp).getTime() / 1000 as UTCTimestamp,
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-      }));
+      console.log('[BasicChartContainer] Starting data transformation...');
+      console.log('[BasicChartContainer] CHECKPOINT 1: About to access result.data');
+      
+      // Use exact same transformation logic as working BasicChart.tsx
+      const data = result.data;
+      
+      console.log('[BasicChartContainer] Using working transformation logic');
+      console.log('[BasicChartContainer] Data keys:', Object.keys(data));
+      
+      if (!data.dates || !data.ohlcv || data.dates.length === 0) {
+        throw new Error(`No data available for ${symbol} (${timeframe} timeframe)`);
+      }
+
+      // Transform data to TradingView format - exact copy from working code
+      const candlestickData: CandlestickData[] = data.dates.map((dateStr: string, index: number) => {
+        const ohlcv = data.ohlcv[index];
+        if (!ohlcv || ohlcv.length < 4) {
+          throw new Error(`Invalid OHLCV data at index ${index}`);
+        }
+
+        return {
+          time: (new Date(dateStr).getTime() / 1000) as UTCTimestamp,
+          open: ohlcv[0],
+          high: ohlcv[1],
+          low: ohlcv[2],
+          close: ohlcv[3],
+        };
+      });
+      
+      console.log('[BasicChartContainer] Transformation complete - got', candlestickData.length, 'points');
+      const validData = candlestickData;
 
       // Create chart data structure
       const newChartData: ChartData = {
-        candlestick: candlestickData,
+        candlestick: validData,
         indicators: [] // Will be populated by indicator calculations
       };
 
@@ -118,8 +160,6 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
         onDataLoaded(newChartData);
       }
 
-      console.log('[BasicChartContainer] Price data loaded successfully:', candlestickData.length, 'points');
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.error('[BasicChartContainer] Error loading price data:', errorMessage);
@@ -130,48 +170,61 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [onDataLoaded, onError]);
+  }, []);
 
   // Calculate indicator data
   const calculateIndicatorData = useCallback(async (
     baseData: CandlestickData[], 
     indicator: IndicatorInfo
   ): Promise<LineData[]> => {
-    console.log('[BasicChartContainer] Calculating indicator:', indicator.name, indicator.parameters);
 
     try {
-      // Transform candlestick data back to OHLCV format for API
-      const ohlcvData = baseData.map(point => ({
-        timestamp: new Date(point.time * 1000).toISOString(),
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-        volume: 1000 // Default volume for now
-      }));
+      // Use the exact API format from the working original code
+      const indicatorId = indicator.name === 'sma' ? 'SimpleMovingAverage' : 
+                         indicator.name === 'rsi' ? 'RSIIndicator' :
+                         indicator.name === 'ema' ? 'ExponentialMovingAverage' : 
+                         indicator.name;
 
+      // Use the actual date range from the loaded candlestick data
+      const startDate = new Date(baseData[0].time * 1000).toISOString().split('T')[0];
+      const endDate = new Date(baseData[baseData.length - 1].time * 1000).toISOString().split('T')[0];
+
+      const requestPayload = {
+        symbol: symbol,
+        timeframe: timeframe,
+        start_date: startDate,
+        end_date: endDate,
+        indicators: [
+          {
+            id: indicatorId,
+            parameters: {
+              period: indicator.parameters.period,
+              source: 'close'
+            },
+            output_name: indicator.name === 'sma' ? `SMA_${indicator.parameters.period}` :
+                        indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
+                        indicator.name === 'ema' ? `EMA_${indicator.parameters.period}` :
+                        `${indicator.name.toUpperCase()}_${indicator.parameters.period}`
+          }
+        ]
+      };
+      
       const response = await fetch('/api/v1/indicators/calculate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          data: {
-            symbol,
-            timeframe,
-            ohlcv: ohlcvData
-          },
-          indicators: [
-            {
-              name: indicator.name,
-              parameters: indicator.parameters
-            }
-          ]
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('[BasicChartContainer] API error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
 
       const result = await response.json();
@@ -180,19 +233,32 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
         throw new Error(result.error?.message || 'Failed to calculate indicator');
       }
 
-      // Transform indicator results to LineData format
-      const indicatorValues = result.data.results[indicator.name] || [];
+      // Transform indicator results to LineData format - match working original code
+      const outputName = indicator.name === 'sma' ? `SMA_${indicator.parameters.period}` :
+                         indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
+                         indicator.name === 'ema' ? `EMA_${indicator.parameters.period}` :
+                         `${indicator.name.toUpperCase()}_${indicator.parameters.period}`;
+                         
+      const indicatorValues = result.indicators?.[outputName] || 
+                             result.indicators?.[outputName.toLowerCase()] || 
+                             [];
+      // Since both datasets are now similar sizes (238 vs 235), map the last N indicator 
+      // values to the last N candlestick timestamps to ensure alignment
+      const indicatorCount = indicatorValues.length;
+      const candlestickCount = baseData.length;
+      const startIndex = candlestickCount - indicatorCount; // Start from the end and work backwards
+      
       const lineData: LineData[] = indicatorValues
         .map((value: number | null, index: number) => {
-          if (value === null || value === undefined) return null;
+          const candlestickIndex = startIndex + index;
+          if (value === null || value === undefined || !baseData[candlestickIndex]) return null;
           return {
-            time: baseData[index]?.time,
+            time: baseData[candlestickIndex].time, // Use exact same timestamp as candlestick data
             value
           };
         })
         .filter((point: any) => point !== null) as LineData[];
-
-      console.log('[BasicChartContainer] Indicator calculated:', indicator.name, lineData.length, 'points');
+        
       return lineData;
 
     } catch (error) {
@@ -208,7 +274,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
     }
 
     const updateIndicators = async () => {
-      console.log('[BasicChartContainer] Updating indicators:', indicators.length);
+      // console.log('[BasicChartContainer] Updating indicators:', indicators.length);
       
       const indicatorSeries: IndicatorSeries[] = [];
       
@@ -237,20 +303,24 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       }
 
       // Update chart data with new indicators
-      setChartData(prev => prev ? {
-        ...prev,
-        indicators: indicatorSeries
-      } : null);
+      setChartData(prev => {
+        if (!prev) return null;
+        const newChartData = {
+          candlestick: [...prev.candlestick], // Create new array reference
+          indicators: [...indicatorSeries]    // Create new array reference
+        };
+        // console.log('[BasicChartContainer] ✅ Updated chartData with', indicatorSeries.length, 'indicators');
+        return newChartData;
+      });
     };
 
     updateIndicators();
-  }, [indicators, chartData?.candlestick, calculateIndicatorData]);
+  }, [indicators, calculateIndicatorData]);
 
   // Load data when symbol or timeframe changes
   useEffect(() => {
     if (symbol && timeframe && 
         (symbol !== currentSymbolRef.current || timeframe !== currentTimeframeRef.current)) {
-      console.log('[BasicChartContainer] Symbol or timeframe changed, reloading data');
       currentSymbolRef.current = symbol;
       currentTimeframeRef.current = timeframe;
       loadPriceData(symbol, timeframe);
@@ -259,7 +329,6 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
 
   // Handle chart creation for synchronization
   const handleChartCreated = useCallback((chart: IChartApi) => {
-    console.log('[BasicChartContainer] Chart created, registering for synchronization');
     chartRef.current = chart;
     
     if (chartSynchronizer && chartId) {
@@ -269,8 +338,6 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
 
   // Handle chart destruction
   const handleChartDestroyed = useCallback(() => {
-    console.log('[BasicChartContainer] Chart destroyed, unregistering from synchronization');
-    
     if (chartSynchronizer && chartId) {
       chartSynchronizer.unregisterChart(chartId);
     }
@@ -280,11 +347,11 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
 
   // Handle time range changes
   const handleTimeRangeChange = useCallback((range: { start: string; end: string }) => {
-    console.log('[BasicChartContainer] Time range changed:', range);
     if (onTimeRangeChange) {
       onTimeRangeChange(range);
     }
   }, [onTimeRangeChange]);
+
 
   return (
     <BasicChart
@@ -299,6 +366,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       onTimeRangeChange={handleTimeRangeChange}
       showLoadingOverlay={true}
       showErrorOverlay={true}
+      preserveTimeScale={!!chartSynchronizer}
     />
   );
 };

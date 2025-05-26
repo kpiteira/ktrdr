@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, FC } from 'react';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, LineData } from 'lightweight-charts';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorDisplay from '../../common/ErrorDisplay';
 
 /**
  * Pure presentation component for the basic price chart
@@ -48,6 +50,9 @@ interface BasicChartProps {
   // Visual state
   showLoadingOverlay?: boolean;
   showErrorOverlay?: boolean;
+  
+  // Synchronization control
+  preserveTimeScale?: boolean;
 }
 
 const BasicChart: FC<BasicChartProps> = ({
@@ -62,7 +67,8 @@ const BasicChart: FC<BasicChartProps> = ({
   onTimeRangeChange,
   onCrosshairMove,
   showLoadingOverlay = true,
-  showErrorOverlay = true
+  showErrorOverlay = true,
+  preserveTimeScale = false
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -73,18 +79,17 @@ const BasicChart: FC<BasicChartProps> = ({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    console.log('[BasicChart] Initializing chart...');
-
-    // Clean up existing chart
-    if (chartRef.current) {
-      chartRef.current.remove();
-      if (onChartDestroyed) {
-        onChartDestroyed();
+    try {
+      // Clean up existing chart
+      if (chartRef.current) {
+        chartRef.current.remove();
+        if (onChartDestroyed) {
+          onChartDestroyed();
+        }
       }
-    }
 
-    // Create new chart
-    const chart = createChart(chartContainerRef.current, {
+      // Create new chart with global error handling
+      const chart = createChart(chartContainerRef.current, {
       width,
       height,
       layout: {
@@ -105,6 +110,12 @@ const BasicChart: FC<BasicChartProps> = ({
         borderColor: '#cccccc',
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 5, // Minimal right offset
+        barSpacing: 6,
+        minBarSpacing: 0.5,
+        // Prevent excessive panning
+        rightBarStaysOnScroll: true,
+        shiftVisibleRangeOnNewBar: false,
       },
     });
 
@@ -121,20 +132,31 @@ const BasicChart: FC<BasicChartProps> = ({
 
     candlestickSeriesRef.current = candlestickSeries;
 
-    // Set up event listeners
+    // Set up event listeners with error handling
     if (onTimeRangeChange) {
       chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
-        if (range) {
-          onTimeRangeChange({
-            start: new Date(range.from * 1000).toISOString(),
-            end: new Date(range.to * 1000).toISOString()
-          });
+        try {
+          if (range && range.from && range.to && !isNaN(range.from) && !isNaN(range.to)) {
+            onTimeRangeChange({
+              start: new Date(range.from * 1000).toISOString(),
+              end: new Date(range.to * 1000).toISOString()
+            });
+          }
+        } catch (error) {
+          console.warn('[BasicChart] Error in time range change handler:', error);
         }
       });
     }
+    
 
     if (onCrosshairMove) {
-      chart.subscribeCrosshairMove(onCrosshairMove);
+      chart.subscribeCrosshairMove((param) => {
+        try {
+          onCrosshairMove(param);
+        } catch (error) {
+          console.warn('[BasicChart] Error in crosshair move handler:', error);
+        }
+      });
     }
 
     // Notify parent
@@ -142,18 +164,62 @@ const BasicChart: FC<BasicChartProps> = ({
       onChartCreated(chart);
     }
 
-    console.log('[BasicChart] Chart initialized successfully');
+      // Add window error handler for TradingView internal errors
+      const handleWindowError = (event: ErrorEvent) => {
+        if (event.message && event.message.includes('Value is null')) {
+          console.warn('[BasicChart] Caught TradingView null error, preventing crash');
+          event.preventDefault();
+          return false;
+        }
+        return true;
+      };
+      window.addEventListener('error', handleWindowError);
+      
+      // Store handler reference for cleanup
+      (chart as any)._errorHandler = handleWindowError;
+
+      console.log('[BasicChart] Chart initialized successfully');
+
+    } catch (error) {
+      console.error('[BasicChart] Error during chart initialization:', error);
+      // Fallback: create a minimal chart if possible
+      try {
+        if (chartContainerRef.current && !chartRef.current) {
+          const fallbackChart = createChart(chartContainerRef.current, {
+            width,
+            height,
+            layout: { background: { color: '#ffffff' }, textColor: '#333' },
+            timeScale: { rightOffset: 5, rightBarStaysOnScroll: true },
+          });
+          chartRef.current = fallbackChart;
+          const fallbackSeries = fallbackChart.addCandlestickSeries();
+          candlestickSeriesRef.current = fallbackSeries;
+        }
+      } catch (fallbackError) {
+        console.error('[BasicChart] Fallback chart creation failed:', fallbackError);
+      }
+    }
 
     // Cleanup function
     return () => {
-      if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
-        candlestickSeriesRef.current = null;
-        indicatorSeriesRef.current.clear();
-        if (onChartDestroyed) {
-          onChartDestroyed();
+      try {
+        if (chartRef.current) {
+          // Clean up error handler
+          const errorHandler = (chartRef.current as any)._errorHandler;
+          if (errorHandler) {
+            window.removeEventListener('error', errorHandler);
+          }
+          
+          chartRef.current.remove();
+          chartRef.current = null;
+          candlestickSeriesRef.current = null;
+          indicatorSeriesRef.current.clear();
+          if (onChartDestroyed) {
+            onChartDestroyed();
+          }
         }
+      } catch (cleanupError) {
+        console.warn('[BasicChart] Error during cleanup:', cleanupError);
       }
     };
   }, [width, height]); // Only recreate chart when dimensions change
@@ -164,10 +230,40 @@ const BasicChart: FC<BasicChartProps> = ({
       return;
     }
 
-    console.log('[BasicChart] Updating chart data:', chartData.candlestick.length, 'candlesticks,', chartData.indicators.length, 'indicators');
+    // Wrap all data operations in error handling to prevent TradingView internal errors
+    try {
+      // console.log('[BasicChart] 📊 Updating chart with', chartData.indicators.length, 'indicators');
 
-    // Update candlestick data
-    candlestickSeriesRef.current.setData(chartData.candlestick);
+      // Update candlestick data with extensive validation
+      if (chartData.candlestick && chartData.candlestick.length > 0) {
+        try {
+          // Validate data bounds to prevent null errors when panning
+          const validData = chartData.candlestick.filter(item => 
+            item && 
+            typeof item.time !== 'undefined' && 
+            typeof item.open === 'number' && 
+            typeof item.high === 'number' && 
+            typeof item.low === 'number' && 
+            typeof item.close === 'number' &&
+            !isNaN(item.open) && !isNaN(item.high) && !isNaN(item.low) && !isNaN(item.close)
+          );
+          
+          if (validData.length > 0 && candlestickSeriesRef.current) {
+            // Use defensive data setting with timeout to prevent race conditions
+            setTimeout(() => {
+              try {
+                if (candlestickSeriesRef.current) {
+                  candlestickSeriesRef.current.setData(validData);
+                }
+              } catch (setDataError) {
+                console.warn('[BasicChart] Error in setData timeout:', setDataError);
+              }
+            }, 0);
+          }
+        } catch (error) {
+          console.warn('[BasicChart] Error processing candlestick data:', error);
+        }
+      }
 
     // Update indicator series
     const currentIndicatorIds = new Set(indicatorSeriesRef.current.keys());
@@ -198,10 +294,17 @@ const BasicChart: FC<BasicChartProps> = ({
           visible: indicator.visible
         });
         indicatorSeriesRef.current.set(indicator.id, series);
-        console.log('[BasicChart] Created indicator series:', indicator.id);
+        // console.log('[BasicChart] ✅ Created indicator series:', indicator.id);
       }
       
       if (series) {
+        // Check for time mismatch
+        const indicatorFirstTime = indicator.data[0]?.time;
+        const candlestickFirstTime = chartData.candlestick[0]?.time;
+        
+        // Debug time mismatch only when needed
+        // console.log('[BasicChart] 🔍 Time check - Indicator first time:', indicatorFirstTime, 'Candlestick first time:', candlestickFirstTime);
+        
         // Update series data and options
         series.setData(indicator.data);
         (series as any).applyOptions({
@@ -209,14 +312,24 @@ const BasicChart: FC<BasicChartProps> = ({
           visible: indicator.visible,
           title: indicator.name
         });
-        console.log('[BasicChart] Updated indicator series:', indicator.id);
+        // console.log('[BasicChart] ✅ Updated indicator series:', indicator.id);
       }
     });
 
-    // Fit content after data update
-    chartRef.current.timeScale().fitContent();
+      // Fit content after data update (only if not preserving time scale for sync)
+      if (!preserveTimeScale && chartRef.current) {
+        try {
+          chartRef.current.timeScale().fitContent();
+        } catch (fitError) {
+          console.warn('[BasicChart] Error fitting content:', fitError);
+        }
+      }
+      
+    } catch (dataUpdateError) {
+      console.error('[BasicChart] Error during data update:', dataUpdateError);
+    }
     
-  }, [chartData]);
+  }, [chartData, chartData?.indicators.length, preserveTimeScale]);
 
   // Handle resize
   useEffect(() => {
@@ -225,13 +338,15 @@ const BasicChart: FC<BasicChartProps> = ({
     }
   }, [width, height]);
 
-  return (
-    <div style={{ position: 'relative', width, height }}>
-      {/* Chart container */}
-      <div 
-        ref={chartContainerRef} 
-        style={{ width: '100%', height: '100%' }}
-      />
+
+  try {
+    return (
+      <div style={{ position: 'relative', width, height }}>
+        {/* Chart container */}
+        <div 
+          ref={chartContainerRef} 
+          style={{ width: '100%', height: '100%' }}
+        />
       
       {/* Loading overlay */}
       {isLoading && showLoadingOverlay && (
@@ -241,24 +356,15 @@ const BasicChart: FC<BasicChartProps> = ({
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: '0.5rem'
+          justifyContent: 'center'
         }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            border: '3px solid #f3f3f3',
-            borderTop: '3px solid #1976d2',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <div style={{ fontSize: '0.9rem', color: '#666' }}>
-            Loading chart data...
-          </div>
+          <LoadingSpinner 
+            size="large" 
+            message="Loading chart data..." 
+          />
         </div>
       )}
       
@@ -270,17 +376,17 @@ const BasicChart: FC<BasicChartProps> = ({
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          flexDirection: 'column',
-          gap: '0.5rem'
+          padding: '2rem'
         }}>
-          <div style={{ fontSize: '2rem', color: '#f44336' }}>⚠️</div>
-          <div style={{ fontSize: '0.9rem', color: '#f44336', textAlign: 'center' }}>
-            {error}
-          </div>
+          <ErrorDisplay 
+            error={error}
+            title="Chart Error"
+            compact={true}
+          />
         </div>
       )}
       
@@ -301,15 +407,12 @@ const BasicChart: FC<BasicChartProps> = ({
         </div>
       )}
       
-      {/* CSS for loading spinner */}
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
-  );
+    );
+  } catch (error) {
+    console.error('[BasicChart] ERROR in component:', error);
+    return <div>BasicChart Error: {String(error)}</div>;
+  }
 };
 
 export default BasicChart;

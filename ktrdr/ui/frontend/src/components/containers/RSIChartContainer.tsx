@@ -34,6 +34,7 @@ interface RSIChartContainerProps {
   // Callbacks
   onDataLoaded?: (data: RSIData) => void;
   onError?: (error: string) => void;
+  onChartReady?: () => void;
 }
 
 const RSIChartContainer: FC<RSIChartContainerProps> = ({
@@ -46,7 +47,8 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
   chartId = 'rsi-chart',
   timeRange,
   onDataLoaded,
-  onError
+  onError,
+  onChartReady
 }) => {
   // Internal state
   const [rsiData, setRsiData] = useState<RSIData | null>(null);
@@ -63,11 +65,26 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
   // Track price data for RSI calculations
   const priceDataRef = useRef<any[]>([]);
 
-  // Load price data for RSI calculations
+  // Load price data for RSI calculations - use same strategy as BasicChartContainer
   const loadPriceData = useCallback(async (symbol: string, timeframe: string) => {
-    console.log('[RSIChartContainer] Loading price data for RSI calculations:', { symbol, timeframe });
 
     try {
+      // Calculate date range to get approximately 500 trading points (same as BasicChartContainer)
+      const targetPoints = 500;
+      const now = new Date();
+      let weeksNeeded;
+      
+      if (timeframe === '1h') {
+        weeksNeeded = Math.ceil(targetPoints / 32.5); // ~15 weeks for 500 points
+      } else if (timeframe === '1d') {
+        weeksNeeded = Math.ceil(targetPoints / 5); // ~100 weeks for 500 points  
+      } else {
+        weeksNeeded = 20; // Default fallback
+      }
+      
+      const startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - (weeksNeeded * 7));
+
       const response = await fetch('/api/v1/data/load', {
         method: 'POST',
         headers: {
@@ -76,7 +93,9 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
         body: JSON.stringify({
           symbol,
           timeframe,
-          source: 'auto'
+          source: 'auto',
+          start_date: startDate.toISOString().split('T')[0],
+          end_date: now.toISOString().split('T')[0]
         }),
       });
 
@@ -91,9 +110,27 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
         throw new Error(result.error?.message || 'Failed to load data');
       }
 
-      // Store price data for RSI calculations
-      priceDataRef.current = result.data.ohlcv;
+      // Store price data for RSI calculations  
+      // Handle both legacy (dates + ohlcv arrays) and new (ohlcv objects) formats
+      const dates = result.data.dates || [];
+      const ohlcv = result.data.ohlcv || [];
+      
+      if (dates.length > 0 && ohlcv.length > 0) {
+        // Legacy format: convert to objects
+        priceDataRef.current = dates.map((dateStr: string, index: number) => ({
+          timestamp: dateStr,
+          open: ohlcv[index][0],
+          high: ohlcv[index][1], 
+          low: ohlcv[index][2],
+          close: ohlcv[index][3],
+          volume: ohlcv[index][4] || 1000
+        }));
+      } else {
+        // New format: use as-is
+        priceDataRef.current = result.data.ohlcv;
+      }
       console.log('[RSIChartContainer] Price data cached for RSI calculations:', priceDataRef.current.length, 'points');
+      setPriceDataLoaded(true);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -107,7 +144,6 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
 
   // Calculate RSI indicator data
   const calculateRSIData = useCallback(async (indicator: IndicatorInfo): Promise<LineData[]> => {
-    console.log('[RSIChartContainer] Calculating RSI:', indicator.name, indicator.parameters);
 
     if (!priceDataRef.current.length) {
       console.warn('[RSIChartContainer] No price data available for RSI calculation');
@@ -121,15 +157,18 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          data: {
-            symbol,
-            timeframe,
-            ohlcv: priceDataRef.current
-          },
+          symbol: symbol,
+          timeframe: timeframe,
+          start_date: new Date(priceDataRef.current[0]?.timestamp || Date.now()).toISOString().split('T')[0],
+          end_date: new Date(priceDataRef.current[priceDataRef.current.length - 1]?.timestamp || Date.now()).toISOString().split('T')[0],
           indicators: [
             {
-              name: indicator.name,
-              parameters: indicator.parameters
+              id: 'RSIIndicator',  // Use backend ID format
+              parameters: {
+                period: indicator.parameters.period,
+                source: 'close'
+              },
+              output_name: `RSI_${indicator.parameters.period}`
             }
           ]
         }),
@@ -145,21 +184,39 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
         throw new Error(result.error?.message || 'Failed to calculate RSI');
       }
 
-      // Transform RSI results to LineData format
-      const rsiValues = result.data.results[indicator.name] || [];
+      // Transform RSI results to LineData format - match BasicChartContainer format
+      const outputName = `RSI_${indicator.parameters.period}`;
+      const rsiValues = result.indicators?.[outputName] || 
+                       result.indicators?.[outputName.toLowerCase()] || 
+                       [];
       const lineData: LineData[] = rsiValues
         .map((value: number | null, index: number) => {
           if (value === null || value === undefined) return null;
           const timestamp = priceDataRef.current[index]?.timestamp;
           if (!timestamp) return null;
+          
+          let time: number;
+          if (typeof timestamp === 'string') {
+            time = new Date(timestamp).getTime() / 1000;
+          } else if (typeof timestamp === 'number') {
+            time = timestamp > 1e10 ? timestamp / 1000 : timestamp;
+          } else {
+            console.error('[RSIChartContainer] Invalid timestamp:', timestamp);
+            return null;
+          }
+          
+          if (isNaN(time) || !isFinite(time)) {
+            console.error('[RSIChartContainer] Invalid time conversion:', timestamp, '->', time);
+            return null;
+          }
+          
           return {
-            time: new Date(timestamp).getTime() / 1000 as UTCTimestamp,
+            time: time as UTCTimestamp,
             value
           };
         })
         .filter((point: any) => point !== null) as LineData[];
 
-      console.log('[RSIChartContainer] RSI calculated:', indicator.name, lineData.length, 'points');
       return lineData;
 
     } catch (error) {
@@ -168,15 +225,16 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
     }
   }, [symbol, timeframe]);
 
-  // Update RSI data when indicators change
+  // Track when price data is loaded to trigger indicator updates
+  const [priceDataLoaded, setPriceDataLoaded] = useState(false);
+
+  // Update RSI data when indicators change OR when price data becomes available
   useEffect(() => {
     if (!priceDataRef.current.length) {
-      console.log('[RSIChartContainer] No price data available, skipping RSI update');
       return;
     }
 
     const updateRSIIndicators = async () => {
-      console.log('[RSIChartContainer] Updating RSI indicators:', indicators.length);
       
       // Filter for RSI indicators only
       const rsiIndicators = indicators.filter(ind => ind.name === 'rsi');
@@ -240,13 +298,12 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
     };
 
     updateRSIIndicators();
-  }, [indicators, calculateRSIData, onDataLoaded, onError]);
+  }, [indicators, priceDataLoaded, calculateRSIData]);
 
   // Load price data when symbol or timeframe changes
   useEffect(() => {
     if (symbol && timeframe && 
         (symbol !== currentSymbolRef.current || timeframe !== currentTimeframeRef.current)) {
-      console.log('[RSIChartContainer] Symbol or timeframe changed, reloading price data');
       currentSymbolRef.current = symbol;
       currentTimeframeRef.current = timeframe;
       
@@ -261,18 +318,20 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
 
   // Handle chart creation for synchronization
   const handleChartCreated = useCallback((chart: IChartApi) => {
-    console.log('[RSIChartContainer] RSI chart created, registering for synchronization');
     chartRef.current = chart;
     
     if (chartSynchronizer && chartId) {
       chartSynchronizer.registerChart(chartId, chart, `RSI Chart (${symbol})`);
     }
-  }, [chartSynchronizer, chartId, symbol]);
+    
+    // Notify parent that chart is ready for synchronization
+    if (onChartReady) {
+      onChartReady();
+    }
+  }, [chartSynchronizer, chartId, symbol, onChartReady]);
 
   // Handle chart destruction
   const handleChartDestroyed = useCallback(() => {
-    console.log('[RSIChartContainer] RSI chart destroyed, unregistering from synchronization');
-    
     if (chartSynchronizer && chartId) {
       chartSynchronizer.unregisterChart(chartId);
     }
@@ -292,6 +351,7 @@ const RSIChartContainer: FC<RSIChartContainerProps> = ({
       showLoadingOverlay={true}
       showErrorOverlay={true}
       showOverboughtOversold={true}
+      preserveTimeScale={!!chartSynchronizer}
     />
   );
 };

@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, FC } from 'react';
 import { createChart, IChartApi, ISeriesApi, LineData } from 'lightweight-charts';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorDisplay from '../../common/ErrorDisplay';
+import EmptyState from '../../common/EmptyState';
 
 /**
  * Pure presentation component for the RSI oscillator chart
@@ -42,6 +45,9 @@ interface RSIChartProps {
   
   // RSI-specific styling
   showOverboughtOversold?: boolean;
+  
+  // Synchronization control
+  preserveTimeScale?: boolean;
 }
 
 const RSIChart: FC<RSIChartProps> = ({
@@ -55,7 +61,8 @@ const RSIChart: FC<RSIChartProps> = ({
   onCrosshairMove,
   showLoadingOverlay = true,
   showErrorOverlay = true,
-  showOverboughtOversold = true
+  showOverboughtOversold = true,
+  preserveTimeScale = false
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -104,6 +111,9 @@ const RSIChart: FC<RSIChartProps> = ({
         borderColor: '#cccccc',
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 10, // Prevents panning too far into future
+        barSpacing: 6,
+        minBarSpacing: 0.5,
       },
     });
 
@@ -134,9 +144,15 @@ const RSIChart: FC<RSIChartProps> = ({
       oversoldLineRef.current = oversoldLine;
     }
 
-    // Set up event listeners
+    // Set up event listeners with error handling
     if (onCrosshairMove) {
-      chart.subscribeCrosshairMove(onCrosshairMove);
+      chart.subscribeCrosshairMove((param) => {
+        try {
+          onCrosshairMove(param);
+        } catch (error) {
+          console.warn('[RSIChart] Error in crosshair move handler:', error);
+        }
+      });
     }
 
     // Notify parent
@@ -167,7 +183,6 @@ const RSIChart: FC<RSIChartProps> = ({
       return;
     }
 
-    console.log('[RSIChart] Updating RSI chart data:', rsiData.indicators.length, 'indicators');
 
     // Update overbought/oversold lines if they exist and we have data
     if (showOverboughtOversold && rsiData.indicators.length > 0) {
@@ -234,14 +249,15 @@ const RSIChart: FC<RSIChartProps> = ({
           visible: indicator.visible,
           title: indicator.name
         });
-        console.log('[RSIChart] Updated RSI series:', indicator.id);
       }
     });
 
-    // Fit content after data update
-    chartRef.current.timeScale().fitContent();
+    // Fit content after data update (only if not preserving time scale for sync)
+    if (!preserveTimeScale) {
+      chartRef.current.timeScale().fitContent();
+    }
     
-  }, [rsiData, showOverboughtOversold]);
+  }, [rsiData, showOverboughtOversold, preserveTimeScale]);
 
   // Handle resize
   useEffect(() => {
@@ -283,24 +299,16 @@ const RSIChart: FC<RSIChartProps> = ({
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: '0.5rem'
+          justifyContent: 'center'
         }}>
-          <div style={{
-            width: '24px',
-            height: '24px',
-            border: '2px solid #f3f3f3',
-            borderTop: '2px solid #9C27B0',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <div style={{ fontSize: '0.8rem', color: '#666' }}>
-            Loading RSI data...
-          </div>
+          <LoadingSpinner 
+            size="medium" 
+            color="#9C27B0"
+            message="Loading RSI data..." 
+          />
         </div>
       )}
       
@@ -312,17 +320,17 @@ const RSIChart: FC<RSIChartProps> = ({
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          flexDirection: 'column',
-          gap: '0.5rem'
+          padding: '1rem'
         }}>
-          <div style={{ fontSize: '1.5rem', color: '#f44336' }}>⚠️</div>
-          <div style={{ fontSize: '0.8rem', color: '#f44336', textAlign: 'center' }}>
-            {error}
-          </div>
+          <ErrorDisplay 
+            error={error}
+            title="RSI Chart Error"
+            compact={true}
+          />
         </div>
       )}
       
@@ -333,25 +341,16 @@ const RSIChart: FC<RSIChartProps> = ({
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          fontSize: '0.9rem',
-          color: '#666',
-          textAlign: 'center'
+          width: '100%'
         }}>
-          No RSI indicators added yet
-          <br />
-          <span style={{ fontSize: '0.8rem' }}>
-            Add RSI from the indicators sidebar
-          </span>
+          <EmptyState
+            icon="📊"
+            title="No RSI indicators"
+            description="Add RSI from the indicators sidebar to see oscillator data"
+            compact={true}
+          />
         </div>
       )}
-      
-      {/* CSS for loading spinner */}
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };

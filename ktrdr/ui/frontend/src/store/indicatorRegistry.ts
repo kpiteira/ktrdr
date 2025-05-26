@@ -7,7 +7,7 @@
 
 export interface ParameterDefinition {
   name: string;
-  type: 'number' | 'string' | 'boolean' | 'select';
+  type: 'number' | 'string' | 'boolean' | 'select' | 'color';
   min?: number;
   max?: number;
   step?: number;
@@ -64,8 +64,7 @@ export const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
       },
       { 
         name: 'color', 
-        type: 'select', 
-        options: ['#2196F3', '#FF5722', '#4CAF50', '#9C27B0', '#FF9800'], 
+        type: 'color', 
         default: '#2196F3',
         label: 'Color',
         description: 'Line color for the indicator'
@@ -96,8 +95,7 @@ export const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
       },
       { 
         name: 'color', 
-        type: 'select', 
-        options: ['#FF5722', '#2196F3', '#4CAF50', '#9C27B0', '#FF9800'], 
+        type: 'color', 
         default: '#FF5722',
         label: 'Color',
         description: 'Line color for the indicator'

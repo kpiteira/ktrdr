@@ -1,10 +1,11 @@
-import React, { FC, useState, useCallback } from 'react';
+import React, { FC, useState, useCallback, useMemo } from 'react';
 import { useChartSynchronizer } from './hooks/useChartSynchronizer';
 import IndicatorSidebarContainer from './components/containers/IndicatorSidebarContainer';
 import BasicChartContainer from './components/containers/BasicChartContainer';
 import RSIChartContainer from './components/containers/RSIChartContainer';
 import SymbolSelector from './components/SymbolSelector';
 import ErrorBoundary from './components/ErrorBoundary';
+import { PriceDataProvider } from './context/PriceDataContext';
 import { IndicatorInfo } from './store/indicatorRegistry';
 import './App.css';
 
@@ -22,8 +23,16 @@ const App: FC = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // Chart synchronization
+  // Chart synchronization - RE-ENABLED with visual-only sync
   const chartSynchronizer = useChartSynchronizer();
+  
+  // Manual sync RSI chart to main chart when both are ready
+  const handleRSIChartReady = useCallback(() => {
+    // Small delay to ensure both charts are fully initialized and have data
+    setTimeout(() => {
+      chartSynchronizer.syncAllToChart('main-chart');
+    }, 200);
+  }, [chartSynchronizer]);
   
   // Time range synchronization between charts
   const [timeRange, setTimeRange] = useState<{ start: string; end: string } | null>(null);
@@ -33,8 +42,6 @@ const App: FC = () => {
 
   // Handle symbol changes from the symbol selector
   const handleSymbolChange = useCallback((symbol: string, timeframe: string) => {
-    console.log('[App] Symbol change requested:', { symbol, timeframe });
-    
     // Ensure we always have a valid timeframe
     let actualTimeframe = timeframe;
     if (!timeframe || timeframe === 'undefined' || timeframe === undefined || timeframe === '') {
@@ -45,10 +52,7 @@ const App: FC = () => {
       } else {
         actualTimeframe = '1h'; // default
       }
-      console.log('[App] Fixed undefined/invalid timeframe to:', actualTimeframe);
     }
-    
-    console.log('[App] Setting new symbol and timeframe:', { symbol, timeframe: actualTimeframe });
     
     // Update state
     setSelectedSymbol(symbol);
@@ -56,24 +60,19 @@ const App: FC = () => {
     
     // Clear time range when symbol changes
     setTimeRange(null);
-    
-    console.log('[App] Symbol change completed');
   }, []);
 
   // Handle time range changes from the main chart
   const handleTimeRangeChange = useCallback((range: { start: string; end: string }) => {
-    console.log('[App] Time range changed:', range);
     setTimeRange(range);
   }, []);
 
   // Handle indicator addition from the sidebar
   const handleIndicatorAdded = useCallback((indicator: IndicatorInfo) => {
-    console.log('[App] Indicator added:', indicator);
     setIndicators(prev => {
       // Check if indicator already exists
       const exists = prev.some(ind => ind.id === indicator.id);
       if (exists) {
-        console.log('[App] Indicator already exists, updating instead of adding');
         return prev.map(ind => ind.id === indicator.id ? indicator : ind);
       }
       return [...prev, indicator];
@@ -82,13 +81,11 @@ const App: FC = () => {
 
   // Handle indicator removal from the sidebar
   const handleIndicatorRemoved = useCallback((indicatorId: string) => {
-    console.log('[App] Indicator removed:', indicatorId);
     setIndicators(prev => prev.filter(ind => ind.id !== indicatorId));
   }, []);
 
   // Handle indicator updates from the sidebar
   const handleIndicatorUpdated = useCallback((indicatorId: string, updates: Partial<IndicatorInfo>) => {
-    console.log('[App] Indicator updated:', indicatorId, updates);
     setIndicators(prev => prev.map(ind => 
       ind.id === indicatorId ? { ...ind, ...updates } : ind
     ));
@@ -96,19 +93,47 @@ const App: FC = () => {
 
   // Handle indicator visibility toggle from the sidebar
   const handleIndicatorToggled = useCallback((indicatorId: string, visible: boolean) => {
-    console.log('[App] Indicator toggled:', indicatorId, visible);
     setIndicators(prev => prev.map(ind => 
       ind.id === indicatorId ? { ...ind, visible } : ind
     ));
   }, []);
 
-  // Get indicators by chart type for passing to appropriate chart containers
-  const overlayIndicators = indicators.filter(ind => ind.chartType === 'overlay');
-  const separateIndicators = indicators.filter(ind => ind.chartType === 'separate');
+  // Stable error handlers for charts
+  const handleMainChartError = useCallback((error: string) => {
+    console.error('[App] Main chart error:', error);
+  }, []);
+
+  const handleRSIChartError = useCallback((error: string) => {
+    console.error('[App] RSI chart error:', error);
+  }, []);
+
+  // Split indicators by chart type (memoized for performance)
+  const { overlayIndicators, separateIndicators } = useMemo(() => {
+    const overlay = indicators.filter(ind => ind.chartType === 'overlay');
+    const separate = indicators.filter(ind => ind.chartType === 'separate');
+    
+    console.log('[App] Indicator split - Total:', indicators.length, 'Overlay:', overlay.length, 'Separate:', separate.length);
+    console.log('[App] Overlay indicators:', overlay.map(ind => `${ind.displayName} (visible: ${ind.visible})`));
+    
+    return {
+      overlayIndicators: overlay,
+      separateIndicators: separate
+    };
+  }, [indicators]);
+
+  // Memoize chart dimensions to prevent unnecessary re-renders
+  const chartDimensions = useMemo(() => ({
+    width: sidebarCollapsed ? 920 : 800,
+    height: {
+      main: 400,
+      rsi: 200
+    }
+  }), [sidebarCollapsed]);
 
   return (
     <ErrorBoundary>
-      <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <PriceDataProvider>
+        <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <header className="App-header" style={{ 
           padding: '0.75rem 1rem', 
@@ -156,7 +181,7 @@ const App: FC = () => {
             flexDirection: 'column',
             gap: '1rem'
           }}>
-            {/* Main Price Chart Container */}
+            {/* Main Price Chart Container - Overlay indicators only */}
             <ErrorBoundary>
               <BasicChartContainer
                 symbol={selectedSymbol}
@@ -164,14 +189,14 @@ const App: FC = () => {
                 indicators={overlayIndicators}
                 chartSynchronizer={chartSynchronizer}
                 chartId="main-chart"
-                width={sidebarCollapsed ? 920 : 800}
-                height={400}
+                width={chartDimensions.width}
+                height={chartDimensions.height.main}
                 onTimeRangeChange={handleTimeRangeChange}
-                onError={(error) => console.error('[App] Main chart error:', error)}
+                onError={handleMainChartError}
               />
             </ErrorBoundary>
 
-            {/* RSI Chart Container (only show if there are RSI indicators) */}
+            {/* RSI Chart Container - Separate panel for oscillators */}
             {separateIndicators.some(ind => ind.name === 'rsi') && (
               <ErrorBoundary>
                 <RSIChartContainer
@@ -181,9 +206,10 @@ const App: FC = () => {
                   chartSynchronizer={chartSynchronizer}
                   chartId="rsi-chart"
                   timeRange={timeRange}
-                  width={sidebarCollapsed ? 920 : 800}
-                  height={200}
-                  onError={(error) => console.error('[App] RSI chart error:', error)}
+                  width={chartDimensions.width}
+                  height={chartDimensions.height.rsi}
+                  onChartReady={handleRSIChartReady}
+                  onError={handleRSIChartError}
                 />
               </ErrorBoundary>
             )}
@@ -215,7 +241,8 @@ const App: FC = () => {
             )}
           </div>
         </main>
-      </div>
+        </div>
+      </PriceDataProvider>
     </ErrorBoundary>
   );
 };
