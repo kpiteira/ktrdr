@@ -102,6 +102,59 @@ export const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
       }
     ],
     colorOptions: ['#FF5722', '#2196F3', '#4CAF50', '#9C27B0', '#FF9800']
+  },
+  macd: {
+    name: 'macd',
+    displayName: 'MACD',
+    category: 'Oscillators',
+    chartType: 'separate',
+    description: 'Moving Average Convergence Divergence - trend following momentum indicator',
+    defaultParameters: { 
+      fast_period: 12,
+      slow_period: 26,
+      signal_period: 9,
+      color: '#9C27B0' 
+    },
+    parameterDefinitions: [
+      { 
+        name: 'fast_period', 
+        type: 'number', 
+        min: 2, 
+        max: 50, 
+        step: 1, 
+        default: 12,
+        label: 'Fast Period',
+        description: 'Fast moving average period'
+      },
+      { 
+        name: 'slow_period', 
+        type: 'number', 
+        min: 5, 
+        max: 100, 
+        step: 1, 
+        default: 26,
+        label: 'Slow Period',
+        description: 'Slow moving average period'
+      },
+      { 
+        name: 'signal_period', 
+        type: 'number', 
+        min: 2, 
+        max: 50, 
+        step: 1, 
+        default: 9,
+        label: 'Signal Period',
+        description: 'Signal line period'
+      },
+      { 
+        name: 'color', 
+        type: 'color', 
+        default: '#9C27B0',
+        label: 'Color',
+        description: 'Line color for the indicator'
+      }
+    ],
+    colorOptions: ['#9C27B0', '#FF5722', '#2196F3', '#4CAF50', '#FF9800']
   }
 };
 

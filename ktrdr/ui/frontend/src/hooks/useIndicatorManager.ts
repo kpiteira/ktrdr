@@ -80,7 +80,7 @@ export const useIndicatorManager = (
 
   // Generic add indicator function
   const addIndicator = useCallback(async (name: string, customParameters?: Record<string, any>) => {
-    console.log('[useIndicatorManager] Adding indicator:', name, customParameters);
+    console.log('🔴 INDICATOR_MANAGER: addIndicator called', name, customParameters);
     setIsLoading(true);
     
     try {
@@ -120,7 +120,7 @@ export const useIndicatorManager = (
 
       // Trigger calculation callback
       if (onIndicatorCalculated) {
-        console.log('[useIndicatorManager] Triggering onIndicatorCalculated callback for:', instance.displayName);
+        console.log('🔴 INDICATOR_MANAGER: Calling onIndicatorCalculated for:', instance.displayName);
         onIndicatorCalculated(instance, []);
       }
       
@@ -134,7 +134,7 @@ export const useIndicatorManager = (
     } finally {
       setIsLoading(false);
     }
-  }, [indicators, onIndicatorCalculated, onError]);
+  }, [onIndicatorCalculated, onError]); // Remove 'indicators' - we use setIndicators(prev => ...) so don't need it
 
   // Remove indicator
   const removeIndicator = useCallback((id: string) => {
@@ -210,15 +210,35 @@ export const useIndicatorManager = (
   // Specific add handlers
   const handleAddSMA = useCallback(async () => {
     if (newSMAPeriod >= 2 && newSMAPeriod <= 500) {
+      // Check for duplicate before adding
+      const duplicate = indicators.some(ind => 
+        ind.name === 'sma' && ind.parameters.period === newSMAPeriod
+      );
+      
+      if (duplicate) {
+        console.log(`[useIndicatorManager] SMA(${newSMAPeriod}) already exists, skipping`);
+        return;
+      }
+      
       await addIndicator('sma', { period: newSMAPeriod });
     }
-  }, [newSMAPeriod, addIndicator]);
+  }, [newSMAPeriod, addIndicator, indicators]);
 
   const handleAddRSI = useCallback(async () => {
     if (newRSIPeriod >= 2 && newRSIPeriod <= 100) {
+      // Check for duplicate before adding
+      const duplicate = indicators.some(ind => 
+        ind.name === 'rsi' && ind.parameters.period === newRSIPeriod
+      );
+      
+      if (duplicate) {
+        console.log(`[useIndicatorManager] RSI(${newRSIPeriod}) already exists, skipping`);
+        return;
+      }
+      
       await addIndicator('rsi', { period: newRSIPeriod });
     }
-  }, [newRSIPeriod, addIndicator]);
+  }, [newRSIPeriod, addIndicator, indicators]);
 
   return {
     // State

@@ -1,13 +1,17 @@
-import React, { FC, useState, useCallback, useMemo } from 'react';
+import React, { FC, useState, useCallback, useMemo, useEffect } from 'react';
 import { useChartSynchronizer } from './hooks/useChartSynchronizer';
 import IndicatorSidebarContainer from './components/containers/IndicatorSidebarContainer';
 import BasicChartContainer from './components/containers/BasicChartContainer';
-import RSIChartContainer from './components/containers/RSIChartContainer';
+import OscillatorChartContainer from './components/containers/OscillatorChartContainer';
 import SymbolSelector from './components/SymbolSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import { PriceDataProvider } from './context/PriceDataContext';
 import { IndicatorInfo } from './store/indicatorRegistry';
+import { createComponentLogger } from './utils/logger';
 import './App.css';
+
+// Test logging immediately on module load
+console.log('[TEST] App module loaded - testing frontend logging at', new Date().toISOString());
 
 /**
  * Main application component using Container/Presentation architecture
@@ -17,21 +21,30 @@ import './App.css';
  * to keep charts in sync and manages the global application state.
  */
 
+// Create logger outside component to ensure stability
+const appLogger = createComponentLogger('App');
+
 const App: FC = () => {
+  console.log('[TEST] App component rendering at', new Date().toISOString());
+  const log = appLogger;
+  log.info('App component started rendering');
+  
   // Core application state
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // Chart synchronization - RE-ENABLED with visual-only sync
-  const chartSynchronizer = useChartSynchronizer();
+  // Chart synchronization - TEMPORARILY DISABLED for debugging
+  const chartSynchronizer = null; // useChartSynchronizer();
   
-  // Manual sync RSI chart to main chart when both are ready
-  const handleRSIChartReady = useCallback(() => {
+  // Manual sync oscillator chart to main chart when both are ready
+  const handleOscillatorChartReady = useCallback(() => {
     // Small delay to ensure both charts are fully initialized and have data
-    setTimeout(() => {
-      chartSynchronizer.syncAllToChart('main-chart');
-    }, 200);
+    if (chartSynchronizer) {
+      setTimeout(() => {
+        chartSynchronizer.syncAllToChart('main-chart');
+      }, 200);
+    }
   }, [chartSynchronizer]);
   
   // Time range synchronization between charts
@@ -69,13 +82,18 @@ const App: FC = () => {
 
   // Handle indicator addition from the sidebar
   const handleIndicatorAdded = useCallback((indicator: IndicatorInfo) => {
+    log.info('handleIndicatorAdded called', { id: indicator.id, name: indicator.displayName });
     setIndicators(prev => {
+      log.info('setIndicators callback', { currentCount: prev.length });
       // Check if indicator already exists
       const exists = prev.some(ind => ind.id === indicator.id);
       if (exists) {
-        return prev.map(ind => ind.id === indicator.id ? indicator : ind);
+        log.info('Indicator already exists, skipping', { id: indicator.id });
+        return prev; // Return unchanged to prevent re-render
       }
-      return [...prev, indicator];
+      log.info('Adding new indicator', { id: indicator.id, newCount: prev.length + 1 });
+      const added = [...prev, indicator];
+      return added;
     });
   }, []);
 
@@ -103,23 +121,29 @@ const App: FC = () => {
     console.error('[App] Main chart error:', error);
   }, []);
 
-  const handleRSIChartError = useCallback((error: string) => {
-    console.error('[App] RSI chart error:', error);
+  const handleOscillatorChartError = useCallback((error: string) => {
+    console.error('[App] Oscillator chart error:', error);
   }, []);
 
-  // Split indicators by chart type (memoized for performance)
-  const { overlayIndicators, separateIndicators } = useMemo(() => {
+  // Split indicators by chart type with stable references  
+  const overlayIndicators = useMemo(() => {
     const overlay = indicators.filter(ind => ind.chartType === 'overlay');
-    const separate = indicators.filter(ind => ind.chartType === 'separate');
-    
-    console.log('[App] Indicator split - Total:', indicators.length, 'Overlay:', overlay.length, 'Separate:', separate.length);
-    console.log('[App] Overlay indicators:', overlay.map(ind => `${ind.displayName} (visible: ${ind.visible})`));
-    
-    return {
-      overlayIndicators: overlay,
-      separateIndicators: separate
-    };
+    log.info('useMemo overlay indicators', { 
+      count: overlay.length, 
+      overlayIds: overlay.map(i => `${i.id}(${i.name})`)
+    });
+    return overlay;
   }, [indicators]);
+
+  const separateIndicators = useMemo(() => {
+    const separate = indicators.filter(ind => ind.chartType === 'separate');
+    log.info('useMemo separate indicators', { 
+      count: separate.length,
+      separateIds: separate.map(i => `${i.id}(${i.name})`)
+    });
+    return separate;
+  }, [indicators]);
+
 
   // Memoize chart dimensions to prevent unnecessary re-renders
   const chartDimensions = useMemo(() => ({
@@ -196,20 +220,20 @@ const App: FC = () => {
               />
             </ErrorBoundary>
 
-            {/* RSI Chart Container - Separate panel for oscillators */}
-            {separateIndicators.some(ind => ind.name === 'rsi') && (
+            {/* Oscillator Chart Container - Generic panel for all oscillator indicators */}
+            {separateIndicators.length > 0 && (
               <ErrorBoundary>
-                <RSIChartContainer
+                <OscillatorChartContainer
                   symbol={selectedSymbol}
                   timeframe={selectedTimeframe}
                   indicators={separateIndicators}
                   chartSynchronizer={chartSynchronizer}
-                  chartId="rsi-chart"
+                  chartId="oscillator-chart"
                   timeRange={timeRange}
                   width={chartDimensions.width}
                   height={chartDimensions.height.rsi}
-                  onChartReady={handleRSIChartReady}
-                  onError={handleRSIChartError}
+                  onChartReady={handleOscillatorChartReady}
+                  onError={handleOscillatorChartError}
                 />
               </ErrorBoundary>
             )}

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Setup**: `./setup_dev.sh` to set up the environment
 - **Python Tests**: `pytest` (all tests), `pytest tests/path/to/test.py` (specific test)
 - **Python Linting**: `black ktrdr tests` (formatting), `mypy ktrdr` (type checking)
-- **Frontend Dev**: `cd ktrdr/ui/frontend && npm run dev`
+- **Frontend Dev**: Use Docker containers (see docker-compose.yml), NOT `npm run dev`
 - **Frontend Tests**: `cd ktrdr/ui/frontend && npm run test`
 - **Frontend Lint**: `cd ktrdr/ui/frontend && npm run lint`
 - **Frontend Typecheck**: `cd ktrdr/ui/frontend && npm run typecheck`

@@ -43,9 +43,17 @@ export const useSharedPriceData = (): UseSharedPriceDataResult => {
     const cacheKey = `${symbol}-${timeframe}`;
     const now = Date.now();
     
+    console.log('[useSharedPriceData] 🔄 loadPriceData called', {
+      symbol,
+      timeframe,
+      cacheKey,
+      hasCached: !!cacheRef.current[cacheKey]
+    });
+    
     // Check cache first
     const cached = cacheRef.current[cacheKey];
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+      console.log('[useSharedPriceData] 💾 Using cached data');
       setPriceData(cached.data);
       currentSymbolRef.current = symbol;
       currentTimeframeRef.current = timeframe;
@@ -93,18 +101,26 @@ export const useSharedPriceData = (): UseSharedPriceDataResult => {
       }
 
       const result = await response.json();
-      if (!result.success || !result.data || !result.data.data) {
+      if (!result.success || !result.data || !result.data.dates || !result.data.ohlcv) {
         throw new Error('Invalid response format from data API');
       }
 
-      // Transform the data to TradingView format
-      const transformedData: CandlestickData[] = result.data.data.map((point: any) => ({
-        time: (new Date(point.timestamp).getTime() / 1000) as UTCTimestamp,
-        open: parseFloat(point.open),
-        high: parseFloat(point.high),
-        low: parseFloat(point.low),
-        close: parseFloat(point.close)
-      }));
+      // Transform the data to TradingView format (matching the actual API response)
+      const data = result.data;
+      const transformedData: CandlestickData[] = data.dates.map((dateStr: string, index: number) => {
+        const ohlcv = data.ohlcv[index];
+        if (!ohlcv || ohlcv.length < 4) {
+          throw new Error(`Invalid OHLCV data at index ${index}`);
+        }
+        
+        return {
+          time: (new Date(dateStr).getTime() / 1000) as UTCTimestamp,
+          open: ohlcv[0],
+          high: ohlcv[1],
+          low: ohlcv[2],
+          close: ohlcv[3]
+        };
+      });
 
       // Sort by time to ensure correct order
       transformedData.sort((a, b) => (a.time as number) - (b.time as number));

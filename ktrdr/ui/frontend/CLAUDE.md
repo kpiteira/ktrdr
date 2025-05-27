@@ -13,6 +13,15 @@
 - Backend API available at `http://localhost:8000/api/v1`
 - Commands should be run inside the Docker container
 
+### Important: Frontend Debugging in Docker
+
+**CRITICAL**: The frontend runs in a Docker container, so:
+- **Frontend logs appear in the BROWSER CONSOLE, not in Docker logs**
+- Use browser DevTools (F12) to see console.log output, not `docker logs`
+- Only server-side logs (backend, nginx) appear in Docker container logs
+- When debugging frontend issues, always check the browser console first
+- Do NOT try to use Docker logs or container inspection for frontend JavaScript debugging
+
 ## Library Versions
 
 - **TradingView Lightweight Charts**: v5.0.7
