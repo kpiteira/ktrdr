@@ -195,7 +195,6 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       return lineData;
 
     } catch (error) {
-      console.error('Error calculating indicator:', error);
       return [];
     }
   }, [symbol, timeframe]);
@@ -280,6 +279,12 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
     }
   }, [onTimeRangeChange]);
 
+  // Handle crosshair synchronization
+  const handleCrosshairMove = useCallback((params: any) => {
+    if (chartSynchronizer && chartId) {
+      chartSynchronizer.synchronizeCrosshair(chartId, params);
+    }
+  }, [chartSynchronizer, chartId]);
 
   return (
     <BasicChart
@@ -292,6 +297,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       onChartCreated={handleChartCreated}
       onChartDestroyed={handleChartDestroyed}
       onTimeRangeChange={handleTimeRangeChange}
+      onCrosshairMove={handleCrosshairMove}
       showLoadingOverlay={true}
       showErrorOverlay={true}
       preserveTimeScale={!!chartSynchronizer}

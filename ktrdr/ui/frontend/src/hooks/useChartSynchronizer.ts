@@ -61,7 +61,8 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
   }, []);
 
   // Synchronize time scale across all charts
-  const synchronizeTimeScale = useCallback((sourceChartId: string) => {
+  // Not wrapped in useCallback since it only depends on refs
+  const synchronizeTimeScale = (sourceChartId: string) => {
     const sourceChart = chartsRef.current.get(sourceChartId);
     if (!sourceChart) {
       return;
@@ -125,7 +126,7 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
         syncInProgressRef.current = false;
       }, 150);
     }
-  }, []);
+  };
 
   // Crosshair synchronization disabled for simplicity
   const synchronizeCrosshair = useCallback((_sourceChartId: string, _point: any) => {
@@ -174,7 +175,7 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
     syncInProgressRef.current = false;
     synchronizeTimeScale(sourceChartId);
     syncInProgressRef.current = wasSyncing;
-  }, []);
+  }, [synchronizeTimeScale]);
 
   return {
     registerChart,

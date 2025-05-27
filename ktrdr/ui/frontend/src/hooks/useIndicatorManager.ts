@@ -73,14 +73,12 @@ export const useIndicatorManager = (
     });
     
     if (Object.keys(newLocalValues).length > 0) {
-      console.log('[useIndicatorManager] Initializing local values for new indicators:', newLocalValues);
       setLocalParameterValues(prev => ({ ...prev, ...newLocalValues }));
     }
   }, [indicators]);
 
   // Generic add indicator function
   const addIndicator = useCallback(async (name: string, customParameters?: Record<string, any>) => {
-    console.log('🔴 INDICATOR_MANAGER: addIndicator called', name, customParameters);
     setIsLoading(true);
     
     try {
@@ -110,24 +108,19 @@ export const useIndicatorManager = (
       );
 
       if (isDuplicate) {
-        console.warn(`[useIndicatorManager] Ignoring duplicate indicator: ${instance.displayName} with parameters:`, instance.parameters);
         return; // Exit early
       }
 
       // Add to indicators list
-      console.log('[useIndicatorManager] Adding new indicator:', instance.displayName);
       setIndicators(prev => [...prev, instance]);
 
       // Trigger calculation callback
       if (onIndicatorCalculated) {
-        console.log('🔴 INDICATOR_MANAGER: Calling onIndicatorCalculated for:', instance.displayName);
         onIndicatorCalculated(instance, []);
       }
       
-      console.log('[useIndicatorManager] Successfully added indicator:', instance);
       
     } catch (error) {
-      console.error('[useIndicatorManager] Failed to add indicator:', error);
       if (onError) {
         onError(error instanceof Error ? error.message : 'Failed to add indicator');
       }
@@ -138,7 +131,6 @@ export const useIndicatorManager = (
 
   // Remove indicator
   const removeIndicator = useCallback((id: string) => {
-    console.log('[useIndicatorManager] Removing indicator:', id);
     setIndicators(prev => prev.filter(ind => ind.id !== id));
     setExpandedIndicators(prev => {
       const newSet = new Set(prev);
@@ -155,7 +147,6 @@ export const useIndicatorManager = (
 
   // Toggle indicator visibility
   const toggleIndicator = useCallback((id: string) => {
-    console.log('[useIndicatorManager] Toggling indicator visibility:', id);
     setIndicators(prev => prev.map(ind => 
       ind.id === id ? { ...ind, visible: !ind.visible } : ind
     ));
@@ -163,7 +154,6 @@ export const useIndicatorManager = (
 
   // Update indicator
   const updateIndicator = useCallback((id: string, updates: Partial<IndicatorInfo>) => {
-    console.log('[useIndicatorManager] Updating indicator:', id, updates);
     setIndicators(prev => prev.map(ind => 
       ind.id === id ? { ...ind, ...updates } : ind
     ));
@@ -184,7 +174,6 @@ export const useIndicatorManager = (
 
   // Handle parameter updates
   const handleParameterUpdate = useCallback((indicatorId: string, parameterName: string, value: any) => {
-    console.log('[useIndicatorManager] Parameter update:', indicatorId, parameterName, value);
     
     // Update local state immediately for responsive UI
     setLocalParameterValues(prev => {
@@ -195,7 +184,6 @@ export const useIndicatorManager = (
           [parameterName]: value
         }
       };
-      console.log('[useIndicatorManager] Updated local values:', newValues);
       return newValues;
     });
     
@@ -216,7 +204,6 @@ export const useIndicatorManager = (
       );
       
       if (duplicate) {
-        console.log(`[useIndicatorManager] SMA(${newSMAPeriod}) already exists, skipping`);
         return;
       }
       
@@ -232,7 +219,6 @@ export const useIndicatorManager = (
       );
       
       if (duplicate) {
-        console.log(`[useIndicatorManager] RSI(${newRSIPeriod}) already exists, skipping`);
         return;
       }
       

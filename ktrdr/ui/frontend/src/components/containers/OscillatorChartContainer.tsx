@@ -230,7 +230,6 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       return lineData;
 
     } catch (error) {
-      console.error('Error calculating oscillator:', error);
       return [];
     }
   }, [symbol, timeframe]);
