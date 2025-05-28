@@ -14,24 +14,19 @@ export async function getSymbols(): Promise<SymbolInfo[]> {
   try {
     const response = await apiClient.get('symbols');
     
-    console.log('Raw API response for symbols:', response);
     
     // Handle the specific response format we're seeing in the logs:
     // {success: true, data: Array(2), error: null}
     if (response && response.success === true && Array.isArray(response.data)) {
-      console.log('Using response.data array from success response');
       return response.data;
     }
     
     // Handle other possible response structures
     if (response && Array.isArray(response)) {
-      console.log('Response is already an array');
       return response;
     } else if (response && response.data && Array.isArray(response.data)) {
-      console.log('Using response.data array');
       return response.data;
     } else if (response && response.data && response.data.data && Array.isArray(response.data.data)) {
-      console.log('Using response.data.data array');
       return response.data.data;
     } else {
       // Unknown structure, but try to handle it gracefully
@@ -41,12 +36,10 @@ export async function getSymbols(): Promise<SymbolInfo[]> {
         // Try to extract any array we can find
         const possibleArrays = Object.values(response).filter(val => Array.isArray(val));
         if (possibleArrays.length > 0) {
-          console.log('Found array in response object:', possibleArrays[0]);
           return possibleArrays[0];
         }
         
         // Last resort: Create mock data for development
-        console.log('Creating mock symbol data for development');
         return [
           { symbol: 'AAPL', name: 'Apple Inc.', exchange: 'NASDAQ', type: 'stock' },
           { symbol: 'MSFT', name: 'Microsoft Corporation', exchange: 'NASDAQ', type: 'stock' },

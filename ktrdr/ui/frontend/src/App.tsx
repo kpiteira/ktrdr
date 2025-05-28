@@ -7,6 +7,7 @@ import SymbolSelector from './components/SymbolSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import { PriceDataProvider } from './context/PriceDataContext';
 import { IndicatorInfo } from './store/indicatorRegistry';
+import { createLogger } from './utils/logger';
 import './App.css';
 
 /**
@@ -17,12 +18,21 @@ import './App.css';
  * to keep charts in sync and manages the global application state.
  */
 
+const logger = createLogger('App');
+
 const App: FC = () => {
   
   // Core application state
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Log app initialization
+  useEffect(() => {
+    // Log app initialization
+    logger.info('App initialized', { symbol: selectedSymbol, timeframe: selectedTimeframe });
+    logger.debug('Debug mode is active');
+  }, []);
   
   // Chart synchronization - TEMPORARILY DISABLED for debugging
   const chartSynchronizer = useChartSynchronizer();
@@ -104,11 +114,11 @@ const App: FC = () => {
 
   // Stable error handlers for charts
   const handleMainChartError = useCallback((error: string) => {
-    console.error('[App] Main chart error:', error);
+    logger.error('Main chart error:', error);
   }, []);
 
   const handleOscillatorChartError = useCallback((error: string) => {
-    console.error('[App] Oscillator chart error:', error);
+    logger.error('Oscillator chart error:', error);
   }, []);
 
   // Split indicators by chart type with stable references  

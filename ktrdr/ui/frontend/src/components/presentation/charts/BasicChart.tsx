@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, FC } from 'react';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, LineData } from 'lightweight-charts';
+import { 
+  createChart, 
+  IChartApi, 
+  ISeriesApi, 
+  CandlestickData, 
+  LineData,
+  CandlestickSeries,
+  LineSeries
+} from 'lightweight-charts';
 import LoadingSpinner from '../../common/LoadingSpinner';
 import ErrorDisplay from '../../common/ErrorDisplay';
 
@@ -72,8 +80,8 @@ const BasicChart: FC<BasicChartProps> = ({
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const candlestickSeriesRef = useRef<any | null>(null);
+  const indicatorSeriesRef = useRef<Map<string, any>>(new Map());
 
   // Component-level error handler to prevent memory leaks
   useEffect(() => {
@@ -108,39 +116,46 @@ const BasicChart: FC<BasicChartProps> = ({
     }
 
     // Create new chart
-    const chart = createChart(chartContainerRef.current, {
-      width,
-      height,
-      layout: {
-        background: { color: '#ffffff' },
-        textColor: '#333',
-      },
-      grid: {
-        vertLines: { color: '#f0f0f0' },
-        horzLines: { color: '#f0f0f0' },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: '#cccccc',
-      },
-      timeScale: {
-        borderColor: '#cccccc',
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 5,
-        barSpacing: 6,
-        minBarSpacing: 0.5,
-        rightBarStaysOnScroll: true,
-        shiftVisibleRangeOnNewBar: false,
-      },
-    });
+    // Remove debug logging and try to catch the actual error
+    let chart;
+    try {
+      chart = createChart(chartContainerRef.current, {
+        width,
+        height,
+        layout: {
+          background: { color: '#ffffff' },
+          textColor: '#333',
+        },
+        grid: {
+          vertLines: { color: '#f0f0f0' },
+          horzLines: { color: '#f0f0f0' },
+        },
+        crosshair: {
+          mode: 1,
+        },
+        rightPriceScale: {
+          borderColor: '#cccccc',
+        },
+        timeScale: {
+          borderColor: '#cccccc',
+          timeVisible: true,
+          secondsVisible: false,
+          rightOffset: 5,
+          barSpacing: 6,
+          minBarSpacing: 0.5,
+          rightBarStaysOnScroll: true,
+          shiftVisibleRangeOnNewBar: false,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to create chart:', error);
+      throw error;
+    }
 
     chartRef.current = chart;
 
-    // Create candlestick series
-    const candlestickSeries = chart.addCandlestickSeries({
+    // Create candlestick series using v5 unified API
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
       wickUpColor: '#26a69a',
@@ -234,12 +249,15 @@ const BasicChart: FC<BasicChartProps> = ({
       let series = indicatorSeriesRef.current.get(indicator.id);
       
       if (!series && chartRef.current) {
-        series = chartRef.current.addLineSeries({
+        // Use v5 unified API for line series
+        series = chartRef.current.addSeries(LineSeries, {
           color: indicator.color || '#2196F3',
           lineWidth: 2,
           title: indicator.name || 'Indicator'
         });
-        indicatorSeriesRef.current.set(indicator.id, series);
+        if (series) {
+          indicatorSeriesRef.current.set(indicator.id, series);
+        }
       }
       
       if (series) {

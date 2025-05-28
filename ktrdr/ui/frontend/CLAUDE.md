@@ -139,17 +139,19 @@ import {
 } from 'lightweight-charts';
 ```
 
-### v5 API (Backward Compatible)
+### v5 API (Unified Series API)
 
-**Good news: v5 maintains v4 API compatibility:**
+**Important: v5 uses a unified API for creating series:**
 ```typescript
-// ✅ v4/v5 compatible approach (works in both versions)
-const candlestickSeries = chart.addCandlestickSeries(options);
-const volumeSeries = chart.addHistogramSeries(options);
-const lineSeries = chart.addLineSeries(options);
+// ✅ v5 unified API - use series type constructors
+import { CandlestickSeries, LineSeries, HistogramSeries } from 'lightweight-charts';
+
+const candlestickSeries = chart.addSeries(CandlestickSeries, options);
+const volumeSeries = chart.addSeries(HistogramSeries, options);
+const lineSeries = chart.addSeries(LineSeries, options);
 ```
 
-**Note:** The documented "unified API" (`chart.addSeries(SeriesType, options)`) and series type exports (`CandlestickSeries`, `LineSeries`, etc.) are not available in the standard v5.0.7 distribution. The v4-style API remains the working approach.
+**Note:** The v4-style methods (`chart.addCandlestickSeries()`, etc.) are no longer available in v5. Always use the unified `chart.addSeries(SeriesType, options)` approach.
 
 **2. Series Markers (now separate primitives):**
 ```typescript

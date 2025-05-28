@@ -1,5 +1,6 @@
 import { useRef, useCallback } from 'react';
 import { IChartApi } from 'lightweight-charts';
+import { createLogger } from '../utils/logger';
 
 /**
  * Custom hook for synchronizing multiple charts
@@ -7,6 +8,8 @@ import { IChartApi } from 'lightweight-charts';
  * Provides utilities for synchronizing time scale, crosshair position,
  * and zoom/pan operations across multiple TradingView charts.
  */
+
+const logger = createLogger('ChartSynchronizer');
 
 export interface ChartReference {
   id: string;
@@ -49,7 +52,7 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
             }, 100); // Quick sync for responsive feel
           }
         } catch (error) {
-          console.error('[useChartSynchronizer] Error in time range change listener:', error);
+          logger.error('Error in time range change listener:', error);
         }
       }
     });
@@ -79,7 +82,7 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
       try {
         visibleRange = sourceTimeScale.getVisibleRange();
       } catch (rangeError) {
-        console.warn('[useChartSynchronizer] Could not get visible range:', rangeError);
+        logger.debug('Could not get visible range:', rangeError);
         return;
       }
       
@@ -115,11 +118,11 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
             targetTimeScale.setVisibleRange(visibleRange);
           }
         } catch (error) {
-          console.error('[useChartSynchronizer] Sync failed for:', chartId, error);
+          logger.error(`Sync failed for: ${chartId}`, error);
         }
       });
     } catch (error) {
-      console.error('[useChartSynchronizer] Error during sync operation:', error);
+      logger.error('Error during sync operation:', error);
     } finally {
       // Reset flag after sync operations complete
       setTimeout(() => {
@@ -139,7 +142,7 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
       try {
         chartRef.chart.timeScale().fitContent();
       } catch (error) {
-        console.error('[useChartSynchronizer] Error fitting content:', error);
+        logger.error('Error fitting content:', error);
       }
     });
   }, []);
@@ -153,7 +156,7 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
         try {
           chartRef.chart.timeScale().setVisibleRange({ from, to });
         } catch (error) {
-          console.error('[useChartSynchronizer] Error setting visible range:', error);
+          logger.error('Error setting visible range:', error);
         }
       });
     } finally {
@@ -209,13 +212,13 @@ export const useBasicChartSync = (options: UseBasicChartSyncOptions) => {
     synchronizer.registerChart(primaryChartId, primaryChart, 'Primary Chart');
     synchronizer.registerChart(secondaryChartId, secondaryChart, 'Secondary Chart');
 
-    console.log('[useBasicChartSync] Charts registered for synchronization');
+    logger.debug('Charts registered for synchronization');
   }, [primaryChartId, secondaryChartId, synchronizer]);
 
   const cleanup = useCallback(() => {
     synchronizer.unregisterChart(primaryChartId);
     synchronizer.unregisterChart(secondaryChartId);
-    console.log('[useBasicChartSync] Charts unregistered');
+    logger.debug('Charts unregistered');
   }, [primaryChartId, secondaryChartId, synchronizer]);
 
   return {

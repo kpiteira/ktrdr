@@ -43,17 +43,10 @@ export const useSharedPriceData = (): UseSharedPriceDataResult => {
     const cacheKey = `${symbol}-${timeframe}`;
     const now = Date.now();
     
-    console.log('[useSharedPriceData] 🔄 loadPriceData called', {
-      symbol,
-      timeframe,
-      cacheKey,
-      hasCached: !!cacheRef.current[cacheKey]
-    });
     
     // Check cache first
     const cached = cacheRef.current[cacheKey];
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      console.log('[useSharedPriceData] 💾 Using cached data');
       setPriceData(cached.data);
       currentSymbolRef.current = symbol;
       currentTimeframeRef.current = timeframe;

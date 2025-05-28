@@ -1,5 +1,9 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { config } from '../config';
+import { createLogger } from '../utils/logger';
+
+// Create logger for API client
+const logger = createLogger('API');
 
 // When in development, we'll use relative URLs to leverage the Vite dev server proxy
 const useRelativeUrls = import.meta.env.DEV;
@@ -14,19 +18,11 @@ const axiosInstance = axios.create({
   },
 });
 
-// Prepare console log level helpers
-const logLevels = {
-  info: (message: string, ...args: any[]) => console.log(message, ...args),
-  verbose: (message: string, ...args: any[]) => console.log('[VERBOSE]', message, ...args),
-  warn: (message: string, ...args: any[]) => console.warn(message, ...args),
-  error: (message: string, ...args: any[]) => console.error(message, ...args),
-};
-
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
   (config) => {
     // Log at INFO level - browser will show this when INFO is enabled
-    logLevels.info(`API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    logger.info(`Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     return config;
   },
   (error) => {
@@ -38,13 +34,13 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => {
     // Log successful responses at INFO level for visibility
-    logLevels.info(`API Response (${response.status}): ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data);
+    logger.info(`Response (${response.status}): ${response.config.method?.toUpperCase()} ${response.config.url}`);
     return response;
   },
   (error) => {
-    logLevels.error('API request failed:', error.message);
+    logger.error('Request failed:', error.message);
     if (error.config) {
-      logLevels.error(`Failed request details: ${error.config.method?.toUpperCase()} ${error.config.baseURL}${error.config.url}`);
+      logger.error(`Failed request details: ${error.config.method?.toUpperCase()} ${error.config.baseURL}${error.config.url}`);
     }
     return Promise.reject(error);
   }
@@ -109,7 +105,7 @@ class ApiClient {
       const response: AxiosResponse<T> = await axiosInstance.get(fullPath, requestConfig);
       return response.data;
     } catch (error) {
-      logLevels.error(`GET ${endpoint} failed:`, error);
+      logger.error(`GET ${endpoint} failed:`, error);
       throw error;
     }
   }
@@ -131,7 +127,7 @@ class ApiClient {
       const response: AxiosResponse<T> = await axiosInstance.post(fullPath, data, requestConfig);
       return response.data;
     } catch (error) {
-      logLevels.error(`POST ${endpoint} failed:`, error);
+      logger.error(`POST ${endpoint} failed:`, error);
       throw error;
     }
   }

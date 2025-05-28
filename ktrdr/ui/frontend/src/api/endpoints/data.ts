@@ -57,7 +57,6 @@ export async function loadData({
   startDate?: string; 
   endDate?: string;
 }): Promise<OHLCVData> {
-  console.log(`[loadData] Requesting data for symbol=${symbol}, timeframe=${timeframe}`);
   
   try {
     const response = await apiClient.post('data/load', {
@@ -67,7 +66,6 @@ export async function loadData({
       end_date: endDate
     });
     
-    console.log(`[loadData] Raw API response:`, response);
     
     // Handle different possible response structures
     let data;
@@ -75,19 +73,15 @@ export async function loadData({
     if (response.success && response.data) {
       // Standard API envelope: {success: true, data: {...}, error: null}
       data = response.data;
-      console.log('[loadData] Using data from success envelope');
     } else if (response.data && response.data.data) {
       // Nested data structure: {data: {data: {...}}}
       data = response.data.data;
-      console.log('[loadData] Using nested data.data structure');
     } else if (Array.isArray(response.data)) {
       // Direct array response
       data = response.data;
-      console.log('[loadData] Using array data structure');
     } else {
       // Direct data object
       data = response;
-      console.log('[loadData] Using direct data structure');
     }
     
     // Validate the data structure has required properties
@@ -121,7 +115,6 @@ export async function loadData({
     
     // If we have sample data for this symbol, use it as fallback even on error
     if (SAMPLE_DATA[symbol]) {
-      console.log(`[loadData] Using sample data fallback after error for ${symbol}`);
       return SAMPLE_DATA[symbol];
     }
     

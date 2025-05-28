@@ -67,7 +67,6 @@ export const config = {
 };
 
 // Add a debug log to verify config values
-console.log('Config initialized:', config);
 
 // Export as default and named export to ensure it can be imported either way
 export default config;

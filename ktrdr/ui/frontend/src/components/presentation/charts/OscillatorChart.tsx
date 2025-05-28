@@ -1,5 +1,12 @@
 import { useEffect, useRef, FC } from 'react';
-import { createChart, IChartApi, ISeriesApi, LineData } from 'lightweight-charts';
+import { 
+  createChart, 
+  IChartApi, 
+  ISeriesApi, 
+  LineData,
+  LineSeries,
+  HistogramSeries
+} from 'lightweight-charts';
 import LoadingSpinner from '../../common/LoadingSpinner';
 import ErrorDisplay from '../../common/ErrorDisplay';
 import EmptyState from '../../common/EmptyState';
@@ -146,7 +153,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
 
     // Add reference lines (like RSI 30/70 levels)
     defaultReferenceLines.forEach(line => {
-      const referenceSeries = chart.addLineSeries({
+      const referenceSeries = chart.addSeries(LineSeries, {
         color: line.color,
         lineWidth: 1,
         lineStyle: 2, // Dashed line
@@ -213,7 +220,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
       let series = indicatorSeriesRef.current.get(indicator.id);
       
       if (!series && chartRef.current) {
-        series = chartRef.current.addLineSeries({
+        series = chartRef.current.addSeries(LineSeries, {
           color: indicator.color,
           lineWidth: 2,
           title: indicator.name

@@ -34,7 +34,6 @@ export const useLocalState = <T>(
   const lastParentValueRef = useRef<T>(initialValue);
 
   const setLocalValue = useCallback((value: T) => {
-    console.log('[useLocalState] Setting local value:', value);
     setLocalValueState(value);
     setIsLocallyModified(true);
     
@@ -46,7 +45,6 @@ export const useLocalState = <T>(
     // Debounce the parent update
     if (onValueChange) {
       timeoutRef.current = setTimeout(() => {
-        console.log('[useLocalState] Calling onValueChange after debounce:', value);
         onValueChange(value);
         timeoutRef.current = null;
       }, debounceMs);
@@ -54,7 +52,6 @@ export const useLocalState = <T>(
   }, [onValueChange, debounceMs]);
 
   const syncWithParent = useCallback((parentValue: T) => {
-    console.log('[useLocalState] Syncing with parent:', parentValue, 'current local:', localValue, 'modified:', isLocallyModified);
     
     // Only sync if we haven't locally modified the value recently
     if (!isLocallyModified || JSON.stringify(parentValue) !== JSON.stringify(lastParentValueRef.current)) {
@@ -65,7 +62,6 @@ export const useLocalState = <T>(
   }, [localValue, isLocallyModified]);
 
   const resetToParent = useCallback((parentValue: T) => {
-    console.log('[useLocalState] Resetting to parent:', parentValue);
     
     // Clear any pending timeout
     if (timeoutRef.current) {
@@ -103,7 +99,6 @@ export const useLocalParameterState = (options: UseLocalParameterStateOptions) =
   const [modifiedParameters, setModifiedParameters] = useState<Set<string>>(new Set());
 
   const updateParameter = useCallback((parameterName: string, value: any) => {
-    console.log('[useLocalParameterState] Updating parameter:', indicatorId, parameterName, value);
     
     setLocalParameters(prev => ({
       ...prev,
@@ -118,7 +113,6 @@ export const useLocalParameterState = (options: UseLocalParameterStateOptions) =
   }, [indicatorId, onParameterChange]);
 
   const syncWithParentParameters = useCallback((newParameters: Record<string, any>) => {
-    console.log('[useLocalParameterState] Syncing with parent parameters:', indicatorId, newParameters);
     
     // Only update parameters that haven't been locally modified
     const updatedParameters = { ...localParameters };
@@ -137,7 +131,6 @@ export const useLocalParameterState = (options: UseLocalParameterStateOptions) =
   }, [localParameters, modifiedParameters]);
 
   const resetParametersToParent = useCallback((newParameters: Record<string, any>) => {
-    console.log('[useLocalParameterState] Resetting parameters to parent:', indicatorId, newParameters);
     setLocalParameters(newParameters);
     setModifiedParameters(new Set());
   }, [indicatorId]);

@@ -3,6 +3,7 @@ import { IChartApi, CandlestickData, LineData, UTCTimestamp } from 'lightweight-
 import BasicChart, { ChartData, IndicatorSeries, ChartInfo } from '../presentation/charts/BasicChart';
 import { useChartSynchronizer } from '../../hooks/useChartSynchronizer';
 import { IndicatorInfo } from '../../store/indicatorRegistry';
+import { createLogger } from '../../utils/logger';
 
 /**
  * Container component for the basic price chart
@@ -11,6 +12,8 @@ import { IndicatorInfo } from '../../store/indicatorRegistry';
  * and state management, while delegating the chart rendering to the 
  * BasicChart presentation component.
  */
+
+const logger = createLogger('BasicChartContainer');
 
 interface BasicChartContainerProps {
   // Chart configuration

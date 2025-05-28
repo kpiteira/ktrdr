@@ -3,6 +3,7 @@ import { IChartApi, LineData, UTCTimestamp, CandlestickData } from 'lightweight-
 import OscillatorChart, { OscillatorData, OscillatorIndicatorSeries } from '../presentation/charts/OscillatorChart';
 import { useChartSynchronizer } from '../../hooks/useChartSynchronizer';
 import { IndicatorInfo, getIndicatorConfig } from '../../store/indicatorRegistry';
+import { createLogger } from '../../utils/logger';
 
 /**
  * Generic container component for oscillator charts
@@ -11,6 +12,8 @@ import { IndicatorInfo, getIndicatorConfig } from '../../store/indicatorRegistry
  * and state management for oscillator-type indicators (RSI, MACD, Stochastic, etc.),
  * while delegating the chart rendering to the OscillatorChart presentation component.
  */
+
+const logger = createLogger('OscillatorChartContainer');
 
 interface OscillatorChartContainerProps {
   // Chart configuration
