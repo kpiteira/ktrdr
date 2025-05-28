@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
+# Backup files
+*.old
+*-old.*
+*.bak
+*.tmp
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
