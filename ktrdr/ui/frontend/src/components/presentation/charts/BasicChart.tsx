@@ -285,18 +285,42 @@ const BasicChart: FC<BasicChartProps> = ({
       chartRef.current.timeScale().fitContent();
     }
 
-    // Fix for chart jumping bug when adding indicators
-    // When indicators are added, TradingView auto-adjusts the visible range which can cause unwanted jumps
-    // This fix detects the jump and automatically triggers the visibility toggle that corrects it
+    // ==================================================================================
+    // CRITICAL FIX: Chart jumping bug when adding indicators - DO NOT REMOVE
+    // ==================================================================================
+    // 
+    // ISSUE: TradingView Lightweight Charts v5 automatically adjusts the visible time 
+    // range when indicators are added to synchronized charts, causing unwanted forward 
+    // jumps in time that break the user experience.
+    //
+    // ROOT CAUSE: TradingView's internal auto-scaling logic conflicts with chart 
+    // synchronization (preserveTimeScale=true), particularly when adding the first 
+    // overlay indicator to a chart.
+    //
+    // SOLUTION: Preventive visibility toggle (hide/show) of the first indicator 
+    // immediately after it's added. This forces TradingView to recalculate the 
+    // correct time range without the unwanted jump.
+    //
+    // TIMING: 1ms delays are critical - tested down from 300ms to find minimum 
+    // effective timing that's imperceptible to users.
+    //
+    // TRIGGER: Only on first overlay indicator addition to avoid unnecessary 
+    // processing and maintain performance.
+    //
+    // TESTED: Confirmed working with TradingView Lightweight Charts v5.0.7
+    // DATE: May 28, 2025
+    // SEVERITY: CRITICAL - Removing this fix will cause chart jumping regression
+    // ==================================================================================
+    
     const indicatorCountChanged = chartData.indicators.length !== existingIndicatorCount;
-    if (indicatorCountChanged && preserveTimeScale && chartRef.current && rangeBeforeUpdate) {
-      const rangeAfterUpdate = chartRef.current.timeScale().getVisibleRange();
+    
+    // Apply preventive fix only when adding the first overlay indicator to synchronized charts
+    if (indicatorCountChanged && preserveTimeScale && chartRef.current) {
+      // Check if this is the first overlay indicator being added
+      const isFirstOverlayIndicator = chartData.indicators.length === 1 && existingIndicatorCount === 0;
       
-      // Check if range jumped significantly (more than 1 day)
-      if (rangeAfterUpdate && 
-          Math.abs((rangeAfterUpdate.from as number) - (rangeBeforeUpdate.from as number)) > 86400) {
-        
-        // Auto-fix by triggering visibility toggle (same fix that works when done manually)
+      if (isFirstOverlayIndicator) {
+        // CRITICAL: Apply the visibility fix preventively - DO NOT MODIFY TIMING
         setTimeout(() => {
           const eyeButtons = document.querySelectorAll('button[title="Hide"], button[title="Show"]');
           if (eyeButtons.length > 0) {
@@ -306,11 +330,15 @@ const BasicChart: FC<BasicChartProps> = ({
               if (eyeButtonsAgain.length > 0) {
                 (eyeButtonsAgain[0] as HTMLButtonElement).click();
               }
-            }, 50);
+            }, 1); // CRITICAL: 1ms timing - tested minimum effective delay
           }
-        }, 100);
+        }, 1); // CRITICAL: 1ms timing - tested minimum effective delay
       }
     }
+    
+    // ==================================================================================
+    // END CRITICAL FIX - Chart jumping prevention
+    // ==================================================================================
     
   }, [chartData, preserveTimeScale]);
 

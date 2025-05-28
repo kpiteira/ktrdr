@@ -83,3 +83,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use vectorized operations (pandas, numpy) for optimal performance
 - Register new indicators in `tests/indicators/indicator_registry.py`
 - Create reference datasets for automated testing
+
+## CRITICAL FIXES - DO NOT REMOVE
+
+### Chart Jumping Bug Prevention (CRITICAL)
+
+**Location**: `ktrdr/ui/frontend/src/components/presentation/charts/BasicChart.tsx` lines 288-341
+
+**Issue**: TradingView Lightweight Charts v5 automatically adjusts visible time range when indicators are added to synchronized charts, causing unwanted forward jumps in time that break user experience.
+
+**Solution**: Preventive visibility toggle (hide/show) of first indicator after addition. Forces TradingView to recalculate correct time range without jumping.
+
+**Key Details**:
+- Only triggers on first overlay indicator addition to synchronized charts (`preserveTimeScale=true`)
+- Uses precisely timed 1ms delays (tested minimum effective timing)
+- Completely imperceptible to users but prevents chart jumping
+- **SEVERITY: CRITICAL** - Removing this fix will cause immediate regression
+
+**Testing**: Add first indicator (SMA, EMA, etc.) and verify no time range jumping occurs.
+
+**Last Verified**: May 28, 2025 with TradingView Lightweight Charts v5.0.7
