@@ -208,6 +208,10 @@ const BasicChart: FC<BasicChartProps> = ({
       return;
     }
 
+    // Capture the current range to detect jumps
+    const rangeBeforeUpdate = chartRef.current.timeScale().getVisibleRange();
+    const existingIndicatorCount = indicatorSeriesRef.current.size;
+
     // Update candlestick data
     if (chartData.candlestick && chartData.candlestick.length > 0) {
       const validData = chartData.candlestick.filter(item => 
@@ -279,6 +283,33 @@ const BasicChart: FC<BasicChartProps> = ({
     // Fit content after data update (only if not preserving time scale for sync)
     if (!preserveTimeScale && chartRef.current) {
       chartRef.current.timeScale().fitContent();
+    }
+
+    // Fix for chart jumping bug when adding indicators
+    // When indicators are added, TradingView auto-adjusts the visible range which can cause unwanted jumps
+    // This fix detects the jump and automatically triggers the visibility toggle that corrects it
+    const indicatorCountChanged = chartData.indicators.length !== existingIndicatorCount;
+    if (indicatorCountChanged && preserveTimeScale && chartRef.current && rangeBeforeUpdate) {
+      const rangeAfterUpdate = chartRef.current.timeScale().getVisibleRange();
+      
+      // Check if range jumped significantly (more than 1 day)
+      if (rangeAfterUpdate && 
+          Math.abs((rangeAfterUpdate.from as number) - (rangeBeforeUpdate.from as number)) > 86400) {
+        
+        // Auto-fix by triggering visibility toggle (same fix that works when done manually)
+        setTimeout(() => {
+          const eyeButtons = document.querySelectorAll('button[title="Hide"], button[title="Show"]');
+          if (eyeButtons.length > 0) {
+            (eyeButtons[0] as HTMLButtonElement).click();
+            setTimeout(() => {
+              const eyeButtonsAgain = document.querySelectorAll('button[title="Hide"], button[title="Show"]');
+              if (eyeButtonsAgain.length > 0) {
+                (eyeButtonsAgain[0] as HTMLButtonElement).click();
+              }
+            }, 50);
+          }
+        }, 100);
+      }
     }
     
   }, [chartData, preserveTimeScale]);
