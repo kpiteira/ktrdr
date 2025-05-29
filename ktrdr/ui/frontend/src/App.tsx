@@ -1,8 +1,9 @@
-import React, { FC, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { FC, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useChartSynchronizer } from './hooks/useChartSynchronizer';
 import IndicatorSidebarContainer from './components/containers/IndicatorSidebarContainer';
 import BasicChartContainer from './components/containers/BasicChartContainer';
 import OscillatorChartContainer from './components/containers/OscillatorChartContainer';
+import LeftSidebar from './components/presentation/layout/LeftSidebar';
 import SymbolSelector from './components/SymbolSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import { PriceDataProvider } from './context/PriceDataContext';
@@ -25,7 +26,9 @@ const App: FC = () => {
   // Core application state
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [currentMode, setCurrentMode] = useState<'research' | 'train' | 'run'>('research');
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
   
   // App initialization
   useEffect(() => {
@@ -76,6 +79,19 @@ const App: FC = () => {
     
     // Clear time range when symbol changes
     setTimeRange(null);
+  }, []);
+
+  // Handle mode changes
+  const handleModeChange = useCallback((mode: 'research' | 'train' | 'run') => {
+    setCurrentMode(mode);
+    logger.info('Mode changed', { mode });
+  }, []);
+
+  // Handle timeframe changes from left sidebar
+  const handleTimeframeChange = useCallback((timeframe: string) => {
+    setSelectedTimeframe(timeframe);
+    setTimeRange(null); // Clear time range when timeframe changes
+    logger.info('Timeframe changed', { timeframe });
   }, []);
 
   // Handle time range changes from the main chart
@@ -152,13 +168,13 @@ const App: FC = () => {
   }, []);
   
   // Memoize chart dimensions to prevent unnecessary re-renders
-  // Calculate available width based on sidebar state
+  // Calculate available width based on both sidebar states
   const chartDimensions = useMemo(() => {
-    // Calculate available width: viewport - sidebar - padding
-    // Collapsed sidebar: 40px, Expanded sidebar: ~320px, Padding: 32px (1rem each side)
-    const sidebarWidth = sidebarCollapsed ? 40 : 320;
+    // Calculate available width: viewport - left sidebar - right sidebar - padding
+    const leftSidebarWidth = leftSidebarCollapsed ? 50 : 220;
+    const rightSidebarWidth = rightSidebarCollapsed ? 40 : 280;
     const padding = 32; // 1rem padding on each side
-    const availableWidth = windowWidth - sidebarWidth - padding;
+    const availableWidth = windowWidth - leftSidebarWidth - rightSidebarWidth - padding;
     
     const calculatedWidth = Math.max(600, availableWidth);
     
@@ -169,129 +185,140 @@ const App: FC = () => {
         rsi: 200
       }
     };
-  }, [sidebarCollapsed, windowWidth]);
+  }, [leftSidebarCollapsed, rightSidebarCollapsed, windowWidth]);
 
 
   // Calculate chart key to force re-mount on dimension changes
   const getChartKey = useCallback((chartType: string) => {
-    return `${chartType}-${sidebarCollapsed}-${chartDimensions.width}`;
-  }, [sidebarCollapsed, chartDimensions.width]);
+    return `${chartType}-${leftSidebarCollapsed}-${rightSidebarCollapsed}-${chartDimensions.width}`;
+  }, [leftSidebarCollapsed, rightSidebarCollapsed, chartDimensions.width]);
 
   return (
     <ErrorBoundary>
       <PriceDataProvider>
         <div className="App" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <header className="App-header" style={{ 
-          padding: '0.75rem 1rem', 
-          backgroundColor: '#1976d2', 
-          color: 'white',
-          borderBottom: '1px solid #e0e0e0',
-          flexShrink: 0
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1 style={{ margin: 0, fontSize: '1.25rem' }}>
-              KTRDR Trading Research - Slice 6.5 (Container/Presentation)
-            </h1>
-            <SymbolSelector 
-              selectedSymbol={selectedSymbol}
-              onSymbolChange={handleSymbolChange}
-            />
-          </div>
-        </header>
-        
-        {/* Main content area */}
-        <main style={{ 
-          display: 'flex', 
-          height: 'calc(100vh - 60px)', 
-          overflow: 'hidden'
-        }}>
-          {/* Indicator Sidebar Container */}
-          <ErrorBoundary>
-            <IndicatorSidebarContainer
-              isCollapsed={sidebarCollapsed}
-              onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-              onIndicatorAdded={handleIndicatorAdded}
-              onIndicatorRemoved={handleIndicatorRemoved}
-              onIndicatorUpdated={handleIndicatorUpdated}
-              onIndicatorToggled={handleIndicatorToggled}
-            />
-          </ErrorBoundary>
-          
-          {/* Chart Area */}
-          <div style={{ 
-            flex: 1, 
-            padding: '1rem',
-            overflow: 'auto',
-            backgroundColor: '#fafafa',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1rem'
+          {/* Header */}
+          <header className="App-header" style={{ 
+            padding: '0.75rem 1rem', 
+            backgroundColor: '#1976d2', 
+            color: 'white',
+            borderBottom: '1px solid #e0e0e0',
+            flexShrink: 0
           }}>
-            {/* Main Price Chart Container - Overlay indicators only */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h1 style={{ margin: 0, fontSize: '1.25rem' }}>
+                KTRDR Trading Research - Slice 7 (Full Sidebar Layout)
+              </h1>
+              <SymbolSelector 
+                selectedSymbol={selectedSymbol}
+                onSymbolChange={handleSymbolChange}
+              />
+            </div>
+          </header>
+          
+          {/* Main content area */}
+          <main style={{ 
+            display: 'flex', 
+            height: 'calc(100vh - 60px)', 
+            overflow: 'hidden'
+          }}>
+            {/* Left Sidebar - Mode selection and navigation */}
             <ErrorBoundary>
-              <BasicChartContainer
-                key={getChartKey('main-chart')}
-                symbol={selectedSymbol}
-                timeframe={selectedTimeframe}
-                indicators={overlayIndicators}
-                chartSynchronizer={chartSynchronizer}
-                chartId="main-chart"
-                width={chartDimensions.width}
-                height={chartDimensions.height.main}
-                initialTimeRange={lastKnownTimeRangeRef.current} // Use the last known range from ref
-                onTimeRangeChange={handleTimeRangeChange}
-                onError={handleMainChartError}
+              <LeftSidebar
+                currentMode={currentMode}
+                isCollapsed={leftSidebarCollapsed}
+                selectedTimeframe={selectedTimeframe}
+                onModeChange={handleModeChange}
+                onTimeframeChange={handleTimeframeChange}
+                onToggleCollapse={() => setLeftSidebarCollapsed(!leftSidebarCollapsed)}
               />
             </ErrorBoundary>
-
-            {/* Oscillator Chart Container - Generic panel for all oscillator indicators */}
-            {separateIndicators.length > 0 && (
+            
+            {/* Chart Area */}
+            <div style={{ 
+              flex: 1, 
+              padding: '1rem',
+              overflow: 'auto',
+              backgroundColor: '#fafafa',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem'
+            }}>
+              {/* Main Price Chart Container - Overlay indicators only */}
               <ErrorBoundary>
-                <OscillatorChartContainer
-                  key={getChartKey('oscillator-chart')}
+                <BasicChartContainer
+                  key={getChartKey('main-chart')}
                   symbol={selectedSymbol}
                   timeframe={selectedTimeframe}
-                  indicators={separateIndicators}
+                  indicators={overlayIndicators}
                   chartSynchronizer={chartSynchronizer}
-                  chartId="oscillator-chart"
-                  timeRange={timeRange}
+                  chartId="main-chart"
                   width={chartDimensions.width}
-                  height={chartDimensions.height.rsi}
-                  onChartReady={handleOscillatorChartReady}
-                  onError={handleOscillatorChartError}
+                  height={chartDimensions.height.main}
+                  initialTimeRange={lastKnownTimeRangeRef.current} // Use the last known range from ref
+                  onTimeRangeChange={handleTimeRangeChange}
+                  onError={handleMainChartError}
                 />
               </ErrorBoundary>
-            )}
 
+              {/* Oscillator Chart Container - Generic panel for all oscillator indicators */}
+              {separateIndicators.length > 0 && (
+                <ErrorBoundary>
+                  <OscillatorChartContainer
+                    key={getChartKey('oscillator-chart')}
+                    symbol={selectedSymbol}
+                    timeframe={selectedTimeframe}
+                    indicators={separateIndicators}
+                    chartSynchronizer={chartSynchronizer}
+                    chartId="oscillator-chart"
+                    timeRange={timeRange}
+                    width={chartDimensions.width}
+                    height={chartDimensions.height.rsi}
+                    onChartReady={handleOscillatorChartReady}
+                    onError={handleOscillatorChartError}
+                  />
+                </ErrorBoundary>
+              )}
 
-            {/* Chart instructions for empty state */}
-            {indicators.length === 0 && (
-              <div style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                color: '#666',
-                fontSize: '1rem'
-              }}>
-                <div>
-                  <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📈</div>
-                  <div style={{ marginBottom: '0.5rem', fontWeight: '500' }}>
-                    Welcome to KTRDR Trading Research
-                  </div>
-                  <div style={{ fontSize: '0.9rem' }}>
-                    Add indicators from the sidebar to start analyzing {selectedSymbol} data
-                  </div>
-                  <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: '#999' }}>
-                    Try adding an SMA or RSI indicator to get started
+              {/* Chart instructions for empty state */}
+              {indicators.length === 0 && (
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  color: '#666',
+                  fontSize: '1rem'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📈</div>
+                    <div style={{ marginBottom: '0.5rem', fontWeight: '500' }}>
+                      Welcome to KTRDR Trading Research
+                    </div>
+                    <div style={{ fontSize: '0.9rem' }}>
+                      Add indicators from the right sidebar to start analyzing {selectedSymbol} data
+                    </div>
+                    <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: '#999' }}>
+                      Try adding an SMA or RSI indicator to get started
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </main>
+              )}
+            </div>
+
+            {/* Right Sidebar - Indicator management */}
+            <ErrorBoundary>
+              <IndicatorSidebarContainer
+                isCollapsed={rightSidebarCollapsed}
+                onToggleCollapse={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+                onIndicatorAdded={handleIndicatorAdded}
+                onIndicatorRemoved={handleIndicatorRemoved}
+                onIndicatorUpdated={handleIndicatorUpdated}
+                onIndicatorToggled={handleIndicatorToggled}
+              />
+            </ErrorBoundary>
+          </main>
         </div>
       </PriceDataProvider>
     </ErrorBoundary>
