@@ -3,7 +3,7 @@ Synchronous IB Data Fetcher based on proven working pattern.
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Tuple
 import pandas as pd
 from ib_insync import Stock, Forex, Contract
@@ -361,15 +361,68 @@ class IbDataRangeDiscovery:
             logger.debug(f"Error checking data at {date} for {symbol}: {e}")
             return False
     
+    def _get_head_timestamp_direct(self, symbol: str, timeframe: str) -> Optional[datetime]:
+        """
+        Get earliest data point using IB's reqHeadTimeStamp API.
+        
+        This is much faster and more accurate than binary search.
+        
+        Args:
+            symbol: Symbol to search for
+            timeframe: Timeframe string (not used for head timestamp)
+            
+        Returns:
+            Earliest available date or None if API fails
+        """
+        try:
+            # Check if data fetcher and IB connection are available
+            if not (self.data_fetcher and self.data_fetcher.connection and self.data_fetcher.connection.ib):
+                logger.debug("IB connection not available for head timestamp")
+                return None
+            
+            if not self.data_fetcher.connection.is_connected():
+                logger.debug("IB connection not active for head timestamp")
+                return None
+            
+            # Get contract for the symbol
+            contract = self.data_fetcher.get_contract(symbol)
+            
+            # Use reqHeadTimeStamp API - much faster than binary search!
+            logger.debug(f"Requesting head timestamp for {symbol}")
+            head_timestamp = self.data_fetcher.connection.ib.reqHeadTimeStamp(
+                contract=contract,
+                whatToShow="TRADES",
+                useRTH=False,  # Include all trading hours
+                formatDate=1   # Return as datetime
+            )
+            
+            if head_timestamp:
+                # Ensure it's timezone-aware
+                if hasattr(head_timestamp, 'tzinfo') and head_timestamp.tzinfo is None:
+                    head_timestamp = head_timestamp.replace(tzinfo=timezone.utc)
+                
+                logger.info(f"Head timestamp for {symbol}: {head_timestamp}")
+                return head_timestamp
+            else:
+                logger.warning(f"No head timestamp returned for {symbol}")
+                return None
+                
+        except Exception as e:
+            logger.debug(f"Head timestamp request failed for {symbol}: {e}")
+            return None
+    
     def get_earliest_data_point(self, symbol: str, timeframe: str, 
                                max_lookback_years: int = 20) -> Optional[datetime]:
         """
-        Find the earliest available data point for a symbol using binary search.
+        Find the earliest available data point for a symbol.
+        
+        Uses IB's reqHeadTimeStamp API for fast, accurate results with
+        binary search as fallback for older IB versions.
         
         Args:
             symbol: Symbol to search for
             timeframe: Timeframe string (e.g., "1 day", "1 hour")
-            max_lookback_years: Maximum years to look back
+            max_lookback_years: Maximum years to look back (used for binary search fallback)
             
         Returns:
             Earliest available date or None if no data found
@@ -381,6 +434,33 @@ class IbDataRangeDiscovery:
         if cached_range:
             logger.debug(f"Using cached range for {symbol}:{timeframe}")
             return cached_range[0]
+        
+        # Try IB's reqHeadTimeStamp API first (much faster!)
+        head_timestamp = self._get_head_timestamp_direct(symbol, timeframe)
+        if head_timestamp:
+            # Cache the result with current time as end
+            latest_date = datetime.now(timezone.utc)
+            self._cache_range(symbol, timeframe, head_timestamp, latest_date)
+            return head_timestamp
+        
+        # Fallback to binary search if reqHeadTimeStamp fails
+        logger.info(f"Head timestamp failed for {symbol}, falling back to binary search")
+        return self._get_earliest_binary_search(symbol, timeframe, max_lookback_years)
+    
+    def _get_earliest_binary_search(self, symbol: str, timeframe: str, 
+                                   max_lookback_years: int = 20) -> Optional[datetime]:
+        """
+        Find earliest data point using binary search (fallback method).
+        
+        Args:
+            symbol: Symbol to search for
+            timeframe: Timeframe string
+            max_lookback_years: Maximum years to look back
+            
+        Returns:
+            Earliest available date or None if no data found
+        """
+        logger.debug(f"Using binary search fallback for {symbol} at {timeframe}")
         
         # Set up binary search bounds
         end_date = datetime.now()
