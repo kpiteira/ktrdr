@@ -12,7 +12,7 @@ This document protects a critical fix for chart jumping bug in TradingView Light
 - **Frequency**: Occurs consistently when adding first overlay indicator to synchronized charts
 
 ### Fix Location
-**File**: `ktrdr/ui/frontend/src/components/presentation/charts/BasicChart.tsx`  
+**File**: `frontend/src/components/presentation/charts/BasicChart.tsx`  
 **Lines**: 288-341  
 **Section**: Marked with "CRITICAL FIX" comment blocks
 

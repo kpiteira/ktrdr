@@ -29,8 +29,8 @@ echo "Building frontend dev image..."
 docker build \
   --build-arg BUILDKIT_INLINE_CACHE=1 \
   --cache-from ktrdr-frontend:dev \
-  -f ktrdr/ui/frontend/Dockerfile.dev \
-  -t ktrdr-frontend:dev ./ktrdr/ui/frontend
+  -f frontend/Dockerfile.dev \
+  -t ktrdr-frontend:dev ./frontend
 
 echo "=========================================="
 echo "Build complete! Run './docker_dev.sh start' to start the environment."

@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Python Tests**: `pytest` (all tests), `pytest tests/path/to/test.py` (specific test)
 - **Python Linting**: `black ktrdr tests` (formatting), `mypy ktrdr` (type checking)
 - **Frontend Dev**: Use Docker containers (see docker-compose.yml), NOT `npm run dev`
-- **Frontend Tests**: `cd ktrdr/ui/frontend && npm run test`
-- **Frontend Lint**: `cd ktrdr/ui/frontend && npm run lint`
-- **Frontend Typecheck**: `cd ktrdr/ui/frontend && npm run typecheck`
+- **Frontend Tests**: `cd frontend && npm run test`
+- **Frontend Lint**: `cd frontend && npm run lint`
+- **Frontend Typecheck**: `cd frontend && npm run typecheck`
 
 ## Architecture Overview
 
@@ -68,7 +68,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Frontend Patterns
 
-- Create components following examples in `ktrdr/ui/frontend/src/components`
+- Create components following examples in `frontend/src/components`
 - Structure components in hierarchy: base, feature, page, layout
 - Use Redux slices with async thunks for API calls
 - Follow TypeScript interface definitions in `src/types`
@@ -88,7 +88,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Chart Jumping Bug Prevention (CRITICAL)
 
-**Location**: `ktrdr/ui/frontend/src/components/presentation/charts/BasicChart.tsx` lines 288-341
+**Location**: `frontend/src/components/presentation/charts/BasicChart.tsx` lines 288-341
 
 **Issue**: TradingView Lightweight Charts v5 automatically adjusts visible time range when indicators are added to synchronized charts, causing unwanted forward jumps in time that break user experience.
 

@@ -44,7 +44,7 @@ services:
   # Frontend React/TypeScript service - Production configuration
   frontend:
     build:
-      context: ./ktrdr/ui/frontend
+      context: ./frontend
       dockerfile: Dockerfile
       args:
         - NODE_ENV=production

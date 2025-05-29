@@ -135,8 +135,8 @@ function rebuild_frontend() {
     docker build \
       --build-arg BUILDKIT_INLINE_CACHE=1 \
       --cache-from ktrdr-frontend:dev \
-      -f ktrdr/ui/frontend/Dockerfile.dev \
-      -t ktrdr-frontend:dev ./ktrdr/ui/frontend
+      -f frontend/Dockerfile.dev \
+      -t ktrdr-frontend:dev ./frontend
     docker-compose up -d frontend
     echo -e "${GREEN}Frontend container rebuilt and started!${NC}"
 }
