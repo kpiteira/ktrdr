@@ -46,7 +46,7 @@ class IbConfig:
         "15 mins": 14,     # 2 weeks
         "20 mins": 20,     # 20 days (conservative)
         "30 mins": 30,     # 1 month
-        "1 hour": 30,      # 1 month
+        "1 hour": 1,       # 1 day (IB limit for hourly data)
         "2 hours": 60,     # 2 months (conservative)
         "3 hours": 90,     # 3 months (conservative)
         "4 hours": 120,    # 4 months (conservative)

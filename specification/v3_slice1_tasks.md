@@ -301,6 +301,42 @@ Each task must:
 - Run tests before committing
 - Update requirements.txt with new dependencies
 
+## CRITICAL: Real Integration Test Checkpoints
+
+**Key Learning**: Unit tests alone are insufficient for IB integration. Real IB connection testing revealed critical issues that mocks couldn't catch.
+
+### Issues Discovered Through Real Testing:
+
+1. **Duration Format Issue** (FIXED) - IB requires "1 W", "1 M" format, not seconds
+2. **Event Loop Conflicts** (ACTIVE) - `asyncio.run()` fails when called from existing event loop
+3. **Timezone Mismatches** (ACTIVE) - IB data (UTC) vs local CSV (naive datetime) comparison errors
+4. **Connection Resilience** - Need real port testing (4002, 7497, 7496)
+
+### Mandatory Real Test Checkpoints:
+
+**After Each Task**: Run `uv run python scripts/test_ib_integration.py`
+
+**Task 1-4 (Completed)**: 
+- ✅ Connection works but has event loop issues
+- ✅ Duration format fixed 
+- ❌ Timezone handling needs fix
+- ❌ Event loop conflicts need resolution
+
+**Task 5+ (Future)**:
+- Must test API endpoints with live IB connection
+- Must test symbol validation with real forex symbols (EUR.USD)
+- Must verify fallback logic under various failure conditions
+
+### Integration Test Requirements:
+
+1. **Real IB Gateway**: Tests must run against actual IB Gateway/TWS
+2. **Multiple Ports**: Test paper (7497, 4002) and live (7496) configurations  
+3. **Mixed Asset Types**: Test forex (EUR.USD), stocks (AAPL), futures
+4. **Failure Scenarios**: Test connection drops, invalid symbols, rate limits
+5. **Data Quality**: Verify actual market data integrity and timezone handling
+
+**IMPORTANT**: Move Task 10 (Integration Tests) to run incrementally after every 2-3 tasks, not at the end.
+
 ## Additional Notes
 
 - **Forex Priority**: When implementing symbol validation, test with EUR.USD first

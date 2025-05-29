@@ -40,6 +40,7 @@ from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.ib_connection import IbConnectionManager
 from ktrdr.data.ib_data_fetcher import IbDataFetcher
 from ktrdr.config.ib_config import get_ib_config
+from ib_insync import util
 
 # Get module logger
 logger = get_logger(__name__)
@@ -275,6 +276,61 @@ class DataManager:
             repair=repair
         )
     
+    def _normalize_timezone(self, dt: Union[str, datetime, pd.Timestamp, None], default_tz: str = 'UTC') -> Optional[pd.Timestamp]:
+        """
+        Normalize datetime to UTC timezone-aware timestamp.
+        
+        Args:
+            dt: Input datetime (string, datetime, or Timestamp)
+            default_tz: Default timezone to assume for naive datetimes
+            
+        Returns:
+            UTC timezone-aware Timestamp or None
+        """
+        if dt is None:
+            return None
+            
+        if isinstance(dt, str):
+            dt = pd.to_datetime(dt)
+            
+        if isinstance(dt, datetime):
+            dt = pd.Timestamp(dt)
+            
+        # If timezone-naive, assume it's in the default timezone
+        if dt.tz is None:
+            dt = dt.tz_localize(default_tz)
+        
+        # Convert to UTC
+        return dt.tz_convert('UTC')
+    
+    def _normalize_dataframe_timezone(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Normalize DataFrame index to UTC timezone-aware.
+        
+        Args:
+            df: DataFrame with datetime index
+            
+        Returns:
+            DataFrame with UTC timezone-aware index
+        """
+        if df.empty:
+            return df
+            
+        df_copy = df.copy()
+        
+        # Ensure index is datetime
+        if not pd.api.types.is_datetime64_any_dtype(df_copy.index):
+            df_copy.index = pd.to_datetime(df_copy.index)
+            
+        # If timezone-naive, assume UTC
+        if df_copy.index.tz is None:
+            df_copy.index = df_copy.index.tz_localize('UTC')
+        else:
+            # Convert to UTC
+            df_copy.index = df_copy.index.tz_convert('UTC')
+            
+        return df_copy
+
     @log_entry_exit(logger=logger, log_args=True)
     def _load_with_fallback(
         self, 
@@ -304,23 +360,30 @@ class DataManager:
         ib_data = None
         local_data = None
         
-        # Convert string dates to datetime if needed
-        if isinstance(start_date, str):
-            start_date = pd.to_datetime(start_date)
-        if isinstance(end_date, str):
-            end_date = pd.to_datetime(end_date)
+        # Normalize dates to UTC timezone-aware timestamps
+        if start_date is None:
+            # Default to last 5 days if no start date provided (conservative for IB limits)
+            start_date = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=5)
+        else:
+            start_date = self._normalize_timezone(start_date)
             
-        # Strategy 1: Try IB first if available and connected
+        if end_date is None:
+            # Default to now if no end date provided
+            end_date = pd.Timestamp.now(tz='UTC')
+        else:
+            end_date = self._normalize_timezone(end_date)
+            
+        # Strategy 1: Try IB first if available
         if self.ib_fetcher and self.ib_connection:
             try:
-                if self.ib_connection.is_connected_sync():
-                    logger.info(f"Attempting to fetch {symbol} from IB")
-                    ib_data = self.ib_fetcher.fetch_historical_data_sync(
-                        symbol, timeframe, start_date, end_date
-                    )
-                    logger.info(f"Successfully fetched {len(ib_data) if ib_data is not None else 0} bars from IB")
-                else:
-                    logger.warning("IB connection not available, skipping IB fetch")
+                logger.info(f"Attempting to fetch {symbol} from IB")
+                ib_data = self.ib_fetcher.fetch_historical_data_sync(
+                    symbol, timeframe, start_date, end_date
+                )
+                if ib_data is not None:
+                    # Normalize timezone for IB data (should already be UTC, but ensure consistency)
+                    ib_data = self._normalize_dataframe_timezone(ib_data)
+                logger.info(f"Successfully fetched {len(ib_data) if ib_data is not None else 0} bars from IB")
             except Exception as e:
                 logger.warning(f"IB fetch failed for {symbol}: {e}")
                 ib_data = None
@@ -329,6 +392,9 @@ class DataManager:
         try:
             logger.info(f"Attempting to load {symbol} from local CSV")
             local_data = self.data_loader.load(symbol, timeframe, start_date, end_date)
+            if local_data is not None:
+                # Normalize timezone for local data
+                local_data = self._normalize_dataframe_timezone(local_data)
             logger.info(f"Successfully loaded {len(local_data) if local_data is not None else 0} bars from local CSV")
         except DataNotFoundError:
             logger.info(f"No local CSV data found for {symbol}")
@@ -375,24 +441,13 @@ class DataManager:
         Merge IB and local data, preferring IB data and filling gaps with local data.
         
         Args:
-            ib_data: DataFrame from IB
-            local_data: DataFrame from local CSV
+            ib_data: DataFrame from IB (already UTC timezone-aware)
+            local_data: DataFrame from local CSV (already UTC timezone-aware)
             
         Returns:
             Merged DataFrame with gaps filled
         """
-        # Ensure both DataFrames have timezone-aware timestamps
-        if not pd.api.types.is_datetime64_any_dtype(ib_data.index):
-            ib_data.index = pd.to_datetime(ib_data.index)
-        if not pd.api.types.is_datetime64_any_dtype(local_data.index):
-            local_data.index = pd.to_datetime(local_data.index)
-            
-        # Make timezone-aware if needed (assume UTC for IB data)
-        if ib_data.index.tz is None:
-            ib_data.index = ib_data.index.tz_localize('UTC')
-        if local_data.index.tz is None:
-            local_data.index = local_data.index.tz_localize('UTC')
-            
+        # Both DataFrames should already be normalized to UTC timezone-aware by caller
         # Combine data, preferring IB data where available
         combined = ib_data.combine_first(local_data)
         

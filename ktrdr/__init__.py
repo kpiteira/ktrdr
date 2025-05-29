@@ -2,6 +2,10 @@
 KTRDR - Automated trading agent with neuro-fuzzy decision engine.
 """
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Import version from centralized version module
 from ktrdr.version import __version__
 

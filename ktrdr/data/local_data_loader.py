@@ -464,12 +464,12 @@ class LocalDataLoader:
                            start_date: Optional[Union[str, datetime]], 
                            end_date: Optional[Union[str, datetime]]) -> pd.DataFrame:
         """
-        Filter DataFrame by start and end dates.
+        Filter DataFrame by start and end dates with timezone compatibility.
         
         Args:
             df: DataFrame to filter
-            start_date: Optional start date
-            end_date: Optional end date
+            start_date: Optional start date (may be timezone-aware)
+            end_date: Optional end date (may be timezone-aware)
             
         Returns:
             Filtered DataFrame
@@ -477,12 +477,54 @@ class LocalDataLoader:
         if start_date is not None:
             if isinstance(start_date, str):
                 start_date = pd.to_datetime(start_date)
-            df = df[df.index >= start_date]
+            
+            # Handle timezone compatibility for start_date
+            if hasattr(start_date, 'tz') and start_date.tz is not None:
+                # start_date is timezone-aware
+                if df.index.tz is None:
+                    # df.index is naive, localize to UTC for comparison
+                    df_index_aware = df.index.tz_localize('UTC')
+                    mask = df_index_aware >= start_date
+                    df = df[mask]
+                else:
+                    # Both timezone-aware, compare directly
+                    df = df[df.index >= start_date]
+            else:
+                # start_date is naive
+                if df.index.tz is not None:
+                    # df.index is timezone-aware, convert to naive UTC for comparison
+                    df_index_naive = df.index.tz_convert('UTC').tz_localize(None)
+                    mask = df_index_naive >= start_date
+                    df = df[mask]
+                else:
+                    # Both naive, compare directly
+                    df = df[df.index >= start_date]
             
         if end_date is not None:
             if isinstance(end_date, str):
                 end_date = pd.to_datetime(end_date)
-            df = df[df.index <= end_date]
+            
+            # Handle timezone compatibility for end_date
+            if hasattr(end_date, 'tz') and end_date.tz is not None:
+                # end_date is timezone-aware
+                if df.index.tz is None:
+                    # df.index is naive, localize to UTC for comparison
+                    df_index_aware = df.index.tz_localize('UTC')
+                    mask = df_index_aware <= end_date
+                    df = df[mask]
+                else:
+                    # Both timezone-aware, compare directly
+                    df = df[df.index <= end_date]
+            else:
+                # end_date is naive
+                if df.index.tz is not None:
+                    # df.index is timezone-aware, convert to naive UTC for comparison
+                    df_index_naive = df.index.tz_convert('UTC').tz_localize(None)
+                    mask = df_index_naive <= end_date
+                    df = df[mask]
+                else:
+                    # Both naive, compare directly
+                    df = df[df.index <= end_date]
             
         return df
     

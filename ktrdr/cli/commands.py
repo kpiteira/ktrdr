@@ -81,12 +81,12 @@ def show_data(
             max_value=1000
         )
         
-        # Create a LocalDataLoader instance
-        loader = LocalDataLoader(data_dir=data_dir)
+        # Create a DataManager instance (with IB integration)
+        data_manager = DataManager(data_dir=data_dir)
         
         # Load the data
         logger.info(f"Loading data for {symbol} ({timeframe})")
-        df = loader.load(symbol, timeframe)
+        df = data_manager.load_data(symbol, timeframe, validate=False)
         
         if df is None or df.empty:
             typer.echo(f"No data found for {symbol} ({timeframe})")
@@ -1135,4 +1135,149 @@ def fuzzify(
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+@cli_app.command("test-ib")
+def test_ib(
+    quick: bool = typer.Option(False, "--quick", "-q", help="Run quick tests only"),
+    symbol: str = typer.Option("AAPL", "--symbol", "-s", help="Test symbol"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output")
+):
+    """
+    Test Interactive Brokers (IB) integration.
+    
+    This command tests the complete IB integration stack:
+    - Configuration loading
+    - Connection establishment  
+    - Data fetching
+    - DataManager integration
+    
+    Requires IB Gateway/TWS to be running.
+    """
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+    from ktrdr.config.ib_config import get_ib_config
+    from ktrdr.data.ib_connection import IbConnectionManager
+    from ktrdr.data.ib_data_fetcher import IbDataFetcher
+    from ktrdr.data.data_manager import DataManager
+    
+    async def run_ib_tests():
+        console.print("\n🚀 [bold blue]Testing IB Integration[/bold blue]")
+        console.print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        results = {"passed": 0, "total": 0}
+        
+        def test_result(name: str, success: bool, details: str = ""):
+            results["total"] += 1
+            if success:
+                results["passed"] += 1
+                console.print(f"✅ [green]{name}[/green]")
+            else:
+                console.print(f"❌ [red]{name}[/red]")
+            if details and verbose:
+                console.print(f"   {details}")
+        
+        # Test 1: Configuration
+        console.print("\n📋 Testing Configuration...")
+        try:
+            config = get_ib_config()
+            test_result("Configuration loaded", True, 
+                f"Host: {config.host}:{config.port}, Client ID: {config.client_id}")
+        except Exception as e:
+            test_result("Configuration loaded", False, str(e))
+            console.print("\n💡 [yellow]Troubleshooting:[/yellow]")
+            console.print("   1. Copy .env.template to .env")
+            console.print("   2. Configure IB_HOST, IB_PORT, IB_CLIENT_ID")
+            return
+        
+        # Test 2: Connection
+        console.print("\n🔌 Testing Connection...")
+        connection = None
+        try:
+            connection = IbConnectionManager(config)
+            await connection.connect()
+            
+            if await connection.is_connected():
+                test_result("IB connection", True, "Connected successfully")
+            else:
+                test_result("IB connection", False, "Connection check failed")
+                return
+        except Exception as e:
+            test_result("IB connection", False, str(e))
+            console.print("\n💡 [yellow]Troubleshooting:[/yellow]")
+            console.print("   1. Start IB Gateway/TWS and login")
+            console.print("   2. Enable API in settings")
+            console.print("   3. Check port (7497 paper, 7496 live)")
+            return
+        
+        if quick:
+            # For quick test, just test connection
+            await connection.disconnect()
+            console.print(f"\n📊 [bold]Quick Test Results:[/bold] {results['passed']}/{results['total']} passed")
+            return
+            
+        # Test 3: Data Fetcher
+        console.print("\n📈 Testing Data Fetcher...")
+        try:
+            fetcher = IbDataFetcher(connection, config)
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=2)
+            
+            data = await fetcher.fetch_historical_data(symbol, "1h", start_date, end_date)
+            
+            if data is not None and len(data) > 0:
+                test_result("Data fetching", True, f"Fetched {len(data)} bars for {symbol}")
+                if verbose:
+                    console.print(f"   Columns: {list(data.columns)}")
+                    console.print(f"   Date range: {data.index[0]} to {data.index[-1]}")
+            else:
+                test_result("Data fetching", False, "No data returned")
+        except Exception as e:
+            test_result("Data fetching", False, str(e))
+        
+        # Test 4: DataManager Integration
+        console.print("\n🔄 Testing DataManager...")
+        try:
+            data_manager = DataManager()
+            has_ib = (data_manager.ib_connection is not None and 
+                     data_manager.ib_fetcher is not None)
+            test_result("DataManager IB integration", has_ib, 
+                "IB components initialized" if has_ib else "IB components missing")
+        except Exception as e:
+            test_result("DataManager IB integration", False, str(e))
+        
+        # Test 5: Fallback Logic
+        console.print("\n⚖️ Testing Fallback Logic...")
+        try:
+            data = data_manager.load_data(symbol, "1d", validate=False)
+            if data is not None and len(data) > 0:
+                test_result("Fallback logic", True, f"Loaded {len(data)} bars")
+            else:
+                test_result("Fallback logic", False, "No data loaded")
+        except Exception as e:
+            test_result("Fallback logic", False, str(e))
+        
+        # Cleanup
+        if connection:
+            await connection.disconnect()
+            console.print("\n🔌 Disconnected from IB")
+        
+        # Summary
+        console.print(f"\n📊 [bold]Test Results:[/bold] {results['passed']}/{results['total']} passed")
+        success_rate = results['passed'] / results['total'] * 100
+        
+        if results['passed'] == results['total']:
+            console.print("🎉 [green]All tests passed! IB integration is working.[/green]")
+        elif success_rate >= 60:
+            console.print("⚠️ [yellow]Most tests passed. Check failures above.[/yellow]")
+        else:
+            console.print("❌ [red]Many tests failed. Check IB setup.[/red]")
+    
+    # Run the async tests
+    try:
+        asyncio.run(run_ib_tests())
+    except KeyboardInterrupt:
+        console.print("\n⏹️ Test interrupted by user")
+    except Exception as e:
+        error_console.print(f"[bold red]Test error:[/bold red] {str(e)}")
         sys.exit(1)

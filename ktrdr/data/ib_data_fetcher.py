@@ -150,12 +150,36 @@ class IbDataFetcher:
         logger.debug(f"Created Stock contract for {symbol}")
         return contract
         
+    def _calculate_duration_string(self, bar_size: str, days: int) -> str:
+        """
+        Convert days to IB duration string format.
+        
+        Args:
+            bar_size: IB bar size string
+            days: Number of days to convert
+            
+        Returns:
+            IB duration string (e.g., "1 W", "1 M", "1 Y")
+        """
+        # Convert days to appropriate IB duration format
+        if days >= 365:
+            years = days // 365
+            return f"{years} Y"
+        elif days >= 30:
+            months = days // 30
+            return f"{months} M"
+        elif days >= 7:
+            weeks = days // 7
+            return f"{weeks} W"
+        else:
+            return f"{days} D"
+    
     def _calculate_chunks(
         self,
         start: datetime,
         end: datetime,
         bar_size: str
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> List[Tuple[datetime, datetime, str]]:
         """
         Calculate date chunks based on IB limits.
         
@@ -165,7 +189,7 @@ class IbDataFetcher:
             bar_size: IB bar size string
             
         Returns:
-            List of (chunk_start, chunk_end) tuples
+            List of (chunk_start, chunk_end, duration_string) tuples
         """
         chunks = []
         chunk_days = self.config.get_chunk_size(bar_size)
@@ -176,12 +200,19 @@ class IbDataFetcher:
                 current + timedelta(days=chunk_days),
                 end
             )
-            chunks.append((current, chunk_end))
+            # Calculate actual days for this chunk
+            actual_days = (chunk_end - current).days
+            if actual_days == 0:
+                actual_days = 1  # Minimum 1 day
+            
+            # Convert to IB duration format
+            duration_str = self._calculate_duration_string(bar_size, actual_days)
+            
+            chunks.append((current, chunk_end, duration_str))
             current = chunk_end
             
         logger.info(
-            f"Split date range into {len(chunks)} chunks of "
-            f"{chunk_days} days for {bar_size} bars"
+            f"Split date range into {len(chunks)} chunks for {bar_size} bars"
         )
         
         return chunks
@@ -209,8 +240,10 @@ class IbDataFetcher:
             DataError: If data fetch fails
             DataNotFoundError: If symbol not found
         """
+        # Auto-connect if not already connected
         if not self.connection.is_connected_sync():
-            raise ConnectionError("Not connected to IB")
+            logger.info("Connecting to IB for data fetch...")
+            await self.connection.connect()
             
         # Convert timeframe to IB bar size
         bar_size = self._get_bar_size(timeframe)
@@ -223,14 +256,14 @@ class IbDataFetcher:
         
         # Fetch all chunks
         all_data = []
-        for i, (chunk_start, chunk_end) in enumerate(chunks):
+        for i, (chunk_start, chunk_end, duration_str) in enumerate(chunks):
             logger.info(
                 f"Fetching chunk {i+1}/{len(chunks)} for {symbol}: "
-                f"{chunk_start} to {chunk_end}"
+                f"{chunk_start} to {chunk_end} (duration: {duration_str})"
             )
             
             chunk_data = await self._fetch_chunk(
-                contract, bar_size, chunk_start, chunk_end
+                contract, bar_size, chunk_start, chunk_end, duration_str
             )
             
             if not chunk_data.empty:
@@ -267,7 +300,8 @@ class IbDataFetcher:
         contract: Contract,
         bar_size: str,
         start: datetime,
-        end: datetime
+        end: datetime,
+        duration_str: str
     ) -> pd.DataFrame:
         """
         Fetch a single chunk of data with retry logic.
@@ -289,10 +323,6 @@ class IbDataFetcher:
         request_start = time.time()
         
         try:
-            # Calculate duration string for IB
-            duration = end - start
-            duration_str = f"{int(duration.total_seconds())} S"
-            
             # Fetch data from IB
             bars = await asyncio.wait_for(
                 self.connection.ib.reqHistoricalDataAsync(
