@@ -4,7 +4,7 @@ Synchronous IB Data Fetcher based on proven working pattern.
 
 import time
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import pandas as pd
 from ib_insync import Stock, Forex, Contract
 from ktrdr.logging import get_logger
@@ -266,3 +266,257 @@ class IbDataFetcherSync:
             metrics["success_rate"] = 0
         
         return metrics
+
+
+class IbDataRangeDiscovery:
+    """
+    Historical data range discovery for IB symbols.
+    
+    This class provides methods to discover the earliest available data
+    for symbols using binary search algorithms.
+    """
+    
+    def __init__(self, data_fetcher: IbDataFetcherSync):
+        """
+        Initialize range discovery.
+        
+        Args:
+            data_fetcher: IbDataFetcherSync instance for data requests
+        """
+        self.data_fetcher = data_fetcher
+        self.range_cache: Dict[str, Dict[str, Tuple[datetime, datetime]]] = {}
+        self.cache_ttl = 86400  # 24 hours cache TTL
+        self.cache_timestamps: Dict[str, float] = {}
+        
+        logger.info("IbDataRangeDiscovery initialized")
+    
+    def _cache_key(self, symbol: str, timeframe: str) -> str:
+        """Generate cache key for symbol/timeframe combination."""
+        return f"{symbol}:{timeframe}"
+    
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """Check if cache entry is still valid."""
+        if cache_key not in self.cache_timestamps:
+            return False
+        
+        age = time.time() - self.cache_timestamps[cache_key]
+        return age < self.cache_ttl
+    
+    def _get_cached_range(self, symbol: str, timeframe: str) -> Optional[Tuple[datetime, datetime]]:
+        """Get cached data range if available and valid."""
+        cache_key = self._cache_key(symbol, timeframe)
+        
+        if not self._is_cache_valid(cache_key):
+            return None
+        
+        symbol_cache = self.range_cache.get(symbol, {})
+        return symbol_cache.get(timeframe)
+    
+    def _cache_range(self, symbol: str, timeframe: str, start: datetime, end: datetime):
+        """Cache discovered data range."""
+        cache_key = self._cache_key(symbol, timeframe)
+        
+        if symbol not in self.range_cache:
+            self.range_cache[symbol] = {}
+        
+        self.range_cache[symbol][timeframe] = (start, end)
+        self.cache_timestamps[cache_key] = time.time()
+        
+        logger.debug(f"Cached range for {symbol}:{timeframe}: {start} to {end}")
+    
+    def _has_data_at_date(self, symbol: str, timeframe: str, date: datetime) -> bool:
+        """
+        Check if data exists at a specific date.
+        
+        Args:
+            symbol: Symbol to check
+            timeframe: Timeframe string (e.g., "1 day", "1 hour")
+            date: Date to check for data
+            
+        Returns:
+            True if data exists at the date, False otherwise
+        """
+        try:
+            # Request a small amount of data around this date
+            end_date = date + timedelta(days=30)  # Look 30 days forward
+            
+            df = self.data_fetcher.fetch_historical_data(
+                symbol=symbol,
+                timeframe=timeframe,
+                start=date,
+                end=end_date
+            )
+            
+            # Check if we got any data and if the earliest data is close to our target date
+            if df.empty:
+                return False
+            
+            earliest_data = df.index.min()
+            # Allow up to 7 days difference for weekends/holidays
+            date_diff = abs((earliest_data.date() - date.date()).days)
+            
+            return date_diff <= 7
+            
+        except Exception as e:
+            logger.debug(f"Error checking data at {date} for {symbol}: {e}")
+            return False
+    
+    def get_earliest_data_point(self, symbol: str, timeframe: str, 
+                               max_lookback_years: int = 20) -> Optional[datetime]:
+        """
+        Find the earliest available data point for a symbol using binary search.
+        
+        Args:
+            symbol: Symbol to search for
+            timeframe: Timeframe string (e.g., "1 day", "1 hour")
+            max_lookback_years: Maximum years to look back
+            
+        Returns:
+            Earliest available date or None if no data found
+        """
+        logger.info(f"Discovering earliest data for {symbol} at {timeframe}")
+        
+        # Check cache first
+        cached_range = self._get_cached_range(symbol, timeframe)
+        if cached_range:
+            logger.debug(f"Using cached range for {symbol}:{timeframe}")
+            return cached_range[0]
+        
+        # Set up binary search bounds
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365 * max_lookback_years)
+        
+        logger.debug(f"Binary search range: {start_date.date()} to {end_date.date()}")
+        
+        # Check if there's any data at all in the maximum range
+        if not self._has_data_at_date(symbol, timeframe, start_date):
+            # Try to find any data by checking the most recent period first
+            if not self._has_data_at_date(symbol, timeframe, end_date - timedelta(days=30)):
+                logger.warning(f"No data found for {symbol} in any timeframe")
+                return None
+        
+        # Binary search for earliest date
+        earliest_found = None
+        left_date = start_date
+        right_date = end_date
+        
+        search_iterations = 0
+        max_iterations = 20  # Prevent infinite loops
+        
+        while (right_date - left_date).days > 7 and search_iterations < max_iterations:
+            search_iterations += 1
+            mid_date = left_date + (right_date - left_date) / 2
+            
+            logger.debug(f"Search iteration {search_iterations}: checking {mid_date.date()}")
+            
+            if self._has_data_at_date(symbol, timeframe, mid_date):
+                # Data exists at mid_date, search earlier
+                earliest_found = mid_date
+                right_date = mid_date
+                logger.debug(f"Data found at {mid_date.date()}, searching earlier")
+            else:
+                # No data at mid_date, search later
+                left_date = mid_date
+                logger.debug(f"No data at {mid_date.date()}, searching later")
+        
+        if earliest_found:
+            # Try to get the exact earliest date by fetching a small sample
+            try:
+                sample_end = earliest_found + timedelta(days=30)
+                df = self.data_fetcher.fetch_historical_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start=earliest_found - timedelta(days=7),
+                    end=sample_end
+                )
+                
+                if not df.empty:
+                    actual_earliest = df.index.min()
+                    logger.info(f"Found earliest data for {symbol} at {actual_earliest}")
+                    
+                    # Cache the result
+                    latest_date = datetime.now()
+                    self._cache_range(symbol, timeframe, actual_earliest, latest_date)
+                    
+                    return actual_earliest
+                    
+            except Exception as e:
+                logger.warning(f"Error refining earliest date for {symbol}: {e}")
+        
+        logger.warning(f"Could not determine earliest data point for {symbol}")
+        return earliest_found
+    
+    def get_data_range(self, symbol: str, timeframe: str) -> Optional[Tuple[datetime, datetime]]:
+        """
+        Get the full available data range for a symbol.
+        
+        Args:
+            symbol: Symbol to check
+            timeframe: Timeframe string
+            
+        Returns:
+            Tuple of (earliest_date, latest_date) or None if no data
+        """
+        # Check cache first
+        cached_range = self._get_cached_range(symbol, timeframe)
+        if cached_range:
+            return cached_range
+        
+        # Discover earliest data point
+        earliest = self.get_earliest_data_point(symbol, timeframe)
+        if not earliest:
+            return None
+        
+        # Latest date is essentially "now" for live data
+        latest = datetime.now()
+        
+        # Cache and return
+        self._cache_range(symbol, timeframe, earliest, latest)
+        return (earliest, latest)
+    
+    def get_multiple_ranges(self, symbols: List[str], timeframes: List[str]) -> Dict[str, Dict[str, Optional[Tuple[datetime, datetime]]]]:
+        """
+        Get data ranges for multiple symbols and timeframes.
+        
+        Args:
+            symbols: List of symbols to check
+            timeframes: List of timeframes to check
+            
+        Returns:
+            Nested dictionary: {symbol: {timeframe: (start, end) or None}}
+        """
+        results = {}
+        
+        for symbol in symbols:
+            results[symbol] = {}
+            for timeframe in timeframes:
+                try:
+                    data_range = self.get_data_range(symbol, timeframe)
+                    results[symbol][timeframe] = data_range
+                    
+                    if data_range:
+                        logger.info(f"Range for {symbol}:{timeframe}: {data_range[0].date()} to {data_range[1].date()}")
+                    else:
+                        logger.warning(f"No data range found for {symbol}:{timeframe}")
+                        
+                except Exception as e:
+                    logger.error(f"Error getting range for {symbol}:{timeframe}: {e}")
+                    results[symbol][timeframe] = None
+        
+        return results
+    
+    def clear_cache(self):
+        """Clear all cached range data."""
+        self.range_cache.clear()
+        self.cache_timestamps.clear()
+        logger.info("Data range cache cleared")
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        total_entries = sum(len(timeframes) for timeframes in self.range_cache.values())
+        
+        return {
+            "total_cached_ranges": total_entries,
+            "symbols_in_cache": len(self.range_cache),
+            "cache_ttl_hours": self.cache_ttl / 3600
+        }
