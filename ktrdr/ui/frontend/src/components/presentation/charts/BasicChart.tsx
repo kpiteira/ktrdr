@@ -61,6 +61,9 @@ interface BasicChartProps {
   
   // Synchronization control
   preserveTimeScale?: boolean;
+  
+  // Time range preservation
+  initialTimeRange?: { start: string; end: string } | null;
 }
 
 const BasicChart: FC<BasicChartProps> = ({
@@ -76,7 +79,8 @@ const BasicChart: FC<BasicChartProps> = ({
   onCrosshairMove,
   showLoadingOverlay = true,
   showErrorOverlay = true,
-  preserveTimeScale = false
+  preserveTimeScale = false,
+  initialTimeRange = null
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -87,7 +91,6 @@ const BasicChart: FC<BasicChartProps> = ({
   useEffect(() => {
     const handleWindowError = (event: ErrorEvent) => {
       if (event.message && event.message.includes('Value is null')) {
-        console.warn('[BasicChart] Caught TradingView null error, preventing crash');
         event.preventDefault();
         return false;
       }
@@ -116,7 +119,6 @@ const BasicChart: FC<BasicChartProps> = ({
     }
 
     // Create new chart
-    // Remove debug logging and try to catch the actual error
     let chart;
     try {
       chart = createChart(chartContainerRef.current, {
@@ -281,7 +283,10 @@ const BasicChart: FC<BasicChartProps> = ({
     });
 
     // Fit content after data update (only if not preserving time scale for sync)
-    if (!preserveTimeScale && chartRef.current) {
+    // Also skip if we have an initial time range (applied or pending)
+    const shouldFitContent = !preserveTimeScale && !initialTimeRange && !initialTimeRangeAppliedRef.current && chartRef.current;
+    
+    if (shouldFitContent) {
       chartRef.current.timeScale().fitContent();
     }
 
@@ -341,6 +346,46 @@ const BasicChart: FC<BasicChartProps> = ({
     // ==================================================================================
     
   }, [chartData, preserveTimeScale]);
+
+  // Apply initial time range only once when chart is first created
+  const initialTimeRangeAppliedRef = useRef(false);
+  
+  useEffect(() => {
+    if (chartRef.current && initialTimeRange && chartData && chartData.candlestick.length > 0 && !initialTimeRangeAppliedRef.current) {
+      // Mark as applied immediately to prevent other operations
+      initialTimeRangeAppliedRef.current = true;
+      
+      // Convert time range to timestamps
+      const fromTime = new Date(initialTimeRange.start).getTime() / 1000;
+      const toTime = new Date(initialTimeRange.end).getTime() / 1000;
+      
+      
+      // Set the visible range after a delay to ensure all other operations complete
+      setTimeout(() => {
+        if (chartRef.current) {
+          chartRef.current.timeScale().setVisibleRange({
+            from: fromTime as any,
+            to: toTime as any
+          });
+          
+          // Force one more application after a short delay to override any interference
+          setTimeout(() => {
+            if (chartRef.current) {
+              chartRef.current.timeScale().setVisibleRange({
+                from: fromTime as any,
+                to: toTime as any
+              });
+            }
+          }, 50); // Reduced from 100ms
+        }
+      }, 150); // Further reduced - testing the limits
+    }
+  }, [initialTimeRange, chartData]);
+  
+  // Reset the flag when component re-mounts (when key changes)
+  useEffect(() => {
+    initialTimeRangeAppliedRef.current = false;
+  }, []);
 
   // Handle resize
   useEffect(() => {

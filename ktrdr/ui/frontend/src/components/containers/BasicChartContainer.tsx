@@ -31,6 +31,9 @@ interface BasicChartContainerProps {
   chartSynchronizer?: ReturnType<typeof useChartSynchronizer>;
   chartId?: string;
   
+  // Time range preservation
+  initialTimeRange?: { start: string; end: string } | null;
+  
   // Callbacks
   onDataLoaded?: (data: ChartData) => void;
   onTimeRangeChange?: (range: { start: string; end: string }) => void;
@@ -45,6 +48,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
   indicators = [],
   chartSynchronizer,
   chartId = 'basic-chart',
+  initialTimeRange,
   onDataLoaded,
   onTimeRangeChange,
   onError
@@ -304,6 +308,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       showLoadingOverlay={true}
       showErrorOverlay={true}
       preserveTimeScale={!!chartSynchronizer}
+      initialTimeRange={initialTimeRange}
     />
   );
 };

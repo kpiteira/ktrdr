@@ -1,4 +1,4 @@
-import React, { FC, useState, useCallback, useMemo, useEffect } from 'react';
+import React, { FC, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useChartSynchronizer } from './hooks/useChartSynchronizer';
 import IndicatorSidebarContainer from './components/containers/IndicatorSidebarContainer';
 import BasicChartContainer from './components/containers/BasicChartContainer';
@@ -27,14 +27,12 @@ const App: FC = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // Log app initialization
+  // App initialization
   useEffect(() => {
-    // Log app initialization
     logger.info('App initialized', { symbol: selectedSymbol, timeframe: selectedTimeframe });
-    logger.debug('Debug mode is active');
   }, []);
   
-  // Chart synchronization - TEMPORARILY DISABLED for debugging
+  // Chart synchronization
   const chartSynchronizer = useChartSynchronizer();
   
   // Manual sync oscillator chart to main chart when both are ready
@@ -49,6 +47,11 @@ const App: FC = () => {
   
   // Time range synchronization between charts
   const [timeRange, setTimeRange] = useState<{ start: string; end: string } | null>(null);
+  
+  
+  // Store the last known time range in a ref (doesn't cause re-renders)
+  const lastKnownTimeRangeRef = useRef<{ start: string; end: string } | null>(null);
+  
   
   // Indicator state for coordination between sidebar and charts
   const [indicators, setIndicators] = useState<IndicatorInfo[]>([]);
@@ -78,6 +81,8 @@ const App: FC = () => {
   // Handle time range changes from the main chart
   const handleTimeRangeChange = useCallback((range: { start: string; end: string }) => {
     setTimeRange(range);
+    // Store in ref so we always have the latest range without causing re-renders
+    lastKnownTimeRangeRef.current = range;
   }, []);
 
   // Handle indicator addition from the sidebar
@@ -133,14 +138,44 @@ const App: FC = () => {
   }, [indicators]);
 
 
+  // State for chart dimensions with window resize handling
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
   // Memoize chart dimensions to prevent unnecessary re-renders
-  const chartDimensions = useMemo(() => ({
-    width: sidebarCollapsed ? 920 : 800,
-    height: {
-      main: 400,
-      rsi: 200
-    }
-  }), [sidebarCollapsed]);
+  // Calculate available width based on sidebar state
+  const chartDimensions = useMemo(() => {
+    // Calculate available width: viewport - sidebar - padding
+    // Collapsed sidebar: 40px, Expanded sidebar: ~320px, Padding: 32px (1rem each side)
+    const sidebarWidth = sidebarCollapsed ? 40 : 320;
+    const padding = 32; // 1rem padding on each side
+    const availableWidth = windowWidth - sidebarWidth - padding;
+    
+    const calculatedWidth = Math.max(600, availableWidth);
+    
+    return {
+      width: calculatedWidth,
+      height: {
+        main: 400,
+        rsi: 200
+      }
+    };
+  }, [sidebarCollapsed, windowWidth]);
+
+
+  // Calculate chart key to force re-mount on dimension changes
+  const getChartKey = useCallback((chartType: string) => {
+    return `${chartType}-${sidebarCollapsed}-${chartDimensions.width}`;
+  }, [sidebarCollapsed, chartDimensions.width]);
 
   return (
     <ErrorBoundary>
@@ -196,6 +231,7 @@ const App: FC = () => {
             {/* Main Price Chart Container - Overlay indicators only */}
             <ErrorBoundary>
               <BasicChartContainer
+                key={getChartKey('main-chart')}
                 symbol={selectedSymbol}
                 timeframe={selectedTimeframe}
                 indicators={overlayIndicators}
@@ -203,6 +239,7 @@ const App: FC = () => {
                 chartId="main-chart"
                 width={chartDimensions.width}
                 height={chartDimensions.height.main}
+                initialTimeRange={lastKnownTimeRangeRef.current} // Use the last known range from ref
                 onTimeRangeChange={handleTimeRangeChange}
                 onError={handleMainChartError}
               />
@@ -212,6 +249,7 @@ const App: FC = () => {
             {separateIndicators.length > 0 && (
               <ErrorBoundary>
                 <OscillatorChartContainer
+                  key={getChartKey('oscillator-chart')}
                   symbol={selectedSymbol}
                   timeframe={selectedTimeframe}
                   indicators={separateIndicators}
@@ -225,6 +263,7 @@ const App: FC = () => {
                 />
               </ErrorBoundary>
             )}
+
 
             {/* Chart instructions for empty state */}
             {indicators.length === 0 && (

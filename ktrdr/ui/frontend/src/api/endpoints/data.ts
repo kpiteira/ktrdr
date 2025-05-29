@@ -86,11 +86,8 @@ export async function loadData({
     
     // Validate the data structure has required properties
     if (!data || !data.dates || !data.ohlcv || data.dates.length === 0 || data.ohlcv.length === 0) {
-      console.warn('[loadData] Data is missing required properties or is empty');
-      
       // If we have sample data for this symbol, use it as fallback
       if (SAMPLE_DATA[symbol]) {
-        console.log(`[loadData] Using sample data fallback for ${symbol}`);
         return SAMPLE_DATA[symbol];
       }
       
@@ -108,10 +105,8 @@ export async function loadData({
       };
     }
     
-    console.log('[loadData] Returning data with', data.dates?.length || 0, 'points');
     return data;
   } catch (error) {
-    console.error('[loadData] Error fetching data:', error);
     
     // If we have sample data for this symbol, use it as fallback even on error
     if (SAMPLE_DATA[symbol]) {
@@ -148,7 +143,6 @@ export async function getSymbols(): Promise<any[]> {
     return response.data.data;
   } else {
     // Unknown structure, but try to handle it gracefully
-    console.warn('Unexpected API response structure for symbols');
     if (response && typeof response === 'object') {
       // Try to extract any array we can find
       const possibleArrays = Object.values(response).filter(val => Array.isArray(val));
