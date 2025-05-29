@@ -227,6 +227,14 @@ def create_application() -> FastAPI:
                     "description": "Fuzzy Logic API Documentation",
                     "url": f"{config.api_prefix}/redoc#tag/Fuzzy"
                 }
+            },
+            {
+                "name": "IB",
+                "description": "Operations related to Interactive Brokers connection status and management.",
+                "externalDocs": {
+                    "description": "IB API Documentation",
+                    "url": f"{config.api_prefix}/redoc#tag/IB"
+                }
             }
         ]
         

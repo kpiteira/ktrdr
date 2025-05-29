@@ -88,6 +88,19 @@ from ktrdr.api.models.charts import (
     ChartExportResponse,
 )
 
+# IB models
+from ktrdr.api.models.ib import (
+    ConnectionInfo,
+    ConnectionMetrics,
+    DataFetchMetrics,
+    IbStatusResponse,
+    IbHealthStatus,
+    IbConfigInfo,
+    IbStatusApiResponse,
+    IbHealthApiResponse,
+    IbConfigApiResponse,
+)
+
 __all__ = [
     # Base models
     'ApiResponse',
@@ -159,4 +172,15 @@ __all__ = [
     'ChartTemplatesResponse',
     'ChartExportRequest',
     'ChartExportResponse',
+    
+    # IB models
+    'ConnectionInfo',
+    'ConnectionMetrics',
+    'DataFetchMetrics',
+    'IbStatusResponse',
+    'IbHealthStatus',
+    'IbConfigInfo',
+    'IbStatusApiResponse',
+    'IbHealthApiResponse',
+    'IbConfigApiResponse',
 ]

@@ -28,6 +28,7 @@ async def health_check(config: APIConfig = Depends(get_api_config)):
 from ktrdr.api.endpoints.data import router as data_router
 from ktrdr.api.endpoints.indicators import router as indicators_router
 from ktrdr.api.endpoints.fuzzy import router as fuzzy_router
+from ktrdr.api.endpoints.ib import router as ib_router
 
 # Include routers with appropriate prefixes
 # Removed the "/v1" prefix since the data router endpoints already include this prefix
@@ -35,3 +36,4 @@ api_router.include_router(data_router, tags=["Data"])
 # Use lowercase tag to match the one defined in indicators.py
 api_router.include_router(indicators_router, tags=["indicators"])
 api_router.include_router(fuzzy_router, tags=["Fuzzy"])
+api_router.include_router(ib_router, prefix="/ib", tags=["IB"])

@@ -1,0 +1,234 @@
+"""
+IB (Interactive Brokers) endpoints for the KTRDR API.
+
+This module implements the API endpoints for IB status, health monitoring,
+and connection management.
+"""
+from typing import Dict, Any
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+
+from ktrdr import get_logger
+from ktrdr.api.services.ib_service import IbService
+from ktrdr.api.models.ib import (
+    IbStatusApiResponse,
+    IbHealthApiResponse,
+    IbConfigApiResponse,
+    IbStatusResponse,
+    IbHealthStatus,
+    IbConfigInfo
+)
+from ktrdr.api.models.base import ApiResponse, ErrorResponse
+from ktrdr.api.dependencies import get_data_manager
+from ktrdr.data.data_manager import DataManager
+
+# Setup module-level logger
+logger = get_logger(__name__)
+
+# Create router for IB endpoints
+router = APIRouter()
+
+
+def get_ib_service(data_manager: DataManager = Depends(get_data_manager)) -> IbService:
+    """Dependency to get IB service instance."""
+    return IbService(data_manager)
+
+
+@router.get(
+    "/status",
+    response_model=IbStatusApiResponse,
+    tags=["IB"],
+    summary="Get IB connection status",
+    description="Returns comprehensive status information about the IB connection including metrics and health indicators."
+)
+async def get_ib_status(
+    ib_service: IbService = Depends(get_ib_service)
+) -> IbStatusApiResponse:
+    """
+    Get IB connection status and metrics.
+    
+    Returns detailed information about:
+    - Current connection status
+    - Connection performance metrics
+    - Data fetching performance metrics
+    - Overall IB availability
+    
+    Returns:
+        IbStatusApiResponse with comprehensive status information
+    """
+    try:
+        status = ib_service.get_status()
+        return ApiResponse(
+            success=True,
+            data=status,
+            error=None
+        )
+    except Exception as e:
+        logger.error(f"Error getting IB status: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-STATUS-ERROR",
+                message="Failed to get IB status",
+                details={"error": str(e)}
+            )
+        )
+
+
+@router.get(
+    "/health",
+    response_model=IbHealthApiResponse,
+    tags=["IB"],
+    summary="Check IB health",
+    description="Performs a health check on the IB connection and returns the overall health status."
+)
+async def check_ib_health(
+    ib_service: IbService = Depends(get_ib_service)
+) -> IbHealthApiResponse:
+    """
+    Check IB connection health.
+    
+    Performs health checks on:
+    - Connection status
+    - Data fetching capability
+    - Recent request success rate
+    
+    Returns:
+        IbHealthApiResponse with health status
+    """
+    try:
+        health = ib_service.get_health()
+        
+        # Return appropriate HTTP status based on health
+        if not health.healthy:
+            return JSONResponse(
+                status_code=503,  # Service Unavailable
+                content=ApiResponse(
+                    success=False,
+                    data=health,
+                    error=ErrorResponse(
+                        code="IB-UNHEALTHY",
+                        message="IB connection is unhealthy",
+                        details={"error_message": health.error_message}
+                    )
+                ).model_dump()
+            )
+        
+        return ApiResponse(
+            success=True,
+            data=health,
+            error=None
+        )
+        
+    except Exception as e:
+        logger.error(f"Error checking IB health: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=ApiResponse(
+                success=False,
+                data=None,
+                error=ErrorResponse(
+                    code="IB-HEALTH-ERROR",
+                    message="Failed to check IB health",
+                    details={"error": str(e)}
+                )
+            ).model_dump()
+        )
+
+
+@router.get(
+    "/config",
+    response_model=IbConfigApiResponse,
+    tags=["IB"],
+    summary="Get IB configuration",
+    description="Returns the current IB configuration settings."
+)
+async def get_ib_config(
+    ib_service: IbService = Depends(get_ib_service)
+) -> IbConfigApiResponse:
+    """
+    Get IB configuration information.
+    
+    Returns configuration details including:
+    - Connection settings (host, port)
+    - Client ID range
+    - Timeout settings
+    - Rate limiting configuration
+    
+    Returns:
+        IbConfigApiResponse with configuration information
+    """
+    try:
+        config = ib_service.get_config()
+        return ApiResponse(
+            success=True,
+            data=config,
+            error=None
+        )
+    except Exception as e:
+        logger.error(f"Error getting IB config: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-CONFIG-ERROR",
+                message="Failed to get IB configuration",
+                details={"error": str(e)}
+            )
+        )
+
+
+@router.post(
+    "/cleanup",
+    response_model=ApiResponse[Dict[str, Any]],
+    tags=["IB"],
+    summary="Clean up IB connections",
+    description="Forcefully disconnects all active IB connections. Useful for troubleshooting connection issues."
+)
+async def cleanup_ib_connections(
+    ib_service: IbService = Depends(get_ib_service)
+) -> ApiResponse[Dict[str, Any]]:
+    """
+    Clean up all IB connections.
+    
+    This endpoint forcefully disconnects all active IB connections,
+    which can be useful when:
+    - Connections are stuck
+    - Testing requires a clean state
+    - Troubleshooting connection issues
+    
+    Returns:
+        ApiResponse with cleanup results
+    """
+    try:
+        result = await ib_service.cleanup_connections()
+        
+        if result["success"]:
+            return ApiResponse(
+                success=True,
+                data=result,
+                error=None
+            )
+        else:
+            return ApiResponse(
+                success=False,
+                data=result,
+                error=ErrorResponse(
+                    code="IB-CLEANUP-FAILED",
+                    message=result["message"],
+                    details=result
+                )
+            )
+            
+    except Exception as e:
+        logger.error(f"Error cleaning up IB connections: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-CLEANUP-ERROR",
+                message="Failed to clean up IB connections",
+                details={"error": str(e)}
+            )
+        )
