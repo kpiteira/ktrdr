@@ -36,11 +36,12 @@ This task breakdown implements IB (Interactive Brokers) data loading functionali
 1. Create IbDataFetcher class inheriting from DataLoaderBase
 2. Implement fetch_historical_data(symbol, timeframe, start, end)
 3. Add timeframe mapping (1m->1 min, 5m->5 mins, etc.)
-4. Implement rate limiting (50 requests/minute)
-5. Add chunking for large date ranges (30 days per request)
+4. Implement token bucket rate limiting (50 requests/minute, smooth distribution)
+5. Add chunking for large date ranges based on IB limits per timeframe
 6. Convert IB bars to OHLCV DataFrame format
 7. Add error handling for symbol not found, no data
 8. Create unit tests with mocked IB responses
+9. Track metrics: fetch success rate, avg response time
 ```
 
 **Test**: `test_ib_data_fetcher.py` - Verify data format, rate limiting, chunking
@@ -118,11 +119,14 @@ This task breakdown implements IB (Interactive Brokers) data loading functionali
 ```
 1. Create IbSymbolValidator class
 2. Implement validate_symbol(symbol) -> bool
-3. Add get_contract_details(symbol) for futures/stocks
+3. Add get_contract_details(symbol) with priority order:
+   - CASH (forex pairs like EUR.USD)
+   - STK (stocks)
+   - FUT (futures)
 4. Cache validated symbols in memory
 5. Implement batch validation for multiple symbols
-6. Add symbol type detection (STK, FUT, etc.)
-7. Create unit tests with common symbols
+6. Add symbol type detection with forex priority
+7. Create unit tests with forex, stock, and futures symbols
 ```
 
 **Test**: `test_ib_symbol_validator.py` - Test various symbol formats
@@ -208,6 +212,47 @@ This task breakdown implements IB (Interactive Brokers) data loading functionali
 
 ---
 
+## Task 11: Health Check and Monitoring
+**File**: `backend/data/ib_health_monitor.py`
+**Commit**: "feat: Add IB connection health monitoring"
+
+```
+1. Create IbHealthMonitor class
+2. Implement periodic health check (every 30s)
+3. Check connection status and latency
+4. Add reconnect logic if connection drops
+5. Expose health status via API endpoint
+6. Add health metrics (uptime, disconnections)
+7. Create background thread for monitoring
+8. Add tests with connection failure scenarios
+```
+
+**Test**: `test_ib_health_monitor.py` - Test health checks and auto-reconnect
+
+---
+
+## Task 12: CLI Progress Display
+**File**: `backend/cli/progress.py`
+**Commit**: "feat: Add progress bars for IB data downloads"
+
+```
+1. Create ProgressReporter class
+2. Implement progress bar using tqdm
+3. Add hooks to IbDataFetcher for progress updates
+4. Show:
+   - Current symbol/timeframe
+   - Bars downloaded / total
+   - Estimated time remaining
+   - Download speed (bars/sec)
+5. Add quiet mode option
+6. Support for multiple concurrent downloads
+7. Add unit tests for progress calculations
+```
+
+**Test**: `test_cli_progress.py` - Test progress reporting accuracy
+
+---
+
 ## Execution Order and Dependencies
 
 ```mermaid
@@ -220,6 +265,8 @@ graph TD
     T3 --> T5[Task 5: API Status]
     T3 --> T8[Task 8: Resume Handler]
     T2 --> T9[Task 9: Data Quality]
+    T1 --> T11[Task 11: Health Monitor]
+    T2 --> T12[Task 12: CLI Progress]
     T1 --> T10[Task 10: Integration Tests]
     T2 --> T10
     T3 --> T10
@@ -229,6 +276,8 @@ graph TD
     T7 --> T10
     T8 --> T10
     T9 --> T10
+    T11 --> T10
+    T12 --> T10
 ```
 
 ## Success Criteria
@@ -251,3 +300,10 @@ Each task must:
 - Commit after each task with descriptive message
 - Run tests before committing
 - Update requirements.txt with new dependencies
+
+## Additional Notes
+
+- **Forex Priority**: When implementing symbol validation, test with EUR.USD first
+- **Rate Limiting**: Use token bucket algorithm for smooth request distribution
+- **CSV Format**: Keep existing format, no metadata columns needed for now
+- **Metrics**: Store in memory for now, expose via API later
