@@ -1281,3 +1281,39 @@ def test_ib(
     except Exception as e:
         error_console.print(f"[bold red]Test error:[/bold red] {str(e)}")
         sys.exit(1)
+
+@cli_app.command("ib-cleanup")
+def ib_cleanup():
+    """
+    Clean up all active IB connections.
+    
+    This command forcefully disconnects all active IB connections and cleans up
+    any lingering connections that might be preventing new connections.
+    
+    Useful when:
+    - IB Gateway is rejecting new connections
+    - Testing left connections open
+    - Connection errors are occurring
+    """
+    from ktrdr.data.ib_cleanup import IbConnectionCleaner
+    
+    console.print("\n🧹 [bold blue]Cleaning up IB connections[/bold blue]")
+    
+    # Show current status
+    console.print("\n📊 Current connection status:")
+    IbConnectionCleaner.print_connection_status()
+    
+    # Perform cleanup
+    console.print("\n🔄 Starting cleanup...")
+    try:
+        IbConnectionCleaner.cleanup_all_sync()
+        console.print("✅ [green]Cleanup completed successfully[/green]")
+        
+        # Show final status
+        console.print("\n📊 Final connection status:")
+        IbConnectionCleaner.print_connection_status()
+        
+    except Exception as e:
+        error_console.print(f"[bold red]Cleanup error:[/bold red] {str(e)}")
+        console.print("\n💡 [yellow]Note:[/yellow] You may need to restart IB Gateway if connections are stuck")
+        sys.exit(1)

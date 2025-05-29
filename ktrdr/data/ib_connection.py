@@ -28,13 +28,19 @@ class ConnectionConfig:
 
 class IbConnectionManager:
     """
-    Manages connection to Interactive Brokers.
+    Manages connection to Interactive Brokers with proper cleanup and state tracking.
     
     Features:
     - Automatic retry with exponential backoff
     - Connection health monitoring
     - Graceful disconnect and cleanup
+    - Connection state tracking
+    - Global connection registry for cleanup
     """
+    
+    # Class-level connection registry to track all instances
+    _active_connections: Dict[str, 'IbConnectionManager'] = {}
+    _connection_lock = asyncio.Lock()
     
     def __init__(self, config: Optional[ConnectionConfig] = None):
         """Initialize connection manager with config."""
@@ -43,6 +49,8 @@ class IbConnectionManager:
         self._connected = False
         self._last_health_check = 0
         self._connection_attempts = 0
+        self.connection_id = f"{self.config.host}:{self.config.port}:{self.config.client_id}"
+        self.is_closing = False
         
         # Connection metrics
         self.metrics: Dict[str, Any] = {
@@ -51,6 +59,55 @@ class IbConnectionManager:
             "last_connect_time": None,
             "last_disconnect_time": None,
         }
+        
+        # Register this connection
+        self._register_connection()
+        
+    def _register_connection(self):
+        """Register this connection instance."""
+        self._active_connections[self.connection_id] = self
+        logger.debug(f"Registered connection {self.connection_id}")
+        
+    def _unregister_connection(self):
+        """Unregister this connection instance."""
+        if self.connection_id in self._active_connections:
+            del self._active_connections[self.connection_id]
+            logger.debug(f"Unregistered connection {self.connection_id}")
+    
+    @classmethod
+    async def cleanup_all_connections(cls):
+        """Clean up all active connections (useful for testing and shutdown)."""
+        async with cls._connection_lock:
+            if cls._active_connections:
+                logger.info(f"Cleaning up {len(cls._active_connections)} active connections")
+                connections = list(cls._active_connections.values())
+                for connection in connections:
+                    try:
+                        await connection.disconnect()
+                    except Exception as e:
+                        logger.warning(f"Error disconnecting {connection.connection_id}: {e}")
+                cls._active_connections.clear()
+                logger.info("All connections cleaned up")
+                
+    @classmethod
+    def get_active_connections(cls) -> Dict[str, 'IbConnectionManager']:
+        """Get all active connections."""
+        return cls._active_connections.copy()
+        
+    @classmethod
+    def get_connection_count(cls) -> int:
+        """Get the number of active connections."""
+        return len(cls._active_connections)
+    
+    def __del__(self):
+        """Ensure cleanup on object deletion."""
+        try:
+            if self._connected and self.ib:
+                logger.warning(f"Connection {self.connection_id} not properly closed, forcing cleanup")
+                self.ib.disconnect()
+            self._unregister_connection()
+        except Exception as e:
+            logger.debug(f"Error in connection destructor: {e}")
         
     @retry_with_backoff(
         retryable_exceptions=ConnectionError,
@@ -122,22 +179,29 @@ class IbConnectionManager:
         util.run(self.connect())
     
     async def disconnect(self) -> None:
-        """Gracefully disconnect from IB."""
-        if not self._connected or not self.ib:
-            logger.info("Not connected, nothing to disconnect")
-            return
+        """Gracefully disconnect from IB with proper cleanup."""
+        if self.is_closing:
+            return  # Already disconnecting
             
+        self.is_closing = True
+        
         try:
-            logger.info("Disconnecting from IB...")
-            self.ib.disconnect()
-            self._connected = False
-            self.metrics["last_disconnect_time"] = time.time()
-            logger.info("Successfully disconnected from IB")
-            
+            if self._connected and self.ib:
+                logger.info(f"Disconnecting from IB ({self.connection_id})...")
+                self.ib.disconnect()
+                self._connected = False
+                self.metrics["last_disconnect_time"] = time.time()
+                logger.info(f"Successfully disconnected from IB ({self.connection_id})")
+            else:
+                logger.debug("Not connected, nothing to disconnect")
+                
         except Exception as e:
             logger.error(f"Error during disconnect: {e}")
         finally:
             self.ib = None
+            self._connected = False
+            self._unregister_connection()
+            self.is_closing = False
             
     def disconnect_sync(self) -> None:
         """Synchronous wrapper for disconnect()."""

@@ -32,6 +32,7 @@ from ktrdr.config.ib_config import get_ib_config
 from ktrdr.data.ib_connection import IbConnectionManager
 from ktrdr.data.ib_data_fetcher import IbDataFetcher
 from ktrdr.data.data_manager import DataManager
+from ktrdr.data.ib_cleanup import IbConnectionCleaner
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -290,40 +291,68 @@ class IBIntegrationTester:
             print("  5. 'Read-Only API' disabled if you need write access")
             
     async def run_all_tests(self):
-        """Run all integration tests."""
+        """Run all integration tests with proper cleanup."""
         print("🚀 Starting IB Integration Tests")
         print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
-        # Test configuration
-        if not self.test_config_loading():
-            self.print_summary()
-            return
+        # Show initial connection status
+        print(f"\n📊 Initial connection status:")
+        IbConnectionCleaner.print_connection_status()
+        
+        try:
+            # Test configuration
+            if not self.test_config_loading():
+                self.print_summary()
+                return
+                
+            # Test connection
+            if not await self.test_connection():
+                self.print_summary()
+                return
+                
+            # Test data fetcher
+            await self.test_data_fetcher()
             
-        # Test connection
-        if not await self.test_connection():
-            self.print_summary()
-            return
+            # Test data manager
+            self.test_data_manager()
             
-        # Test data fetcher
-        await self.test_data_fetcher()
-        
-        # Test data manager
-        self.test_data_manager()
-        
-        # Test specific data types
-        await self.test_forex_data()
-        await self.test_stock_data()
-        
-        # Test fallback logic
-        self.test_fallback_logic()
-        
-        # Cleanup
-        if self.connection:
+            # Test specific data types
+            await self.test_forex_data()
+            await self.test_stock_data()
+            
+            # Test fallback logic
+            self.test_fallback_logic()
+            
+        finally:
+            # Comprehensive cleanup
+            print("\n🧹 Starting comprehensive cleanup...")
+            
+            # First, disconnect our specific connection
+            if self.connection:
+                try:
+                    await self.connection.disconnect()
+                    print("✅ Test connection disconnected")
+                except Exception as e:
+                    print(f"⚠️  Error disconnecting test connection: {e}")
+            
+            # Then clean up any remaining connections
             try:
-                await self.connection.disconnect()
-                print("\n🔌 Disconnected from IB")
+                await IbConnectionCleaner.cleanup_all()
+                print("✅ All connections cleaned up")
+                
+                # Wait for cleanup to complete
+                cleanup_success = await IbConnectionCleaner.wait_for_cleanup(max_wait_seconds=5)
+                if cleanup_success:
+                    print("✅ Cleanup verification passed")
+                else:
+                    print("⚠️  Some connections may still be active")
+                    
             except Exception as e:
-                print(f"\n⚠️  Disconnect error: {e}")
+                print(f"⚠️  Error during cleanup: {e}")
+            
+            # Show final connection status
+            print(f"\n📊 Final connection status:")
+            IbConnectionCleaner.print_connection_status()
                 
         self.print_summary()
 
