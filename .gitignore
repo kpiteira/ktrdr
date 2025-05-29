@@ -51,7 +51,7 @@ coverage.xml
 *.iws
 
 # TypeScript / JavaScript
-ktrdr/ui/frontend/node_modules/
+frontend/node_modules/
 **/node_modules/
 npm-debug.log
 yarn-debug.log
@@ -63,11 +63,11 @@ yarn-error.log
 .stylelintcache
 
 # Vite
-ktrdr/ui/frontend/.vite/
+frontend/.vite/
 **/dist-ssr/
 
 # Frontend Frameworks & Build Tools
-ktrdr/ui/frontend/.turbo
+frontend/.turbo
 **/out/
 **/.next/
 **/.nuxt
