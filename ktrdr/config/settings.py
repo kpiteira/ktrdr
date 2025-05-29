@@ -7,6 +7,7 @@ overrides and environment variable support.
 from pydantic import BaseSettings, Field
 from functools import lru_cache
 from .. import metadata
+from .ib_config import IbConfig, get_ib_config
 
 class APISettings(BaseSettings):
     """API Server Settings."""
@@ -47,3 +48,14 @@ def clear_settings_cache() -> None:
     """Clear settings cache."""
     get_api_settings.cache_clear()
     get_logging_settings.cache_clear()
+
+# Export IB config for convenience
+__all__ = [
+    "APISettings",
+    "LoggingSettings",
+    "get_api_settings",
+    "get_logging_settings",
+    "clear_settings_cache",
+    "IbConfig",
+    "get_ib_config",
+]
