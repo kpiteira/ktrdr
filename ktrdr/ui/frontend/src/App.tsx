@@ -1,11 +1,16 @@
 import { FC, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useChartSynchronizer } from './hooks/useChartSynchronizer';
+import { useKeyboardShortcuts, createCommonShortcuts } from './hooks/useKeyboardShortcuts';
+import { useToast, ToastProvider } from './context/ToastContext';
 import IndicatorSidebarContainer from './components/containers/IndicatorSidebarContainer';
 import BasicChartContainer from './components/containers/BasicChartContainer';
 import OscillatorChartContainer from './components/containers/OscillatorChartContainer';
 import LeftSidebar from './components/presentation/layout/LeftSidebar';
 import SymbolSelector from './components/SymbolSelector';
 import ErrorBoundary from './components/ErrorBoundary';
+import ToastContainer from './components/presentation/feedback/ToastContainer';
+import KeyboardShortcutsModal from './components/presentation/feedback/KeyboardShortcutsModal';
+import { NoIndicatorsEmpty } from './components/presentation/feedback/EmptyStates';
 import { PriceDataProvider } from './context/PriceDataContext';
 import { IndicatorInfo } from './store/indicatorRegistry';
 import { createLogger } from './utils/logger';
@@ -21,7 +26,9 @@ import './App.css';
 
 const logger = createLogger('App');
 
-const App: FC = () => {
+// Inner component that uses toast context
+const AppContent: FC = () => {
+  const { showToast } = useToast();
   
   // Core application state
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
@@ -29,6 +36,7 @@ const App: FC = () => {
   const [currentMode, setCurrentMode] = useState<'research' | 'train' | 'run'>('research');
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   
   // App initialization
   useEffect(() => {
@@ -193,6 +201,25 @@ const App: FC = () => {
     return `${chartType}-${leftSidebarCollapsed}-${rightSidebarCollapsed}-${chartDimensions.width}`;
   }, [leftSidebarCollapsed, rightSidebarCollapsed, chartDimensions.width]);
 
+  // Keyboard shortcuts setup
+  const shortcuts = useMemo(() => createCommonShortcuts({
+    toggleLeftSidebar: () => setLeftSidebarCollapsed(!leftSidebarCollapsed),
+    toggleRightSidebar: () => setRightSidebarCollapsed(!rightSidebarCollapsed),
+    showHelp: () => setShowKeyboardHelp(true),
+    clearIndicators: () => {
+      if (indicators.length > 0) {
+        setIndicators([]);
+        showToast({
+          type: 'info',
+          title: 'Indicators Cleared',
+          message: 'All indicators have been removed from your charts'
+        });
+      }
+    }
+  }), [leftSidebarCollapsed, rightSidebarCollapsed, indicators.length, showToast]);
+
+  useKeyboardShortcuts({ shortcuts });
+
   return (
     <ErrorBoundary>
       <PriceDataProvider>
@@ -207,12 +234,32 @@ const App: FC = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h1 style={{ margin: 0, fontSize: '1.25rem' }}>
-                KTRDR Trading Research - Slice 7 (Full Sidebar Layout)
+                KTRDR Trading Research - Slice 8 (Error & Loading Polish)
               </h1>
-              <SymbolSelector 
-                selectedSymbol={selectedSymbol}
-                onSymbolChange={handleSymbolChange}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <button
+                  onClick={() => setShowKeyboardHelp(true)}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    color: 'white',
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.25rem'
+                  }}
+                  title="Show keyboard shortcuts (⌘ + H)"
+                >
+                  ⌨️ Shortcuts
+                </button>
+                <SymbolSelector 
+                  selectedSymbol={selectedSymbol}
+                  onSymbolChange={handleSymbolChange}
+                />
+              </div>
             </div>
           </header>
           
@@ -282,28 +329,9 @@ const App: FC = () => {
 
               {/* Chart instructions for empty state */}
               {indicators.length === 0 && (
-                <div style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textAlign: 'center',
-                  color: '#666',
-                  fontSize: '1rem'
-                }}>
-                  <div>
-                    <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📈</div>
-                    <div style={{ marginBottom: '0.5rem', fontWeight: '500' }}>
-                      Welcome to KTRDR Trading Research
-                    </div>
-                    <div style={{ fontSize: '0.9rem' }}>
-                      Add indicators from the right sidebar to start analyzing {selectedSymbol} data
-                    </div>
-                    <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: '#999' }}>
-                      Try adding an SMA or RSI indicator to get started
-                    </div>
-                  </div>
-                </div>
+                <NoIndicatorsEmpty 
+                  onAddIndicator={() => setRightSidebarCollapsed(false)}
+                />
               )}
             </div>
 
@@ -319,9 +347,28 @@ const App: FC = () => {
               />
             </ErrorBoundary>
           </main>
+
+          {/* Toast Container */}
+          <ToastContainer />
+
+          {/* Keyboard Shortcuts Modal */}
+          <KeyboardShortcutsModal
+            shortcuts={shortcuts}
+            isOpen={showKeyboardHelp}
+            onClose={() => setShowKeyboardHelp(false)}
+          />
         </div>
       </PriceDataProvider>
     </ErrorBoundary>
+  );
+};
+
+// Main App component with Toast Provider
+const App: FC = () => {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 };
 

@@ -1,5 +1,6 @@
-import React, { FC, useCallback } from 'react';
+import { FC, useCallback } from 'react';
 import { useIndicatorManager } from '../../hooks/useIndicatorManager';
+import { useToast } from '../../context/ToastContext';
 import IndicatorSidebar from '../presentation/sidebar/IndicatorSidebar';
 import { IndicatorInfo } from '../../store/indicatorRegistry';
 
@@ -34,30 +35,62 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
   onIndicatorToggled,
   symbolData
 }) => {
+  const { showToast } = useToast();
+  
   // Use the indicator manager hook for all state and operations
   const indicatorManager = useIndicatorManager({
     onIndicatorCalculated: useCallback((indicator: IndicatorInfo, data: number[]) => {
+      // Show success toast
+      showToast({
+        type: 'success',
+        title: 'Indicator Added',
+        message: `${indicator.displayName} has been added to your chart`,
+        duration: 3000
+      });
       
       // Only notify parent, don't update local state to avoid circular updates
       if (onIndicatorAdded) {
         onIndicatorAdded({ ...indicator, data });
-      } else {
       }
-    }, [onIndicatorAdded]),
+    }, [onIndicatorAdded, showToast]),
     
     onError: useCallback((error: string) => {
       console.error('[IndicatorSidebarContainer] Indicator error:', error);
-      // Could show toast notification or error state
-    }, [])
+      
+      // Show error toast with user-friendly message
+      const userFriendlyError = error.includes('Network') 
+        ? 'Connection error. Please check your internet and try again.'
+        : error.includes('calculation') 
+        ? 'Failed to calculate indicator. Please try again.'
+        : 'Something went wrong. Please try again.';
+        
+      showToast({
+        type: 'error',
+        title: 'Indicator Error',
+        message: userFriendlyError,
+        duration: 5000
+      });
+    }, [showToast])
   });
 
   // Wrap the indicator manager actions to provide parent notifications
   const handleRemoveIndicator = useCallback((id: string) => {
+    const indicator = indicatorManager.indicators.find(ind => ind.id === id);
     indicatorManager.removeIndicator(id);
+    
+    if (indicator) {
+      showToast({
+        type: 'info',
+        title: 'Indicator Removed',
+        message: `${indicator.displayName} has been removed from your chart`,
+        duration: 2000
+      });
+    }
+    
     if (onIndicatorRemoved) {
       onIndicatorRemoved(id);
     }
-  }, [indicatorManager.removeIndicator, onIndicatorRemoved]);
+  }, [indicatorManager.indicators, indicatorManager.removeIndicator, onIndicatorRemoved, showToast]);
 
   const handleToggleIndicator = useCallback((id: string) => {
     const indicator = indicatorManager.indicators.find(ind => ind.id === id);
