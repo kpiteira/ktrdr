@@ -2,8 +2,8 @@ services:
   # FastAPI backend service - Development configuration
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.dev
+      context: ..
+      dockerfile: docker/backend/Dockerfile.dev
       # Cache from the previously built image for faster rebuilds
       cache_from:
         - ktrdr-backend:dev
@@ -14,16 +14,16 @@ services:
       - "8000:8000"
     volumes:
       # Mount source code for hot-reloading
-      - ./ktrdr:/app/ktrdr
+      - ../ktrdr:/app/ktrdr
       # Mount tests directory for running tests
-      - ./tests:/app/tests
+      - ../tests:/app/tests
       # Mount data and logs directories for persistence
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ../data:/app/data
+      - ../logs:/app/logs
       # Mount config as read-only
-      - ./config:/app/config:ro
+      - ../config:/app/config:ro
       # Mount output directory for visualization files
-      - ./output:/app/output
+      - ../output:/app/output
       # Cache directories for pip and uv
       - pip-cache:/root/.cache/pip
       - uv-cache:/root/.cache/uv
@@ -43,7 +43,7 @@ services:
   # Frontend React/TypeScript service - Development configuration
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile.dev
       # Cache from the previously built image for faster rebuilds
       cache_from:
@@ -55,7 +55,7 @@ services:
       - "5173:5173"
     volumes:
       # Mount source code for hot-reloading
-      - ./frontend:/app
+      - ../frontend:/app
       # Prevent node_modules from being overwritten by host volume
       - /app/node_modules
       # Add npm cache volume for faster npm installs
