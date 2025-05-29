@@ -37,6 +37,9 @@ from ktrdr.errors import (
 )
 
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.ib_connection import IbConnectionManager
+from ktrdr.data.ib_data_fetcher import IbDataFetcher
+from ktrdr.config.ib_config import get_ib_config
 
 # Get module logger
 logger = get_logger(__name__)
@@ -120,6 +123,17 @@ class DataManager:
         # Initialize the LocalDataLoader
         self.data_loader = LocalDataLoader(data_dir=data_dir)
         
+        # Initialize IB components (optional, may not be connected)
+        try:
+            self.ib_config = get_ib_config()
+            self.ib_connection = IbConnectionManager(self.ib_config)
+            self.ib_fetcher = IbDataFetcher(self.ib_connection, self.ib_config)
+            logger.info("IB fetcher initialized successfully")
+        except Exception as e:
+            self.ib_connection = None
+            self.ib_fetcher = None
+            logger.warning(f"IB fetcher initialization failed: {e}. Using local CSV only.")
+        
         # Store parameters
         self.max_gap_percentage = max_gap_percentage
         self.default_repair_method = default_repair_method
@@ -167,9 +181,9 @@ class DataManager:
             DataCorruptionError: If data has integrity issues and strict=True
             DataError: For other data-related errors
         """
-        # Load data using the LocalDataLoader
+        # Load data with IB-first strategy and fallback logic
         logger.info(f"Loading data for {symbol} ({timeframe})")
-        df = self.data_loader.load(symbol, timeframe, start_date, end_date)
+        df = self._load_with_fallback(symbol, timeframe, start_date, end_date)
         
         # Check if df is None (happens when fallback returns None)
         if df is None:
@@ -260,6 +274,134 @@ class DataManager:
             validate=validate,
             repair=repair
         )
+    
+    @log_entry_exit(logger=logger, log_args=True)
+    def _load_with_fallback(
+        self, 
+        symbol: str, 
+        timeframe: str, 
+        start_date: Optional[Union[str, datetime]] = None,
+        end_date: Optional[Union[str, datetime]] = None
+    ) -> Optional[pd.DataFrame]:
+        """
+        Load data with IB-first strategy and fallback to local CSV.
+        
+        Strategy:
+        1. Try IB first if connected and configured
+        2. If IB fails or partial data, try local CSV
+        3. If both have data, merge and fill gaps
+        4. Save merged data back to CSV for future use
+        
+        Args:
+            symbol: The trading symbol
+            timeframe: The timeframe of the data
+            start_date: Optional start date
+            end_date: Optional end date
+            
+        Returns:
+            DataFrame with data or None if no data found
+        """
+        ib_data = None
+        local_data = None
+        
+        # Convert string dates to datetime if needed
+        if isinstance(start_date, str):
+            start_date = pd.to_datetime(start_date)
+        if isinstance(end_date, str):
+            end_date = pd.to_datetime(end_date)
+            
+        # Strategy 1: Try IB first if available and connected
+        if self.ib_fetcher and self.ib_connection:
+            try:
+                if self.ib_connection.is_connected_sync():
+                    logger.info(f"Attempting to fetch {symbol} from IB")
+                    ib_data = self.ib_fetcher.fetch_historical_data_sync(
+                        symbol, timeframe, start_date, end_date
+                    )
+                    logger.info(f"Successfully fetched {len(ib_data) if ib_data is not None else 0} bars from IB")
+                else:
+                    logger.warning("IB connection not available, skipping IB fetch")
+            except Exception as e:
+                logger.warning(f"IB fetch failed for {symbol}: {e}")
+                ib_data = None
+        
+        # Strategy 2: Try local CSV
+        try:
+            logger.info(f"Attempting to load {symbol} from local CSV")
+            local_data = self.data_loader.load(symbol, timeframe, start_date, end_date)
+            logger.info(f"Successfully loaded {len(local_data) if local_data is not None else 0} bars from local CSV")
+        except DataNotFoundError:
+            logger.info(f"No local CSV data found for {symbol}")
+            local_data = None
+        except Exception as e:
+            logger.warning(f"Local CSV load failed for {symbol}: {e}")
+            local_data = None
+            
+        # Strategy 3: Merge and gap-fill if we have both sources
+        if ib_data is not None and local_data is not None:
+            logger.info(f"Merging IB data ({len(ib_data)} bars) with local data ({len(local_data)} bars)")
+            merged_data = self._merge_and_fill_gaps(ib_data, local_data)
+            
+            # Save merged data back to CSV for future use
+            try:
+                self.data_loader.save(merged_data, symbol, timeframe)
+                logger.info(f"Saved merged data ({len(merged_data)} bars) to local CSV")
+            except Exception as e:
+                logger.warning(f"Failed to save merged data: {e}")
+                
+            return merged_data
+            
+        # Strategy 4: Return whichever data source worked
+        if ib_data is not None:
+            logger.info(f"Using IB data only ({len(ib_data)} bars)")
+            # Save IB data to local CSV for future use
+            try:
+                self.data_loader.save(ib_data, symbol, timeframe)
+                logger.info(f"Saved IB data to local CSV")
+            except Exception as e:
+                logger.warning(f"Failed to save IB data: {e}")
+            return ib_data
+            
+        if local_data is not None:
+            logger.info(f"Using local CSV data only ({len(local_data)} bars)")
+            return local_data
+            
+        # Strategy 5: No data found from any source
+        logger.warning(f"No data found for {symbol} from any source")
+        return None
+    
+    def _merge_and_fill_gaps(self, ib_data: pd.DataFrame, local_data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Merge IB and local data, preferring IB data and filling gaps with local data.
+        
+        Args:
+            ib_data: DataFrame from IB
+            local_data: DataFrame from local CSV
+            
+        Returns:
+            Merged DataFrame with gaps filled
+        """
+        # Ensure both DataFrames have timezone-aware timestamps
+        if not pd.api.types.is_datetime64_any_dtype(ib_data.index):
+            ib_data.index = pd.to_datetime(ib_data.index)
+        if not pd.api.types.is_datetime64_any_dtype(local_data.index):
+            local_data.index = pd.to_datetime(local_data.index)
+            
+        # Make timezone-aware if needed (assume UTC for IB data)
+        if ib_data.index.tz is None:
+            ib_data.index = ib_data.index.tz_localize('UTC')
+        if local_data.index.tz is None:
+            local_data.index = local_data.index.tz_localize('UTC')
+            
+        # Combine data, preferring IB data where available
+        combined = ib_data.combine_first(local_data)
+        
+        # Sort by timestamp and remove duplicates
+        combined = combined.sort_index().drop_duplicates()
+        
+        logger.info(f"Merged data: IB({len(ib_data)}) + Local({len(local_data)}) = Combined({len(combined)})")
+        
+        return combined
     
     @log_entry_exit(logger=logger, log_args=True)
     def check_data_integrity(self, df: pd.DataFrame, timeframe: str, is_post_repair: bool = False) -> List[str]:
