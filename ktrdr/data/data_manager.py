@@ -37,10 +37,9 @@ from ktrdr.errors import (
 )
 
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.ib_connection import IbConnectionManager
-from ktrdr.data.ib_data_fetcher import IbDataFetcher
+from ktrdr.data.ib_connection_sync import IbConnectionSync, ConnectionConfig
+from ktrdr.data.ib_data_fetcher_sync import IbDataFetcherSync
 from ktrdr.config.ib_config import get_ib_config
-from ib_insync import util
 
 # Get module logger
 logger = get_logger(__name__)
@@ -126,9 +125,17 @@ class DataManager:
         
         # Initialize IB components (optional, may not be connected)
         try:
-            self.ib_config = get_ib_config()
-            self.ib_connection = IbConnectionManager(self.ib_config)
-            self.ib_fetcher = IbDataFetcher(self.ib_connection, self.ib_config)
+            ib_config = get_ib_config()
+            # Convert to sync config
+            sync_config = ConnectionConfig(
+                host=ib_config.host,
+                port=ib_config.port,
+                client_id=None,  # Use random client ID
+                timeout=ib_config.timeout,
+                readonly=ib_config.readonly
+            )
+            self.ib_connection = IbConnectionSync(sync_config)
+            self.ib_fetcher = IbDataFetcherSync(self.ib_connection)
             logger.info("IB fetcher initialized successfully")
         except Exception as e:
             self.ib_connection = None
@@ -377,13 +384,17 @@ class DataManager:
         if self.ib_fetcher and self.ib_connection:
             try:
                 logger.info(f"Attempting to fetch {symbol} from IB")
-                ib_data = self.ib_fetcher.fetch_historical_data_sync(
+                # Use synchronous fetch_historical_data directly
+                ib_data = self.ib_fetcher.fetch_historical_data(
                     symbol, timeframe, start_date, end_date
                 )
-                if ib_data is not None:
+                if ib_data is not None and not ib_data.empty:
                     # Normalize timezone for IB data (should already be UTC, but ensure consistency)
                     ib_data = self._normalize_dataframe_timezone(ib_data)
-                logger.info(f"Successfully fetched {len(ib_data) if ib_data is not None else 0} bars from IB")
+                    logger.info(f"Successfully fetched {len(ib_data)} bars from IB")
+                else:
+                    logger.info(f"No data returned from IB for {symbol}")
+                    ib_data = None
             except Exception as e:
                 logger.warning(f"IB fetch failed for {symbol}: {e}")
                 ib_data = None
