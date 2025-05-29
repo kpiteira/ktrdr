@@ -272,8 +272,107 @@ class IbConfigUpdateResponse(BaseModel):
         }
     )
 
+class DataRangeInfo(BaseModel):
+    """
+    Data range information for a symbol/timeframe combination.
+    
+    Attributes:
+        earliest_date: Earliest available data date
+        latest_date: Latest available data date (usually current)
+        total_days: Total days of data coverage
+        cached: Whether this result was from cache
+    """
+    earliest_date: Optional[datetime] = Field(None, description="Earliest available data date")
+    latest_date: Optional[datetime] = Field(None, description="Latest available data date")
+    total_days: Optional[int] = Field(None, description="Total days of data coverage")
+    cached: bool = Field(..., description="Whether result was from cache")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "earliest_date": "1980-12-12T00:00:00Z",
+                "latest_date": "2025-05-29T12:00:00Z",
+                "total_days": 16204,
+                "cached": True
+            }
+        }
+    )
+
+class SymbolRangeResponse(BaseModel):
+    """
+    Data ranges for all requested timeframes of a symbol.
+    
+    Attributes:
+        symbol: Symbol name
+        ranges: Dictionary mapping timeframe to range info
+    """
+    symbol: str = Field(..., description="Symbol name")
+    ranges: Dict[str, Optional[DataRangeInfo]] = Field(..., description="Timeframe to range mapping")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol": "AAPL",
+                "ranges": {
+                    "1d": {
+                        "earliest_date": "1980-12-12T00:00:00Z",
+                        "latest_date": "2025-05-29T12:00:00Z",
+                        "total_days": 16204,
+                        "cached": False
+                    },
+                    "1h": {
+                        "earliest_date": "2000-01-01T00:00:00Z",
+                        "latest_date": "2025-05-29T12:00:00Z",
+                        "total_days": 9279,
+                        "cached": False
+                    }
+                }
+            }
+        }
+    )
+
+class DataRangesResponse(BaseModel):
+    """
+    Data ranges for multiple symbols and timeframes.
+    
+    Attributes:
+        symbols: List of symbol range information
+        requested_timeframes: Timeframes that were requested
+        cache_stats: Statistics about cache usage
+    """
+    symbols: List[SymbolRangeResponse] = Field(..., description="Symbol range information")
+    requested_timeframes: List[str] = Field(..., description="Requested timeframes")
+    cache_stats: Dict[str, Any] = Field(..., description="Cache usage statistics")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbols": [
+                    {
+                        "symbol": "AAPL",
+                        "ranges": {
+                            "1d": {
+                                "earliest_date": "1980-12-12T00:00:00Z",
+                                "latest_date": "2025-05-29T12:00:00Z",
+                                "total_days": 16204,
+                                "cached": False
+                            }
+                        }
+                    }
+                ],
+                "requested_timeframes": ["1d"],
+                "cache_stats": {
+                    "total_cached_ranges": 1,
+                    "symbols_in_cache": 1,
+                    "cache_ttl_hours": 24
+                }
+            }
+        }
+    )
+
 # Type aliases for API responses
 IbStatusApiResponse = ApiResponse[IbStatusResponse]
 IbHealthApiResponse = ApiResponse[IbHealthStatus]
 IbConfigApiResponse = ApiResponse[IbConfigInfo]
 IbConfigUpdateApiResponse = ApiResponse[IbConfigUpdateResponse]
+IbDataRangesApiResponse = ApiResponse[DataRangesResponse]

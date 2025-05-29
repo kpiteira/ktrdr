@@ -5,10 +5,11 @@ This module provides service layer functionality for IB operations.
 """
 import time
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from ktrdr import get_logger
 from ktrdr.data.data_manager import DataManager
+from ktrdr.data.ib_data_fetcher_sync import IbDataRangeDiscovery
 from ktrdr.api.models.ib import (
     ConnectionInfo,
     ConnectionMetrics,
@@ -17,7 +18,10 @@ from ktrdr.api.models.ib import (
     IbHealthStatus,
     IbConfigInfo,
     IbConfigUpdateRequest,
-    IbConfigUpdateResponse
+    IbConfigUpdateResponse,
+    DataRangeInfo,
+    SymbolRangeResponse,
+    DataRangesResponse
 )
 from ktrdr.config.ib_config import reset_ib_config, IbConfig
 
@@ -314,4 +318,80 @@ class IbService:
             previous_config=previous_config,
             new_config=new_config,
             reconnect_required=reconnect_required
+        )
+    
+    def get_data_ranges(self, symbols: List[str], timeframes: List[str]) -> DataRangesResponse:
+        """
+        Get historical data ranges for multiple symbols and timeframes.
+        
+        Args:
+            symbols: List of symbols to check
+            timeframes: List of timeframes to check (e.g., ['1d', '1h'])
+            
+        Returns:
+            DataRangesResponse with range information
+        """
+        # Check if IB is available
+        if not (self.data_manager.ib_connection and self.data_manager.ib_fetcher):
+            raise ValueError("IB integration not available")
+        
+        # Create range discovery instance
+        range_discovery = IbDataRangeDiscovery(self.data_manager.ib_fetcher)
+        
+        # Track which results were cached
+        cached_ranges = set()
+        for symbol in symbols:
+            for timeframe in timeframes:
+                if range_discovery._get_cached_range(symbol, timeframe):
+                    cached_ranges.add(f"{symbol}:{timeframe}")
+        
+        # Get ranges for all symbols/timeframes
+        multiple_ranges = range_discovery.get_multiple_ranges(symbols, timeframes)
+        
+        # Convert to API response format
+        symbol_responses = []
+        for symbol in symbols:
+            ranges = {}
+            for timeframe in timeframes:
+                data_range = multiple_ranges.get(symbol, {}).get(timeframe)
+                
+                if data_range:
+                    start_date, end_date = data_range
+                    
+                    # Handle timezone-aware datetime objects
+                    if hasattr(start_date, 'to_pydatetime'):
+                        start_date = start_date.to_pydatetime()
+                    if hasattr(end_date, 'to_pydatetime'):
+                        end_date = end_date.to_pydatetime()
+                    
+                    # Calculate total days, handling timezone differences
+                    if start_date.tzinfo and not end_date.tzinfo:
+                        end_date = end_date.replace(tzinfo=start_date.tzinfo)
+                    elif end_date.tzinfo and not start_date.tzinfo:
+                        start_date = start_date.replace(tzinfo=end_date.tzinfo)
+                    
+                    total_days = (end_date - start_date).days
+                    was_cached = f"{symbol}:{timeframe}" in cached_ranges
+                    
+                    ranges[timeframe] = DataRangeInfo(
+                        earliest_date=start_date,
+                        latest_date=end_date,
+                        total_days=total_days,
+                        cached=was_cached
+                    )
+                else:
+                    ranges[timeframe] = None
+            
+            symbol_responses.append(SymbolRangeResponse(
+                symbol=symbol,
+                ranges=ranges
+            ))
+        
+        # Get cache statistics
+        cache_stats = range_discovery.get_cache_stats()
+        
+        return DataRangesResponse(
+            symbols=symbol_responses,
+            requested_timeframes=timeframes,
+            cache_stats=cache_stats
         )

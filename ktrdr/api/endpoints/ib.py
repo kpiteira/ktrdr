@@ -5,7 +5,7 @@ This module implements the API endpoints for IB status, health monitoring,
 and connection management.
 """
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from ktrdr import get_logger
@@ -15,11 +15,13 @@ from ktrdr.api.models.ib import (
     IbHealthApiResponse,
     IbConfigApiResponse,
     IbConfigUpdateApiResponse,
+    IbDataRangesApiResponse,
     IbStatusResponse,
     IbHealthStatus,
     IbConfigInfo,
     IbConfigUpdateRequest,
-    IbConfigUpdateResponse
+    IbConfigUpdateResponse,
+    DataRangesResponse
 )
 from ktrdr.api.models.base import ApiResponse, ErrorResponse
 from ktrdr.api.dependencies import get_data_manager
@@ -277,6 +279,108 @@ async def update_ib_config(
             error=ErrorResponse(
                 code="IB-CONFIG-UPDATE-ERROR",
                 message="Failed to update IB configuration",
+                details={"error": str(e)}
+            )
+        )
+
+
+@router.get(
+    "/ranges",
+    response_model=IbDataRangesApiResponse,
+    tags=["IB"],
+    summary="Get historical data ranges for symbols",
+    description="Discovers the earliest and latest available data for symbols and timeframes using binary search."
+)
+async def get_data_ranges(
+    symbols: str = Query(..., description="Comma-separated list of symbols (e.g., 'AAPL,MSFT')"),
+    timeframes: str = Query(default="1d", description="Comma-separated list of timeframes (e.g., '1d,1h')"),
+    ib_service: IbService = Depends(get_ib_service)
+) -> IbDataRangesApiResponse:
+    """
+    Get historical data ranges for symbols and timeframes.
+    
+    This endpoint discovers the earliest available data for the specified symbols
+    using a binary search algorithm. Results are cached for 24 hours to improve
+    performance on subsequent requests.
+    
+    Supported timeframes: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
+    
+    Returns:
+        IbDataRangesApiResponse with range information for each symbol/timeframe
+    """
+    try:
+        # Parse comma-separated inputs
+        symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+        timeframe_list = [t.strip().lower() for t in timeframes.split(",") if t.strip()]
+        
+        if not symbol_list:
+            return ApiResponse(
+                success=False,
+                data=None,
+                error=ErrorResponse(
+                    code="IB-RANGES-INVALID-SYMBOLS",
+                    message="No valid symbols provided",
+                    details={"symbols": symbols}
+                )
+            )
+        
+        if not timeframe_list:
+            return ApiResponse(
+                success=False,
+                data=None,
+                error=ErrorResponse(
+                    code="IB-RANGES-INVALID-TIMEFRAMES",
+                    message="No valid timeframes provided",
+                    details={"timeframes": timeframes}
+                )
+            )
+        
+        # Validate timeframes
+        valid_timeframes = {"1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"}
+        invalid_timeframes = [tf for tf in timeframe_list if tf not in valid_timeframes]
+        if invalid_timeframes:
+            return ApiResponse(
+                success=False,
+                data=None,
+                error=ErrorResponse(
+                    code="IB-RANGES-UNSUPPORTED-TIMEFRAMES",
+                    message=f"Unsupported timeframes: {', '.join(invalid_timeframes)}",
+                    details={
+                        "invalid_timeframes": invalid_timeframes,
+                        "valid_timeframes": list(valid_timeframes)
+                    }
+                )
+            )
+        
+        # Get data ranges
+        ranges_response = ib_service.get_data_ranges(symbol_list, timeframe_list)
+        
+        return ApiResponse(
+            success=True,
+            data=ranges_response,
+            error=None
+        )
+        
+    except ValueError as e:
+        logger.error(f"Error getting data ranges: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-RANGES-UNAVAILABLE",
+                message=str(e),
+                details={"error": str(e)}
+            )
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting data ranges: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-RANGES-ERROR",
+                message="Failed to get data ranges",
                 details={"error": str(e)}
             )
         )
