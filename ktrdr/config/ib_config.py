@@ -23,7 +23,7 @@ class IbConfig:
     
     # Connection settings
     host: str = field(default_factory=lambda: os.getenv("IB_HOST", "127.0.0.1"))
-    port: int = field(default_factory=lambda: int(os.getenv("IB_PORT", "7497")))
+    port: int = field(default_factory=lambda: int(os.getenv("IB_PORT", "4002")))
     client_id: int = field(default_factory=lambda: int(os.getenv("IB_CLIENT_ID", "1")))
     timeout: int = field(default_factory=lambda: int(os.getenv("IB_TIMEOUT", "10")))
     readonly: bool = field(default_factory=lambda: os.getenv("IB_READONLY", "false").lower() == "true")
@@ -122,13 +122,13 @@ class IbConfig:
     
     def is_paper_trading(self) -> bool:
         """Check if configured for paper trading."""
-        # Common paper trading ports
-        return self.port in [7497, 4001, 4002]
+        # Paper trading ports: TWS=7497, IB Gateway=4002
+        return self.port in [7497, 4002]
     
     def is_live_trading(self) -> bool:
         """Check if configured for live trading."""
-        # Common live trading ports
-        return self.port in [7496, 4000]
+        # Live trading ports: TWS=7496, IB Gateway=4001
+        return self.port in [7496, 4001]
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""

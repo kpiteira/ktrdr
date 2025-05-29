@@ -15,8 +15,11 @@ from ktrdr.api.models.ib import (
     DataFetchMetrics,
     IbStatusResponse,
     IbHealthStatus,
-    IbConfigInfo
+    IbConfigInfo,
+    IbConfigUpdateRequest,
+    IbConfigUpdateResponse
 )
+from ktrdr.config.ib_config import reset_ib_config, IbConfig
 
 logger = get_logger(__name__)
 
@@ -248,3 +251,67 @@ class IbService:
                 "message": f"Cleanup failed: {str(e)}",
                 "connections_closed": 0
             }
+    
+    async def update_config(self, request: IbConfigUpdateRequest) -> IbConfigUpdateResponse:
+        """
+        Update IB configuration dynamically.
+        
+        This method updates the IB configuration and determines if reconnection
+        is required for the changes to take effect.
+        
+        Args:
+            request: Configuration update request
+            
+        Returns:
+            IbConfigUpdateResponse with previous and new configuration
+        """
+        # Get current configuration
+        previous_config = self.get_config()
+        
+        # Create new configuration based on current + updates
+        current_ib_config = self.data_manager.ib_connection.config if self.data_manager.ib_connection else IbConfig()
+        
+        # Track if we need to reconnect
+        reconnect_required = False
+        
+        # Update configuration values
+        if request.port is not None and request.port != current_ib_config.port:
+            # Port change requires reconnection
+            reconnect_required = True
+            # Update port in environment variable so it persists
+            import os
+            os.environ["IB_PORT"] = str(request.port)
+            
+        if request.host is not None and request.host != current_ib_config.host:
+            # Host change requires reconnection
+            reconnect_required = True
+            os.environ["IB_HOST"] = request.host
+            
+        if request.client_id is not None:
+            # Client ID change requires reconnection if we're connected
+            if self.data_manager.ib_connection and self.data_manager.ib_connection.is_connected():
+                reconnect_required = True
+            os.environ["IB_CLIENT_ID"] = str(request.client_id)
+        
+        # Reset the configuration to pick up new environment variables
+        reset_ib_config()
+        
+        # Recreate data manager with new configuration
+        if reconnect_required:
+            # Disconnect existing connection if any
+            if self.data_manager.ib_connection and self.data_manager.ib_connection.is_connected():
+                self.data_manager.ib_connection.disconnect()
+                logger.info("Disconnected existing IB connection for reconfiguration")
+            
+            # Create new data manager with updated configuration
+            self.data_manager = DataManager()
+            logger.info("Created new DataManager with updated IB configuration")
+        
+        # Get new configuration
+        new_config = self.get_config()
+        
+        return IbConfigUpdateResponse(
+            previous_config=previous_config,
+            new_config=new_config,
+            reconnect_required=reconnect_required
+        )

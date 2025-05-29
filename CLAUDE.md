@@ -2,15 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL: THIS PROJECT USES UV ⚠️
+
+**NEVER run `python` or `python3` directly!** This project uses `uv` for Python dependency management.
+
+**Always use `uv run` for Python commands:**
+- `uv run python script.py` (NOT `python script.py`)
+- `uv run pytest` (NOT `pytest`)
+- `uv run mypy ktrdr` (NOT `mypy ktrdr`)
+- `uv run black ktrdr tests` (NOT `black ktrdr tests`)
+
+Running Python directly will fail because dependencies are managed by uv, not installed globally.
+
 ## Build/Test/Lint Commands
 
 - **Setup**: `./setup_dev.sh` to set up the environment
-- **Python Tests**: `pytest` (all tests), `pytest tests/path/to/test.py` (specific test)
-- **Python Linting**: `black ktrdr tests` (formatting), `mypy ktrdr` (type checking)
-- **Frontend Dev**: Use Docker containers (see docker/docker-compose.yml), NOT `npm run dev`
-- **Frontend Tests**: `cd frontend && npm run test`
-- **Frontend Lint**: `cd frontend && npm run lint`
-- **Frontend Typecheck**: `cd frontend && npm run typecheck`
+- **Python Tests**: `uv run pytest` (all tests), `uv run pytest tests/path/to/test.py` (specific test)
+- **Python Linting**: `uv run black ktrdr tests` (formatting), `uv run mypy ktrdr` (type checking)
+- **Frontend Dev**: Use Docker containers (see docker-compose.yml), NOT `npm run dev`
+- **Frontend Tests**: `cd ktrdr/ui/frontend && npm run test`
+- **Frontend Lint**: `cd ktrdr/ui/frontend && npm run lint`
+- **Frontend Typecheck**: `cd ktrdr/ui/frontend && npm run typecheck`
 
 ## Architecture Overview
 

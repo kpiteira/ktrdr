@@ -11,6 +11,7 @@ from ktrdr.api.config import APIConfig
 from ktrdr.api.services.data_service import DataService
 from ktrdr.api.services.indicator_service import IndicatorService
 from ktrdr.api.services.fuzzy_service import FuzzyService
+from ktrdr.data.data_manager import DataManager
 
 
 def get_api_config() -> APIConfig:
@@ -59,8 +60,20 @@ def get_fuzzy_service() -> FuzzyService:
     return FuzzyService()
 
 
+# Data manager dependency
+def get_data_manager() -> DataManager:
+    """
+    Dependency for providing the data manager.
+    
+    Returns:
+        DataManager: Initialized data manager instance with IB integration
+    """
+    return DataManager()
+
+
 # Define common dependencies with annotations for usage in route functions
 ConfigDep = Annotated[APIConfig, Depends(get_api_config)]
 DataServiceDep = Annotated[DataService, Depends(get_data_service)]
 IndicatorServiceDep = Annotated[IndicatorService, Depends(get_indicator_service)]
 FuzzyServiceDep = Annotated[FuzzyService, Depends(get_fuzzy_service)]
+DataManagerDep = Annotated[DataManager, Depends(get_data_manager)]

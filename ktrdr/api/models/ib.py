@@ -204,7 +204,76 @@ class IbConfigInfo(BaseModel):
         }
     )
 
+class IbConfigUpdateRequest(BaseModel):
+    """
+    Request to update IB configuration.
+    
+    Attributes:
+        port: New port number (4002=IB Gateway Paper, 4001=IB Gateway Live, 7497=TWS Paper, 7496=TWS Live)
+        host: New host address (optional)
+        client_id: New client ID (optional)
+    """
+    port: Optional[int] = Field(None, ge=1, le=65535, description="New port number")
+    host: Optional[str] = Field(None, description="New host address")
+    client_id: Optional[int] = Field(None, ge=0, le=999999, description="New client ID")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "port": 4001,
+                "host": "127.0.0.1",
+                "client_id": 1
+            }
+        }
+    )
+
+class IbConfigUpdateResponse(BaseModel):
+    """
+    Response after updating IB configuration.
+    
+    Attributes:
+        previous_config: Configuration before update
+        new_config: Configuration after update
+        reconnect_required: Whether reconnection is required for changes to take effect
+    """
+    previous_config: IbConfigInfo = Field(..., description="Configuration before update")
+    new_config: IbConfigInfo = Field(..., description="Configuration after update")
+    reconnect_required: bool = Field(..., description="Whether reconnection is required")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "previous_config": {
+                    "host": "127.0.0.1",
+                    "port": 4002,
+                    "client_id_range": {"min": 1000, "max": 9999},
+                    "timeout": 15,
+                    "readonly": False,
+                    "rate_limit": {
+                        "max_requests": 50,
+                        "period_seconds": 60,
+                        "pacing_delay": 0.6
+                    }
+                },
+                "new_config": {
+                    "host": "127.0.0.1",
+                    "port": 4001,
+                    "client_id_range": {"min": 1000, "max": 9999},
+                    "timeout": 15,
+                    "readonly": False,
+                    "rate_limit": {
+                        "max_requests": 50,
+                        "period_seconds": 60,
+                        "pacing_delay": 0.6
+                    }
+                },
+                "reconnect_required": True
+            }
+        }
+    )
+
 # Type aliases for API responses
 IbStatusApiResponse = ApiResponse[IbStatusResponse]
 IbHealthApiResponse = ApiResponse[IbHealthStatus]
 IbConfigApiResponse = ApiResponse[IbConfigInfo]
+IbConfigUpdateApiResponse = ApiResponse[IbConfigUpdateResponse]

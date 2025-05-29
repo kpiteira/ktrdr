@@ -14,9 +14,12 @@ from ktrdr.api.models.ib import (
     IbStatusApiResponse,
     IbHealthApiResponse,
     IbConfigApiResponse,
+    IbConfigUpdateApiResponse,
     IbStatusResponse,
     IbHealthStatus,
-    IbConfigInfo
+    IbConfigInfo,
+    IbConfigUpdateRequest,
+    IbConfigUpdateResponse
 )
 from ktrdr.api.models.base import ApiResponse, ErrorResponse
 from ktrdr.api.dependencies import get_data_manager
@@ -229,6 +232,51 @@ async def cleanup_ib_connections(
             error=ErrorResponse(
                 code="IB-CLEANUP-ERROR",
                 message="Failed to clean up IB connections",
+                details={"error": str(e)}
+            )
+        )
+
+
+@router.put(
+    "/config",
+    response_model=IbConfigUpdateApiResponse,
+    tags=["IB"],
+    summary="Update IB configuration",
+    description="Updates the IB connection configuration. May require reconnection for changes to take effect."
+)
+async def update_ib_config(
+    request: IbConfigUpdateRequest,
+    ib_service: IbService = Depends(get_ib_service)
+) -> IbConfigUpdateApiResponse:
+    """
+    Update IB configuration dynamically.
+    
+    Allows updating:
+    - Port (4002=IB Gateway Paper, 4001=IB Gateway Live, 7497=TWS Paper, 7496=TWS Live)
+    - Host address
+    - Client ID
+    
+    The response indicates whether reconnection is required for the changes
+    to take effect.
+    
+    Returns:
+        IbConfigUpdateApiResponse with previous and new configuration
+    """
+    try:
+        result = await ib_service.update_config(request)
+        return ApiResponse(
+            success=True,
+            data=result,
+            error=None
+        )
+    except Exception as e:
+        logger.error(f"Error updating IB config: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-CONFIG-UPDATE-ERROR",
+                message="Failed to update IB configuration",
                 details={"error": str(e)}
             )
         )
