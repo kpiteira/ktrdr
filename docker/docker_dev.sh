@@ -2,7 +2,15 @@
 # Docker development helper script for KTRDR
 
 # Change to docker directory for docker-compose commands
-cd "$(dirname "$0")"
+# Get the actual script location (resolving symlinks) - macOS compatible
+SOURCE="$0"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # Set colorful output
 BLUE='\033[0;34m'
