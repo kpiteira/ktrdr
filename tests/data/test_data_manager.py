@@ -70,7 +70,7 @@ def data_manager(tmp_path):
     """Create a DataManager instance with a temporary directory for testing."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    return DataManager(data_dir=str(data_dir))
+    return DataManager(data_dir=str(data_dir), enable_ib=False)
 
 
 @pytest.fixture

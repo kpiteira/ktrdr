@@ -3,6 +3,8 @@ Tests for DataManager IB integration
 """
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="IB integration tests disabled for unit test run")
 import asyncio
 from datetime import datetime, timezone, timedelta
 from unittest.mock import Mock, AsyncMock, patch

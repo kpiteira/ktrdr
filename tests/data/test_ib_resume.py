@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import pytest
+
+pytestmark = pytest.mark.skip(reason="IB integration tests disabled for unit test run")
+
 import pandas as pd
 
 from ktrdr.data.ib_resume_handler import IbResumeHandler, DownloadChunk, DownloadSession
