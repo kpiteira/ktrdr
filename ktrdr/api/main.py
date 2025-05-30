@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from ktrdr.api.config import APIConfig
 from ktrdr.api.middleware import add_middleware
+from ktrdr.api.startup import lifespan
 from ktrdr.errors import (
     DataError, 
     ConnectionError, 
@@ -49,6 +50,7 @@ def create_application() -> FastAPI:
         # We'll use custom redoc route instead of the default
         redoc_url=None,
         openapi_url=f"{config.api_prefix}/openapi.json",
+        lifespan=lifespan,
     )
     
     # Add CORS middleware

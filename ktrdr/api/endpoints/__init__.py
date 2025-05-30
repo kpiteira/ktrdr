@@ -29,6 +29,7 @@ from ktrdr.api.endpoints.data import router as data_router
 from ktrdr.api.endpoints.indicators import router as indicators_router
 from ktrdr.api.endpoints.fuzzy import router as fuzzy_router
 from ktrdr.api.endpoints.ib import router as ib_router
+from ktrdr.api.endpoints.system import router as system_router
 
 # Include routers with appropriate prefixes
 # Removed the "/v1" prefix since the data router endpoints already include this prefix
@@ -37,3 +38,4 @@ api_router.include_router(data_router, tags=["Data"])
 api_router.include_router(indicators_router, tags=["indicators"])
 api_router.include_router(fuzzy_router, tags=["Fuzzy"])
 api_router.include_router(ib_router, prefix="/ib", tags=["IB"])
+api_router.include_router(system_router, prefix="/system", tags=["System"])

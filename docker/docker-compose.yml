@@ -31,16 +31,18 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
-      # IB Gateway configuration - using host network, connect to localhost
-      - IB_HOST=127.0.0.1
-      - IB_PORT=4002
-      - IB_CLIENT_ID=999
+      # IB Gateway configuration - using port forwarding through host
+      - IB_HOST=host.docker.internal
+      - IB_PORT=4003
+      - IB_CLIENT_ID=1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - ktrdr-network
 

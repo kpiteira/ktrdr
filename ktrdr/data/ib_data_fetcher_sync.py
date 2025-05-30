@@ -26,12 +26,15 @@ class IbDataFetcherSync:
         Initialize the data fetcher.
         
         Args:
-            connection: Optional IbConnectionSync instance
-            config: Optional ConnectionConfig
+            connection: IbConnectionSync instance (REQUIRED for persistent connection manager)
+            config: Optional ConnectionConfig (only used if connection is None - DEPRECATED)
         """
         if connection:
             self.connection = connection
         else:
+            # DANGEROUS: Creating own connection can cause garbage collection disconnects
+            logger.warning("⚠️ Creating IbDataFetcherSync without connection parameter - this may cause disconnects!")
+            logger.warning("⚠️ Consider using persistent connection manager instead")
             self.connection = IbConnectionSync(config)
         
         self.ib = self.connection.ib

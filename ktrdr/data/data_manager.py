@@ -37,10 +37,9 @@ from ktrdr.errors import (
 )
 
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.ib_connection_sync import IbConnectionSync, ConnectionConfig
+from ktrdr.data.ib_connection_manager import get_connection_manager
 from ktrdr.data.ib_data_fetcher_sync import IbDataFetcherSync
 from ktrdr.data.data_quality_validator import DataQualityValidator
-from ktrdr.config.ib_config import get_ib_config
 
 # Get module logger
 logger = get_logger(__name__)
@@ -127,20 +126,12 @@ class DataManager:
         # Initialize the LocalDataLoader
         self.data_loader = LocalDataLoader(data_dir=data_dir)
         
-        # Store IB configuration for lazy initialization
+        # Use persistent connection manager for IB integration
         self.enable_ib = enable_ib
-        self.ib_connection = None
-        self.ib_fetcher = None
-        self._ib_config = None
+        self.connection_manager = get_connection_manager() if enable_ib else None
         
         if enable_ib:
-            try:
-                # Store config but don't connect yet (lazy initialization)
-                self._ib_config = get_ib_config()
-                logger.info("IB configuration loaded for lazy initialization")
-            except Exception as e:
-                logger.warning(f"IB configuration failed: {e}. IB integration disabled.")
-                self.enable_ib = False
+            logger.info("IB integration enabled (using persistent connection manager)")
         else:
             logger.info("IB integration disabled")
         
@@ -383,57 +374,15 @@ class DataManager:
     
     def _ensure_ib_connection(self) -> bool:
         """
-        Ensure IB connection is available, initializing lazily if needed.
+        Check if IB connection is available from persistent connection manager.
         
         Returns:
             True if IB connection is available, False otherwise
         """
-        if not self.enable_ib or self._ib_config is None:
+        if not self.enable_ib or not self.connection_manager:
             return False
             
-        # Check if we're in an async context (FastAPI/uvloop environment)
-        # IB connections fail with "event loop already running" in async contexts
-        try:
-            import asyncio
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                logger.warning("Cannot initialize IB connection in async context (event loop already running)")
-                logger.info("IB integration automatically disabled in FastAPI/uvloop environment")
-                return False
-        except RuntimeError:
-            # No running loop, safe to proceed
-            pass
-            
-        # If already connected, check if connection is still alive
-        if self.ib_connection and self.ib_fetcher:
-            try:
-                if self.ib_connection.is_connected():
-                    return True
-                else:
-                    logger.info("IB connection was lost, reconnecting...")
-            except Exception as e:
-                logger.warning(f"Error checking IB connection status: {e}")
-        
-        # Initialize IB components lazily
-        try:
-            logger.info("Initializing IB connection on demand...")
-            # Convert to sync config
-            sync_config = ConnectionConfig(
-                host=self._ib_config.host,
-                port=self._ib_config.port,
-                client_id=None,  # Use random client ID
-                timeout=self._ib_config.timeout,
-                readonly=self._ib_config.readonly
-            )
-            self.ib_connection = IbConnectionSync(sync_config)
-            self.ib_fetcher = IbDataFetcherSync(self.ib_connection)
-            logger.info("IB connection initialized successfully")
-            return True
-        except Exception as e:
-            logger.warning(f"IB connection initialization failed: {e}")
-            self.ib_connection = None
-            self.ib_fetcher = None
-            return False
+        return self.connection_manager.is_connected()
 
     @log_entry_exit(logger=logger, log_args=True)
     def _load_with_fallback(
@@ -518,14 +467,20 @@ class DataManager:
         
         # Strategy 3: Only connect to IB if we need additional data
         if need_ib_data:
-            # Lazy initialization of IB connection
+            # Check if IB connection is available
             if self._ensure_ib_connection():
                 try:
-                    logger.info(f"Attempting to fetch {symbol} from IB (lazy initialization)")
-                    # Use synchronous fetch_historical_data directly with IB-specific dates
-                    ib_data = self.ib_fetcher.fetch_historical_data(
-                        symbol, timeframe, ib_start_date, ib_end_date
-                    )
+                    logger.info(f"Attempting to fetch {symbol} from IB (using persistent connection)")
+                    # Get connection from persistent manager and create fetcher
+                    ib_connection = self.connection_manager.get_connection()
+                    if ib_connection:
+                        ib_fetcher = IbDataFetcherSync(ib_connection)
+                        ib_data = ib_fetcher.fetch_historical_data(
+                            symbol, timeframe, ib_start_date, ib_end_date
+                        )
+                    else:
+                        logger.warning("No IB connection available from persistent manager")
+                        ib_data = None
                     if ib_data is not None and not ib_data.empty:
                         # Normalize timezone for IB data (should already be UTC, but ensure consistency)
                         ib_data = self._normalize_dataframe_timezone(ib_data)

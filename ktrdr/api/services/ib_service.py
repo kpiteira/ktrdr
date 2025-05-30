@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List
 
 from ktrdr import get_logger
 from ktrdr.data.data_manager import DataManager
+from ktrdr.data.ib_connection_manager import get_connection_manager
 from ktrdr.data.ib_data_fetcher_sync import IbDataRangeDiscovery
 from ktrdr.api.models.ib import (
     ConnectionInfo,
@@ -45,6 +46,7 @@ class IbService:
                          a new instance will be created.
         """
         self.data_manager = data_manager or DataManager()
+        self.connection_manager = get_connection_manager()
         logger.info("IbService initialized")
     
     def get_status(self) -> IbStatusResponse:
@@ -54,11 +56,9 @@ class IbService:
         Returns:
             IbStatusResponse with connection info, metrics, and availability
         """
-        # Check if IB components are available
-        ib_available = (
-            self.data_manager.ib_connection is not None and 
-            self.data_manager.ib_fetcher is not None
-        )
+        # Check if IB connection is available via persistent connection manager
+        connection = self.connection_manager.get_connection()
+        ib_available = connection is not None and connection.is_connected()
         
         if not ib_available:
             # Return minimal status when IB is not available
@@ -87,45 +87,35 @@ class IbService:
                 ib_available=False
             )
         
-        # Get connection info
-        conn = self.data_manager.ib_connection
-        is_connected = conn.is_connected()
-        
-        # Calculate connection time if connected
-        connection_time = None
-        uptime_seconds = None
-        if is_connected and conn.metrics.get("last_connect_time"):
-            connection_time = datetime.fromtimestamp(
-                conn.metrics["last_connect_time"], 
-                tz=timezone.utc
-            )
-            uptime_seconds = time.time() - conn.metrics["last_connect_time"]
+        # Get connection info from persistent connection manager
+        status = self.connection_manager.get_status()
+        metrics = self.connection_manager.get_metrics()
         
         connection_info = ConnectionInfo(
-            connected=is_connected,
-            host=conn.config.host,
-            port=conn.config.port,
-            client_id=conn.config.client_id,
-            connection_time=connection_time
+            connected=status.connected,
+            host=status.host,
+            port=status.port,
+            client_id=status.client_id,
+            connection_time=status.last_connect_time
         )
         
-        # Get connection metrics
+        # Get connection metrics from connection manager
         connection_metrics = ConnectionMetrics(
-            total_connections=conn.metrics.get("total_connections", 0),
-            failed_connections=conn.metrics.get("failed_connections", 0),
-            last_connect_time=conn.metrics.get("last_connect_time"),
-            last_disconnect_time=conn.metrics.get("last_disconnect_time"),
-            uptime_seconds=uptime_seconds
+            total_connections=status.connection_attempts,
+            failed_connections=status.failed_attempts,
+            last_connect_time=status.last_connect_time.timestamp() if status.last_connect_time else None,
+            last_disconnect_time=status.last_disconnect_time.timestamp() if status.last_disconnect_time else None,
+            uptime_seconds=metrics.get("uptime_seconds")
         )
         
-        # Get data fetching metrics
-        fetcher_metrics = self.data_manager.ib_fetcher.get_metrics()
+        # For data fetching metrics, we'll use placeholder values since
+        # the persistent connection manager doesn't track these yet
         data_metrics = DataFetchMetrics(
-            total_requests=fetcher_metrics.get("total_requests", 0),
-            successful_requests=fetcher_metrics.get("successful_requests", 0),
-            failed_requests=fetcher_metrics.get("failed_requests", 0),
-            total_bars_fetched=fetcher_metrics.get("total_bars_fetched", 0),
-            success_rate=fetcher_metrics.get("success_rate", 0.0) * 100  # Convert to percentage
+            total_requests=0,
+            successful_requests=0,
+            failed_requests=0,
+            total_bars_fetched=0,
+            success_rate=0.0
         )
         
         return IbStatusResponse(
@@ -142,29 +132,47 @@ class IbService:
         Returns:
             IbHealthStatus indicating overall health
         """
-        # Check if IB is available
-        if not (self.data_manager.ib_connection and self.data_manager.ib_fetcher):
+        # Check if IB connection is available via persistent connection manager
+        connection = self.connection_manager.get_connection()
+        if not connection:
             return IbHealthStatus(
                 healthy=False,
                 connection_ok=False,
                 data_fetching_ok=False,
                 last_successful_request=None,
-                error_message="IB integration not available"
+                error_message="IB connection not available"
             )
         
-        # Check connection
-        connection_ok = self.data_manager.ib_connection.is_connected()
+        # Check connection using both manager state and actual IB connection
+        manager_connected = self.connection_manager.is_connected()
+        actual_connected = connection.is_connected()
         
-        # Check data fetching (based on success rate)
-        fetcher_metrics = self.data_manager.ib_fetcher.get_metrics()
-        success_rate = fetcher_metrics.get("success_rate", 0.0)
-        data_fetching_ok = success_rate > 0.9  # Consider healthy if >90% success rate
+        # REAL IB API TEST: Actually try to make an API call to verify connection works
+        api_test_ok = False
+        try:
+            # Try to get account information - this is a simple API call that will fail if transport is broken
+            if actual_connected:
+                ib = connection.ib
+                # Test 1: Try to get managed accounts (simple and fast)
+                accounts = ib.managedAccounts()
+                if accounts is not None:  # Even empty list is OK
+                    api_test_ok = True
+                    logger.debug(f"✅ IB API test successful: {len(accounts)} accounts found")
+                else:
+                    logger.warning("❌ IB API test failed: managedAccounts() returned None")
+        except Exception as e:
+            logger.warning(f"❌ IB API test failed: {e}")
+            api_test_ok = False
         
-        # Get last successful request time
-        last_successful_request = None
-        if fetcher_metrics.get("successful_requests", 0) > 0:
-            # This is a simplified approach - in production you might track this explicitly
-            last_successful_request = datetime.now(timezone.utc)
+        # Connection is only OK if all checks pass
+        connection_ok = manager_connected and actual_connected and api_test_ok
+        
+        # Data fetching is OK if we can successfully make API calls
+        data_fetching_ok = api_test_ok
+        
+        # Get last successful request time from connection status
+        status = self.connection_manager.get_status()
+        last_successful_request = status.last_connect_time
         
         # Determine overall health
         healthy = connection_ok and data_fetching_ok

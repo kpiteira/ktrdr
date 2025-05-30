@@ -6,7 +6,7 @@ import time
 import random
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
-from ib_insync import IB
+from ib_insync import IB, util
 from ktrdr.logging import get_logger
 from ktrdr.errors import ConnectionError
 
@@ -42,6 +42,7 @@ class IbConnectionSync:
         
         self.ib = IB()
         self.connected = False
+        self._event_loop = None  # Keep reference to event loop
         
         # Connection metrics
         self.metrics: Dict[str, Any] = {
@@ -75,14 +76,8 @@ class IbConnectionSync:
                     f"with client ID {self.config.client_id} (attempt {retries+1}/{max_retries})..."
                 )
                 
-                # Use synchronous connect
-                self.ib.connect(
-                    self.config.host, 
-                    self.config.port, 
-                    clientId=self.config.client_id,
-                    readonly=self.config.readonly,
-                    timeout=self.config.timeout
-                )
+                # Use synchronous connect with proper event loop handling
+                self._connect_with_event_loop()
                 
                 if self.ib.isConnected():
                     logger.info("Successfully connected to IB")
@@ -100,6 +95,47 @@ class IbConnectionSync:
         
         logger.error("Failed to connect to IB after all retries")
         return False
+    
+    def _connect_with_event_loop(self) -> None:
+        """Connect to IB with proper event loop handling for thread context."""
+        import asyncio
+        
+        async def _do_connect_async():
+            """Async function to connect to IB."""
+            await self.ib.connectAsync(
+                self.config.host, 
+                self.config.port, 
+                clientId=self.config.client_id,
+                readonly=self.config.readonly,
+                timeout=self.config.timeout
+            )
+        
+        # Create new event loop for this thread and KEEP IT ALIVE
+        try:
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Store reference to keep loop alive for connection lifetime
+            self._event_loop = loop
+            
+            # Connect using the loop
+            loop.run_until_complete(_do_connect_async())
+            
+            # DO NOT CLOSE THE LOOP - ib_insync needs it to stay alive!
+            logger.info(f"Event loop created and kept alive for client ID {self.config.client_id}")
+            
+        except Exception as e:
+            # Clean up loop only on failure
+            if self._event_loop:
+                try:
+                    self._event_loop.close()
+                except:
+                    pass
+                self._event_loop = None
+                asyncio.set_event_loop(None)
+            # Re-raise with more context
+            raise ConnectionError(f"IB connection failed: {e}")
     
     def ensure_connection(self) -> bool:
         """
@@ -119,7 +155,7 @@ class IbConnectionSync:
         return self.ib.isConnected()
     
     def disconnect(self) -> None:
-        """Disconnect from IB."""
+        """Disconnect from IB and clean up event loop."""
         if self.ib.isConnected():
             logger.info(f"Disconnecting from IB (client ID: {self.config.client_id})...")
             self.ib.disconnect()
@@ -128,6 +164,16 @@ class IbConnectionSync:
             logger.info("Successfully disconnected from IB")
         else:
             logger.debug("Not connected, nothing to disconnect")
+        
+        # Clean up event loop
+        if self._event_loop and not self._event_loop.is_closed():
+            try:
+                logger.info(f"Cleaning up event loop for client ID {self.config.client_id}")
+                self._event_loop.close()
+                self._event_loop = None
+            except Exception as e:
+                logger.warning(f"Error cleaning up event loop: {e}")
+                self._event_loop = None
     
     def get_connection_info(self) -> Dict[str, Any]:
         """Get connection status and metrics."""
@@ -150,9 +196,17 @@ class IbConnectionSync:
     
     def __del__(self):
         """Ensure cleanup on deletion."""
+        import traceback
         try:
             if self.ib and self.ib.isConnected():
-                logger.warning(f"Connection not properly closed for client ID {self.config.client_id}, forcing cleanup")
-                self.ib.disconnect()
+                logger.error(f"🚨 DESTRUCTOR DISCONNECT DISABLED: Connection not properly closed for client ID {self.config.client_id}")
+                logger.error(f"🚨 WOULD HAVE DISCONNECTED - but disabled to prevent issues")
+                logger.error(f"🚨 DESTRUCTOR TRACEBACK: Object being garbage collected:")
+                # Log the stack trace to see where this object was created
+                for line in traceback.format_stack():
+                    logger.error(f"🚨 {line.strip()}")
+                # TEMPORARILY DISABLED: self.ib.disconnect()
+            else:
+                logger.info(f"🧹 Clean destructor for client ID {self.config.client_id} (was already disconnected)")
         except Exception as e:
             logger.debug(f"Error in destructor: {e}")
