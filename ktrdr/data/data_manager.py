@@ -391,6 +391,19 @@ class DataManager:
         if not self.enable_ib or self._ib_config is None:
             return False
             
+        # Check if we're in an async context (FastAPI/uvloop environment)
+        # IB connections fail with "event loop already running" in async contexts
+        try:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                logger.warning("Cannot initialize IB connection in async context (event loop already running)")
+                logger.info("IB integration automatically disabled in FastAPI/uvloop environment")
+                return False
+        except RuntimeError:
+            # No running loop, safe to proceed
+            pass
+            
         # If already connected, check if connection is still alive
         if self.ib_connection and self.ib_fetcher:
             try:

@@ -31,6 +31,10 @@ services:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
+      # IB Gateway configuration - using host network, connect to localhost
+      - IB_HOST=127.0.0.1
+      - IB_PORT=4002
+      - IB_CLIENT_ID=999
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -64,6 +68,8 @@ services:
       - NODE_ENV=development
       - VITE_API_BASE_URL=http://backend:8000/api/v1
       - VITE_DEBUG_MODE=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - backend
     networks:

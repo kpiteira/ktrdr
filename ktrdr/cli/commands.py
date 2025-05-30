@@ -1154,14 +1154,13 @@ def test_ib(
     
     Requires IB Gateway/TWS to be running.
     """
-    import asyncio
     from datetime import datetime, timedelta, timezone
     from ktrdr.config.ib_config import get_ib_config
-    from ktrdr.data.ib_connection import IbConnectionManager
-    from ktrdr.data.ib_data_fetcher import IbDataFetcher
+    from ktrdr.data.ib_connection_sync import IbConnectionSync, ConnectionConfig
+    from ktrdr.data.ib_data_fetcher_sync import IbDataFetcherSync
     from ktrdr.data.data_manager import DataManager
     
-    async def run_ib_tests():
+    def run_ib_tests():
         console.print("\n🚀 [bold blue]Testing IB Integration[/bold blue]")
         console.print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
@@ -1194,10 +1193,18 @@ def test_ib(
         console.print("\n🔌 Testing Connection...")
         connection = None
         try:
-            connection = IbConnectionManager(config)
-            await connection.connect()
+            # Convert to sync config
+            sync_config = ConnectionConfig(
+                host=config.host,
+                port=config.port,
+                client_id=config.client_id,
+                timeout=config.timeout,
+                readonly=config.readonly
+            )
+            connection = IbConnectionSync(sync_config)
+            # Connection is established automatically in __init__
             
-            if await connection.is_connected():
+            if connection.is_connected():
                 test_result("IB connection", True, "Connected successfully")
             else:
                 test_result("IB connection", False, "Connection check failed")
@@ -1212,18 +1219,18 @@ def test_ib(
         
         if quick:
             # For quick test, just test connection
-            await connection.disconnect()
+            connection.disconnect()
             console.print(f"\n📊 [bold]Quick Test Results:[/bold] {results['passed']}/{results['total']} passed")
             return
             
         # Test 3: Data Fetcher
         console.print("\n📈 Testing Data Fetcher...")
         try:
-            fetcher = IbDataFetcher(connection, config)
+            fetcher = IbDataFetcherSync(connection)
             end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=2)
             
-            data = await fetcher.fetch_historical_data(symbol, "1h", start_date, end_date)
+            data = fetcher.fetch_historical_data(symbol, "1h", start_date, end_date)
             
             if data is not None and len(data) > 0:
                 test_result("Data fetching", True, f"Fetched {len(data)} bars for {symbol}")
@@ -1234,15 +1241,20 @@ def test_ib(
                 test_result("Data fetching", False, "No data returned")
         except Exception as e:
             test_result("Data fetching", False, str(e))
+            if verbose:
+                console.print(f"   Error details: {type(e).__name__}: {str(e)}")
         
         # Test 4: DataManager Integration
         console.print("\n🔄 Testing DataManager...")
         try:
             data_manager = DataManager()
-            has_ib = (data_manager.ib_connection is not None and 
-                     data_manager.ib_fetcher is not None)
-            test_result("DataManager IB integration", has_ib, 
-                "IB components initialized" if has_ib else "IB components missing")
+            # Test if IB integration is properly configured (lazy initialization)
+            has_ib_config = (data_manager.enable_ib and data_manager._ib_config is not None)
+            # Try to trigger lazy initialization
+            can_connect = data_manager._ensure_ib_connection() if has_ib_config else False
+            
+            test_result("DataManager IB integration", has_ib_config and can_connect, 
+                f"IB config: {has_ib_config}, Connection: {can_connect}")
         except Exception as e:
             test_result("DataManager IB integration", False, str(e))
         
@@ -1259,7 +1271,7 @@ def test_ib(
         
         # Cleanup
         if connection:
-            await connection.disconnect()
+            connection.disconnect()
             console.print("\n🔌 Disconnected from IB")
         
         # Summary
@@ -1273,9 +1285,9 @@ def test_ib(
         else:
             console.print("❌ [red]Many tests failed. Check IB setup.[/red]")
     
-    # Run the async tests
+    # Run the tests (now synchronous)
     try:
-        asyncio.run(run_ib_tests())
+        run_ib_tests()
     except KeyboardInterrupt:
         console.print("\n⏹️ Test interrupted by user")
     except Exception as e:
