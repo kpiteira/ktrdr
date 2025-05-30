@@ -127,29 +127,22 @@ class DataManager:
         # Initialize the LocalDataLoader
         self.data_loader = LocalDataLoader(data_dir=data_dir)
         
-        # Initialize IB components (optional, may not be connected)
+        # Store IB configuration for lazy initialization
+        self.enable_ib = enable_ib
+        self.ib_connection = None
+        self.ib_fetcher = None
+        self._ib_config = None
+        
         if enable_ib:
             try:
-                ib_config = get_ib_config()
-                # Convert to sync config
-                sync_config = ConnectionConfig(
-                    host=ib_config.host,
-                    port=ib_config.port,
-                    client_id=None,  # Use random client ID
-                    timeout=ib_config.timeout,
-                    readonly=ib_config.readonly
-                )
-                self.ib_connection = IbConnectionSync(sync_config)
-                self.ib_fetcher = IbDataFetcherSync(self.ib_connection)
-                logger.info("IB fetcher initialized successfully")
+                # Store config but don't connect yet (lazy initialization)
+                self._ib_config = get_ib_config()
+                logger.info("IB configuration loaded for lazy initialization")
             except Exception as e:
-                self.ib_connection = None
-                self.ib_fetcher = None
-                logger.warning(f"IB fetcher initialization failed: {e}. Using local CSV only.")
+                logger.warning(f"IB configuration failed: {e}. IB integration disabled.")
+                self.enable_ib = False
         else:
-            self.ib_connection = None
-            self.ib_fetcher = None
-            logger.info("IB integration disabled. Using local CSV only.")
+            logger.info("IB integration disabled")
         
         # Store parameters
         self.max_gap_percentage = max_gap_percentage
@@ -244,7 +237,10 @@ class DataManager:
                 # Note: Current unified validator doesn't support selective repair types yet
             
             # Check if there are critical issues and handle based on strict mode
-            if not quality_report.is_healthy():
+            # In strict mode, no critical or high severity issues are allowed
+            is_healthy = quality_report.is_healthy(max_critical=0, max_high=0 if strict else 5)
+            
+            if not is_healthy:
                 issues_summary = quality_report.get_summary()
                 issues_str = f"{issues_summary['total_issues']} issues found"
                 
@@ -384,6 +380,47 @@ class DataManager:
             df_copy.index = df_copy.index.tz_convert('UTC')
             
         return df_copy
+    
+    def _ensure_ib_connection(self) -> bool:
+        """
+        Ensure IB connection is available, initializing lazily if needed.
+        
+        Returns:
+            True if IB connection is available, False otherwise
+        """
+        if not self.enable_ib or self._ib_config is None:
+            return False
+            
+        # If already connected, check if connection is still alive
+        if self.ib_connection and self.ib_fetcher:
+            try:
+                if self.ib_connection.is_connected():
+                    return True
+                else:
+                    logger.info("IB connection was lost, reconnecting...")
+            except Exception as e:
+                logger.warning(f"Error checking IB connection status: {e}")
+        
+        # Initialize IB components lazily
+        try:
+            logger.info("Initializing IB connection on demand...")
+            # Convert to sync config
+            sync_config = ConnectionConfig(
+                host=self._ib_config.host,
+                port=self._ib_config.port,
+                client_id=None,  # Use random client ID
+                timeout=self._ib_config.timeout,
+                readonly=self._ib_config.readonly
+            )
+            self.ib_connection = IbConnectionSync(sync_config)
+            self.ib_fetcher = IbDataFetcherSync(self.ib_connection)
+            logger.info("IB connection initialized successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"IB connection initialization failed: {e}")
+            self.ib_connection = None
+            self.ib_fetcher = None
+            return False
 
     @log_entry_exit(logger=logger, log_args=True)
     def _load_with_fallback(
@@ -394,13 +431,14 @@ class DataManager:
         end_date: Optional[Union[str, datetime]] = None
     ) -> Optional[pd.DataFrame]:
         """
-        Load data with IB-first strategy and fallback to local CSV.
+        Load data with local-first strategy and lazy IB fallback.
         
         Strategy:
-        1. Try IB first if connected and configured
-        2. If IB fails or partial data, try local CSV
-        3. If both have data, merge and fill gaps
-        4. Save merged data back to CSV for future use
+        1. Try local CSV first (fast)
+        2. If local data covers requested range, return it
+        3. Only connect to IB if local data is insufficient
+        4. If both have data, merge and fill gaps
+        5. Save merged data back to CSV for future use
         
         Args:
             symbol: The trading symbol
@@ -434,41 +472,62 @@ class DataManager:
         else:
             ib_end_date = self._normalize_timezone(ib_end_date)
             
-        # Strategy 1: Try IB first if available
-        if self.ib_fetcher and self.ib_connection:
-            try:
-                logger.info(f"Attempting to fetch {symbol} from IB")
-                # Use synchronous fetch_historical_data directly with IB-specific dates
-                ib_data = self.ib_fetcher.fetch_historical_data(
-                    symbol, timeframe, ib_start_date, ib_end_date
-                )
-                if ib_data is not None and not ib_data.empty:
-                    # Normalize timezone for IB data (should already be UTC, but ensure consistency)
-                    ib_data = self._normalize_dataframe_timezone(ib_data)
-                    logger.info(f"Successfully fetched {len(ib_data)} bars from IB")
-                else:
-                    logger.info(f"No data returned from IB for {symbol}")
-                    ib_data = None
-            except Exception as e:
-                logger.warning(f"IB fetch failed for {symbol}: {e}")
-                ib_data = None
+        need_ib_data = False
         
-        # Strategy 2: Try local CSV with original date filters (preserving None values)
+        # Strategy 1: Try local CSV first (fast)
         try:
-            logger.info(f"Attempting to load {symbol} from local CSV")
+            logger.info(f"Attempting to load {symbol} from local CSV (fast path)")
             local_data = self.data_loader.load(symbol, timeframe, original_start_date, original_end_date)
             if local_data is not None:
                 # Normalize timezone for local data
                 local_data = self._normalize_dataframe_timezone(local_data)
-            logger.info(f"Successfully loaded {len(local_data) if local_data is not None else 0} bars from local CSV")
+                logger.info(f"Successfully loaded {len(local_data)} bars from local CSV")
+                
+                # Strategy 2: Check if local data covers requested range
+                if self._local_data_covers_range(local_data, start_date, end_date):
+                    logger.info(f"Local data covers requested range - no IB fetch needed")
+                    # Note: We still proceed to validation/processing below, but don't need IB data
+                    need_ib_data = False
+                else:
+                    logger.info(f"Local data does not cover full requested range - will attempt IB fetch")
+                    need_ib_data = True
+            else:
+                logger.info(f"No local data available - will attempt IB fetch")
+                need_ib_data = True
         except DataNotFoundError:
-            logger.info(f"No local CSV data found for {symbol}")
+            logger.info(f"No local CSV data found for {symbol} - will attempt IB fetch")
             local_data = None
+            need_ib_data = True
         except Exception as e:
-            logger.warning(f"Local CSV load failed for {symbol}: {e}")
+            logger.warning(f"Local CSV load failed for {symbol}: {e} - will attempt IB fetch")
             local_data = None
+            need_ib_data = True
+        
+        # Strategy 3: Only connect to IB if we need additional data
+        if need_ib_data:
+            # Lazy initialization of IB connection
+            if self._ensure_ib_connection():
+                try:
+                    logger.info(f"Attempting to fetch {symbol} from IB (lazy initialization)")
+                    # Use synchronous fetch_historical_data directly with IB-specific dates
+                    ib_data = self.ib_fetcher.fetch_historical_data(
+                        symbol, timeframe, ib_start_date, ib_end_date
+                    )
+                    if ib_data is not None and not ib_data.empty:
+                        # Normalize timezone for IB data (should already be UTC, but ensure consistency)
+                        ib_data = self._normalize_dataframe_timezone(ib_data)
+                        logger.info(f"Successfully fetched {len(ib_data)} bars from IB")
+                    else:
+                        logger.info(f"No data returned from IB for {symbol}")
+                        ib_data = None
+                except Exception as e:
+                    logger.warning(f"IB fetch failed for {symbol}: {e}")
+                    ib_data = None
+            else:
+                logger.info(f"IB connection not available - skipping IB fetch")
+                ib_data = None
             
-        # Strategy 3: Merge and gap-fill if we have both sources
+        # Strategy 4: Merge and gap-fill if we have both sources
         if ib_data is not None and local_data is not None:
             logger.info(f"Merging IB data ({len(ib_data)} bars) with local data ({len(local_data)} bars)")
             merged_data = self._merge_and_fill_gaps(ib_data, local_data)
@@ -482,7 +541,7 @@ class DataManager:
                 
             return merged_data
             
-        # Strategy 4: Return whichever data source worked
+        # Strategy 5: Return whichever data source worked
         if ib_data is not None:
             logger.info(f"Using IB data only ({len(ib_data)} bars)")
             # Save IB data to local CSV for future use
@@ -497,7 +556,7 @@ class DataManager:
             logger.info(f"Using local CSV data only ({len(local_data)} bars)")
             return local_data
             
-        # Strategy 5: No data found from any source
+        # Strategy 6: No data found from any source
         logger.warning(f"No data found for {symbol} from any source")
         return None
     
@@ -522,6 +581,49 @@ class DataManager:
         logger.info(f"Merged data: IB({len(ib_data)}) + Local({len(local_data)}) = Combined({len(combined)})")
         
         return combined
+    
+    def _local_data_covers_range(
+        self, 
+        local_data: pd.DataFrame, 
+        start_date: Optional[Union[str, datetime]], 
+        end_date: Optional[Union[str, datetime]]
+    ) -> bool:
+        """
+        Check if local data covers the requested date range.
+        
+        Args:
+            local_data: DataFrame with local data
+            start_date: Requested start date (None means no constraint)
+            end_date: Requested end date (None means no constraint)
+            
+        Returns:
+            True if local data covers the requested range, False otherwise
+        """
+        if local_data is None or local_data.empty:
+            return False
+        
+        # If no date constraints, local data is sufficient
+        if start_date is None and end_date is None:
+            return True
+        
+        # Normalize requested dates
+        req_start = self._normalize_timezone(start_date) if start_date is not None else None
+        req_end = self._normalize_timezone(end_date) if end_date is not None else None
+        
+        # Get local data range
+        local_start = local_data.index.min()
+        local_end = local_data.index.max()
+        
+        # Check coverage
+        start_covered = req_start is None or local_start <= req_start
+        end_covered = req_end is None or local_end >= req_end
+        
+        coverage_result = start_covered and end_covered
+        
+        if not coverage_result:
+            logger.debug(f"Local data range ({local_start} to {local_end}) does not cover requested range ({req_start} to {req_end})")
+        
+        return coverage_result
     
     @log_entry_exit(logger=logger, log_args=True)
     def check_data_integrity(self, df: pd.DataFrame, timeframe: str, is_post_repair: bool = False) -> List[str]:
@@ -685,7 +787,19 @@ class DataManager:
             logger.warning("Cannot repair empty DataFrame")
             return df
         
-        logger.info(f"Repairing data using unified validator")
+        # Validate method parameter for backward compatibility
+        if method not in ['auto', 'ffill', 'bfill', 'interpolate', 'zero', 'mean', 'median', 'drop']:
+            raise DataError(
+                message=f"Invalid repair method: {method}",
+                error_code="DATA-InvalidParameter",
+                details={
+                    "parameter": "method",
+                    "value": method,
+                    "valid_options": ['auto', 'ffill', 'bfill', 'interpolate', 'zero', 'mean', 'median', 'drop']
+                }
+            )
+        
+        logger.info(f"Repairing data using unified validator (method={method} - delegated to validator)")
         
         # Use the unified data quality validator for repairs
         df_repaired, quality_report = self.data_validator.validate_data(

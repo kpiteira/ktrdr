@@ -161,8 +161,7 @@ class TestDataManager:
         repaired_df = data_manager.load_data(
             "CORRUPT", "1d", 
             validate=True, 
-            repair=True,
-            repair_method='ffill'
+            repair=True
         )
         
         # Verify repair fixed the issues
