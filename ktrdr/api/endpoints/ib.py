@@ -4,6 +4,7 @@ IB (Interactive Brokers) endpoints for the KTRDR API.
 This module implements the API endpoints for IB status, health monitoring,
 and connection management.
 """
+
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -16,12 +17,15 @@ from ktrdr.api.models.ib import (
     IbConfigApiResponse,
     IbConfigUpdateApiResponse,
     IbDataRangesApiResponse,
+    IbLoadApiResponse,
     IbStatusResponse,
     IbHealthStatus,
     IbConfigInfo,
     IbConfigUpdateRequest,
     IbConfigUpdateResponse,
-    DataRangesResponse
+    DataRangesResponse,
+    IbLoadRequest,
+    IbLoadResponse,
 )
 from ktrdr.api.models.base import ApiResponse, ErrorResponse
 from ktrdr.api.dependencies import get_data_manager
@@ -44,30 +48,26 @@ def get_ib_service(data_manager: DataManager = Depends(get_data_manager)) -> IbS
     response_model=IbStatusApiResponse,
     tags=["IB"],
     summary="Get IB connection status",
-    description="Returns comprehensive status information about the IB connection including metrics and health indicators."
+    description="Returns comprehensive status information about the IB connection including metrics and health indicators.",
 )
 async def get_ib_status(
-    ib_service: IbService = Depends(get_ib_service)
+    ib_service: IbService = Depends(get_ib_service),
 ) -> IbStatusApiResponse:
     """
     Get IB connection status and metrics.
-    
+
     Returns detailed information about:
     - Current connection status
     - Connection performance metrics
     - Data fetching performance metrics
     - Overall IB availability
-    
+
     Returns:
         IbStatusApiResponse with comprehensive status information
     """
     try:
         status = ib_service.get_status()
-        return ApiResponse(
-            success=True,
-            data=status,
-            error=None
-        )
+        return ApiResponse(success=True, data=status, error=None)
     except Exception as e:
         logger.error(f"Error getting IB status: {e}")
         return ApiResponse(
@@ -76,8 +76,8 @@ async def get_ib_status(
             error=ErrorResponse(
                 code="IB-STATUS-ERROR",
                 message="Failed to get IB status",
-                details={"error": str(e)}
-            )
+                details={"error": str(e)},
+            ),
         )
 
 
@@ -86,25 +86,25 @@ async def get_ib_status(
     response_model=IbHealthApiResponse,
     tags=["IB"],
     summary="Check IB health",
-    description="Performs a health check on the IB connection and returns the overall health status."
+    description="Performs a health check on the IB connection and returns the overall health status.",
 )
 async def check_ib_health(
-    ib_service: IbService = Depends(get_ib_service)
+    ib_service: IbService = Depends(get_ib_service),
 ) -> IbHealthApiResponse:
     """
     Check IB connection health.
-    
+
     Performs health checks on:
     - Connection status
     - Data fetching capability
     - Recent request success rate
-    
+
     Returns:
         IbHealthApiResponse with health status
     """
     try:
         health = ib_service.get_health()
-        
+
         # Return appropriate HTTP status based on health
         if not health.healthy:
             return JSONResponse(
@@ -115,17 +115,13 @@ async def check_ib_health(
                     error=ErrorResponse(
                         code="IB-UNHEALTHY",
                         message="IB connection is unhealthy",
-                        details={"error_message": health.error_message}
-                    )
-                ).model_dump()
+                        details={"error_message": health.error_message},
+                    ),
+                ).model_dump(),
             )
-        
-        return ApiResponse(
-            success=True,
-            data=health,
-            error=None
-        )
-        
+
+        return ApiResponse(success=True, data=health, error=None)
+
     except Exception as e:
         logger.error(f"Error checking IB health: {e}")
         return JSONResponse(
@@ -136,9 +132,9 @@ async def check_ib_health(
                 error=ErrorResponse(
                     code="IB-HEALTH-ERROR",
                     message="Failed to check IB health",
-                    details={"error": str(e)}
-                )
-            ).model_dump()
+                    details={"error": str(e)},
+                ),
+            ).model_dump(),
         )
 
 
@@ -147,30 +143,26 @@ async def check_ib_health(
     response_model=IbConfigApiResponse,
     tags=["IB"],
     summary="Get IB configuration",
-    description="Returns the current IB configuration settings."
+    description="Returns the current IB configuration settings.",
 )
 async def get_ib_config(
-    ib_service: IbService = Depends(get_ib_service)
+    ib_service: IbService = Depends(get_ib_service),
 ) -> IbConfigApiResponse:
     """
     Get IB configuration information.
-    
+
     Returns configuration details including:
     - Connection settings (host, port)
     - Client ID range
     - Timeout settings
     - Rate limiting configuration
-    
+
     Returns:
         IbConfigApiResponse with configuration information
     """
     try:
         config = ib_service.get_config()
-        return ApiResponse(
-            success=True,
-            data=config,
-            error=None
-        )
+        return ApiResponse(success=True, data=config, error=None)
     except Exception as e:
         logger.error(f"Error getting IB config: {e}")
         return ApiResponse(
@@ -179,8 +171,8 @@ async def get_ib_config(
             error=ErrorResponse(
                 code="IB-CONFIG-ERROR",
                 message="Failed to get IB configuration",
-                details={"error": str(e)}
-            )
+                details={"error": str(e)},
+            ),
         )
 
 
@@ -189,43 +181,37 @@ async def get_ib_config(
     response_model=ApiResponse[Dict[str, Any]],
     tags=["IB"],
     summary="Clean up IB connections",
-    description="Forcefully disconnects all active IB connections. Useful for troubleshooting connection issues."
+    description="Forcefully disconnects all active IB connections. Useful for troubleshooting connection issues.",
 )
 async def cleanup_ib_connections(
-    ib_service: IbService = Depends(get_ib_service)
+    ib_service: IbService = Depends(get_ib_service),
 ) -> ApiResponse[Dict[str, Any]]:
     """
     Clean up all IB connections.
-    
+
     This endpoint forcefully disconnects all active IB connections,
     which can be useful when:
     - Connections are stuck
     - Testing requires a clean state
     - Troubleshooting connection issues
-    
+
     Returns:
         ApiResponse with cleanup results
     """
     try:
         result = await ib_service.cleanup_connections()
-        
+
         if result["success"]:
-            return ApiResponse(
-                success=True,
-                data=result,
-                error=None
-            )
+            return ApiResponse(success=True, data=result, error=None)
         else:
             return ApiResponse(
                 success=False,
                 data=result,
                 error=ErrorResponse(
-                    code="IB-CLEANUP-FAILED",
-                    message=result["message"],
-                    details=result
-                )
+                    code="IB-CLEANUP-FAILED", message=result["message"], details=result
+                ),
             )
-            
+
     except Exception as e:
         logger.error(f"Error cleaning up IB connections: {e}")
         return ApiResponse(
@@ -234,8 +220,8 @@ async def cleanup_ib_connections(
             error=ErrorResponse(
                 code="IB-CLEANUP-ERROR",
                 message="Failed to clean up IB connections",
-                details={"error": str(e)}
-            )
+                details={"error": str(e)},
+            ),
         )
 
 
@@ -244,33 +230,28 @@ async def cleanup_ib_connections(
     response_model=IbConfigUpdateApiResponse,
     tags=["IB"],
     summary="Update IB configuration",
-    description="Updates the IB connection configuration. May require reconnection for changes to take effect."
+    description="Updates the IB connection configuration. May require reconnection for changes to take effect.",
 )
 async def update_ib_config(
-    request: IbConfigUpdateRequest,
-    ib_service: IbService = Depends(get_ib_service)
+    request: IbConfigUpdateRequest, ib_service: IbService = Depends(get_ib_service)
 ) -> IbConfigUpdateApiResponse:
     """
     Update IB configuration dynamically.
-    
+
     Allows updating:
     - Port (4002=IB Gateway Paper, 4001=IB Gateway Live, 7497=TWS Paper, 7496=TWS Live)
     - Host address
     - Client ID
-    
+
     The response indicates whether reconnection is required for the changes
     to take effect.
-    
+
     Returns:
         IbConfigUpdateApiResponse with previous and new configuration
     """
     try:
         result = await ib_service.update_config(request)
-        return ApiResponse(
-            success=True,
-            data=result,
-            error=None
-        )
+        return ApiResponse(success=True, data=result, error=None)
     except Exception as e:
         logger.error(f"Error updating IB config: {e}")
         return ApiResponse(
@@ -279,8 +260,8 @@ async def update_ib_config(
             error=ErrorResponse(
                 code="IB-CONFIG-UPDATE-ERROR",
                 message="Failed to update IB configuration",
-                details={"error": str(e)}
-            )
+                details={"error": str(e)},
+            ),
         )
 
 
@@ -289,22 +270,26 @@ async def update_ib_config(
     response_model=IbDataRangesApiResponse,
     tags=["IB"],
     summary="Get historical data ranges for symbols",
-    description="Discovers the earliest and latest available data for symbols and timeframes using binary search."
+    description="Discovers the earliest and latest available data for symbols and timeframes using binary search.",
 )
 async def get_data_ranges(
-    symbols: str = Query(..., description="Comma-separated list of symbols (e.g., 'AAPL,MSFT')"),
-    timeframes: str = Query(default="1d", description="Comma-separated list of timeframes (e.g., '1d,1h')"),
-    ib_service: IbService = Depends(get_ib_service)
+    symbols: str = Query(
+        ..., description="Comma-separated list of symbols (e.g., 'AAPL,MSFT')"
+    ),
+    timeframes: str = Query(
+        default="1d", description="Comma-separated list of timeframes (e.g., '1d,1h')"
+    ),
+    ib_service: IbService = Depends(get_ib_service),
 ) -> IbDataRangesApiResponse:
     """
     Get historical data ranges for symbols and timeframes.
-    
+
     This endpoint discovers the earliest available data for the specified symbols
     using a binary search algorithm. Results are cached for 24 hours to improve
     performance on subsequent requests.
-    
+
     Supported timeframes: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
-    
+
     Returns:
         IbDataRangesApiResponse with range information for each symbol/timeframe
     """
@@ -312,7 +297,7 @@ async def get_data_ranges(
         # Parse comma-separated inputs
         symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
         timeframe_list = [t.strip().lower() for t in timeframes.split(",") if t.strip()]
-        
+
         if not symbol_list:
             return ApiResponse(
                 success=False,
@@ -320,10 +305,10 @@ async def get_data_ranges(
                 error=ErrorResponse(
                     code="IB-RANGES-INVALID-SYMBOLS",
                     message="No valid symbols provided",
-                    details={"symbols": symbols}
-                )
+                    details={"symbols": symbols},
+                ),
             )
-        
+
         if not timeframe_list:
             return ApiResponse(
                 success=False,
@@ -331,10 +316,10 @@ async def get_data_ranges(
                 error=ErrorResponse(
                     code="IB-RANGES-INVALID-TIMEFRAMES",
                     message="No valid timeframes provided",
-                    details={"timeframes": timeframes}
-                )
+                    details={"timeframes": timeframes},
+                ),
             )
-        
+
         # Validate timeframes
         valid_timeframes = {"1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"}
         invalid_timeframes = [tf for tf in timeframe_list if tf not in valid_timeframes]
@@ -347,32 +332,26 @@ async def get_data_ranges(
                     message=f"Unsupported timeframes: {', '.join(invalid_timeframes)}",
                     details={
                         "invalid_timeframes": invalid_timeframes,
-                        "valid_timeframes": list(valid_timeframes)
-                    }
-                )
+                        "valid_timeframes": list(valid_timeframes),
+                    },
+                ),
             )
-        
+
         # Get data ranges
         ranges_response = ib_service.get_data_ranges(symbol_list, timeframe_list)
-        
-        return ApiResponse(
-            success=True,
-            data=ranges_response,
-            error=None
-        )
-        
+
+        return ApiResponse(success=True, data=ranges_response, error=None)
+
     except ValueError as e:
         logger.error(f"Error getting data ranges: {e}")
         return ApiResponse(
             success=False,
             data=None,
             error=ErrorResponse(
-                code="IB-RANGES-UNAVAILABLE",
-                message=str(e),
-                details={"error": str(e)}
-            )
+                code="IB-RANGES-UNAVAILABLE", message=str(e), details={"error": str(e)}
+            ),
         )
-        
+
     except Exception as e:
         logger.error(f"Error getting data ranges: {e}")
         return ApiResponse(
@@ -381,6 +360,124 @@ async def get_data_ranges(
             error=ErrorResponse(
                 code="IB-RANGES-ERROR",
                 message="Failed to get data ranges",
-                details={"error": str(e)}
+                details={"error": str(e)},
+            ),
+        )
+
+
+@router.post(
+    "/load",
+    response_model=IbLoadApiResponse,
+    tags=["IB"],
+    summary="Load data from IB",
+    description="Load OHLCV data from Interactive Brokers with support for different modes (tail, backfill, full).",
+)
+async def load_ib_data(
+    request: IbLoadRequest, ib_service: IbService = Depends(get_ib_service)
+) -> IbLoadApiResponse:
+    """
+    Load data from Interactive Brokers.
+
+    This endpoint supports three loading modes:
+    - **tail**: Load data from the last available timestamp to now (default)
+    - **backfill**: Load data before the earliest available timestamp
+    - **full**: Load maximum available history (ignores existing data)
+
+    The endpoint respects IB duration limits and uses progressive loading
+    for large gaps, automatically splitting requests as needed.
+
+    Args:
+        request: Load request specifying symbol, timeframe, mode, and optional date range
+
+    Returns:
+        IbLoadApiResponse with loading results including status, bars fetched, and execution metrics
+    """
+    try:
+        # Validate that the request is properly formed
+        if not request.symbol or not request.symbol.strip():
+            return ApiResponse(
+                success=False,
+                data=None,
+                error=ErrorResponse(
+                    code="IB-LOAD-INVALID-SYMBOL",
+                    message="Symbol is required and cannot be empty",
+                    details={"symbol": request.symbol},
+                ),
             )
+
+        # Clean up symbol name
+        clean_symbol = request.symbol.strip().upper()
+        request.symbol = clean_symbol
+
+        logger.info(
+            f"Loading data for {request.symbol}_{request.timeframe} (mode: {request.mode})"
+        )
+
+        # Perform the data loading operation
+        result = ib_service.load_data(request)
+
+        # Determine success based on result status
+        if result.status == "success":
+            return ApiResponse(success=True, data=result, error=None)
+        elif result.status == "partial":
+            # Partial success - some data was loaded but not complete
+            return ApiResponse(
+                success=True,
+                data=result,
+                error=ErrorResponse(
+                    code="IB-LOAD-PARTIAL",
+                    message="Data loading partially successful",
+                    details={"error_message": result.error_message},
+                ),
+            )
+        else:
+            # Failed
+            return ApiResponse(
+                success=False,
+                data=result,
+                error=ErrorResponse(
+                    code="IB-LOAD-FAILED",
+                    message=result.error_message or "Data loading failed",
+                    details={
+                        "symbol": request.symbol,
+                        "timeframe": request.timeframe,
+                        "mode": request.mode,
+                        "execution_time": result.execution_time_seconds,
+                    },
+                ),
+            )
+
+    except ValueError as e:
+        # Validation errors
+        logger.warning(f"Validation error loading data: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-LOAD-VALIDATION-ERROR",
+                message=str(e),
+                details={
+                    "symbol": request.symbol,
+                    "timeframe": request.timeframe,
+                    "mode": request.mode,
+                },
+            ),
+        )
+
+    except Exception as e:
+        # Unexpected errors
+        logger.error(f"Unexpected error loading data: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-LOAD-ERROR",
+                message="Unexpected error during data loading",
+                details={
+                    "error": str(e),
+                    "symbol": request.symbol,
+                    "timeframe": request.timeframe,
+                    "mode": request.mode,
+                },
+            ),
         )
