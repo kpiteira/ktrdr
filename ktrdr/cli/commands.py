@@ -1342,3 +1342,154 @@ def ib_cleanup():
             "\n💡 [yellow]Note:[/yellow] You may need to restart IB Gateway if connections are stuck"
         )
         sys.exit(1)
+
+
+@cli_app.command("ib-load")
+def ib_load(
+    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Argument(..., help="Timeframe (e.g., 1d, 1h, 15m)"),
+    mode: str = typer.Option("tail", "--mode", "-m", help="Load mode: tail, backfill, or full"),
+    start_date: Optional[str] = typer.Option(None, "--start", "-s", help="Start date (ISO format: 2024-01-01T00:00:00Z)"),
+    end_date: Optional[str] = typer.Option(None, "--end", "-e", help="End date (ISO format: 2024-01-01T00:00:00Z)"),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be loaded without actually loading"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+):
+    """
+    Load OHLCV data from Interactive Brokers.
+
+    This command fetches historical data from IB and saves it to local CSV files.
+    It respects IB pacing limits and handles large date ranges automatically.
+
+    Load modes:
+    - tail: Load recent data to fill gaps (default)
+    - backfill: Load older data to extend history backwards
+    - full: Load complete dataset (ignores existing data)
+
+    Examples:
+        ktrdr ib-load AAPL 1d --mode tail
+        ktrdr ib-load MSFT 1h --mode backfill --start 2023-01-01T00:00:00Z
+        ktrdr ib-load NVDA 15m --mode full --dry-run
+    """
+    import asyncio
+    import httpx
+    from datetime import datetime
+    from ktrdr.config.validation import InputValidator
+
+    def format_duration(seconds: float) -> str:
+        """Format duration in human-readable format."""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            return f"{seconds/60:.1f}m"
+        else:
+            return f"{seconds/3600:.1f}h"
+
+    async def call_ib_load_api():
+        """Call the IB load API endpoint."""
+        try:
+            # Validate inputs
+            symbol_validated = InputValidator.validate_string(
+                symbol.upper(), min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\-\.]+$"
+            )
+            
+            if mode not in ["tail", "backfill", "full"]:
+                raise ValidationError(f"Invalid mode '{mode}'. Must be: tail, backfill, or full")
+
+            # Build request payload
+            payload = {
+                "symbol": symbol_validated,
+                "timeframe": timeframe,
+                "mode": mode
+            }
+            
+            if start_date:
+                payload["start"] = start_date
+            if end_date:
+                payload["end"] = end_date
+
+            console.print(f"\n🚀 [bold blue]Loading {symbol_validated} {timeframe} data from Interactive Brokers[/bold blue]")
+            console.print(f"Mode: [cyan]{mode}[/cyan]")
+            
+            if start_date or end_date:
+                console.print(f"Date range: {start_date or 'auto'} → {end_date or 'auto'}")
+            
+            if dry_run:
+                console.print("\n[yellow]🔍 DRY RUN - No data will be actually loaded[/yellow]")
+                console.print(f"Would send request: {json.dumps(payload, indent=2)}")
+                return
+
+            # Show what we're about to do
+            if verbose:
+                console.print(f"\nRequest payload:")
+                console.print(json.dumps(payload, indent=2))
+
+            # Make the API call
+            start_time = datetime.now()
+            console.print(f"\n⏳ Connecting to IB and fetching data...")
+            
+            async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minute timeout
+                response = await client.post(
+                    "http://localhost:8000/api/v1/ib/load",
+                    json=payload
+                )
+                
+            elapsed = (datetime.now() - start_time).total_seconds()
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                console.print(f"\n✅ [bold green]Data loading completed successfully![/bold green]")
+                console.print(f"⏱️  Duration: {format_duration(elapsed)}")
+                console.print(f"📊 Fetched: [cyan]{result.get('fetched_bars', 0)}[/cyan] bars")
+                
+                if result.get('merged_file'):
+                    console.print(f"💾 Saved to: [green]{result['merged_file']}[/green]")
+                    
+                if result.get('cached_before'):
+                    console.print("📁 Data was merged with existing cached data")
+                
+                # Show additional metrics if available
+                if verbose and 'operation_details' in result:
+                    details = result['operation_details']
+                    console.print(f"\n📈 [bold]Detailed metrics:[/bold]")
+                    for key, value in details.items():
+                        console.print(f"   {key}: {value}")
+                        
+            else:
+                error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                error_msg = error_data.get('detail', f"HTTP {response.status_code}")
+                
+                console.print(f"\n❌ [bold red]Loading failed![/bold red]")
+                console.print(f"⏱️  Duration: {format_duration(elapsed)}")
+                console.print(f"🚨 Error: {error_msg}")
+                
+                if verbose and error_data:
+                    console.print(f"\nFull error response:")
+                    console.print(json.dumps(error_data, indent=2))
+                    
+                sys.exit(1)
+                
+        except ValidationError as e:
+            error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+            sys.exit(1)
+        except httpx.ConnectError:
+            error_console.print("[bold red]Connection error:[/bold red] Could not connect to KTRDR API server")
+            error_console.print("Make sure the API server is running at http://localhost:8000")
+            sys.exit(1)
+        except httpx.TimeoutException:
+            error_console.print("[bold red]Timeout error:[/bold red] Request took longer than 5 minutes")
+            error_console.print("Large data loads can take time. Try a smaller date range.")
+            sys.exit(1)
+        except Exception as e:
+            error_console.print(f"[bold red]Unexpected error:[/bold red] {str(e)}")
+            if verbose:
+                import traceback
+                error_console.print(traceback.format_exc())
+            sys.exit(1)
+
+    # Run the async function
+    try:
+        asyncio.run(call_ib_load_api())
+    except KeyboardInterrupt:
+        console.print("\n⏹️ Loading interrupted by user")
+        sys.exit(1)

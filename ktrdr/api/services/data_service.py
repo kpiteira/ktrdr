@@ -166,9 +166,11 @@ class DataService(BaseService):
 
         # Get available data files from the data_loader
         available_files = self.data_manager.data_loader.get_available_data_files()
+        logger.debug(f"Processing {len(available_files)} data files to extract unique symbols")
 
         # Extract unique symbols from the available files
         symbols = sorted(set(symbol for symbol, _ in available_files))
+        logger.debug(f"Aggregated {len(available_files)} files into {len(symbols)} unique symbols")
 
         # Create a map of symbol to timeframes
         symbol_timeframes = {}
@@ -211,7 +213,7 @@ class DataService(BaseService):
 
         elapsed = time.time() - start_time
         logger.info(
-            f"Retrieved {len(result)} available symbols in {elapsed:.3f}s (optimized)"
+            f"Retrieved {len(result)} unique symbols (from {len(available_files)} data files) in {elapsed:.3f}s"
         )
         return result
 

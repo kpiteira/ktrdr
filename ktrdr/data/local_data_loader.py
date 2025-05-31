@@ -570,7 +570,7 @@ class LocalDataLoader:
                 logger.warning(f"Data directory does not exist: {self.data_dir}")
                 return result
 
-            logger.debug(f"Searching for data files in {self.data_dir}")
+            logger.debug(f"Searching for data files in {self.data_dir} (format: symbol_timeframe.csv)")
 
             for file_path in self.data_dir.glob(f"*.{self.default_format}"):
                 filename = file_path.name
@@ -581,7 +581,7 @@ class LocalDataLoader:
                     timeframe = parts[1]
                     result.append((symbol, timeframe))
 
-            logger.info(f"Found {len(result)} available data files")
+            logger.info(f"Found {len(result)} data files (will be aggregated by symbol for unique symbols)")
             return result
 
         except PermissionError as e:
