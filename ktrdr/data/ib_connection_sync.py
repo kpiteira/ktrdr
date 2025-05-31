@@ -43,7 +43,8 @@ class IbConnectionSync:
 
         self.ib = IB()
         self.connected = False
-        self._event_loop = None  # Keep reference to event loop
+        self._event_loop: Optional[Any] = None  # Keep reference to event loop
+        self._connection_thread: Optional[Any] = None  # Keep reference to connection thread
 
         # Connection metrics
         self.metrics: Dict[str, Any] = {
@@ -131,8 +132,8 @@ class IbConnectionSync:
                     f"with client ID {self.config.client_id} (attempt {retries+1}/{max_retries})..."
                 )
 
-                # Use original event loop approach but simplified
-                self._connect_with_event_loop()
+                # Use ib_insync's recommended approach for event loop handling
+                self._connect_simple()
 
                 if self.ib.isConnected():
                     logger.info("Successfully connected to IB")
@@ -152,21 +153,84 @@ class IbConnectionSync:
         return False
 
     def _connect_simple(self) -> None:
-        """Simple connection using ib_insync's util.run for proper event loop handling."""
+        """Simple connection using thread-based approach for all contexts."""
+        # Always use thread-based connection to avoid event loop conflicts
+        # This works reliably in all contexts: FastAPI, background threads, etc.
+        logger.debug("Using thread-based IB connection for maximum compatibility")
+        self._connect_in_thread()
+
+    def _connect_in_thread(self) -> None:
+        """Connect to IB in a separate thread to avoid event loop conflicts."""
+        import threading
+        import asyncio
         from ib_insync import util
-
-        async def _do_connect():
-            """Async connect function."""
-            await self.ib.connectAsync(
-                self.config.host,
-                self.config.port,
-                clientId=self.config.client_id,
-                readonly=self.config.readonly,
-                timeout=self.config.timeout,
-            )
-
-        # Use ib_insync's recommended way to run async code
-        util.run(_do_connect())
+        
+        connection_result = {"success": False, "error": None, "loop": None}
+        
+        def thread_connect():
+            """Connection function to run in thread."""
+            try:
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                connection_result["loop"] = loop
+                
+                async def _do_connect():
+                    """Async connect function."""
+                    await self.ib.connectAsync(
+                        self.config.host,
+                        self.config.port,
+                        clientId=self.config.client_id,
+                        readonly=self.config.readonly,
+                        timeout=self.config.timeout,
+                    )
+                
+                # Run the connection in the new event loop
+                loop.run_until_complete(_do_connect())
+                connection_result["success"] = True
+                
+                # Keep the loop running for ongoing operations
+                logger.debug(f"Connection established, keeping event loop running for client {self.config.client_id}")
+                
+                # Run the event loop forever to keep the connection alive
+                # This is what ib_insync needs - a running event loop
+                loop.run_forever()
+                
+            except Exception as e:
+                connection_result["error"] = str(e)
+                # Only close loop on error
+                try:
+                    if "loop" in locals():
+                        loop.close()
+                        asyncio.set_event_loop(None)
+                except:
+                    pass
+        
+        # Run connection in separate thread as daemon so it doesn't block shutdown
+        thread = threading.Thread(target=thread_connect, daemon=True)
+        thread.start()
+        
+        # Wait for connection to complete, but don't join the thread (let it run)
+        import time
+        timeout = self.config.timeout + 5
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            if connection_result["success"] or connection_result["error"]:
+                break
+            time.sleep(0.1)
+        
+        if not connection_result["success"] and not connection_result["error"]:
+            raise ConnectionError("Connection timed out in thread")
+            
+        if not connection_result["success"]:
+            error = connection_result.get("error", "Unknown thread connection error")
+            raise ConnectionError(f"Thread connection failed: {error}")
+            
+        # Store the event loop reference for later use
+        self._event_loop = connection_result["loop"]
+        self._connection_thread = thread  # Store thread reference for cleanup
+        logger.debug(f"Stored event loop and thread references for client {self.config.client_id}")
 
     def _connect_with_event_loop(self) -> None:
         """Connect to IB with simplified event loop handling."""
@@ -236,17 +300,30 @@ class IbConnectionSync:
         else:
             logger.debug("Not connected, nothing to disconnect")
 
-        # Clean up event loop
+        # Clean up event loop and thread
         if self._event_loop and not self._event_loop.is_closed():
             try:
                 logger.info(
-                    f"Cleaning up event loop for client ID {self.config.client_id}"
+                    f"Stopping event loop for client ID {self.config.client_id}"
                 )
-                self._event_loop.close()
+                # Stop the event loop if it's running
+                self._event_loop.call_soon_threadsafe(self._event_loop.stop)
+                
+                # Wait a bit for the loop to stop, then close it
+                import time
+                time.sleep(0.1)
+                
+                if not self._event_loop.is_closed():
+                    self._event_loop.close()
                 self._event_loop = None
+                
+                logger.info(f"Event loop stopped for client ID {self.config.client_id}")
             except Exception as e:
                 logger.warning(f"Error cleaning up event loop: {e}")
                 self._event_loop = None
+                
+        # Clean up thread reference
+        self._connection_thread = None
 
     def get_connection_info(self) -> Dict[str, Any]:
         """Get connection status and metrics."""

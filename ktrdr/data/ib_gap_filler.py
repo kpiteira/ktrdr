@@ -11,17 +11,16 @@ Automatically fills gaps in market data by:
 
 import threading
 import time
-import os
 from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import pandas as pd
 
 from ktrdr.logging import get_logger
-from ktrdr.data.ib_connection_manager import get_connection_manager
-from ktrdr.data.ib_data_fetcher_sync import IbDataFetcherSync
-from ktrdr.data.ib_context_manager import create_context_aware_fetcher
+from ktrdr.data.ib_data_loader import IbDataLoader
+from ktrdr.data.ib_connection_strategy import get_connection_strategy
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.config.ib_limits import IbLimitsRegistry
 from ktrdr.config.loader import ConfigLoader
 
 logger = get_logger(__name__)
@@ -39,11 +38,24 @@ class GapFillerService:
     - Runs independently in the background
     """
 
-    def __init__(self, data_dir: Optional[str] = None):
+    def __init__(self, data_dir: Optional[str] = None, ib_data_loader: Optional[IbDataLoader] = None):
         """Initialize the gap filler service."""
         self.data_dir = data_dir or self._get_data_dir()
-        self.data_loader = LocalDataLoader(data_dir=self.data_dir)
-        self.connection_manager = get_connection_manager()
+        
+        # Initialize local data loader for reading existing CSV files
+        self.local_data_loader = LocalDataLoader(data_dir=self.data_dir)
+        
+        # Use injected IB data loader or create default for IB operations
+        if ib_data_loader:
+            self.ib_data_loader = ib_data_loader
+        else:
+            # Create default IB data loader with gap filler connection strategy
+            connection_strategy = get_connection_strategy()
+            self.ib_data_loader = IbDataLoader(
+                connection_strategy=connection_strategy,
+                data_dir=self.data_dir,
+                validate_data=True
+            )
 
         # Service control
         self._running = False
@@ -129,11 +141,17 @@ class GapFillerService:
 
         while self._running and not self._stop_event.is_set():
             try:
-                # Only scan if IB connection is available
-                if self.connection_manager.is_connected():
-                    self._scan_and_fill_gaps()
-                else:
-                    logger.debug("IB not connected, skipping gap scan")
+                # Check if IB connection is available via data loader
+                try:
+                    # Try to get a connection to verify IB availability
+                    connection_strategy = get_connection_strategy()
+                    test_connection = connection_strategy.get_connection_for_operation("gap_filler")
+                    if test_connection and test_connection.is_connected():
+                        self._scan_and_fill_gaps()
+                    else:
+                        logger.debug("IB not connected, skipping gap scan")
+                except Exception as e:
+                    logger.debug(f"IB connection check failed: {e}, skipping gap scan")
 
                 self.stats["last_scan_time"] = datetime.now(timezone.utc)
 
@@ -188,8 +206,9 @@ class GapFillerService:
                         processed < len(symbols_timeframes)
                         and not self._stop_event.is_set()
                     ):
-                        logger.debug(f"Pacing delay after {symbol}_{timeframe}")
-                        time.sleep(1.0)  # 1 second between requests
+                        pacing_delay = IbLimitsRegistry.get_safe_delay("between_requests")
+                        logger.debug(f"Pacing delay after {symbol}_{timeframe}: {pacing_delay}s")
+                        time.sleep(pacing_delay)
 
             except Exception as e:
                 error_msg = str(e).lower()
@@ -260,7 +279,7 @@ class GapFillerService:
         """
         try:
             # Load existing data to check last timestamp
-            df = self.data_loader.load(symbol, timeframe)
+            df = self.local_data_loader.load(symbol, timeframe)
 
             if df is None or df.empty:
                 logger.debug(f"No existing data for {symbol}_{timeframe}")
@@ -288,7 +307,7 @@ class GapFillerService:
             gap_hours = (current_time - next_expected).total_seconds() / 3600
 
             # Different gap thresholds for different timeframes
-            gap_threshold = self._get_gap_threshold(timeframe)
+            gap_threshold = IbLimitsRegistry.get_gap_threshold_hours(timeframe)
 
             if gap_hours < gap_threshold:
                 # No significant gap
@@ -305,118 +324,34 @@ class GapFillerService:
             logger.info(f"Gap detected for {symbol}_{timeframe}: {gap_hours:.1f} hours")
             self.stats["gaps_detected"] += 1
 
-            # Fill the gap - handle large gaps with multiple requests
-            success = self._fill_gap_progressive(
-                symbol, timeframe, next_expected, current_time
-            )
-
-            if success:
-                self.stats["gaps_filled"] += 1
-                logger.info(f"✅ Filled gap for {symbol}_{timeframe}")
-            else:
+            # Fill the gap using the unified IB data loader
+            try:
+                final_data, metadata = self.ib_data_loader.load_with_existing_check(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start=next_expected,
+                    end=current_time,
+                    operation_type="gap_filler"
+                )
+                
+                if metadata["fetched_bars"] > 0:
+                    self.stats["gaps_filled"] += 1
+                    logger.info(f"✅ Filled gap for {symbol}_{timeframe}: {metadata['fetched_bars']} bars fetched")
+                    return True
+                else:
+                    self.stats["gaps_failed"] += 1
+                    logger.warning(f"❌ No data fetched for gap in {symbol}_{timeframe}")
+                    return False
+                    
+            except Exception as e:
                 self.stats["gaps_failed"] += 1
-                logger.warning(f"❌ Failed to fill gap for {symbol}_{timeframe}")
-
-            return success
+                logger.error(f"❌ Failed to fill gap for {symbol}_{timeframe}: {e}")
+                return False
 
         except Exception as e:
             logger.error(f"Error checking gap for {symbol}_{timeframe}: {e}")
             return False
 
-    def _fill_gap_progressive(
-        self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime
-    ) -> bool:
-        """
-        Fill gap progressively with multiple requests if needed for large gaps.
-
-        This method handles gaps that exceed IB single-request limits by making
-        multiple sequential requests working backwards from end_time.
-
-        Returns:
-            True if gap was filled successfully, False otherwise
-        """
-        try:
-            # Get IB max duration limit for this timeframe
-            max_limits = {
-                "1m": 1,  # 1 day
-                "5m": 7,  # 1 week
-                "15m": 14,  # 2 weeks
-                "30m": 30,  # 1 month
-                "1h": 30,  # 1 month
-                "4h": 30,  # 1 month (conservative)
-                "1d": 365,  # 1 year
-                "1w": 730,  # 2 years
-                "1M": 365,  # 1 year
-            }
-
-            max_days = max_limits.get(timeframe, 30)
-            total_gap_days = (end_time - start_time).days
-
-            if total_gap_days <= max_days:
-                # Small gap - use single request
-                logger.info(f"Small gap ({total_gap_days} days) - using single request")
-                return self._fill_gap(symbol, timeframe, start_time, end_time)
-
-            # Large gap - use progressive filling
-            logger.info(
-                f"Large gap ({total_gap_days} days) - using progressive filling (max {max_days} days per request)"
-            )
-
-            current_end = end_time
-            total_bars_added = 0
-            requests_made = 0
-            max_requests = 5  # Limit to prevent excessive API calls
-
-            while current_end > start_time and requests_made < max_requests:
-                # Calculate start time for this chunk (work backwards)
-                chunk_start = max(start_time, current_end - timedelta(days=max_days))
-
-                logger.info(
-                    f"Progressive fill request {requests_made + 1}: {chunk_start.date()} to {current_end.date()}"
-                )
-
-                # Fill this chunk
-                chunk_success = self._fill_gap(
-                    symbol, timeframe, chunk_start, current_end
-                )
-
-                if chunk_success:
-                    requests_made += 1
-                    logger.info(
-                        f"✅ Progressive chunk {requests_made} filled successfully"
-                    )
-
-                    # Move to previous chunk
-                    current_end = chunk_start - timedelta(
-                        hours=1
-                    )  # Move back 1 hour to avoid overlap
-
-                    # Add delay between requests to respect IB pacing
-                    if current_end > start_time:
-                        logger.debug("Pacing delay between progressive requests")
-                        time.sleep(2.0)  # 2 second delay between requests
-                else:
-                    logger.warning(f"❌ Progressive chunk {requests_made + 1} failed")
-                    break
-
-            if current_end <= start_time:
-                logger.info(
-                    f"✅ Progressive gap filling completed in {requests_made} requests"
-                )
-                return True
-            else:
-                logger.warning(
-                    f"⚠️ Progressive gap filling incomplete after {requests_made} requests"
-                )
-                return (
-                    requests_made > 0
-                )  # Partial success if at least one request worked
-
-        except Exception as e:
-            logger.error(
-                f"Error in progressive gap filling for {symbol}_{timeframe}: {e}"
-            )
-            return False
 
     def _calculate_next_expected_timestamp(
         self, last_timestamp: datetime, timeframe: str
@@ -435,109 +370,6 @@ class GapFillerService:
         minutes = timeframe_minutes.get(timeframe, 60)
         return last_timestamp + timedelta(minutes=minutes)
 
-    def _get_gap_threshold(self, timeframe: str) -> float:
-        """Get gap threshold in hours for different timeframes."""
-        thresholds = {
-            "1m": 0.5,  # 30 minutes
-            "5m": 1.0,  # 1 hour
-            "15m": 2.0,  # 2 hours
-            "30m": 3.0,  # 3 hours
-            "1h": 6.0,  # 6 hours
-            "4h": 12.0,  # 12 hours
-            "1d": 18.0,  # 18 hours (more reasonable for daily data)
-        }
-        return thresholds.get(timeframe, 6.0)
-
-    def _fill_gap(
-        self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime
-    ) -> bool:
-        """
-        Fill gap by fetching data from IB and updating CSV.
-
-        Returns:
-            True if gap was filled successfully, False otherwise
-        """
-        try:
-            # Get IB connection
-            logger.info(f"🔍 Requesting connection for {symbol}_{timeframe}")
-            connection = self.connection_manager.get_connection()
-            if not connection:
-                logger.warning("No IB connection available for gap filling")
-                return False
-
-            # Debug: Check connection state
-            logger.info(
-                f"📋 Got connection for {symbol}_{timeframe}: connected={connection.is_connected()}, client_id={connection.config.client_id}"
-            )
-
-            # Create context-aware data fetcher
-            context_fetcher = create_context_aware_fetcher(connection)
-
-            # Fetch missing data using context-aware method
-            logger.debug(f"Fetching data for {symbol} from {start_time} to {end_time}")
-            new_data = context_fetcher.fetch_historical_data(
-                symbol, timeframe, start_time, end_time
-            )
-
-            if new_data is None or new_data.empty:
-                logger.warning(f"No new data received for {symbol}_{timeframe}")
-                return False
-
-            # Load existing data
-            existing_data = self.data_loader.load(symbol, timeframe)
-
-            # Combine and save
-            if existing_data is not None and not existing_data.empty:
-                # Ensure timezone consistency before combining
-                if existing_data.index.tz is None and new_data.index.tz is not None:
-                    # Existing data is timezone-naive, make it UTC-aware
-                    existing_data.index = existing_data.index.tz_localize(timezone.utc)
-                elif existing_data.index.tz is not None and new_data.index.tz is None:
-                    # New data is timezone-naive, make it UTC-aware
-                    new_data.index = new_data.index.tz_localize(timezone.utc)
-                elif (
-                    existing_data.index.tz is not None and new_data.index.tz is not None
-                ):
-                    # Both are timezone-aware, convert to UTC
-                    existing_data.index = existing_data.index.tz_convert(timezone.utc)
-                    new_data.index = new_data.index.tz_convert(timezone.utc)
-
-                # Combine data, removing duplicates
-                combined = pd.concat([existing_data, new_data])
-                combined = combined[~combined.index.duplicated(keep="last")]
-                combined = combined.sort_index()
-            else:
-                combined = new_data
-
-            # Save to CSV
-            self._save_data_to_csv(symbol, timeframe, combined)
-
-            logger.info(f"Added {len(new_data)} bars to {symbol}_{timeframe}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error filling gap for {symbol}_{timeframe}: {e}")
-            return False
-
-    def _save_data_to_csv(
-        self, symbol: str, timeframe: str, data: pd.DataFrame
-    ) -> None:
-        """Save data to CSV file."""
-        try:
-            # Ensure data directory exists
-            os.makedirs(self.data_dir, exist_ok=True)
-
-            # Create filename
-            filename = f"{symbol}_{timeframe}.csv"
-            filepath = os.path.join(self.data_dir, filename)
-
-            # Save to CSV
-            data.to_csv(filepath)
-            logger.debug(f"Saved {len(data)} bars to {filepath}")
-
-        except Exception as e:
-            logger.error(f"Error saving data to CSV: {e}")
-            raise
 
     def get_stats(self) -> Dict[str, Any]:
         """Get gap filling statistics."""
@@ -551,10 +383,13 @@ class GapFillerService:
 
     def force_scan(self) -> Dict[str, Any]:
         """Force an immediate gap scan (for testing/debugging)."""
-        if not self.connection_manager.is_connected():
-            return {"error": "IB not connected"}
-
         try:
+            # Check IB connection availability
+            connection_strategy = get_connection_strategy()
+            test_connection = connection_strategy.get_connection_for_operation("gap_filler")
+            if not test_connection or not test_connection.is_connected():
+                return {"error": "IB not connected"}
+
             self._scan_and_fill_gaps()
             return {"success": True, "stats": self.get_stats()}
         except Exception as e:

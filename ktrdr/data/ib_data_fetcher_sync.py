@@ -69,12 +69,18 @@ class IbDataFetcherSync:
             raise ConnectionError("Not connected to IB")
 
         try:
+            # Use thread-safe contract qualification 
             if instrument_type == "stock":
-                contracts = self.ib.qualifyContracts(Stock(symbol, "SMART", "USD"))
+                contract = Stock(symbol, "SMART", "USD")
             elif instrument_type == "forex":
-                contracts = self.ib.qualifyContracts(Forex(symbol))
+                contract = Forex(symbol)
             else:
                 raise ValueError(f"Unsupported instrument type: {instrument_type}")
+
+            # Use the connection's event loop to run the async operation
+            contracts = self._run_in_connection_loop(
+                self.ib.qualifyContractsAsync(contract)
+            )
 
             if not contracts:
                 raise DataError(f"Could not qualify contract for {symbol}")
@@ -84,6 +90,30 @@ class IbDataFetcherSync:
         except Exception as e:
             logger.error(f"Error qualifying contract for {symbol}: {e}")
             raise
+
+    def _run_in_connection_loop(self, coro):
+        """Run an async coroutine using the connection's event loop."""
+        import asyncio
+        
+        # Check if the connection has an event loop
+        if hasattr(self.connection, '_event_loop') and self.connection._event_loop:
+            # Use the connection's event loop via run_coroutine_threadsafe
+            future = asyncio.run_coroutine_threadsafe(coro, self.connection._event_loop)
+            return future.result(timeout=30)  # 30 second timeout
+        else:
+            # Fallback: create a temporary event loop
+            return self._run_in_temp_loop(coro)
+
+    def _run_in_temp_loop(self, coro):
+        """Run coroutine in a temporary event loop (fallback)."""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
 
     def determine_duration_str(self, timeframe: str, days: int) -> str:
         """
@@ -99,21 +129,10 @@ class IbDataFetcherSync:
         Returns:
             IB-compatible duration string like '1 W', '1 M', etc.
         """
-        # IB maximum duration limits per timeframe (from specification)
-        max_limits = {
-            "1m": 1,  # 1 day
-            "5m": 7,  # 1 week
-            "15m": 14,  # 2 weeks
-            "30m": 30,  # 1 month
-            "1h": 30,  # 1 month
-            "4h": 30,  # 1 month (conservative)
-            "1d": 365,  # 1 year
-            "1w": 730,  # 2 years
-            "1M": 365,  # 1 year
-        }
-
-        # Get max allowed days for this timeframe
-        max_days = max_limits.get(timeframe, 30)  # Default to 1 month
+        # Get max allowed duration for this timeframe from centralized registry
+        from ktrdr.config.ib_limits import IbLimitsRegistry
+        max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
+        max_days = max_duration.days
 
         # If request exceeds IB limits, cap it and warn
         if days > max_days:
@@ -253,14 +272,17 @@ class IbDataFetcherSync:
             ):
                 self.connection.metrics["last_error"] = None
 
-            bars = self.ib.reqHistoricalData(
-                contract,
-                endDateTime=end_dt_str,
-                durationStr=duration_str,
-                barSizeSetting=bar_size,
-                whatToShow=what_to_show,
-                useRTH=False,  # Use all trading hours
-                formatDate=1,  # Return as datetime objects
+            # Use thread-safe historical data request
+            bars = self._run_in_connection_loop(
+                self.ib.reqHistoricalDataAsync(
+                    contract,
+                    endDateTime=end_dt_str,
+                    durationStr=duration_str,
+                    barSizeSetting=bar_size,
+                    whatToShow=what_to_show,
+                    useRTH=False,  # Use all trading hours
+                    formatDate=1,  # Return as datetime objects
+                )
             )
 
             # Check for timeout
@@ -490,11 +512,13 @@ class IbDataRangeDiscovery:
 
             # Use reqHeadTimeStamp API - much faster than binary search!
             logger.debug(f"Requesting head timestamp for {symbol}")
-            head_timestamp = self.data_fetcher.connection.ib.reqHeadTimeStamp(
-                contract=contract,
-                whatToShow="TRADES",
-                useRTH=False,  # Include all trading hours
-                formatDate=1,  # Return as datetime
+            head_timestamp = self.data_fetcher._run_in_connection_loop(
+                self.data_fetcher.connection.ib.reqHeadTimeStampAsync(
+                    contract=contract,
+                    whatToShow="TRADES",
+                    useRTH=False,  # Include all trading hours
+                    formatDate=1,  # Return as datetime
+                )
             )
 
             if head_timestamp:

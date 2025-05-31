@@ -37,8 +37,8 @@ from ktrdr.errors import (
 )
 
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.ib_connection_manager import get_connection_manager
-from ktrdr.data.ib_data_fetcher_sync import IbDataFetcherSync
+from ktrdr.data.ib_data_loader import IbDataLoader
+from ktrdr.data.ib_connection_strategy import get_connection_strategy
 from ktrdr.data.data_quality_validator import DataQualityValidator
 
 # Get module logger
@@ -130,13 +130,18 @@ class DataManager:
         # Initialize the LocalDataLoader
         self.data_loader = LocalDataLoader(data_dir=data_dir)
 
-        # Use persistent connection manager for IB integration
+        # Initialize IB data loader for advanced IB operations
         self.enable_ib = enable_ib
-        self.connection_manager = get_connection_manager() if enable_ib else None
-
         if enable_ib:
-            logger.info("IB integration enabled (using persistent connection manager)")
+            connection_strategy = get_connection_strategy()
+            self.ib_data_loader = IbDataLoader(
+                connection_strategy=connection_strategy,
+                data_dir=data_dir,
+                validate_data=True
+            )
+            logger.info("IB integration enabled (using unified data loader)")
         else:
+            self.ib_data_loader = None
             logger.info("IB integration disabled")
 
         # Store parameters
@@ -395,15 +400,21 @@ class DataManager:
 
     def _ensure_ib_connection(self) -> bool:
         """
-        Check if IB connection is available from persistent connection manager.
+        Check if IB connection is available via data loader.
 
         Returns:
             True if IB connection is available, False otherwise
         """
-        if not self.enable_ib or not self.connection_manager:
+        if not self.enable_ib or not self.ib_data_loader:
             return False
 
-        return self.connection_manager.is_connected()
+        try:
+            # Try to get a connection to test availability
+            connection_strategy = get_connection_strategy()
+            connection = connection_strategy.get_connection_for_operation("data_manager")
+            return connection is not None and connection.is_connected()
+        except Exception:
+            return False
 
     @log_entry_exit(logger=logger, log_args=True)
     def _load_with_fallback(
@@ -502,27 +513,26 @@ class DataManager:
             if self._ensure_ib_connection():
                 try:
                     logger.info(
-                        f"Attempting to fetch {symbol} from IB (using persistent connection)"
+                        f"Attempting to fetch {symbol} from IB (using unified data loader)"
                     )
-                    # Get connection from persistent manager and create fetcher
-                    ib_connection = self.connection_manager.get_connection()
-                    if ib_connection:
-                        ib_fetcher = IbDataFetcherSync(ib_connection)
-                        ib_data = ib_fetcher.fetch_historical_data(
-                            symbol, timeframe, ib_start_date, ib_end_date
-                        )
-                    else:
-                        logger.warning(
-                            "No IB connection available from persistent manager"
-                        )
-                        ib_data = None
-                    if ib_data is not None and not ib_data.empty:
+                    
+                    # Use unified IB data loader which handles all the complexity
+                    ib_data, metadata = self.ib_data_loader.load_with_existing_check(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        start=ib_start_date,
+                        end=ib_end_date,
+                        operation_type="data_manager"
+                    )
+                    
+                    if not ib_data.empty:
                         # Normalize timezone for IB data (should already be UTC, but ensure consistency)
                         ib_data = self._normalize_dataframe_timezone(ib_data)
-                        logger.info(f"Successfully fetched {len(ib_data)} bars from IB")
+                        logger.info(f"Successfully fetched {metadata['fetched_bars']} new bars from IB (total: {len(ib_data)})")
                     else:
                         logger.info(f"No data returned from IB for {symbol}")
                         ib_data = None
+                        
                 except Exception as e:
                     logger.warning(f"IB fetch failed for {symbol}: {e}")
                     ib_data = None
@@ -531,30 +541,24 @@ class DataManager:
                 ib_data = None
 
         # Strategy 4: Merge and gap-fill if we have both sources
+        # Note: The IB data loader already handles merging, but we may have local data
+        # that wasn't considered by the IB loader (if we loaded it with different parameters)
         if ib_data is not None and local_data is not None:
-            logger.info(
-                f"Merging IB data ({len(ib_data)} bars) with local data ({len(local_data)} bars)"
-            )
-            merged_data = self._merge_and_fill_gaps(ib_data, local_data)
-
-            # Save merged data back to CSV for future use
-            try:
-                self.data_loader.save(merged_data, symbol, timeframe)
-                logger.info(f"Saved merged data ({len(merged_data)} bars) to local CSV")
-            except Exception as e:
-                logger.warning(f"Failed to save merged data: {e}")
-
-            return merged_data
+            # Check if we need to merge (IB data loader might have already merged)
+            if len(ib_data) != len(local_data) or not ib_data.equals(local_data):
+                logger.info(
+                    f"Additional merging: IB data ({len(ib_data)} bars) with local data ({len(local_data)} bars)"
+                )
+                merged_data = self._merge_and_fill_gaps(ib_data, local_data)
+                return merged_data
+            else:
+                # IB data loader already handled merging
+                logger.info(f"Using IB data (already merged): {len(ib_data)} bars")
+                return ib_data
 
         # Strategy 5: Return whichever data source worked
         if ib_data is not None:
             logger.info(f"Using IB data only ({len(ib_data)} bars)")
-            # Save IB data to local CSV for future use
-            try:
-                self.data_loader.save(ib_data, symbol, timeframe)
-                logger.info(f"Saved IB data to local CSV")
-            except Exception as e:
-                logger.warning(f"Failed to save IB data: {e}")
             return ib_data
 
         if local_data is not None:
