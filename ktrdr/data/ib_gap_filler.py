@@ -52,8 +52,8 @@ class GapFillerService:
         
         # Configuration
         self.check_interval = 300  # Check every 5 minutes
-        self.max_gap_days = 30     # Don't fetch gaps older than 30 days
-        self.batch_size = 5        # Process max 5 symbols per cycle
+        self.max_gap_days = 365    # Allow gaps up to 1 year (reasonable limit)
+        self.batch_size = 10       # Process max 10 symbols per cycle
         
         # Supported timeframes for gap filling
         self.supported_timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
@@ -165,7 +165,7 @@ class GapFillerService:
             logger.debug("No CSV files found to check for gaps")
             return
         
-        # Process symbols in batches to avoid overwhelming IB
+        # Process symbols sequentially to avoid pacing limits
         processed = 0
         for symbol, timeframe in symbols_timeframes:
             if processed >= self.batch_size:
@@ -176,14 +176,31 @@ class GapFillerService:
                 break
                 
             try:
+                # Sequential processing with pacing detection
                 gap_filled = self._check_and_fill_gap(symbol, timeframe)
                 if gap_filled:
                     processed += 1
                     self.stats["symbols_processed"].add(f"{symbol}_{timeframe}")
                     
+                    # Add small delay between successful requests to respect IB pacing
+                    if processed < len(symbols_timeframes) and not self._stop_event.is_set():
+                        logger.debug(f"Pacing delay after {symbol}_{timeframe}")
+                        time.sleep(1.0)  # 1 second between requests
+                        
             except Exception as e:
-                logger.warning(f"Error checking gap for {symbol}_{timeframe}: {e}")
-                self.stats["gaps_failed"] += 1
+                error_msg = str(e).lower()
+                
+                # Check for IB pacing limit errors
+                if any(pacing_keyword in error_msg for pacing_keyword in [
+                    'pacing', 'rate limit', 'too many requests', 'throttle', 'quota'
+                ]):
+                    logger.warning(f"🚦 IB pacing limit detected for {symbol}_{timeframe}: {e}")
+                    logger.info("🛑 Stopping gap filling due to pacing limits - will retry in next cycle")
+                    self.stats["gaps_failed"] += 1
+                    break  # Stop processing and let regular cycle retry later
+                else:
+                    logger.warning(f"Error checking gap for {symbol}_{timeframe}: {e}")
+                    self.stats["gaps_failed"] += 1
         
         if processed > 0:
             logger.info(f"Gap filling cycle completed: processed {processed} symbols")
@@ -267,8 +284,8 @@ class GapFillerService:
             logger.info(f"Gap detected for {symbol}_{timeframe}: {gap_hours:.1f} hours")
             self.stats["gaps_detected"] += 1
             
-            # Fill the gap
-            success = self._fill_gap(symbol, timeframe, next_expected, current_time)
+            # Fill the gap - handle large gaps with multiple requests
+            success = self._fill_gap_progressive(symbol, timeframe, next_expected, current_time)
             
             if success:
                 self.stats["gaps_filled"] += 1
@@ -281,6 +298,81 @@ class GapFillerService:
             
         except Exception as e:
             logger.error(f"Error checking gap for {symbol}_{timeframe}: {e}")
+            return False
+    
+    def _fill_gap_progressive(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> bool:
+        """
+        Fill gap progressively with multiple requests if needed for large gaps.
+        
+        This method handles gaps that exceed IB single-request limits by making
+        multiple sequential requests working backwards from end_time.
+        
+        Returns:
+            True if gap was filled successfully, False otherwise
+        """
+        try:
+            # Get IB max duration limit for this timeframe
+            max_limits = {
+                '1m': 1,      # 1 day
+                '5m': 7,      # 1 week  
+                '15m': 14,    # 2 weeks
+                '30m': 30,    # 1 month
+                '1h': 30,     # 1 month
+                '4h': 30,     # 1 month (conservative)
+                '1d': 365,    # 1 year
+                '1w': 730,    # 2 years
+                '1M': 365,    # 1 year
+            }
+            
+            max_days = max_limits.get(timeframe, 30)
+            total_gap_days = (end_time - start_time).days
+            
+            if total_gap_days <= max_days:
+                # Small gap - use single request
+                logger.info(f"Small gap ({total_gap_days} days) - using single request")
+                return self._fill_gap(symbol, timeframe, start_time, end_time)
+            
+            # Large gap - use progressive filling
+            logger.info(f"Large gap ({total_gap_days} days) - using progressive filling (max {max_days} days per request)")
+            
+            current_end = end_time
+            total_bars_added = 0
+            requests_made = 0
+            max_requests = 5  # Limit to prevent excessive API calls
+            
+            while current_end > start_time and requests_made < max_requests:
+                # Calculate start time for this chunk (work backwards)
+                chunk_start = max(start_time, current_end - timedelta(days=max_days))
+                
+                logger.info(f"Progressive fill request {requests_made + 1}: {chunk_start.date()} to {current_end.date()}")
+                
+                # Fill this chunk
+                chunk_success = self._fill_gap(symbol, timeframe, chunk_start, current_end)
+                
+                if chunk_success:
+                    requests_made += 1
+                    logger.info(f"✅ Progressive chunk {requests_made} filled successfully")
+                    
+                    # Move to previous chunk
+                    current_end = chunk_start - timedelta(hours=1)  # Move back 1 hour to avoid overlap
+                    
+                    # Add delay between requests to respect IB pacing
+                    if current_end > start_time:
+                        logger.debug("Pacing delay between progressive requests")
+                        time.sleep(2.0)  # 2 second delay between requests
+                else:
+                    logger.warning(f"❌ Progressive chunk {requests_made + 1} failed")
+                    break
+            
+            if current_end <= start_time:
+                logger.info(f"✅ Progressive gap filling completed in {requests_made} requests")
+                return True
+            else:
+                logger.warning(f"⚠️ Progressive gap filling incomplete after {requests_made} requests")
+                return requests_made > 0  # Partial success if at least one request worked
+                
+        except Exception as e:
+            logger.error(f"Error in progressive gap filling for {symbol}_{timeframe}: {e}")
             return False
     
     def _calculate_next_expected_timestamp(self, last_timestamp: datetime, timeframe: str) -> datetime:
@@ -307,7 +399,7 @@ class GapFillerService:
             "30m": 3.0,   # 3 hours
             "1h": 6.0,    # 6 hours
             "4h": 12.0,   # 12 hours
-            "1d": 36.0,   # 1.5 days
+            "1d": 18.0,   # 18 hours (more reasonable for daily data)
         }
         return thresholds.get(timeframe, 6.0)
     
@@ -345,6 +437,18 @@ class GapFillerService:
             
             # Combine and save
             if existing_data is not None and not existing_data.empty:
+                # Ensure timezone consistency before combining
+                if existing_data.index.tz is None and new_data.index.tz is not None:
+                    # Existing data is timezone-naive, make it UTC-aware
+                    existing_data.index = existing_data.index.tz_localize(timezone.utc)
+                elif existing_data.index.tz is not None and new_data.index.tz is None:
+                    # New data is timezone-naive, make it UTC-aware  
+                    new_data.index = new_data.index.tz_localize(timezone.utc)
+                elif existing_data.index.tz is not None and new_data.index.tz is not None:
+                    # Both are timezone-aware, convert to UTC
+                    existing_data.index = existing_data.index.tz_convert(timezone.utc)
+                    new_data.index = new_data.index.tz_convert(timezone.utc)
+                
                 # Combine data, removing duplicates
                 combined = pd.concat([existing_data, new_data])
                 combined = combined[~combined.index.duplicated(keep='last')]

@@ -50,7 +50,12 @@ class IbConnectionSync:
             "failed_connections": 0,
             "last_connect_time": None,
             "last_disconnect_time": None,
+            "last_error": None,
+            "callback_events": 0,
         }
+        
+        # Set up callback handlers for error detection and pacing monitoring
+        self._setup_callback_handlers()
         
         # Try to connect on initialization
         try:
@@ -58,6 +63,43 @@ class IbConnectionSync:
         except Exception as e:
             logger.error(f"Initial connection failed: {e}")
             logger.warning("You can still use local data, but IB features will not be available.")
+    
+    def _setup_callback_handlers(self) -> None:
+        """Set up minimal IB callback event handlers to avoid connection resets."""
+        logger.debug(f"Setting up minimal callback handlers for client ID {self.config.client_id}")
+        
+        # Minimal error event handler - with pacing detection
+        def on_error(reqId, errorCode, errorString, contract):
+            logger.warning(f"IB Error {errorCode} (reqId: {reqId}): {errorString}")
+            self.metrics["callback_events"] += 1
+            self.metrics["last_error"] = {
+                "reqId": reqId,
+                "errorCode": errorCode, 
+                "errorString": errorString,
+                "time": time.time()
+            }
+            
+            # Detect pacing violations (IB error codes for rate limiting)
+            if errorCode in [162, 165, 200, 354]:  # Common pacing error codes
+                logger.warning(f"🚦 IB pacing violation detected: {errorCode} - {errorString}")
+                self.metrics["pacing_violations"] = self.metrics.get("pacing_violations", 0) + 1
+        
+        # Minimal connection handlers - avoid setting self.connected here
+        def on_connected():
+            logger.info(f"IB connection callback for client ID {self.config.client_id}")
+            self.metrics["callback_events"] += 1
+        
+        def on_disconnected():
+            logger.info(f"IB disconnection callback for client ID {self.config.client_id}")
+            self.metrics["callback_events"] += 1
+            self.metrics["last_disconnect_time"] = time.time()
+        
+        # Register minimal event handlers
+        self.ib.errorEvent += on_error
+        self.ib.connectedEvent += on_connected
+        self.ib.disconnectedEvent += on_disconnected
+        
+        logger.debug("Minimal callback handlers registered")
     
     def _connect(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """
@@ -76,7 +118,7 @@ class IbConnectionSync:
                     f"with client ID {self.config.client_id} (attempt {retries+1}/{max_retries})..."
                 )
                 
-                # Use synchronous connect with proper event loop handling
+                # Use original event loop approach but simplified
                 self._connect_with_event_loop()
                 
                 if self.ib.isConnected():
@@ -96,8 +138,25 @@ class IbConnectionSync:
         logger.error("Failed to connect to IB after all retries")
         return False
     
+    def _connect_simple(self) -> None:
+        """Simple connection using ib_insync's util.run for proper event loop handling."""
+        from ib_insync import util
+        
+        async def _do_connect():
+            """Async connect function."""
+            await self.ib.connectAsync(
+                self.config.host, 
+                self.config.port, 
+                clientId=self.config.client_id,
+                readonly=self.config.readonly,
+                timeout=self.config.timeout
+            )
+        
+        # Use ib_insync's recommended way to run async code
+        util.run(_do_connect())
+    
     def _connect_with_event_loop(self) -> None:
-        """Connect to IB with proper event loop handling for thread context."""
+        """Connect to IB with simplified event loop handling."""
         import asyncio
         
         async def _do_connect_async():
@@ -110,30 +169,27 @@ class IbConnectionSync:
                 timeout=self.config.timeout
             )
         
-        # Create new event loop for this thread and KEEP IT ALIVE
+        # Create event loop for this connection attempt only
         try:
             # Create a new event loop for this thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
-            # Store reference to keep loop alive for connection lifetime
-            self._event_loop = loop
-            
             # Connect using the loop
             loop.run_until_complete(_do_connect_async())
             
-            # DO NOT CLOSE THE LOOP - ib_insync needs it to stay alive!
-            logger.info(f"Event loop created and kept alive for client ID {self.config.client_id}")
+            # Keep loop reference but don't close it yet - ib_insync needs it
+            self._event_loop = loop
+            logger.debug(f"Event loop created for client ID {self.config.client_id}")
             
         except Exception as e:
-            # Clean up loop only on failure
-            if self._event_loop:
-                try:
-                    self._event_loop.close()
-                except:
-                    pass
-                self._event_loop = None
+            # Clean up loop on failure
+            try:
+                if 'loop' in locals():
+                    loop.close()
                 asyncio.set_event_loop(None)
+            except:
+                pass
             # Re-raise with more context
             raise ConnectionError(f"IB connection failed: {e}")
     
@@ -195,18 +251,17 @@ class IbConnectionSync:
         self.disconnect()
     
     def __del__(self):
-        """Ensure cleanup on deletion."""
-        import traceback
+        """Ensure cleanup on deletion to prevent connection leaks."""
         try:
             if self.ib and self.ib.isConnected():
-                logger.error(f"🚨 DESTRUCTOR DISCONNECT DISABLED: Connection not properly closed for client ID {self.config.client_id}")
-                logger.error(f"🚨 WOULD HAVE DISCONNECTED - but disabled to prevent issues")
-                logger.error(f"🚨 DESTRUCTOR TRACEBACK: Object being garbage collected:")
-                # Log the stack trace to see where this object was created
-                for line in traceback.format_stack():
-                    logger.error(f"🚨 {line.strip()}")
-                # TEMPORARILY DISABLED: self.ib.disconnect()
+                logger.warning(f"🧹 Cleaning up leaked connection for client ID {self.config.client_id}")
+                # Re-enabled: We MUST disconnect to prevent connection leaks in IB Gateway
+                try:
+                    self.ib.disconnect()
+                    logger.info(f"✅ Successfully cleaned up connection for client ID {self.config.client_id}")
+                except Exception as disconnect_error:
+                    logger.error(f"❌ Error during destructor disconnect for client ID {self.config.client_id}: {disconnect_error}")
             else:
-                logger.info(f"🧹 Clean destructor for client ID {self.config.client_id} (was already disconnected)")
+                logger.debug(f"🧹 Clean destructor for client ID {self.config.client_id} (was already disconnected)")
         except Exception as e:
             logger.debug(f"Error in destructor: {e}")

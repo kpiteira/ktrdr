@@ -42,15 +42,14 @@ async def lifespan(app: FastAPI):
     # Give connection manager a moment to attempt initial connection
     await asyncio.sleep(2)
     
-    # Start gap filling service - TEMPORARILY DISABLED for connection debugging
-    logger.info("🔧 Gap filling service temporarily disabled for debugging")
-    # try:
-    #     if start_gap_filler():
-    #         logger.info("✅ Automatic gap filling service started")
-    #     else:
-    #         logger.warning("⚠️ Failed to start gap filling service")
-    # except Exception as e:
-    #     logger.error(f"❌ Error starting gap filling service: {e}")
+    # Start gap filling service
+    try:
+        if start_gap_filler():
+            logger.info("✅ Automatic gap filling service started")
+        else:
+            logger.warning("⚠️ Failed to start gap filling service")
+    except Exception as e:
+        logger.error(f"❌ Error starting gap filling service: {e}")
     
     logger.info("🎉 API startup completed")
     
@@ -59,13 +58,12 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("🛑 Shutting down KTRDR API services...")
     
-    # Stop gap filling service first - TEMPORARILY DISABLED
-    logger.info("🔧 Gap filling service was disabled, no need to stop")
-    # try:
-    #     stop_gap_filler()
-    #     logger.info("✅ Gap filling service stopped")
-    # except Exception as e:
-    #     logger.error(f"❌ Error stopping gap filling service: {e}")
+    # Stop gap filling service first
+    try:
+        stop_gap_filler()
+        logger.info("✅ Gap filling service stopped")
+    except Exception as e:
+        logger.error(f"❌ Error stopping gap filling service: {e}")
     
     # Stop connection manager
     try:

@@ -79,9 +79,9 @@ class PersistentIbConnectionManager:
         self._max_client_id = 50  # Reasonable limit
         self._client_id_lock = threading.Lock()
         
-        # Retry configuration
-        self._retry_delays = [5, 10, 30, 60, 120, 300]  # Progressive delays in seconds
-        self._max_retry_delay = 300  # 5 minutes max
+        # Retry configuration - longer delays to avoid overwhelming IB Gateway
+        self._retry_delays = [15, 30, 60, 120, 300, 600]  # Progressive delays in seconds
+        self._max_retry_delay = 600  # 10 minutes max
         
         logger.info("Initialized PersistentIbConnectionManager")
     
@@ -216,12 +216,27 @@ class PersistentIbConnectionManager:
                 
                 logger.info(f"✅ Successfully connected to IB with client ID {client_id}")
             else:
-                # Connection failed
+                # Connection failed - explicitly clean up to prevent connection leaks
+                logger.warning(f"🧹 Connection failed for client ID {client_id}, cleaning up...")
+                try:
+                    new_connection.disconnect()
+                except Exception as cleanup_error:
+                    logger.debug(f"Error during failed connection cleanup: {cleanup_error}")
+                new_connection = None  # Help GC
                 self._handle_connection_failure("Connection check failed")
                 
         except Exception as e:
             error_msg = str(e)
             logger.warning(f"Connection attempt failed: {error_msg}")
+            
+            # Clean up any partially created connection
+            if 'new_connection' in locals():
+                logger.debug(f"🧹 Cleaning up failed connection after exception for client ID {client_id}")
+                try:
+                    new_connection.disconnect()
+                except Exception:
+                    pass  # Ignore cleanup errors
+                new_connection = None
             
             # Check for specific errors that indicate client ID conflict
             if "already in use" in error_msg.lower() or "duplicate" in error_msg.lower():
@@ -307,8 +322,14 @@ class PersistentIbConnectionManager:
         )
     
     def _get_next_client_id(self) -> Optional[int]:
-        """Get next client ID to try."""
+        """Get next client ID to try, starting with configured client_id."""
         with self._client_id_lock:
+            # If this is the first attempt, use the configured client ID
+            if self._current_client_id == 1 and hasattr(self.config, 'client_id'):
+                logger.info(f"Using configured client ID: {self.config.client_id}")
+                self._current_client_id = self.config.client_id + 1  # Next attempt will increment
+                return self.config.client_id
+            
             if self._current_client_id > self._max_client_id:
                 return None
             

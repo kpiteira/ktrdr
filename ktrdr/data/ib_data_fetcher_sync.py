@@ -3,6 +3,7 @@ Synchronous IB Data Fetcher based on proven working pattern.
 """
 
 import time
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Tuple
 import pandas as pd
@@ -82,6 +83,9 @@ class IbDataFetcherSync:
         """
         Determine the appropriate duration string based on timeframe and days.
         
+        This method respects IB maximum duration limits per timeframe and rounds UP
+        to ensure complete gap coverage.
+        
         Args:
             timeframe: Timeframe like '1h', '1d', etc.
             days: Number of days to fetch
@@ -89,15 +93,38 @@ class IbDataFetcherSync:
         Returns:
             IB-compatible duration string like '1 W', '1 M', etc.
         """
-        # IB duration format
+        # IB maximum duration limits per timeframe (from specification)
+        max_limits = {
+            '1m': 1,      # 1 day
+            '5m': 7,      # 1 week  
+            '15m': 14,    # 2 weeks
+            '30m': 30,    # 1 month
+            '1h': 30,     # 1 month
+            '4h': 30,     # 1 month (conservative)
+            '1d': 365,    # 1 year
+            '1w': 730,    # 2 years
+            '1M': 365,    # 1 year
+        }
+        
+        # Get max allowed days for this timeframe
+        max_days = max_limits.get(timeframe, 30)  # Default to 1 month
+        
+        # If request exceeds IB limits, cap it and warn
+        if days > max_days:
+            logger.warning(f"Request for {days} days exceeds IB limit of {max_days} days for {timeframe}")
+            logger.warning(f"Capping to {max_days} days - you may need multiple requests for full gap")
+            days = max_days
+        
+        # Round UP to ensure we cover the entire gap
+        
         if days >= 365:
-            years = days // 365
+            years = math.ceil(days / 365)
             return f"{years} Y"
         elif days >= 30:
-            months = days // 30
+            months = math.ceil(days / 30)
             return f"{months} M"
         elif days >= 7:
-            weeks = days // 7
+            weeks = math.ceil(days / 7)
             return f"{weeks} W"
         else:
             return f"{days} D"
@@ -156,10 +183,11 @@ class IbDataFetcherSync:
         start: datetime,
         end: datetime,
         instrument_type: str = 'stock',
-        what_to_show: str = 'TRADES'
+        what_to_show: str = 'TRADES',
+        timeout_seconds: int = 120
     ) -> pd.DataFrame:
         """
-        Fetch historical data from IB.
+        Fetch historical data from IB with proper timeout and error handling.
         
         Args:
             symbol: Symbol to fetch
@@ -168,12 +196,15 @@ class IbDataFetcherSync:
             end: End datetime
             instrument_type: Type of instrument
             what_to_show: IB data type (TRADES, BID, ASK, MIDPOINT)
+            timeout_seconds: Request timeout in seconds
             
         Returns:
             DataFrame with OHLCV data
         """
         if not self.connection.ensure_connection():
             raise ConnectionError("Not connected to IB")
+        
+        start_time = time.time()
         
         try:
             # Get contract
@@ -199,11 +230,15 @@ class IbDataFetcherSync:
             logger.info(
                 f"Requesting historical data: {symbol} ({instrument_type}), "
                 f"bar size: {bar_size}, duration: {duration_str}, "
-                f"end: {end_dt_str}, whatToShow: {what_to_show}"
+                f"end: {end_dt_str}, whatToShow: {what_to_show}, timeout: {timeout_seconds}s"
             )
             
-            # Make the request
+            # Make the request with proper error handling
             self.metrics["total_requests"] += 1
+            
+            # Clear any previous errors before request
+            if hasattr(self.connection, 'metrics') and 'last_error' in self.connection.metrics:
+                self.connection.metrics['last_error'] = None
             
             bars = self.ib.reqHistoricalData(
                 contract,
@@ -214,6 +249,35 @@ class IbDataFetcherSync:
                 useRTH=False,  # Use all trading hours
                 formatDate=1   # Return as datetime objects
             )
+            
+            # Check for timeout
+            elapsed = time.time() - start_time
+            if elapsed > timeout_seconds:
+                logger.error(f"Request timed out after {elapsed:.1f}s for {symbol}")
+                self.metrics["failed_requests"] += 1
+                raise DataError(f"Request timed out after {elapsed:.1f}s", details={"symbol": symbol})
+            
+            # Check for errors that might have occurred during request
+            if hasattr(self.connection, 'metrics') and self.connection.metrics.get('last_error'):
+                error_info = self.connection.metrics['last_error']
+                error_code = error_info.get('errorCode')
+                error_msg = error_info.get('errorString')
+                
+                # Filter out informational messages that aren't actually errors
+                informational_codes = [
+                    2106,  # HMDS data farm connection is OK
+                    2107,  # HMDS data farm connection is OK (historical data)
+                    2108,  # HMDS data farm connection is inactive
+                    2119,  # Market data farm connection is OK
+                    2174,  # Time zone warning (not an error)
+                ]
+                
+                # Check if error occurred during our request (within last few seconds)
+                error_time = error_info.get('time', 0)
+                if error_time > start_time and error_code not in informational_codes:
+                    logger.error(f"IB error during request for {symbol}: {error_code} - {error_msg}")
+                    self.metrics["failed_requests"] += 1
+                    raise DataError(f"IB error {error_code}: {error_msg}", details={"symbol": symbol})
             
             if not bars:
                 logger.warning(f"No data returned for {symbol}")
@@ -245,18 +309,21 @@ class IbDataFetcherSync:
             self.metrics["successful_requests"] += 1
             self.metrics["total_bars_fetched"] += len(df)
             
-            logger.info(f"Successfully fetched {len(df)} bars for {symbol}")
+            elapsed = time.time() - start_time
+            logger.info(f"Successfully fetched {len(df)} bars for {symbol} in {elapsed:.1f}s")
             
             return df
             
         except Exception as e:
+            elapsed = time.time() - start_time
             self.metrics["failed_requests"] += 1
-            logger.error(f"Error fetching data for {symbol}: {e}")
+            logger.error(f"Error fetching data for {symbol} after {elapsed:.1f}s: {e}")
             raise DataError(
                 f"Failed to fetch historical data: {e}",
-                details={"symbol": symbol, "error": str(e)}
+                details={"symbol": symbol, "error": str(e), "elapsed_seconds": elapsed}
             )
     
+
     def get_metrics(self) -> Dict[str, Any]:
         """Get fetcher metrics."""
         metrics = self.metrics.copy()

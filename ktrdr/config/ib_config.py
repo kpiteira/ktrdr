@@ -25,7 +25,7 @@ class IbConfig:
     host: str = field(default_factory=lambda: os.getenv("IB_HOST", "127.0.0.1"))
     port: int = field(default_factory=lambda: int(os.getenv("IB_PORT", "4002")))
     client_id: int = field(default_factory=lambda: int(os.getenv("IB_CLIENT_ID", "1")))
-    timeout: int = field(default_factory=lambda: int(os.getenv("IB_TIMEOUT", "10")))
+    timeout: int = field(default_factory=lambda: int(os.getenv("IB_TIMEOUT", "30")))
     readonly: bool = field(default_factory=lambda: os.getenv("IB_READONLY", "false").lower() == "true")
     
     # Rate limiting settings
