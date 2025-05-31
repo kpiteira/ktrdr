@@ -5,6 +5,7 @@ This module provides services for accessing indicator functionality
 through the API, including listing available indicators and calculating
 indicator values for given data.
 """
+
 from typing import Dict, List, Any, Optional, Tuple
 import pandas as pd
 from datetime import datetime
@@ -16,8 +17,11 @@ from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.api.models.indicators import (
-    IndicatorMetadata, IndicatorParameter, IndicatorType,
-    IndicatorConfig, IndicatorCalculateRequest
+    IndicatorMetadata,
+    IndicatorParameter,
+    IndicatorType,
+    IndicatorConfig,
+    IndicatorCalculateRequest,
 )
 from ktrdr.api.services.base import BaseService
 
@@ -28,158 +32,167 @@ logger = get_logger(__name__)
 class IndicatorService(BaseService):
     """
     Service for indicator-related operations.
-    
+
     This service bridges the API layer with the core indicator functionality,
     providing methods to list available indicators and calculate indicator values.
     """
-    
+
     def __init__(self):
         """Initialize the indicator service."""
         super().__init__()  # Initialize BaseService
         self.data_manager = DataManager()
         self.logger.info("Initialized IndicatorService")
-    
+
     async def get_available_indicators(self) -> List[IndicatorMetadata]:
         """
         Get a list of all available indicators with their metadata.
-        
+
         Returns:
             List of IndicatorMetadata objects containing information about
             each available indicator.
-            
+
         Raises:
             ProcessingError: If there is an error retrieving indicator information.
         """
         try:
             indicators: List[IndicatorMetadata] = []
-            
+
             # Process built-in indicators
             for id_name, indicator_class in BUILT_IN_INDICATORS.items():
                 # Skip aliases (shorter names for the same indicator)
-                if id_name != indicator_class.__name__ and id_name in BUILT_IN_INDICATORS:
+                if (
+                    id_name != indicator_class.__name__
+                    and id_name in BUILT_IN_INDICATORS
+                ):
                     continue
-                
+
                 # Create a temporary instance to get default parameters
                 try:
                     temp_instance = indicator_class()
-                    
+
                     # Get indicator type
                     indicator_type = IndicatorType.TREND  # Default
-                    if hasattr(temp_instance, 'type'):
-                        type_value = getattr(temp_instance, 'type', 'trend')
+                    if hasattr(temp_instance, "type"):
+                        type_value = getattr(temp_instance, "type", "trend")
                         # Try to convert to enum value
                         try:
                             indicator_type = IndicatorType(type_value.lower())
                         except ValueError:
                             indicator_type = IndicatorType.CUSTOM
-                    
+
                     # Extract parameters from the indicator's __init__ method
                     params = []
-                    
+
                     # Use inspection to determine default parameters
-                    # For simplicity, we'll use hardcoded common parameters 
+                    # For simplicity, we'll use hardcoded common parameters
                     # that most indicators have
-                    common_params = {
-                        'period': 14,
-                        'source': 'close'
-                    }
-                    
+                    common_params = {"period": 14, "source": "close"}
+
                     # Check if any of these parameters exist in the instance
                     for param_name, default_value in common_params.items():
                         if hasattr(temp_instance, param_name):
                             param_value = getattr(temp_instance, param_name)
                         else:
                             param_value = default_value
-                        
+
                         # Determine parameter type
-                        param_type = 'str'
+                        param_type = "str"
                         if isinstance(param_value, int):
-                            param_type = 'int'
+                            param_type = "int"
                         elif isinstance(param_value, float):
-                            param_type = 'float'
+                            param_type = "float"
                         elif isinstance(param_value, bool):
-                            param_type = 'bool'
+                            param_type = "bool"
                         elif isinstance(param_value, list):
-                            param_type = 'list'
+                            param_type = "list"
                         elif isinstance(param_value, dict):
-                            param_type = 'dict'
-                        
+                            param_type = "dict"
+
                         # Extract constraints if available
                         min_value = None
                         max_value = None
                         options = None
-                        
-                        if hasattr(temp_instance, f'_{param_name}_min'):
-                            min_value = getattr(temp_instance, f'_{param_name}_min')
-                        if hasattr(temp_instance, f'_{param_name}_max'):
-                            max_value = getattr(temp_instance, f'_{param_name}_max')
-                        if hasattr(temp_instance, f'_{param_name}_options'):
-                            options = getattr(temp_instance, f'_{param_name}_options')
-                        
+
+                        if hasattr(temp_instance, f"_{param_name}_min"):
+                            min_value = getattr(temp_instance, f"_{param_name}_min")
+                        if hasattr(temp_instance, f"_{param_name}_max"):
+                            max_value = getattr(temp_instance, f"_{param_name}_max")
+                        if hasattr(temp_instance, f"_{param_name}_options"):
+                            options = getattr(temp_instance, f"_{param_name}_options")
+
                         # Add parameter metadata
-                        params.append(IndicatorParameter(
-                            name=param_name,
-                            type=param_type,
-                            description=f"{param_name.replace('_', ' ').title()} parameter",
-                            default=param_value,
-                            min_value=min_value,
-                            max_value=max_value,
-                            options=options if param_name == 'source' else None
-                        ))
-                    
+                        params.append(
+                            IndicatorParameter(
+                                name=param_name,
+                                type=param_type,
+                                description=f"{param_name.replace('_', ' ').title()} parameter",
+                                default=param_value,
+                                min_value=min_value,
+                                max_value=max_value,
+                                options=options if param_name == "source" else None,
+                            )
+                        )
+
                     # If source is not already added, add it as a common parameter
-                    if not any(p.name == 'source' for p in params):
-                        params.append(IndicatorParameter(
-                            name='source',
-                            type='str',
-                            description="Source price data to use",
-                            default='close',
-                            min_value=None,
-                            max_value=None,
-                            options=['close', 'open', 'high', 'low']
-                        ))
-                    
+                    if not any(p.name == "source" for p in params):
+                        params.append(
+                            IndicatorParameter(
+                                name="source",
+                                type="str",
+                                description="Source price data to use",
+                                default="close",
+                                min_value=None,
+                                max_value=None,
+                                options=["close", "open", "high", "low"],
+                            )
+                        )
+
                     # Create indicator metadata
                     metadata = IndicatorMetadata(
                         id=indicator_class.__name__,
-                        name=getattr(temp_instance, 'name', indicator_class.__name__),
-                        description=indicator_class.__doc__.split('\n\n')[0] if indicator_class.__doc__ else "",
+                        name=getattr(temp_instance, "name", indicator_class.__name__),
+                        description=(
+                            indicator_class.__doc__.split("\n\n")[0]
+                            if indicator_class.__doc__
+                            else ""
+                        ),
                         type=indicator_type,
-                        parameters=params
+                        parameters=params,
                     )
-                    
+
                     indicators.append(metadata)
-                    
+
                 except Exception as e:
-                    logger.warning(f"Failed to extract metadata for indicator {id_name}: {str(e)}")
-            
+                    logger.warning(
+                        f"Failed to extract metadata for indicator {id_name}: {str(e)}"
+                    )
+
             logger.info(f"Retrieved metadata for {len(indicators)} indicators")
             return indicators
-            
+
         except Exception as e:
             logger.error(f"Error retrieving available indicators: {str(e)}")
             raise ProcessingError(
                 message="Failed to retrieve available indicators",
                 error_code="PROC-IndicatorRetrievalFailed",
-                details={"error": str(e)}
+                details={"error": str(e)},
             ) from e
-    
+
     async def calculate_indicators(
-        self, 
-        request: IndicatorCalculateRequest
+        self, request: IndicatorCalculateRequest
     ) -> Tuple[List[str], Dict[str, List[float]], Dict[str, Any]]:
         """
         Calculate indicators based on the provided request.
-        
+
         Args:
             request: IndicatorCalculateRequest containing the calculation parameters.
-            
+
         Returns:
             Tuple containing:
             - List of date strings
             - Dictionary mapping indicator names to their calculated values
             - Metadata dictionary with additional information
-            
+
         Raises:
             DataError: If there is an error loading the required data.
             ConfigurationError: If there is an error in the indicator configuration.
@@ -189,24 +202,24 @@ class IndicatorService(BaseService):
             # Load data
             start_date = None
             end_date = None
-            
+
             if request.start_date:
                 start_date = datetime.fromisoformat(request.start_date)
             if request.end_date:
                 end_date = datetime.fromisoformat(request.end_date)
-            
+
             logger.info(
                 f"Loading data for {request.symbol} ({request.timeframe}) "
                 f"from {start_date or 'beginning'} to {end_date or 'end'}"
             )
-            
+
             try:
                 # Update parameter names to match DataManager's API
                 df = self.data_manager.load(
                     symbol=request.symbol,
                     interval=request.timeframe,
                     start_date=start_date,
-                    end_date=end_date
+                    end_date=end_date,
                 )
             except Exception as e:
                 logger.error(f"Error loading data: {str(e)}")
@@ -218,22 +231,19 @@ class IndicatorService(BaseService):
                         "timeframe": request.timeframe,
                         "start_date": request.start_date,
                         "end_date": request.end_date,
-                        "error": str(e)
-                    }
+                        "error": str(e),
+                    },
                 ) from e
-            
+
             if df is None or df.empty:
                 raise DataError(
                     message=f"No data available for {request.symbol} ({request.timeframe})",
                     error_code="DATA-NoData",
-                    details={
-                        "symbol": request.symbol,
-                        "timeframe": request.timeframe
-                    }
+                    details={"symbol": request.symbol, "timeframe": request.timeframe},
                 )
-                
+
             logger.info(f"Loaded {len(df)} data points")
-            
+
             # Create indicator instances from the request
             indicators = []
             for indicator_config in request.indicators:
@@ -244,33 +254,35 @@ class IndicatorService(BaseService):
                         raise ConfigurationError(
                             message=f"Unknown indicator: {indicator_config.id}",
                             error_code="CONFIG-UnknownIndicator",
-                            details={"indicator_id": indicator_config.id}
+                            details={"indicator_id": indicator_config.id},
                         )
-                    
+
                     # Create indicator instance with provided parameters
                     indicator = indicator_class(**indicator_config.parameters)
-                    
+
                     # If custom output name is specified, store it for later
                     if indicator_config.output_name:
                         indicator.output_name = indicator_config.output_name
-                    
+
                     indicators.append(indicator)
-                    
+
                 except Exception as e:
-                    logger.error(f"Error creating indicator {indicator_config.id}: {str(e)}")
+                    logger.error(
+                        f"Error creating indicator {indicator_config.id}: {str(e)}"
+                    )
                     raise ConfigurationError(
                         message=f"Failed to create indicator {indicator_config.id}",
                         error_code="CONFIG-IndicatorCreationFailed",
                         details={
                             "indicator_id": indicator_config.id,
                             "parameters": indicator_config.parameters,
-                            "error": str(e)
-                        }
+                            "error": str(e),
+                        },
                     ) from e
-            
+
             # Initialize the indicator engine with the created indicators
             engine = IndicatorEngine(indicators)
-            
+
             # Calculate indicators
             try:
                 result_df = engine.apply(df)
@@ -280,50 +292,55 @@ class IndicatorService(BaseService):
                 raise ProcessingError(
                     message="Failed to calculate indicators",
                     error_code="PROC-CalculationFailed",
-                    details={"error": str(e)}
+                    details={"error": str(e)},
                 ) from e
-                
+
             # Extract dates and indicator values
-            dates = result_df.index.strftime('%Y-%m-%d %H:%M:%S').tolist()
-            
+            dates = result_df.index.strftime("%Y-%m-%d %H:%M:%S").tolist()
+
             # Determine which columns are indicators (not OHLCV)
-            ohlcv_columns = ['open', 'high', 'low', 'close', 'volume']
-            indicator_columns = [col for col in result_df.columns if col.lower() not in ohlcv_columns]
-            
+            ohlcv_columns = ["open", "high", "low", "close", "volume"]
+            indicator_columns = [
+                col for col in result_df.columns if col.lower() not in ohlcv_columns
+            ]
+
             # Map indicator values by name
             indicator_values = {}
             for col in indicator_columns:
                 # Handle custom output names
                 output_name = col
                 for indicator in indicators:
-                    if hasattr(indicator, 'output_name') and output_name.startswith(indicator.name):
+                    if hasattr(indicator, "output_name") and output_name.startswith(
+                        indicator.name
+                    ):
                         output_name = indicator.output_name
                         break
-                
+
                 # Convert to list and handle NaN/Inf values for JSON compatibility
                 values = result_df[col].tolist()
                 # Replace NaN and Inf values with None for JSON serialization
                 import math
+
                 clean_values = []
                 for val in values:
                     if pd.isna(val) or math.isinf(val):
                         clean_values.append(None)
                     else:
                         clean_values.append(val)
-                        
+
                 indicator_values[output_name] = clean_values
-            
+
             # Create metadata
             metadata = {
                 "symbol": request.symbol,
                 "timeframe": request.timeframe,
                 "start_date": dates[0] if dates else None,
                 "end_date": dates[-1] if dates else None,
-                "points": len(dates)
+                "points": len(dates),
             }
-            
+
             return dates, indicator_values, metadata
-            
+
         except (DataError, ConfigurationError, ProcessingError) as e:
             # Re-raise known error types
             raise
@@ -332,32 +349,32 @@ class IndicatorService(BaseService):
             raise ProcessingError(
                 message="An unexpected error occurred during indicator calculation",
                 error_code="PROC-UnexpectedError",
-                details={"error": str(e)}
+                details={"error": str(e)},
             ) from e
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """
         Perform a health check on the indicator service.
-        
+
         Returns:
             Dict[str, Any]: Health check information
         """
         try:
             # Check available indicators
             indicator_count = len(BUILT_IN_INDICATORS)
-            
+
             # Get a list of indicator names
             indicator_names = list(BUILT_IN_INDICATORS.keys())
-            
+
             return {
                 "status": "healthy",
                 "available_indicators": indicator_count,
                 "first_5_indicators": indicator_names[:5] if indicator_names else [],
-                "message": "Indicator service is functioning normally"
+                "message": "Indicator service is functioning normally",
             }
         except Exception as e:
             self.logger.error(f"Health check failed: {str(e)}")
             return {
                 "status": "unhealthy",
-                "message": f"Indicator service health check failed: {str(e)}"
+                "message": f"Indicator service health check failed: {str(e)}",
             }

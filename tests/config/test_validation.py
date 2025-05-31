@@ -10,9 +10,9 @@ from pathlib import Path
 import tempfile
 
 from ktrdr.config.validation import (
-    InputValidator, 
+    InputValidator,
     sanitize_parameter,
-    sanitize_parameters
+    sanitize_parameters,
 )
 from ktrdr.errors import ValidationError
 
@@ -52,7 +52,7 @@ class TestInputValidator:
         # Valid pattern
         result = InputValidator.validate_string("abc123", pattern=r"^[a-z]+[0-9]+$")
         assert result == "abc123"
-        
+
         # Invalid pattern
         with pytest.raises(ValidationError) as excinfo:
             InputValidator.validate_string("123abc", pattern=r"^[a-z]+[0-9]+$")
@@ -62,12 +62,16 @@ class TestInputValidator:
     def test_validate_string_allowed_values(self):
         """Test validating a string against allowed values."""
         # Valid value
-        result = InputValidator.validate_string("apple", allowed_values={"apple", "orange", "banana"})
+        result = InputValidator.validate_string(
+            "apple", allowed_values={"apple", "orange", "banana"}
+        )
         assert result == "apple"
-        
+
         # Invalid value
         with pytest.raises(ValidationError) as excinfo:
-            InputValidator.validate_string("grape", allowed_values={"apple", "orange", "banana"})
+            InputValidator.validate_string(
+                "grape", allowed_values={"apple", "orange", "banana"}
+            )
         assert "not in allowed set" in str(excinfo.value)
         assert excinfo.value.error_code == "VAL-InvalidValue"
 
@@ -103,7 +107,7 @@ class TestInputValidator:
         # Valid value
         result = InputValidator.validate_numeric(10, allowed_values={5, 10, 15})
         assert result == 10
-        
+
         # Invalid value
         with pytest.raises(ValidationError) as excinfo:
             InputValidator.validate_numeric(12, allowed_values={5, 10, 15})
@@ -147,20 +151,22 @@ class TestInputValidator:
     # File path validation tests
     def test_validate_file_path_valid(self):
         """Test validating a valid file path."""
-        with tempfile.NamedTemporaryFile(suffix='.txt') as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
             result = InputValidator.validate_file_path(tmp.name)
             assert isinstance(result, Path)
 
     def test_validate_file_path_not_exist(self):
         """Test validating a file path that doesn't exist."""
         with pytest.raises(ValidationError) as excinfo:
-            InputValidator.validate_file_path("/path/to/nonexistent/file.txt", must_exist=True)
+            InputValidator.validate_file_path(
+                "/path/to/nonexistent/file.txt", must_exist=True
+            )
         assert "does not exist" in str(excinfo.value)
         assert excinfo.value.error_code == "VAL-FileNotFound"
 
     def test_validate_file_path_wrong_type(self):
         """Test validating a file path with wrong file type."""
-        with tempfile.NamedTemporaryFile(suffix='.txt') as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".txt") as tmp:
             with pytest.raises(ValidationError) as excinfo:
                 InputValidator.validate_file_path(tmp.name, file_type="csv")
             assert "Expected file type" in str(excinfo.value)
@@ -189,11 +195,7 @@ class TestSanitizeFunctions:
 
     def test_sanitize_parameters(self):
         """Test sanitizing multiple parameters."""
-        params = {
-            "path": "test/path",
-            "name": "test\x00string",
-            "count": 10
-        }
+        params = {"path": "test/path", "name": "test\x00string", "count": 10}
         result = sanitize_parameters(params)
         assert len(result) == 3
         assert Path(result["path"]).is_absolute()

@@ -4,6 +4,7 @@ Fuzzy logic endpoints for the KTRDR API.
 This module provides endpoints for accessing fuzzy logic functionality,
 including listing available fuzzy sets and fuzzifying indicator values.
 """
+
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -11,7 +12,10 @@ from ktrdr import get_logger
 from ktrdr.errors import DataError, ConfigurationError, ProcessingError
 from ktrdr.api.services.fuzzy_service import FuzzyService
 from ktrdr.api.models.fuzzy import (
-    FuzzyConfigsResponse, FuzzyConfigResponse, FuzzyEvaluateRequest, FuzzyEvaluateResponse
+    FuzzyConfigsResponse,
+    FuzzyConfigResponse,
+    FuzzyEvaluateRequest,
+    FuzzyEvaluateResponse,
 )
 from ktrdr.api.dependencies import get_fuzzy_service
 
@@ -29,20 +33,20 @@ router = APIRouter(prefix="/fuzzy", tags=["Fuzzy"])
     description="""
     Returns a list of indicators that have fuzzy set configurations available, along with their 
     fuzzy sets and membership functions. These indicators can be used with the fuzzy evaluation endpoints.
-    """
+    """,
 )
 async def list_fuzzy_indicators(
-    fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
+    fuzzy_service: FuzzyService = Depends(get_fuzzy_service),
 ) -> Dict[str, Any]:
     """
     List all indicators available for fuzzy operations.
-    
+
     This endpoint returns information about indicators that have fuzzy set
     configurations, including their available fuzzy sets.
-    
+
     Returns:
         Dict with success flag and list of fuzzy indicators
-        
+
     Example response:
         ```json
         {
@@ -63,16 +67,13 @@ async def list_fuzzy_indicators(
           ]
         }
         ```
-        
+
     Errors:
         - 500: Server error while retrieving fuzzy indicator information
     """
     try:
         indicators = await fuzzy_service.get_available_indicators()
-        return {
-            "success": True,
-            "data": indicators
-        }
+        return {"success": True, "data": indicators}
     except ProcessingError as e:
         logger.error(f"Error in list_fuzzy_indicators: {str(e)}")
         raise HTTPException(
@@ -82,9 +83,9 @@ async def list_fuzzy_indicators(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except Exception as e:
         logger.error(f"Unexpected error in list_fuzzy_indicators: {str(e)}")
@@ -95,9 +96,9 @@ async def list_fuzzy_indicators(
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "An unexpected error occurred while retrieving fuzzy indicators",
-                    "details": {"error": str(e)}
-                }
-            }
+                    "details": {"error": str(e)},
+                },
+            },
         )
 
 
@@ -109,21 +110,20 @@ async def list_fuzzy_indicators(
     Returns detailed information about the fuzzy sets configured for a specific indicator,
     including membership function types and parameters. This provides insight into how
     indicator values are converted to fuzzy membership degrees.
-    """
+    """,
 )
 async def get_fuzzy_sets(
-    indicator: str,
-    fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
+    indicator: str, fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
 ) -> Dict[str, Any]:
     """
     Get detailed information about fuzzy sets for a specific indicator.
-    
+
     Args:
         indicator: Name of the indicator
-        
+
     Returns:
         Dict with success flag and fuzzy sets information
-        
+
     Example response:
         ```json
         {
@@ -144,17 +144,14 @@ async def get_fuzzy_sets(
           }
         }
         ```
-        
+
     Errors:
         - 400: Invalid indicator name or configuration error
         - 500: Server error while retrieving fuzzy set information
     """
     try:
         fuzzy_sets = await fuzzy_service.get_fuzzy_sets(indicator)
-        return {
-            "success": True,
-            "data": fuzzy_sets
-        }
+        return {"success": True, "data": fuzzy_sets}
     except ConfigurationError as e:
         logger.error(f"Configuration error in get_fuzzy_sets: {str(e)}")
         raise HTTPException(
@@ -164,9 +161,9 @@ async def get_fuzzy_sets(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except ProcessingError as e:
         logger.error(f"Processing error in get_fuzzy_sets: {str(e)}")
@@ -177,9 +174,9 @@ async def get_fuzzy_sets(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except Exception as e:
         logger.error(f"Unexpected error in get_fuzzy_sets: {str(e)}")
@@ -190,9 +187,9 @@ async def get_fuzzy_sets(
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "An unexpected error occurred while retrieving fuzzy sets",
-                    "details": {"error": str(e)}
-                }
-            }
+                    "details": {"error": str(e)},
+                },
+            },
         )
 
 
@@ -204,21 +201,20 @@ async def get_fuzzy_sets(
     Applies fuzzy membership functions to convert numeric indicator values into fuzzy membership degrees.
     This endpoint is useful for converting raw indicator values into fuzzy logic inputs that represent
     linguistic variables like "low", "medium", or "high".
-    """
+    """,
 )
 async def fuzzify_values(
-    data: Dict[str, Any],
-    fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
+    data: Dict[str, Any], fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
 ) -> Dict[str, Any]:
     """
     Apply fuzzy membership functions to indicator values.
-    
+
     Args:
         data: Dictionary containing indicator name and values to fuzzify
-            
+
     Returns:
         Dict with success flag and fuzzified values
-        
+
     Example request:
         ```json
         {
@@ -227,7 +223,7 @@ async def fuzzify_values(
           "dates": ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]
         }
         ```
-        
+
     Example response:
         ```json
         {
@@ -244,7 +240,7 @@ async def fuzzify_values(
           }
         }
         ```
-        
+
     Errors:
         - 400: Invalid indicator or missing required fields
         - 500: Server error during fuzzification
@@ -253,7 +249,7 @@ async def fuzzify_values(
         indicator = data.get("indicator")
         values = data.get("values", [])
         dates = data.get("dates")
-        
+
         if not indicator:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -262,11 +258,11 @@ async def fuzzify_values(
                     "error": {
                         "code": "VALIDATION_ERROR",
                         "message": "Missing required field: indicator",
-                        "details": {}
-                    }
-                }
+                        "details": {},
+                    },
+                },
             )
-            
+
         if not values:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -275,16 +271,13 @@ async def fuzzify_values(
                     "error": {
                         "code": "VALIDATION_ERROR",
                         "message": "Missing required field: values",
-                        "details": {}
-                    }
-                }
+                        "details": {},
+                    },
+                },
             )
-        
+
         result = await fuzzy_service.fuzzify_indicator(indicator, values, dates)
-        return {
-            "success": True,
-            "data": result
-        }
+        return {"success": True, "data": result}
     except ConfigurationError as e:
         logger.error(f"Configuration error in fuzzify_values: {str(e)}")
         raise HTTPException(
@@ -294,9 +287,9 @@ async def fuzzify_values(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except ProcessingError as e:
         logger.error(f"Processing error in fuzzify_values: {str(e)}")
@@ -307,9 +300,9 @@ async def fuzzify_values(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except Exception as e:
         logger.error(f"Unexpected error in fuzzify_values: {str(e)}")
@@ -320,9 +313,9 @@ async def fuzzify_values(
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "An unexpected error occurred during fuzzification",
-                    "details": {"error": str(e)}
-                }
-            }
+                    "details": {"error": str(e)},
+                },
+            },
         )
 
 
@@ -334,21 +327,20 @@ async def fuzzify_values(
     Loads market data, calculates indicators, and applies fuzzy membership functions in a single operation.
     This is a convenience endpoint that combines data loading, indicator calculation, and fuzzy evaluation
     in one request, making it ideal for applications that need to process OHLCV data through fuzzy logic.
-    """
+    """,
 )
 async def fuzzify_data(
-    data: Dict[str, Any],
-    fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
+    data: Dict[str, Any], fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
 ) -> Dict[str, Any]:
     """
     Load data, calculate indicators, and apply fuzzy membership functions.
-    
+
     Args:
         data: Dictionary containing symbol, timeframe, and indicators to fuzzify
-            
+
     Returns:
         Dict with success flag and fuzzified data
-        
+
     Example request:
         ```json
         {
@@ -368,7 +360,7 @@ async def fuzzify_data(
           "end_date": "2023-01-31T23:59:59"
         }
         ```
-        
+
     Example response:
         ```json
         {
@@ -397,7 +389,7 @@ async def fuzzify_data(
           }
         }
         ```
-        
+
     Errors:
         - 400: Invalid request parameters or configuration error
         - 404: Data not found for the specified symbol and timeframe
@@ -409,7 +401,7 @@ async def fuzzify_data(
         indicator_configs = data.get("indicators", [])
         start_date = data.get("start_date")
         end_date = data.get("end_date")
-        
+
         if not symbol:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -418,11 +410,11 @@ async def fuzzify_data(
                     "error": {
                         "code": "VALIDATION_ERROR",
                         "message": "Missing required field: symbol",
-                        "details": {}
-                    }
-                }
+                        "details": {},
+                    },
+                },
             )
-            
+
         if not timeframe:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -431,11 +423,11 @@ async def fuzzify_data(
                     "error": {
                         "code": "VALIDATION_ERROR",
                         "message": "Missing required field: timeframe",
-                        "details": {}
-                    }
-                }
+                        "details": {},
+                    },
+                },
             )
-            
+
         if not indicator_configs:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -444,18 +436,15 @@ async def fuzzify_data(
                     "error": {
                         "code": "VALIDATION_ERROR",
                         "message": "Missing required field: indicators",
-                        "details": {}
-                    }
-                }
+                        "details": {},
+                    },
+                },
             )
-        
+
         result = await fuzzy_service.fuzzify_data(
             symbol, timeframe, indicator_configs, start_date, end_date
         )
-        return {
-            "success": True,
-            "data": result
-        }
+        return {"success": True, "data": result}
     except DataError as e:
         logger.error(f"Data error in fuzzify_data: {str(e)}")
         raise HTTPException(
@@ -465,9 +454,9 @@ async def fuzzify_data(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except ConfigurationError as e:
         logger.error(f"Configuration error in fuzzify_data: {str(e)}")
@@ -478,9 +467,9 @@ async def fuzzify_data(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except ProcessingError as e:
         logger.error(f"Processing error in fuzzify_data: {str(e)}")
@@ -491,9 +480,9 @@ async def fuzzify_data(
                 "error": {
                     "code": e.error_code,
                     "message": str(e),
-                    "details": e.details
-                }
-            }
+                    "details": e.details,
+                },
+            },
         )
     except Exception as e:
         logger.error(f"Unexpected error in fuzzify_data: {str(e)}")
@@ -504,7 +493,7 @@ async def fuzzify_data(
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "An unexpected error occurred during data fuzzification",
-                    "details": {"error": str(e)}
-                }
-            }
+                    "details": {"error": str(e)},
+                },
+            },
         )

@@ -11,10 +11,10 @@ from pydantic import BaseModel, Field, field_validator
 
 class DataConfig(BaseModel):
     """Configuration settings for data handling."""
-    
+
     directory: str = Field(..., description="Directory path for data files")
     default_format: str = Field("csv", description="Default file format for data")
-    
+
     @field_validator("directory")
     @classmethod
     def directory_must_exist(cls, v: str) -> str:
@@ -29,11 +29,11 @@ class DataConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     """Configuration settings for logging."""
-    
+
     level: str = Field("INFO", description="Default logging level")
     file_path: Optional[str] = Field(None, description="Path to log file")
     console_output: bool = Field(True, description="Whether to output logs to console")
-    
+
     @field_validator("level")
     @classmethod
     def valid_log_level(cls, v: str) -> str:
@@ -41,37 +41,36 @@ class LoggingConfig(BaseModel):
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         upper_v = v.upper()
         if upper_v not in valid_levels:
-            raise ValueError(f"Invalid logging level: {v}. Must be one of {valid_levels}")
+            raise ValueError(
+                f"Invalid logging level: {v}. Must be one of {valid_levels}"
+            )
         return upper_v
 
 
 class SecurityConfig(BaseModel):
     """Configuration settings for security features."""
-    
+
     credential_providers: List[str] = Field(
-        default_factory=list,
-        description="List of credential providers to initialize"
+        default_factory=list, description="List of credential providers to initialize"
     )
     validate_user_input: bool = Field(
-        True, 
-        description="Whether to validate user-provided parameters"
+        True, description="Whether to validate user-provided parameters"
     )
     sensitive_file_patterns: List[str] = Field(
         default_factory=lambda: ["*.key", "*.pem", "*.env", "*_credentials*"],
-        description="Patterns for files that should be protected"
+        description="Patterns for files that should be protected",
     )
 
 
 class IndicatorConfig(BaseModel):
     """Configuration for a technical indicator."""
-    
+
     type: str = Field(..., description="The type/class of indicator")
     name: Optional[str] = Field(None, description="Custom name for the indicator")
     params: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Parameters for indicator initialization"
+        default_factory=dict, description="Parameters for indicator initialization"
     )
-    
+
     @field_validator("type")
     @classmethod
     def validate_indicator_type(cls, v: str) -> str:
@@ -84,18 +83,19 @@ class IndicatorConfig(BaseModel):
 
 class IndicatorsConfig(BaseModel):
     """Configuration for all indicators."""
-    
+
     indicators: List[IndicatorConfig] = Field(
-        default_factory=list,
-        description="List of indicator configurations"
+        default_factory=list, description="List of indicator configurations"
     )
 
 
 class KtrdrConfig(BaseModel):
     """Root configuration model for KTRDR."""
-    
+
     data: DataConfig
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     debug: bool = Field(False, description="Global debug flag")
-    indicators: Optional[IndicatorsConfig] = Field(None, description="Indicator configurations")
+    indicators: Optional[IndicatorsConfig] = Field(
+        None, description="Indicator configurations"
+    )

@@ -31,7 +31,7 @@ from ktrdr.fuzzy.engine import FuzzyEngine
 cli_app = typer.Typer(
     name="ktrdr",
     help="KTRDR - Trading analysis and automation tool",
-    add_completion=False
+    add_completion=False,
 )
 
 # Get module logger
@@ -45,78 +45,81 @@ error_console = Console(stderr=True)
 @cli_app.command("show-data")
 def show_data(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
+    timeframe: str = typer.Option(
+        "1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"
+    ),
     rows: int = typer.Option(10, "--rows", "-r", help="Number of rows to display"),
-    data_dir: Optional[str] = typer.Option(None, "--data-dir", "-d", help="Data directory path"),
-    tail: bool = typer.Option(False, "--tail", help="Show the last N rows instead of the first N"),
-    columns: Optional[List[str]] = typer.Option(None, "--columns", "-c", help="Columns to display")
+    data_dir: Optional[str] = typer.Option(
+        None, "--data-dir", "-d", help="Data directory path"
+    ),
+    tail: bool = typer.Option(
+        False, "--tail", help="Show the last N rows instead of the first N"
+    ),
+    columns: Optional[List[str]] = typer.Option(
+        None, "--columns", "-c", help="Columns to display"
+    ),
 ):
     """
     Show OHLCV data from local storage.
-    
+
     This command loads and displays price data for the specified symbol and timeframe.
     """
     # Debug output
-    typer.echo(f"DEBUG: Command received with symbol={symbol}, timeframe={timeframe}, rows={rows}", err=True)
-    
+    typer.echo(
+        f"DEBUG: Command received with symbol={symbol}, timeframe={timeframe}, rows={rows}",
+        err=True,
+    )
+
     try:
         # Validate inputs
         symbol = InputValidator.validate_string(
-            symbol, 
-            min_length=1, 
-            max_length=10,
-            pattern=r'^[A-Za-z0-9\-\.]+$'
+            symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
-        
+
         timeframe = InputValidator.validate_string(
-            timeframe, 
-            min_length=1, 
-            max_length=5,
-            pattern=r'^[0-9]+[dhm]$'
+            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
         )
-        
-        rows = InputValidator.validate_numeric(
-            rows, 
-            min_value=1, 
-            max_value=1000
-        )
-        
+
+        rows = InputValidator.validate_numeric(rows, min_value=1, max_value=1000)
+
         # Create a DataManager instance (with IB integration)
         data_manager = DataManager(data_dir=data_dir)
-        
+
         # Load the data
         logger.info(f"Loading data for {symbol} ({timeframe})")
         df = data_manager.load_data(symbol, timeframe, validate=False)
-        
+
         if df is None or df.empty:
             typer.echo(f"No data found for {symbol} ({timeframe})")
             return
-        
+
         # Filter columns if specified
         if columns:
             # Validate that the specified columns exist
             valid_columns = [col for col in columns if col in df.columns]
             if not valid_columns:
-                typer.echo(f"Warning: None of the specified columns exist. Available columns: {', '.join(df.columns)}")
+                typer.echo(
+                    f"Warning: None of the specified columns exist. Available columns: {', '.join(df.columns)}"
+                )
                 return
             df = df[valid_columns]
-        
+
         # Display information about the data
         typer.echo(f"\nData for {symbol} ({timeframe}):")
         typer.echo(f"Total rows: {len(df)}")
         typer.echo(f"Date range: {df.index.min()} to {df.index.max()}")
         typer.echo(f"Columns: {', '.join(df.columns)}\n")
-        
+
         # Format the data for display
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', None)
-        
+        pd.set_option("display.max_columns", None)
+        pd.set_option("display.width", None)
+
         # Display the data
         if tail:
             typer.echo(df.tail(rows))
         else:
             typer.echo(df.head(rows))
-            
+
     except ValidationError as e:
         typer.echo(f"Validation error: {e}", err=True)
         sys.exit(1)
@@ -131,109 +134,91 @@ def show_data(
 @cli_app.command("compute-indicator")
 def compute_indicator(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
-    
+    timeframe: str = typer.Option(
+        "1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"
+    ),
     # Indicator configuration options
     config_file: Optional[str] = typer.Option(
-        None, 
-        "--config", 
-        "-c", 
-        help="Path to indicator configuration YAML file"
+        None, "--config", "-c", help="Path to indicator configuration YAML file"
     ),
     indicator_type: Optional[str] = typer.Option(
-        None, 
-        "--type", 
-        help="Indicator type (e.g., RSI, SMA, EMA)"
+        None, "--type", help="Indicator type (e.g., RSI, SMA, EMA)"
     ),
     period: Optional[int] = typer.Option(
-        None, 
-        "--period", 
-        "-p", 
-        help="Period for the indicator calculation"
+        None, "--period", "-p", help="Period for the indicator calculation"
     ),
     source: str = typer.Option(
-        "close", 
-        "--source", 
-        "-s", 
-        help="Source column for calculation (default: close)"
+        "close", "--source", "-s", help="Source column for calculation (default: close)"
     ),
-    
     # Output options
     rows: int = typer.Option(10, "--rows", "-r", help="Number of rows to display"),
-    data_dir: Optional[str] = typer.Option(None, "--data-dir", "-d", help="Data directory path"),
-    tail: bool = typer.Option(False, "--tail", help="Show the last N rows instead of the first N"),
+    data_dir: Optional[str] = typer.Option(
+        None, "--data-dir", "-d", help="Data directory path"
+    ),
+    tail: bool = typer.Option(
+        False, "--tail", help="Show the last N rows instead of the first N"
+    ),
     format: str = typer.Option(
-        "table", 
-        "--format", 
-        "-f", 
-        help="Output format (table, csv, json)"
+        "table", "--format", "-f", help="Output format (table, csv, json)"
     ),
     output_file: Optional[str] = typer.Option(
-        None, 
-        "--output",
-        "-o",
-        help="Save output to file (specify path)"
-    )
+        None, "--output", "-o", help="Save output to file (specify path)"
+    ),
 ):
     """
     Compute and display technical indicator values.
-    
+
     This command calculates technical indicators for the specified symbol and timeframe,
     based on either a configuration file or direct parameter specification.
     """
     logger.info(f"Computing indicator for {symbol} ({timeframe})")
-    
+
     try:
         # Validate inputs - allow longer symbol names (up to 20 chars)
         symbol = InputValidator.validate_string(
-            symbol, 
-            min_length=1, 
-            max_length=20,
-            pattern=r'^[A-Za-z0-9\-\.]+$'
+            symbol, min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
-        
+
         timeframe = InputValidator.validate_string(
-            timeframe, 
-            min_length=1, 
-            max_length=5,
-            pattern=r'^[0-9]+[dhm]$'
+            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
         )
-        
-        rows = InputValidator.validate_numeric(
-            rows, 
-            min_value=1, 
-            max_value=1000
-        )
-        
+
+        rows = InputValidator.validate_numeric(rows, min_value=1, max_value=1000)
+
         format = InputValidator.validate_string(
-            format,
-            allowed_values=["table", "csv", "json"]
+            format, allowed_values=["table", "csv", "json"]
         )
-        
+
         # Create a DataManager instance (using LocalDataLoader)
         data_manager = DataManager(data_dir=data_dir)
-        
+
         # Load the data
         logger.info(f"Loading data for {symbol} ({timeframe})")
         df = data_manager.load_data(symbol, timeframe)
-        
+
         if df is None or df.empty:
             # For "No data found" we use console.print if it's not JSON format
             # For JSON format, we'll return an empty array with a message
             if format == "json":
                 if output_file:
-                    with open(output_file, 'w') as f:
-                        json.dump({"error": f"No data found for {symbol} ({timeframe})"}, f)
+                    with open(output_file, "w") as f:
+                        json.dump(
+                            {"error": f"No data found for {symbol} ({timeframe})"}, f
+                        )
                 else:
-                    print(json.dumps({"error": f"No data found for {symbol} ({timeframe})"}))
+                    print(
+                        json.dumps(
+                            {"error": f"No data found for {symbol} ({timeframe})"}
+                        )
+                    )
                 return
             else:
                 console.print(f"No data found for {symbol} ({timeframe})")
                 return
-        
+
         # Determine indicator configuration
         indicators = []
-        
+
         # If a config file is provided, use it
         if config_file:
             logger.info(f"Loading indicator configurations from {config_file}")
@@ -243,23 +228,23 @@ def compute_indicator(
                     raise ConfigurationError(
                         message=f"Configuration file not found: {config_file}",
                         error_code="CONFIG-FileNotFound",
-                        details={"file_path": config_file}
+                        details={"file_path": config_file},
                     )
-                
-                with open(config_path, 'r') as f:
+
+                with open(config_path, "r") as f:
                     config_data = yaml.safe_load(f)
-                
+
                 # Create indicators from configuration
                 indicators_config = IndicatorsConfig(**config_data)
                 factory = IndicatorFactory(indicators_config)
                 indicators = factory.build()
-                
+
             except Exception as e:
                 logger.error(f"Failed to load indicator configuration: {str(e)}")
                 raise ConfigurationError(
                     message=f"Failed to load indicator configuration: {str(e)}",
                     error_code="CONFIG-LoadError",
-                    details={"file_path": config_file, "error": str(e)}
+                    details={"file_path": config_file, "error": str(e)},
                 )
         # If indicator type is provided, create a single indicator
         elif indicator_type:
@@ -267,17 +252,18 @@ def compute_indicator(
                 raise ValidationError(
                     message="Period must be specified when using --type",
                     error_code="VALIDATION-MissingParameter",
-                    details={"missing_parameter": "period"}
+                    details={"missing_parameter": "period"},
                 )
-            
-            logger.info(f"Creating {indicator_type} indicator with period={period}, source={source}")
-            
+
+            logger.info(
+                f"Creating {indicator_type} indicator with period={period}, source={source}"
+            )
+
             # Create an indicator config
             indicator_config = IndicatorConfig(
-                type=indicator_type,
-                params={"period": period, "source": source}
+                type=indicator_type, params={"period": period, "source": source}
             )
-            
+
             # Create the indicator
             factory = IndicatorFactory([indicator_config])
             indicators = factory.build()
@@ -285,9 +271,9 @@ def compute_indicator(
             raise ValidationError(
                 message="Either --config or --type must be specified",
                 error_code="VALIDATION-MissingParameter",
-                details={"missing_parameter": "--config or --type"}
+                details={"missing_parameter": "--config or --type"},
             )
-        
+
         # Compute indicators
         result_df = df.copy()
         for indicator in indicators:
@@ -297,33 +283,43 @@ def compute_indicator(
                 result_df[column_name] = indicator.compute(df)
             except DataError as e:
                 # Handle insufficient data error more gracefully
-                error_console.print(f"[bold red]Error computing {indicator.name}:[/bold red] {str(e)}")
+                error_console.print(
+                    f"[bold red]Error computing {indicator.name}:[/bold red] {str(e)}"
+                )
                 logger.error(f"Error computing {indicator.name}: {str(e)}")
                 # If we can't compute this indicator, continue with others
                 continue
-        
+
         # Check if we were able to compute any indicators
-        computed_indicators = [ind for ind in indicators if ind.get_column_name() in result_df.columns]
+        computed_indicators = [
+            ind for ind in indicators if ind.get_column_name() in result_df.columns
+        ]
         if not computed_indicators:
-            error_console.print("[bold red]Error:[/bold red] Could not compute any indicators")
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not compute any indicators"
+            )
             return
-        
+
         # Get the data to display (head or tail)
         display_df = result_df.tail(rows) if tail else result_df.head(rows)
-        
+
         # Format the output
         if format == "table":
             # Display information about the data
-            console.print(f"\n[bold]Data for {symbol} ({timeframe}) with indicators:[/bold]")
+            console.print(
+                f"\n[bold]Data for {symbol} ({timeframe}) with indicators:[/bold]"
+            )
             console.print(f"Total rows: {len(result_df)}")
-            console.print(f"Date range: {result_df.index.min()} to {result_df.index.max()}")
-            
+            console.print(
+                f"Date range: {result_df.index.min()} to {result_df.index.max()}"
+            )
+
             # Create a Rich table for better formatting
             table = Table(title=f"{symbol} ({timeframe}) with indicators")
-            
+
             # Add the index column
             table.add_column("Date", style="cyan")
-            
+
             # Add data columns (original OHLCV + indicators)
             for col in display_df.columns:
                 # Use different styles for indicators
@@ -331,49 +327,47 @@ def compute_indicator(
                     table.add_column(col, style="green")
                 else:
                     table.add_column(col, style="yellow")
-            
+
             # Add rows
             for idx, row in display_df.iterrows():
                 # Convert all values to strings and round floating point numbers
-                values = [idx.strftime('%Y-%m-%d')] + [
-                    f"{val:.4f}" if isinstance(val, float) else str(val)
-                    for val in row
+                values = [idx.strftime("%Y-%m-%d")] + [
+                    f"{val:.4f}" if isinstance(val, float) else str(val) for val in row
                 ]
                 table.add_row(*values)
-            
+
             # Print the table
             console.print(table)
-            
+
             # Print indicator details
             console.print("\n[bold]Indicator Details:[/bold]")
             for indicator in computed_indicators:
                 console.print(f"- {indicator.name}: {indicator.params}")
-        
+
         elif format == "csv":
             output = display_df.to_csv()
             if output_file:
-                with open(output_file, 'w') as f:
+                with open(output_file, "w") as f:
                     f.write(output)
                 console.print(f"Output saved to {output_file}")
             else:
                 console.print(output)
-                
+
         elif format == "json":
             # Convert to JSON - need to handle the index
             json_data = display_df.reset_index().to_json(
-                orient="records", 
-                date_format="iso"
+                orient="records", date_format="iso"
             )
-            
+
             if output_file:
-                with open(output_file, 'w') as f:
+                with open(output_file, "w") as f:
                     f.write(json_data)
                 console.print(f"Output saved to {output_file}")
             else:
                 # For JSON format, we use print() instead of console.print()
                 # to ensure only the JSON content is displayed with no formatting
                 print(json_data)
-                
+
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         logger.error(f"Validation error: {str(e)}")
@@ -395,161 +389,126 @@ def compute_indicator(
 @cli_app.command("plot")
 def plot(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
-    
+    timeframe: str = typer.Option(
+        "1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"
+    ),
     # Chart options
     chart_type: str = typer.Option(
-        "candlestick", 
-        "--chart-type", 
+        "candlestick",
+        "--chart-type",
         "-c",
-        help="Chart type (candlestick, line, histogram)"
+        help="Chart type (candlestick, line, histogram)",
     ),
-    theme: str = typer.Option(
-        "dark",
-        "--theme", 
-        help="Chart theme (dark, light)"
-    ),
-    height: int = typer.Option(
-        500,
-        "--height",
-        help="Chart height in pixels"
-    ),
-    
+    theme: str = typer.Option("dark", "--theme", help="Chart theme (dark, light)"),
+    height: int = typer.Option(500, "--height", help="Chart height in pixels"),
     # Indicator options
     indicator_type: Optional[str] = typer.Option(
         None,
-        "--indicator", 
+        "--indicator",
         "-i",
-        help="Indicator type to add (e.g., SMA, EMA, RSI, MACD)"
+        help="Indicator type to add (e.g., SMA, EMA, RSI, MACD)",
     ),
     period: int = typer.Option(
-        20,
-        "--period", 
-        "-p",
-        help="Period for the indicator calculation"
+        20, "--period", "-p", help="Period for the indicator calculation"
     ),
     source: str = typer.Option(
-        "close",
-        "--source", 
-        "-s",
-        help="Source column for calculation (default: close)"
+        "close", "--source", "-s", help="Source column for calculation (default: close)"
     ),
     panel: bool = typer.Option(
-        False,
-        "--panel",
-        help="Add indicator as a separate panel (default: overlay)"
+        False, "--panel", help="Add indicator as a separate panel (default: overlay)"
     ),
-    
     # Range slider
     range_slider: bool = typer.Option(
         True,
         "--range-slider/--no-range-slider",
-        help="Add a range slider for chart navigation"
+        help="Add a range slider for chart navigation",
     ),
-    
     # Additional data display options
     volume: bool = typer.Option(
-        True,
-        "--volume/--no-volume",
-        help="Add volume panel to the chart"
+        True, "--volume/--no-volume", help="Add volume panel to the chart"
     ),
-    
     # Output options
     output_file: Optional[str] = typer.Option(
         None,
-        "--output", 
+        "--output",
         "-o",
-        help="Save output to file (specify path), defaults to symbol_timeframe.html"
+        help="Save output to file (specify path), defaults to symbol_timeframe.html",
     ),
     data_dir: Optional[str] = typer.Option(
-        None,
-        "--data-dir", 
-        "-d",
-        help="Data directory path"
-    )
+        None, "--data-dir", "-d", help="Data directory path"
+    ),
 ):
     """
     Create and save interactive price charts.
-    
+
     This command generates interactive visualizations of price data,
     optionally including indicators and volume data.
     """
     logger.info(f"Creating chart for {symbol} ({timeframe})")
-    
+
     try:
         # Validate inputs
         symbol = InputValidator.validate_string(
-            symbol,
-            min_length=1,
-            max_length=20,
-            pattern=r'^[A-Za-z0-9\-\.]+$'
+            symbol, min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
-        
+
         timeframe = InputValidator.validate_string(
-            timeframe,
-            min_length=1,
-            max_length=5,
-            pattern=r'^[0-9]+[dhm]$'
+            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
         )
-        
+
         chart_type = InputValidator.validate_string(
-            chart_type,
-            allowed_values=["candlestick", "line", "histogram"]
+            chart_type, allowed_values=["candlestick", "line", "histogram"]
         )
-        
-        theme = InputValidator.validate_string(
-            theme,
-            allowed_values=["dark", "light"]
-        )
-        
-        height = InputValidator.validate_numeric(
-            height,
-            min_value=100,
-            max_value=2000
-        )
-        
+
+        theme = InputValidator.validate_string(theme, allowed_values=["dark", "light"])
+
+        height = InputValidator.validate_numeric(height, min_value=100, max_value=2000)
+
         # Create a DataManager instance
         data_manager = DataManager(data_dir=data_dir)
-        
+
         # Load the data
         logger.info(f"Loading data for {symbol} ({timeframe})")
         df = data_manager.load_data(symbol, timeframe)
-        
+
         if df is None or df.empty:
-            error_console.print(f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})")
+            error_console.print(
+                f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})"
+            )
             return
-        
+
         # Create visualizer with selected theme
         visualizer = Visualizer(theme=theme)
-        
+
         # Create chart
         console.print(f"Creating {chart_type} chart for {symbol} ({timeframe})...")
         chart = visualizer.create_chart(
             data=df,
             title=f"{symbol} ({timeframe})",
             chart_type=chart_type,
-            height=height
+            height=height,
         )
-        
+
         # Add indicator if specified
         if indicator_type:
             # Create and compute the indicator
             indicator_config = IndicatorConfig(
-                type=indicator_type,
-                params={"period": period, "source": source}
+                type=indicator_type, params={"period": period, "source": source}
             )
             factory = IndicatorFactory([indicator_config])
             indicators = factory.build()
-            
+
             if not indicators:
-                error_console.print(f"[bold red]Error:[/bold red] Failed to create indicator {indicator_type}")
+                error_console.print(
+                    f"[bold red]Error:[/bold red] Failed to create indicator {indicator_type}"
+                )
             else:
                 indicator = indicators[0]
                 # Calculate indicator values
                 try:
                     indicator_name = indicator.get_column_name()
                     df[indicator_name] = indicator.compute(df)
-                    
+
                     # Colors for common indicators
                     if indicator_type.lower() in ["sma", "ma"]:
                         color = "#2962FF"  # Blue
@@ -559,7 +518,7 @@ def plot(
                         color = "#9C27B0"  # Purple
                     else:
                         color = "#2962FF"  # Default blue
-                    
+
                     # Add indicator to chart (as panel or overlay)
                     if panel:
                         console.print(f"Adding {indicator_name} as panel...")
@@ -568,7 +527,7 @@ def plot(
                             data=df,
                             column=indicator_name,
                             color=color,
-                            title=indicator_name
+                            title=indicator_name,
                         )
                     else:
                         console.print(f"Adding {indicator_name} as overlay...")
@@ -577,12 +536,14 @@ def plot(
                             data=df,
                             column=indicator_name,
                             color=color,
-                            title=indicator_name
+                            title=indicator_name,
                         )
                 except Exception as e:
-                    error_console.print(f"[bold red]Error computing {indicator_type}:[/bold red] {str(e)}")
+                    error_console.print(
+                        f"[bold red]Error computing {indicator_type}:[/bold red] {str(e)}"
+                    )
                     logger.error(f"Error computing {indicator_type}: {str(e)}")
-        
+
         # Add volume if requested
         if volume:
             console.print("Adding volume panel...")
@@ -592,25 +553,27 @@ def plot(
                 column="volume",
                 panel_type="histogram",
                 color="#00BCD4",  # Cyan
-                title="Volume"
+                title="Volume",
             )
-        
+
         # Add range slider if requested
         if range_slider:
             console.print("Adding range slider...")
             chart = visualizer.configure_range_slider(chart, height=60, show=True)
-        
+
         # Determine output path if not provided
         if not output_file:
             output_dir = Path("output")
             os.makedirs(output_dir, exist_ok=True)
             output_file = output_dir / f"{symbol.lower()}_{timeframe}_{chart_type}.html"
-        
+
         # Save the chart
         output_path = visualizer.save(chart, output_file, overwrite=True)
         console.print(f"\n[green]Chart saved to:[/green] {output_path}")
-        console.print(f"Open this file in your web browser to view the interactive chart.")
-        
+        console.print(
+            f"Open this file in your web browser to view the interactive chart."
+        )
+
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         logger.error(f"Validation error: {str(e)}")
@@ -632,71 +595,48 @@ def plot(
 @cli_app.command("plot-indicators")
 def plot_indicators(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
-    
+    timeframe: str = typer.Option(
+        "1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"
+    ),
     # Indicators configuration
     config_file: Optional[str] = typer.Option(
-        None,
-        "--config",
-        "-c",
-        help="Path to indicator configuration YAML file"
+        None, "--config", "-c", help="Path to indicator configuration YAML file"
     ),
-    
     # Chart options
-    theme: str = typer.Option(
-        "dark",
-        "--theme",
-        help="Chart theme (dark, light)"
-    ),
+    theme: str = typer.Option("dark", "--theme", help="Chart theme (dark, light)"),
     separate_panels: bool = typer.Option(
         True,
         "--separate-panels/--overlays",
-        help="Whether to place each indicator in a separate panel"
+        help="Whether to place each indicator in a separate panel",
     ),
-    
     # Output options
     output_file: Optional[str] = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (specify path)"
+        None, "--output", "-o", help="Save output to file (specify path)"
     ),
     data_dir: Optional[str] = typer.Option(
-        None,
-        "--data-dir", 
-        "-d",
-        help="Data directory path"
-    )
+        None, "--data-dir", "-d", help="Data directory path"
+    ),
 ):
     """
     Create multi-indicator charts with combined price and indicator plots.
-    
+
     This command generates comprehensive trading visualizations with
     multiple indicators based on a configuration file.
     """
     logger.info(f"Creating multi-indicator chart for {symbol} ({timeframe})")
-    
+
     try:
         # Validate inputs
         symbol = InputValidator.validate_string(
-            symbol,
-            min_length=1,
-            max_length=20,
-            pattern=r'^[A-Za-z0-9\-\.]+$'
+            symbol, min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
-        
+
         timeframe = InputValidator.validate_string(
-            timeframe,
-            min_length=1,
-            max_length=5,
-            pattern=r'^[0-9]+[dhm]$'
+            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
         )
-        
-        theme = InputValidator.validate_string(
-            theme,
-            allowed_values=["dark", "light"]
-        )
-        
+
+        theme = InputValidator.validate_string(theme, allowed_values=["dark", "light"])
+
         # Check that config file exists if specified
         if config_file:
             config_path = Path(config_file)
@@ -704,27 +644,29 @@ def plot_indicators(
                 raise ConfigurationError(
                     message=f"Configuration file not found: {config_file}",
                     error_code="CONFIG-FileNotFound",
-                    details={"file_path": config_file}
+                    details={"file_path": config_file},
                 )
-        
+
         # Create a DataManager instance
         data_manager = DataManager(data_dir=data_dir)
-        
+
         # Load the data
         logger.info(f"Loading data for {symbol} ({timeframe})")
         df = data_manager.load_data(symbol, timeframe)
-        
+
         if df is None or df.empty:
-            error_console.print(f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})")
+            error_console.print(
+                f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})"
+            )
             return
-        
+
         # Load indicator configuration
         indicators = []
         if config_file:
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, "r") as f:
                     config_data = yaml.safe_load(f)
-                
+
                 indicators_config = IndicatorsConfig(**config_data)
                 factory = IndicatorFactory(indicators_config)
                 indicators = factory.build()
@@ -733,35 +675,41 @@ def plot_indicators(
                 raise ConfigurationError(
                     message=f"Failed to load indicator configuration: {str(e)}",
                     error_code="CONFIG-LoadError",
-                    details={"file_path": config_file, "error": str(e)}
+                    details={"file_path": config_file, "error": str(e)},
                 )
         else:
             # Default indicators if no config provided
             indicators_config = IndicatorsConfig(
                 indicators=[
-                    IndicatorConfig(type="SMA", params={"period": 20, "source": "close"}),
-                    IndicatorConfig(type="SMA", params={"period": 50, "source": "close"}),
-                    IndicatorConfig(type="RSI", params={"period": 14, "source": "close"})
+                    IndicatorConfig(
+                        type="SMA", params={"period": 20, "source": "close"}
+                    ),
+                    IndicatorConfig(
+                        type="SMA", params={"period": 50, "source": "close"}
+                    ),
+                    IndicatorConfig(
+                        type="RSI", params={"period": 14, "source": "close"}
+                    ),
                 ]
             )
             factory = IndicatorFactory(indicators_config)
             indicators = factory.build()
-        
+
         # Create visualizer with selected theme
         visualizer = Visualizer(theme=theme)
-        
+
         # Create chart
         console.print(f"Creating chart for {symbol} ({timeframe})...")
         chart = visualizer.create_chart(
             data=df,
             title=f"{symbol} ({timeframe}) Technical Analysis",
             chart_type="candlestick",
-            height=500
+            height=500,
         )
-        
+
         # Process indicators
         result_df = df.copy()
-        
+
         # Define a color palette for indicators
         color_palette = [
             "#2962FF",  # Blue
@@ -772,28 +720,30 @@ def plot_indicators(
             "#00BCD4",  # Cyan
             "#FFC107",  # Amber
         ]
-        
+
         # Add computed indicators to the chart
         overlay_count = 0
         panel_count = 0
-        
+
         for i, indicator in enumerate(indicators):
             indicator_name = indicator.get_column_name()
             try:
                 # Compute indicator
                 console.print(f"Computing {indicator.name} indicator...")
                 result_df[indicator_name] = indicator.compute(df)
-                
+
                 # Determine color (cycle through palette)
                 color = color_palette[i % len(color_palette)]
-                
+
                 # Check if this indicator should be a separate panel
                 # Use the indicator's own preference unless overridden by user
                 should_use_panel = separate_panels or not indicator.display_as_overlay
-                
+
                 # Add indicator to chart
                 if should_use_panel:
-                    panel_type = "histogram" if "MACD_HIST" in indicator_name else "line"
+                    panel_type = (
+                        "histogram" if "MACD_HIST" in indicator_name else "line"
+                    )
                     console.print(f"Adding {indicator_name} as panel...")
                     chart = visualizer.add_indicator_panel(
                         chart=chart,
@@ -801,7 +751,7 @@ def plot_indicators(
                         column=indicator_name,
                         panel_type=panel_type,
                         color=color,
-                        title=f"{indicator.name} ({indicator.params.get('period', '')})"
+                        title=f"{indicator.name} ({indicator.params.get('period', '')})",
                     )
                     panel_count += 1
                 else:
@@ -811,14 +761,16 @@ def plot_indicators(
                         data=result_df,
                         column=indicator_name,
                         color=color,
-                        title=f"{indicator.name} ({indicator.params.get('period', '')})"
+                        title=f"{indicator.name} ({indicator.params.get('period', '')})",
                     )
                     overlay_count += 1
-                    
+
             except Exception as e:
-                error_console.print(f"[bold red]Error computing {indicator.name}:[/bold red] {str(e)}")
+                error_console.print(
+                    f"[bold red]Error computing {indicator.name}:[/bold red] {str(e)}"
+                )
                 logger.error(f"Error computing {indicator.name}: {str(e)}")
-        
+
         # Add volume panel
         console.print("Adding volume panel...")
         chart = visualizer.add_indicator_panel(
@@ -827,25 +779,29 @@ def plot_indicators(
             column="volume",
             panel_type="histogram",
             color="#00BCD4",  # Cyan
-            title="Volume"
+            title="Volume",
         )
-        
+
         # Add range slider
         console.print("Adding range slider...")
         chart = visualizer.configure_range_slider(chart, height=60, show=True)
-        
+
         # Determine output path if not provided
         if not output_file:
             output_dir = Path("output")
             os.makedirs(output_dir, exist_ok=True)
             output_file = output_dir / f"{symbol.lower()}_{timeframe}_analysis.html"
-        
+
         # Save the chart
         output_path = visualizer.save(chart, output_file, overwrite=True)
         console.print(f"\n[green]Chart saved to:[/green] {output_path}")
-        console.print(f"Open this file in your web browser to view the interactive chart.")
-        console.print(f"Chart contains {overlay_count} overlay indicators and {panel_count} panel indicators.")
-        
+        console.print(
+            f"Open this file in your web browser to view the interactive chart."
+        )
+        console.print(
+            f"Chart contains {overlay_count} overlay indicators and {panel_count} panel indicators."
+        )
+
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         logger.error(f"Validation error: {str(e)}")
@@ -867,118 +823,134 @@ def plot_indicators(
 @cli_app.command("fuzzify")
 def fuzzify(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
-    
+    timeframe: str = typer.Option(
+        "1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"
+    ),
     # Indicator options
-    indicator_type: str = typer.Option(..., "--indicator", "-i", help="Indicator type to fuzzify (e.g., RSI, MACD)"),
-    period: int = typer.Option(14, "--period", "-p", help="Period for the indicator calculation"),
-    source: str = typer.Option("close", "--source", "-s", help="Source column for indicator calculation"),
-    
+    indicator_type: str = typer.Option(
+        ..., "--indicator", "-i", help="Indicator type to fuzzify (e.g., RSI, MACD)"
+    ),
+    period: int = typer.Option(
+        14, "--period", "-p", help="Period for the indicator calculation"
+    ),
+    source: str = typer.Option(
+        "close", "--source", "-s", help="Source column for indicator calculation"
+    ),
     # Fuzzy configuration options
-    fuzzy_config: Optional[str] = typer.Option(None, "--fuzzy-config", "-f", 
-                                              help="Path to fuzzy configuration YAML file (default: config/fuzzy.yaml)"),
-    strategy: Optional[str] = typer.Option(None, "--strategy", 
-                                          help="Strategy name to use for fuzzy configuration overrides"),
-    
+    fuzzy_config: Optional[str] = typer.Option(
+        None,
+        "--fuzzy-config",
+        "-f",
+        help="Path to fuzzy configuration YAML file (default: config/fuzzy.yaml)",
+    ),
+    strategy: Optional[str] = typer.Option(
+        None,
+        "--strategy",
+        help="Strategy name to use for fuzzy configuration overrides",
+    ),
     # Output options
     rows: int = typer.Option(10, "--rows", "-r", help="Number of rows to display"),
-    data_dir: Optional[str] = typer.Option(None, "--data-dir", "-d", help="Data directory path"),
-    tail: bool = typer.Option(False, "--tail", help="Show the last N rows instead of the first N"),
-    format: str = typer.Option("table", "--format", help="Output format (table, csv, json)"),
-    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="Save output to file (specify path)"),
-    show_original: bool = typer.Option(True, "--show-original/--hide-original", 
-                                      help="Include original indicator values in output"),
-    normalize: bool = typer.Option(False, "--normalize", help="Normalize membership values (sum to 1.0)"),
-    colorize: bool = typer.Option(True, "--colorize/--no-color", help="Colorize the output table")
+    data_dir: Optional[str] = typer.Option(
+        None, "--data-dir", "-d", help="Data directory path"
+    ),
+    tail: bool = typer.Option(
+        False, "--tail", help="Show the last N rows instead of the first N"
+    ),
+    format: str = typer.Option(
+        "table", "--format", help="Output format (table, csv, json)"
+    ),
+    output_file: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Save output to file (specify path)"
+    ),
+    show_original: bool = typer.Option(
+        True,
+        "--show-original/--hide-original",
+        help="Include original indicator values in output",
+    ),
+    normalize: bool = typer.Option(
+        False, "--normalize", help="Normalize membership values (sum to 1.0)"
+    ),
+    colorize: bool = typer.Option(
+        True, "--colorize/--no-color", help="Colorize the output table"
+    ),
 ):
     """
     Apply fuzzy membership functions to indicator values.
-    
+
     This command calculates indicator values and applies fuzzy membership functions
     to transform them into fuzzy membership degrees (values between 0 and 1).
     """
     logger.info(f"Fuzzifying {indicator_type} for {symbol} ({timeframe})")
-    
+
     try:
         # Validate inputs
         symbol = InputValidator.validate_string(
-            symbol,
-            min_length=1,
-            max_length=20,
-            pattern=r'^[A-Za-z0-9\-\.]+$'
+            symbol, min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
-        
+
         timeframe = InputValidator.validate_string(
-            timeframe,
-            min_length=1,
-            max_length=5,
-            pattern=r'^[0-9]+[dhm]$'
+            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
         )
-        
+
         indicator_type = InputValidator.validate_string(
-            indicator_type,
-            min_length=1,
-            max_length=20
+            indicator_type, min_length=1, max_length=20
         )
-        
-        period = InputValidator.validate_numeric(
-            period,
-            min_value=1,
-            max_value=1000
-        )
-        
-        rows = InputValidator.validate_numeric(
-            rows,
-            min_value=1,
-            max_value=1000
-        )
-        
+
+        period = InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+
+        rows = InputValidator.validate_numeric(rows, min_value=1, max_value=1000)
+
         format = InputValidator.validate_string(
-            format,
-            allowed_values=["table", "csv", "json"]
+            format, allowed_values=["table", "csv", "json"]
         )
-        
+
         # Create a DataManager instance (using LocalDataLoader)
         data_manager = DataManager(data_dir=data_dir)
-        
+
         # Load the data
         logger.info(f"Loading data for {symbol} ({timeframe})")
         df = data_manager.load_data(symbol, timeframe)
-        
+
         if df is None or df.empty:
-            error_console.print(f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})")
+            error_console.print(
+                f"[bold red]Error:[/bold red] No data found for {symbol} ({timeframe})"
+            )
             return
-        
+
         # Create and compute the indicator
         indicator_config = IndicatorConfig(
             type=indicator_type,  # Don't convert to lowercase here
-            params={"period": period, "source": source}
+            params={"period": period, "source": source},
         )
         factory = IndicatorFactory([indicator_config])
         indicators = factory.build()
-        
+
         if not indicators:
-            error_console.print(f"[bold red]Error:[/bold red] Failed to create indicator {indicator_type}")
+            error_console.print(
+                f"[bold red]Error:[/bold red] Failed to create indicator {indicator_type}"
+            )
             return
-        
+
         indicator = indicators[0]
         indicator_name = indicator.get_column_name()
-        
+
         # Compute indicator values
         logger.info(f"Computing {indicator_name} indicator")
         try:
             indicator_values = indicator.compute(df)
         except DataError as e:
-            error_console.print(f"[bold red]Error computing {indicator_name}:[/bold red] {str(e)}")
+            error_console.print(
+                f"[bold red]Error computing {indicator_name}:[/bold red] {str(e)}"
+            )
             return
-        
+
         # Load fuzzy configuration
         logger.info("Loading fuzzy configuration")
-        
+
         # Fix: Use absolute path to the config file instead of relative path
         config_dir = Path.cwd() / "config"
         fuzzy_loader = FuzzyConfigLoader(config_dir=config_dir)
-        
+
         try:
             if fuzzy_config:
                 # Load from specified file
@@ -987,63 +959,73 @@ def fuzzify(
                 # Load default with optional strategy override
                 fuzzy_config_obj = fuzzy_loader.load_with_strategy_override(strategy)
         except (ConfigurationError, FileNotFoundError) as e:
-            error_console.print(f"[bold red]Error loading fuzzy configuration:[/bold red] {str(e)}")
+            error_console.print(
+                f"[bold red]Error loading fuzzy configuration:[/bold red] {str(e)}"
+            )
             return
-        
+
         # Create fuzzy engine
         fuzzy_engine = FuzzyEngine(fuzzy_config_obj)
-        
+
         # Check if the indicator is available in fuzzy configuration
         available_indicators = fuzzy_engine.get_available_indicators()
         if indicator_type.lower() not in available_indicators:
-            error_console.print(f"[bold red]Error:[/bold red] Indicator '{indicator_type}' not found in fuzzy configuration.")
-            error_console.print(f"Available indicators: {', '.join(available_indicators)}")
+            error_console.print(
+                f"[bold red]Error:[/bold red] Indicator '{indicator_type}' not found in fuzzy configuration."
+            )
+            error_console.print(
+                f"Available indicators: {', '.join(available_indicators)}"
+            )
             return
-        
+
         # Apply fuzzy membership functions
         logger.info(f"Applying fuzzy membership functions to {indicator_name}")
         fuzzy_result = fuzzy_engine.fuzzify(indicator_type.lower(), indicator_values)
-        
+
         # Normalize if requested
         if normalize:
             logger.info("Normalizing membership values")
             row_sums = fuzzy_result.sum(axis=1)
             row_sums = row_sums.replace(0, 1)  # Avoid division by zero
             fuzzy_result = fuzzy_result.div(row_sums, axis=0)
-        
+
         # Create combined result DataFrame
         result_df = pd.DataFrame({indicator_name: indicator_values}, index=df.index)
         result_df = pd.concat([result_df, fuzzy_result], axis=1)
-        
+
         # Get the data to display (head or tail)
         display_df = result_df.tail(rows) if tail else result_df.head(rows)
-        
+
         # Hide original indicator values if requested
         if not show_original:
             display_df = display_df.drop(columns=[indicator_name])
-        
+
         # Format the output
         if format == "table":
             # Display information about the data
-            console.print(f"\n[bold]Fuzzy membership values for {indicator_type} ({symbol}, {timeframe}):[/bold]")
+            console.print(
+                f"\n[bold]Fuzzy membership values for {indicator_type} ({symbol}, {timeframe}):[/bold]"
+            )
             console.print(f"Total rows: {len(result_df)}")
-            console.print(f"Date range: {result_df.index.min()} to {result_df.index.max()}")
+            console.print(
+                f"Date range: {result_df.index.min()} to {result_df.index.max()}"
+            )
             if strategy:
                 console.print(f"Using strategy: {strategy}")
-            
+
             # Create a Rich table for better formatting
             table = Table(title=f"{indicator_type} Fuzzy Membership Values")
-            
+
             # Add the index column
             table.add_column("Date", style="cyan")
-            
+
             # Add original indicator column if requested
             if show_original:
                 table.add_column(indicator_name, style="green")
-            
+
             # Add fuzzy set columns
             fuzzy_sets = fuzzy_engine.get_fuzzy_sets(indicator_type.lower())
-            
+
             # Define colors for fuzzy sets
             fuzzy_colors = {
                 "low": "blue",
@@ -1057,69 +1039,78 @@ def fuzzify(
                 "above": "red",
                 "bullish": "red",
             }
-            
+
             # Default color for any set not in the predefined map
             default_color = "white"
-            
+
             for fuzzy_set in fuzzy_sets:
                 output_name = f"{indicator_type.lower()}_{fuzzy_set}"
                 # Choose color based on set name if colorize is enabled
-                style = fuzzy_colors.get(fuzzy_set, default_color) if colorize else default_color
+                style = (
+                    fuzzy_colors.get(fuzzy_set, default_color)
+                    if colorize
+                    else default_color
+                )
                 table.add_column(fuzzy_set, style=style)
-            
+
             # Add rows
             for idx, row in display_df.iterrows():
                 # Format values
-                values = [idx.strftime('%Y-%m-%d')]
-                
+                values = [idx.strftime("%Y-%m-%d")]
+
                 if show_original:
                     orig_value = row[indicator_name]
-                    values.append(f"{orig_value:.4f}" if not pd.isna(orig_value) else "N/A")
-                
+                    values.append(
+                        f"{orig_value:.4f}" if not pd.isna(orig_value) else "N/A"
+                    )
+
                 # Add formatted fuzzy membership values
                 for fuzzy_set in fuzzy_sets:
                     output_name = f"{indicator_type.lower()}_{fuzzy_set}"
                     membership = row[output_name]
-                    values.append(f"{membership:.4f}" if not pd.isna(membership) else "N/A")
-                
+                    values.append(
+                        f"{membership:.4f}" if not pd.isna(membership) else "N/A"
+                    )
+
                 table.add_row(*values)
-            
+
             # Print the table
             console.print(table)
-            
+
             # Print fuzzy set definitions
             console.print("\n[bold]Fuzzy Set Definitions:[/bold]")
             for fuzzy_set in fuzzy_sets:
                 # Get the membership function parameters
-                mf_config = fuzzy_config_obj.root[indicator_type.lower()].root[fuzzy_set]
+                mf_config = fuzzy_config_obj.root[indicator_type.lower()].root[
+                    fuzzy_set
+                ]
                 params = mf_config.parameters
                 console.print(f"- {fuzzy_set}: [{params[0]}, {params[1]}, {params[2]}]")
-                
+
         elif format == "csv":
             output = display_df.to_csv()
             if output_file:
-                with open(output_file, 'w') as f:
+                with open(output_file, "w") as f:
                     f.write(output)
                 console.print(f"Output saved to {output_file}")
             else:
                 console.print(output)
-                
+
         elif format == "json":
             # Convert to JSON - need to handle the index
             json_data = display_df.reset_index().to_json(
-                orient="records",
-                date_format="iso"
+                orient="records", date_format="iso"
             )
-            
+
             if output_file:
-                with open(output_file, 'w') as f:
+                with open(output_file, "w") as f:
                     f.write(json_data)
                 console.print(f"Output saved to {output_file}")
             else:
                 # For JSON format, we use print() instead of console.print()
                 # to ensure only the JSON content is displayed with no formatting
                 print(json_data)
-                
+
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         logger.error(f"Validation error: {str(e)}")
@@ -1137,21 +1128,22 @@ def fuzzify(
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         sys.exit(1)
 
+
 @cli_app.command("test-ib")
 def test_ib(
     quick: bool = typer.Option(False, "--quick", "-q", help="Run quick tests only"),
     symbol: str = typer.Option("AAPL", "--symbol", "-s", help="Test symbol"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
     """
     Test Interactive Brokers (IB) integration.
-    
+
     This command tests the complete IB integration stack:
     - Configuration loading
-    - Connection establishment  
+    - Connection establishment
     - Data fetching
     - DataManager integration
-    
+
     Requires IB Gateway/TWS to be running.
     """
     from datetime import datetime, timedelta, timezone
@@ -1159,13 +1151,13 @@ def test_ib(
     from ktrdr.data.ib_connection_sync import IbConnectionSync, ConnectionConfig
     from ktrdr.data.ib_data_fetcher_sync import IbDataFetcherSync
     from ktrdr.data.data_manager import DataManager
-    
+
     def run_ib_tests():
         console.print("\n🚀 [bold blue]Testing IB Integration[/bold blue]")
         console.print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
+
         results = {"passed": 0, "total": 0}
-        
+
         def test_result(name: str, success: bool, details: str = ""):
             results["total"] += 1
             if success:
@@ -1175,20 +1167,23 @@ def test_ib(
                 console.print(f"❌ [red]{name}[/red]")
             if details and verbose:
                 console.print(f"   {details}")
-        
+
         # Test 1: Configuration
         console.print("\n📋 Testing Configuration...")
         try:
             config = get_ib_config()
-            test_result("Configuration loaded", True, 
-                f"Host: {config.host}:{config.port}, Client ID: {config.client_id}")
+            test_result(
+                "Configuration loaded",
+                True,
+                f"Host: {config.host}:{config.port}, Client ID: {config.client_id}",
+            )
         except Exception as e:
             test_result("Configuration loaded", False, str(e))
             console.print("\n💡 [yellow]Troubleshooting:[/yellow]")
             console.print("   1. Copy .env.template to .env")
             console.print("   2. Configure IB_HOST, IB_PORT, IB_CLIENT_ID")
             return
-        
+
         # Test 2: Connection
         console.print("\n🔌 Testing Connection...")
         connection = None
@@ -1199,11 +1194,11 @@ def test_ib(
                 port=config.port,
                 client_id=config.client_id,
                 timeout=config.timeout,
-                readonly=config.readonly
+                readonly=config.readonly,
             )
             connection = IbConnectionSync(sync_config)
             # Connection is established automatically in __init__
-            
+
             if connection.is_connected():
                 test_result("IB connection", True, "Connected successfully")
             else:
@@ -1216,24 +1211,28 @@ def test_ib(
             console.print("   2. Enable API in settings")
             console.print("   3. Check port (7497 paper, 7496 live)")
             return
-        
+
         if quick:
             # For quick test, just test connection
             connection.disconnect()
-            console.print(f"\n📊 [bold]Quick Test Results:[/bold] {results['passed']}/{results['total']} passed")
+            console.print(
+                f"\n📊 [bold]Quick Test Results:[/bold] {results['passed']}/{results['total']} passed"
+            )
             return
-            
+
         # Test 3: Data Fetcher
         console.print("\n📈 Testing Data Fetcher...")
         try:
             fetcher = IbDataFetcherSync(connection)
             end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=2)
-            
+
             data = fetcher.fetch_historical_data(symbol, "1h", start_date, end_date)
-            
+
             if data is not None and len(data) > 0:
-                test_result("Data fetching", True, f"Fetched {len(data)} bars for {symbol}")
+                test_result(
+                    "Data fetching", True, f"Fetched {len(data)} bars for {symbol}"
+                )
                 if verbose:
                     console.print(f"   Columns: {list(data.columns)}")
                     console.print(f"   Date range: {data.index[0]} to {data.index[-1]}")
@@ -1243,21 +1242,28 @@ def test_ib(
             test_result("Data fetching", False, str(e))
             if verbose:
                 console.print(f"   Error details: {type(e).__name__}: {str(e)}")
-        
+
         # Test 4: DataManager Integration
         console.print("\n🔄 Testing DataManager...")
         try:
             data_manager = DataManager()
             # Test if IB integration is properly configured (lazy initialization)
-            has_ib_config = (data_manager.enable_ib and data_manager._ib_config is not None)
+            has_ib_config = (
+                data_manager.enable_ib and data_manager._ib_config is not None
+            )
             # Try to trigger lazy initialization
-            can_connect = data_manager._ensure_ib_connection() if has_ib_config else False
-            
-            test_result("DataManager IB integration", has_ib_config and can_connect, 
-                f"IB config: {has_ib_config}, Connection: {can_connect}")
+            can_connect = (
+                data_manager._ensure_ib_connection() if has_ib_config else False
+            )
+
+            test_result(
+                "DataManager IB integration",
+                has_ib_config and can_connect,
+                f"IB config: {has_ib_config}, Connection: {can_connect}",
+            )
         except Exception as e:
             test_result("DataManager IB integration", False, str(e))
-        
+
         # Test 5: Fallback Logic
         console.print("\n⚖️ Testing Fallback Logic...")
         try:
@@ -1268,23 +1274,27 @@ def test_ib(
                 test_result("Fallback logic", False, "No data loaded")
         except Exception as e:
             test_result("Fallback logic", False, str(e))
-        
+
         # Cleanup
         if connection:
             connection.disconnect()
             console.print("\n🔌 Disconnected from IB")
-        
+
         # Summary
-        console.print(f"\n📊 [bold]Test Results:[/bold] {results['passed']}/{results['total']} passed")
-        success_rate = results['passed'] / results['total'] * 100
-        
-        if results['passed'] == results['total']:
-            console.print("🎉 [green]All tests passed! IB integration is working.[/green]")
+        console.print(
+            f"\n📊 [bold]Test Results:[/bold] {results['passed']}/{results['total']} passed"
+        )
+        success_rate = results["passed"] / results["total"] * 100
+
+        if results["passed"] == results["total"]:
+            console.print(
+                "🎉 [green]All tests passed! IB integration is working.[/green]"
+            )
         elif success_rate >= 60:
             console.print("⚠️ [yellow]Most tests passed. Check failures above.[/yellow]")
         else:
             console.print("❌ [red]Many tests failed. Check IB setup.[/red]")
-    
+
     # Run the tests (now synchronous)
     try:
         run_ib_tests()
@@ -1294,38 +1304,41 @@ def test_ib(
         error_console.print(f"[bold red]Test error:[/bold red] {str(e)}")
         sys.exit(1)
 
+
 @cli_app.command("ib-cleanup")
 def ib_cleanup():
     """
     Clean up all active IB connections.
-    
+
     This command forcefully disconnects all active IB connections and cleans up
     any lingering connections that might be preventing new connections.
-    
+
     Useful when:
     - IB Gateway is rejecting new connections
     - Testing left connections open
     - Connection errors are occurring
     """
     from ktrdr.data.ib_cleanup import IbConnectionCleaner
-    
+
     console.print("\n🧹 [bold blue]Cleaning up IB connections[/bold blue]")
-    
+
     # Show current status
     console.print("\n📊 Current connection status:")
     IbConnectionCleaner.print_connection_status()
-    
+
     # Perform cleanup
     console.print("\n🔄 Starting cleanup...")
     try:
         IbConnectionCleaner.cleanup_all_sync()
         console.print("✅ [green]Cleanup completed successfully[/green]")
-        
+
         # Show final status
         console.print("\n📊 Final connection status:")
         IbConnectionCleaner.print_connection_status()
-        
+
     except Exception as e:
         error_console.print(f"[bold red]Cleanup error:[/bold red] {str(e)}")
-        console.print("\n💡 [yellow]Note:[/yellow] You may need to restart IB Gateway if connections are stuck")
+        console.print(
+            "\n💡 [yellow]Note:[/yellow] You may need to restart IB Gateway if connections are stuck"
+        )
         sys.exit(1)

@@ -4,6 +4,7 @@ KTRDR - Automated trading agent with neuro-fuzzy decision engine.
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Import version from centralized version module
@@ -20,7 +21,7 @@ from ktrdr.logging import (
     log_entry_exit,
     log_performance,
     log_data_operation,
-    log_error
+    log_error,
 )
 
 # Configure default logging

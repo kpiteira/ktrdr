@@ -4,6 +4,7 @@ API dependencies module.
 This module provides dependency injection functions for FastAPI routes.
 These dependencies are used to provide services and configuration to API endpoints.
 """
+
 from typing import Annotated
 from fastapi import Depends
 
@@ -17,7 +18,7 @@ from ktrdr.data.data_manager import DataManager
 def get_api_config() -> APIConfig:
     """
     Dependency for providing the API configuration.
-    
+
     Returns:
         APIConfig: The current API configuration
     """
@@ -28,10 +29,10 @@ def get_api_config() -> APIConfig:
 def get_data_service() -> DataService:
     """
     Dependency for providing the data service.
-    
+
     The service is instantiated per-request to ensure fresh configurations
     are applied and resources are properly managed.
-    
+
     Returns:
         DataService: Initialized data service instance
     """
@@ -42,7 +43,7 @@ def get_data_service() -> DataService:
 def get_indicator_service() -> IndicatorService:
     """
     Dependency for providing the indicator service.
-    
+
     Returns:
         IndicatorService: Initialized indicator service instance
     """
@@ -53,7 +54,7 @@ def get_indicator_service() -> IndicatorService:
 def get_fuzzy_service() -> FuzzyService:
     """
     Dependency for providing the fuzzy service.
-    
+
     Returns:
         FuzzyService: Initialized fuzzy service instance
     """
@@ -64,7 +65,7 @@ def get_fuzzy_service() -> FuzzyService:
 def get_data_manager() -> DataManager:
     """
     Dependency for providing the data manager.
-    
+
     Returns:
         DataManager: Initialized data manager instance with IB integration
     """

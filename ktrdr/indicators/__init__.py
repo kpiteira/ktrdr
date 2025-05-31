@@ -12,10 +12,10 @@ from ktrdr.indicators.indicator_factory import IndicatorFactory
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 
 __all__ = [
-    'BaseIndicator',
-    'RSIIndicator',
-    'SimpleMovingAverage', 
-    'ExponentialMovingAverage',
-    'IndicatorFactory',
-    'IndicatorEngine'
+    "BaseIndicator",
+    "RSIIndicator",
+    "SimpleMovingAverage",
+    "ExponentialMovingAverage",
+    "IndicatorFactory",
+    "IndicatorEngine",
 ]

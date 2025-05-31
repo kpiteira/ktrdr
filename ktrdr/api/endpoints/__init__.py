@@ -3,6 +3,7 @@ API router module.
 
 This module defines the main API router with versioned endpoints.
 """
+
 from fastapi import APIRouter, Depends
 from ktrdr.api.config import APIConfig
 from ktrdr.api.dependencies import get_api_config
@@ -10,19 +11,18 @@ from ktrdr.api.dependencies import get_api_config
 # Create main API router
 api_router = APIRouter()
 
+
 # Define API endpoints
 @api_router.get("/health")
 async def health_check(config: APIConfig = Depends(get_api_config)):
     """
     Health check endpoint.
-    
+
     Returns:
         dict: Health status information
     """
-    return {
-        "status": "ok",
-        "version": config.version
-    }
+    return {"status": "ok", "version": config.version}
+
 
 # Import and include other endpoint routers
 from ktrdr.api.endpoints.data import router as data_router

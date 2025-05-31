@@ -11,8 +11,8 @@ from ktrdr.api.services.indicator_service import IndicatorService
 from ktrdr.api.services.fuzzy_service import FuzzyService
 
 __all__ = [
-    'BaseService',
-    'DataService',
-    'IndicatorService',
-    'FuzzyService',
+    "BaseService",
+    "DataService",
+    "IndicatorService",
+    "FuzzyService",
 ]

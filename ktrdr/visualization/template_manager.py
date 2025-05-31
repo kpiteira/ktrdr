@@ -15,13 +15,14 @@ from ktrdr.errors import ConfigurationError
 
 # Setup logging
 import logging
+
 logger = logging.getLogger(__name__)
 
 
 class TemplateManager:
     """
     Manager for HTML and JavaScript templates used in chart visualization.
-    
+
     This class handles the loading, manipulation, and rendering of HTML and JavaScript
     templates used for chart visualization. It provides methods for generating chart
     HTML and JavaScript code based on configurations.
@@ -31,7 +32,7 @@ class TemplateManager:
     def get_base_template() -> str:
         """
         Get the base HTML template for chart visualization.
-        
+
         Returns:
             The base HTML template as a string.
         """
@@ -335,28 +336,28 @@ class TemplateManager:
         title: str = "KTRDR Chart",
         chart_configs: List[Dict] = None,
         chart_data: Dict = None,
-        theme: str = "dark", 
-        has_range_slider: bool = False
+        theme: str = "dark",
+        has_range_slider: bool = False,
     ) -> str:
         """
         Render chart HTML based on the template.
-        
+
         Args:
             title: The title of the chart.
             chart_configs: List of chart configurations.
             chart_data: Dictionary of chart data.
             theme: The theme to use. Either 'dark' or 'light'.
             has_range_slider: Whether to include a range slider.
-            
+
         Returns:
             The rendered HTML as a string.
-        
+
         Raises:
             ConfigurationError: If an invalid theme is provided.
         """
         if chart_configs is None:
             chart_configs = []
-        
+
         if chart_data is None:
             chart_data = {}
 
@@ -385,9 +386,9 @@ class TemplateManager:
             raise ConfigurationError(
                 f"Invalid theme: {theme}. Use 'dark' or 'light'.",
                 "CONFIG-InvalidTheme",
-                {"theme": theme}
+                {"theme": theme},
             )
-        
+
         # Create chart containers
         chart_containers = ""
         chart_scripts = ""
@@ -395,25 +396,29 @@ class TemplateManager:
         zoom_fit_handlers = ""
         sync_scripts = ""
         overlay_scripts = ""
-        
+
         # Maps to track charts for synchronization
         chart_ids = []
         charts_to_sync = {}
-        
+
         # Process chart configurations
         for config in chart_configs:
             chart_id = config.get("id", f"chart_{len(chart_ids)}")
             chart_ids.append(chart_id)
-            
+
             chart_type = config.get("type", "price")
             chart_title = config.get("title", f"{chart_type.capitalize()} Chart")
             chart_height = config.get("height", 400)
-            
+
             # Handle visibility states for dynamic layouts
             is_panel = config.get("is_panel", False) or chart_id.endswith("_panel")
             is_range_slider = config.get("is_range_slider", False)
-            visibility_style = "" if not is_panel else config.get("visible", True) and "block" or "none"
-            
+            visibility_style = (
+                ""
+                if not is_panel
+                else config.get("visible", True) and "block" or "none"
+            )
+
             # Create chart container div with the correct height
             chart_containers += f"""
         <div class="chart-container" id="{chart_id}_container" style="display:{visibility_style}">
@@ -426,59 +431,62 @@ class TemplateManager:
             </div>
         </div>
 """
-            
+
             # Track charts that need to be synchronized
             if "sync" in config:
                 target_chart_id = config["sync"].get("target")
                 sync_mode = config["sync"].get("mode", "default")
-                
+
                 if target_chart_id:
                     if target_chart_id not in charts_to_sync:
                         charts_to_sync[target_chart_id] = []
-                    charts_to_sync[target_chart_id].append({
-                        "chart_id": chart_id,
-                        "mode": sync_mode
-                    })
-            
+                    charts_to_sync[target_chart_id].append(
+                        {"chart_id": chart_id, "mode": sync_mode}
+                    )
+
             # Generate chart data
             chart_data_obj = chart_data.get(chart_id, [])
-            
+
             # Generate chart script
             chart_scripts += TemplateManager._generate_chart_script(
                 chart_id=chart_id,
                 chart_type=chart_type,
                 chart_config=config,
                 data=chart_data_obj,
-                is_range_slider=config.get("is_range_slider", False)
+                is_range_slider=config.get("is_range_slider", False),
             )
-            
+
             # Add resize handler
             resize_handlers += f"if ({chart_id}) {chart_id}.resize({chart_height}, {chart_id}.clientWidth);\n            "
-            
+
             # Add zoom fit handler
-            zoom_fit_handlers += f"if ({chart_id}) {chart_id}.timeScale().fitContent();\n            "
-            
+            zoom_fit_handlers += (
+                f"if ({chart_id}) {chart_id}.timeScale().fitContent();\n            "
+            )
+
             # Process overlay series if present
             if "overlay_series" in config and chart_data:
                 for overlay in config.get("overlay_series", []):
                     overlay_id = overlay.get("id")
                     overlay_type = overlay.get("type", "line")
                     overlay_options = overlay.get("options", {})
-                    
+
                     # Skip if no data is available for this overlay
                     if overlay_id not in chart_data:
                         continue
-                    
+
                     overlay_data = chart_data.get(overlay_id, [])
-                    
+
                     # Generate script for adding overlay series
                     color = overlay_options.get("color", "#2962FF")
                     line_width = overlay_options.get("lineWidth", 1.5)
                     title = overlay_options.get("title", "")
-                    
+
                     # Generate method name with proper case (addLineSeries, addAreaSeries, etc.)
-                    overlay_method_name = f"add{overlay_type[0].upper()}{overlay_type[1:]}Series"
-                    
+                    overlay_method_name = (
+                        f"add{overlay_type[0].upper()}{overlay_type[1:]}Series"
+                    )
+
                     overlay_scripts += f"""
         // Add {overlay_type} overlay to {chart_id}
         const {overlay_id} = {chart_id}.{overlay_method_name}({{
@@ -507,7 +515,7 @@ class TemplateManager:
         {overlay_id}_legend.appendChild({overlay_id}_label);
         document.getElementById('{chart_id}_legend').appendChild({overlay_id}_legend);
 """
-        
+
         # Generate synchronization scripts
         for target_chart_id, source_charts in charts_to_sync.items():
             sync_scripts += f"""
@@ -516,18 +524,18 @@ class TemplateManager:
             {target_chart_id}.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {{
                 if (timeRange) {{
 """
-            
+
             for source in source_charts:
                 source_chart_id = source["chart_id"]
                 sync_scripts += f"""                    if ({source_chart_id}) {{
                         {source_chart_id}.timeScale().setVisibleLogicalRange(timeRange);
                     }}
 """
-            
+
             sync_scripts += """                }
             });
 """
-            
+
             # Add bidirectional synchronization
             for source in source_charts:
                 source_chart_id = source["chart_id"]
@@ -538,7 +546,7 @@ class TemplateManager:
                     if (timeRange) {{
                         {target_chart_id}.timeScale().setVisibleLogicalRange(timeRange);
 """
-                
+
                 # Sync other dependent charts too
                 for other_source in source_charts:
                     other_chart_id = other_source["chart_id"]
@@ -547,19 +555,29 @@ class TemplateManager:
                             {other_chart_id}.timeScale().setVisibleLogicalRange(timeRange);
                         }}
 """
-                
+
                 sync_scripts += """                    }
                 });
             }
 """
-            
+
             sync_scripts += "        }\n"
 
         # Handle range slider if needed
         if has_range_slider:
-            slider_id = next((c["id"] for c in chart_configs if c.get("is_range_slider", False)), "range_slider")
-            main_chart_id = next((c["sync"]["target"] for c in chart_configs if c.get("id") == slider_id), chart_ids[0])
-            
+            slider_id = next(
+                (c["id"] for c in chart_configs if c.get("is_range_slider", False)),
+                "range_slider",
+            )
+            main_chart_id = next(
+                (
+                    c["sync"]["target"]
+                    for c in chart_configs
+                    if c.get("id") == slider_id
+                ),
+                chart_ids[0],
+            )
+
             sync_scripts += f"""
         // Special handling for range slider
         if ({slider_id} && {main_chart_id}) {{
@@ -570,7 +588,7 @@ class TemplateManager:
             }}
         }}
 """
-        
+
         # Render the template with all components
         return TemplateManager.get_base_template().format(
             title=title,
@@ -589,22 +607,27 @@ class TemplateManager:
             resize_handlers=resize_handlers,
             zoom_fit_handlers=zoom_fit_handlers,
             sync_scripts=sync_scripts,
-            overlay_scripts=overlay_scripts
+            overlay_scripts=overlay_scripts,
         )
 
     @staticmethod
-    def _generate_chart_script(chart_id: str, chart_type: str, chart_config: Dict, 
-                            data: List[Dict], is_range_slider: bool = False) -> str:
+    def _generate_chart_script(
+        chart_id: str,
+        chart_type: str,
+        chart_config: Dict,
+        data: List[Dict],
+        is_range_slider: bool = False,
+    ) -> str:
         """
         Generate JavaScript code to create a chart with the given configuration.
-        
+
         Args:
             chart_id: The ID of the chart.
             chart_type: The type of chart.
             chart_config: The chart configuration.
             data: The data for the chart.
             is_range_slider: Whether the chart is a range slider.
-            
+
         Returns:
             The generated JavaScript code.
         """
@@ -612,15 +635,21 @@ class TemplateManager:
         chart_options = chart_config.get("options", {})
         series_options = chart_config.get("series_options", {})
         height = chart_config.get("height", 400)
-        
+
         # Series type based on chart type
-        series_type = "candlestick" if chart_type == "price" else \
-                     "histogram" if chart_type == "histogram" else \
-                     "area" if chart_type == "range" else "line"
-        
+        series_type = (
+            "candlestick"
+            if chart_type == "price"
+            else (
+                "histogram"
+                if chart_type == "histogram"
+                else "area" if chart_type == "range" else "line"
+            )
+        )
+
         # Generate method name with proper case (addCandlestickSeries, addHistogramSeries, etc.)
         method_name = f"add{series_type[0].upper()}{series_type[1:]}Series"
-        
+
         # Set up the chart creation script with explicit sizing to ensure rendering
         script = f"""
         // Create {chart_id} container with explicit size
@@ -675,7 +704,7 @@ class TemplateManager:
         // Fit content to ensure chart displays properly
         {chart_id}.timeScale().fitContent();
 """
-        
+
         # Add special handling for range slider if needed
         if is_range_slider:
             script += f"""
@@ -688,5 +717,5 @@ class TemplateManager:
         
         {chart_id}.timeScale().subscribeVisibleLogicalRangeChange(handle{chart_id}TimeRangeChange);
 """
-        
+
         return script

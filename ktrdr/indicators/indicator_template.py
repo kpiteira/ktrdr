@@ -1,7 +1,7 @@
 """
 Template for creating new indicators.
 
-This file serves as a template and guide for implementing new indicators that 
+This file serves as a template and guide for implementing new indicators that
 will automatically integrate with the testing framework.
 
 Steps to create a new indicator:
@@ -29,23 +29,23 @@ logger = get_logger(__name__)
 class NewIndicator(BaseIndicator):
     """
     Template for a new indicator implementation.
-    
+
     Replace this docstring with a description of your indicator, including:
     - What the indicator measures
     - Common use cases
     - Default parameters and their meanings
-    
+
     Attributes:
         name (str): The name of the indicator
         params (dict): Parameters for indicator calculation including:
             - param1 (type): Description of parameter
             - param2 (type): Description of parameter
     """
-    
-    def __init__(self, param1: int = 14, param2: str = 'close'):
+
+    def __init__(self, param1: int = 14, param2: str = "close"):
         """
         Initialize the indicator.
-        
+
         Args:
             param1 (int): Description of parameter (default: 14)
             param2 (str): Description of parameter (default: 'close')
@@ -53,93 +53,105 @@ class NewIndicator(BaseIndicator):
         # Call parent constructor with name and parameters
         super().__init__(name="MY_INDICATOR", param1=param1, param2=param2)
         logger.debug(f"Initialized {self.name} indicator with params: {self.params}")
-    
+
     def _validate_params(self, params):
         """
         Validate parameters for the indicator.
-        
+
         Args:
             params (dict): Parameters to validate
-            
+
         Returns:
             dict: Validated parameters
-            
+
         Raises:
             DataError: If parameters are invalid
         """
         # Example parameter validation
-        if 'param1' in params:
-            param1 = params['param1']
+        if "param1" in params:
+            param1 = params["param1"]
             if not isinstance(param1, int):
                 raise DataError(
                     message="Parameter 'param1' must be an integer",
                     error_code="DATA-InvalidType",
-                    details={"parameter": "param1", "expected": "int", "received": type(param1).__name__}
+                    details={
+                        "parameter": "param1",
+                        "expected": "int",
+                        "received": type(param1).__name__,
+                    },
                 )
             if param1 < 2:
                 raise DataError(
                     message="Parameter 'param1' must be at least 2",
                     error_code="DATA-InvalidValue",
-                    details={"parameter": "param1", "minimum": 2, "received": param1}
+                    details={"parameter": "param1", "minimum": 2, "received": param1},
                 )
-        
+
         # Example validation for string parameter
-        if 'param2' in params and not isinstance(params['param2'], str):
+        if "param2" in params and not isinstance(params["param2"], str):
             raise DataError(
                 message="Parameter 'param2' must be a string",
                 error_code="DATA-InvalidType",
-                details={"parameter": "param2", "expected": "str", "received": type(params['param2']).__name__}
+                details={
+                    "parameter": "param2",
+                    "expected": "str",
+                    "received": type(params["param2"]).__name__,
+                },
             )
-        
+
         return params
-    
+
     def compute(self, df: pd.DataFrame) -> pd.Series:
         """
         Compute the indicator for the given data.
-        
+
         Args:
             df (pd.DataFrame): DataFrame containing price data
-            
+
         Returns:
             pd.Series: Series containing indicator values
-            
+
         Raises:
             DataError: If input data is invalid or insufficient
         """
         # Validate input data
-        param1 = self.params['param1']
-        param2 = self.params['param2']
-        
+        param1 = self.params["param1"]
+        param2 = self.params["param2"]
+
         # Ensure required columns are present
         self.validate_input_data(df, [param2])
-        
+
         # Ensure we have enough data points
         self.validate_sufficient_data(df, param1)
-        
-        logger.debug(f"Computing {self.name} with param1={param1} on DataFrame with {len(df)} rows")
-        
+
+        logger.debug(
+            f"Computing {self.name} with param1={param1} on DataFrame with {len(df)} rows"
+        )
+
         try:
             # Implement your indicator calculation here
             # This is just a placeholder implementation
             result = df[param2].rolling(window=param1).mean()
-            
+
             # Set the name for the result Series
             result.name = self.get_column_name()
-            
-            logger.debug(f"{self.name} calculation completed, non-NaN values: {result.count()}")
+
+            logger.debug(
+                f"{self.name} calculation completed, non-NaN values: {result.count()}"
+            )
             return result
-            
+
         except Exception as e:
             error_msg = f"Error calculating {self.name}: {str(e)}"
             logger.error(error_msg)
             raise DataError(
                 message=error_msg,
                 error_code="DATA-CalculationError",
-                details={"indicator": self.name, "error": str(e)}
+                details={"indicator": self.name, "error": str(e)},
             ) from e
 
 
-# To register this indicator for testing, add the following to 
+# To register this indicator for testing, add the following to
 # tests/indicators/indicator_registry.py:
 """
 # In register_builtin_indicators() function:

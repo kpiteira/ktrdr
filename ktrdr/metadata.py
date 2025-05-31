@@ -4,6 +4,7 @@ KTRDR Metadata Module - Single source of truth for project configuration.
 This module reads from the central metadata file and provides programmatic
 access to all project metadata and configuration.
 """
+
 import os
 import yaml
 from pathlib import Path
@@ -18,19 +19,23 @@ METADATA_FILE = PROJECT_ROOT / "config" / "ktrdr_metadata.yaml"
 # Environment variable prefix
 ENV_PREFIX = "KTRDR_"
 
+
 # Load metadata from YAML
 def _load_metadata() -> Dict[str, Any]:
     """Load metadata from the central metadata file."""
     with open(METADATA_FILE, "r") as f:
         return yaml.safe_load(f)
 
+
 # Initial load
 _metadata = _load_metadata()
+
 
 # Get current environment
 def get_environment() -> str:
     """Get the current environment name from environment variable or default."""
     return os.environ.get(f"{ENV_PREFIX}ENVIRONMENT", "development")
+
 
 # Load environment-specific config
 def _load_environment_config(env: str) -> Dict[str, Any]:
@@ -41,8 +46,10 @@ def _load_environment_config(env: str) -> Dict[str, Any]:
             return yaml.safe_load(f) or {}
     return {}
 
+
 # Environment config
 _env_config = _load_environment_config(get_environment())
+
 
 # Reload configuration (for testing or dynamic reloading)
 def reload_config() -> None:
@@ -51,15 +58,16 @@ def reload_config() -> None:
     _metadata = _load_metadata()
     _env_config = _load_environment_config(get_environment())
 
+
 # Core metadata access functions
 def get(path: str, default: Any = None) -> Any:
     """
     Get a metadata value by dot-notation path.
-    
+
     Example: get("project.version") -> "1.0.6.1"
     """
-    parts = path.split('.')
-    
+    parts = path.split(".")
+
     # Try environment config first
     current = _env_config
     for part in parts:
@@ -74,7 +82,7 @@ def get(path: str, default: Any = None) -> Any:
                 else:
                     return default
             break
-    
+
     # Check environment variables for override
     env_var = f"{ENV_PREFIX}{'_'.join(parts).upper()}"
     env_value = os.environ.get(env_var)
@@ -89,8 +97,9 @@ def get(path: str, default: Any = None) -> Any:
         elif isinstance(current, list):
             return env_value.split(",")
         return env_value
-    
+
     return current
+
 
 # Project information
 PROJECT_NAME = get("project.name")
@@ -109,6 +118,7 @@ API_TITLE = get("api.title")
 API_DESCRIPTION = get("api.description")
 API_PREFIX = get("api.prefix")
 
+
 # Helper functions for specific contexts
 def get_fastapi_settings() -> Dict[str, Any]:
     """Get FastAPI application settings."""
@@ -121,17 +131,25 @@ def get_fastapi_settings() -> Dict[str, Any]:
         "openapi_url": f"{API_PREFIX}/openapi.json",
     }
 
+
 def get_docker_labels() -> Dict[str, str]:
     """Get Docker labels based on metadata."""
     return {
         "org.opencontainers.image.title": get("docker.labels.title", PROJECT_NAME),
-        "org.opencontainers.image.description": get("docker.labels.description", PROJECT_DESCRIPTION),
+        "org.opencontainers.image.description": get(
+            "docker.labels.description", PROJECT_DESCRIPTION
+        ),
         "org.opencontainers.image.version": VERSION,
-        "org.opencontainers.image.licenses": get("docker.labels.licenses", get("project.license")),
+        "org.opencontainers.image.licenses": get(
+            "docker.labels.licenses", get("project.license")
+        ),
         "org.opencontainers.image.authors": get("docker.labels.authors", ORG_NAME),
         "org.opencontainers.image.source": ORG_GITHUB,
-        "org.opencontainers.image.documentation": get("docker.labels.documentation", ORG_DOCS_URL),
+        "org.opencontainers.image.documentation": get(
+            "docker.labels.documentation", ORG_DOCS_URL
+        ),
     }
+
 
 def get_api_examples() -> Dict[str, Any]:
     """Get API examples for documentation."""

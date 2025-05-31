@@ -10,7 +10,7 @@ from ktrdr.errors.exceptions import (
     DataFormatError,
     DataNotFoundError,
     DataCorruptionError,
-    DataValidationError
+    DataValidationError,
 )
 
 from ktrdr.data.local_data_loader import LocalDataLoader
@@ -23,5 +23,5 @@ __all__ = [
     "DataFormatError",
     "DataNotFoundError",
     "DataCorruptionError",
-    "DataValidationError"
+    "DataValidationError",
 ]

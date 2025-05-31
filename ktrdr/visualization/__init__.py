@@ -11,10 +11,4 @@ from ktrdr.visualization.template_manager import TemplateManager
 from ktrdr.visualization.renderer import Renderer
 from ktrdr.visualization.visualizer import Visualizer
 
-__all__ = [
-    'DataAdapter',
-    'ConfigBuilder',
-    'TemplateManager',
-    'Renderer',
-    'Visualizer'
-]
+__all__ = ["DataAdapter", "ConfigBuilder", "TemplateManager", "Renderer", "Visualizer"]
