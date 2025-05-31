@@ -563,6 +563,8 @@ class IbService:
         """
         Determine the actual start and end dates for data loading based on mode.
 
+        As per specification: If no local CSV exists, treat ALL modes as "full initialization".
+
         Args:
             request: Load request with mode and optional date overrides
 
@@ -571,10 +573,6 @@ class IbService:
         """
         current_time = datetime.now(timezone.utc)
         
-        # Initialize variables with proper typing
-        start_time: Optional[datetime] = None
-        end_time: Optional[datetime] = None
-
         # Use explicit date overrides if provided
         if request.start and request.end:
             start_time = request.start
@@ -588,23 +586,84 @@ class IbService:
 
             return start_time, end_time
 
-        # For all modes without explicit dates, let the data loader handle intelligent detection
-        # This simplifies the logic since IbDataLoader.load_with_existing_check() handles:
-        # - "tail": Loading from end of existing data to now
-        # - "full": Loading maximum available history  
-        # - "backfill": Loading before existing data
+        # Check if CSV exists for this symbol/timeframe
+        data_dir = getattr(self.data_loader, 'data_dir', self._get_data_dir())
+        csv_path = Path(data_dir) / f"{request.symbol}_{request.timeframe}.csv"
+        csv_exists = csv_path.exists() and csv_path.stat().st_size > 100  # Must have content
         
+        if not csv_exists:
+            # SPECIFICATION: "CSV not found: treat all modes as full initialization"
+            logger.info(f"No CSV found for {request.symbol}_{request.timeframe}, treating {request.mode} mode as full initialization")
+            max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
+            start_time = current_time - max_duration
+            end_time = current_time
+            return start_time, end_time
+            
+        # CSV exists - handle modes based on existing data
         if request.mode == "full":
             # Full mode: get maximum available history based on IB limits
             max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
             start_time = current_time - max_duration
             end_time = current_time
             
+        elif request.mode == "tail":
+            # Tail mode: load from end of existing CSV to now
+            try:
+                # Load existing data to find the latest timestamp
+                from ktrdr.data.local_data_loader import LocalDataLoader
+                local_loader = LocalDataLoader(data_dir=str(data_dir))
+                existing_df = local_loader.load(request.symbol, request.timeframe)
+                
+                if not existing_df.empty:
+                    latest_timestamp = existing_df.index.max()
+                    # Start from next period after latest data
+                    if request.timeframe == "1h":
+                        start_time = latest_timestamp + pd.Timedelta(hours=1)
+                    else:
+                        start_time = latest_timestamp + pd.Timedelta(days=1)
+                    end_time = current_time
+                else:
+                    # Empty CSV - treat as full initialization
+                    max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
+                    start_time = current_time - max_duration
+                    end_time = current_time
+                    
+            except Exception as e:
+                logger.warning(f"Error reading existing CSV for tail mode: {e}, treating as full initialization")
+                max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
+                start_time = current_time - max_duration
+                end_time = current_time
+                
+        elif request.mode == "backfill":
+            # Backfill mode: load before earliest existing data
+            try:
+                from ktrdr.data.local_data_loader import LocalDataLoader
+                local_loader = LocalDataLoader(data_dir=str(data_dir))
+                existing_df = local_loader.load(request.symbol, request.timeframe)
+                
+                if not existing_df.empty:
+                    earliest_timestamp = existing_df.index.min()
+                    # Backfill some reasonable amount based on timeframe
+                    backfill_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
+                    start_time = earliest_timestamp - backfill_duration
+                    if request.timeframe == "1h":
+                        end_time = earliest_timestamp - pd.Timedelta(hours=1)
+                    else:
+                        end_time = earliest_timestamp - pd.Timedelta(days=1)
+                else:
+                    # Empty CSV - treat as full initialization
+                    max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
+                    start_time = current_time - max_duration
+                    end_time = current_time
+                    
+            except Exception as e:
+                logger.warning(f"Error reading existing CSV for backfill mode: {e}, treating as full initialization")
+                max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
+                start_time = current_time - max_duration
+                end_time = current_time
         else:
-            # For tail and backfill modes, let data loader determine optimal range
-            # by passing None for start (data loader will detect existing data and choose appropriately)
-            start_time = None
-            end_time = current_time
+            logger.error(f"Unknown mode: {request.mode}")
+            return None, None
 
         return start_time, end_time
 

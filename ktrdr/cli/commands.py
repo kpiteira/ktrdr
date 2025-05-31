@@ -1437,23 +1437,61 @@ def ib_load(
             
             if response.status_code == 200:
                 result = response.json()
+                # The API returns nested data structure: {"success": true, "data": {"fetched_bars": 250, ...}}
+                data = result.get('data', {})
+                fetched_bars = data.get('fetched_bars', 0)
                 
-                console.print(f"\n✅ [bold green]Data loading completed successfully![/bold green]")
-                console.print(f"⏱️  Duration: {format_duration(elapsed)}")
-                console.print(f"📊 Fetched: [cyan]{result.get('fetched_bars', 0)}[/cyan] bars")
+                # Check if this is a successful operation
+                operation_successful = (
+                    data.get('status') == 'success' and 
+                    data.get('error_message') is None
+                )
                 
-                if result.get('merged_file'):
-                    console.print(f"💾 Saved to: [green]{result['merged_file']}[/green]")
+                if operation_successful:
+                    if fetched_bars > 0:
+                        # New data was fetched
+                        console.print(f"\n✅ [bold green]Data loading completed successfully![/bold green]")
+                        console.print(f"⏱️  Duration: {format_duration(elapsed)}")
+                        console.print(f"📊 Fetched: [cyan]{fetched_bars}[/cyan] bars")
+                        
+                        if data.get('merged_file'):
+                            console.print(f"💾 Saved to: [green]{data['merged_file']}[/green]")
+                            
+                        if data.get('cached_before'):
+                            console.print("📁 Data was merged with existing cached data")
+                    else:
+                        # No new data needed - local data is already current
+                        console.print(f"\n✅ [bold green]Data already up to date![/bold green]")
+                        console.print(f"⏱️  Duration: {format_duration(elapsed)}")
+                        console.print(f"📊 No new data needed - local data covers the requested period")
+                        
+                        if data.get('cached_before'):
+                            console.print("📁 Using existing cached data")
+                        if data.get('merged_file'):
+                            console.print(f"💾 Data location: [green]{data['merged_file']}[/green]")
                     
-                if result.get('cached_before'):
-                    console.print("📁 Data was merged with existing cached data")
-                
-                # Show additional metrics if available
-                if verbose and 'operation_details' in result:
-                    details = result['operation_details']
-                    console.print(f"\n📈 [bold]Detailed metrics:[/bold]")
-                    for key, value in details.items():
-                        console.print(f"   {key}: {value}")
+                    # Show additional metrics if available  
+                    if verbose:
+                        console.print(f"\n📈 [bold]Detailed metrics:[/bold]")
+                        console.print(f"   Start time: {data.get('start_time', 'N/A')}")
+                        console.print(f"   End time: {data.get('end_time', 'N/A')}")
+                        console.print(f"   Requests made: {data.get('requests_made', 'N/A')}")
+                        console.print(f"   Execution time: {data.get('execution_time_seconds', 'N/A')}s")
+                else:
+                    console.print(f"\n❌ [bold red]Data loading failed![/bold red]")
+                    console.print(f"⏱️  Duration: {format_duration(elapsed)}")
+                    console.print(f"🚨 Error: No data fetched (0 bars)")
+                    console.print(f"📊 This usually means:")
+                    console.print(f"   • Symbol '{symbol_validated}' not found in IB")
+                    console.print(f"   • No data available for timeframe '{timeframe}'")
+                    console.print(f"   • Date range has no available data")
+                    console.print(f"   • IB connection/permission issues")
+                    
+                    if verbose:
+                        console.print(f"\nFull API response:")
+                        console.print(json.dumps(result, indent=2))
+                    
+                    sys.exit(1)
                         
             else:
                 error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
