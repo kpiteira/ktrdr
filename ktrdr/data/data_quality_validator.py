@@ -161,8 +161,8 @@ class DataQualityValidator:
         "5m": "5min",
         "15m": "15min",
         "30m": "30min",
-        "1h": "1H",
-        "4h": "4H",
+        "1h": "1h",
+        "4h": "4h",
         "1d": "1D",
         "1w": "1W",
     }

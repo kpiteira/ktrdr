@@ -97,10 +97,15 @@ class IbDataFetcherSync:
         
         # Check if the connection has an event loop
         if hasattr(self.connection, '_event_loop') and self.connection._event_loop:
-            # Use the connection's event loop via run_coroutine_threadsafe
-            future = asyncio.run_coroutine_threadsafe(coro, self.connection._event_loop)
-            return future.result(timeout=30)  # 30 second timeout
+            try:
+                # Use the connection's event loop via run_coroutine_threadsafe
+                future = asyncio.run_coroutine_threadsafe(coro, self.connection._event_loop)
+                return future.result(timeout=30)  # 30 second timeout
+            except Exception as e:
+                logger.warning(f"Failed to use connection event loop: {e}, falling back to temp loop")
+                return self._run_in_temp_loop(coro)
         else:
+            logger.debug("Connection has no event loop, using temporary loop")
             # Fallback: create a temporary event loop
             return self._run_in_temp_loop(coro)
 
