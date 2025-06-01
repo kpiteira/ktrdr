@@ -5,7 +5,7 @@ This module implements the API endpoints for IB status, health monitoring,
 and connection management.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
@@ -17,12 +17,18 @@ from ktrdr.api.models.ib import (
     IbConfigApiResponse,
     IbConfigUpdateApiResponse,
     IbDataRangesApiResponse,
+    SymbolDiscoveryApiResponse,
+    DiscoveredSymbolsApiResponse,
     IbStatusResponse,
     IbHealthStatus,
     IbConfigInfo,
     IbConfigUpdateRequest,
     IbConfigUpdateResponse,
     DataRangesResponse,
+    SymbolDiscoveryRequest,
+    SymbolDiscoveryResponse,
+    DiscoveredSymbolsResponse,
+    SymbolInfo,
 )
 from ktrdr.api.models.base import ApiResponse, ErrorResponse
 
@@ -356,6 +362,157 @@ async def get_data_ranges(
                 code="IB-RANGES-ERROR",
                 message="Failed to get data ranges",
                 details={"error": str(e)},
+            ),
+        )
+
+
+@router.post(
+    "/symbols/discover",
+    response_model=SymbolDiscoveryApiResponse,
+    tags=["IB", "Symbols"],
+    summary="Discover symbol information",
+    description="Discovers and caches symbol information including instrument type, exchange, and contract details from Interactive Brokers.",
+)
+async def discover_symbol(
+    request: SymbolDiscoveryRequest,
+    ib_service: IbService = Depends(get_ib_service),
+) -> SymbolDiscoveryApiResponse:
+    """
+    Discover symbol information from Interactive Brokers.
+    
+    This endpoint validates a symbol against IB's contract database and returns
+    detailed information including instrument type, exchange, and description.
+    Results are cached to improve performance on subsequent requests.
+    
+    Args:
+        request: Symbol discovery request with symbol and optional force_refresh
+        
+    Returns:
+        SymbolDiscoveryApiResponse with symbol information or null if not found
+        
+    Raises:
+        HTTPException: If discovery operation fails
+    """
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        logger.info(f"Discovering symbol: {request.symbol}")
+        
+        # Discover symbol using IB service
+        symbol_info_dict = ib_service.discover_symbol(
+            symbol=request.symbol,
+            force_refresh=request.force_refresh
+        )
+        
+        discovery_time_ms = (time.time() - start_time) * 1000
+        
+        if symbol_info_dict is None:
+            # Symbol not found
+            return SymbolDiscoveryApiResponse(
+                success=True,
+                data=SymbolDiscoveryResponse(
+                    symbol_info=None,
+                    cached=False,
+                    discovery_time_ms=discovery_time_ms
+                )
+            )
+        
+        # Convert dict to SymbolInfo model
+        symbol_info = SymbolInfo(**symbol_info_dict)
+        
+        # Determine if result was cached (heuristic based on discovery time)
+        cached = discovery_time_ms < 50  # Fast response usually indicates cache hit
+        
+        return SymbolDiscoveryApiResponse(
+            success=True,
+            data=SymbolDiscoveryResponse(
+                symbol_info=symbol_info,
+                cached=cached,
+                discovery_time_ms=discovery_time_ms
+            )
+        )
+        
+    except Exception as e:
+        logger.error(f"Symbol discovery failed for {request.symbol}: {e}")
+        return SymbolDiscoveryApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-SYMBOL-DISCOVERY-ERROR",
+                message=f"Failed to discover symbol '{request.symbol}'",
+                details={"symbol": request.symbol, "error": str(e)},
+            ),
+        )
+
+
+@router.get(
+    "/symbols/discovered",
+    response_model=DiscoveredSymbolsApiResponse,
+    tags=["IB", "Symbols"],
+    summary="Get discovered symbols",
+    description="Returns all symbols that have been discovered and cached, with optional filtering by instrument type.",
+)
+async def get_discovered_symbols(
+    instrument_type: Optional[str] = Query(
+        None, description="Filter by instrument type (e.g., 'stock', 'forex', 'futures')"
+    ),
+    ib_service: IbService = Depends(get_ib_service),
+) -> DiscoveredSymbolsApiResponse:
+    """
+    Get all discovered symbols from the cache.
+    
+    This endpoint returns symbols that have been previously discovered and cached
+    by the symbol discovery system. Results can be filtered by instrument type.
+    
+    Args:
+        instrument_type: Optional filter by instrument type
+        
+    Returns:
+        DiscoveredSymbolsApiResponse with list of cached symbols and statistics
+        
+    Raises:
+        HTTPException: If operation fails
+    """
+    try:
+        logger.info(f"Getting discovered symbols (filter: {instrument_type})")
+        
+        # Get discovered symbols from IB service
+        symbols_data = ib_service.get_discovered_symbols(instrument_type=instrument_type)
+        
+        # Convert to SymbolInfo models
+        symbols = [SymbolInfo(**symbol_dict) for symbol_dict in symbols_data]
+        
+        # Count by instrument type
+        instrument_type_counts = {}
+        for symbol in symbols:
+            instrument_type_counts[symbol.instrument_type] = (
+                instrument_type_counts.get(symbol.instrument_type, 0) + 1
+            )
+        
+        # Get cache statistics
+        cache_stats = ib_service.get_symbol_discovery_stats()
+        
+        return DiscoveredSymbolsApiResponse(
+            success=True,
+            data=DiscoveredSymbolsResponse(
+                symbols=symbols,
+                total_count=len(symbols),
+                instrument_types=instrument_type_counts,
+                cache_stats=cache_stats
+            )
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get discovered symbols: {e}")
+        return DiscoveredSymbolsApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="IB-DISCOVERED-SYMBOLS-ERROR",
+                message="Failed to get discovered symbols",
+                details={"instrument_type": instrument_type, "error": str(e)},
             ),
         )
 

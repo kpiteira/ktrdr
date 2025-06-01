@@ -546,6 +546,153 @@ class IbLoadResponse(BaseModel):
     )
 
 
+class SymbolInfo(BaseModel):
+    """
+    Information about a discovered symbol.
+    
+    Attributes:
+        symbol: The normalized symbol
+        instrument_type: Type of instrument (stock, forex, futures, etc.)
+        exchange: Primary exchange
+        currency: Contract currency
+        description: Human-readable description
+        discovered_at: Timestamp when first discovered
+        last_validated: Timestamp of last successful validation
+        validation_count: Number of times this symbol has been validated
+        is_active: Whether this symbol is currently tradeable
+    """
+    
+    symbol: str = Field(..., description="The normalized symbol")
+    instrument_type: str = Field(..., description="Type of instrument")
+    exchange: str = Field(..., description="Primary exchange")
+    currency: str = Field(..., description="Contract currency")
+    description: str = Field(..., description="Human-readable description")
+    discovered_at: float = Field(..., description="Timestamp when first discovered")
+    last_validated: float = Field(..., description="Timestamp of last validation")
+    validation_count: int = Field(default=1, description="Number of validations")
+    is_active: bool = Field(default=True, description="Whether symbol is tradeable")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol": "AAPL",
+                "instrument_type": "stock",
+                "exchange": "NASDAQ",
+                "currency": "USD",
+                "description": "Apple Inc.",
+                "discovered_at": 1735689600.0,
+                "last_validated": 1735689600.0,
+                "validation_count": 1,
+                "is_active": True
+            }
+        }
+    )
+
+
+class SymbolDiscoveryRequest(BaseModel):
+    """
+    Request to discover symbol information.
+    
+    Attributes:
+        symbol: Symbol to discover (e.g., 'AAPL', 'EURUSD')
+        force_refresh: Force re-validation even if cached
+    """
+    
+    symbol: str = Field(..., description="Symbol to discover")
+    force_refresh: bool = Field(default=False, description="Force re-validation")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol": "EURUSD",
+                "force_refresh": False
+            }
+        }
+    )
+
+
+class SymbolDiscoveryResponse(BaseModel):
+    """
+    Response from symbol discovery operation.
+    
+    Attributes:
+        symbol_info: Discovered symbol information (null if not found)
+        cached: Whether result came from cache
+        discovery_time_ms: Time taken to discover symbol
+    """
+    
+    symbol_info: Optional[SymbolInfo] = Field(None, description="Discovered symbol info")
+    cached: bool = Field(..., description="Whether result came from cache")
+    discovery_time_ms: float = Field(..., description="Discovery time in milliseconds")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbol_info": {
+                    "symbol": "EURUSD",
+                    "instrument_type": "forex",
+                    "exchange": "IDEALPRO",
+                    "currency": "USD",
+                    "description": "EUR.USD",
+                    "discovered_at": 1735689600.0,
+                    "last_validated": 1735689600.0,
+                    "validation_count": 1,
+                    "is_active": True
+                },
+                "cached": False,
+                "discovery_time_ms": 125.5
+            }
+        }
+    )
+
+
+class DiscoveredSymbolsResponse(BaseModel):
+    """
+    Response containing list of discovered symbols.
+    
+    Attributes:
+        symbols: List of discovered symbols
+        total_count: Total number of discovered symbols
+        instrument_types: Count by instrument type
+        cache_stats: Symbol discovery cache statistics
+    """
+    
+    symbols: List[SymbolInfo] = Field(..., description="List of discovered symbols")
+    total_count: int = Field(..., description="Total number of symbols")
+    instrument_types: Dict[str, int] = Field(..., description="Count by instrument type")
+    cache_stats: Dict[str, Any] = Field(..., description="Cache statistics")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "symbols": [
+                    {
+                        "symbol": "AAPL",
+                        "instrument_type": "stock",
+                        "exchange": "NASDAQ",
+                        "currency": "USD",
+                        "description": "Apple Inc.",
+                        "discovered_at": 1735689600.0,
+                        "last_validated": 1735689600.0,
+                        "validation_count": 5,
+                        "is_active": True
+                    }
+                ],
+                "total_count": 15,
+                "instrument_types": {
+                    "stock": 10,
+                    "forex": 4,
+                    "futures": 1
+                },
+                "cache_stats": {
+                    "symbol_discoveries": 15,
+                    "symbol_cache_hits": 45
+                }
+            }
+        }
+    )
+
+
 # Type aliases for API responses
 IbStatusApiResponse = ApiResponse[IbStatusResponse]
 IbHealthApiResponse = ApiResponse[IbHealthStatus]
@@ -553,3 +700,5 @@ IbConfigApiResponse = ApiResponse[IbConfigInfo]
 IbConfigUpdateApiResponse = ApiResponse[IbConfigUpdateResponse]
 IbDataRangesApiResponse = ApiResponse[DataRangesResponse]
 IbLoadApiResponse = ApiResponse[IbLoadResponse]
+SymbolDiscoveryApiResponse = ApiResponse[SymbolDiscoveryResponse]
+DiscoveredSymbolsApiResponse = ApiResponse[DiscoveredSymbolsResponse]

@@ -139,6 +139,7 @@ class IbLimitsRegistry:
         # Background services
         "gap_filler": list(range(101, 111)),         # 101-110: Gap filling service
         "data_manager": list(range(111, 121)),       # 111-120: DataManager IB fallback
+        "symbol_validation": list(range(121, 131)),  # 121-130: Symbol validation service
         
         # Development and testing
         "cli_temporary": list(range(201, 251)),      # 201-250: CLI temporary connections

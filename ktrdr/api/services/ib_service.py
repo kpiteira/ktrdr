@@ -476,5 +476,130 @@ class IbService:
             cache_stats=cache_stats,
         )
 
+    def discover_symbol(self, symbol: str, force_refresh: bool = False) -> Optional[Dict[str, Any]]:
+        """
+        Discover symbol information using IB symbol validator.
+        
+        Args:
+            symbol: Symbol to discover (e.g., 'AAPL', 'EURUSD')
+            force_refresh: Force re-validation even if cached
+            
+        Returns:
+            Dictionary with symbol information or None if not found
+        """
+        try:
+            # Use the IbDataLoader's symbol discovery functionality
+            validator = self.data_loader._get_symbol_validator()
+            
+            if force_refresh:
+                # Clear cache for this symbol first
+                normalized_symbol = symbol.upper().strip()
+                if hasattr(validator, '_cache') and normalized_symbol in validator._cache:
+                    del validator._cache[normalized_symbol]
+                if hasattr(validator, '_failed_symbols') and normalized_symbol in validator._failed_symbols:
+                    validator._failed_symbols.remove(normalized_symbol)
+            
+            # Get contract details
+            contract_info = validator.get_contract_details(symbol)
+            
+            if contract_info is None:
+                return None
+            
+            # Map IB asset type to our instrument type
+            instrument_type = self.data_loader._map_ib_asset_type(contract_info.asset_type)
+            
+            # Return symbol information in API format
+            return {
+                "symbol": contract_info.symbol,
+                "instrument_type": instrument_type,
+                "exchange": contract_info.exchange,
+                "currency": contract_info.currency,
+                "description": contract_info.description,
+                "discovered_at": contract_info.validated_at,
+                "last_validated": contract_info.validated_at,
+                "validation_count": 1,
+                "is_active": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Symbol discovery failed for {symbol}: {e}")
+            return None
+    
+    def get_discovered_symbols(self, instrument_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get all discovered symbols from the cache.
+        
+        Args:
+            instrument_type: Filter by instrument type (optional)
+            
+        Returns:
+            List of discovered symbol information
+        """
+        try:
+            validator = self.data_loader._get_symbol_validator()
+            
+            # Get all cached symbols
+            cached_symbols = validator.get_cached_symbols()
+            discovered_symbols = []
+            
+            for symbol in cached_symbols:
+                # Get contract info from cache
+                contract_info = validator.get_contract_details(symbol)
+                
+                if contract_info:
+                    # Map IB asset type to our instrument type
+                    symbol_instrument_type = self.data_loader._map_ib_asset_type(contract_info.asset_type)
+                    
+                    # Filter by instrument type if specified
+                    if instrument_type and symbol_instrument_type != instrument_type:
+                        continue
+                    
+                    discovered_symbols.append({
+                        "symbol": contract_info.symbol,
+                        "instrument_type": symbol_instrument_type,
+                        "exchange": contract_info.exchange,
+                        "currency": contract_info.currency,
+                        "description": contract_info.description,
+                        "discovered_at": contract_info.validated_at,
+                        "last_validated": contract_info.validated_at,
+                        "validation_count": 1,
+                        "is_active": True
+                    })
+            
+            # Sort by last validated time (most recent first)
+            discovered_symbols.sort(key=lambda s: s["last_validated"], reverse=True)
+            return discovered_symbols
+            
+        except Exception as e:
+            logger.error(f"Failed to get discovered symbols: {e}")
+            return []
+    
+    def get_symbol_discovery_stats(self) -> Dict[str, Any]:
+        """
+        Get symbol discovery cache statistics.
+        
+        Returns:
+            Dictionary with discovery statistics
+        """
+        try:
+            # Get stats from validator cache
+            validator = self.data_loader._get_symbol_validator()
+            validator_stats = validator.get_cache_stats()
+            
+            # Get stats from data loader
+            loader_stats = self.data_loader.stats
+            
+            return {
+                "cached_symbols": validator_stats.get("cached_symbols", 0),
+                "failed_symbols": validator_stats.get("failed_symbols", 0),
+                "total_lookups": validator_stats.get("total_lookups", 0),
+                "symbol_discoveries": loader_stats.get("symbol_discoveries", 0),
+                "symbol_cache_hits": loader_stats.get("symbol_cache_hits", 0)
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get discovery stats: {e}")
+            return {}
+
 
 

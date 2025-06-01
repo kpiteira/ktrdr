@@ -115,6 +115,10 @@ class IbConnectionStrategy:
             # DataManager IB fallback gets its own connection
             return "data_manager_fallback"
             
+        elif operation_type == "symbol_validation":
+            # Symbol validation gets its own dedicated connection to avoid event loop conflicts
+            return "symbol_validation_dedicated"
+            
         elif operation_type == "batch":
             # Batch operations get unique connections per batch
             if operation_id:
@@ -176,6 +180,9 @@ class IbConnectionStrategy:
                 
             elif operation_type == "data_manager":
                 return IbLimitsRegistry.get_client_id_for_purpose("data_manager", 0)
+                
+            elif operation_type == "symbol_validation":
+                return IbLimitsRegistry.get_client_id_for_purpose("symbol_validation", 0)
                 
             elif operation_type == "batch":
                 # Use API pool for batch operations

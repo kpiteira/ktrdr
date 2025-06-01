@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ktrdr.data.ib_connection_strategy import IbConnectionStrategy
 from ktrdr.data.ib_data_fetcher_sync import IbDataFetcherSync
+from ktrdr.data.ib_symbol_validator import IbSymbolValidator
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.config.ib_limits import IbLimitsRegistry
 from ktrdr.data.data_quality_validator import DataQualityValidator
@@ -48,6 +49,9 @@ class IbDataLoader:
         self.data_dir = Path(data_dir) if data_dir else None
         self.validate_data = validate_data
         
+        # Initialize symbol validator for automatic symbol discovery and caching
+        self._symbol_validator: Optional[IbSymbolValidator] = None
+        
         # Initialize data quality validator if requested
         self.validator = DataQualityValidator(auto_correct=True) if validate_data else None
         
@@ -62,8 +66,147 @@ class IbDataLoader:
             "total_bars_fetched": 0,
             "total_execution_time": 0.0,
             "progressive_loads": 0,
-            "chunks_processed": 0
+            "chunks_processed": 0,
+            "symbol_discoveries": 0,
+            "symbol_cache_hits": 0
         }
+    
+    def _get_symbol_validator(self) -> IbSymbolValidator:
+        """
+        Get or create the IB symbol validator.
+        
+        Returns:
+            IbSymbolValidator instance
+        """
+        if self._symbol_validator is None:
+            # Use a dedicated connection for symbol validation to avoid event loop conflicts
+            connection = self.connection_strategy.get_connection_for_operation("symbol_validation")
+            self._symbol_validator = IbSymbolValidator(connection=connection)
+            logger.info("Created IbSymbolValidator for symbol discovery")
+        
+        return self._symbol_validator
+    
+    def _determine_instrument_type(self, symbol: str) -> str:
+        """
+        Determine the correct instrument type for a symbol using cached discovery.
+        
+        Args:
+            symbol: Symbol to analyze (e.g., 'AAPL', 'EURUSD')
+            
+        Returns:
+            Instrument type ('stock', 'forex', 'futures', etc.)
+            
+        Raises:
+            DataError: If symbol is not found in IB
+        """
+        try:
+            validator = self._get_symbol_validator()
+            
+            # Check if we already have this symbol cached
+            contract_info = validator.get_contract_details(symbol)
+            
+            if contract_info is None:
+                # If symbol discovery fails, try common fallbacks
+                logger.warning(f"Symbol discovery failed for {symbol}, trying fallback logic")
+                
+                # Try to infer instrument type from symbol format
+                fallback_type = self._infer_instrument_type_from_format(symbol)
+                
+                if fallback_type:
+                    logger.info(f"🔄 FALLBACK: Using inferred type '{fallback_type}' for {symbol}")
+                    return fallback_type
+                else:
+                    raise DataError(
+                        f"Symbol '{symbol}' not found in Interactive Brokers and could not be inferred. "
+                        f"Please verify the symbol is correct and that IB Gateway/TWS is running with proper data subscriptions."
+                    )
+            
+            # Map IB asset type to our instrument type
+            instrument_type = self._map_ib_asset_type(contract_info.asset_type)
+            
+            # Update stats
+            age = time.time() - contract_info.validated_at
+            if age < 10:  # Recently discovered (within 10 seconds)
+                self.stats["symbol_discoveries"] += 1
+                logger.info(f"🔍 SYMBOL DISCOVERY: {symbol} → {instrument_type} ({contract_info.asset_type})")
+            else:
+                self.stats["symbol_cache_hits"] += 1
+                logger.debug(f"🎯 SYMBOL CACHE HIT: {symbol} → {instrument_type}")
+            
+            return instrument_type
+            
+        except Exception as e:
+            logger.error(f"Failed to determine instrument type for {symbol}: {e}")
+            raise DataError(f"Symbol discovery failed for {symbol}: {e}") from e
+    
+    @staticmethod
+    def _map_ib_asset_type(ib_asset_type: str) -> str:
+        """
+        Map IB asset type to our instrument type nomenclature.
+        
+        Args:
+            ib_asset_type: IB asset type (STK, CASH, FUT, etc.)
+            
+        Returns:
+            Our instrument type (stock, forex, futures, etc.)
+        """
+        mapping = {
+            "STK": "stock",
+            "CASH": "forex", 
+            "FUT": "futures",
+            "OPT": "options",
+            "IND": "index",
+            "CFD": "cfd",
+            "BOND": "bond",
+            "CMDTY": "commodity"
+        }
+        
+        return mapping.get(ib_asset_type, ib_asset_type.lower())
+    
+    @staticmethod
+    def _infer_instrument_type_from_format(symbol: str) -> Optional[str]:
+        """
+        Infer instrument type from symbol format when IB discovery fails.
+        
+        This is a fallback method for when IB Gateway is not available
+        or symbol discovery fails.
+        
+        Args:
+            symbol: Symbol to analyze
+            
+        Returns:
+            Inferred instrument type or None if cannot be determined
+        """
+        symbol_upper = symbol.upper().strip()
+        
+        # Forex patterns (6 characters, all alpha)
+        if len(symbol_upper) == 6 and symbol_upper.isalpha():
+            # Common forex pairs
+            common_forex = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD']
+            if symbol_upper in common_forex:
+                return 'forex'
+            
+            # General pattern: 3 currency codes
+            if len(symbol_upper[:3]) == 3 and len(symbol_upper[3:]) == 3:
+                return 'forex'
+        
+        # Forex with separator (EUR.USD, EUR/USD)
+        if any(sep in symbol_upper for sep in ['.', '/']):
+            parts = symbol_upper.replace('.', '/').split('/')
+            if len(parts) == 2 and len(parts[0]) == 3 and len(parts[1]) == 3:
+                return 'forex'
+        
+        # Stock patterns (1-5 characters, mostly alpha)
+        if 1 <= len(symbol_upper) <= 5 and symbol_upper.replace('.', '').isalpha():
+            return 'stock'
+        
+        # Futures patterns (often have month/year suffixes)
+        if any(month in symbol_upper for month in ['H', 'M', 'U', 'Z']) and len(symbol_upper) >= 3:
+            return 'futures'
+        
+        # Default fallback for unknown patterns
+        logger.debug(f"Could not infer instrument type for symbol: {symbol}")
+        return None
     
     def load_data_range(self, 
                        symbol: str, 
@@ -96,7 +239,11 @@ class IbDataLoader:
         start_time = time.time()
         
         try:
-            # Validate date range doesn't exceed IB limits
+            # Step 1: Discover symbol and determine correct instrument type
+            instrument_type = self._determine_instrument_type(symbol)
+            logger.info(f"🎯 Using instrument type '{instrument_type}' for {symbol}")
+            
+            # Step 2: Validate date range doesn't exceed IB limits
             duration = end - start
             max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
             
@@ -106,16 +253,16 @@ class IbDataLoader:
                     f"Use load_progressive() for larger ranges."
                 )
             
-            # Get IB connection for this operation
+            # Step 3: Get IB connection for this operation
             connection = self.connection_strategy.get_connection_for_operation(operation_type)
             
-            # Create fetcher
+            # Step 4: Create fetcher
             fetcher = IbDataFetcherSync(connection)
             
-            # Fetch data from IB
-            logger.info(f"Fetching {symbol} {timeframe} from {start} to {end}")
+            # Step 5: Fetch data from IB with discovered instrument type
+            logger.info(f"Fetching {symbol} ({instrument_type}) {timeframe} from {start} to {end}")
             
-            data = fetcher.fetch_historical_data(symbol, timeframe, start, end)
+            data = fetcher.fetch_historical_data(symbol, timeframe, start, end, instrument_type)
             
             # Update stats
             self.stats["total_requests"] += 1
