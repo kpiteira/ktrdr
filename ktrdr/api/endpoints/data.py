@@ -23,6 +23,8 @@ from ktrdr.api.models.data import (
     DataRangeRequest,
     DataRangeResponse,
     DataRangeInfo,
+    DataLoadApiResponse,
+    DataLoadOperationResponse,
 )
 from ktrdr.api.dependencies import get_data_service
 
@@ -155,106 +157,293 @@ async def get_timeframes(
         ) from e
 
 
-@router.post(
-    "/data/load",
+@router.get(
+    "/data/{symbol}/{timeframe}",
     response_model=DataLoadResponse,
     tags=["Data"],
-    summary="Load OHLCV price data",
+    summary="Get cached OHLCV data (Frontend)",
     description="""
-    Loads price and volume data (Open, High, Low, Close, Volume) for the specified symbol and timeframe,
-    with optional date range filtering. This is the primary endpoint for retrieving market data.
+    Retrieves cached OHLCV data for visualization. This endpoint is optimized for frontend use:
+    
+    **Features:**
+    - Fast response (local data only, no external API calls)
+    - Returns actual OHLCV data arrays for charting
+    - Optional date filtering with query parameters
+    - Returns empty data if not cached locally (no errors)
+    
+    **Perfect for:** Frontend charts, data visualization, dashboards
+    """,
+)
+async def get_cached_data(
+    symbol: str = Path(..., description="Trading symbol (e.g. AAPL, MSFT)"),
+    timeframe: str = Path(..., description="Data timeframe (e.g. 1d, 1h)"),
+    start_date: Optional[str] = Query(None, description="Optional start date filter (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Optional end date filter (YYYY-MM-DD)"),
+    data_service: DataService = Depends(get_data_service),
+) -> DataLoadResponse:
+    """
+    Get cached OHLCV data from local storage for frontend visualization.
+    
+    This endpoint retrieves data that has already been fetched and cached locally.
+    It does NOT trigger any external operations, making it perfect for frontend
+    applications that need fast data display.
+    
+    Args:
+        symbol: Trading symbol (e.g., 'AAPL', 'MSFT')
+        timeframe: Data timeframe (e.g., '1d', '1h')
+        start_date: Optional start date for filtering (YYYY-MM-DD format)
+        end_date: Optional end date for filtering (YYYY-MM-DD format)
+        
+    Returns:
+        DataLoadResponse containing OHLCV data in array format
+        
+    Example:
+        GET /api/v1/data/AAPL/1d
+        GET /api/v1/data/MSFT/1h?start_date=2023-01-01&end_date=2023-06-01
+    """
+    try:
+        logger.info(f"Getting cached data for {symbol} ({timeframe}) - frontend request")
+        
+        # Validate symbol
+        if not symbol or not symbol.strip():
+            raise DataError(
+                message="Symbol is required and cannot be empty",
+                error_code="DATA-InvalidSymbol",
+                details={"symbol": symbol},
+            )
+            
+        # Clean symbol
+        clean_symbol = symbol.strip().upper()
+        
+        # Convert string dates to datetime if provided
+        start_dt = None
+        end_dt = None
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            except ValueError:
+                raise DataError(
+                    message="Invalid start_date format. Use YYYY-MM-DD",
+                    error_code="DATA-InvalidDate",
+                    details={"start_date": start_date},
+                )
+        if end_date:
+            try:
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            except ValueError:
+                raise DataError(
+                    message="Invalid end_date format. Use YYYY-MM-DD",
+                    error_code="DATA-InvalidDate", 
+                    details={"end_date": end_date},
+                )
+        
+        # Load data using DataManager with local mode only
+        df = data_service.data_manager.load_data(
+            symbol=clean_symbol,
+            timeframe=timeframe,
+            start_date=start_dt,
+            end_date=end_dt,
+            mode="local",  # Force local only - no external operations
+            validate=True,
+            repair=False,
+        )
+        
+        # Convert to API format
+        if df is None or df.empty:
+            # Return empty data structure
+            data = OHLCVData(
+                dates=[],
+                ohlcv=[],
+                metadata={
+                    "symbol": clean_symbol,
+                    "timeframe": timeframe,
+                    "start": "",
+                    "end": "",
+                    "points": 0
+                }
+            )
+        else:
+            # Convert DataFrame to API format
+            api_data = data_service._convert_df_to_api_format(
+                df, clean_symbol, timeframe, include_metadata=True
+            )
+            data = OHLCVData(**api_data)
+        
+        logger.info(f"Retrieved {len(data.dates)} cached data points for {clean_symbol}")
+        return DataLoadResponse(success=True, data=data)
+        
+    except DataNotFoundError as e:
+        logger.warning(f"No cached data found for {clean_symbol} ({timeframe}): {str(e)}")
+        # Return empty data instead of error for cached-only endpoint
+        data = OHLCVData(
+            dates=[],
+            ohlcv=[],
+            metadata={
+                "symbol": clean_symbol,
+                "timeframe": timeframe,
+                "start": "",
+                "end": "",
+                "points": 0
+            }
+        )
+        return DataLoadResponse(success=True, data=data)
+        
+    except DataError as e:
+        logger.error(f"Data error getting cached data for {clean_symbol}: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error getting cached data for {clean_symbol}: {str(e)}")
+        raise DataError(
+            message=f"Failed to get cached data for {clean_symbol} ({timeframe})",
+            error_code="DATA-GetError",
+            details={
+                "symbol": clean_symbol,
+                "timeframe": timeframe,
+                "error": str(e),
+            },
+        ) from e
+
+
+@router.post(
+    "/data/load",
+    response_model=DataLoadApiResponse,
+    tags=["Data"],
+    summary="Load data via DataManager (CLI/Operations)",
+    description="""
+    Data loading operations endpoint for CLI and background processes.
+    
+    This endpoint performs actual data loading operations and returns operational
+    metrics about what was fetched, from where, and how long it took.
+    
+    **Loading Modes:**
+    - `tail`: Load recent data from last available timestamp to now
+    - `backfill`: Load historical data before earliest available timestamp  
+    - `full`: Load both historical (backfill) and recent (tail) data
+    
+    **Features:**
+    - Intelligent gap analysis with trading calendar awareness
+    - Progressive loading for large date ranges
+    - Partial failure resilience (continues with successful segments)
+    - Detailed operation metrics and timing
+    
+    **Perfect for:** CLI commands, background jobs, data management operations
     """,
 )
 async def load_data(
     request: DataLoadRequest, data_service: DataService = Depends(get_data_service)
-) -> DataLoadResponse:
+) -> DataLoadApiResponse:
     """
-    Load OHLCV data for a symbol and timeframe.
-
-    Loads price and volume data for the specified symbol and timeframe,
-    with optional date range filtering.
-
+    Load data using enhanced DataManager with IB integration.
+    
+    This endpoint uses the enhanced DataManager which provides:
+    - Intelligent gap analysis 
+    - Smart segmentation for large ranges
+    - Trading calendar awareness
+    - IB rate limit compliance
+    - Partial failure resilience
+    
     Args:
-        request (DataLoadRequest): Request parameters including symbol, timeframe, and date range
-
+        request: Enhanced data loading request with mode support
+        
     Returns:
-        DataLoadResponse: Response containing OHLCV data
-
+        Detailed response with operation metrics and status
+        
     Example request:
         ```json
         {
           "symbol": "AAPL",
-          "timeframe": "1d",
-          "start_date": "2023-01-01T00:00:00",
-          "end_date": "2023-01-31T23:59:59",
-          "include_metadata": true
+          "timeframe": "1h",
+          "mode": "tail"
         }
         ```
-
+        
     Example response:
         ```json
         {
           "success": true,
           "data": {
-            "dates": ["2023-01-03", "2023-01-04", "2023-01-05"],
-            "ohlcv": [
-              [125.07, 128.69, 124.17, 126.36, 88115055],
-              [127.13, 128.96, 125.08, 126.96, 70790707],
-              [127.13, 127.77, 124.76, 125.02, 80643157]
-            ],
-            "metadata": {
-              "symbol": "AAPL",
-              "timeframe": "1d",
-              "start_date": "2023-01-03",
-              "end_date": "2023-01-05",
-              "point_count": 3,
-              "source": "local_file"
-            }
+            "status": "success",
+            "fetched_bars": 168,
+            "cached_before": true,
+            "merged_file": "data/AAPL_1h.csv",
+            "gaps_analyzed": 2,
+            "segments_fetched": 1,
+            "ib_requests_made": 3,
+            "execution_time_seconds": 2.456
           }
         }
         ```
-
-    Errors:
-        - 404: Data not found for the specified symbol and timeframe
-        - 400: Invalid request parameters
-        - 500: Server error while loading data
     """
     try:
-        logger.info(f"Loading data for {request.symbol} ({request.timeframe})")
-
-        data = await data_service.load_data(
-            symbol=request.symbol,
+        logger.info(f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}")
+        
+        # Validate request
+        if not request.symbol or not request.symbol.strip():
+            raise DataError(
+                message="Symbol is required and cannot be empty",
+                error_code="DATA-InvalidSymbol",
+                details={"symbol": request.symbol},
+            )
+            
+        # Clean symbol
+        clean_symbol = request.symbol.strip().upper()
+        
+        # Use DataService which delegates to DataManager for intelligent loading
+        result = await data_service.load_data(
+            symbol=clean_symbol,
             timeframe=request.timeframe,
             start_date=request.start_date,
             end_date=request.end_date,
-            include_metadata=request.include_metadata,
+            mode=request.mode,  # Let DataManager decide whether to use IB or not
+            include_metadata=True,
         )
-
-        # Convert to OHLCVData model
-        ohlcv_data = OHLCVData(**data)
-
-        logger.info(
-            f"Successfully loaded {len(data['dates'])} data points for {request.symbol}"
-        )
-        return DataLoadResponse(success=True, data=ohlcv_data)
-    except DataNotFoundError as e:
-        logger.error(f"Data not found: {str(e)}")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Data not found for {request.symbol} ({request.timeframe})",
-        )
+        
+        # Convert to response model
+        response_data = DataLoadOperationResponse(**result)
+        
+        # Determine success based on status
+        if result["status"] == "success":
+            logger.info(f"Successfully loaded {result['fetched_bars']} bars for {clean_symbol}")
+            return DataLoadApiResponse(success=True, data=response_data, error=None)
+        elif result["status"] == "partial":
+            logger.warning(f"Partially loaded data for {clean_symbol}: {result.get('error_message', 'Unknown error')}")
+            return DataLoadApiResponse(
+                success=True,  # Still considered success for partial data
+                data=response_data,
+                error={
+                    "code": "DATA-PartialLoad", 
+                    "message": "Data loading partially successful",
+                    "details": {"error_message": result.get("error_message")}
+                }
+            )
+        else:
+            logger.error(f"Failed to load data for {clean_symbol}: {result.get('error_message', 'Unknown error')}")
+            return DataLoadApiResponse(
+                success=False,
+                data=response_data,
+                error={
+                    "code": "DATA-LoadFailed",
+                    "message": result.get("error_message", "Data loading failed"),
+                    "details": {
+                        "symbol": clean_symbol,
+                        "timeframe": request.timeframe,
+                        "mode": request.mode,
+                    }
+                }
+            )
+            
     except DataError as e:
-        # Let the global exception handler deal with this
-        logger.error(f"Data error: {str(e)}")
+        logger.error(f"Data error loading {request.symbol}: {str(e)}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error loading data: {str(e)}")
+        logger.error(f"Unexpected error loading {request.symbol}: {str(e)}")
         raise DataError(
             message=f"Failed to load data for {request.symbol} ({request.timeframe})",
             error_code="DATA-LoadError",
             details={
                 "symbol": request.symbol,
                 "timeframe": request.timeframe,
+                "mode": request.mode,
                 "error": str(e),
             },
         ) from e
@@ -342,3 +531,4 @@ async def get_data_range(
                 "error": str(e),
             },
         ) from e
+

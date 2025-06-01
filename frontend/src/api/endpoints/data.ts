@@ -59,12 +59,14 @@ export async function loadData({
 }): Promise<OHLCVData> {
   
   try {
-    const response = await apiClient.post('data/load', {
-      symbol,
-      timeframe,
-      start_date: startDate,
-      end_date: endDate
-    });
+    // Build query parameters for date filtering
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const queryString = params.toString();
+    const url = `data/${symbol}/${timeframe}${queryString ? `?${queryString}` : ''}`;
+    
+    const response = await apiClient.get(url);
     
     
     // Handle different possible response structures

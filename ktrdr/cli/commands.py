@@ -1355,15 +1355,16 @@ def ib_load(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
 ):
     """
-    Load OHLCV data from Interactive Brokers.
+    Load OHLCV data using enhanced DataManager with IB integration.
 
-    This command fetches historical data from IB and saves it to local CSV files.
-    It respects IB pacing limits and handles large date ranges automatically.
+    This command uses intelligent gap analysis to efficiently fetch data from IB.
+    It leverages the enhanced DataManager for smart segmentation, trading calendar
+    awareness, and optimal data fetching strategies.
 
     Load modes:
     - tail: Load recent data to fill gaps (default)
     - backfill: Load older data to extend history backwards
-    - full: Load complete dataset (ignores existing data)
+    - full: Load complete dataset (backfill + tail to fill all gaps)
 
     Examples:
         ktrdr ib-load AAPL 1d --mode tail
@@ -1403,9 +1404,9 @@ def ib_load(
             }
             
             if start_date:
-                payload["start"] = start_date
+                payload["start_date"] = start_date
             if end_date:
-                payload["end"] = end_date
+                payload["end_date"] = end_date
 
             console.print(f"\n🚀 [bold blue]Loading {symbol_validated} {timeframe} data from Interactive Brokers[/bold blue]")
             console.print(f"Mode: [cyan]{mode}[/cyan]")
@@ -1429,7 +1430,7 @@ def ib_load(
             
             async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minute timeout
                 response = await client.post(
-                    "http://localhost:8000/api/v1/ib/load",
+                    "http://localhost:8000/api/v1/data/load",
                     json=payload
                 )
                 
@@ -1453,6 +1454,14 @@ def ib_load(
                         console.print(f"\n✅ [bold green]Data loading completed successfully![/bold green]")
                         console.print(f"⏱️  Duration: {format_duration(elapsed)}")
                         console.print(f"📊 Fetched: [cyan]{fetched_bars}[/cyan] bars")
+                        
+                        # Show enhanced metrics if available
+                        if data.get('gaps_analyzed') is not None:
+                            console.print(f"🔍 Gaps analyzed: {data.get('gaps_analyzed', 0)}")
+                        if data.get('segments_fetched') is not None:
+                            console.print(f"📈 Segments fetched: {data.get('segments_fetched', 0)}")
+                        if data.get('ib_requests_made') is not None:
+                            console.print(f"🔌 IB requests: {data.get('ib_requests_made', 0)}")
                         
                         if data.get('merged_file'):
                             console.print(f"💾 Saved to: [green]{data['merged_file']}[/green]")

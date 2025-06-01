@@ -74,19 +74,13 @@ export const useSharedPriceData = (): UseSharedPriceDataResult => {
       const startDate = new Date(currentDate);
       startDate.setDate(startDate.getDate() - (weeksNeeded * 7));
       
-      const response = await fetch('/api/v1/data/load', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          symbol,
-          timeframe,
-          source: 'auto',
-          start_date: startDate.toISOString().split('T')[0],
-          end_date: currentDate.toISOString().split('T')[0]
-        }),
+      // Build query parameters for date filtering
+      const params = new URLSearchParams({
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: currentDate.toISOString().split('T')[0]
       });
+      
+      const response = await fetch(`/api/v1/data/${symbol}/${timeframe}?${params.toString()}`);
 
       if (!response.ok) {
         const errorText = await response.text();

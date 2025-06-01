@@ -54,6 +54,7 @@ class DataService(BaseService):
         timeframe: str,
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
+        mode: str = "local",
         include_metadata: bool = True,
     ) -> Dict[str, Any]:
         """
@@ -73,37 +74,60 @@ class DataService(BaseService):
             DataNotFoundError: If data is not found
             DataError: For other data-related errors
         """
-        logger.info(f"Loading data for {symbol} ({timeframe})")
+        import time
+        
+        start_time = time.time()
+        logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
 
         try:
-            # Load data using the DataManager
+            # Load data using the DataManager with mode support
             df = self.data_manager.load_data(
                 symbol=symbol,
                 timeframe=timeframe,
                 start_date=start_date,
                 end_date=end_date,
+                mode=mode,  # Pass through the mode - DataManager decides whether to use IB
                 validate=True,
                 repair=False,
             )
 
-            # Convert DataFrame to API response format
-            result = self._convert_df_to_api_format(
-                df, symbol, timeframe, include_metadata
-            )
+            execution_time = time.time() - start_time
+            
+            # Return enhanced format with metrics
+            result = {
+                "status": "success",
+                "fetched_bars": len(df) if df is not None and not df.empty else 0,
+                "cached_before": True,  # Will be enhanced when DataManager provides this info
+                "merged_file": f"data/{symbol}_{timeframe}.csv",
+                "gaps_analyzed": 0,  # Will be enhanced when DataManager provides this info  
+                "segments_fetched": 0,  # Will be enhanced when DataManager provides this info
+                "external_requests_made": 0 if mode == "local" else 0,  # Will be enhanced when DataManager provides this info
+                "execution_time_seconds": execution_time,
+                "error_message": None,
+            }
 
-            logger.info(f"Successfully loaded {len(df)} data points for {symbol}")
+            logger.info(f"Successfully loaded {result['fetched_bars']} bars for {symbol}")
             return result
 
         except DataNotFoundError as e:
             logger.error(f"Data not found for {symbol} ({timeframe}): {str(e)}")
             raise
         except Exception as e:
+            execution_time = time.time() - start_time
             logger.error(f"Error loading data for {symbol} ({timeframe}): {str(e)}")
-            raise DataError(
-                message=f"Failed to load data for {symbol} ({timeframe}): {str(e)}",
-                error_code="DATA-LoadError",
-                details={"symbol": symbol, "timeframe": timeframe},
-            ) from e
+            
+            # Return failed status in enhanced format
+            return {
+                "status": "failed",
+                "fetched_bars": 0,
+                "cached_before": False,
+                "merged_file": f"data/{symbol}_{timeframe}.csv",
+                "gaps_analyzed": 0,
+                "segments_fetched": 0,
+                "external_requests_made": 0,
+                "execution_time_seconds": execution_time,
+                "error_message": str(e),
+            }
 
     def _convert_df_to_api_format(
         self,
@@ -344,6 +368,7 @@ class DataService(BaseService):
                 error_code="DATA-RangeError",
                 details={"symbol": symbol, "timeframe": timeframe},
             ) from e
+
 
     async def health_check(self) -> Dict[str, Any]:
         """

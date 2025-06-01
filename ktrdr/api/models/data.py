@@ -12,67 +12,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from ktrdr.api.models.base import ApiResponse
 
 
-class DataLoadRequest(BaseModel):
-    """
-    Request model for loading OHLCV data.
-
-    Attributes:
-        symbol (str): Trading symbol
-        timeframe (str): Data timeframe (e.g., '1d', '1h')
-        start_date (Optional[datetime]): Start date for data range
-        end_date (Optional[datetime]): End date for data range
-        include_metadata (bool): Whether to include metadata in response
-    """
-
-    symbol: str = Field(..., description="Trading symbol")
-    timeframe: str = Field(..., description="Data timeframe (e.g., '1d', '1h')")
-    start_date: Optional[datetime] = Field(None, description="Start date")
-    end_date: Optional[datetime] = Field(None, description="End date")
-    include_metadata: bool = Field(
-        True, description="Whether to include metadata in response"
-    )
-
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "symbol": "AAPL",
-                    "timeframe": "1d",
-                    "start_date": "2023-01-01T00:00:00",
-                    "end_date": "2023-01-31T23:59:59",
-                    "include_metadata": True,
-                }
-            ]
-        }
-    }
-
-    @field_validator("timeframe")
-    @classmethod
-    def validate_timeframe(cls, v: str) -> str:
-        """Validate that the timeframe is in the correct format."""
-        valid_timeframes = [
-            "1m",
-            "5m",
-            "15m",
-            "30m",
-            "1h",
-            "2h",
-            "4h",
-            "1d",
-            "1w",
-            "1M",
-        ]
-        if v not in valid_timeframes:
-            raise ValueError(f"Timeframe must be one of {valid_timeframes}")
-        return v
-
-    @model_validator(mode="after")
-    def validate_dates(self) -> "DataLoadRequest":
-        """Validate that start_date is before end_date if both are provided."""
-        if self.start_date and self.end_date and self.start_date > self.end_date:
-            raise ValueError("start_date must be before end_date")
-        return self
-
 
 class OHLCVPoint(BaseModel):
     """
@@ -259,4 +198,102 @@ class DataRangeInfo(BaseModel):
 class DataRangeResponse(ApiResponse[DataRangeInfo]):
     """Response model for data range endpoint."""
 
+    pass
+
+
+class DataLoadRequest(BaseModel):
+    """
+    Request model for loading data via DataManager.
+    
+    This model supports intelligent gap analysis, mode-based loading,
+    and leverages the enhanced DataManager capabilities.
+    
+    Attributes:
+        symbol (str): Trading symbol
+        timeframe (str): Data timeframe (e.g., '1d', '1h')
+        mode (str): Loading mode - 'local' (cached only), 'tail' (recent gaps), 'backfill' (historical), 'full' (backfill + tail)
+        start_date (Optional[datetime]): Optional start date override
+        end_date (Optional[datetime]): Optional end date override
+    """
+    
+    symbol: str = Field(..., description="Trading symbol")
+    timeframe: str = Field(..., description="Data timeframe (e.g., '1d', '1h')")
+    mode: Literal["local", "tail", "backfill", "full"] = Field(
+        default="local", 
+        description="Loading mode: 'local' for cached data only, 'tail' for recent gaps, 'backfill' for historical, 'full' for backfill + tail"
+    )
+    start_date: Optional[datetime] = Field(None, description="Optional start date override")
+    end_date: Optional[datetime] = Field(None, description="Optional end date override")
+    
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "symbol": "AAPL",
+                    "timeframe": "1h", 
+                    "mode": "tail"
+                },
+                {
+                    "symbol": "MSFT",
+                    "timeframe": "1d",
+                    "mode": "backfill",
+                    "start_date": "2023-01-01T00:00:00Z",
+                    "end_date": "2023-06-01T00:00:00Z"
+                }
+            ]
+        }
+    }
+    
+    @field_validator("timeframe")
+    @classmethod
+    def validate_timeframe(cls, v: str) -> str:
+        """Validate that the timeframe is in the correct format."""
+        valid_timeframes = [
+            "1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d", "1w", "1M"
+        ]
+        if v not in valid_timeframes:
+            raise ValueError(f"Timeframe must be one of {valid_timeframes}")
+        return v
+    
+    @model_validator(mode="after")
+    def validate_dates(self) -> "DataLoadRequest":
+        """Validate that start_date is before end_date if both are provided."""
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("start_date must be before end_date")
+        return self
+
+
+class DataLoadOperationResponse(BaseModel):
+    """
+    Response model for data loading operations with enhanced metrics.
+    
+    Provides detailed information about the loading operation including
+    gap analysis results and data source metrics.
+    
+    Attributes:
+        status (str): Operation status - 'success', 'partial', or 'failed'
+        fetched_bars (int): Number of bars fetched
+        cached_before (bool): Whether data existed before operation
+        merged_file (str): Path to the merged CSV file
+        gaps_analyzed (int): Number of gaps identified by DataManager
+        segments_fetched (int): Number of segments successfully fetched
+        external_requests_made (int): Number of external API calls made (e.g., IB)
+        execution_time_seconds (float): Total execution time
+        error_message (Optional[str]): Error message if operation failed
+    """
+    
+    status: Literal["success", "partial", "failed"] = Field(..., description="Operation status")
+    fetched_bars: int = Field(..., description="Number of bars fetched")
+    cached_before: bool = Field(..., description="Whether data existed before operation")
+    merged_file: str = Field(..., description="Path to the merged CSV file")
+    gaps_analyzed: int = Field(..., description="Number of gaps identified by DataManager")
+    segments_fetched: int = Field(..., description="Number of segments successfully fetched")
+    external_requests_made: int = Field(..., description="Number of external API calls made (e.g., IB)")
+    execution_time_seconds: float = Field(..., description="Total execution time")
+    error_message: Optional[str] = Field(None, description="Error message if operation failed")
+
+
+class DataLoadApiResponse(ApiResponse[DataLoadOperationResponse]):
+    """API response wrapper for data loading operations."""
+    
     pass

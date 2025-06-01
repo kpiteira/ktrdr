@@ -574,16 +574,25 @@ class IbService:
         current_time = datetime.now(timezone.utc)
         
         # Use explicit date overrides if provided
-        if request.start and request.end:
+        if request.start or request.end:
             start_time = request.start
-            end_time = request.end
+            end_time = request.end or current_time  # Default end to now if not provided
 
-            # Ensure timezone-aware
-            if start_time.tzinfo is None:
-                start_time = start_time.replace(tzinfo=timezone.utc)
-            if end_time.tzinfo is None:
-                end_time = end_time.replace(tzinfo=timezone.utc)
-
+            if start_time:
+                # Ensure timezone-aware
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=timezone.utc)
+            
+            if end_time:
+                # Ensure timezone-aware
+                if end_time.tzinfo is None:
+                    end_time = end_time.replace(tzinfo=timezone.utc)
+                    
+            # If only end date provided, use IB limits to calculate start
+            if not start_time and end_time:
+                max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
+                start_time = end_time - max_duration
+                
             return start_time, end_time
 
         # Check if CSV exists for this symbol/timeframe

@@ -167,6 +167,7 @@ class DataManager:
         timeframe: str,
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
+        mode: str = "local",
         validate: bool = True,
         repair: bool = False,
         repair_outliers: bool = True,
@@ -180,6 +181,7 @@ class DataManager:
             timeframe: The timeframe of the data (e.g., '1h', '1d')
             start_date: Optional start date for filtering data
             end_date: Optional end date for filtering data
+            mode: Loading mode - 'local' (local only), 'tail' (recent gaps), 'backfill' (historical), 'full' (backfill + tail)
             validate: Whether to validate data integrity (default: True)
             repair: Whether to repair any detected issues (default: False)
             repair_outliers: Whether to repair detected outliers when repair=True (default: True)
@@ -194,14 +196,19 @@ class DataManager:
             DataError: For other data-related errors
 
         Note:
-            This method now uses the unified DataQualityValidator which handles
-            outlier detection, OHLC validation, gap detection, and auto-correction
-            internally. The repair_outliers parameter controls whether outlier
-            correction is applied during the repair process.
+            This method uses the unified DataQualityValidator and enhanced IB integration.
+            When mode is 'tail', 'backfill', or 'full', it uses intelligent gap analysis
+            and IB fetching for missing data segments.
         """
-        # Load data with IB-first strategy and fallback logic
-        logger.info(f"Loading data for {symbol} ({timeframe})")
-        df = self._load_with_fallback(symbol, timeframe, start_date, end_date)
+        # Load data based on mode
+        logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
+        
+        if mode == "local":
+            # Local-only mode: use basic loader without IB integration
+            df = self.data_loader.load(symbol, timeframe, start_date, end_date)
+        else:
+            # Enhanced modes: use intelligent gap analysis with IB integration
+            df = self._load_with_fallback(symbol, timeframe, start_date, end_date, mode)
 
         # Check if df is None (happens when fallback returns None)
         if df is None:
@@ -416,6 +423,326 @@ class DataManager:
         except Exception:
             return False
 
+    def _analyze_gaps(
+        self,
+        existing_data: Optional[pd.DataFrame],
+        requested_start: datetime,
+        requested_end: datetime,
+        timeframe: str,
+    ) -> List[Tuple[datetime, datetime]]:
+        """
+        Analyze gaps between existing data and requested range.
+        
+        This method implements intelligent gap analysis to identify only the missing
+        segments that need to be fetched from IB, avoiding redundant data requests.
+        
+        Args:
+            existing_data: DataFrame with existing local data (can be None)
+            requested_start: Start of requested date range
+            requested_end: End of requested date range
+            timeframe: Data timeframe for trading calendar awareness
+            
+        Returns:
+            List of (start_time, end_time) tuples representing gaps to fill
+        """
+        gaps = []
+        
+        # If no existing data, entire range is a gap
+        if existing_data is None or existing_data.empty:
+            logger.info(f"No existing data found - entire range is a gap: {requested_start} to {requested_end}")
+            return [(requested_start, requested_end)]
+        
+        # Ensure timezone consistency
+        if existing_data.index.tz is None:
+            existing_data.index = existing_data.index.tz_localize('UTC')
+        elif existing_data.index.tz != requested_start.tzinfo:
+            existing_data.index = existing_data.index.tz_convert(requested_start.tzinfo)
+        
+        data_start = existing_data.index.min()
+        data_end = existing_data.index.max()
+        
+        logger.debug(f"Existing data range: {data_start} to {data_end}")
+        logger.debug(f"Requested range: {requested_start} to {requested_end}")
+        
+        # Gap before existing data
+        if requested_start < data_start:
+            gap_end = min(data_start, requested_end)
+            if self._is_meaningful_gap(requested_start, gap_end, timeframe):
+                gaps.append((requested_start, gap_end))
+                logger.debug(f"Found gap before existing data: {requested_start} to {gap_end}")
+        
+        # Gap after existing data
+        if requested_end > data_end:
+            gap_start = max(data_end, requested_start)
+            if self._is_meaningful_gap(gap_start, requested_end, timeframe):
+                gaps.append((gap_start, requested_end))
+                logger.debug(f"Found gap after existing data: {gap_start} to {requested_end}")
+        
+        # Gaps within existing data (holes in the dataset)
+        if requested_start < data_end and requested_end > data_start:
+            internal_gaps = self._find_internal_gaps(
+                existing_data, 
+                max(requested_start, data_start),
+                min(requested_end, data_end),
+                timeframe
+            )
+            gaps.extend(internal_gaps)
+        
+        # Filter out non-trading periods and very small gaps
+        filtered_gaps = []
+        for gap_start, gap_end in gaps:
+            if self._is_meaningful_gap(gap_start, gap_end, timeframe):
+                filtered_gaps.append((gap_start, gap_end))
+            else:
+                logger.debug(f"Filtered out insignificant gap: {gap_start} to {gap_end}")
+        
+        logger.info(f"🔍 GAP ANALYSIS COMPLETE: Found {len(filtered_gaps)} meaningful gaps to fill")
+        for i, (gap_start, gap_end) in enumerate(filtered_gaps):
+            duration = gap_end - gap_start
+            logger.info(f"📍 GAP {i+1}: {gap_start} → {gap_end} (duration: {duration})")
+        return filtered_gaps
+    
+    def _find_internal_gaps(
+        self,
+        data: pd.DataFrame,
+        range_start: datetime,
+        range_end: datetime,
+        timeframe: str,
+    ) -> List[Tuple[datetime, datetime]]:
+        """
+        Find gaps within existing data (missing periods in the middle).
+        
+        Args:
+            data: Existing DataFrame with timezone-aware index
+            range_start: Start of range to check within
+            range_end: End of range to check within  
+            timeframe: Data timeframe for gap detection
+            
+        Returns:
+            List of internal gaps found
+        """
+        gaps = []
+        
+        # Filter data to the requested range
+        mask = (data.index >= range_start) & (data.index <= range_end)
+        range_data = data[mask].sort_index()
+        
+        if len(range_data) < 2:
+            return gaps
+        
+        # Calculate expected frequency
+        freq_map = {
+            '1m': pd.Timedelta(minutes=1),
+            '5m': pd.Timedelta(minutes=5),
+            '15m': pd.Timedelta(minutes=15),
+            '30m': pd.Timedelta(minutes=30),
+            '1h': pd.Timedelta(hours=1),
+            '4h': pd.Timedelta(hours=4),
+            '1d': pd.Timedelta(days=1),
+            '1w': pd.Timedelta(weeks=1),
+        }
+        
+        expected_freq = freq_map.get(timeframe, pd.Timedelta(days=1))
+        
+        # Look for gaps larger than expected frequency
+        for i in range(len(range_data) - 1):
+            current_time = range_data.index[i]
+            next_time = range_data.index[i + 1]
+            gap_size = next_time - current_time
+            
+            # Consider it a gap if it's significantly larger than expected frequency
+            # and accounts for non-trading periods
+            if gap_size > expected_freq * 3:  # Allow some tolerance
+                gap_start = current_time + expected_freq
+                gap_end = next_time
+                
+                if self._is_meaningful_gap(gap_start, gap_end, timeframe):
+                    gaps.append((gap_start, gap_end))
+                    logger.debug(f"Found internal gap: {gap_start} to {gap_end}")
+        
+        return gaps
+    
+    def _is_meaningful_gap(
+        self, 
+        gap_start: datetime, 
+        gap_end: datetime, 
+        timeframe: str
+    ) -> bool:
+        """
+        Determine if a gap is meaningful enough to warrant fetching data.
+        
+        Filters out weekends, holidays, and very small gaps that aren't worth
+        the overhead of an IB request.
+        
+        Args:
+            gap_start: Gap start time
+            gap_end: Gap end time
+            timeframe: Data timeframe
+            
+        Returns:
+            True if gap is meaningful and should be filled
+        """
+        gap_duration = gap_end - gap_start
+        
+        # Minimum gap sizes by timeframe to avoid micro-gaps
+        min_gaps = {
+            '1m': pd.Timedelta(minutes=5),     # At least 5 minutes
+            '5m': pd.Timedelta(minutes=15),    # At least 15 minutes  
+            '15m': pd.Timedelta(hours=1),      # At least 1 hour
+            '30m': pd.Timedelta(hours=2),      # At least 2 hours
+            '1h': pd.Timedelta(hours=4),       # At least 4 hours
+            '4h': pd.Timedelta(days=1),        # At least 1 day
+            '1d': pd.Timedelta(days=2),        # At least 2 days
+            '1w': pd.Timedelta(weeks=1),       # At least 1 week
+        }
+        
+        min_gap = min_gaps.get(timeframe, pd.Timedelta(hours=1))
+        
+        if gap_duration < min_gap:
+            return False
+        
+        # For daily data, check if gap spans weekends only
+        if timeframe == '1d':
+            return self._gap_contains_trading_days(gap_start, gap_end)
+        
+        # For intraday data, more permissive (markets trade during weekdays)
+        return True
+    
+    def _gap_contains_trading_days(self, start: datetime, end: datetime) -> bool:
+        """
+        Check if a gap contains any trading days (Mon-Fri, excluding holidays).
+        
+        This is a simplified implementation. A full implementation would
+        integrate with a trading calendar library like pandas_market_calendars.
+        
+        Args:
+            start: Gap start time
+            end: Gap end time
+            
+        Returns:
+            True if gap contains trading days
+        """
+        current = start.date()
+        end_date = end.date()
+        
+        while current <= end_date:
+            # Monday = 0, Sunday = 6
+            if current.weekday() < 5:  # Monday through Friday
+                # TODO: Add holiday checking with trading calendar
+                return True
+            current += timedelta(days=1)
+        
+        return False
+    
+    def _split_into_segments(
+        self,
+        gaps: List[Tuple[datetime, datetime]],
+        timeframe: str,
+    ) -> List[Tuple[datetime, datetime]]:
+        """
+        Split large gaps into IB-compliant segments.
+        
+        Takes gaps that might exceed IB duration limits and splits them
+        into smaller segments that can be fetched individually.
+        
+        Args:
+            gaps: List of gaps to potentially split
+            timeframe: Data timeframe for limit checking
+            
+        Returns:
+            List of segments ready for IB fetching
+        """
+        from ktrdr.config.ib_limits import IbLimitsRegistry
+        
+        segments = []
+        max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
+        
+        for gap_start, gap_end in gaps:
+            gap_duration = gap_end - gap_start
+            
+            if gap_duration <= max_duration:
+                # Gap fits in single request
+                segments.append((gap_start, gap_end))
+                logger.debug(f"Gap fits in single segment: {gap_start} to {gap_end} ({gap_duration})")
+            else:
+                # Split into multiple segments
+                logger.info(f"Splitting large gap {gap_start} to {gap_end} ({gap_duration}) into segments (max: {max_duration})")
+                
+                current_start = gap_start
+                while current_start < gap_end:
+                    segment_end = min(current_start + max_duration, gap_end)
+                    segments.append((current_start, segment_end))
+                    logger.debug(f"Created segment: {current_start} to {segment_end}")
+                    current_start = segment_end
+        
+        logger.info(f"⚡ SEGMENTATION: Split {len(gaps)} gaps into {len(segments)} IB-compliant segments")
+        for i, (seg_start, seg_end) in enumerate(segments):
+            duration = seg_end - seg_start
+            logger.info(f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})")
+        return segments
+
+    def _fetch_segments_with_resilience(
+        self,
+        symbol: str,
+        timeframe: str,
+        segments: List[Tuple[datetime, datetime]],
+    ) -> Tuple[List[pd.DataFrame], int, int]:
+        """
+        Fetch multiple segments with failure resilience.
+        
+        Attempts to fetch each segment individually, continuing with other segments
+        if some fail. This ensures partial success rather than complete failure.
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            segments: List of (start, end) segments to fetch
+            
+        Returns:
+            Tuple of (successful_dataframes, successful_count, failed_count)
+        """
+        successful_data = []
+        successful_count = 0
+        failed_count = 0
+        
+        if not self.enable_ib or not self.ib_data_loader:
+            logger.warning("IB integration not available for segment fetching")
+            return successful_data, successful_count, len(segments)
+        
+        logger.info(f"Fetching {len(segments)} segments with failure resilience")
+        
+        for i, (segment_start, segment_end) in enumerate(segments):
+            try:
+                duration = segment_end - segment_start
+                logger.info(f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end}")
+                logger.info(f"🚀 IB REQUEST {i+1}: Duration = {duration} (within IB limit)")
+                
+                # Use the "dumb" IbDataLoader to fetch exactly what we ask for
+                segment_data = self.ib_data_loader.load_data_range(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start=segment_start,
+                    end=segment_end,
+                    operation_type="data_manager"
+                )
+                
+                if segment_data is not None and not segment_data.empty:
+                    successful_data.append(segment_data)
+                    successful_count += 1
+                    logger.info(f"✅ IB SUCCESS {i+1}: Received {len(segment_data)} bars from IB")
+                else:
+                    failed_count += 1
+                    logger.warning(f"❌ IB FAILURE {i+1}: No data returned from IB")
+                    
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"❌ IB ERROR {i+1}: Request failed - {e}")
+                # Continue with next segment rather than failing completely
+                continue
+        
+        logger.info(f"Segment fetching complete: {successful_count} successful, {failed_count} failed")
+        return successful_data, successful_count, failed_count
+
     @log_entry_exit(logger=logger, log_args=True)
     def _load_with_fallback(
         self,
@@ -423,151 +750,161 @@ class DataManager:
         timeframe: str,
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
+        mode: str = "tail",
     ) -> Optional[pd.DataFrame]:
         """
-        Load data with local-first strategy and lazy IB fallback.
+        Load data with intelligent gap analysis and resilient segment fetching.
 
-        Strategy:
-        1. Try local CSV first (fast)
-        2. If local data covers requested range, return it
-        3. Only connect to IB if local data is insufficient
-        4. If both have data, merge and fill gaps
-        5. Save merged data back to CSV for future use
+        ENHANCED STRATEGY:
+        1. Load existing local data (fast)
+        2. Perform intelligent gap analysis vs requested range
+        3. Split gaps into IB-compliant segments
+        4. Use "dumb" IbDataLoader to fetch only missing segments
+        5. Merge all data sources chronologically
+        6. Handle partial failures gracefully
+
+        This replaces the old "naive" approach of fetching entire ranges
+        with a smart approach that only fetches missing data segments.
 
         Args:
             symbol: The trading symbol
             timeframe: The timeframe of the data
             start_date: Optional start date
             end_date: Optional end date
+            mode: Loading mode - 'tail' (recent gaps), 'backfill' (historical), 'full' (backfill + tail)
 
         Returns:
             DataFrame with data or None if no data found
         """
-        ib_data = None
-        local_data = None
-
-        # Store original dates for local CSV loading (preserve None values)
-        original_start_date = start_date
-        original_end_date = end_date
-
-        # Prepare dates for IB query (apply defaults only for IB)
-        ib_start_date = start_date
-        ib_end_date = end_date
-
-        if ib_start_date is None:
-            # Default to last 5 days if no start date provided (conservative for IB limits)
-            ib_start_date = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=5)
+        # Normalize and validate date range - ALWAYS respect user-provided dates
+        if start_date is None:
+            # Default range based on mode
+            if mode == "tail":
+                # Tail: recent data if no range specified
+                requested_start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30)
+            elif mode == "backfill":
+                # Backfill: go back as far as IB allows for this timeframe
+                from ktrdr.config.ib_limits import IbLimitsRegistry
+                max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
+                requested_start = pd.Timestamp.now(tz="UTC") - max_duration
+            else:  # mode == "full" or any other mode
+                # Full: use maximum available range if no start specified
+                from ktrdr.config.ib_limits import IbLimitsRegistry
+                max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
+                requested_start = pd.Timestamp.now(tz="UTC") - max_duration
         else:
-            ib_start_date = self._normalize_timezone(ib_start_date)
+            # ALWAYS respect user-provided start_date regardless of mode
+            requested_start = self._normalize_timezone(start_date)
 
-        if ib_end_date is None:
-            # Default to now if no end date provided
-            ib_end_date = pd.Timestamp.now(tz="UTC")
+        if end_date is None:
+            requested_end = pd.Timestamp.now(tz="UTC")
         else:
-            ib_end_date = self._normalize_timezone(ib_end_date)
+            # ALWAYS respect user-provided end_date regardless of mode
+            requested_end = self._normalize_timezone(end_date)
 
-        need_ib_data = False
+        if requested_start >= requested_end:
+            logger.warning(f"Invalid date range: start {requested_start} >= end {requested_end}")
+            return None
 
-        # Strategy 1: Try local CSV first (fast)
+        logger.info(f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}")
+
+        # Step 1: Load existing local data (ALL modes need this for gap analysis)
+        existing_data = None
         try:
-            logger.info(f"Attempting to load {symbol} from local CSV (fast path)")
-            local_data = self.data_loader.load(
-                symbol, timeframe, original_start_date, original_end_date
-            )
-            if local_data is not None:
-                # Normalize timezone for local data
-                local_data = self._normalize_dataframe_timezone(local_data)
-                logger.info(
-                    f"Successfully loaded {len(local_data)} bars from local CSV"
-                )
-
-                # Strategy 2: Check if local data covers requested range
-                if self._local_data_covers_range(local_data, start_date, end_date):
-                    logger.info(
-                        f"Local data covers requested range - no IB fetch needed"
-                    )
-                    # Note: We still proceed to validation/processing below, but don't need IB data
-                    need_ib_data = False
-                else:
-                    logger.info(
-                        f"Local data does not cover full requested range - will attempt IB fetch"
-                    )
-                    need_ib_data = True
+            logger.info(f"📁 Loading existing local data for {symbol}")
+            existing_data = self.data_loader.load(symbol, timeframe)
+            if existing_data is not None and not existing_data.empty:
+                existing_data = self._normalize_dataframe_timezone(existing_data)
+                logger.info(f"✅ Found existing data: {len(existing_data)} bars ({existing_data.index.min()} to {existing_data.index.max()})")
             else:
-                logger.info(f"No local data available - will attempt IB fetch")
-                need_ib_data = True
-        except DataNotFoundError:
-            logger.info(f"No local CSV data found for {symbol} - will attempt IB fetch")
-            local_data = None
-            need_ib_data = True
+                logger.info(f"📭 No existing local data found")
         except Exception as e:
-            logger.warning(
-                f"Local CSV load failed for {symbol}: {e} - will attempt IB fetch"
+            logger.info(f"📭 No existing local data: {e}")
+            existing_data = None
+
+        # Step 2: Intelligent gap analysis
+        logger.info(f"🔍 GAP ANALYSIS: Starting intelligent gap detection for {symbol} {timeframe}")
+        logger.info(f"🔍 GAP ANALYSIS: Requested range = {requested_start} to {requested_end}")
+        if existing_data is not None and not existing_data.empty:
+            logger.info(f"🔍 GAP ANALYSIS: Existing data range = {existing_data.index.min()} to {existing_data.index.max()}")
+        else:
+            logger.info(f"🔍 GAP ANALYSIS: No existing data found")
+        gaps = self._analyze_gaps(existing_data, requested_start, requested_end, timeframe)
+        
+        if not gaps:
+            logger.info(f"✅ No gaps found - existing data covers requested range!")
+            # Filter existing data to requested range if needed
+            if existing_data is not None:
+                mask = (existing_data.index >= requested_start) & (existing_data.index <= requested_end)
+                filtered_data = existing_data[mask] if mask.any() else existing_data
+                logger.info(f"📊 Returning {len(filtered_data)} bars from existing data (filtered to requested range)")
+                return filtered_data
+            return existing_data
+
+        # Step 3: Split gaps into IB-compliant segments
+        logger.info(f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments...")
+        segments = self._split_into_segments(gaps, timeframe)
+        logger.info(f"⚡ SEGMENTATION COMPLETE: Created {len(segments)} segments for IB fetching")
+        
+        if not segments:
+            logger.info(f"✅ No segments to fetch after filtering")
+            return existing_data
+
+        # Step 4: Check IB availability and fetch segments
+        fetched_data_frames = []
+        
+        if self._ensure_ib_connection():
+            logger.info(f"🚀 Fetching {len(segments)} segments using resilient strategy...")
+            successful_frames, successful_count, failed_count = self._fetch_segments_with_resilience(
+                symbol, timeframe, segments
             )
-            local_data = None
-            need_ib_data = True
+            fetched_data_frames = successful_frames
+            
+            if successful_count > 0:
+                logger.info(f"✅ Successfully fetched {successful_count}/{len(segments)} segments")
+            if failed_count > 0:
+                logger.warning(f"⚠️ {failed_count}/{len(segments)} segments failed - continuing with partial data")
+        else:
+            logger.warning(f"❌ IB connection not available - using existing data only")
 
-        # Strategy 3: Only connect to IB if we need additional data
-        if need_ib_data:
-            # Check if IB connection is available
-            if self._ensure_ib_connection():
-                try:
-                    logger.info(
-                        f"Attempting to fetch {symbol} from IB (using unified data loader)"
-                    )
-                    
-                    # Use unified IB data loader which handles all the complexity
-                    ib_data, metadata = self.ib_data_loader.load_with_existing_check(
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        start=ib_start_date,
-                        end=ib_end_date,
-                        operation_type="data_manager"
-                    )
-                    
-                    if not ib_data.empty:
-                        # Normalize timezone for IB data (should already be UTC, but ensure consistency)
-                        ib_data = self._normalize_dataframe_timezone(ib_data)
-                        logger.info(f"Successfully fetched {metadata['fetched_bars']} new bars from IB (total: {len(ib_data)})")
-                    else:
-                        logger.info(f"No data returned from IB for {symbol}")
-                        ib_data = None
-                        
-                except Exception as e:
-                    logger.warning(f"IB fetch failed for {symbol}: {e}")
-                    ib_data = None
-            else:
-                logger.info(f"IB connection not available - skipping IB fetch")
-                ib_data = None
-
-        # Strategy 4: Merge and gap-fill if we have both sources
-        # Note: The IB data loader already handles merging, but we may have local data
-        # that wasn't considered by the IB loader (if we loaded it with different parameters)
-        if ib_data is not None and local_data is not None:
-            # Check if we need to merge (IB data loader might have already merged)
-            if len(ib_data) != len(local_data) or not ib_data.equals(local_data):
-                logger.info(
-                    f"Additional merging: IB data ({len(ib_data)} bars) with local data ({len(local_data)} bars)"
-                )
-                merged_data = self._merge_and_fill_gaps(ib_data, local_data)
-                return merged_data
-            else:
-                # IB data loader already handled merging
-                logger.info(f"Using IB data (already merged): {len(ib_data)} bars")
-                return ib_data
-
-        # Strategy 5: Return whichever data source worked
-        if ib_data is not None:
-            logger.info(f"Using IB data only ({len(ib_data)} bars)")
-            return ib_data
-
-        if local_data is not None:
-            logger.info(f"Using local CSV data only ({len(local_data)} bars)")
-            return local_data
-
-        # Strategy 6: No data found from any source
-        logger.warning(f"No data found for {symbol} from any source")
-        return None
+        # Step 5: Merge all data sources
+        all_data_frames = []
+        
+        # Add existing data if available
+        if existing_data is not None and not existing_data.empty:
+            all_data_frames.append(existing_data)
+            
+        # Add fetched data
+        all_data_frames.extend(fetched_data_frames)
+        
+        if not all_data_frames:
+            logger.warning(f"❌ No data available from any source")
+            return None
+            
+        # Combine and sort all data
+        logger.info(f"🔄 Merging {len(all_data_frames)} data sources...")
+        combined_data = pd.concat(all_data_frames, ignore_index=False)
+        
+        # Remove duplicates and sort
+        combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
+        combined_data = combined_data.sort_index()
+        
+        # Filter to requested range
+        mask = (combined_data.index >= requested_start) & (combined_data.index <= requested_end)
+        final_data = combined_data[mask] if mask.any() else combined_data
+        
+        logger.info(f"📊 Final dataset: {len(final_data)} bars covering {final_data.index.min() if not final_data.empty else 'N/A'} to {final_data.index.max() if not final_data.empty else 'N/A'}")
+        
+        # Save the enhanced dataset back to CSV for future use
+        if len(fetched_data_frames) > 0:  # Only save if we fetched new data
+            try:
+                self.data_loader.save(combined_data, symbol, timeframe)
+                logger.info(f"💾 Saved enhanced dataset: {len(combined_data)} bars")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to save enhanced dataset: {e}")
+        
+        logger.info(f"🎉 ENHANCED STRATEGY COMPLETE: Returning {len(final_data)} bars")
+        return final_data
 
     def _merge_and_fill_gaps(
         self, ib_data: pd.DataFrame, local_data: pd.DataFrame
