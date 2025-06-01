@@ -7,11 +7,10 @@ This module provides service layer functionality for IB operations.
 import time
 import pandas as pd
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from ktrdr import get_logger
-from ktrdr.data.data_manager import DataManager
 from ktrdr.data.ib_data_loader import IbDataLoader
 from ktrdr.data.ib_connection_strategy import get_connection_strategy
 from ktrdr.data.ib_data_fetcher_sync import IbDataRangeDiscovery, IbDataFetcherSync
@@ -28,8 +27,6 @@ from ktrdr.api.models.ib import (
     DataRangeInfo,
     SymbolRangeResponse,
     DataRangesResponse,
-    IbLoadRequest,
-    IbLoadResponse,
 )
 from ktrdr.config.ib_config import reset_ib_config, IbConfig
 
@@ -38,22 +35,30 @@ logger = get_logger(__name__)
 
 class IbService:
     """
-    Service for managing IB operations and status.
+    Service for IB infrastructure operations only.
 
-    This service provides methods for checking IB connection status,
-    health monitoring, and configuration information.
+    This service provides methods for:
+    - IB connection status and health monitoring
+    - IB configuration management
+    - IB data range discovery
+    - IB connection cleanup
+
+    Note: Data loading operations are handled by DataManager through DataService.
+    IbService is now a "dumb" service focused only on IB infrastructure.
     """
 
-    def __init__(self, data_manager: Optional[DataManager] = None, data_loader: Optional[IbDataLoader] = None):
+    def __init__(self, data_loader: Optional[IbDataLoader] = None):
         """
-        Initialize the IB service.
+        Initialize the IB service for IB infrastructure operations only.
 
         Args:
-            data_manager: Optional DataManager instance. If not provided,
-                         a new instance will be created.
             data_loader: Optional IbDataLoader instance for dependency injection.
+            
+        Note:
+            IbService now focuses only on IB infrastructure operations (status, health, 
+            config, ranges, cleanup). Data loading operations are handled by DataManager
+            through the DataService.
         """
-        self.data_manager = data_manager or DataManager()
         
         # Use injected data loader or create default
         if data_loader:
@@ -471,208 +476,5 @@ class IbService:
             cache_stats=cache_stats,
         )
 
-    def load_data(self, request: IbLoadRequest) -> IbLoadResponse:
-        """
-        Load data from IB with support for different modes.
 
-        Args:
-            request: Data loading request with symbol, timeframe, mode, and optional date range
-
-        Returns:
-            IbLoadResponse with operation results
-        """
-        start_time = time.time()
-
-        try:
-            # Check if CSV exists before operation  
-            data_dir = getattr(self.data_loader, 'data_dir', self._get_data_dir())
-            csv_path = Path(data_dir) / f"{request.symbol}_{request.timeframe}.csv"
-            cached_before = csv_path.exists()
-
-            # Determine start and end dates based on request mode
-            actual_start, actual_end = self._determine_date_range(request)
-
-            if actual_start is None or actual_end is None:
-                return IbLoadResponse(
-                    status="failed",
-                    fetched_bars=0,
-                    cached_before=cached_before,
-                    merged_file="",
-                    start_time=None,
-                    end_time=None,
-                    requests_made=0,
-                    execution_time_seconds=time.time() - start_time,
-                    error_message="Unable to determine valid date range for loading",
-                )
-
-            # Check if the date range is reasonable
-            gap_days = (actual_end - actual_start).days if actual_start and actual_end else 0
-            if gap_days <= 0:
-                return IbLoadResponse(
-                    status="success",
-                    fetched_bars=0,
-                    cached_before=cached_before,
-                    merged_file=str(csv_path),
-                    start_time=actual_start,
-                    end_time=actual_end,
-                    requests_made=0,
-                    execution_time_seconds=time.time() - start_time,
-                    error_message=None,
-                )
-
-            # Use unified data loader for all operations
-            final_data, metadata = self.data_loader.load_with_existing_check(
-                symbol=request.symbol,
-                timeframe=request.timeframe,
-                start=actual_start,
-                end=actual_end,
-                operation_type="api_call"
-            )
-
-            return IbLoadResponse(
-                status="success" if metadata["fetched_bars"] >= 0 else "failed",
-                fetched_bars=metadata["fetched_bars"],
-                cached_before=metadata["cached_before"],
-                merged_file=str(csv_path),
-                start_time=actual_start,
-                end_time=actual_end,
-                requests_made=1,  # Data loader handles progressive requests internally
-                execution_time_seconds=metadata["execution_time_seconds"],
-                error_message=None,
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Error loading data for {request.symbol}_{request.timeframe}: {e}"
-            )
-            return IbLoadResponse(
-                status="failed",
-                fetched_bars=0,
-                cached_before=cached_before if "cached_before" in locals() else False,
-                merged_file="",
-                start_time=None,
-                end_time=None,
-                requests_made=0,
-                execution_time_seconds=time.time() - start_time,
-                error_message=str(e),
-            )
-
-    def _determine_date_range(
-        self, request: IbLoadRequest
-    ) -> Tuple[Optional[datetime], Optional[datetime]]:
-        """
-        Determine the actual start and end dates for data loading based on mode.
-
-        As per specification: If no local CSV exists, treat ALL modes as "full initialization".
-
-        Args:
-            request: Load request with mode and optional date overrides
-
-        Returns:
-            Tuple of (start_time, end_time) or (None, None) if unable to determine
-        """
-        current_time = datetime.now(timezone.utc)
-        
-        # Use explicit date overrides if provided
-        if request.start or request.end:
-            start_time = request.start
-            end_time = request.end or current_time  # Default end to now if not provided
-
-            if start_time:
-                # Ensure timezone-aware
-                if start_time.tzinfo is None:
-                    start_time = start_time.replace(tzinfo=timezone.utc)
-            
-            if end_time:
-                # Ensure timezone-aware
-                if end_time.tzinfo is None:
-                    end_time = end_time.replace(tzinfo=timezone.utc)
-                    
-            # If only end date provided, use IB limits to calculate start
-            if not start_time and end_time:
-                max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-                start_time = end_time - max_duration
-                
-            return start_time, end_time
-
-        # Check if CSV exists for this symbol/timeframe
-        data_dir = getattr(self.data_loader, 'data_dir', self._get_data_dir())
-        csv_path = Path(data_dir) / f"{request.symbol}_{request.timeframe}.csv"
-        csv_exists = csv_path.exists() and csv_path.stat().st_size > 100  # Must have content
-        
-        if not csv_exists:
-            # SPECIFICATION: "CSV not found: treat all modes as full initialization"
-            logger.info(f"No CSV found for {request.symbol}_{request.timeframe}, treating {request.mode} mode as full initialization")
-            max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-            start_time = current_time - max_duration
-            end_time = current_time
-            return start_time, end_time
-            
-        # CSV exists - handle modes based on existing data
-        if request.mode == "full":
-            # Full mode: get maximum available history based on IB limits
-            max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-            start_time = current_time - max_duration
-            end_time = current_time
-            
-        elif request.mode == "tail":
-            # Tail mode: load from end of existing CSV to now
-            try:
-                # Load existing data to find the latest timestamp
-                from ktrdr.data.local_data_loader import LocalDataLoader
-                local_loader = LocalDataLoader(data_dir=str(data_dir))
-                existing_df = local_loader.load(request.symbol, request.timeframe)
-                
-                if not existing_df.empty:
-                    latest_timestamp = existing_df.index.max()
-                    # Start from next period after latest data
-                    if request.timeframe == "1h":
-                        start_time = latest_timestamp + pd.Timedelta(hours=1)
-                    else:
-                        start_time = latest_timestamp + pd.Timedelta(days=1)
-                    end_time = current_time
-                else:
-                    # Empty CSV - treat as full initialization
-                    max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-                    start_time = current_time - max_duration
-                    end_time = current_time
-                    
-            except Exception as e:
-                logger.warning(f"Error reading existing CSV for tail mode: {e}, treating as full initialization")
-                max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-                start_time = current_time - max_duration
-                end_time = current_time
-                
-        elif request.mode == "backfill":
-            # Backfill mode: load before earliest existing data
-            try:
-                from ktrdr.data.local_data_loader import LocalDataLoader
-                local_loader = LocalDataLoader(data_dir=str(data_dir))
-                existing_df = local_loader.load(request.symbol, request.timeframe)
-                
-                if not existing_df.empty:
-                    earliest_timestamp = existing_df.index.min()
-                    # Backfill some reasonable amount based on timeframe
-                    backfill_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-                    start_time = earliest_timestamp - backfill_duration
-                    if request.timeframe == "1h":
-                        end_time = earliest_timestamp - pd.Timedelta(hours=1)
-                    else:
-                        end_time = earliest_timestamp - pd.Timedelta(days=1)
-                else:
-                    # Empty CSV - treat as full initialization
-                    max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-                    start_time = current_time - max_duration
-                    end_time = current_time
-                    
-            except Exception as e:
-                logger.warning(f"Error reading existing CSV for backfill mode: {e}, treating as full initialization")
-                max_duration = IbLimitsRegistry.get_duration_limit(request.timeframe)
-                start_time = current_time - max_duration
-                end_time = current_time
-        else:
-            logger.error(f"Unknown mode: {request.mode}")
-            return None, None
-
-        return start_time, end_time
 

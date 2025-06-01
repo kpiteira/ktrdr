@@ -262,9 +262,11 @@ class IbDataFetcherSync:
                 logger.info(f"Adjusted whatToShow to 'BID' for forex instrument")
 
             logger.info(
-                f"Requesting historical data: {symbol} ({instrument_type}), "
-                f"bar size: {bar_size}, duration: {duration_str}, "
-                f"end: {end_dt_str}, whatToShow: {what_to_show}, timeout: {timeout_seconds}s"
+                f"🌐 IB API CALL: Requesting historical data for {symbol} ({instrument_type})"
+            )
+            logger.info(
+                f"🌐 IB API PARAMS: bar_size={bar_size}, duration={duration_str}, "
+                f"end={end_dt_str}, whatToShow={what_to_show}, timeout={timeout_seconds}s"
             )
 
             # Make the request with proper error handling
@@ -363,7 +365,7 @@ class IbDataFetcherSync:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"Successfully fetched {len(df)} bars for {symbol} in {elapsed:.1f}s"
+                f"🌐 IB API SUCCESS: Fetched {len(df)} bars for {symbol} in {elapsed:.1f}s"
             )
 
             return df

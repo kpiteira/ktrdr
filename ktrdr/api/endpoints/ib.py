@@ -17,19 +17,14 @@ from ktrdr.api.models.ib import (
     IbConfigApiResponse,
     IbConfigUpdateApiResponse,
     IbDataRangesApiResponse,
-    IbLoadApiResponse,
     IbStatusResponse,
     IbHealthStatus,
     IbConfigInfo,
     IbConfigUpdateRequest,
     IbConfigUpdateResponse,
     DataRangesResponse,
-    IbLoadRequest,
-    IbLoadResponse,
 )
 from ktrdr.api.models.base import ApiResponse, ErrorResponse
-from ktrdr.api.dependencies import get_data_manager
-from ktrdr.data.data_manager import DataManager
 
 # Setup module-level logger
 logger = get_logger(__name__)
@@ -38,9 +33,9 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-def get_ib_service(data_manager: DataManager = Depends(get_data_manager)) -> IbService:
+def get_ib_service() -> IbService:
     """Dependency to get IB service instance."""
-    return IbService(data_manager)
+    return IbService()
 
 
 @router.get(
@@ -365,119 +360,3 @@ async def get_data_ranges(
         )
 
 
-@router.post(
-    "/load",
-    response_model=IbLoadApiResponse,
-    tags=["IB"],
-    summary="Load data from IB",
-    description="Load OHLCV data from Interactive Brokers with support for different modes (tail, backfill, full).",
-)
-async def load_ib_data(
-    request: IbLoadRequest, ib_service: IbService = Depends(get_ib_service)
-) -> IbLoadApiResponse:
-    """
-    Load data from Interactive Brokers.
-
-    This endpoint supports three loading modes:
-    - **tail**: Load data from the last available timestamp to now (default)
-    - **backfill**: Load data before the earliest available timestamp
-    - **full**: Load maximum available history (ignores existing data)
-
-    The endpoint respects IB duration limits and uses progressive loading
-    for large gaps, automatically splitting requests as needed.
-
-    Args:
-        request: Load request specifying symbol, timeframe, mode, and optional date range
-
-    Returns:
-        IbLoadApiResponse with loading results including status, bars fetched, and execution metrics
-    """
-    try:
-        # Validate that the request is properly formed
-        if not request.symbol or not request.symbol.strip():
-            return ApiResponse(
-                success=False,
-                data=None,
-                error=ErrorResponse(
-                    code="IB-LOAD-INVALID-SYMBOL",
-                    message="Symbol is required and cannot be empty",
-                    details={"symbol": request.symbol},
-                ),
-            )
-
-        # Clean up symbol name
-        clean_symbol = request.symbol.strip().upper()
-        request.symbol = clean_symbol
-
-        logger.info(
-            f"Loading data for {request.symbol}_{request.timeframe} (mode: {request.mode})"
-        )
-
-        # Perform the data loading operation
-        result = ib_service.load_data(request)
-
-        # Determine success based on result status
-        if result.status == "success":
-            return ApiResponse(success=True, data=result, error=None)
-        elif result.status == "partial":
-            # Partial success - some data was loaded but not complete
-            return ApiResponse(
-                success=True,
-                data=result,
-                error=ErrorResponse(
-                    code="IB-LOAD-PARTIAL",
-                    message="Data loading partially successful",
-                    details={"error_message": result.error_message},
-                ),
-            )
-        else:
-            # Failed
-            return ApiResponse(
-                success=False,
-                data=result,
-                error=ErrorResponse(
-                    code="IB-LOAD-FAILED",
-                    message=result.error_message or "Data loading failed",
-                    details={
-                        "symbol": request.symbol,
-                        "timeframe": request.timeframe,
-                        "mode": request.mode,
-                        "execution_time": result.execution_time_seconds,
-                    },
-                ),
-            )
-
-    except ValueError as e:
-        # Validation errors
-        logger.warning(f"Validation error loading data: {e}")
-        return ApiResponse(
-            success=False,
-            data=None,
-            error=ErrorResponse(
-                code="IB-LOAD-VALIDATION-ERROR",
-                message=str(e),
-                details={
-                    "symbol": request.symbol,
-                    "timeframe": request.timeframe,
-                    "mode": request.mode,
-                },
-            ),
-        )
-
-    except Exception as e:
-        # Unexpected errors
-        logger.error(f"Unexpected error loading data: {e}")
-        return ApiResponse(
-            success=False,
-            data=None,
-            error=ErrorResponse(
-                code="IB-LOAD-ERROR",
-                message="Unexpected error during data loading",
-                details={
-                    "error": str(e),
-                    "symbol": request.symbol,
-                    "timeframe": request.timeframe,
-                    "mode": request.mode,
-                },
-            ),
-        )

@@ -96,7 +96,98 @@ Violating these limits may result in pacing violations, leading to delayed respo
 
 ---
 
-## 🏗️ **ARCHITECTURE & THREADING MODEL**
+## 🏗️ **ENHANCED ARCHITECTURE & INTELLIGENT GAP FILLING**
+
+### **✅ CORRECTED Smart Data Orchestration Architecture**
+
+#### **🎯 Data Loading Flow (PRODUCTION)**
+```
+API Request (/api/v1/data/load)
+    ↓
+DataService (API Adapter)
+    ↓  
+DataManager (SMART - Orchestrator)
+    ├── Gap Analysis: Detect meaningful missing segments
+    ├── Segment Planning: Split large ranges into IB-compliant chunks
+    ├── For each gap:
+    │   └── IbService.load_data() (DUMB - Pure IB Fetcher)
+    │       └── IbDataLoader (Raw IB API calls)
+    │           └── Progressive chunking if segment > IB limits
+    └── Merge: Combine existing + fetched data chronologically
+```
+
+#### **🏗️ IB Infrastructure Flow (SEPARATE)**
+```
+API Request (/api/v1/ib/status|health|config|ranges)
+    ↓
+IbService (IB Infrastructure Only)
+    └── IB Components (status, health, discovery, config)
+```
+
+### **🧠 DETAILED Component Responsibilities**
+
+#### **📊 DataManager (SMART Orchestrator)**
+**Primary Responsibilities**:
+- **Gap Analysis**: Compare existing CSV data vs requested date range
+- **Smart Filtering**: Ignore weekends, holidays, micro-gaps not worth fetching
+- **Segment Planning**: Break large requests into missing pieces only
+- **Mode Logic**: Handle tail/backfill/full modes with intelligent defaults
+- **Date Range Determination**: Calculate optimal start/end dates
+- **Local CSV Management**: Load, merge, save local data files
+- **Failure Resilience**: Continue with other segments if some fail
+- **Trading Calendar Awareness**: Understand market closure patterns
+
+**Key Methods**:
+- `load_data()` - Main entry point for all data loading
+- `_analyze_gaps()` - Intelligent gap detection
+- `_split_into_segments()` - IB-compliant chunking
+- `_fetch_segments_with_resilience()` - Resilient multi-segment fetching
+
+#### **🔌 IbService (DUMB IB Infrastructure)**
+**Primary Responsibilities**:
+- **Connection Management**: Status, health, cleanup operations
+- **Configuration**: Get/update IB connection settings
+- **Data Discovery**: Find what data ranges are available in IB
+- **Raw Data Fetching**: Fetch exact date ranges when asked by DataManager
+
+**Key Methods**:
+- `get_status()` - IB connection status
+- `get_health()` - IB health checks
+- `get_config()` - IB configuration info
+- `get_data_ranges()` - IB data discovery (binary search)
+- `cleanup_connections()` - Force disconnect IB connections
+- `load_data()` - **SIMPLIFIED**: Only fetch exact ranges from IB (no local logic)
+
+**❌ IbService SHOULD NOT**:
+- Analyze gaps or determine what data to fetch
+- Handle CSV files or local data operations
+- Make decisions about date ranges or modes
+- Merge data sources
+
+#### **🌐 DataService (API Adapter)**  
+**Primary Responsibilities**:
+- **API Interface**: Expose DataManager functionality to REST API
+- **Request Validation**: Validate API requests before calling DataManager
+- **Response Formatting**: Convert DataManager results to API responses
+- **Error Handling**: Translate DataManager exceptions to API errors
+
+#### **🔧 IbDataLoader (RAW IB API)**
+**Primary Responsibilities**:
+- **Raw IB Calls**: Direct ib_insync API interactions
+- **Progressive Chunking**: Split large requests that exceed IB limits
+- **Connection Handling**: Manage IB connections for data requests
+- **Data Validation**: Basic OHLCV data quality checks
+
+**Called By**: IbService.load_data() only (never directly by other components)
+
+**Example Scenario**:
+- **Request**: RBLX 1d from 2023-01-01 to 2025-05-30 (516 days)
+- **Existing Data**: 2024-04-01 to 2025-05-01 with gap 2024-12-01 to 2024-12-10
+- **Smart Analysis**: Identify 3 missing segments:
+  1. `2023-01-01 → 2024-04-01` (456 days, needs progressive chunking)
+  2. `2024-12-01 → 2024-12-10` (9 days, single request)  
+  3. `2025-05-01 → 2025-05-30` (29 days, single request)
+- **Efficient Execution**: Fetch only missing data, not entire 516-day range
 
 ### **✅ Connection Management Architecture**
 
@@ -165,13 +256,19 @@ temp_connection = IbConnectionSync(ConnectionConfig(client_id=unique_client_id))
 | `IbDataFetcherSync` | ✅ **PRODUCTION** | Handles IB API calls with timeout and error handling |
 | `GapFillerService` | ✅ **PRODUCTION** | Automatic gap detection and progressive filling |
 | `api/endpoints/ib.py` | ✅ **PRODUCTION** | Status, health, config, ranges, cleanup, load endpoints |
-| `DataManager` | ✅ **PRODUCTION** | Delegates to IB when CSVs incomplete |
+| `IbDataLoader` | ✅ **PRODUCTION** | Unified IB data fetching with progressive loading |
+| `CLI Tool` | ✅ **PRODUCTION** | `ktrdr ib-load` command with all modes and options |
+
+### **🔄 ENHANCED Modules**
+
+| Module | Status | Description |
+|--------|--------|-------------|
+| `DataManager` | ✅ **PRODUCTION** | Enhanced with intelligent gap analysis, segment orchestration, and failure resilience |
 
 ### **❌ MISSING Modules**
 
 | Module | Status | Description |
 |--------|--------|-------------|
-| `cli/load_ib.py` | ❌ **NOT IMPLEMENTED** | CLI tool to trigger tail/backfill loads |
 | Frontend Load Controls | ❌ **DEPRIORITIZED** | UI controls for data loading |
 
 ### **⚠️ PARTIAL Implementation**
@@ -185,30 +282,43 @@ temp_connection = IbConnectionSync(ConnectionConfig(client_id=unique_client_id))
 
 ## 📤 API Implementation Status
 
-### **✅ IMPLEMENTED Endpoints**
+### **✅ IB Infrastructure Endpoints (CORRECT)**
 
 **Endpoint**: `GET /api/v1/ib/status`
-- Returns connection status, metrics, health indicators
+- Returns IB connection status, metrics, health indicators
+- ✅ **Correctly uses IbService**
 
 **Endpoint**: `GET /api/v1/ib/health`  
-- Performs health checks on connection and data fetching
+- Performs health checks on IB connection and API functionality
+- ✅ **Correctly uses IbService**
 
 **Endpoint**: `GET /api/v1/ib/config`
 - Returns current IB configuration settings
+- ✅ **Correctly uses IbService**
 
 **Endpoint**: `GET /api/v1/ib/ranges`
 - Discovers earliest/latest available data for symbols using IB's reqHeadTimeStamp
+- ✅ **Correctly uses IbService** (pure IB discovery, no data loading)
 
 **Endpoint**: `POST /api/v1/ib/cleanup`
 - Forcefully disconnects all IB connections for troubleshooting
+- ✅ **Correctly uses IbService**
 
-**Endpoint**: `POST /api/v1/ib/load`
-- Loads OHLCV data from IB with mode support (tail, backfill, full)
-- Supports explicit date range overrides
-- Uses progressive loading for large gaps
+### **❌ MISPLACED Data Loading Endpoint (NEEDS FIXING)**
+
+**Endpoint**: `POST /api/v1/ib/load` ❌ **WRONG LOCATION**
+- Currently in IbService (incorrect)
+- Should be `POST /api/v1/data/load` using DataService → DataManager
+
+### **🎯 CORRECT Data Loading Endpoint (TO BE IMPLEMENTED)**
+
+**Endpoint**: `POST /api/v1/data/load` ✅ **CORRECT ARCHITECTURE**
+- Uses DataService → DataManager → (gap analysis) → IbService.load_data() (when needed)
+- Supports all modes (tail, backfill, full) with intelligent processing
+- Handles large date ranges with smart segmentation
 - Returns detailed operation metrics
 
-The `/api/v1/ib/load` endpoint implementation supports:
+The **CORRECT** `/api/v1/data/load` endpoint will support:
 ```json
 {
   "symbol": "MSFT",
@@ -231,9 +341,17 @@ The `/api/v1/ib/load` endpoint implementation supports:
   "status": "success",
   "fetched_bars": 2432,
   "cached_before": true,
-  "merged_file": "data/MSFT_1h.csv"
+  "merged_file": "data/MSFT_1h.csv",
+  "gaps_analyzed": 3,
+  "segments_fetched": 2,
+  "ib_requests_made": 2
 }
 ```
+
+**Enhanced Response Fields**:
+- `gaps_analyzed` - Number of gaps identified by DataManager
+- `segments_fetched` - Number of segments successfully fetched from IB
+- `ib_requests_made` - Number of actual IB API calls made
 
 ---
 
@@ -256,20 +374,42 @@ The `/api/v1/ib/load` endpoint implementation supports:
 
 ## 📋 **REMAINING IMPLEMENTATION**
 
-### **✅ Priority 1: Explicit Load API** (COMPLETED)
+### **✅ Priority 1: Core Infrastructure** (COMPLETED)
 - ✅ Added `/api/v1/ib/load` endpoint with mode support  
-- ✅ Implemented explicit backfill logic (extended from current gap filling)
-- ✅ Added date range validation and IB limit checking
+- ✅ Implemented CLI tool `ktrdr ib-load` with all features
+- ✅ Fixed date range logic and response parsing
+- ✅ Established progressive loading foundation
 
-### **🎯 Priority 2: CLI Tool** (1-2 hours)
-- Create `scripts/load_ib.py` wrapper around API
-- Add argument parsing and progress display
-- Include examples and help documentation
+### **🎯 Priority 2: Architecture Compliance** (CRITICAL - 2-3 hours)
+- **Move `/api/v1/ib/load` to `/api/v1/data/load`** using DataService
+- **Simplify IbService.load_data()** to pure IB fetcher (remove local logic)
+- **Update GapFillerService** to use DataManager instead of IbDataLoader
+- **Ensure IbService only called by DataManager** for data operations
 
 ### **🎯 Priority 3: Symbol Discovery** (2-3 hours)
 - Enhance IB service to validate symbols against IB contracts
 - Add auto-detection of instrument types (stock, forex, futures)
 - Improve error messages for invalid symbols
+
+### **🔧 Current Architecture Issues**
+
+**IMPLEMENTED BUT NOT USED**: DataManager has complete intelligent gap analysis but the main API endpoints bypass it!
+
+**Current Flow** ❌ **WRONG**:
+```
+/api/v1/ib/load → IbService.load_data() → IbDataLoader (bypasses DataManager!)
+```
+
+**Required Flow** ✅ **CORRECT**:
+```
+/api/v1/data/load → DataService → DataManager → IbService.load_data() → IbDataLoader
+```
+
+**Architecture Violations**:
+- Main data loading API bypasses enhanced DataManager
+- IbService has local CSV logic (should be in DataManager)
+- GapFillerService uses IbDataLoader directly (should use DataManager)
+- Enhanced gap analysis is unused in production
 
 ---
 
@@ -309,9 +449,9 @@ echo "timestamp,open,high,low,close,volume" > data/AAPL_1h.csv
 
 ---
 
-## 🎉 **PRODUCTION READINESS**
+## 🎉 **PRODUCTION READINESS** 
 
-**Current Status: 90% Complete - Production Ready with Explicit Load API**
+**Current Status: 85% Complete - Enhanced DataManager Implemented But Not Used**
 
 ### **✅ Ready for Production Use**
 - ✅ **Automatic gap filling**: Keeps all data up-to-date
@@ -320,11 +460,24 @@ echo "timestamp,open,high,low,close,volume" > data/AAPL_1h.csv
 - ✅ **Monitoring**: API endpoints for health and status
 - ✅ **Error handling**: Comprehensive retry and recovery
 - ✅ **Docker integration**: Full containerized deployment with port forwarding
-- ✅ **Explicit data loading**: API endpoint for on-demand loading with mode support
+- ✅ **CLI interface**: Complete `ktrdr ib-load` command with all modes
+- ✅ **Progressive loading**: Handles large ranges when properly invoked
 
-### **⚠️ Manual Intervention Required For**
-- **New symbols**: Requires CSV creation workaround OR use API endpoint
-- **Explicit backfill**: Can now use API endpoint with backfill mode
-- **CLI automation**: No command-line interface yet
+### **⚠️ ENHANCED BUT UNUSED Capabilities** 
+- ⚠️ **Large date ranges**: Enhanced DataManager can handle >1 year but API bypasses it
+- ⚠️ **Efficient backfilling**: Smart gap analysis implemented but not used in production
+- ⚠️ **Trading calendar awareness**: Implemented but main API uses old "dumb" approach
+- ⚠️ **Failure resilience**: Available in DataManager but unused by current API flow
+- ⚠️ **Smart orchestration**: DataManager ready but API endpoints bypass it
 
-The remaining 10% (CLI interface) adds command-line convenience but core functionality is complete.
+### **📊 Current Capability**
+- ✅ **Small ranges** (<1 year): Work via current API (using old approach)
+- ✅ **New symbols**: Full initialization works
+- ❌ **Large ranges** (>1 year): Still fail because API bypasses enhanced DataManager
+- ❌ **Complex gap scenarios**: Not optimally handled due to architecture violations
+- ❌ **Trading calendar aware**: Enhanced logic exists but unused by production API
+- ❌ **Partial failure resilience**: Available but unused
+
+**Critical Issue**: Enhanced DataManager is implemented but production API doesn't use it!
+
+**Next Priority**: Fix architecture violations to enable enhanced capabilities in production.

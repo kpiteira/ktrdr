@@ -17,8 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 from ktrdr.logging import get_logger
-from ktrdr.data.ib_data_loader import IbDataLoader
-from ktrdr.data.ib_connection_strategy import get_connection_strategy
+from ktrdr.data.data_manager import DataManager
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.config.ib_limits import IbLimitsRegistry
 from ktrdr.config.loader import ConfigLoader
@@ -38,23 +37,21 @@ class GapFillerService:
     - Runs independently in the background
     """
 
-    def __init__(self, data_dir: Optional[str] = None, ib_data_loader: Optional[IbDataLoader] = None):
+    def __init__(self, data_dir: Optional[str] = None, data_manager: Optional[DataManager] = None):
         """Initialize the gap filler service."""
         self.data_dir = data_dir or self._get_data_dir()
         
         # Initialize local data loader for reading existing CSV files
         self.local_data_loader = LocalDataLoader(data_dir=self.data_dir)
         
-        # Use injected IB data loader or create default for IB operations
-        if ib_data_loader:
-            self.ib_data_loader = ib_data_loader
+        # Use injected DataManager or create default for intelligent gap operations
+        if data_manager:
+            self.data_manager = data_manager
         else:
-            # Create default IB data loader with gap filler connection strategy
-            connection_strategy = get_connection_strategy()
-            self.ib_data_loader = IbDataLoader(
-                connection_strategy=connection_strategy,
+            # Create default DataManager with IB integration enabled
+            self.data_manager = DataManager(
                 data_dir=self.data_dir,
-                validate_data=True
+                enable_ib=True  # Enable IB integration for gap filling
             )
 
         # Service control
@@ -141,17 +138,17 @@ class GapFillerService:
 
         while self._running and not self._stop_event.is_set():
             try:
-                # Check if IB connection is available via data loader
+                # Check if IB is available via DataManager
                 try:
-                    # Try to get a connection to verify IB availability
-                    connection_strategy = get_connection_strategy()
-                    test_connection = connection_strategy.get_connection_for_operation("gap_filler")
-                    if test_connection and test_connection.is_connected():
+                    # Check if DataManager has IB integration enabled
+                    if self.data_manager.enable_ib and self.data_manager.ib_data_loader:
+                        # Try a simple IB operation to verify connectivity
+                        # We can check this by testing if the IB data loader is functional
                         self._scan_and_fill_gaps()
                     else:
-                        logger.debug("IB not connected, skipping gap scan")
+                        logger.debug("IB not enabled in DataManager, skipping gap scan")
                 except Exception as e:
-                    logger.debug(f"IB connection check failed: {e}, skipping gap scan")
+                    logger.debug(f"IB availability check failed: {e}, skipping gap scan")
 
                 self.stats["last_scan_time"] = datetime.now(timezone.utc)
 
@@ -324,23 +321,35 @@ class GapFillerService:
             logger.info(f"Gap detected for {symbol}_{timeframe}: {gap_hours:.1f} hours")
             self.stats["gaps_detected"] += 1
 
-            # Fill the gap using the unified IB data loader
+            # Fill the gap using the enhanced DataManager (intelligent gap analysis)
             try:
-                final_data, metadata = self.ib_data_loader.load_with_existing_check(
+                # Use DataManager's tail mode to fill gaps automatically
+                df = self.data_manager.load_data(
                     symbol=symbol,
                     timeframe=timeframe,
-                    start=next_expected,
-                    end=current_time,
-                    operation_type="gap_filler"
+                    start_date=next_expected,
+                    end_date=current_time,
+                    mode="tail",  # Tail mode is perfect for gap filling
+                    validate=True,
+                    repair=False,
                 )
                 
-                if metadata["fetched_bars"] > 0:
-                    self.stats["gaps_filled"] += 1
-                    logger.info(f"✅ Filled gap for {symbol}_{timeframe}: {metadata['fetched_bars']} bars fetched")
-                    return True
+                if df is not None and not df.empty:
+                    # Filter to just the new data (after next_expected)
+                    new_data = df[df.index >= next_expected]
+                    fetched_bars = len(new_data)
+                    
+                    if fetched_bars > 0:
+                        self.stats["gaps_filled"] += 1
+                        logger.info(f"✅ Filled gap for {symbol}_{timeframe}: {fetched_bars} bars fetched")
+                        return True
+                    else:
+                        self.stats["gaps_failed"] += 1
+                        logger.warning(f"❌ No new data fetched for gap in {symbol}_{timeframe}")
+                        return False
                 else:
                     self.stats["gaps_failed"] += 1
-                    logger.warning(f"❌ No data fetched for gap in {symbol}_{timeframe}")
+                    logger.warning(f"❌ No data returned for gap in {symbol}_{timeframe}")
                     return False
                     
             except Exception as e:
@@ -384,11 +393,9 @@ class GapFillerService:
     def force_scan(self) -> Dict[str, Any]:
         """Force an immediate gap scan (for testing/debugging)."""
         try:
-            # Check IB connection availability
-            connection_strategy = get_connection_strategy()
-            test_connection = connection_strategy.get_connection_for_operation("gap_filler")
-            if not test_connection or not test_connection.is_connected():
-                return {"error": "IB not connected"}
+            # Check IB availability via DataManager
+            if not self.data_manager.enable_ib or not self.data_manager.ib_data_loader:
+                return {"error": "IB not enabled in DataManager"}
 
             self._scan_and_fill_gaps()
             return {"success": True, "stats": self.get_stats()}
