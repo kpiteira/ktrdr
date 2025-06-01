@@ -129,8 +129,9 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
                          indicator.name === 'ema' ? 'ExponentialMovingAverage' : 
                          indicator.name;
 
-      const startDate = new Date(baseData[0].time * 1000).toISOString().split('T')[0];
-      const endDate = new Date(baseData[baseData.length - 1].time * 1000).toISOString().split('T')[0];
+      // Use ISO timestamps without timezone suffix (API expects this format)
+      const startDate = new Date(baseData[0].time * 1000).toISOString().replace(/\.\d{3}Z$/, '');
+      const endDate = new Date(baseData[baseData.length - 1].time * 1000).toISOString().replace(/\.\d{3}Z$/, '');
 
       const requestPayload = {
         symbol: symbol,
@@ -152,7 +153,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
         ]
       };
       
-      const response = await fetch('/api/v1/indicators/calculate', {
+      const response = await fetch('/api/v1/indicators/calculate?page_size=10000', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,17 +179,18 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       const indicatorValues = result.indicators?.[outputName] || 
                              result.indicators?.[outputName.toLowerCase()] || 
                              [];
+
+      const dates = result.dates || [];
       
-      const indicatorCount = indicatorValues.length;
-      const candlestickCount = baseData.length;
-      const startIndex = candlestickCount - indicatorCount;
-      
+      // Map indicator values to line data using the dates from the response (timestamp-based approach)
       const lineData: LineData[] = indicatorValues
         .map((value: number | null, index: number) => {
-          const candlestickIndex = startIndex + index;
-          if (value === null || value === undefined || !baseData[candlestickIndex]) return null;
+          if (value === null || value === undefined || !dates[index]) return null;
+          
+          const timestamp = new Date(dates[index]).getTime() / 1000;
+          
           return {
-            time: baseData[candlestickIndex].time as UTCTimestamp,
+            time: timestamp as UTCTimestamp,
             value
           };
         })

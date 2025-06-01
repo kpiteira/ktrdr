@@ -161,8 +161,9 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
                          indicator.name === 'stochastic' ? 'StochasticIndicator' :
                          indicator.name;
 
-      const startDate = new Date(baseData[0].time * 1000).toISOString().split('T')[0];
-      const endDate = new Date(baseData[baseData.length - 1].time * 1000).toISOString().split('T')[0];
+      // Use ISO timestamps without timezone suffix (API expects this format)
+      const startDate = new Date(baseData[0].time * 1000).toISOString().replace(/\.\d{3}Z$/, '');
+      const endDate = new Date(baseData[baseData.length - 1].time * 1000).toISOString().replace(/\.\d{3}Z$/, '');
 
       const requestPayload = {
         symbol: symbol,
@@ -183,7 +184,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
         ]
       };
       
-      const response = await fetch('/api/v1/indicators/calculate', {
+      const response = await fetch('/api/v1/indicators/calculate?page_size=10000', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
