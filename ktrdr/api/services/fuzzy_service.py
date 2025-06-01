@@ -704,22 +704,41 @@ class FuzzyService(BaseService):
             indicator_perf = self.track_performance(f"calculate_{indicator_name}")
             
             try:
-                # Calculate the indicator using the indicator engine
-                result_df = self.indicator_engine.calculate_indicator(
-                    data=df,
-                    indicator_name=indicator_name
-                )
+                # Map indicator names to their calculation methods
+                if indicator_name.lower() == 'rsi':
+                    result_df = self.indicator_engine.compute_rsi(data=df)
+                    # RSI calculation returns a dataframe with an 'rsi' column
+                    if 'rsi' in result_df.columns:
+                        indicator_series = result_df['rsi']
+                        indicator_perf["end_tracking"]()
+                        return indicator_series
+                        
+                elif indicator_name.lower() == 'macd':
+                    result_df = self.indicator_engine.compute_macd(data=df)
+                    # MACD calculation returns multiple columns, use the main MACD line
+                    if 'macd' in result_df.columns:
+                        indicator_series = result_df['macd']
+                        indicator_perf["end_tracking"]()
+                        return indicator_series
+                        
+                elif indicator_name.lower() == 'ema':
+                    result_df = self.indicator_engine.compute_ema(data=df)
+                    # EMA calculation returns a dataframe with an 'ema' column
+                    if 'ema' in result_df.columns:
+                        indicator_series = result_df['ema']
+                        indicator_perf["end_tracking"]()
+                        return indicator_series
+                        
+                elif indicator_name.lower() == 'sma':
+                    result_df = self.indicator_engine.compute_sma(data=df)
+                    # SMA calculation returns a dataframe with an 'sma' column
+                    if 'sma' in result_df.columns:
+                        indicator_series = result_df['sma']
+                        indicator_perf["end_tracking"]()
+                        return indicator_series
                 
-                # Extract the main indicator column
-                # Look for column that matches the indicator name
-                matching_columns = [col for col in result_df.columns if indicator_name.lower() in col.lower()]
-                
-                if matching_columns:
-                    indicator_series = result_df[matching_columns[0]]
-                    indicator_perf["end_tracking"]()
-                    return indicator_series
                 else:
-                    self.logger.warning(f"No matching column found for indicator {indicator_name} in result")
+                    self.logger.warning(f"Unknown indicator: {indicator_name}")
                     return None
                     
             except Exception as e:

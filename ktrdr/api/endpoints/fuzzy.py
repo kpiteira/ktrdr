@@ -16,6 +16,7 @@ from ktrdr.api.models.fuzzy import (
     FuzzyConfigResponse,
     FuzzyEvaluateRequest,
     FuzzyEvaluateResponse,
+    FuzzyOverlayResponse,
 )
 from ktrdr.api.dependencies import get_fuzzy_service
 
@@ -187,6 +188,141 @@ async def get_fuzzy_sets(
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "An unexpected error occurred while retrieving fuzzy sets",
+                    "details": {"error": str(e)},
+                },
+            },
+        )
+
+
+@router.get(
+    "/data",
+    response_model=FuzzyOverlayResponse,
+    summary="Get fuzzy membership overlays for chart display",
+    description="""
+    Returns time series fuzzy membership values for indicators over a given period.
+    This endpoint is designed for frontend chart overlays, providing fuzzy membership
+    data in a format optimized for visualization.
+    
+    The endpoint loads OHLCV data, calculates requested indicators, and computes
+    fuzzy membership values using the configured membership functions. Results
+    are returned as time series data suitable for chart overlays.
+    """,
+)
+async def get_fuzzy_overlay_data(
+    symbol: str = Query(..., description="Trading symbol (e.g., AAPL)"),
+    timeframe: str = Query(..., description="Data timeframe (e.g., 1h, 1d)"),
+    indicators: Optional[List[str]] = Query(None, description="List of indicators (if omitted, returns all configured indicators)"),
+    start_date: Optional[str] = Query(None, description="Start date (ISO format)"),
+    end_date: Optional[str] = Query(None, description="End date (ISO format)"),
+    fuzzy_service: FuzzyService = Depends(get_fuzzy_service),
+) -> FuzzyOverlayResponse:
+    """
+    Get fuzzy membership overlays for indicators over time.
+
+    This endpoint provides time series fuzzy membership values that can be used
+    to create chart overlays showing fuzzy regions (e.g., RSI "low", "neutral", "high").
+
+    Args:
+        symbol: Trading symbol to load data for
+        timeframe: Data timeframe (e.g., "1h", "1d", "5m")
+        indicators: Optional list of specific indicators to include
+        start_date: Optional start date for data filtering
+        end_date: Optional end date for data filtering
+
+    Returns:
+        FuzzyOverlayResponse with time series membership data
+
+    Example response:
+        ```json
+        {
+          "symbol": "AAPL",
+          "timeframe": "1h",
+          "data": {
+            "rsi": [
+              {
+                "set": "low",
+                "membership": [
+                  {"timestamp": "2023-01-01T09:00:00", "value": 0.8},
+                  {"timestamp": "2023-01-01T10:00:00", "value": 0.6}
+                ]
+              },
+              {
+                "set": "high", 
+                "membership": [
+                  {"timestamp": "2023-01-01T09:00:00", "value": 0.2},
+                  {"timestamp": "2023-01-01T10:00:00", "value": 0.4}
+                ]
+              }
+            ]
+          },
+          "warnings": ["Unknown indicator 'invalid' - skipping"]
+        }
+        ```
+
+    Errors:
+        - 400: Invalid request parameters or configuration error
+        - 404: No data available for the specified symbol and timeframe
+        - 500: Server error during processing
+    """
+    try:
+        logger.info(f"Getting fuzzy overlay data for {symbol} {timeframe}")
+        
+        # Call the service to get fuzzy overlays
+        result = await fuzzy_service.get_fuzzy_overlays(
+            symbol=symbol,
+            timeframe=timeframe,
+            indicators=indicators,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        
+        # Convert service response to Pydantic model
+        return FuzzyOverlayResponse(**result)
+        
+    except DataError as e:
+        logger.error(f"Data error in get_fuzzy_overlay_data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": e.error_code,
+                    "message": str(e),
+                    "details": e.details,
+                },
+            },
+        )
+    except ConfigurationError as e:
+        logger.error(f"Configuration error in get_fuzzy_overlay_data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": e.error_code,
+                    "message": str(e),
+                    "details": e.details,
+                },
+            },
+        )
+    except ProcessingError as e:
+        logger.error(f"Processing error in get_fuzzy_overlay_data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": e.error_code,
+                    "message": str(e),
+                    "details": e.details,
+                },
+            },
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in get_fuzzy_overlay_data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "An unexpected error occurred during fuzzy overlay generation",
                     "details": {"error": str(e)},
                 },
             },
