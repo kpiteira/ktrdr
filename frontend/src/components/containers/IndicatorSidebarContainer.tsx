@@ -132,6 +132,9 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
       localParameterValues={indicatorManager.localParameterValues}
       newSMAPeriod={indicatorManager.newSMAPeriod}
       newRSIPeriod={indicatorManager.newRSIPeriod}
+      newMACDFastPeriod={indicatorManager.newMACDFastPeriod}
+      newMACDSlowPeriod={indicatorManager.newMACDSlowPeriod}
+      newMACDSignalPeriod={indicatorManager.newMACDSignalPeriod}
       isLoading={indicatorManager.isLoading}
       
       // UI state
@@ -140,12 +143,16 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
       // Actions
       onAddSMA={indicatorManager.handleAddSMA}
       onAddRSI={indicatorManager.handleAddRSI}
+      onAddMACD={indicatorManager.handleAddMACD}
       onRemoveIndicator={handleRemoveIndicator}
       onToggleIndicator={handleToggleIndicator}
       onToggleParameterControls={indicatorManager.toggleParameterControls}
       onParameterUpdate={handleParameterUpdate}
       onNewSMAPeriodChange={indicatorManager.setNewSMAPeriod}
       onNewRSIPeriodChange={indicatorManager.setNewRSIPeriod}
+      onNewMACDFastPeriodChange={indicatorManager.setNewMACDFastPeriod}
+      onNewMACDSlowPeriodChange={indicatorManager.setNewMACDSlowPeriod}
+      onNewMACDSignalPeriodChange={indicatorManager.setNewMACDSignalPeriod}
       onToggleCollapse={onToggleCollapse}
     />
   );

@@ -21,6 +21,9 @@ export interface UseIndicatorManagerReturn {
   localParameterValues: Record<string, Record<string, any>>;
   newSMAPeriod: number;
   newRSIPeriod: number;
+  newMACDFastPeriod: number;
+  newMACDSlowPeriod: number;
+  newMACDSignalPeriod: number;
   isLoading: boolean;
   
   // Actions
@@ -33,8 +36,12 @@ export interface UseIndicatorManagerReturn {
   // Form handlers
   setNewSMAPeriod: (period: number) => void;
   setNewRSIPeriod: (period: number) => void;
+  setNewMACDFastPeriod: (period: number) => void;
+  setNewMACDSlowPeriod: (period: number) => void;
+  setNewMACDSignalPeriod: (period: number) => void;
   handleAddSMA: () => Promise<void>;
   handleAddRSI: () => Promise<void>;
+  handleAddMACD: () => Promise<void>;
   handleParameterUpdate: (indicatorId: string, parameterName: string, value: any) => void;
 }
 
@@ -57,6 +64,9 @@ export const useIndicatorManager = (
   // Form state
   const [newSMAPeriod, setNewSMAPeriod] = useState(20);
   const [newRSIPeriod, setNewRSIPeriod] = useState(14);
+  const [newMACDFastPeriod, setNewMACDFastPeriod] = useState(12);
+  const [newMACDSlowPeriod, setNewMACDSlowPeriod] = useState(26);
+  const [newMACDSignalPeriod, setNewMACDSignalPeriod] = useState(9);
   
   // Refs for tracking
   const initializedIndicatorsRef = useRef<Set<string>>(new Set());
@@ -232,6 +242,33 @@ export const useIndicatorManager = (
     }
   }, [newRSIPeriod, addIndicator, indicators]);
 
+  const handleAddMACD = useCallback(async () => {
+    // Validate MACD parameters
+    if (newMACDFastPeriod >= 2 && newMACDFastPeriod <= 50 &&
+        newMACDSlowPeriod >= 5 && newMACDSlowPeriod <= 100 &&
+        newMACDSignalPeriod >= 2 && newMACDSignalPeriod <= 50 &&
+        newMACDFastPeriod < newMACDSlowPeriod) {
+      
+      // Check for duplicate before adding
+      const duplicate = indicators.some(ind => 
+        ind.name === 'macd' && 
+        ind.parameters.fast_period === newMACDFastPeriod &&
+        ind.parameters.slow_period === newMACDSlowPeriod &&
+        ind.parameters.signal_period === newMACDSignalPeriod
+      );
+      
+      if (duplicate) {
+        return;
+      }
+      
+      await addIndicator('macd', { 
+        fast_period: newMACDFastPeriod,
+        slow_period: newMACDSlowPeriod,
+        signal_period: newMACDSignalPeriod
+      });
+    }
+  }, [newMACDFastPeriod, newMACDSlowPeriod, newMACDSignalPeriod, addIndicator, indicators]);
+
   return {
     // State
     indicators,
@@ -239,6 +276,9 @@ export const useIndicatorManager = (
     localParameterValues,
     newSMAPeriod,
     newRSIPeriod,
+    newMACDFastPeriod,
+    newMACDSlowPeriod,
+    newMACDSignalPeriod,
     isLoading,
     
     // Actions
@@ -251,8 +291,12 @@ export const useIndicatorManager = (
     // Form handlers
     setNewSMAPeriod,
     setNewRSIPeriod,
+    setNewMACDFastPeriod,
+    setNewMACDSlowPeriod,
+    setNewMACDSignalPeriod,
     handleAddSMA,
     handleAddRSI,
+    handleAddMACD,
     handleParameterUpdate
   };
 };

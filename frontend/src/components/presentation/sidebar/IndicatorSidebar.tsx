@@ -15,18 +15,25 @@ interface IndicatorSidebarProps {
   localParameterValues: Record<string, Record<string, any>>;
   newSMAPeriod: number;
   newRSIPeriod: number;
+  newMACDFastPeriod: number;
+  newMACDSlowPeriod: number;
+  newMACDSignalPeriod: number;
   isLoading: boolean;
   isCollapsed?: boolean;
 
   // Action props
   onAddSMA: () => void;
   onAddRSI: () => void;
+  onAddMACD: () => void;
   onRemoveIndicator: (id: string) => void;
   onToggleIndicator: (id: string) => void;
   onToggleParameterControls: (indicatorId: string) => void;
   onParameterUpdate: (indicatorId: string, parameterName: string, value: any) => void;
   onNewSMAPeriodChange: (period: number) => void;
   onNewRSIPeriodChange: (period: number) => void;
+  onNewMACDFastPeriodChange: (period: number) => void;
+  onNewMACDSlowPeriodChange: (period: number) => void;
+  onNewMACDSignalPeriodChange: (period: number) => void;
   onToggleCollapse?: () => void;
 }
 
@@ -36,16 +43,23 @@ const IndicatorSidebar: FC<IndicatorSidebarProps> = ({
   localParameterValues,
   newSMAPeriod,
   newRSIPeriod,
+  newMACDFastPeriod,
+  newMACDSlowPeriod,
+  newMACDSignalPeriod,
   isLoading,
   isCollapsed = false,
   onAddSMA,
   onAddRSI,
+  onAddMACD,
   onRemoveIndicator,
   onToggleIndicator,
   onToggleParameterControls,
   onParameterUpdate,
   onNewSMAPeriodChange,
   onNewRSIPeriodChange,
+  onNewMACDFastPeriodChange,
+  onNewMACDSlowPeriodChange,
+  onNewMACDSignalPeriodChange,
   onToggleCollapse
 }) => {
   if (isCollapsed) {
@@ -217,10 +231,22 @@ const IndicatorSidebar: FC<IndicatorSidebarProps> = ({
             max={100}
             unit="periods"
             buttonLabel={`Add RSI(${newRSIPeriod})`}
-            buttonColor="#9C27B0"
+            buttonColor="#FF5722"
             isLoading={isLoading}
             onValueChange={onNewRSIPeriodChange}
             onAdd={onAddRSI}
+          />
+
+          {/* MACD Section */}
+          <MACDAddSection
+            fastPeriod={newMACDFastPeriod}
+            slowPeriod={newMACDSlowPeriod}
+            signalPeriod={newMACDSignalPeriod}
+            isLoading={isLoading}
+            onFastPeriodChange={onNewMACDFastPeriodChange}
+            onSlowPeriodChange={onNewMACDSlowPeriodChange}
+            onSignalPeriodChange={onNewMACDSignalPeriodChange}
+            onAdd={onAddMACD}
           />
         </div>
       </div>
@@ -541,6 +567,176 @@ const ParameterControls: FC<ParameterControlsProps> = ({
           </>
         )}
       </div>
+    </div>
+  );
+};
+
+/**
+ * MACD add section component for multi-parameter indicators
+ */
+interface MACDAddSectionProps {
+  fastPeriod: number;
+  slowPeriod: number;
+  signalPeriod: number;
+  isLoading: boolean;
+  onFastPeriodChange: (period: number) => void;
+  onSlowPeriodChange: (period: number) => void;
+  onSignalPeriodChange: (period: number) => void;
+  onAdd: () => void;
+}
+
+const MACDAddSection: FC<MACDAddSectionProps> = ({
+  fastPeriod,
+  slowPeriod,
+  signalPeriod,
+  isLoading,
+  onFastPeriodChange,
+  onSlowPeriodChange,
+  onSignalPeriodChange,
+  onAdd
+}) => {
+  // Validation: fast period must be less than slow period
+  const isValid = fastPeriod < slowPeriod && 
+                 fastPeriod >= 2 && fastPeriod <= 50 &&
+                 slowPeriod >= 5 && slowPeriod <= 100 &&
+                 signalPeriod >= 2 && signalPeriod <= 50;
+
+  return (
+    <div>
+      <label style={{ 
+        display: 'block', 
+        fontSize: '0.8rem', 
+        color: '#666', 
+        marginBottom: '0.5rem',
+        fontWeight: '500'
+      }}>
+        Oscillator: MACD (Moving Average Convergence Divergence)
+      </label>
+      
+      {/* Parameter inputs in a grid */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: '1fr 1fr 1fr', 
+        gap: '0.5rem', 
+        marginBottom: '0.5rem' 
+      }}>
+        {/* Fast Period */}
+        <div>
+          <label style={{ 
+            display: 'block', 
+            fontSize: '0.7rem', 
+            color: '#777', 
+            marginBottom: '0.25rem',
+            textAlign: 'center'
+          }}>
+            Fast
+          </label>
+          <input
+            type="number"
+            min={2}
+            max={50}
+            value={fastPeriod}
+            onChange={(e) => onFastPeriodChange(parseInt(e.target.value) || 2)}
+            style={{
+              width: '100%',
+              padding: '0.4rem',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              textAlign: 'center',
+              fontSize: '0.8rem'
+            }}
+            disabled={isLoading}
+          />
+        </div>
+
+        {/* Slow Period */}
+        <div>
+          <label style={{ 
+            display: 'block', 
+            fontSize: '0.7rem', 
+            color: '#777', 
+            marginBottom: '0.25rem',
+            textAlign: 'center'
+          }}>
+            Slow
+          </label>
+          <input
+            type="number"
+            min={5}
+            max={100}
+            value={slowPeriod}
+            onChange={(e) => onSlowPeriodChange(parseInt(e.target.value) || 5)}
+            style={{
+              width: '100%',
+              padding: '0.4rem',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              textAlign: 'center',
+              fontSize: '0.8rem'
+            }}
+            disabled={isLoading}
+          />
+        </div>
+
+        {/* Signal Period */}
+        <div>
+          <label style={{ 
+            display: 'block', 
+            fontSize: '0.7rem', 
+            color: '#777', 
+            marginBottom: '0.25rem',
+            textAlign: 'center'
+          }}>
+            Signal
+          </label>
+          <input
+            type="number"
+            min={2}
+            max={50}
+            value={signalPeriod}
+            onChange={(e) => onSignalPeriodChange(parseInt(e.target.value) || 2)}
+            style={{
+              width: '100%',
+              padding: '0.4rem',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              textAlign: 'center',
+              fontSize: '0.8rem'
+            }}
+            disabled={isLoading}
+          />
+        </div>
+      </div>
+
+      {/* Validation feedback */}
+      {!isValid && (
+        <div style={{
+          fontSize: '0.7rem',
+          color: '#f44336',
+          marginBottom: '0.5rem',
+          textAlign: 'center'
+        }}>
+          {fastPeriod >= slowPeriod ? 'Fast period must be less than slow period' : 'Invalid parameter ranges'}
+        </div>
+      )}
+
+      <button
+        onClick={onAdd}
+        disabled={isLoading || !isValid}
+        style={{
+          padding: '0.5rem 0.75rem',
+          backgroundColor: isLoading || !isValid ? '#ccc' : '#9C27B0',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: isLoading || !isValid ? 'not-allowed' : 'pointer',
+          fontSize: '0.8rem',
+          fontWeight: '500',
+          width: '100%'
+        }}
+      >
+        {isLoading ? 'Adding...' : `Add MACD(${fastPeriod},${slowPeriod},${signalPeriod})`}
+      </button>
     </div>
   );
 };
