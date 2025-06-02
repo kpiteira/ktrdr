@@ -115,10 +115,14 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
           const targetTimeScale = chartRef.chart.timeScale();
           // Additional safety check before setting range
           if (targetTimeScale && typeof targetTimeScale.setVisibleRange === 'function') {
-            targetTimeScale.setVisibleRange(visibleRange);
+            // Only set range if valid
+            if (visibleRange && visibleRange.from && visibleRange.to) {
+              targetTimeScale.setVisibleRange(visibleRange);
+            }
           }
         } catch (error) {
-          logger.error(`Sync failed for: ${chartId}`, error);
+          // Reduce noise - sync errors are not critical
+          logger.warn(`Sync failed for: ${chartId}`, error);
         }
       });
     } catch (error) {
@@ -149,14 +153,22 @@ export const useChartSynchronizer = (): UseChartSynchronizerReturn => {
 
   // Set visible range for all charts
   const setAllChartsVisibleRange = useCallback((from: number, to: number) => {
+    // Validate inputs
+    if (!from || !to || isNaN(from) || isNaN(to) || from >= to) {
+      return;
+    }
+
     syncInProgressRef.current = true;
 
     try {
       chartsRef.current.forEach((chartRef) => {
         try {
-          chartRef.chart.timeScale().setVisibleRange({ from, to });
+          const timeScale = chartRef.chart.timeScale();
+          if (timeScale && typeof timeScale.setVisibleRange === 'function') {
+            timeScale.setVisibleRange({ from, to });
+          }
         } catch (error) {
-          logger.error('Error setting visible range:', error);
+          logger.warn('Error setting visible range:', error);
         }
       });
     } finally {

@@ -183,6 +183,12 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
 
   // Calculate oscillator data for a given indicator
   const calculateOscillatorData = useCallback(async (indicator: IndicatorInfo, baseData: CandlestickData[]) => {
+    // Temporary: Skip MACD calculation until Task 3 implementation
+    if (indicator.name === 'macd') {
+      console.warn(`[OscillatorChartContainer] MACD calculation not yet implemented - returning empty data`);
+      return [];
+    }
+
     try {
       const indicatorId = indicator.name === 'rsi' ? 'RSIIndicator' : 
                          indicator.name === 'macd' ? 'MACDIndicator' :
@@ -262,6 +268,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       return lineData;
 
     } catch (error) {
+      console.warn(`[OscillatorChartContainer] Failed to calculate ${indicator.name}:`, error);
       return [];
     }
   }, [symbol, timeframe]);
@@ -281,15 +288,27 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       try {
         // Calculate data for each oscillator indicator in parallel
         const oscillatorPromises = oscillatorIndicators.map(async (indicator) => {
-          const indicatorData = await calculateOscillatorData(indicator, priceData);
-          
-          return {
-            id: indicator.id,
-            name: indicator.displayName,
-            data: indicatorData,
-            color: indicator.parameters.color || '#FF5722',
-            visible: indicator.visible
-          };
+          try {
+            const indicatorData = await calculateOscillatorData(indicator, priceData);
+            
+            return {
+              id: indicator.id,
+              name: indicator.displayName,
+              data: indicatorData,
+              color: indicator.parameters.color || '#FF5722',
+              visible: indicator.visible
+            };
+          } catch (error) {
+            console.warn(`[OscillatorChartContainer] Skipping failed indicator ${indicator.name}:`, error);
+            // Return indicator with empty data instead of failing completely
+            return {
+              id: indicator.id,
+              name: indicator.displayName,
+              data: [],
+              color: indicator.parameters.color || '#FF5722',
+              visible: indicator.visible
+            };
+          }
         });
         
         const oscillatorSeries = await Promise.all(oscillatorPromises);

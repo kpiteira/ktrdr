@@ -362,7 +362,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
       {/* Fuzzy Overlay */}
       <FuzzyOverlay
         chartInstance={chartRef.current}
-        fuzzyData={fuzzyData}
+        fuzzyData={fuzzyData || null}
         visible={fuzzyVisible}
         opacity={fuzzyOpacity}
         colorScheme={fuzzyColorScheme}
