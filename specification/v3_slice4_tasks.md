@@ -163,51 +163,58 @@ This task breakdown implements the Fuzzy Data Overlay API to expose time-series 
 
 ---
 
-## Task 7: Redux Store Integration
-**File**: `frontend/src/store/fuzzySlice.ts`
-**Commit**: "feat: Add Redux slice for fuzzy overlay state"
+## Task 7: Enhanced Fuzzy Data Hook
+**File**: `frontend/src/hooks/useFuzzyData.ts` (enhancement)
+**Commit**: "feat: Add enhanced fuzzy data hook with caching"
 
 ```
-1. Create fuzzySlice with initial state:
-   - overlays: FuzzyOverlayData | null
-   - loading: boolean
-   - error: string | null
-2. Add actions:
-   - setFuzzyOverlays
-   - clearFuzzyOverlays
-   - setFuzzyLoading
-   - setFuzzyError
-3. Create thunk for fetching:
-   - fetchFuzzyOverlays(symbol, timeframe, indicators?)
-4. Add selectors:
-   - selectFuzzyOverlays
-   - selectFuzzyByIndicator
-5. Implement cache invalidation logic
-6. Add TypeScript types for all actions
-7. Create store tests
+1. Enhance useFuzzyData hook with:
+   - Request deduplication
+   - Response caching with TTL
+   - Automatic cleanup on unmount
+   - Error retry logic
+2. Add state management:
+   - loading states per request
+   - error handling with typed errors
+   - warning collection from API
+3. Implement performance optimizations:
+   - useMemo for expensive data transformations
+   - useCallback for stable function references
+   - Abort controller for request cancellation
+4. Add comprehensive error handling
+5. Follow existing hook patterns in codebase
+6. Create hook integration tests
+7. Add JSDoc documentation
 ```
 
-**Test**: `fuzzySlice.test.ts` - Test reducers, actions, selectors
+**Test**: `useFuzzyData.test.tsx` - Test enhanced hook functionality
 
 ---
 
-## Task 8: Integration with Existing Store
-**File**: `frontend/src/store/index.ts` (modification)
-**Commit**: "feat: Integrate fuzzy slice into root store"
+## Task 8: API Client Error Handling
+**File**: `frontend/src/api/endpoints/fuzzy.ts` (enhancement)
+**Commit**: "feat: Add robust error handling to fuzzy API client"
 
 ```
-1. Import fuzzySlice reducer
-2. Add to root reducer configuration
-3. Update RootState type
-4. Create typed hooks:
-   - useAppSelector with fuzzy selectors
-   - useAppDispatch with fuzzy actions
-5. Add fuzzy state persistence config (if needed)
-6. Update store DevTools configuration
-7. Test store integration
+1. Enhance getFuzzyOverlay API client:
+   - Add retry logic with exponential backoff
+   - Implement request timeout handling
+   - Add network error detection
+   - Handle partial response scenarios
+2. Add typed error responses:
+   - ValidationError for invalid parameters
+   - NetworkError for connection issues
+   - ServerError for backend failures
+3. Implement request cancellation:
+   - AbortController integration
+   - Cleanup on component unmount
+4. Add comprehensive logging
+5. Follow existing API client patterns
+6. Create error handling tests
+7. Add error recovery strategies
 ```
 
-**Test**: `store.integration.test.ts` - Verify fuzzy state in root store
+**Test**: `fuzzy.api.test.ts` - Test error scenarios and recovery
 
 ---
 
@@ -292,8 +299,9 @@ graph TD
     T2 --> T4
     T4 --> T5[Task 5: Frontend Client]
     T5 --> T6[Task 6: React Hook]
-    T5 --> T7[Task 7: Redux Slice]
-    T7 --> T8[Task 8: Store Integration]
+    T5 --> T7[Task 7: Enhanced Hook]
+    T6 --> T7
+    T7 --> T8[Task 8: API Error Handling]
     T6 --> T10[Task 10: Data Inspector]
     T8 --> T10
     T4 --> T9[Task 9: Backend Tests]

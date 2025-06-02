@@ -112,7 +112,7 @@ The frontend requires a batch endpoint to retrieve fuzzy overlays for each indic
 | `services/fuzzy_service.py`   | Internal logic for fuzzy set aggregation            |
 | `frontend/src/api/fuzzy.ts`   | Typed client for `GET /fuzzy/data`                  |
 | `frontend/hooks/useFuzzyData` | Hook to call and store fuzzy overlay data           |
-| `frontend/store/`             | Add fuzzy overlay state scaffold (no rendering yet) |
+| `frontend/api/endpoints/`     | Add fuzzy API client with typed responses           |
 
 ---
 
@@ -170,21 +170,25 @@ export function useFuzzyData(symbol: string, timeframe: string, indicators?: str
 
 ---
 
-## 🧩 Store Strategy
+## 🧩 State Management Strategy
 
-* Store structure:
+**Using React Hooks + Context Architecture:**
+
+* Local state management with custom hooks:
 
 ```ts
-interface AppState {
-  fuzzyOverlays: FuzzyOverlayData | null;
+// Custom hook for fuzzy data management
+export function useFuzzyData(symbol: string, timeframe: string, indicators?: string[]) {
+  const [data, setData] = useState<FuzzyOverlayData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // ... hook implementation
 }
 ```
 
-* Extend global reducer with actions:
-
-  * `SET_FUZZY_OVERLAYS`
-  * `CLEAR_FUZZY_OVERLAYS`
-* Use selector hooks like `useFuzzyOverlay(symbol, tf)` to pull scoped overlays
+* Container components manage fuzzy state locally
+* No global Redux store - follows existing Container/Presentation pattern
+* Share data between components via Context if needed
 
 ---
 

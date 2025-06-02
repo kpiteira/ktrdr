@@ -116,7 +116,9 @@ class FuzzyService(BaseService):
 
             self.fuzzy_engine = FuzzyEngine(self.config)
             self.batch_calculator = BatchFuzzyCalculator(self.fuzzy_engine)
-            self.logger.info("FuzzyService initialized with configuration and batch calculator")
+            self.logger.info(
+                "FuzzyService initialized with configuration and batch calculator"
+            )
         except Exception as e:
             self.logger.error(f"Failed to initialize fuzzy engine: {str(e)}")
             # Create a minimal valid configuration instead of an empty one
@@ -413,7 +415,7 @@ class FuzzyService(BaseService):
             self.logger.info(f"Loaded {len(df)} data points for {symbol} ({timeframe})")
 
             # Extract dates for later use
-            dates = df.index.strftime("%Y-%m-%d %H:%M:%S").tolist()
+            dates = [dt.strftime("%Y-%m-%d %H:%M:%S") for dt in df.index]
 
             # Create response structure
             response = {
@@ -495,20 +497,20 @@ class FuzzyService(BaseService):
     ) -> Dict[str, Any]:
         """
         Get fuzzy membership overlays for indicators over time.
-        
+
         This is the main method for the new /fuzzy/data endpoint that provides
         time series fuzzy membership values for chart overlays.
-        
+
         Args:
             symbol: Trading symbol (e.g., "AAPL")
             timeframe: Data timeframe (e.g., "1h", "1d")
             indicators: List of indicator names (if None, return all configured indicators)
             start_date: Optional start date for filtering
             end_date: Optional end date for filtering
-            
+
         Returns:
             Dictionary containing fuzzy overlay data structured for frontend consumption
-            
+
         Raises:
             DataError: If there is an error loading the required data
             ConfigurationError: If there is an error in the configuration
@@ -516,14 +518,14 @@ class FuzzyService(BaseService):
         """
         try:
             overall_perf = self.track_performance("get_fuzzy_overlays")
-            
+
             if not self.fuzzy_engine or not self.batch_calculator:
                 raise ConfigurationError(
                     message="Fuzzy engine is not initialized",
                     error_code="CONFIG-FuzzyEngineNotInitialized",
                     details={},
                 )
-            
+
             self.log_operation(
                 "get_fuzzy_overlays",
                 symbol=symbol,
@@ -532,18 +534,20 @@ class FuzzyService(BaseService):
                 start_date=start_date,
                 end_date=end_date,
             )
-            
+
             # Determine which indicators to process
             available_indicators = self.fuzzy_engine.get_available_indicators()
             if indicators is None:
                 # Return all configured indicators
                 target_indicators = available_indicators
-                self.logger.debug(f"Using all available indicators: {target_indicators}")
+                self.logger.debug(
+                    f"Using all available indicators: {target_indicators}"
+                )
             else:
                 # Validate requested indicators and filter out unknown ones
                 target_indicators = []
                 warnings = []
-                
+
                 for indicator in indicators:
                     if indicator in available_indicators:
                         target_indicators.append(indicator)
@@ -551,10 +555,10 @@ class FuzzyService(BaseService):
                         warning_msg = f"Unknown indicator '{indicator}' - skipping"
                         warnings.append(warning_msg)
                         self.logger.warning(warning_msg)
-                
+
                 if not target_indicators:
                     self.logger.warning("No valid indicators found after filtering")
-            
+
             # Load OHLCV data
             load_perf = self.track_performance("load_ohlcv_data")
             try:
@@ -577,100 +581,113 @@ class FuzzyService(BaseService):
                         "error": str(e),
                     },
                 ) from e
-            
+
             if df is None or df.empty:
                 raise DataError(
                     message=f"No data available for {symbol} ({timeframe})",
                     error_code="DATA-NoData",
                     details={"symbol": symbol, "timeframe": timeframe},
                 )
-            
+
             load_perf["end_tracking"]()
-            self.logger.info(f"Loaded {len(df)} OHLCV data points for {symbol} ({timeframe})")
-            
+            self.logger.info(
+                f"Loaded {len(df)} OHLCV data points for {symbol} ({timeframe})"
+            )
+
             # Apply default range logic (e.g., most recent 10000 bars)
             max_bars = 10000
             if len(df) > max_bars:
                 df = df.tail(max_bars)
                 self.logger.debug(f"Limited data to most recent {max_bars} bars")
-            
+
             # Calculate indicators and compute fuzzy memberships
             fuzzy_overlay_data = {}
             processing_warnings = []
-            
+
             for indicator_name in target_indicators:
                 try:
                     indicator_perf = self.track_performance(f"process_{indicator_name}")
-                    
+
                     # Calculate or get indicator values
-                    indicator_series = await self._get_indicator_values(df, indicator_name)
-                    
+                    indicator_series = await self._get_indicator_values(
+                        df, indicator_name
+                    )
+
                     if indicator_series is None:
                         warning_msg = f"Failed to calculate indicator '{indicator_name}' - skipping"
                         processing_warnings.append(warning_msg)
                         self.logger.warning(warning_msg)
                         continue
-                    
+
                     # Compute fuzzy memberships using batch calculator
                     membership_results = self.batch_calculator.calculate_memberships(
                         indicator_name, indicator_series
                     )
-                    
+
                     # Structure results for frontend consumption
                     indicator_fuzzy_sets = []
                     fuzzy_sets = self.fuzzy_engine.get_fuzzy_sets(indicator_name)
-                    
+
                     for set_name in fuzzy_sets:
                         output_name = f"{indicator_name}_{set_name}"
                         if output_name in membership_results:
                             membership_series = membership_results[output_name]
-                            
+
                             # Convert to list of timestamp/value pairs
                             membership_points = []
                             for timestamp, value in membership_series.items():
-                                membership_points.append({
-                                    "timestamp": timestamp.isoformat(),
-                                    "value": float(value) if pd.notna(value) else None
-                                })
-                            
-                            indicator_fuzzy_sets.append({
-                                "set": set_name,
-                                "membership": membership_points
-                            })
-                    
+                                membership_points.append(
+                                    {
+                                        "timestamp": timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                                        "value": (
+                                            float(value) if pd.notna(value) else None
+                                        ),
+                                    }
+                                )
+
+                            indicator_fuzzy_sets.append(
+                                {"set": set_name, "membership": membership_points}
+                            )
+
                     fuzzy_overlay_data[indicator_name] = indicator_fuzzy_sets
-                    
+
                     indicator_perf["end_tracking"]()
-                    self.logger.debug(f"Processed fuzzy memberships for {indicator_name}")
-                    
+                    self.logger.debug(
+                        f"Processed fuzzy memberships for {indicator_name}"
+                    )
+
                 except Exception as e:
-                    warning_msg = f"Error processing indicator '{indicator_name}': {str(e)}"
+                    warning_msg = (
+                        f"Error processing indicator '{indicator_name}': {str(e)}"
+                    )
                     processing_warnings.append(warning_msg)
                     self.logger.warning(warning_msg)
                     # Continue with other indicators
-            
+
             # Prepare response
             response = {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "data": fuzzy_overlay_data
+                "data": fuzzy_overlay_data,
             }
-            
+
             # Add warnings if any occurred
-            all_warnings = (warnings if 'warnings' in locals() else []) + processing_warnings
+            all_warnings = (
+                warnings if "warnings" in locals() else []
+            ) + processing_warnings
             if all_warnings:
                 response["warnings"] = all_warnings
-            
+
             end_tracking = overall_perf["end_tracking"]
             performance_metrics = end_tracking()
-            
+
             self.logger.info(
                 f"Generated fuzzy overlays for {len(fuzzy_overlay_data)} indicators "
                 f"with {len(df)} data points in {performance_metrics.get('duration_ms', 0):.2f}ms"
             )
-            
+
             return response
-            
+
         except (DataError, ConfigurationError) as e:
             # Re-raise known error types
             raise
@@ -681,74 +698,116 @@ class FuzzyService(BaseService):
                 error_code="PROC-UnexpectedFuzzyOverlayError",
                 details={"error": str(e)},
             ) from e
-    
-    async def _get_indicator_values(self, df: pd.DataFrame, indicator_name: str) -> Optional[pd.Series]:
+
+    async def _get_indicator_values(
+        self, df: pd.DataFrame, indicator_name: str
+    ) -> Optional[pd.Series]:
         """
         Get or calculate indicator values from the OHLCV dataframe.
-        
+
         Args:
             df: OHLCV dataframe
             indicator_name: Name of the indicator
-            
+
         Returns:
             Series with indicator values or None if calculation fails
         """
         try:
             # Check if it's a direct OHLCV column first
-            if indicator_name.lower() in ['open', 'high', 'low', 'close', 'volume']:
+            if indicator_name.lower() in ["open", "high", "low", "close", "volume"]:
                 column_name = indicator_name.lower()
                 if column_name in df.columns:
                     return df[column_name]
-            
+
             # Use IndicatorEngine to calculate the indicator
             indicator_perf = self.track_performance(f"calculate_{indicator_name}")
-            
+
             try:
                 # Map indicator names to their calculation methods
-                if indicator_name.lower() == 'rsi':
+                if indicator_name.lower() == "rsi":
                     result_df = self.indicator_engine.compute_rsi(data=df)
-                    # RSI calculation returns a dataframe with an 'rsi' column
-                    if 'rsi' in result_df.columns:
-                        indicator_series = result_df['rsi']
+                    # RSI calculation returns a dataframe with an 'RSI_14' column (or similar)
+                    rsi_columns = [
+                        col for col in result_df.columns if "rsi" in col.lower()
+                    ]
+                    if rsi_columns:
+                        indicator_series = result_df[
+                            rsi_columns[0]
+                        ]  # Use first RSI column found
                         indicator_perf["end_tracking"]()
                         return indicator_series
-                        
-                elif indicator_name.lower() == 'macd':
+                    else:
+                        self.logger.warning(f"No RSI column found in result")
+                        return None
+
+                elif indicator_name.lower() == "macd":
                     result_df = self.indicator_engine.compute_macd(data=df)
                     # MACD calculation returns multiple columns, use the main MACD line
-                    if 'macd' in result_df.columns:
-                        indicator_series = result_df['macd']
+                    macd_columns = [
+                        col
+                        for col in result_df.columns
+                        if "macd" in col.lower()
+                        and "signal" not in col.lower()
+                        and "histogram" not in col.lower()
+                    ]
+                    if macd_columns:
+                        indicator_series = result_df[
+                            macd_columns[0]
+                        ]  # Use main MACD line
                         indicator_perf["end_tracking"]()
                         return indicator_series
-                        
-                elif indicator_name.lower() == 'ema':
+                    else:
+                        self.logger.warning(f"No MACD column found in result")
+                        return None
+
+                elif indicator_name.lower() == "ema":
                     result_df = self.indicator_engine.compute_ema(data=df)
-                    # EMA calculation returns a dataframe with an 'ema' column
-                    if 'ema' in result_df.columns:
-                        indicator_series = result_df['ema']
+                    # EMA calculation returns a dataframe with an EMA column
+                    ema_columns = [
+                        col for col in result_df.columns if "ema" in col.lower()
+                    ]
+                    if ema_columns:
+                        indicator_series = result_df[
+                            ema_columns[0]
+                        ]  # Use first EMA column found
                         indicator_perf["end_tracking"]()
                         return indicator_series
-                        
-                elif indicator_name.lower() == 'sma':
+                    else:
+                        self.logger.warning(f"No EMA column found in result")
+                        return None
+
+                elif indicator_name.lower() == "sma":
                     result_df = self.indicator_engine.compute_sma(data=df)
-                    # SMA calculation returns a dataframe with an 'sma' column
-                    if 'sma' in result_df.columns:
-                        indicator_series = result_df['sma']
+                    # SMA calculation returns a dataframe with an SMA column
+                    sma_columns = [
+                        col for col in result_df.columns if "sma" in col.lower()
+                    ]
+                    if sma_columns:
+                        indicator_series = result_df[
+                            sma_columns[0]
+                        ]  # Use first SMA column found
                         indicator_perf["end_tracking"]()
                         return indicator_series
-                
+                    else:
+                        self.logger.warning(f"No SMA column found in result")
+                        return None
+
                 else:
                     self.logger.warning(f"Unknown indicator: {indicator_name}")
                     return None
-                    
+
             except Exception as e:
-                self.logger.warning(f"Failed to calculate indicator {indicator_name}: {str(e)}")
+                self.logger.warning(
+                    f"Failed to calculate indicator {indicator_name}: {str(e)}"
+                )
                 return None
             finally:
                 indicator_perf["end_tracking"]()
-                
+
         except Exception as e:
-            self.logger.error(f"Error getting indicator values for {indicator_name}: {str(e)}")
+            self.logger.error(
+                f"Error getting indicator values for {indicator_name}: {str(e)}"
+            )
             return None
 
     async def health_check(self) -> Dict[str, Any]:
@@ -773,21 +832,17 @@ class FuzzyService(BaseService):
             available_indicators = self.fuzzy_engine.get_available_indicators()
 
             # Get a sample fuzzy set for testing if available
-            sample_fuzzy_sets = {}
+            sample_fuzzy_sets: List[str] = []
             if available_indicators:
                 sample_indicator = available_indicators[0]
-                sample_fuzzy_sets = self.fuzzy_engine.get_fuzzy_sets(sample_indicator)
+                sample_fuzzy_sets = list(self.fuzzy_engine.get_fuzzy_sets(sample_indicator))
 
             return {
                 "status": status,
                 "initialized": True,
                 "available_indicators": len(available_indicators),
                 "indicator_names": available_indicators[:5],  # First 5 indicators
-                "sample_fuzzy_sets": (
-                    sample_fuzzy_sets[:5]
-                    if isinstance(sample_fuzzy_sets, list)
-                    else list(sample_fuzzy_sets)[:5]
-                ),  # First 5 fuzzy sets
+                "sample_fuzzy_sets": sample_fuzzy_sets[:5],  # First 5 fuzzy sets
                 "message": message,
             }
         except Exception as e:
