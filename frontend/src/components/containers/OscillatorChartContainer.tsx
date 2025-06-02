@@ -201,12 +201,17 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
         indicators: [
           {
             id: indicatorId,
-            parameters: {
+            parameters: indicator.name === 'macd' ? {
+              fast_period: indicator.parameters.fast_period,
+              slow_period: indicator.parameters.slow_period,
+              signal_period: indicator.parameters.signal_period,
+              source: 'close'
+            } : {
               period: indicator.parameters.period,
               source: 'close'
             },
             output_name: indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
-                        indicator.name === 'macd' ? `MACD_${indicator.parameters.period}` :
+                        indicator.name === 'macd' ? `MACD_${indicator.parameters.fast_period}_${indicator.parameters.slow_period}` :
                         `${indicator.name.toUpperCase()}_${indicator.parameters.period}`
           }
         ]
@@ -231,7 +236,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       }
 
       const outputName = indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
-                        indicator.name === 'macd' ? `MACD_${indicator.parameters.period}` :
+                        indicator.name === 'macd' ? `MACD_${indicator.parameters.fast_period}_${indicator.parameters.slow_period}` :
                         `${indicator.name.toUpperCase()}_${indicator.parameters.period}`;
                          
       const oscillatorValues = result.indicators?.[outputName] || 
