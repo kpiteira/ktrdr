@@ -3,6 +3,7 @@ import { IChartApi, LineData, UTCTimestamp, CandlestickData } from 'lightweight-
 import OscillatorChart, { OscillatorData, OscillatorIndicatorSeries } from '../presentation/charts/OscillatorChart';
 import { useChartSynchronizer } from '../../hooks/useChartSynchronizer';
 import { IndicatorInfo, getIndicatorConfig } from '../../store/indicatorRegistry';
+import { useFuzzyOverlay } from '../../hooks/useFuzzyOverlay';
 import { createLogger } from '../../utils/logger';
 
 /**
@@ -63,6 +64,14 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   // Chart reference for synchronization
   const chartRef = useRef<IChartApi | null>(null);
   
+  // Filter indicators to only oscillator types (chartType: 'separate')
+  const oscillatorIndicators = useMemo(() => {
+    return indicators.filter(ind => {
+      const config = getIndicatorConfig(ind.name);
+      return config?.chartType === 'separate';
+    });
+  }, [indicators]);
+
   // Get oscillator configuration based on the indicators we have
   const getOscillatorConfig = useCallback(() => {
     // If we have RSI indicators, use RSI config
@@ -86,13 +95,32 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     };
   }, [indicators]);
 
-  // Filter indicators to only oscillator types (chartType: 'separate')
-  const oscillatorIndicators = useMemo(() => {
-    return indicators.filter(ind => {
-      const config = getIndicatorConfig(ind.name);
-      return config?.chartType === 'separate';
-    });
-  }, [indicators]);
+  // Fuzzy overlay state - we'll manage individual overlays
+  // For MVP, we'll focus on RSI fuzzy overlays (the most common oscillator)
+  const rsiIndicator = useMemo(() => 
+    oscillatorIndicators.find(ind => ind.name === 'rsi'), 
+    [oscillatorIndicators]
+  );
+  
+  // Calculate date range for fuzzy data (same as price data)
+  const dateRange = useMemo(() => {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 3);
+    return {
+      start: startDate.toISOString().split('T')[0],
+      end: endDate.toISOString().split('T')[0]
+    };
+  }, []);
+
+  // Fuzzy overlay hook for RSI indicator (if present)
+  const rsiFuzzyOverlay = useFuzzyOverlay(
+    rsiIndicator?.id || 'no-rsi',
+    symbol,
+    timeframe,
+    dateRange,
+    rsiIndicator?.fuzzyVisible || false
+  );
 
   // Internal state
   const [priceData, setPriceData] = useState<CandlestickData[]>([]);
@@ -324,6 +352,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     return null;
   }
 
+
   return (
     <OscillatorChart
       width={width}
@@ -331,6 +360,10 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       oscillatorData={oscillatorData}
       isLoading={isLoading}
       error={error}
+      fuzzyData={rsiIndicator ? rsiFuzzyOverlay.fuzzyData : null}
+      fuzzyVisible={rsiIndicator ? !!rsiIndicator.fuzzyVisible : false}
+      fuzzyOpacity={rsiIndicator ? rsiIndicator.fuzzyOpacity || rsiFuzzyOverlay.opacity : 0.3}
+      fuzzyColorScheme={rsiIndicator ? rsiIndicator.fuzzyColorScheme || rsiFuzzyOverlay.colorScheme : 'default'}
       onChartCreated={handleChartCreated}
       onChartDestroyed={handleChartDestroyed}
       onCrosshairMove={handleCrosshairMove}

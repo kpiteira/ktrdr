@@ -110,9 +110,16 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
     if (onIndicatorUpdated) {
       const indicator = indicatorManager.indicators.find(ind => ind.id === indicatorId);
       if (indicator) {
-        onIndicatorUpdated(indicatorId, { 
-          parameters: { ...indicator.parameters, [parameterName]: value } 
-        });
+        // Handle fuzzy parameters differently from regular parameters
+        const isFuzzyParameter = ['fuzzyVisible', 'fuzzyOpacity', 'fuzzyColorScheme'].includes(parameterName);
+        
+        if (isFuzzyParameter) {
+          onIndicatorUpdated(indicatorId, { [parameterName]: value });
+        } else {
+          onIndicatorUpdated(indicatorId, { 
+            parameters: { ...indicator.parameters, [parameterName]: value } 
+          });
+        }
       }
     }
   }, [indicatorManager.handleParameterUpdate, indicatorManager.indicators, onIndicatorUpdated]);

@@ -347,6 +347,7 @@ const IndicatorItem: FC<IndicatorItemProps> = ({
         <ParameterControls
           config={config}
           localValues={localParameterValues}
+          indicator={indicator}
           onParameterUpdate={onParameterUpdate}
         />
       )}
@@ -360,14 +361,19 @@ const IndicatorItem: FC<IndicatorItemProps> = ({
 interface ParameterControlsProps {
   config: any;
   localValues: Record<string, any>;
+  indicator: IndicatorInfo;
   onParameterUpdate: (parameterName: string, value: any) => void;
 }
 
 const ParameterControls: FC<ParameterControlsProps> = ({
   config,
   localValues,
+  indicator,
   onParameterUpdate
 }) => {
+  // Check if this indicator supports fuzzy overlays (currently only RSI)
+  const supportsFuzzy = indicator.name === 'rsi';
+
   return (
     <div
       style={{
@@ -380,6 +386,7 @@ const ParameterControls: FC<ParameterControlsProps> = ({
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {/* Standard indicator parameters */}
         {config.parameterDefinitions.map((paramDef: any) => (
           <div key={paramDef.name}>
             <label style={{ display: 'block', color: '#666', marginBottom: '0.25rem' }}>
@@ -448,6 +455,91 @@ const ParameterControls: FC<ParameterControlsProps> = ({
             )}
           </div>
         ))}
+
+        {/* Fuzzy overlay controls - only shown for supported indicators */}
+        {supportsFuzzy && (
+          <>
+            <div style={{ 
+              borderTop: '1px solid #ddd', 
+              marginTop: '0.5rem', 
+              paddingTop: '0.5rem' 
+            }}>
+              <label style={{ 
+                display: 'block', 
+                color: '#666', 
+                marginBottom: '0.5rem',
+                fontWeight: '600',
+                fontSize: '0.75rem'
+              }}>
+                🔮 Fuzzy Overlays
+              </label>
+              
+              {/* Fuzzy visibility toggle */}
+              <div style={{ marginBottom: '0.5rem' }}>
+                <label style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem',
+                  cursor: 'pointer'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={indicator.fuzzyVisible || false}
+                    onChange={(e) => onParameterUpdate('fuzzyVisible', e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#555' }}>
+                    Show fuzzy membership
+                  </span>
+                </label>
+              </div>
+
+              {/* Fuzzy opacity slider - only shown when fuzzy is visible */}
+              {indicator.fuzzyVisible && (
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <label style={{ display: 'block', color: '#666', marginBottom: '0.25rem', fontSize: '0.75rem' }}>
+                    Opacity: {Math.round((indicator.fuzzyOpacity || 0.3) * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={1.0}
+                    step={0.1}
+                    value={indicator.fuzzyOpacity || 0.3}
+                    onChange={(e) => onParameterUpdate('fuzzyOpacity', parseFloat(e.target.value))}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+
+              {/* Color scheme selector - only shown when fuzzy is visible */}
+              {indicator.fuzzyVisible && (
+                <div>
+                  <label style={{ display: 'block', color: '#666', marginBottom: '0.25rem', fontSize: '0.75rem' }}>
+                    Color scheme:
+                  </label>
+                  <select
+                    value={indicator.fuzzyColorScheme || 'default'}
+                    onChange={(e) => onParameterUpdate('fuzzyColorScheme', e.target.value)}
+                    style={{
+                      padding: '0.25rem',
+                      border: '1px solid #ccc',
+                      borderRadius: '3px',
+                      fontSize: '0.75rem',
+                      width: '100%'
+                    }}
+                  >
+                    <option value="default">Default (Blue/Gray/Red)</option>
+                    <option value="monochrome">Monochrome (Grayscale)</option>
+                    <option value="trading">Trading (Red/Green)</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

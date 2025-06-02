@@ -174,23 +174,29 @@ export const useIndicatorManager = (
 
   // Handle parameter updates
   const handleParameterUpdate = useCallback((indicatorId: string, parameterName: string, value: any) => {
+    // Check if this is a fuzzy parameter (top-level property) or regular parameter
+    const isFuzzyParameter = ['fuzzyVisible', 'fuzzyOpacity', 'fuzzyColorScheme'].includes(parameterName);
     
-    // Update local state immediately for responsive UI
-    setLocalParameterValues(prev => {
-      const newValues = {
-        ...prev,
-        [indicatorId]: {
-          ...prev[indicatorId],
-          [parameterName]: value
-        }
-      };
-      return newValues;
-    });
+    // Update local state immediately for responsive UI (only for regular parameters)
+    if (!isFuzzyParameter) {
+      setLocalParameterValues(prev => {
+        const newValues = {
+          ...prev,
+          [indicatorId]: {
+            ...prev[indicatorId],
+            [parameterName]: value
+          }
+        };
+        return newValues;
+      });
+    }
     
-    // Update indicator parameters
+    // Update indicator state
     setIndicators(prev => prev.map(ind => 
       ind.id === indicatorId 
-        ? { ...ind, parameters: { ...ind.parameters, [parameterName]: value } }
+        ? isFuzzyParameter
+          ? { ...ind, [parameterName]: value }  // Fuzzy parameters are top-level
+          : { ...ind, parameters: { ...ind.parameters, [parameterName]: value } }  // Regular parameters
         : ind
     ));
   }, []);

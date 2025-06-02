@@ -37,6 +37,13 @@ export interface IndicatorInfo {
   visible: boolean;
   chartType: 'overlay' | 'separate';
   data?: number[];
+  // Fuzzy overlay properties
+  /** Whether fuzzy membership overlays are visible on the chart (default: false) */
+  fuzzyVisible?: boolean;
+  /** Opacity of fuzzy overlays, range 0.0-1.0 (default: 0.3) */
+  fuzzyOpacity?: number;
+  /** Color scheme for fuzzy sets: 'default', 'monochrome', 'trading' (default: 'default') */
+  fuzzyColorScheme?: string;
 }
 
 // Centralized indicator registry
@@ -195,7 +202,11 @@ export const createIndicatorInstance = (
     displayName: config.displayName,
     parameters: { ...config.defaultParameters, ...customParameters },
     visible: true,
-    chartType: config.chartType
+    chartType: config.chartType,
+    // Fuzzy overlay defaults
+    fuzzyVisible: false,
+    fuzzyOpacity: 0.3,
+    fuzzyColorScheme: 'default'
   };
 };
 

@@ -1,28 +1,12 @@
 {
   "cache": {
-    "NVDA": {
-      "symbol": "NVDA",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "NVIDIA CORP",
-      "validated_at": 1748801402.5406463
-    },
-    "EURUSD": {
-      "symbol": "EURUSD",
-      "asset_type": "CASH",
-      "exchange": "IDEALPRO",
-      "currency": "USD",
-      "description": "European Monetary Union Euro",
-      "validated_at": 1748801403.8937297
-    },
     "MSFT": {
       "symbol": "MSFT",
       "asset_type": "STK",
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "MICROSOFT CORP",
-      "validated_at": 1748801404.8997414
+      "validated_at": 1748905818.5347745
     },
     "AAPL": {
       "symbol": "AAPL",
@@ -30,7 +14,15 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "APPLE INC",
-      "validated_at": 1748801411.8436003
+      "validated_at": 1748906422.184994
+    },
+    "NVDA": {
+      "symbol": "NVDA",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "NVIDIA CORP",
+      "validated_at": 1748901834.0892775
     },
     "TSLA": {
       "symbol": "TSLA",
@@ -38,9 +30,9 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "TESLA INC",
-      "validated_at": 1748801477.2074757
+      "validated_at": 1748901837.3442197
     }
   },
   "failed_symbols": [],
-  "last_updated": 1748801477.2074845
+  "last_updated": 1748906422.1850426
 }

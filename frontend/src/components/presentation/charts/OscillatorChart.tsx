@@ -10,6 +10,8 @@ import {
 import LoadingSpinner from '../../common/LoadingSpinner';
 import ErrorDisplay from '../../common/ErrorDisplay';
 import EmptyState from '../../common/EmptyState';
+import FuzzyOverlay from './FuzzyOverlay';
+import { ChartFuzzyData } from '../../../api/types/fuzzy';
 
 /**
  * Generic presentation component for oscillator charts
@@ -48,6 +50,12 @@ interface OscillatorChartProps {
   isLoading: boolean;
   error: string | null;
   
+  // Fuzzy overlay props
+  fuzzyData?: ChartFuzzyData[] | null;
+  fuzzyVisible?: boolean;
+  fuzzyOpacity?: number;
+  fuzzyColorScheme?: string;
+  
   // Chart synchronization
   onChartCreated?: (chart: IChartApi) => void;
   onChartDestroyed?: () => void;
@@ -75,6 +83,10 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
   oscillatorData,
   isLoading,
   error,
+  fuzzyData,
+  fuzzyVisible = false,
+  fuzzyOpacity = 0.3,
+  fuzzyColorScheme = 'default',
   onChartCreated,
   onChartDestroyed,
   onCrosshairMove,
@@ -346,6 +358,16 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
           />
         </div>
       )}
+      
+      {/* Fuzzy Overlay */}
+      <FuzzyOverlay
+        chartInstance={chartRef.current}
+        fuzzyData={fuzzyData}
+        visible={fuzzyVisible}
+        opacity={fuzzyOpacity}
+        colorScheme={fuzzyColorScheme}
+        indicatorId="oscillator-chart"
+      />
     </div>
   );
 };

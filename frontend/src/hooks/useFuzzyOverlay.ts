@@ -1,0 +1,377 @@
+/**
+ * Custom hook for fuzzy overlay data management
+ * 
+ * Provides fuzzy membership data fetching, caching, and local state management
+ * following React hooks patterns without Redux complexity.
+ */
+
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { getFuzzyOverlay } from '../api/endpoints/fuzzy';
+import { 
+  FuzzyOverlayResponse, 
+  FuzzySetMembership, 
+  ChartFuzzyData 
+} from '../api/types/fuzzy';
+import { createFuzzyColorConfig } from '../utils/fuzzyColors';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('useFuzzyOverlay');
+
+/**
+ * Cache entry for fuzzy data
+ */
+interface FuzzyCacheEntry {
+  data: FuzzyOverlayResponse;
+  timestamp: number;
+  ttl: number;
+}
+
+/**
+ * Simple cache for fuzzy overlay data
+ * Prevents duplicate requests for the same parameters
+ */
+class FuzzyDataCache {
+  private cache = new Map<string, FuzzyCacheEntry>();
+  private readonly defaultTtl = 5 * 60 * 1000; // 5 minutes
+
+  private createKey(indicatorId: string, symbol: string, timeframe: string, dateRange?: string): string {
+    return dateRange 
+      ? `${indicatorId}:${symbol}:${timeframe}:${dateRange}`
+      : `${indicatorId}:${symbol}:${timeframe}`;
+  }
+
+  get(indicatorId: string, symbol: string, timeframe: string, dateRange?: string): FuzzyOverlayResponse | null {
+    const key = this.createKey(indicatorId, symbol, timeframe, dateRange);
+    const entry = this.cache.get(key);
+    
+    if (!entry) return null;
+    
+    // Check if cache entry has expired
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return entry.data;
+  }
+
+  set(
+    indicatorId: string, 
+    symbol: string, 
+    timeframe: string, 
+    data: FuzzyOverlayResponse, 
+    ttl?: number,
+    dateRange?: string
+  ): void {
+    const key = this.createKey(indicatorId, symbol, timeframe, dateRange);
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl: ttl || this.defaultTtl
+    });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+// Global cache instance
+const fuzzyCache = new FuzzyDataCache();
+
+/**
+ * Hook state interface
+ */
+interface UseFuzzyOverlayState {
+  fuzzyData: ChartFuzzyData[] | null;
+  isLoading: boolean;
+  error: string | null;
+  isVisible: boolean;
+  opacity: number;
+  colorScheme: string;
+}
+
+/**
+ * Hook return interface
+ */
+interface UseFuzzyOverlayReturn extends UseFuzzyOverlayState {
+  toggleVisibility: () => void;
+  setOpacity: (opacity: number) => void;
+  setColorScheme: (scheme: string) => void;
+  refetch: () => Promise<void>;
+  clearCache: () => void;
+}
+
+/**
+ * Transform API response to chart-ready format
+ */
+const transformFuzzyDataForChart = (
+  fuzzyData: FuzzySetMembership[],
+  colorScheme: string,
+  opacity: number
+): ChartFuzzyData[] => {
+  return fuzzyData.map(setData => {
+    const colorConfig = createFuzzyColorConfig(setData.set, colorScheme, opacity);
+    
+    // Convert membership points to chart format
+    // Scale fuzzy values (0-1) to RSI range (0-100) for proper visibility
+    const chartData = setData.membership
+      .filter(point => point.value !== null)
+      .map(point => ({
+        time: new Date(point.timestamp).getTime() / 1000, // Convert to Unix timestamp
+        value: (point.value as number) * 100 // Scale 0-1 to 0-100 for RSI chart
+      }));
+
+    return {
+      setName: setData.set,
+      data: chartData,
+      color: colorConfig.fillColor,
+      opacity
+    };
+  });
+};
+
+/**
+ * Custom hook for fuzzy overlay data and state management
+ * 
+ * @param indicatorId - Unique identifier for the indicator instance
+ * @param symbol - Trading symbol (e.g., 'AAPL')
+ * @param timeframe - Data timeframe (e.g., '1d', '1h')
+ * @param dateRange - Optional date range to match chart data
+ * @returns Fuzzy overlay state and control functions
+ */
+export const useFuzzyOverlay = (
+  indicatorId: string,
+  symbol: string,
+  timeframe: string,
+  dateRange?: { start: string; end: string },
+  isVisible?: boolean
+): UseFuzzyOverlayReturn => {
+  // Local state management
+  const [state, setState] = useState<UseFuzzyOverlayState>({
+    fuzzyData: null,
+    isLoading: false,
+    error: null,
+    isVisible: isVisible || false,
+    opacity: 0.3,
+    colorScheme: 'default'
+  });
+
+  // Refs for cleanup and abort controller
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+
+  // Extract indicator name from indicatorId (e.g., 'rsi-123' -> 'rsi')
+  const indicatorName = useMemo(() => {
+    return indicatorId.split('-')[0];
+  }, [indicatorId]);
+
+  // Update internal visibility state when external isVisible prop changes
+  useEffect(() => {
+    setState(prev => ({ ...prev, isVisible: isVisible || false }));
+  }, [isVisible]);
+
+  /**
+   * Fetch fuzzy data from API or cache
+   */
+  const fetchFuzzyData = useCallback(async () => {
+    // Don't fetch if not visible
+    if (!state.isVisible) {
+      return;
+    }
+
+    // Use provided date range or default to last 3 months to match chart data
+    const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
+    const startDate = dateRange?.start || (() => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - 3);
+      return date.toISOString().split('T')[0];
+    })();
+    const dateRangeKey = `${startDate}:${endDate}`;
+
+    // Check cache first
+    const cachedData = fuzzyCache.get(indicatorId, symbol, timeframe, dateRangeKey);
+    if (cachedData && cachedData.data[indicatorName]) {
+      logger.debug(`Using cached fuzzy data for ${indicatorId}`);
+      const transformedData = transformFuzzyDataForChart(
+        cachedData.data[indicatorName],
+        state.colorScheme,
+        state.opacity
+      );
+      
+      if (isMountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          fuzzyData: transformedData,
+          error: null
+        }));
+      }
+      return;
+    }
+
+    // Cancel any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    abortControllerRef.current = new AbortController();
+
+    if (isMountedRef.current) {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+    }
+
+    try {
+      const response = await getFuzzyOverlay(
+        {
+          symbol,
+          timeframe,
+          indicators: [indicatorName],
+          start_date: startDate,
+          end_date: endDate
+        },
+        abortControllerRef.current.signal
+      );
+
+      // Cache the response with date range
+      fuzzyCache.set(indicatorId, symbol, timeframe, response, undefined, dateRangeKey);
+
+      // Check if we got data for our indicator
+      const indicatorData = response.data[indicatorName];
+      if (!indicatorData) {
+        throw new Error(`No fuzzy data available for indicator: ${indicatorName}`);
+      }
+
+      // Transform data for charts
+      const transformedData = transformFuzzyDataForChart(
+        indicatorData,
+        state.colorScheme,
+        state.opacity
+      );
+
+      if (isMountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          fuzzyData: transformedData,
+          isLoading: false,
+          error: null
+        }));
+      }
+
+      logger.debug(`Successfully loaded fuzzy data for ${indicatorName}`, {
+        sets: indicatorData.length,
+        dataPoints: transformedData.reduce((sum, set) => sum + set.data.length, 0)
+      });
+
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        logger.debug(`Fuzzy data request aborted for ${indicatorId}`);
+        return;
+      }
+
+      logger.error(`Failed to fetch fuzzy data for ${indicatorId}:`, error);
+      
+      if (isMountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error.message || 'Failed to load fuzzy data'
+        }));
+      }
+    }
+  }, [indicatorId, symbol, timeframe, indicatorName, state.isVisible, state.colorScheme, state.opacity, dateRange]);
+
+  /**
+   * Toggle fuzzy overlay visibility
+   */
+  const toggleVisibility = useCallback(() => {
+    setState(prev => {
+      const newVisible = !prev.isVisible;
+      logger.debug(`Toggling fuzzy visibility for ${indicatorId}: ${newVisible}`);
+      return { ...prev, isVisible: newVisible };
+    });
+  }, [indicatorId]);
+
+  /**
+   * Set fuzzy overlay opacity
+   */
+  const setOpacity = useCallback((newOpacity: number) => {
+    const clampedOpacity = Math.max(0, Math.min(1, newOpacity));
+    setState(prev => ({ ...prev, opacity: clampedOpacity }));
+  }, []);
+
+  /**
+   * Set fuzzy color scheme
+   */
+  const setColorScheme = useCallback((newScheme: string) => {
+    setState(prev => ({ ...prev, colorScheme: newScheme }));
+  }, []);
+
+  /**
+   * Force refetch fuzzy data
+   */
+  const refetch = useCallback(async () => {
+    fuzzyCache.clear();
+    await fetchFuzzyData();
+  }, [fetchFuzzyData]);
+
+  /**
+   * Clear cache for this hook
+   */
+  const clearCache = useCallback(() => {
+    fuzzyCache.clear();
+  }, []);
+
+  // Effect to fetch data when visibility or parameters change
+  useEffect(() => {
+    fetchFuzzyData();
+  }, [fetchFuzzyData]);
+
+  // Effect to retransform data when opacity or color scheme changes
+  useEffect(() => {
+    if (state.fuzzyData && !state.isLoading) {
+      // Calculate current date range key
+      const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
+      const startDate = dateRange?.start || (() => {
+        const date = new Date();
+        date.setMonth(date.getMonth() - 3);
+        return date.toISOString().split('T')[0];
+      })();
+      const dateRangeKey = `${startDate}:${endDate}`;
+
+      // Find the original data from cache to retransform
+      const cachedData = fuzzyCache.get(indicatorId, symbol, timeframe, dateRangeKey);
+      if (cachedData && cachedData.data[indicatorName]) {
+        const transformedData = transformFuzzyDataForChart(
+          cachedData.data[indicatorName],
+          state.colorScheme,
+          state.opacity
+        );
+        setState(prev => ({ ...prev, fuzzyData: transformedData }));
+      }
+    }
+  }, [state.colorScheme, state.opacity, indicatorId, symbol, timeframe, indicatorName, dateRange]);
+
+  // Cleanup effect - only runs on actual unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [indicatorId]); // Reset when indicatorId changes
+
+  const returnValue = {
+    ...state,
+    toggleVisibility,
+    setOpacity,
+    setColorScheme,
+    refetch,
+    clearCache
+  };
+
+
+  return returnValue;
+};
