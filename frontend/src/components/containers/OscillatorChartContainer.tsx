@@ -87,6 +87,18 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       };
     }
     
+    // If we have MACD indicators, use MACD config
+    const hasMACD = indicators.some(ind => ind.name === 'macd');
+    if (hasMACD) {
+      return {
+        title: 'MACD Oscillator',
+        yAxisRange: { min: undefined, max: undefined }, // Auto-scale for MACD
+        referenceLines: [
+          { value: 0, color: '#888888', label: 'Zero Line' }
+        ]
+      };
+    }
+    
     // Default oscillator config
     return {
       title: 'Oscillator',
@@ -183,12 +195,6 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
 
   // Calculate oscillator data for a given indicator
   const calculateOscillatorData = useCallback(async (indicator: IndicatorInfo, baseData: CandlestickData[]) => {
-    // Temporary: Skip MACD calculation until Task 3 implementation
-    if (indicator.name === 'macd') {
-      console.warn(`[OscillatorChartContainer] MACD calculation not yet implemented - returning empty data`);
-      return [];
-    }
-
     try {
       const indicatorId = indicator.name === 'rsi' ? 'RSIIndicator' : 
                          indicator.name === 'macd' ? 'MACDIndicator' :

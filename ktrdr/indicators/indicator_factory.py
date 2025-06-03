@@ -16,6 +16,7 @@ from ktrdr.indicators import (
     RSIIndicator,
     SimpleMovingAverage,
     ExponentialMovingAverage,
+    MACDIndicator,
 )
 
 logger = get_logger(__name__)
@@ -28,6 +29,8 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "SimpleMovingAverage": SimpleMovingAverage,
     "EMA": ExponentialMovingAverage,
     "ExponentialMovingAverage": ExponentialMovingAverage,
+    "MACD": MACDIndicator,
+    "MACDIndicator": MACDIndicator,
 }
 
 
