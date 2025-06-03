@@ -97,7 +97,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
 
 
   // Initialize chart
@@ -232,11 +232,27 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
       let series = indicatorSeriesRef.current.get(indicator.id);
       
       if (!series && chartRef.current) {
-        series = chartRef.current.addSeries(LineSeries, {
-          color: indicator.color,
-          lineWidth: 2,
-          title: indicator.name
-        });
+        // Create appropriate series type based on indicator type
+        if (indicator.type === 'histogram') {
+          series = chartRef.current.addSeries(HistogramSeries, {
+            color: indicator.color,
+            title: indicator.name,
+            // Make histogram less prominent
+            priceFormat: {
+              type: 'price',
+              precision: 4,
+              minMove: 0.0001,
+            },
+          });
+        } else {
+          // Default to line series with increased thickness for MACD lines
+          const lineWidth = indicator.name.includes('MACD') ? 3 : 2;
+          series = chartRef.current.addSeries(LineSeries, {
+            color: indicator.color,
+            lineWidth: lineWidth,
+            title: indicator.name
+          });
+        }
         indicatorSeriesRef.current.set(indicator.id, series);
       }
       
@@ -245,14 +261,23 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
           series.setData(indicator.data);
         }
         
-        // Apply all options at once including visibility
-        series.applyOptions({
-          color: indicator.color,
-          title: indicator.name,
-          lineVisible: indicator.visible !== false,
-          lastValueVisible: indicator.visible !== false,
-          priceLineVisible: indicator.visible !== false
-        });
+        // Apply options based on series type
+        if (indicator.type === 'histogram') {
+          series.applyOptions({
+            color: indicator.color,
+            title: indicator.name,
+            visible: indicator.visible !== false
+          });
+        } else {
+          // Line series options
+          series.applyOptions({
+            color: indicator.color,
+            title: indicator.name,
+            lineVisible: indicator.visible !== false,
+            lastValueVisible: indicator.visible !== false,
+            priceLineVisible: indicator.visible !== false
+          });
+        }
       }
     });
 

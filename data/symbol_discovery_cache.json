@@ -6,7 +6,7 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "MICROSOFT CORP",
-      "validated_at": 1748905818.5347745
+      "validated_at": 1748913420.2825902
     },
     "AAPL": {
       "symbol": "AAPL",
@@ -14,25 +14,9 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "APPLE INC",
-      "validated_at": 1748906422.184994
-    },
-    "NVDA": {
-      "symbol": "NVDA",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "NVIDIA CORP",
-      "validated_at": 1748901834.0892775
-    },
-    "TSLA": {
-      "symbol": "TSLA",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "TESLA INC",
-      "validated_at": 1748901837.3442197
+      "validated_at": 1748912214.2224455
     }
   },
   "failed_symbols": [],
-  "last_updated": 1748906422.1850426
+  "last_updated": 1748913420.2826371
 }

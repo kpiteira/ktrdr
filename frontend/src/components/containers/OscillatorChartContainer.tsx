@@ -247,15 +247,48 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
         throw new Error(result.error?.message || 'Failed to calculate oscillator');
       }
 
+      const dates = result.dates || [];
+      
+      // Handle MACD multi-series (MACD line, Signal line, Histogram)
+      if (indicator.name === 'macd') {
+        const macdLineKey = `MACD_${indicator.parameters.fast_period}_${indicator.parameters.slow_period}`;
+        const signalLineKey = `MACD_signal_${indicator.parameters.fast_period}_${indicator.parameters.slow_period}_${indicator.parameters.signal_period}`;
+        const histogramKey = `MACD_hist_${indicator.parameters.fast_period}_${indicator.parameters.slow_period}_${indicator.parameters.signal_period}`;
+        
+        const macdValues = result.indicators?.[macdLineKey] || [];
+        const signalValues = result.indicators?.[signalLineKey] || [];
+        const histogramValues = result.indicators?.[histogramKey] || [];
+        
+        // Transform to line data format
+        const transformToLineData = (values: number[]) => 
+          values
+            .map((value: number | null, index: number) => {
+              if (value === null || value === undefined || !dates[index]) return null;
+              
+              const timestamp = new Date(dates[index]).getTime() / 1000;
+              
+              return {
+                time: timestamp as UTCTimestamp,
+                value
+              };
+            })
+            .filter((point: any) => point !== null) as LineData[];
+        
+        // Return multi-series data for MACD
+        return {
+          macd: transformToLineData(macdValues),
+          signal: transformToLineData(signalValues),
+          histogram: transformToLineData(histogramValues)
+        };
+      }
+      
+      // Handle single-series indicators (RSI, etc.)
       const outputName = indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
-                        indicator.name === 'macd' ? `MACD_${indicator.parameters.fast_period}_${indicator.parameters.slow_period}` :
                         `${indicator.name.toUpperCase()}_${indicator.parameters.period}`;
                          
       const oscillatorValues = result.indicators?.[outputName] || 
                               result.indicators?.[outputName.toLowerCase()] || 
                               [];
-
-      const dates = result.dates || [];
       
       // Map oscillator values to line data using the dates from the response
       const lineData: LineData[] = oscillatorValues
@@ -297,27 +330,64 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
           try {
             const indicatorData = await calculateOscillatorData(indicator, priceData);
             
-            return {
+            // Handle MACD multi-series data
+            if (indicator.name === 'macd' && indicatorData && typeof indicatorData === 'object' && 'macd' in indicatorData) {
+              const macdData = indicatorData as { macd: LineData[]; signal: LineData[]; histogram: LineData[] };
+              
+              return [
+                {
+                  id: `${indicator.id}-macd`,
+                  name: `${indicator.displayName} Line`,
+                  data: macdData.macd,
+                  color: '#2196F3', // Bright blue for better visibility
+                  visible: indicator.visible,
+                  type: 'line' as const
+                },
+                {
+                  id: `${indicator.id}-signal`,
+                  name: `${indicator.displayName} Signal`,
+                  data: macdData.signal,
+                  color: '#FF5722', // Orange-red for signal line
+                  visible: indicator.visible,
+                  type: 'line' as const
+                },
+                {
+                  id: `${indicator.id}-histogram`,
+                  name: `${indicator.displayName} Histogram`,
+                  data: macdData.histogram,
+                  color: '#9E9E9E', // Light gray for less intrusive histogram
+                  visible: indicator.visible,
+                  type: 'histogram' as const
+                }
+              ];
+            }
+            
+            // Handle single-series indicators (RSI, etc.)
+            return [{
               id: indicator.id,
               name: indicator.displayName,
-              data: indicatorData,
+              data: indicatorData as LineData[],
               color: indicator.parameters.color || '#FF5722',
-              visible: indicator.visible
-            };
+              visible: indicator.visible,
+              type: 'line' as const
+            }];
           } catch (error) {
             console.warn(`[OscillatorChartContainer] Skipping failed indicator ${indicator.name}:`, error);
             // Return indicator with empty data instead of failing completely
-            return {
+            return [{
               id: indicator.id,
               name: indicator.displayName,
               data: [],
               color: indicator.parameters.color || '#FF5722',
-              visible: indicator.visible
-            };
+              visible: indicator.visible,
+              type: 'line' as const
+            }];
           }
         });
         
-        const oscillatorSeries = await Promise.all(oscillatorPromises);
+        const oscillatorSeriesArrays = await Promise.all(oscillatorPromises);
+        // Flatten the arrays since each indicator can return multiple series (especially MACD)
+        const oscillatorSeries = oscillatorSeriesArrays.flat();
 
         const newOscillatorData: OscillatorData = {
           indicators: oscillatorSeries
