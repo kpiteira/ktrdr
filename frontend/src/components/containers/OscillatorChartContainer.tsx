@@ -3,7 +3,7 @@ import { IChartApi, LineData, UTCTimestamp, CandlestickData } from 'lightweight-
 import OscillatorChart, { OscillatorData, OscillatorIndicatorSeries } from '../presentation/charts/OscillatorChart';
 import { useChartSynchronizer } from '../../hooks/useChartSynchronizer';
 import { IndicatorInfo, getIndicatorConfig } from '../../store/indicatorRegistry';
-import { useFuzzyOverlay } from '../../hooks/useFuzzyOverlay';
+import { useFuzzyOverlay, ScalingConfig } from '../../hooks/useFuzzyOverlay';
 import { createLogger } from '../../utils/logger';
 
 /**
@@ -108,9 +108,14 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   }, [indicators]);
 
   // Fuzzy overlay state - we'll manage individual overlays
-  // For MVP, we'll focus on RSI fuzzy overlays (the most common oscillator)
+  // Support both RSI and MACD fuzzy overlays
   const rsiIndicator = useMemo(() => 
     oscillatorIndicators.find(ind => ind.name === 'rsi'), 
+    [oscillatorIndicators]
+  );
+  
+  const macdIndicator = useMemo(() => 
+    oscillatorIndicators.find(ind => ind.name === 'macd'), 
     [oscillatorIndicators]
   );
   
@@ -125,6 +130,32 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     };
   }, []);
 
+  // Calculate MACD scaling range dynamically based on oscillator data
+  const macdScalingConfig: ScalingConfig | undefined = useMemo(() => {
+    if (!macdIndicator || !oscillatorData) return undefined;
+    
+    // Find MACD series data to calculate range
+    const macdSeries = oscillatorData.indicators.find(series => 
+      series.id.includes(macdIndicator.id) && series.id.includes('macd')
+    );
+    
+    if (!macdSeries || !macdSeries.data.length) return undefined;
+    
+    // Calculate min/max from actual MACD data for dynamic scaling
+    const values = macdSeries.data.map(point => point.value);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    
+    // Add some padding (10%) for better visualization
+    const padding = (maxValue - minValue) * 0.1;
+    
+    return {
+      minValue: minValue - padding,
+      maxValue: maxValue + padding,
+      indicatorType: 'macd' as const
+    };
+  }, [macdIndicator, oscillatorData]);
+
   // Fuzzy overlay hook for RSI indicator (if present)
   const rsiFuzzyOverlay = useFuzzyOverlay(
     rsiIndicator?.id || 'no-rsi',
@@ -132,6 +163,16 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     timeframe,
     dateRange,
     rsiIndicator?.fuzzyVisible || false
+  );
+  
+  // Fuzzy overlay hook for MACD indicator (if present) with dynamic scaling
+  const macdFuzzyOverlay = useFuzzyOverlay(
+    macdIndicator?.id || 'no-macd',
+    symbol,
+    timeframe,
+    dateRange,
+    macdIndicator?.fuzzyVisible || false,
+    macdScalingConfig
   );
 
   // Internal state
@@ -453,6 +494,31 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   }
 
 
+  // Determine which fuzzy overlay to show (RSI takes precedence if both are present)
+  const activeFuzzyData = rsiIndicator && rsiIndicator.fuzzyVisible 
+    ? rsiFuzzyOverlay.fuzzyData 
+    : macdIndicator && macdIndicator.fuzzyVisible 
+    ? macdFuzzyOverlay.fuzzyData 
+    : null;
+    
+  const activeFuzzyVisible = rsiIndicator && rsiIndicator.fuzzyVisible 
+    ? true 
+    : macdIndicator && macdIndicator.fuzzyVisible 
+    ? true 
+    : false;
+    
+  const activeFuzzyOpacity = rsiIndicator && rsiIndicator.fuzzyVisible 
+    ? rsiIndicator.fuzzyOpacity || rsiFuzzyOverlay.opacity 
+    : macdIndicator && macdIndicator.fuzzyVisible 
+    ? macdIndicator.fuzzyOpacity || macdFuzzyOverlay.opacity 
+    : 0.3;
+    
+  const activeFuzzyColorScheme = rsiIndicator && rsiIndicator.fuzzyVisible 
+    ? rsiIndicator.fuzzyColorScheme || rsiFuzzyOverlay.colorScheme 
+    : macdIndicator && macdIndicator.fuzzyVisible 
+    ? macdIndicator.fuzzyColorScheme || macdFuzzyOverlay.colorScheme 
+    : 'default';
+
   return (
     <OscillatorChart
       width={width}
@@ -460,10 +526,10 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       oscillatorData={oscillatorData}
       isLoading={isLoading}
       error={error}
-      fuzzyData={rsiIndicator ? rsiFuzzyOverlay.fuzzyData : null}
-      fuzzyVisible={rsiIndicator ? !!rsiIndicator.fuzzyVisible : false}
-      fuzzyOpacity={rsiIndicator ? rsiIndicator.fuzzyOpacity || rsiFuzzyOverlay.opacity : 0.3}
-      fuzzyColorScheme={rsiIndicator ? rsiIndicator.fuzzyColorScheme || rsiFuzzyOverlay.colorScheme : 'default'}
+      fuzzyData={activeFuzzyData}
+      fuzzyVisible={activeFuzzyVisible}
+      fuzzyOpacity={activeFuzzyOpacity}
+      fuzzyColorScheme={activeFuzzyColorScheme}
       onChartCreated={handleChartCreated}
       onChartDestroyed={handleChartDestroyed}
       onCrosshairMove={handleCrosshairMove}

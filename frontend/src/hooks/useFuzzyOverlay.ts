@@ -103,23 +103,42 @@ interface UseFuzzyOverlayReturn extends UseFuzzyOverlayState {
 }
 
 /**
- * Transform API response to chart-ready format
+ * Scaling configuration for different indicator types
+ */
+interface ScalingConfig {
+  minValue: number;
+  maxValue: number;
+  indicatorType: 'rsi' | 'macd' | 'other';
+}
+
+/**
+ * Transform API response to chart-ready format with dynamic scaling
  */
 const transformFuzzyDataForChart = (
   fuzzyData: FuzzySetMembership[],
   colorScheme: string,
-  opacity: number
+  opacity: number,
+  scalingConfig?: ScalingConfig
 ): ChartFuzzyData[] => {
+  // Default to RSI scaling for backward compatibility
+  const defaultScaling: ScalingConfig = {
+    minValue: 0,
+    maxValue: 100,
+    indicatorType: 'rsi'
+  };
+  
+  const scaling = scalingConfig || defaultScaling;
+  const range = scaling.maxValue - scaling.minValue;
+  
   return fuzzyData.map(setData => {
     const colorConfig = createFuzzyColorConfig(setData.set, colorScheme, opacity);
     
-    // Convert membership points to chart format
-    // Scale fuzzy values (0-1) to RSI range (0-100) for proper visibility
+    // Convert membership points to chart format with dynamic scaling
     const chartData = setData.membership
       .filter(point => point.value !== null)
       .map(point => ({
         time: new Date(point.timestamp).getTime() / 1000, // Convert to Unix timestamp
-        value: (point.value as number) * 100 // Scale 0-1 to 0-100 for RSI chart
+        value: scaling.minValue + ((point.value as number) * range) // Scale 0-1 to indicator range
       }));
 
     return {
@@ -138,6 +157,8 @@ const transformFuzzyDataForChart = (
  * @param symbol - Trading symbol (e.g., 'AAPL')
  * @param timeframe - Data timeframe (e.g., '1d', '1h')
  * @param dateRange - Optional date range to match chart data
+ * @param isVisible - Whether the overlay should be visible
+ * @param scalingConfig - Scaling configuration for the indicator type
  * @returns Fuzzy overlay state and control functions
  */
 export const useFuzzyOverlay = (
@@ -145,7 +166,8 @@ export const useFuzzyOverlay = (
   symbol: string,
   timeframe: string,
   dateRange?: { start: string; end: string },
-  isVisible?: boolean
+  isVisible?: boolean,
+  scalingConfig?: ScalingConfig
 ): UseFuzzyOverlayReturn => {
   // Local state management
   const [state, setState] = useState<UseFuzzyOverlayState>({
@@ -196,7 +218,8 @@ export const useFuzzyOverlay = (
       const transformedData = transformFuzzyDataForChart(
         cachedData.data[indicatorName],
         state.colorScheme,
-        state.opacity
+        state.opacity,
+        scalingConfig
       );
       
       if (isMountedRef.current) {
@@ -246,7 +269,8 @@ export const useFuzzyOverlay = (
       const transformedData = transformFuzzyDataForChart(
         indicatorData,
         state.colorScheme,
-        state.opacity
+        state.opacity,
+        scalingConfig
       );
 
       if (isMountedRef.current) {
@@ -345,7 +369,8 @@ export const useFuzzyOverlay = (
         const transformedData = transformFuzzyDataForChart(
           cachedData.data[indicatorName],
           state.colorScheme,
-          state.opacity
+          state.opacity,
+          scalingConfig
         );
         setState(prev => ({ ...prev, fuzzyData: transformedData }));
       }
@@ -375,3 +400,6 @@ export const useFuzzyOverlay = (
 
   return returnValue;
 };
+
+// Export the scaling config interface for use in other components
+export type { ScalingConfig };
