@@ -14,9 +14,33 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "APPLE INC",
-      "validated_at": 1748919695.7091627
+      "validated_at": 1748923430.5981948
+    },
+    "NVDA": {
+      "symbol": "NVDA",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "NVIDIA CORP",
+      "validated_at": 1748923429.774958
+    },
+    "TSLA": {
+      "symbol": "TSLA",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "TESLA INC",
+      "validated_at": 1748923431.378658
+    },
+    "EURUSD": {
+      "symbol": "EURUSD",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "USD",
+      "description": "European Monetary Union Euro",
+      "validated_at": 1748924338.779733
     }
   },
   "failed_symbols": [],
-  "last_updated": 1748921157.2695787
+  "last_updated": 1748924338.7797427
 }

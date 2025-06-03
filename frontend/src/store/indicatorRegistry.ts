@@ -26,6 +26,12 @@ export interface IndicatorConfig {
   parameterDefinitions: ParameterDefinition[];
   colorOptions: string[];
   description?: string;
+  // Fuzzy overlay support configuration
+  fuzzySupport?: {
+    enabled: boolean;
+    scalingType: 'fixed' | 'dynamic';
+    defaultRange?: { min: number; max: number }; // For fixed scaling
+  };
   // Future: validation functions, calculation hints, etc.
 }
 
@@ -108,7 +114,12 @@ export const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
         description: 'Line color for the indicator'
       }
     ],
-    colorOptions: ['#FF5722', '#2196F3', '#4CAF50', '#9C27B0', '#FF9800']
+    colorOptions: ['#FF5722', '#2196F3', '#4CAF50', '#9C27B0', '#FF9800'],
+    fuzzySupport: {
+      enabled: true,
+      scalingType: 'fixed',
+      defaultRange: { min: 0, max: 100 }
+    }
   },
   macd: {
     name: 'macd',
@@ -161,7 +172,11 @@ export const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
         description: 'Line color for the indicator'
       }
     ],
-    colorOptions: ['#9C27B0', '#FF5722', '#2196F3', '#4CAF50', '#FF9800']
+    colorOptions: ['#9C27B0', '#FF5722', '#2196F3', '#4CAF50', '#FF9800'],
+    fuzzySupport: {
+      enabled: true,
+      scalingType: 'dynamic'
+    }
   }
 };
 
@@ -256,4 +271,54 @@ export const validateIndicatorParameters = (
 // Generate a unique ID for indicator instances
 export const generateIndicatorId = (name: string): string => {
   return `${name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+// Generate scaling configuration for fuzzy overlays based on indicator registry
+export const getIndicatorFuzzyScaling = (
+  indicatorName: string,
+  oscillatorData?: { indicators: Array<{ id: string; data: Array<{ value: number }> }> },
+  indicatorId?: string
+): { minValue: number; maxValue: number; indicatorType: 'rsi' | 'macd' | 'other' } | undefined => {
+  const config = getIndicatorConfig(indicatorName);
+  
+  if (!config?.fuzzySupport?.enabled) {
+    return undefined;
+  }
+  
+  // Fixed scaling (e.g., RSI 0-100)
+  if (config.fuzzySupport.scalingType === 'fixed' && config.fuzzySupport.defaultRange) {
+    return {
+      minValue: config.fuzzySupport.defaultRange.min,
+      maxValue: config.fuzzySupport.defaultRange.max,
+      indicatorType: indicatorName as 'rsi' | 'macd' | 'other'
+    };
+  }
+  
+  // Dynamic scaling (e.g., MACD calculated from data)
+  if (config.fuzzySupport.scalingType === 'dynamic' && oscillatorData && indicatorId) {
+    // Find the relevant series data for this indicator
+    const indicatorSeries = oscillatorData.indicators.find(series => 
+      series.id.includes(indicatorId) && series.id.includes(indicatorName)
+    );
+    
+    if (!indicatorSeries || !indicatorSeries.data.length) {
+      return undefined;
+    }
+    
+    // Calculate dynamic range from actual data
+    const values = indicatorSeries.data.map(point => point.value);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    
+    // Add padding for better visualization
+    const padding = (maxValue - minValue) * 0.1;
+    
+    return {
+      minValue: minValue - padding,
+      maxValue: maxValue + padding,
+      indicatorType: indicatorName as 'rsi' | 'macd' | 'other'
+    };
+  }
+  
+  return undefined;
 };

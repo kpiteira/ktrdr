@@ -2,7 +2,7 @@ import { FC, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { IChartApi, LineData, UTCTimestamp, CandlestickData } from 'lightweight-charts';
 import OscillatorChart, { OscillatorData, OscillatorIndicatorSeries } from '../presentation/charts/OscillatorChart';
 import { useChartSynchronizer } from '../../hooks/useChartSynchronizer';
-import { IndicatorInfo, getIndicatorConfig } from '../../store/indicatorRegistry';
+import { IndicatorInfo, getIndicatorConfig, getIndicatorFuzzyScaling } from '../../store/indicatorRegistry';
 import { useFuzzyOverlay, ScalingConfig } from '../../hooks/useFuzzyOverlay';
 import { createLogger } from '../../utils/logger';
 
@@ -130,31 +130,24 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     };
   }, []);
 
-  // Calculate MACD scaling range dynamically based on oscillator data
-  const macdScalingConfig: ScalingConfig | undefined = useMemo(() => {
-    if (!macdIndicator || !oscillatorData) return undefined;
+  // Generate scaling configurations for all oscillator indicators dynamically
+  const fuzzyScalingConfigs = useMemo(() => {
+    const configs: Record<string, ScalingConfig> = {};
     
-    // Find MACD series data to calculate range
-    const macdSeries = oscillatorData.indicators.find(series => 
-      series.id.includes(macdIndicator.id) && series.id.includes('macd')
-    );
+    oscillatorIndicators.forEach(indicator => {
+      const scalingConfig = getIndicatorFuzzyScaling(
+        indicator.name,
+        oscillatorData || undefined,
+        indicator.id
+      );
+      
+      if (scalingConfig) {
+        configs[indicator.id] = scalingConfig;
+      }
+    });
     
-    if (!macdSeries || !macdSeries.data.length) return undefined;
-    
-    // Calculate min/max from actual MACD data for dynamic scaling
-    const values = macdSeries.data.map(point => point.value);
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
-    
-    // Add some padding (10%) for better visualization
-    const padding = (maxValue - minValue) * 0.1;
-    
-    return {
-      minValue: minValue - padding,
-      maxValue: maxValue + padding,
-      indicatorType: 'macd' as const
-    };
-  }, [macdIndicator, oscillatorData]);
+    return configs;
+  }, [oscillatorIndicators, oscillatorData]);
 
   // Fuzzy overlay hook for RSI indicator (if present)
   const rsiFuzzyOverlay = useFuzzyOverlay(
@@ -162,7 +155,8 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     symbol,
     timeframe,
     dateRange,
-    rsiIndicator?.fuzzyVisible || false
+    rsiIndicator?.fuzzyVisible || false,
+    rsiIndicator ? fuzzyScalingConfigs[rsiIndicator.id] : undefined
   );
   
   // Fuzzy overlay hook for MACD indicator (if present) with dynamic scaling
@@ -172,7 +166,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     timeframe,
     dateRange,
     macdIndicator?.fuzzyVisible || false,
-    macdScalingConfig
+    macdIndicator ? fuzzyScalingConfigs[macdIndicator.id] : undefined
   );
 
   // Internal state

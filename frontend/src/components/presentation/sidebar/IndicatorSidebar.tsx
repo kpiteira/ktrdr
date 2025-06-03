@@ -397,8 +397,8 @@ const ParameterControls: FC<ParameterControlsProps> = ({
   indicator,
   onParameterUpdate
 }) => {
-  // Check if this indicator supports fuzzy overlays (RSI and MACD)
-  const supportsFuzzy = indicator.name === 'rsi' || indicator.name === 'macd';
+  // Check if this indicator supports fuzzy overlays based on registry configuration
+  const supportsFuzzy = config?.fuzzySupport?.enabled || false;
 
   return (
     <div
