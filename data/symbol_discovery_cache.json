@@ -6,7 +6,7 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "MICROSOFT CORP",
-      "validated_at": 1748913420.2825902
+      "validated_at": 1748921157.2695584
     },
     "AAPL": {
       "symbol": "AAPL",
@@ -14,9 +14,9 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "description": "APPLE INC",
-      "validated_at": 1748912214.2224455
+      "validated_at": 1748919695.7091627
     }
   },
   "failed_symbols": [],
-  "last_updated": 1748913420.2826371
+  "last_updated": 1748921157.2695787
 }
