@@ -479,6 +479,14 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
 
   // Calculate preserve time scale based on synchronization
   const preserveTimeScale = !!chartSynchronizer;
+  
+  // console.log(`🔄 [OscillatorChartContainer] Synchronization state:`, {
+  //   chartSynchronizer: !!chartSynchronizer,
+  //   preserveTimeScale,
+  //   chartId,
+  //   symbol,
+  //   timeframe
+  // });
 
   // Only render if we have oscillator indicators
   if (oscillatorIndicators.length === 0) {

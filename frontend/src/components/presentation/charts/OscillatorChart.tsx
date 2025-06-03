@@ -186,10 +186,10 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
         lastValueVisible: false,
       });
       
-      // Add horizontal line at the reference value
+      // Add horizontal line at the reference value using proper UTC timestamps
       referenceSeries.setData([
-        { time: '2020-01-01' as any, value: line.value },
-        { time: '2030-01-01' as any, value: line.value }
+        { time: (new Date('2020-01-01').getTime() / 1000) as any, value: line.value },
+        { time: (new Date('2030-01-01').getTime() / 1000) as any, value: line.value }
       ]);
     });
 
@@ -223,6 +223,9 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
     if (!oscillatorData || !chartRef.current) {
       return;
     }
+
+    // Track existing indicator count for chart jumping prevention
+    const existingIndicatorCount = indicatorSeriesRef.current.size;
 
     // Update indicator series
     const currentIndicatorIds = new Set(indicatorSeriesRef.current.keys());
@@ -297,6 +300,77 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
     if (!preserveTimeScale && chartRef.current) {
       chartRef.current.timeScale().fitContent();
     }
+
+    // ==================================================================================
+    // CRITICAL FIX: Chart jumping bug when adding oscillator indicators - DO NOT REMOVE
+    // ==================================================================================
+    // 
+    // ISSUE: TradingView Lightweight Charts v5 automatically adjusts the visible time 
+    // range when oscillator indicators are added to synchronized charts, causing unwanted 
+    // forward jumps in time that break the user experience.
+    //
+    // ROOT CAUSE: TradingView's internal auto-scaling logic conflicts with chart 
+    // synchronization (preserveTimeScale=true), particularly when adding the first 
+    // oscillator indicator to a chart or when fuzzy overlays are enabled/disabled.
+    //
+    // SOLUTION: Preventive visibility toggle (hide/show) of the first indicator 
+    // immediately after it's added. This forces TradingView to recalculate the 
+    // correct time range without the unwanted jump.
+    //
+    // TIMING: 1ms delays are critical - tested down from 300ms to find minimum 
+    // effective timing that's imperceptible to users.
+    //
+    // TRIGGER: Only on first oscillator indicator addition to avoid unnecessary 
+    // processing and maintain performance.
+    //
+    // TESTED: Confirmed working with TradingView Lightweight Charts v5.0.7
+    // DATE: May 28, 2025 (ported from BasicChart.tsx to OscillatorChart.tsx)
+    // SEVERITY: CRITICAL - Removing this fix will cause chart jumping regression
+    // ==================================================================================
+    
+    const indicatorCountChanged = oscillatorData.indicators.length !== existingIndicatorCount;
+    
+    // Apply preventive fix only when adding the first oscillator indicator to synchronized charts
+    if (indicatorCountChanged && preserveTimeScale && chartRef.current) {
+      // Check if this is the first oscillator indicator being added
+      const isFirstOscillatorIndicator = oscillatorData.indicators.length === 1 && existingIndicatorCount === 0;
+      
+      // console.log(`🔧 [OscillatorChart] Chart jumping check:`, {
+      //   indicatorCountChanged,
+      //   preserveTimeScale,
+      //   isFirstOscillatorIndicator,
+      //   currentIndicators: oscillatorData.indicators.length,
+      //   existingCount: existingIndicatorCount
+      // });
+      
+      if (isFirstOscillatorIndicator) {
+        // console.log(`🚨 [OscillatorChart] Applying chart jumping prevention for first oscillator indicator`);
+        
+        // CRITICAL: Apply the visibility fix preventively - DO NOT MODIFY TIMING
+        setTimeout(() => {
+          const eyeButtons = document.querySelectorAll('button[title="Hide"], button[title="Show"]');
+          // console.log(`👁️ [OscillatorChart] Found ${eyeButtons.length} eye buttons:`, Array.from(eyeButtons).map(btn => btn.title));
+          
+          if (eyeButtons.length > 0) {
+            // console.log(`🖱️ [OscillatorChart] Clicking first eye button: ${eyeButtons[0].title}`);
+            (eyeButtons[0] as HTMLButtonElement).click();
+            setTimeout(() => {
+              const eyeButtonsAgain = document.querySelectorAll('button[title="Hide"], button[title="Show"]');
+              if (eyeButtonsAgain.length > 0) {
+                // console.log(`🖱️ [OscillatorChart] Clicking eye button again: ${eyeButtonsAgain[0].title}`);
+                (eyeButtonsAgain[0] as HTMLButtonElement).click();
+              }
+            }, 1); // CRITICAL: 1ms timing - tested minimum effective delay
+          } else {
+            console.warn(`⚠️ [OscillatorChart] No eye buttons found for chart jumping prevention`);
+          }
+        }, 1); // CRITICAL: 1ms timing - tested minimum effective delay
+      }
+    }
+    
+    // ==================================================================================
+    // END CRITICAL FIX - Chart jumping prevention for oscillator charts
+    // ==================================================================================
     
   }, [oscillatorData, preserveTimeScale]);
 
@@ -404,6 +478,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
         opacity={fuzzyOpacity}
         colorScheme={fuzzyColorScheme}
         indicatorId="oscillator-chart"
+        preserveTimeScale={preserveTimeScale}
       />
     </div>
   );

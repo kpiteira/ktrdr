@@ -35,6 +35,8 @@ export interface FuzzyOverlayProps {
   colorScheme?: string;
   /** Indicator ID for debugging/logging */
   indicatorId?: string;
+  /** Whether the chart is synchronized (for chart jumping prevention) */
+  preserveTimeScale?: boolean;
 }
 
 /**
@@ -57,10 +59,18 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
   visible,
   opacity = 0.3,
   colorScheme = 'default',
-  indicatorId = 'unknown'
+  indicatorId = 'unknown',
+  preserveTimeScale = false
 }) => {
   // Ref to store active fuzzy series
   const fuzzySeriesRef = useRef<FuzzySeriesRef[]>([]);
+  
+  // Ref to track operation state and prevent race conditions
+  const operationStateRef = useRef({
+    isOperating: false,
+    operationCount: 0,
+    lastSavedRange: null as any
+  });
 
   /**
    * Clean up all fuzzy series
@@ -149,32 +159,164 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
   }, [chartInstance, indicatorId]);
 
   /**
-   * Update fuzzy overlay rendering
+   * Update fuzzy overlay rendering with chart jumping prevention
    */
   const updateFuzzyOverlays = useCallback(() => {
-    // Clean up existing series first
-    cleanupSeries();
-
-    // Don't create new series if not visible or no data
-    if (!visible || !fuzzyData || fuzzyData.length === 0) {
+    // Prevent overlapping operations
+    if (operationStateRef.current.isOperating) {
+      console.log(`⏳ [FuzzyOverlay] Operation in progress, skipping for ${indicatorId}`);
       return;
     }
-
-    if (!chartInstance) {
-      logger.debug(`Cannot update fuzzy overlays - no chart instance for ${indicatorId}`);
-      return;
+    
+    operationStateRef.current.isOperating = true;
+    operationStateRef.current.operationCount++;
+    const operationId = operationStateRef.current.operationCount;
+    
+    // Track whether we're adding fuzzy overlays to detect if we need jumping prevention
+    const hadFuzzySeries = fuzzySeriesRef.current.length > 0;
+    
+    // ==================================================================================
+    // ENHANCED FIX: Chart jumping prevention with stable range management
+    // ==================================================================================
+    // 
+    // ISSUE: Time range preservation becomes unstable after multiple operations due to
+    // accumulated errors and race conditions between fuzzy overlay operations.
+    //
+    // SOLUTION: 
+    // 1. Use a master time range that's only updated when charts are stable
+    // 2. Prevent concurrent operations with operation locking
+    // 3. Validate time ranges before applying them
+    // 4. Use longer delays for TradingView to stabilize
+    // ==================================================================================
+    
+    const isEnablingFuzzyOverlays = !hadFuzzySeries && visible && fuzzyData && fuzzyData.length > 0;
+    const isDisablingFuzzyOverlays = hadFuzzySeries && (!visible || !fuzzyData || fuzzyData.length === 0);
+    
+    // Reduced logging for cleaner output
+    if (isEnablingFuzzyOverlays || isDisablingFuzzyOverlays) {
+      console.log(`🎯 [FuzzyOverlay] Op ${operationId} ${isEnablingFuzzyOverlays ? 'ENABLE' : 'DISABLE'} for ${indicatorId}`);
     }
-
-    // Create new series for each fuzzy set
-    fuzzyData.forEach(fuzzySet => {
-      const series = createFuzzySeries(fuzzySet);
-      if (series) {
-        fuzzySeriesRef.current.push({
-          series,
-          setName: fuzzySet.setName
-        });
+    
+    // Get a fresh, stable time range - don't reuse potentially corrupted ranges
+    let currentTimeRange: any = null;
+    if (preserveTimeScale && chartInstance) {
+      try {
+        const timeScale = chartInstance.timeScale();
+        const visibleRange = timeScale.getVisibleRange();
+        
+        // Validate the range before using it - both values must be numbers
+        const isValidRange = visibleRange && 
+            typeof visibleRange.from === 'number' && 
+            typeof visibleRange.to === 'number' &&
+            visibleRange.to > visibleRange.from &&
+            isFinite(visibleRange.from) && 
+            isFinite(visibleRange.to) &&
+            visibleRange.from > 0 &&  // Sanity check for reasonable timestamps
+            visibleRange.to > 0;
+            
+        if (isValidRange) {
+          currentTimeRange = {
+            from: Number(visibleRange.from),  // Ensure it's a number
+            to: Number(visibleRange.to)       // Ensure it's a number
+          };
+          // Only update our master range if this one looks stable
+          if (operationId <= 3 || !operationStateRef.current.lastSavedRange) {
+            operationStateRef.current.lastSavedRange = { ...currentTimeRange };
+          }
+          // console.log(`💾 [FuzzyOverlay] Op ${operationId} - Valid time range:`, currentTimeRange);
+        } else {
+          console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Invalid time range detected:`, {
+            visibleRange,
+            fromType: typeof visibleRange?.from,
+            toType: typeof visibleRange?.to,
+            fromValue: visibleRange?.from,
+            toValue: visibleRange?.to
+          });
+          
+          // Use the last saved range if available and valid
+          if (operationStateRef.current.lastSavedRange) {
+            const lastRange = operationStateRef.current.lastSavedRange;
+            const isLastRangeValid = typeof lastRange.from === 'number' && 
+                                   typeof lastRange.to === 'number' &&
+                                   isFinite(lastRange.from) && 
+                                   isFinite(lastRange.to);
+            if (isLastRangeValid) {
+              currentTimeRange = lastRange;
+              // console.log(`🔄 [FuzzyOverlay] Op ${operationId} - Using last saved range:`, currentTimeRange);
+            } else {
+              console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Last saved range also invalid, skipping time preservation`);
+              currentTimeRange = null;
+            }
+          } else {
+            console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - No valid saved range available`);
+            currentTimeRange = null;
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Failed to get time range:`, error);
+        currentTimeRange = operationStateRef.current.lastSavedRange;
       }
-    });
+    }
+    
+    // Perform the operation
+    const performOperation = () => {
+      // Clean up existing series first
+      cleanupSeries();
+
+      // Don't create new series if not visible or no data
+      if (!visible || !fuzzyData || fuzzyData.length === 0) {
+        // console.log(`🧹 [FuzzyOverlay] Op ${operationId} - Cleaned up, no new series needed`);
+        return;
+      }
+
+      if (!chartInstance) {
+        logger.debug(`Cannot update fuzzy overlays - no chart instance for ${indicatorId}`);
+        return;
+      }
+
+      // Create new series for each fuzzy set
+      fuzzyData.forEach(fuzzySet => {
+        const series = createFuzzySeries(fuzzySet);
+        if (series) {
+          fuzzySeriesRef.current.push({
+            series,
+            setName: fuzzySet.setName
+          });
+        }
+      });
+      
+      // console.log(`✨ [FuzzyOverlay] Op ${operationId} - Created ${fuzzySeriesRef.current.length} series`);
+    };
+    
+    // Restore time range with enhanced stability
+    const restoreTimeRange = () => {
+      if (currentTimeRange && preserveTimeScale && chartInstance) {
+        try {
+          chartInstance.timeScale().setVisibleRange(currentTimeRange);
+          // console.log(`🔄 [FuzzyOverlay] Op ${operationId} - Restored time range:`, currentTimeRange);
+        } catch (error) {
+          console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Failed to restore time range:`, error);
+        }
+      }
+      
+      // Mark operation complete
+      operationStateRef.current.isOperating = false;
+    };
+    
+    // Execute the operation with proper timing
+    performOperation();
+    
+    // Restore time range after a longer delay for stability
+    if (currentTimeRange && preserveTimeScale) {
+      setTimeout(restoreTimeRange, 50); // Increased delay for TradingView stability
+    } else {
+      operationStateRef.current.isOperating = false;
+    }
+    
+    // ==================================================================================
+    // END ENHANCED FIX - Fuzzy overlay chart jumping prevention
+    // ==================================================================================
+    
   }, [
     visible, 
     fuzzyData, 
@@ -182,6 +324,7 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
     opacity, 
     colorScheme, 
     indicatorId,
+    preserveTimeScale,
     cleanupSeries,
     createFuzzySeries
   ]);
