@@ -124,18 +124,6 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     };
   }, [indicators]);
 
-  // Fuzzy overlay state - we'll manage individual overlays
-  // Support both RSI and MACD fuzzy overlays
-  const rsiIndicator = useMemo(() => 
-    oscillatorIndicators.find(ind => ind.name === 'rsi'), 
-    [oscillatorIndicators]
-  );
-  
-  const macdIndicator = useMemo(() => 
-    oscillatorIndicators.find(ind => ind.name === 'macd'), 
-    [oscillatorIndicators]
-  );
-  
   // Calculate date range for fuzzy data (same as price data)
   const dateRange = useMemo(() => {
     const endDate = new Date();
@@ -166,24 +154,17 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     return configs;
   }, [oscillatorIndicators, oscillatorData]);
 
-  // Fuzzy overlay hook for RSI indicator (if present)
-  const rsiFuzzyOverlay = useFuzzyOverlay(
-    rsiIndicator?.id || 'no-rsi',
-    symbol,
-    timeframe,
-    dateRange,
-    rsiIndicator?.fuzzyVisible || false,
-    rsiIndicator ? fuzzyScalingConfigs[rsiIndicator.id] : undefined
-  );
+  // Get the primary indicator for this container (assumes single indicator type per container)
+  const primaryIndicator = oscillatorIndicators[0];
   
-  // Fuzzy overlay hook for MACD indicator (if present) with dynamic scaling
-  const macdFuzzyOverlay = useFuzzyOverlay(
-    macdIndicator?.id || 'no-macd',
+  // GENERIC fuzzy overlay hook - only for the primary indicator in this container
+  const fuzzyOverlay = useFuzzyOverlay(
+    primaryIndicator?.id || 'no-indicator',
     symbol,
     timeframe,
     dateRange,
-    macdIndicator?.fuzzyVisible || false,
-    macdIndicator ? fuzzyScalingConfigs[macdIndicator.id] : undefined
+    primaryIndicator?.fuzzyVisible,
+    primaryIndicator ? fuzzyScalingConfigs[primaryIndicator.id] : undefined
   );
 
   // Internal state
@@ -505,30 +486,12 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   }
 
 
-  // Determine which fuzzy overlay to show (RSI takes precedence if both are present)
-  const activeFuzzyData = rsiIndicator && rsiIndicator.fuzzyVisible 
-    ? rsiFuzzyOverlay.fuzzyData 
-    : macdIndicator && macdIndicator.fuzzyVisible 
-    ? macdFuzzyOverlay.fuzzyData 
-    : null;
-    
-  const activeFuzzyVisible = rsiIndicator && rsiIndicator.fuzzyVisible 
-    ? true 
-    : macdIndicator && macdIndicator.fuzzyVisible 
-    ? true 
-    : false;
-    
-  const activeFuzzyOpacity = rsiIndicator && rsiIndicator.fuzzyVisible 
-    ? rsiIndicator.fuzzyOpacity || rsiFuzzyOverlay.opacity 
-    : macdIndicator && macdIndicator.fuzzyVisible 
-    ? macdIndicator.fuzzyOpacity || macdFuzzyOverlay.opacity 
-    : 0.3;
-    
-  const activeFuzzyColorScheme = rsiIndicator && rsiIndicator.fuzzyVisible 
-    ? rsiIndicator.fuzzyColorScheme || rsiFuzzyOverlay.colorScheme 
-    : macdIndicator && macdIndicator.fuzzyVisible 
-    ? macdIndicator.fuzzyColorScheme || macdFuzzyOverlay.colorScheme 
-    : 'default';
+  // GENERIC fuzzy overlay data - let the hook control visibility, don't double-check
+  const activeFuzzyData = fuzzyOverlay.isVisible ? fuzzyOverlay.fuzzyData : null;
+  const activeFuzzyVisible = fuzzyOverlay.isVisible;
+  const activeFuzzyOpacity = primaryIndicator?.fuzzyOpacity || fuzzyOverlay.opacity;
+  const activeFuzzyColorScheme = primaryIndicator?.fuzzyColorScheme || fuzzyOverlay.colorScheme;
+
 
   // Prepare container data for render prop or direct rendering
   const containerData: OscillatorContainerData = {

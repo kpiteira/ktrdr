@@ -182,6 +182,10 @@ export const useFuzzyOverlay = (
   // Refs for cleanup and abort controller
   const abortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
+  
+  // Refs to avoid state dependencies in fetchFuzzyData
+  const colorSchemeRef = useRef(state.colorScheme);
+  const opacityRef = useRef(state.opacity);
 
   // Extract indicator name from indicatorId (e.g., 'rsi-123' -> 'rsi')
   const indicatorName = useMemo(() => {
@@ -190,15 +194,27 @@ export const useFuzzyOverlay = (
 
   // Update internal visibility state when external isVisible prop changes
   useEffect(() => {
-    setState(prev => ({ ...prev, isVisible: isVisible || false }));
-  }, [isVisible]);
+    // Only update if external prop is explicitly set (not undefined)
+    if (isVisible !== undefined) {
+      setState(prev => ({ ...prev, isVisible: isVisible }));
+    }
+  }, [isVisible, indicatorId]);
+
+  // Update refs when state changes to avoid stale closures
+  useEffect(() => {
+    colorSchemeRef.current = state.colorScheme;
+    opacityRef.current = state.opacity;
+  }, [state.colorScheme, state.opacity]);
 
   /**
    * Fetch fuzzy data from API or cache
    */
-  const fetchFuzzyData = useCallback(async () => {
+  const fetchFuzzyData = useCallback(async (forceVisible?: boolean) => {
+    // Use provided visibility or check current state via ref
+    const isCurrentlyVisible = forceVisible ?? state.isVisible;
+    
     // Don't fetch if not visible
-    if (!state.isVisible) {
+    if (!isCurrentlyVisible) {
       return;
     }
 
@@ -217,8 +233,8 @@ export const useFuzzyOverlay = (
       logger.debug(`Using cached fuzzy data for ${indicatorId}`);
       const transformedData = transformFuzzyDataForChart(
         cachedData.data[indicatorName],
-        state.colorScheme,
-        state.opacity,
+        colorSchemeRef.current,
+        opacityRef.current,
         scalingConfig
       );
       
@@ -268,8 +284,8 @@ export const useFuzzyOverlay = (
       // Transform data for charts
       const transformedData = transformFuzzyDataForChart(
         indicatorData,
-        state.colorScheme,
-        state.opacity,
+        colorSchemeRef.current,
+        opacityRef.current,
         scalingConfig
       );
 
@@ -303,7 +319,7 @@ export const useFuzzyOverlay = (
         }));
       }
     }
-  }, [indicatorId, symbol, timeframe, indicatorName, state.isVisible, dateRange]);
+  }, [indicatorId, symbol, timeframe, indicatorName, dateRange]);
 
   /**
    * Toggle fuzzy overlay visibility
@@ -346,10 +362,20 @@ export const useFuzzyOverlay = (
     fuzzyCache.clear();
   }, []);
 
-  // Effect to fetch data when visibility or parameters change
+  // Initial fetch effect when key parameters change
   useEffect(() => {
-    fetchFuzzyData();
-  }, [fetchFuzzyData]);
+    // Only fetch if currently visible and we don't have data
+    if (state.isVisible && !state.fuzzyData && !state.isLoading) {
+      fetchFuzzyData();
+    }
+  }, [indicatorId, symbol, timeframe]);
+
+  // Effect to fetch data when visibility changes to true
+  useEffect(() => {
+    if (state.isVisible && !state.fuzzyData && !state.isLoading) {
+      fetchFuzzyData(true); // Force visible since we already checked
+    }
+  }, [state.isVisible, indicatorId]);
 
   // Effect to retransform data when opacity or color scheme changes (with debouncing)
   useEffect(() => {
