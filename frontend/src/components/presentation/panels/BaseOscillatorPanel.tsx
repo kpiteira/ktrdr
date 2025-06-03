@@ -11,6 +11,28 @@ import { IPanelComponent } from '../../../types/panels';
 import OscillatorChart, { OscillatorData } from '../charts/OscillatorChart';
 import { createLogger } from '../../../utils/logger';
 
+// Add CSS animations for loading states
+const panelAnimationStyles = `
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  
+  @keyframes loading-bar {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(0%); }
+    100% { transform: translateX(100%); }
+  }
+`;
+
+// Inject styles if not already present
+if (typeof document !== 'undefined' && !document.getElementById('panel-animations')) {
+  const styleElement = document.createElement('style');
+  styleElement.id = 'panel-animations';
+  styleElement.textContent = panelAnimationStyles;
+  document.head.appendChild(styleElement);
+}
+
 const logger = createLogger('BaseOscillatorPanel');
 
 /**
@@ -215,11 +237,17 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
         minHeight: state.isCollapsed ? '40px' : '120px',
         backgroundColor: '#ffffff',
         border: '1px solid #e0e0e0',
-        borderRadius: '4px',
+        borderRadius: '8px',
         overflow: 'hidden',
-        transition: 'height 0.3s ease-in-out',
+        boxShadow: state.isCollapsed 
+          ? '0 2px 6px rgba(0, 0, 0, 0.06)' 
+          : '0 4px 12px rgba(0, 0, 0, 0.1)',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        transform: state.isCollapsed ? 'scale(0.99)' : 'scale(1)',
+        borderColor: state.isCollapsed ? '#e0e0e0' : '#d0d0d0',
+        marginBottom: '0.75rem'
       }}
       data-panel-id={state.id}
       data-panel-type={state.config.type}
@@ -228,16 +256,32 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
       <div
         style={{
           height: '40px',
-          backgroundColor: '#f8f9fa',
-          borderBottom: state.isCollapsed ? 'none' : '1px solid #e0e0e0',
+          background: state.isCollapsed 
+            ? 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)'
+            : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+          borderBottom: state.isCollapsed ? 'none' : '1px solid #e9ecef',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 0.75rem',
+          padding: '0 1rem',
           fontSize: '0.9rem',
-          fontWeight: '500',
-          color: '#333',
-          flexShrink: 0
+          fontWeight: '600',
+          color: '#2c3e50',
+          flexShrink: 0,
+          cursor: state.config.collapsible ? 'pointer' : 'default',
+          transition: 'all 0.2s ease',
+          backdropFilter: 'blur(10px)'
+        }}
+        onClick={state.config.collapsible ? handleToggleCollapse : undefined}
+        onMouseEnter={(e) => {
+          if (state.config.collapsible) {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = state.isCollapsed 
+            ? 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)'
+            : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)';
         }}
       >
         {/* Panel Title and Indicator Info */}
@@ -245,11 +289,14 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
           <span>{state.config.title}</span>
           {indicators.length > 0 && (
             <span style={{ 
-              fontSize: '0.8rem', 
-              color: '#666',
-              backgroundColor: '#e9ecef',
-              padding: '0.2rem 0.4rem',
-              borderRadius: '3px'
+              fontSize: '0.75rem', 
+              color: '#495057',
+              background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+              padding: '0.25rem 0.6rem',
+              borderRadius: '12px',
+              fontWeight: '500',
+              border: '1px solid #90caf9',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
             }}>
               {indicators.length} indicator{indicators.length > 1 ? 's' : ''}
             </span>
@@ -267,23 +314,39 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
         </div>
 
         {/* Panel Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {/* Collapse/Expand Button */}
           {state.config.collapsible && (
             <button
-              onClick={handleToggleCollapse}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleCollapse();
+              }}
               style={{
-                background: 'none',
-                border: 'none',
+                background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+                border: '1px solid #dee2e6',
                 cursor: 'pointer',
-                fontSize: '0.8rem',
-                color: '#666',
-                padding: '0.25rem',
-                borderRadius: '3px',
+                fontSize: '0.75rem',
+                color: '#495057',
+                padding: '0.375rem 0.5rem',
+                borderRadius: '6px',
                 display: 'flex',
-                alignItems: 'center'
+                alignItems: 'center',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+                transition: 'all 0.15s ease',
+                fontWeight: '500'
               }}
               title={state.isCollapsed ? 'Expand panel' : 'Collapse panel'}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+              }}
             >
               {state.isCollapsed ? '▲' : '▼'}
             </button>
@@ -291,17 +354,35 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
 
           {/* Remove Panel Button */}
           <button
-            onClick={handleRemove}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRemove();
+            }}
             style={{
-              background: 'none',
-              border: 'none',
+              background: 'linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%)',
+              border: '1px solid #feb2b2',
               cursor: 'pointer',
-              fontSize: '0.8rem',
-              color: '#dc3545',
-              padding: '0.25rem',
-              borderRadius: '3px'
+              fontSize: '0.75rem',
+              color: '#c53030',
+              padding: '0.375rem 0.5rem',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+              transition: 'all 0.15s ease',
+              fontWeight: '500'
             }}
             title="Remove panel"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #fed7d7 0%, #fc8181 100%)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 2px 4px rgba(197, 48, 48, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+            }}
           >
             ✕
           </button>
@@ -326,23 +407,40 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
                 left: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: '#fff3cd',
-                border: '1px solid #ffeaa7',
-                borderRadius: '4px',
-                padding: '1rem',
+                background: 'linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%)',
+                border: '1px solid #feb2b2',
+                borderRadius: '8px',
+                padding: '1.5rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#856404',
+                color: '#c53030',
                 fontSize: '0.9rem',
-                zIndex: 10
+                zIndex: 10,
+                backdropFilter: 'blur(10px)',
+                boxShadow: '0 4px 12px rgba(197, 48, 48, 0.15)'
               }}
             >
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: '500', marginBottom: '0.5rem' }}>
+                <div style={{ 
+                  fontWeight: '600', 
+                  marginBottom: '0.5rem',
+                  fontSize: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <span style={{ fontSize: '1.2rem' }}>⚠️</span>
                   Panel Error
                 </div>
-                <div>{error}</div>
+                <div style={{ 
+                  fontSize: '0.85rem',
+                  opacity: 0.9,
+                  lineHeight: 1.4
+                }}>
+                  {error}
+                </div>
               </div>
             </div>
           )}
@@ -356,18 +454,40 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
                 left: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 249, 250, 0.95) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#666',
+                color: '#495057',
                 fontSize: '0.9rem',
-                zIndex: 10
+                zIndex: 10,
+                backdropFilter: 'blur(10px)',
+                boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.1)'
               }}
             >
               <div style={{ textAlign: 'center' }}>
-                <div style={{ marginBottom: '0.5rem' }}>⏳</div>
-                <div>Loading {state.config.title.toLowerCase()}...</div>
+                <div style={{ 
+                  marginBottom: '0.75rem',
+                  fontSize: '1.5rem',
+                  animation: 'pulse 1.5s ease-in-out infinite'
+                }}>
+                  ⏳
+                </div>
+                <div style={{ 
+                  fontWeight: '500',
+                  fontSize: '0.9rem',
+                  color: '#6c757d'
+                }}>
+                  Loading {state.config.title.toLowerCase()}...
+                </div>
+                <div style={{
+                  width: '40px',
+                  height: '3px',
+                  background: 'linear-gradient(90deg, #007bff, #6610f2, #007bff)',
+                  borderRadius: '2px',
+                  margin: '0.75rem auto 0',
+                  animation: 'loading-bar 1.5s ease-in-out infinite'
+                }}></div>
               </div>
             </div>
           )}
