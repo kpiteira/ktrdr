@@ -302,7 +302,6 @@ const AppContent: FC = () => {
               {separateIndicators.length > 0 && (
                 <ErrorBoundary>
                   <OscillatorPanelManager
-                    key={getChartKey('oscillator-panels')}
                     indicators={separateIndicators}
                     symbol={selectedSymbol}
                     timeframe={selectedTimeframe}

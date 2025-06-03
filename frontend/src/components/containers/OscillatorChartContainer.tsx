@@ -460,7 +460,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     };
 
     updateOscillatorData();
-  }, [oscillatorIndicators, priceData, calculateOscillatorData, onDataLoaded, onError]);
+  }, [oscillatorIndicators, priceData, symbol, timeframe]);
 
   // Load price data when symbol/timeframe changes
   useEffect(() => {

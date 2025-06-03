@@ -102,7 +102,15 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
 
   // Initialize chart
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!chartContainerRef.current) {
+      return;
+    }
+    
+    // Don't create chart with invalid dimensions
+    if (width <= 0 || height <= 0) {
+      console.warn(`OscillatorChart: Invalid dimensions - width: ${width}, height: ${height}`);
+      return;
+    }
 
     // Clean up existing chart
     if (chartRef.current) {
@@ -118,10 +126,14 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
       { value: 70, color: '#888888', label: 'Overbought' }
     ];
 
+    // Validate dimensions before creating chart
+    const validWidth = Math.max(100, width);
+    const validHeight = Math.max(100, height);
+    
     // Create new chart
     const chart = createChart(chartContainerRef.current, {
-      width,
-      height,
+      width: validWidth,
+      height: validHeight,
       layout: {
         background: { color: oscillatorConfig.backgroundColor || '#ffffff' },
         textColor: '#333',

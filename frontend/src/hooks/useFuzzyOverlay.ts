@@ -303,7 +303,7 @@ export const useFuzzyOverlay = (
         }));
       }
     }
-  }, [indicatorId, symbol, timeframe, indicatorName, state.isVisible, state.colorScheme, state.opacity, dateRange]);
+  }, [indicatorId, symbol, timeframe, indicatorName, state.isVisible, dateRange]);
 
   /**
    * Toggle fuzzy overlay visibility
@@ -351,9 +351,12 @@ export const useFuzzyOverlay = (
     fetchFuzzyData();
   }, [fetchFuzzyData]);
 
-  // Effect to retransform data when opacity or color scheme changes
+  // Effect to retransform data when opacity or color scheme changes (with debouncing)
   useEffect(() => {
-    if (state.fuzzyData && !state.isLoading) {
+    if (!state.fuzzyData || state.isLoading) return;
+
+    // Debounce rapid opacity changes to prevent chart jumping
+    const timeoutId = setTimeout(() => {
       // Calculate current date range key
       const endDate = dateRange?.end || new Date().toISOString().split('T')[0];
       const startDate = dateRange?.start || (() => {
@@ -372,10 +375,16 @@ export const useFuzzyOverlay = (
           state.opacity,
           scalingConfig
         );
-        setState(prev => ({ ...prev, fuzzyData: transformedData }));
+        
+        // Only update if component is still mounted
+        if (isMountedRef.current) {
+          setState(prev => ({ ...prev, fuzzyData: transformedData }));
+        }
       }
-    }
-  }, [state.colorScheme, state.opacity, indicatorId, symbol, timeframe, indicatorName, dateRange]);
+    }, 100); // 100ms debounce to prevent rapid updates
+
+    return () => clearTimeout(timeoutId);
+  }, [state.colorScheme, state.opacity, indicatorId, symbol, timeframe, indicatorName, dateRange, scalingConfig]);
 
   // Cleanup effect - only runs on actual unmount
   useEffect(() => {

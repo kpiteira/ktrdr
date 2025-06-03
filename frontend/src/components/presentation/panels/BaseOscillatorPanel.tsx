@@ -116,21 +116,22 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
    * Handle panel resize
    */
   const handleResize = useCallback(() => {
-    if (!panelRef.current || isResizing) return;
+    if (!panelRef.current || isResizing || state.isCollapsed) return;
     
     const rect = panelRef.current.getBoundingClientRect();
     const newHeight = rect.height;
     
-    if (Math.abs(newHeight - actualHeight) > 5) {
+    // Only update actualHeight if the change is significant and we're not collapsed
+    if (Math.abs(newHeight - actualHeight) > 10) { // Increased threshold to prevent minor fluctuations
       setIsResizing(true);
       setActualHeight(newHeight);
       
       // Debounce resize completion
       setTimeout(() => {
         setIsResizing(false);
-      }, 100);
+      }, 200); // Increased timeout for more stability
     }
-  }, [actualHeight, isResizing]);
+  }, [actualHeight, isResizing, state.isCollapsed]);
 
   /**
    * Panel collapse/expand handler
@@ -173,18 +174,26 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
   }, [handleResize]);
 
   /**
-   * Update height when props change
+   * Update height when props change (with debouncing)
    */
   useEffect(() => {
-    if (!state.isCollapsed && Math.abs(height - actualHeight) > 5) {
-      setActualHeight(height);
+    if (state.isCollapsed) return;
+    
+    if (Math.abs(height - actualHeight) > 5) {
+      // Small debounce to prevent rapid height changes
+      const timeoutId = setTimeout(() => {
+        setActualHeight(height);
+      }, 50);
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [height, state.isCollapsed, actualHeight]);
 
   /**
    * Get display height based on collapse state
+   * Use the configured height instead of actualHeight to prevent feedback loops
    */
-  const displayHeight = state.isCollapsed ? 40 : actualHeight;
+  const displayHeight = state.isCollapsed ? 40 : height;
 
   /**
    * Generate oscillator configuration for this panel
@@ -364,24 +373,33 @@ const BaseOscillatorPanel: FC<BaseOscillatorPanelProps> = ({
           )}
 
           {/* Chart Content */}
-          {!error && (
-            <OscillatorChart
-              width={width}
-              height={displayHeight - 40} // Subtract header height
-              oscillatorData={oscillatorData}
-              isLoading={isLoading}
-              error={error}
-              fuzzyData={fuzzyData}
-              fuzzyVisible={fuzzyVisible}
-              fuzzyOpacity={fuzzyOpacity}
-              fuzzyColorScheme={fuzzyColorScheme}
-              onChartCreated={handleChartCreated}
-              onChartDestroyed={handleChartDestroyed}
-              onCrosshairMove={handleCrosshairMove}
-              preserveTimeScale={preserveTimeScale}
-              oscillatorConfig={oscillatorConfig}
-            />
-          )}
+          {!error && !state.isCollapsed && (() => {
+            const chartHeight = displayHeight - 40; // Subtract header height
+            
+            // Only render chart if we have a valid height (minimum 100px)
+            if (chartHeight < 100) {
+              return null;
+            }
+            
+            return (
+              <OscillatorChart
+                width={width}
+                height={chartHeight}
+                oscillatorData={oscillatorData || null}
+                isLoading={isLoading}
+                error={error || null}
+                fuzzyData={fuzzyData}
+                fuzzyVisible={fuzzyVisible}
+                fuzzyOpacity={fuzzyOpacity}
+                fuzzyColorScheme={fuzzyColorScheme}
+                onChartCreated={handleChartCreated}
+                onChartDestroyed={handleChartDestroyed}
+                onCrosshairMove={handleCrosshairMove}
+                preserveTimeScale={preserveTimeScale}
+                oscillatorConfig={oscillatorConfig}
+              />
+            );
+          })()}
         </div>
       )}
     </div>

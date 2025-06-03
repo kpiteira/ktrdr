@@ -71,14 +71,18 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
       
       fuzzySeriesRef.current.forEach(({ series }) => {
         try {
-          if (chartInstance) {
+          // Check if chart instance is still valid before trying to remove series
+          if (chartInstance && series) {
             chartInstance.removeSeries(series);
           }
         } catch (error) {
-          logger.warn(`Error removing fuzzy series:`, error);
+          // This is expected when the chart has been destroyed (e.g., panel collapse)
+          // Just log at debug level instead of warning to avoid noise
+          logger.debug(`Fuzzy series cleanup skipped - chart likely destroyed for ${indicatorId}`);
         }
       });
       
+      // Always clear the ref regardless of success/failure
       fuzzySeriesRef.current = [];
     }
   }, [chartInstance, indicatorId]);
@@ -157,7 +161,7 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
     }
 
     if (!chartInstance) {
-      logger.warn(`Cannot update fuzzy overlays - no chart instance for ${indicatorId}`);
+      logger.debug(`Cannot update fuzzy overlays - no chart instance for ${indicatorId}`);
       return;
     }
 
