@@ -3,7 +3,186 @@
 ## Overview
 This task breakdown implements MACD (Moving Average Convergence Divergence) indicator support with fuzzy membership overlays, building on the successful Slice 4.5 fuzzy overlay system. MACD presents unique challenges with its multi-series rendering (MACD line, Signal line, Histogram) and dynamic value ranges, making it an excellent test of our architecture's scalability and generalization capabilities.
 
-**🧪 User Testing Approach**: This specification includes 8 strategic user testing checkpoints (🧪) that allow validation at key milestones. Each checkpoint builds incrementally, enabling early issue detection before problems cascade to subsequent tasks.
+**🧪 User Testing Approach**: This specification includes strategic user testing checkpoints (🧪) that allow validation at key milestones. Each checkpoint builds incrementally, enabling early issue detection before problems cascade to subsequent tasks.
+
+**🔄 MAJOR ARCHITECTURE REVISION** (Updated post-implementation): After completing Tasks 1-7, user testing revealed critical issues that require a fundamental architecture change:
+1. **Single Panel Limitation**: RSI and MACD are mutually exclusive in current single-panel design
+2. **Chart Instability**: Fuzzy overlay changes cause unwanted chart jumping and range modifications
+3. **Multi-Indicator Conflicts**: Multiple MACD instances create unreadable overlapping charts
+4. **Scalability Issues**: Current architecture doesn't scale to professional trading interface needs
+
+**NEW APPROACH**: Multi-panel architecture with individual panels per indicator type, solving all identified issues while providing a foundation for future scalability.
+
+---
+
+## ARCHITECTURE REVISION: Multi-Panel System
+
+### Current Status (Tasks 1-7 ✅ COMPLETED)
+- ✅ **Task 1-2**: MACD sidebar controls and state management
+- ✅ **Task 3-4**: Multi-series MACD rendering (line + signal + histogram)  
+- ✅ **Task 5**: Dynamic fuzzy scaling for MACD overlays
+- ✅ **Task 6**: MACD fuzzy controls in sidebar
+- ✅ **Task 7**: Generalized fuzzy architecture with registry-based configuration
+
+### Critical Issues Discovered During Testing
+1. **Panel Mutual Exclusivity**: Only one oscillator type can display at a time
+2. **Chart Instability**: Fuzzy overlay changes trigger unwanted chart range modifications
+3. **Multi-Instance Conflicts**: Multiple MACD indicators overlap unreadably
+4. **Professional Interface Gap**: Single panel doesn't match trading platform standards
+
+### NEW TASKS: Architecture Foundation
+
+#### **Task 8 (REVISED): Multi-Panel Architecture Foundation**
+**Priority**: IMMEDIATE (replaces original Task 8)
+**Files**: New architecture components
+**Commit**: "feat: Implement multi-panel oscillator architecture foundation"
+
+```
+1. Create BaseOscillatorPanel component:
+   - Generic panel with chart, fuzzy overlays, synchronization
+   - Reusable across all oscillator types
+   - Independent scaling and state management
+   - Standard lifecycle management (create/destroy/update)
+
+2. Create OscillatorPanelManager:
+   - Manages multiple panel instances
+   - Handles panel registration and layout
+   - Coordinates synchronization across panels
+   - Provides panel lifecycle services
+
+3. Design component hierarchy:
+   App
+   ├── MainChart (price data)
+   └── OscillatorPanelManager
+       ├── BaseOscillatorPanel (generic)
+       │   ├── RSIPanel (extends Base)
+       │   ├── MACDPanel (extends Base)
+       │   └── [Future]Panel (extends Base)
+       └── PanelSynchronization
+
+4. Implement core abstractions:
+   - IPanelComponent interface for type safety
+   - Standard panel props and lifecycle hooks
+   - Generic fuzzy overlay integration
+   - Panel-specific configuration system
+
+5. Add panel management features:
+   - Individual panel collapse/expand
+   - Panel reordering capabilities
+   - Dynamic panel creation/removal
+   - Panel-specific error boundaries
+```
+
+#### **Task 9 (REVISED): Individual Panel Implementation**
+**Priority**: HIGH (replaces original Task 9)
+**Files**: Specific panel components
+**Commit**: "feat: Implement RSI and MACD panel components"
+
+```
+1. Implement RSIPanel extending BaseOscillatorPanel:
+   - RSI-specific chart configuration (0-100 range, reference lines)
+   - Fixed scaling fuzzy overlay integration
+   - RSI-specific error handling and edge cases
+   - Support for multiple RSI instances
+
+2. Implement MACDPanel extending BaseOscillatorPanel:
+   - MACD multi-series rendering (line + signal + histogram)
+   - Dynamic scaling fuzzy overlay integration
+   - Zero-line reference and auto-scaling
+   - Support for multiple MACD instances
+
+3. Panel-specific features:
+   - Type-safe props for indicator-specific data
+   - Custom chart configurations per panel type
+   - Indicator-specific fuzzy overlay behavior
+   - Independent error states and loading
+
+4. Panel lifecycle management:
+   - Efficient panel creation/destruction
+   - Proper chart cleanup on panel removal
+   - Memory leak prevention
+   - Performance optimization for multiple panels
+
+5. Add panel UI enhancements:
+   - Panel headers with indicator names and controls
+   - Individual panel collapse/expand
+   - Visual separation between panels
+   - Responsive design for different screen sizes
+```
+
+#### **Task 10 (REVISED): Chart Stability and Multi-Panel Integration**
+**Priority**: HIGH (new task)
+**Files**: Chart synchronization and stability
+**Commit**: "feat: Fix chart stability and implement multi-panel synchronization"
+
+```
+1. Fix chart stability issues:
+   - Prevent fuzzy overlay changes from affecting chart scaling
+   - Implement stable Y-axis scaling per panel
+   - Fix time scale preservation during overlay updates
+   - Add debouncing for rapid overlay changes
+
+2. Implement multi-panel synchronization:
+   - Time scale synchronization across all panels
+   - Crosshair synchronization (optional)
+   - Zoom/pan coordination between panels
+   - Independent Y-axis scaling per panel
+
+3. Enhance chart lifecycle management:
+   - Proper chart cleanup on panel removal
+   - Efficient chart updates for multiple panels
+   - Memory optimization for panel instances
+   - Prevention of chart jumping during updates
+
+4. Add advanced panel features:
+   - Panel height management (auto-sizing)
+   - Panel splitter controls for user adjustment
+   - Panel persistence (remember collapsed state)
+   - Panel-specific context menus
+
+5. Performance optimization:
+   - Lazy loading of panel charts
+   - Efficient rendering of multiple overlays
+   - Optimized synchronization algorithms
+   - Memory pooling for chart instances
+```
+
+#### **Task 11 (NEW): Integration Testing and Polish**
+**Priority**: MEDIUM (replaces original Task 10)
+**Files**: Integration tests and final polish
+**Commit**: "feat: Complete multi-panel integration with comprehensive testing"
+
+```
+1. Comprehensive integration testing:
+   - Test multiple RSI + MACD panels simultaneously
+   - Verify fuzzy overlays work independently per panel
+   - Test panel management (create/remove/reorder)
+   - Validate synchronization across all panels
+
+2. User experience enhancements:
+   - Smooth panel animations (collapse/expand)
+   - Professional panel styling and spacing
+   - Intuitive panel management controls
+   - Responsive design validation
+
+3. Performance validation:
+   - Test with 5+ panels (mixed RSI/MACD)
+   - Memory usage profiling
+   - Rendering performance benchmarks
+   - Synchronization latency testing
+
+4. Documentation updates:
+   - Multi-panel architecture guide
+   - Panel development guidelines
+   - Performance best practices
+   - Troubleshooting guide
+
+5. Final polish:
+   - Code cleanup and optimization
+   - Remove deprecated single-panel code
+   - Update TypeScript types
+   - Accessibility improvements
+```
 
 ## Prerequisites
 - ✅ Completed Slice 4.5 with working fuzzy overlay system for RSI

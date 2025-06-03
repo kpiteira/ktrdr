@@ -41,6 +41,12 @@
       "validated_at": 1748924338.779733
     }
   },
-  "failed_symbols": [],
-  "last_updated": 1748924338.7797427
+  "failed_symbols": [
+    "TSLA",
+    "MSFT",
+    "NVDA",
+    "AAPL",
+    "EURUSD"
+  ],
+  "last_updated": 1748961608.0827658
 }

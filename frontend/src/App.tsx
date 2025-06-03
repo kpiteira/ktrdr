@@ -4,7 +4,7 @@ import { useKeyboardShortcuts, createCommonShortcuts } from './hooks/useKeyboard
 import { useToast, ToastProvider } from './context/ToastContext';
 import IndicatorSidebarContainer from './components/containers/IndicatorSidebarContainer';
 import BasicChartContainer from './components/containers/BasicChartContainer';
-import OscillatorChartContainer from './components/containers/OscillatorChartContainer';
+import OscillatorPanelManager from './components/containers/OscillatorPanelManager';
 import LeftSidebar from './components/presentation/layout/LeftSidebar';
 import SymbolSelector from './components/SymbolSelector';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -46,15 +46,7 @@ const AppContent: FC = () => {
   // Chart synchronization
   const chartSynchronizer = useChartSynchronizer();
   
-  // Manual sync oscillator chart to main chart when both are ready
-  const handleOscillatorChartReady = useCallback(() => {
-    // Small delay to ensure both charts are fully initialized and have data
-    if (chartSynchronizer) {
-      setTimeout(() => {
-        chartSynchronizer.syncAllToChart('main-chart');
-      }, 200);
-    }
-  }, [chartSynchronizer]);
+  // Panel synchronization will be handled by the OscillatorPanelManager
   
   // Time range synchronization between charts
   const [timeRange, setTimeRange] = useState<{ start: string; end: string } | null>(null);
@@ -146,9 +138,7 @@ const AppContent: FC = () => {
     logger.error('Main chart error:', error);
   }, []);
 
-  const handleOscillatorChartError = useCallback((error: string) => {
-    logger.error('Oscillator chart error:', error);
-  }, []);
+  // Oscillator errors are now handled by the panel manager
 
   // Split indicators by chart type with stable references  
   const overlayIndicators = useMemo(() => {
@@ -308,21 +298,30 @@ const AppContent: FC = () => {
                 />
               </ErrorBoundary>
 
-              {/* Oscillator Chart Container - Generic panel for all oscillator indicators */}
+              {/* Multi-Panel Oscillator Manager - Individual panels for each oscillator type */}
               {separateIndicators.length > 0 && (
                 <ErrorBoundary>
-                  <OscillatorChartContainer
-                    key={getChartKey('oscillator-chart')}
+                  <OscillatorPanelManager
+                    key={getChartKey('oscillator-panels')}
+                    indicators={separateIndicators}
                     symbol={selectedSymbol}
                     timeframe={selectedTimeframe}
-                    indicators={separateIndicators}
-                    chartSynchronizer={chartSynchronizer}
-                    chartId="oscillator-chart"
-                    timeRange={timeRange}
                     width={chartDimensions.width}
-                    height={chartDimensions.height.rsi}
-                    onChartReady={handleOscillatorChartReady}
-                    onError={handleOscillatorChartError}
+                    chartSynchronizer={chartSynchronizer}
+                    onPanelCreated={(panelId) => {
+                      logger.debug(`Panel created: ${panelId}`);
+                    }}
+                    onPanelRemoved={(panelId) => {
+                      logger.debug(`Panel removed: ${panelId}`);
+                    }}
+                    onPanelError={(panelId, error) => {
+                      logger.error(`Panel error in ${panelId}:`, error);
+                      showToast({
+                        type: 'error',
+                        title: 'Panel Error',
+                        message: `Error in ${panelId}: ${error}`
+                      });
+                    }}
                   />
                 </ErrorBoundary>
               )}

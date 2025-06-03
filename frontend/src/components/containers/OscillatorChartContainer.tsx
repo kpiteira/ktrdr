@@ -16,6 +16,19 @@ import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('OscillatorChartContainer');
 
+/**
+ * Container data interface - what the container provides to its children
+ */
+interface OscillatorContainerData {
+  oscillatorData: OscillatorData | null;
+  isLoading: boolean;
+  error: string | null;
+  fuzzyData: any;
+  fuzzyVisible: boolean;
+  fuzzyOpacity: number;
+  fuzzyColorScheme: string;
+}
+
 interface OscillatorChartContainerProps {
   // Chart configuration
   width?: number;
@@ -42,6 +55,9 @@ interface OscillatorChartContainerProps {
   
   // Oscillator-specific configuration
   oscillatorType?: 'rsi' | 'macd' | 'stochastic' | 'williams'; // Default configs for common types
+  
+  // Render prop for panel integration
+  render?: (data: OscillatorContainerData) => React.ReactNode;
 }
 
 const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
@@ -56,7 +72,8 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   onDataLoaded,
   onError,
   onChartReady,
-  oscillatorType = 'rsi' // Default to RSI for backward compatibility
+  oscillatorType = 'rsi', // Default to RSI for backward compatibility
+  render
 }) => {
   // Internal state
   const [oscillatorData, setOscillatorData] = useState<OscillatorData | null>(null);
@@ -513,6 +530,22 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
     ? macdIndicator.fuzzyColorScheme || macdFuzzyOverlay.colorScheme 
     : 'default';
 
+  // Prepare container data for render prop or direct rendering
+  const containerData: OscillatorContainerData = {
+    oscillatorData,
+    isLoading,
+    error,
+    fuzzyData: activeFuzzyData,
+    fuzzyVisible: activeFuzzyVisible,
+    fuzzyOpacity: activeFuzzyOpacity,
+    fuzzyColorScheme: activeFuzzyColorScheme
+  };
+
+  // Use render prop if provided, otherwise render OscillatorChart directly
+  if (render) {
+    return <>{render(containerData)}</>;
+  }
+
   return (
     <OscillatorChart
       width={width}
@@ -534,3 +567,4 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
 };
 
 export default OscillatorChartContainer;
+export type { OscillatorContainerData };
