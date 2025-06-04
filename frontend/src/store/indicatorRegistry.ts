@@ -177,6 +177,37 @@ export const INDICATOR_REGISTRY: Record<string, IndicatorConfig> = {
       enabled: true,
       scalingType: 'dynamic'
     }
+  },
+  zigzag: {
+    name: 'zigzag',
+    displayName: 'ZigZag',
+    category: 'Pattern Analysis',
+    chartType: 'overlay',
+    description: 'Identifies significant price reversals by filtering out minor fluctuations',
+    defaultParameters: { 
+      threshold: 0.05,
+      color: '#FF6B35' 
+    },
+    parameterDefinitions: [
+      { 
+        name: 'threshold', 
+        type: 'number', 
+        min: 0.01, 
+        max: 0.5, 
+        step: 0.01, 
+        default: 0.05,
+        label: 'Threshold (%)',
+        description: 'Minimum percentage move to constitute a reversal'
+      },
+      { 
+        name: 'color', 
+        type: 'color', 
+        default: '#FF6B35',
+        label: 'Color',
+        description: 'Line color for the ZigZag'
+      }
+    ],
+    colorOptions: ['#FF6B35', '#2196F3', '#4CAF50', '#9C27B0', '#FF5722']
   }
 };
 

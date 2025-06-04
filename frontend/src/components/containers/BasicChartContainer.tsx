@@ -70,10 +70,9 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
     setError(null);
     
     try {
-      // Calculate dates for last 3 months
+      // Load data from 2024-01-01 to today for better ZigZag visualization
       const endDate = new Date();
-      const startDate = new Date();
-      startDate.setMonth(startDate.getMonth() - 3);
+      const startDate = new Date('2024-01-01');
       
       // Build query parameters for date filtering
       const params = new URLSearchParams({
@@ -127,11 +126,39 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       const indicatorId = indicator.name === 'sma' ? 'SimpleMovingAverage' : 
                          indicator.name === 'rsi' ? 'RSIIndicator' :
                          indicator.name === 'ema' ? 'ExponentialMovingAverage' : 
+                         indicator.name === 'macd' ? 'MACDIndicator' :
+                         indicator.name === 'zigzag' ? 'ZigZagIndicator' :
                          indicator.name;
 
       // Use ISO timestamps without timezone suffix (API expects this format)
       const startDate = new Date(baseData[0].time * 1000).toISOString().replace(/\.\d{3}Z$/, '');
       const endDate = new Date(baseData[baseData.length - 1].time * 1000).toISOString().replace(/\.\d{3}Z$/, '');
+
+      // Build parameters based on indicator type
+      let parameters: any = { source: 'close' };
+      let outputName = '';
+      
+      if (indicator.name === 'zigzag') {
+        parameters.threshold = indicator.parameters.threshold;
+        outputName = `ZigZag_${(indicator.parameters.threshold * 100).toFixed(0)}`;
+      } else {
+        parameters.period = indicator.parameters.period;
+        outputName = indicator.name === 'sma' ? `SMA_${indicator.parameters.period}` :
+                    indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
+                    indicator.name === 'ema' ? `EMA_${indicator.parameters.period}` :
+                    indicator.name === 'macd' ? `MACD_${indicator.parameters.fast_period}_${indicator.parameters.slow_period}_${indicator.parameters.signal_period}` :
+                    `${indicator.name.toUpperCase()}_${indicator.parameters.period}`;
+      }
+      
+      // Handle MACD special case
+      if (indicator.name === 'macd') {
+        parameters = {
+          fast_period: indicator.parameters.fast_period,
+          slow_period: indicator.parameters.slow_period,
+          signal_period: indicator.parameters.signal_period,
+          source: 'close'
+        };
+      }
 
       const requestPayload = {
         symbol: symbol,
@@ -141,14 +168,8 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
         indicators: [
           {
             id: indicatorId,
-            parameters: {
-              period: indicator.parameters.period,
-              source: 'close'
-            },
-            output_name: indicator.name === 'sma' ? `SMA_${indicator.parameters.period}` :
-                        indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
-                        indicator.name === 'ema' ? `EMA_${indicator.parameters.period}` :
-                        `${indicator.name.toUpperCase()}_${indicator.parameters.period}`
+            parameters: parameters,
+            output_name: outputName
           }
         ]
       };
@@ -171,23 +192,105 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
         throw new Error(result.error?.message || 'Failed to calculate indicator');
       }
 
-      const outputName = indicator.name === 'sma' ? `SMA_${indicator.parameters.period}` :
-                         indicator.name === 'rsi' ? `RSI_${indicator.parameters.period}` :
-                         indicator.name === 'ema' ? `EMA_${indicator.parameters.period}` :
-                         `${indicator.name.toUpperCase()}_${indicator.parameters.period}`;
-                         
       const indicatorValues = result.indicators?.[outputName] || 
                              result.indicators?.[outputName.toLowerCase()] || 
                              [];
 
       const dates = result.dates || [];
       
-      // Map indicator values to line data using the dates from the response (timestamp-based approach)
+      // Special handling for ZigZag: interpolate between extremes to create continuous lines
+      if (indicator.name === 'zigzag') {
+        // First, collect all the extreme points (non-null values)
+        const extremes: { time: UTCTimestamp; value: number; index: number }[] = [];
+        
+        indicatorValues.forEach((value: number | null, index: number) => {
+          if (value !== null && value !== undefined && dates[index] && 
+              typeof value === 'number' && isFinite(value) && !isNaN(value)) {
+            const timestamp = new Date(dates[index]).getTime() / 1000;
+            if (isFinite(timestamp) && !isNaN(timestamp)) {
+              extremes.push({
+                time: timestamp as UTCTimestamp,
+                value,
+                index
+              });
+            }
+          }
+        });
+
+        console.log(`ZigZag extremes found: ${extremes.length}`);
+
+        if (extremes.length < 2) {
+          // Not enough extremes to interpolate - return sparse data
+          return indicatorValues
+            .map((value: number | null, index: number) => {
+              if (value === null || value === undefined || !dates[index]) return null;
+              const timestamp = new Date(dates[index]).getTime() / 1000;
+              return {
+                time: timestamp as UTCTimestamp,
+                value
+              };
+            })
+            .filter((point: any) => point !== null) as LineData[];
+        }
+
+        // Interpolate between extremes to create continuous ZigZag lines
+        const interpolatedData: LineData[] = [];
+        
+        for (let i = 0; i < extremes.length - 1; i++) {
+          const startExtreme = extremes[i];
+          const endExtreme = extremes[i + 1];
+          
+          // Add the start extreme
+          interpolatedData.push({
+            time: startExtreme.time,
+            value: startExtreme.value
+          });
+          
+          // Interpolate between start and end
+          const startIndex = startExtreme.index;
+          const endIndex = endExtreme.index;
+          const valueDiff = endExtreme.value - startExtreme.value;
+          const indexDiff = endIndex - startIndex;
+          
+          for (let j = startIndex + 1; j < endIndex; j++) {
+            if (dates[j]) {
+              const progress = (j - startIndex) / indexDiff;
+              const interpolatedValue = startExtreme.value + (valueDiff * progress);
+              const timestamp = new Date(dates[j]).getTime() / 1000;
+              
+              if (isFinite(timestamp) && !isNaN(timestamp)) {
+                interpolatedData.push({
+                  time: timestamp as UTCTimestamp,
+                  value: interpolatedValue
+                });
+              }
+            }
+          }
+        }
+        
+        // Add the final extreme
+        const lastExtreme = extremes[extremes.length - 1];
+        interpolatedData.push({
+          time: lastExtreme.time,
+          value: lastExtreme.value
+        });
+
+        console.log(`ZigZag interpolated: ${extremes.length} extremes → ${interpolatedData.length} continuous points`);
+        return interpolatedData;
+      }
+
+      // Regular indicator processing for non-ZigZag indicators
       const lineData: LineData[] = indicatorValues
         .map((value: number | null, index: number) => {
-          if (value === null || value === undefined || !dates[index]) return null;
+          if (value === null || value === undefined || !dates[index] || 
+              typeof value !== 'number' || !isFinite(value) || isNaN(value)) {
+            return null;
+          }
           
           const timestamp = new Date(dates[index]).getTime() / 1000;
+          if (!isFinite(timestamp) || isNaN(timestamp)) {
+            return null;
+          }
           
           return {
             time: timestamp as UTCTimestamp,
@@ -234,9 +337,19 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       const indicatorPromises = indicators.map(async (indicator) => {
         const indicatorData = await calculateIndicatorData(priceData, indicator);
         
+        // Generate display name based on indicator type
+        let displayName = '';
+        if (indicator.name === 'zigzag') {
+          displayName = `${indicator.displayName}(${(indicator.parameters.threshold * 100).toFixed(1)}%)`;
+        } else if (indicator.name === 'macd') {
+          displayName = `${indicator.displayName}(${indicator.parameters.fast_period},${indicator.parameters.slow_period},${indicator.parameters.signal_period})`;
+        } else {
+          displayName = `${indicator.displayName}(${indicator.parameters.period})`;
+        }
+        
         return {
           id: indicator.id,
-          name: `${indicator.displayName}(${indicator.parameters.period})`,
+          name: displayName,
           data: indicatorData,
           color: indicator.parameters.color || '#2196F3',
           visible: indicator.visible

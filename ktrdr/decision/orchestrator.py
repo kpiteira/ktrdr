@@ -61,9 +61,16 @@ class PositionState:
     def holding_period(self) -> Optional[float]:
         """Holding period in hours."""
         if self.entry_time:
-            current_time = pd.Timestamp.now()
+            current_time = pd.Timestamp.now(tz='UTC')
             if isinstance(self.entry_time, pd.Timestamp):
-                return (current_time - self.entry_time).total_seconds() / 3600
+                # Ensure both timestamps are timezone-aware UTC
+                entry_time = self.entry_time
+                if entry_time.tz is None:
+                    entry_time = entry_time.tz_localize('UTC')
+                elif str(entry_time.tz) != 'UTC':
+                    entry_time = entry_time.tz_convert('UTC')
+                    
+                return (current_time - entry_time).total_seconds() / 3600
         return None
     
     def update_from_decision(self, decision: TradingDecision, current_bar: pd.Series):
@@ -171,25 +178,61 @@ class DecisionOrchestrator:
         Returns:
             TradingDecision with signal, confidence, and metadata
         """
-        # Step 1: Calculate indicators
-        indicators = self.indicator_engine.calculate_multiple(
-            data=historical_data,
-            configs=self.strategy_config['indicators']
-        )
+        # Step 1: Calculate indicators (use same approach as training)
+        # Initialize indicator engine with strategy configs if not already done
+        if not self.indicator_engine.indicators:
+            # Convert dict configs to proper format
+            indicator_configs = self.strategy_config['indicators']
+            fixed_configs = []
+            for config in indicator_configs:
+                if isinstance(config, dict) and 'type' not in config:
+                    config = config.copy()
+                    config['type'] = config['name'].upper()
+                fixed_configs.append(config)
+            
+            from ..indicators.indicator_engine import IndicatorEngine
+            self.indicator_engine = IndicatorEngine(indicators=fixed_configs)
+        
+        # Apply indicators to get calculated values
+        indicators_df = self.indicator_engine.apply(historical_data)
+        
+        # Map indicators to original names for fuzzy processing (same as training)
+        mapped_indicators = {}
+        for config in self.strategy_config['indicators']:
+            original_name = config['name']
+            indicator_type = config['name'].upper()
+            
+            # Find matching columns
+            for col in indicators_df.columns:
+                if col.upper().startswith(indicator_type):
+                    if indicator_type in ['SMA', 'EMA']:
+                        # Use price ratio for moving averages
+                        mapped_indicators[original_name] = historical_data['close'].iloc[-1] / indicators_df[col].iloc[-1]
+                    elif indicator_type == 'MACD':
+                        # Use main MACD line
+                        if col.startswith('MACD_') and '_signal_' not in col and '_hist_' not in col:
+                            mapped_indicators[original_name] = indicators_df[col].iloc[-1]
+                            break
+                    else:
+                        # Use raw values for other indicators
+                        mapped_indicators[original_name] = indicators_df[col].iloc[-1]
+                        break
         
         # Step 2: Generate fuzzy memberships
-        fuzzy_values = self.fuzzy_engine.evaluate_batch(
-            indicators=indicators,
-            fuzzy_config=self.strategy_config['fuzzy_sets']
-        )
+        fuzzy_values = {}
+        for indicator_name, indicator_value in mapped_indicators.items():
+            if indicator_name in self.strategy_config['fuzzy_sets']:
+                # Fuzzify this indicator
+                membership_result = self.fuzzy_engine.fuzzify(indicator_name, indicator_value)
+                fuzzy_values.update(membership_result)
         
         # Step 3: Prepare decision context
         context = self._prepare_context(
             symbol=symbol,
             current_bar=current_bar,
             historical_data=historical_data,
-            indicators=indicators.iloc[-1].to_dict(),
-            fuzzy_memberships=fuzzy_values.iloc[-1].to_dict(),
+            indicators=mapped_indicators,
+            fuzzy_memberships=fuzzy_values,
             portfolio_state=portfolio_state
         )
         
@@ -198,6 +241,8 @@ class DecisionOrchestrator:
             self.model, self.model_metadata = self._load_model_for_symbol(symbol, timeframe)
             self.decision_engine.neural_model.model = self.model
             self.decision_engine.neural_model.is_trained = True
+            # Set the saved scaler for consistent feature scaling
+            self.decision_engine.neural_model.feature_scaler = self.model_metadata.get("scaler")
         
         # Step 5: Generate decision using the decision engine
         decision = self.decision_engine.generate_decision(
@@ -220,22 +265,15 @@ class DecisionOrchestrator:
         Returns:
             FuzzyEngine instance configured with strategy fuzzy sets
         """
-        # Convert strategy fuzzy sets to FuzzyConfig format
-        fuzzy_sets = {}
+        # Use the same approach as training system - load directly from dict
+        from ..fuzzy.config import FuzzyConfigLoader
+        
         strategy_fuzzy_sets = self.strategy_config.get('fuzzy_sets', {})
+        if not strategy_fuzzy_sets:
+            raise ValueError("No fuzzy_sets found in strategy configuration")
         
-        for indicator_name, sets in strategy_fuzzy_sets.items():
-            fuzzy_set_configs = {}
-            for set_name, parameters in sets.items():
-                # Assume triangular membership functions for now
-                fuzzy_set_configs[set_name] = MembershipFunctionConfig(
-                    type="triangular",
-                    parameters=parameters
-                )
-            fuzzy_sets[indicator_name] = FuzzySetConfig(fuzzy_set_configs)
-        
-        # Create FuzzyConfig
-        fuzzy_config = FuzzyConfig(fuzzy_sets)
+        # Load fuzzy config directly from the strategy fuzzy_sets
+        fuzzy_config = FuzzyConfigLoader.load_from_dict(strategy_fuzzy_sets)
         
         return FuzzyEngine(fuzzy_config)
     
@@ -285,6 +323,9 @@ class DecisionOrchestrator:
             parts = timeframe_version.split("_v")
             timeframe = parts[0]
             version = "v" + parts[1]  # Re-add the 'v' prefix
+        elif timeframe_version.endswith("_latest"):
+            timeframe = timeframe_version.replace("_latest", "")
+            version = None  # Let model storage handle latest
         else:
             timeframe = timeframe_version
             version = None

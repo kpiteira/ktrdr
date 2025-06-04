@@ -59,65 +59,61 @@ class MLPTradingModel(BaseNeuralModel):
         return nn.Sequential(*layers)
     
     def prepare_features(self, fuzzy_data: pd.DataFrame, 
-                        indicators: pd.DataFrame) -> torch.Tensor:
+                        indicators: pd.DataFrame, 
+                        saved_scaler=None) -> torch.Tensor:
         """Create feature vector from fuzzy memberships and context.
+        
+        IMPORTANT: This must create the same features as training FeatureEngineer!
         
         Args:
             fuzzy_data: DataFrame with fuzzy membership values
             indicators: DataFrame with raw indicator values
+            saved_scaler: Pre-trained scaler from model training (for consistent scaling)
             
         Returns:
             Tensor of prepared features
         """
-        features = []
+        # Use the same feature engineering logic as training to avoid dimension mismatch
+        from ...training.feature_engineering import FeatureEngineer
         
-        # Core fuzzy membership values
-        fuzzy_columns = [col for col in fuzzy_data.columns if 'membership' in col.lower()]
-        for column in fuzzy_columns:
-            if column in fuzzy_data.columns:
-                features.append(fuzzy_data[column].values)
+        # Get feature config from model config, with defaults that match training
+        feature_config = self.config.get('features', {})
+        # Ensure the same defaults as training
+        feature_config.setdefault('include_price_context', True)
+        feature_config.setdefault('include_volume_context', True)
+        feature_config.setdefault('include_raw_indicators', False)
+        feature_config.setdefault('lookback_periods', 1)
+        feature_config.setdefault('scale_features', True)
         
-        # Price context features (if enabled)
-        if self.config.get('features', {}).get('include_price_context', False):
-            # Current price relative to SMA
-            if 'close' in indicators.columns and 'sma_20' in indicators.columns:
-                price_ratio = indicators['close'] / indicators['sma_20']
-                features.append(price_ratio.values)
-            
-            # Price momentum (rate of change)
-            if 'close' in indicators.columns:
-                roc = indicators['close'].pct_change(5).fillna(0)
-                features.append(roc.values)
+        # Create FeatureEngineer with the same config
+        engineer = FeatureEngineer(feature_config)
         
-        # Volume context (if enabled)
-        if self.config.get('features', {}).get('include_volume_context', False):
-            if 'volume' in indicators.columns:
-                # Volume relative to average
-                volume_sma = indicators['volume'].rolling(20).mean()
-                volume_ratio = indicators['volume'] / volume_sma.fillna(indicators['volume'])
-                features.append(volume_ratio.values)
+        # CRITICAL: Use the saved scaler from training to ensure consistent scaling
+        if saved_scaler is not None:
+            engineer.scaler = saved_scaler
         
-        # Lookback features (temporal context)
-        lookback = self.config.get('features', {}).get('lookback_periods', 1)
-        if lookback > 1:
-            # Add lagged fuzzy values
-            for i in range(1, lookback):
-                for column in fuzzy_columns:
-                    if column in fuzzy_data.columns:
-                        shifted = fuzzy_data[column].shift(i).fillna(0.5)  # 0.5 = neutral
-                        features.append(shifted.values)
+        # Create a dummy price_data DataFrame from indicators if needed
+        # For inference, we typically only have the current bar, so create minimal price data
+        if 'close' in indicators.columns:
+            price_data = indicators[['open', 'high', 'low', 'close', 'volume']].copy() if 'volume' in indicators.columns else indicators[['open', 'high', 'low', 'close']].copy()
+        else:
+            # Fallback: create minimal price data
+            price_data = pd.DataFrame({
+                'open': indicators.get('open', 0),
+                'high': indicators.get('high', 0), 
+                'low': indicators.get('low', 0),
+                'close': indicators.get('close', 0),
+                'volume': indicators.get('volume', 0)
+            }, index=indicators.index)
         
-        # Stack all features
-        if not features:
-            raise ValueError("No features could be extracted from the data")
+        # Use the same feature preparation as training
+        features_tensor, feature_names = engineer.prepare_features(
+            fuzzy_data=fuzzy_data,
+            indicators=indicators, 
+            price_data=price_data
+        )
         
-        feature_matrix = np.column_stack(features)
-        
-        # Handle NaN values
-        feature_matrix = np.nan_to_num(feature_matrix, nan=0.0)
-        
-        # Convert to tensor
-        return torch.FloatTensor(feature_matrix)
+        return features_tensor
     
     def train(self, X: torch.Tensor, y: torch.Tensor, 
               validation_data: Optional[tuple] = None) -> Dict[str, Any]:

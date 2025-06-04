@@ -22,6 +22,7 @@ def run_backtest(
     capital: float = typer.Option(100000, "--capital", "-c", help="Initial capital for backtest"),
     commission: float = typer.Option(0.001, "--commission", help="Commission rate as decimal (0.001 = 0.1%)"),
     slippage: float = typer.Option(0.0005, "--slippage", help="Slippage rate as decimal (0.0005 = 0.05%)"),
+    data_mode: str = typer.Option("local", "--data-mode", help="Data loading mode: 'local', 'ib', or 'full'"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output with progress"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress all output except errors"),
@@ -66,6 +67,7 @@ def run_backtest(
             initial_capital=capital,
             commission=commission,
             slippage=slippage,
+            data_mode=data_mode,
             verbose=verbose and not quiet
         )
         

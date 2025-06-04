@@ -18,6 +18,7 @@ interface IndicatorSidebarProps {
   newMACDFastPeriod: number;
   newMACDSlowPeriod: number;
   newMACDSignalPeriod: number;
+  newZigZagThreshold: number;
   isLoading: boolean;
   isCollapsed?: boolean;
 
@@ -25,6 +26,7 @@ interface IndicatorSidebarProps {
   onAddSMA: () => void;
   onAddRSI: () => void;
   onAddMACD: () => void;
+  onAddZigZag: () => void;
   onRemoveIndicator: (id: string) => void;
   onToggleIndicator: (id: string) => void;
   onToggleParameterControls: (indicatorId: string) => void;
@@ -34,6 +36,7 @@ interface IndicatorSidebarProps {
   onNewMACDFastPeriodChange: (period: number) => void;
   onNewMACDSlowPeriodChange: (period: number) => void;
   onNewMACDSignalPeriodChange: (period: number) => void;
+  onNewZigZagThresholdChange: (threshold: number) => void;
   onToggleCollapse?: () => void;
 }
 
@@ -46,11 +49,13 @@ const IndicatorSidebar: FC<IndicatorSidebarProps> = ({
   newMACDFastPeriod,
   newMACDSlowPeriod,
   newMACDSignalPeriod,
+  newZigZagThreshold,
   isLoading,
   isCollapsed = false,
   onAddSMA,
   onAddRSI,
   onAddMACD,
+  onAddZigZag,
   onRemoveIndicator,
   onToggleIndicator,
   onToggleParameterControls,
@@ -60,6 +65,7 @@ const IndicatorSidebar: FC<IndicatorSidebarProps> = ({
   onNewMACDFastPeriodChange,
   onNewMACDSlowPeriodChange,
   onNewMACDSignalPeriodChange,
+  onNewZigZagThresholdChange,
   onToggleCollapse
 }) => {
   if (isCollapsed) {
@@ -248,6 +254,20 @@ const IndicatorSidebar: FC<IndicatorSidebarProps> = ({
             onSignalPeriodChange={onNewMACDSignalPeriodChange}
             onAdd={onAddMACD}
           />
+
+          {/* ZigZag Section */}
+          <IndicatorAddSection
+            label="Pattern: ZigZag Analysis"
+            value={newZigZagThreshold * 100} // Convert to percentage for display
+            min={1}
+            max={50}
+            unit="% threshold"
+            buttonLabel={`Add ZigZag(${(newZigZagThreshold * 100).toFixed(1)}%)`}
+            buttonColor="#FF6B35"
+            isLoading={isLoading}
+            onValueChange={(value) => onNewZigZagThresholdChange(value / 100)} // Convert back to decimal
+            onAdd={onAddZigZag}
+          />
         </div>
       </div>
 
@@ -318,7 +338,12 @@ const IndicatorItem: FC<IndicatorItemProps> = ({
             }}
           />
           <span style={{ fontWeight: '500' }}>
-            {indicator.displayName}({localParameterValues.period || indicator.parameters.period})
+            {indicator.name === 'zigzag' 
+              ? `${indicator.displayName}(${((localParameterValues.threshold || indicator.parameters.threshold) * 100).toFixed(1)}%)`
+              : indicator.name === 'macd'
+              ? `${indicator.displayName}(${localParameterValues.fast_period || indicator.parameters.fast_period},${localParameterValues.slow_period || indicator.parameters.slow_period},${localParameterValues.signal_period || indicator.parameters.signal_period})`
+              : `${indicator.displayName}(${localParameterValues.period || indicator.parameters.period})`
+            }
           </span>
         </div>
         

@@ -96,12 +96,12 @@ model:
 # Decision logic configuration
 decisions:
   output_format: "classification"  # BUY=0, HOLD=1, SELL=2
-  confidence_threshold: 0.6  # minimum confidence for action
-  position_awareness: true   # consider current position in decisions
+  confidence_threshold: 0.5  # LOWERED - minimum confidence for action
+  position_awareness: true    # ENABLED - consider current position in decisions
   
   # Signal filtering
   filters:
-    min_signal_separation: 4  # minimum bars between signals
+    min_signal_separation: 1  # REDUCED - minimum bars between signals
     volume_filter: false       # require above-average volume
 
 # Decision orchestrator settings
@@ -124,7 +124,7 @@ training:
   method: "supervised"
   labels:
     source: "zigzag"  # forward-looking ZigZag operator
-    zigzag_threshold: 0.05  # 5% price movement for label generation
+    zigzag_threshold: 0.03  # 3% price movement for label generation (more sensitive)
     label_lookahead: 20     # maximum bars to look ahead
   
   # Train/validation/test split

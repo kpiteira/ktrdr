@@ -135,6 +135,7 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
       newMACDFastPeriod={indicatorManager.newMACDFastPeriod}
       newMACDSlowPeriod={indicatorManager.newMACDSlowPeriod}
       newMACDSignalPeriod={indicatorManager.newMACDSignalPeriod}
+      newZigZagThreshold={indicatorManager.newZigZagThreshold}
       isLoading={indicatorManager.isLoading}
       
       // UI state
@@ -144,6 +145,7 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
       onAddSMA={indicatorManager.handleAddSMA}
       onAddRSI={indicatorManager.handleAddRSI}
       onAddMACD={indicatorManager.handleAddMACD}
+      onAddZigZag={indicatorManager.handleAddZigZag}
       onRemoveIndicator={handleRemoveIndicator}
       onToggleIndicator={handleToggleIndicator}
       onToggleParameterControls={indicatorManager.toggleParameterControls}
@@ -153,6 +155,7 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
       onNewMACDFastPeriodChange={indicatorManager.setNewMACDFastPeriod}
       onNewMACDSlowPeriodChange={indicatorManager.setNewMACDSlowPeriod}
       onNewMACDSignalPeriodChange={indicatorManager.setNewMACDSignalPeriod}
+      onNewZigZagThresholdChange={indicatorManager.setNewZigZagThreshold}
       onToggleCollapse={onToggleCollapse}
     />
   );

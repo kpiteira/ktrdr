@@ -77,16 +77,22 @@ class DecisionEngine:
         raw_signal = Signal[nn_output['signal']]
         confidence = nn_output['confidence']
         
+        # Normalize timestamp to ensure proper handling
+        if isinstance(current_data.name, pd.Timestamp):
+            timestamp = current_data.name
+        else:
+            timestamp = pd.Timestamp(current_data.name)
+        
         # Apply position awareness and filters
         final_signal = self._apply_position_logic(
-            raw_signal, confidence, current_data.name
+            raw_signal, confidence, timestamp
         )
         
         # Create decision object
         decision = TradingDecision(
             signal=final_signal,
             confidence=confidence,
-            timestamp=pd.Timestamp(current_data.name) if not isinstance(current_data.name, pd.Timestamp) else current_data.name,
+            timestamp=timestamp,
             reasoning={
                 'fuzzy_memberships': fuzzy_memberships,
                 'nn_probabilities': nn_output['probabilities'],
@@ -123,8 +129,8 @@ class DecisionEngine:
             if col in current_data:
                 indicators_df[col] = current_data[col]
         
-        # Use model's feature preparation
-        return self.neural_model.prepare_features(fuzzy_df, indicators_df)
+        # Use model's feature preparation with saved scaler for consistent scaling
+        return self.neural_model.prepare_features(fuzzy_df, indicators_df, self.neural_model.feature_scaler)
     
     def _apply_position_logic(self, raw_signal: Signal, 
                             confidence: float, 
@@ -151,7 +157,22 @@ class DecisionEngine:
         min_separation_hours = filters.get('min_signal_separation', 4)
         
         if self.last_signal_time is not None:
-            time_since_last = (timestamp - self.last_signal_time).total_seconds() / 3600
+            # Ensure both timestamps are timezone-aware UTC for consistent comparison
+            current_ts = timestamp
+            last_ts = self.last_signal_time
+            
+            # Convert to UTC if needed
+            if current_ts.tz is None:
+                current_ts = current_ts.tz_localize('UTC')
+            elif str(current_ts.tz) != 'UTC':
+                current_ts = current_ts.tz_convert('UTC')
+                
+            if last_ts.tz is None:
+                last_ts = last_ts.tz_localize('UTC')
+            elif str(last_ts.tz) != 'UTC':
+                last_ts = last_ts.tz_convert('UTC')
+            
+            time_since_last = (current_ts - last_ts).total_seconds() / 3600
             if time_since_last < min_separation_hours:
                 return Signal.HOLD
         
@@ -195,22 +216,32 @@ class DecisionEngine:
         
         return active_filters
     
-    def update_position(self, executed_signal: Signal):
+    def update_position(self, executed_signal: Signal, timestamp: pd.Timestamp = None):
         """Update internal position tracking after trade execution.
         
         Args:
             executed_signal: The signal that was executed
+            timestamp: The timestamp of the signal (defaults to now if not provided)
         """
+        if timestamp is None:
+            timestamp = pd.Timestamp.now(tz='UTC')
+        
+        # Ensure timestamp is timezone-aware UTC
+        if timestamp.tz is None:
+            timestamp = timestamp.tz_localize('UTC')
+        elif str(timestamp.tz) != 'UTC':
+            timestamp = timestamp.tz_convert('UTC')
+            
         if executed_signal == Signal.BUY:
             self.current_position = Position.LONG
-            self.last_signal_time = pd.Timestamp.now()
+            self.last_signal_time = timestamp
         elif executed_signal == Signal.SELL:
             if self.current_position == Position.LONG:
                 self.current_position = Position.FLAT
             else:
                 # We don't support short positions in MVP
                 self.current_position = Position.FLAT
-            self.last_signal_time = pd.Timestamp.now()
+            self.last_signal_time = timestamp
     
     def reset(self):
         """Reset engine state."""

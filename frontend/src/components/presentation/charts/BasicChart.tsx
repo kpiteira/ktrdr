@@ -170,11 +170,25 @@ const BasicChart: FC<BasicChartProps> = ({
     // Set up event listeners
     if (onTimeRangeChange) {
       chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
-        if (range && range.from && range.to && !isNaN(range.from) && !isNaN(range.to)) {
-          onTimeRangeChange({
-            start: new Date(range.from * 1000).toISOString(),
-            end: new Date(range.to * 1000).toISOString()
-          });
+        // Enhanced validation for sparse data scenarios
+        if (range && 
+            range.from !== null && range.from !== undefined &&
+            range.to !== null && range.to !== undefined &&
+            typeof range.from === 'number' && 
+            typeof range.to === 'number' &&
+            !isNaN(range.from) && !isNaN(range.to) &&
+            isFinite(range.from) && isFinite(range.to) &&
+            range.from < range.to) {
+          try {
+            onTimeRangeChange({
+              start: new Date(range.from * 1000).toISOString(),
+              end: new Date(range.to * 1000).toISOString()
+            });
+          } catch (error) {
+            console.warn('Failed to process time range change:', error);
+          }
+        } else {
+          console.debug('Ignoring invalid time range from sparse data:', range);
         }
       });
     }
@@ -210,8 +224,24 @@ const BasicChart: FC<BasicChartProps> = ({
       return;
     }
 
-    // Capture the current range to detect jumps
-    const rangeBeforeUpdate = chartRef.current.timeScale().getVisibleRange();
+    // Capture the current range to detect jumps - safely handle null ranges for sparse data
+    let rangeBeforeUpdate = null;
+    try {
+      rangeBeforeUpdate = chartRef.current.timeScale().getVisibleRange();
+      // Validate range for sparse data scenarios
+      if (rangeBeforeUpdate && (
+        typeof rangeBeforeUpdate.from !== 'number' || 
+        typeof rangeBeforeUpdate.to !== 'number' ||
+        !isFinite(rangeBeforeUpdate.from) || 
+        !isFinite(rangeBeforeUpdate.to) ||
+        rangeBeforeUpdate.from >= rangeBeforeUpdate.to
+      )) {
+        rangeBeforeUpdate = null;
+      }
+    } catch (error) {
+      console.warn('Failed to get visible range (sparse data):', error);
+      rangeBeforeUpdate = null;
+    }
     const existingIndicatorCount = indicatorSeriesRef.current.size;
 
     // Update candlestick data
@@ -268,7 +298,26 @@ const BasicChart: FC<BasicChartProps> = ({
       
       if (series) {
         if (indicator.data && indicator.data.length > 0) {
-          series.setData(indicator.data);
+          // Validate data points for sparse indicators like ZigZag
+          const validDataPoints = indicator.data.filter(point => 
+            point && 
+            typeof point.time !== 'undefined' && 
+            typeof point.value === 'number' && 
+            !isNaN(point.value) && 
+            isFinite(point.value)
+          );
+          
+          // Only set data if we have valid points to prevent TradingView crashes
+          if (validDataPoints.length > 0) {
+            try {
+              series.setData(validDataPoints);
+            } catch (error) {
+              console.warn(`Failed to set data for indicator ${indicator.name}:`, error);
+              // Continue without crashing - series will be empty but chart remains functional
+            }
+          } else {
+            console.warn(`Indicator ${indicator.name} has no valid data points - skipping data update`);
+          }
         }
         
         // Apply all options at once including visibility

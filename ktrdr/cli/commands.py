@@ -1636,6 +1636,30 @@ def train_command(
                   validation_split, epochs, data_mode, verbose, dry_run)
 
 
+# ===== Model Debugging Commands =====
+
+@cli_app.command("model-test")
+def model_test_command(
+    strategy: str = typer.Argument(..., help="Path to strategy YAML configuration file"),
+    symbol: str = typer.Argument(..., help="Trading symbol to test (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Argument(..., help="Timeframe for test data (e.g., 1h, 4h, 1d)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Path to specific trained model"),
+    samples: int = typer.Option(10, "--samples", help="Number of recent data points to test"),
+    data_mode: str = typer.Option("local", "--data-mode", help="Data loading mode: 'local', 'ib', or 'full'"),
+):
+    """
+    Test a trained model on recent data to see what signals it generates.
+    
+    This is useful for debugging why backtests might show no trades.
+    
+    Examples:
+        ktrdr model-test strategies/neuro_mean_reversion.yaml AAPL 1h
+        ktrdr model-test strategies/momentum.yaml MSFT 4h --samples 20
+    """
+    from .model_testing_commands import test_model_signals
+    test_model_signals(strategy, symbol, timeframe, model, samples, data_mode)
+
+
 # ===== Backtesting Commands =====
 
 @cli_app.command("backtest")
@@ -1649,6 +1673,7 @@ def backtest_command(
     capital: float = typer.Option(100000, "--capital", "-c", help="Initial capital for backtest"),
     commission: float = typer.Option(0.001, "--commission", help="Commission rate as decimal (0.001 = 0.1%)"),
     slippage: float = typer.Option(0.0005, "--slippage", help="Slippage rate as decimal (0.0005 = 0.05%)"),
+    data_mode: str = typer.Option("local", "--data-mode", help="Data loading mode: 'local', 'ib', or 'full'"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output with progress"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress all output except errors"),
@@ -1665,4 +1690,4 @@ def backtest_command(
     """
     from .backtesting_commands import run_backtest
     run_backtest(strategy, symbol, timeframe, start_date, end_date, model,
-                capital, commission, slippage, verbose, output, quiet)
+                capital, commission, slippage, data_mode, verbose, output, quiet)

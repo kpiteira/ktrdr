@@ -25,6 +25,7 @@ class BacktestConfig:
     initial_capital: float = 100000.0
     commission: float = 0.001  # 0.1%
     slippage: float = 0.0005  # 0.05%
+    data_mode: str = "local"  # Data loading mode
     verbose: bool = False
 
 
@@ -122,16 +123,51 @@ class BacktestingEngine:
         if self.config.verbose:
             print(f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}")
             print(f"🔧 Running simulation...")
+            print(f"🔍 DEBUG: Data range check - Start: {self.config.start_date}, End: {self.config.end_date}")
+            print(f"🔍 DEBUG: Actual data range - Start: {data.index[0]}, End: {data.index[-1]}")
+            print(f"🔍 DEBUG: Data length: {len(data)} bars")
         
         # Initialize tracking
         trades_executed = 0
         last_progress_update = 0
         
-        # Main simulation loop
+        # DEBUG: Track signal statistics
+        signal_counts = {"BUY": 0, "SELL": 0, "HOLD": 0}
+        non_hold_signals = []
+        trade_attempts = []
+        
+        # Main simulation loop with progress tracking
+        last_processed_timestamp = None
+        repeated_timestamp_count = 0
+        
         for idx in range(len(data)):
             current_bar = data.iloc[idx]
             current_timestamp = current_bar.name
             current_price = current_bar['close']
+            
+            # Debug: Check for infinite loops on the same timestamp
+            if current_timestamp == last_processed_timestamp:
+                repeated_timestamp_count += 1
+                if repeated_timestamp_count > 5:
+                    print(f"🚨 INFINITE LOOP DETECTED: Processing {current_timestamp} repeatedly ({repeated_timestamp_count} times)")
+                    print(f"   Breaking to prevent infinite loop")
+                    break
+            else:
+                repeated_timestamp_count = 0
+                last_processed_timestamp = current_timestamp
+            
+            # Safety check: ensure we don't process beyond the configured end date
+            if self.config.end_date:
+                end_date = pd.to_datetime(self.config.end_date)
+                if current_timestamp.tz is not None and end_date.tz is None:
+                    end_date = end_date.tz_localize('UTC')
+                elif current_timestamp.tz is None and end_date.tz is not None:
+                    current_timestamp = current_timestamp.tz_localize('UTC')
+                    
+                if current_timestamp > end_date:
+                    if self.config.verbose:
+                        print(f"🛑 Breaking loop: {current_timestamp} exceeds end date {end_date}")
+                    break
             
             # Prepare historical data up to current point
             historical_data = data.iloc[:idx+1]
@@ -164,8 +200,29 @@ class BacktestingEngine:
                     current_position=Position.FLAT
                 )
             
+            # DEBUG: Track all signals
+            signal_counts[decision.signal.value] += 1
+            
+            # Track decision for analysis (even HOLD decisions)
+            if self.config.verbose and idx % max(1, len(data) // 10) == 0:  # Log every 10% of progress
+                progress = (idx / len(data)) * 100
+                signal_name = decision.signal.value
+                print(f"⏳ {progress:.0f}% | {current_timestamp.strftime('%Y-%m-%d')} | Signal: {signal_name} | Confidence: {decision.confidence:.3f}")
+            
             # Execute decision if action required
             if decision.signal != Signal.HOLD:
+                # DEBUG: Log every non-HOLD signal
+                non_hold_signals.append({
+                    "timestamp": current_timestamp,
+                    "signal": decision.signal.value,
+                    "confidence": decision.confidence,
+                    "price": current_price
+                })
+                
+                if self.config.verbose:
+                    print(f"🎯 NON-HOLD SIGNAL: {decision.signal.value} at {current_timestamp} "
+                          f"| Confidence: {decision.confidence:.4f} | Price: ${current_price:.2f}")
+                
                 trade = self.position_manager.execute_trade(
                     signal=decision.signal,
                     price=current_price,
@@ -177,12 +234,27 @@ class BacktestingEngine:
                     }
                 )
                 
+                # DEBUG: Log trade execution result
+                trade_attempts.append({
+                    "timestamp": current_timestamp,
+                    "signal": decision.signal.value,
+                    "confidence": decision.confidence,
+                    "price": current_price,
+                    "trade_executed": trade is not None,
+                    "trade_details": trade.__dict__ if trade else None
+                })
+                
                 if trade:
                     trades_executed += 1
+                    # Update the decision engine's position state
+                    self.orchestrator.decision_engine.update_position(decision.signal, current_timestamp)
                     if self.config.verbose:
                         action = "🟢 BUY " if decision.signal == Signal.BUY else "🔴 SELL"
-                        print(f"{current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action} @ ${current_price:.2f} "
+                        print(f"✅ TRADE EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action} @ ${current_price:.2f} "
                               f"| Confidence: {decision.confidence:.2f} | Trade #{trades_executed}")
+                else:
+                    if self.config.verbose:
+                        print(f"❌ TRADE FAILED: {decision.signal.value} signal not executed at {current_timestamp}")
             
             # Update position with current market price
             self.position_manager.update_position(current_price, current_timestamp)
@@ -212,6 +284,35 @@ class BacktestingEngine:
         if self.config.verbose:
             print("=" * 60)
             print("✅ Backtest completed!")
+            
+            # DEBUG: Print detailed signal analysis
+            print(f"\n🔍 SIGNAL ANALYSIS:")
+            print(f"   Total bars processed: {len(data):,}")
+            print(f"   HOLD signals: {signal_counts['HOLD']:,}")
+            print(f"   BUY signals: {signal_counts['BUY']:,}")
+            print(f"   SELL signals: {signal_counts['SELL']:,}")
+            print(f"   Non-HOLD signals: {len(non_hold_signals):,}")
+            print(f"   Trade attempts: {len(trade_attempts):,}")
+            print(f"   Successful trades: {trades_executed}")
+            
+            if non_hold_signals:
+                print(f"\n📊 FIRST 5 NON-HOLD SIGNALS:")
+                for i, signal in enumerate(non_hold_signals[:5]):
+                    print(f"   {i+1}. {signal['timestamp']} | {signal['signal']} | "
+                          f"Confidence: {signal['confidence']:.4f} | Price: ${signal['price']:.2f}")
+            
+            if trade_attempts:
+                print(f"\n💼 TRADE ATTEMPT ANALYSIS:")
+                successful = sum(1 for t in trade_attempts if t['trade_executed'])
+                failed = len(trade_attempts) - successful
+                print(f"   Successful: {successful}")
+                print(f"   Failed: {failed}")
+                
+                if failed > 0:
+                    print(f"\n❌ FAILED TRADE ATTEMPTS:")
+                    for i, attempt in enumerate([t for t in trade_attempts if not t['trade_executed']][:5]):
+                        print(f"   {i+1}. {attempt['timestamp']} | {attempt['signal']} | "
+                              f"Confidence: {attempt['confidence']:.4f} | Price: ${attempt['price']:.2f}")
         
         results = self._generate_results(start_time, end_time, execution_time)
         
@@ -226,20 +327,26 @@ class BacktestingEngine:
         Returns:
             DataFrame with OHLCV data
         """
-        # Load data using the data manager
+        # Load data using the data manager with specified mode
         data = self.data_manager.load_data(
             symbol=self.config.symbol,
             timeframe=self.config.timeframe,
-            mode="full"
+            mode=self.config.data_mode
         )
         
         # Filter by date range if specified
         if self.config.start_date:
             start_date = pd.to_datetime(self.config.start_date)
+            # Make timezone-aware if needed to match data index
+            if data.index.tz is not None and start_date.tz is None:
+                start_date = start_date.tz_localize('UTC')
             data = data[data.index >= start_date]
         
         if self.config.end_date:
             end_date = pd.to_datetime(self.config.end_date)
+            # Make timezone-aware if needed to match data index
+            if data.index.tz is not None and end_date.tz is None:
+                end_date = end_date.tz_localize('UTC')
             data = data[data.index <= end_date]
         
         return data
@@ -294,8 +401,45 @@ class BacktestingEngine:
         print(f"\n📊 BACKTEST RESULTS - {results.strategy_name}")
         print("=" * 60)
         
-        # Performance metrics
+        # Check if any trades were executed
         metrics = results.metrics
+        if metrics.total_trades == 0:
+            print("⚠️  NO TRADES EXECUTED")
+            print("\n🔍 Analysis:")
+            print("   • No trading signals were generated")
+            print("   • Possible causes:")
+            print("     - Model may need retraining with different parameters")
+            print("     - Confidence thresholds may be too high")
+            print("     - Market conditions don't match training period")
+            print("     - Fuzzy membership functions may need adjustment")
+            
+            # Show decision statistics if available
+            decision_stats = getattr(self.orchestrator, 'decision_history', [])
+            if decision_stats:
+                hold_count = sum(1 for d in decision_stats if d.signal.value == 'HOLD')
+                buy_signals = sum(1 for d in decision_stats if d.signal.value == 'BUY')
+                sell_signals = sum(1 for d in decision_stats if d.signal.value == 'SELL')
+                
+                print(f"\n📈 Signal Distribution:")
+                print(f"   HOLD signals: {hold_count}")
+                print(f"   BUY signals: {buy_signals}")
+                print(f"   SELL signals: {sell_signals}")
+                
+                if len(decision_stats) > 0:
+                    avg_confidence = sum(d.confidence for d in decision_stats) / len(decision_stats)
+                    print(f"   Average confidence: {avg_confidence:.3f}")
+            
+            print(f"\n💡 Recommendations:")
+            print("   • Review model training performance and validation accuracy")
+            print("   • Consider adjusting confidence thresholds in strategy config")
+            print("   • Verify fuzzy membership function parameters")
+            print("   • Try different training periods or market conditions")
+            
+            final_value = results.equity_curve['portfolio_value'].iloc[-1] if len(results.equity_curve) > 0 else self.config.initial_capital
+            print(f"\n🎯 Portfolio Value: ${final_value:,.2f} (unchanged)")
+            return
+        
+        # Performance metrics (only show if trades were made)
         print(f"💰 Performance Metrics:")
         print(f"   Total Return: ${metrics.total_return:,.2f} ({metrics.total_return_pct:.2f}%)")
         print(f"   Annualized Return: {metrics.annualized_return:.2f}%")

@@ -24,6 +24,7 @@ export interface UseIndicatorManagerReturn {
   newMACDFastPeriod: number;
   newMACDSlowPeriod: number;
   newMACDSignalPeriod: number;
+  newZigZagThreshold: number;
   isLoading: boolean;
   
   // Actions
@@ -39,9 +40,11 @@ export interface UseIndicatorManagerReturn {
   setNewMACDFastPeriod: (period: number) => void;
   setNewMACDSlowPeriod: (period: number) => void;
   setNewMACDSignalPeriod: (period: number) => void;
+  setNewZigZagThreshold: (threshold: number) => void;
   handleAddSMA: () => Promise<void>;
   handleAddRSI: () => Promise<void>;
   handleAddMACD: () => Promise<void>;
+  handleAddZigZag: () => Promise<void>;
   handleParameterUpdate: (indicatorId: string, parameterName: string, value: any) => void;
 }
 
@@ -67,6 +70,7 @@ export const useIndicatorManager = (
   const [newMACDFastPeriod, setNewMACDFastPeriod] = useState(12);
   const [newMACDSlowPeriod, setNewMACDSlowPeriod] = useState(26);
   const [newMACDSignalPeriod, setNewMACDSignalPeriod] = useState(9);
+  const [newZigZagThreshold, setNewZigZagThreshold] = useState(0.05);
   
   // Refs for tracking
   const initializedIndicatorsRef = useRef<Set<string>>(new Set());
@@ -269,6 +273,21 @@ export const useIndicatorManager = (
     }
   }, [newMACDFastPeriod, newMACDSlowPeriod, newMACDSignalPeriod, addIndicator, indicators]);
 
+  const handleAddZigZag = useCallback(async () => {
+    if (newZigZagThreshold >= 0.01 && newZigZagThreshold <= 0.5) {
+      // Check for duplicate before adding
+      const duplicate = indicators.some(ind => 
+        ind.name === 'zigzag' && ind.parameters.threshold === newZigZagThreshold
+      );
+      
+      if (duplicate) {
+        return;
+      }
+      
+      await addIndicator('zigzag', { threshold: newZigZagThreshold });
+    }
+  }, [newZigZagThreshold, addIndicator, indicators]);
+
   return {
     // State
     indicators,
@@ -279,6 +298,7 @@ export const useIndicatorManager = (
     newMACDFastPeriod,
     newMACDSlowPeriod,
     newMACDSignalPeriod,
+    newZigZagThreshold,
     isLoading,
     
     // Actions
@@ -294,9 +314,11 @@ export const useIndicatorManager = (
     setNewMACDFastPeriod,
     setNewMACDSlowPeriod,
     setNewMACDSignalPeriod,
+    setNewZigZagThreshold,
     handleAddSMA,
     handleAddRSI,
     handleAddMACD,
+    handleAddZigZag,
     handleParameterUpdate
   };
 };

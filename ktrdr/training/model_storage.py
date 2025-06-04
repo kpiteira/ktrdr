@@ -85,7 +85,7 @@ class ModelStorage:
             "timeframe": timeframe,
             "created_at": datetime.now().isoformat(),
             "model_type": model.__class__.__name__,
-            "input_size": getattr(model, 'input_size', None),
+            "input_size": config.get('model', {}).get('input_size', getattr(model, 'input_size', None)),
             "pytorch_version": torch.__version__,
             "training_summary": {
                 "epochs": training_metrics.get("epochs_trained", 0),
@@ -123,6 +123,8 @@ class ModelStorage:
             if not model_dir.exists():
                 # Fallback: find latest version manually
                 model_dir = self._find_latest_version(strategy_name, symbol, timeframe)
+                if model_dir is None:
+                    raise FileNotFoundError(f"No models found for {strategy_name}/{symbol}_{timeframe}")
         else:
             model_dir = self.base_path / strategy_name / f"{symbol}_{timeframe}_{version}"
         

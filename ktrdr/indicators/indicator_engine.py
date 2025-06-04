@@ -116,7 +116,7 @@ class IndicatorEngine:
                 indicator_name = getattr(
                     indicator, "name", str(indicator.__class__.__name__)
                 )
-                logger.info(f"Computing indicator: {indicator_name}")
+                logger.debug(f"Computing indicator: {indicator_name}")
 
                 # Compute indicator and add to result DataFrame
                 result = indicator.compute(result_df)
@@ -143,7 +143,7 @@ class IndicatorEngine:
                     {"indicator": indicator.__class__.__name__, "error": str(e)},
                 ) from e
 
-        logger.info(f"Successfully applied {len(self.indicators)} indicators to data")
+        logger.debug(f"Successfully applied {len(self.indicators)} indicators to data")
         return result_df
 
     def compute_rsi(

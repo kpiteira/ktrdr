@@ -84,6 +84,33 @@ class ZigZagLabeler:
             
         return labels
     
+    def generate_segment_labels(self, price_data: pd.DataFrame) -> pd.Series:
+        """Generate BALANCED BUY/SELL/HOLD labels using ZigZag segment approach.
+        
+        This creates much more balanced training data by labeling entire trend segments
+        instead of just extreme points. This should fix the class imbalance problem
+        that causes neural network collapse.
+        
+        Logic:
+        1. Find ZigZag extremes using threshold
+        2. Label entire segments between extremes as BUY (upward) or SELL (downward)
+        3. Only keep extremes themselves as HOLD (transition points)
+        
+        Args:
+            price_data: DataFrame with OHLCV data
+            
+        Returns:
+            Series of labels (0=BUY, 1=HOLD, 2=SELL) with better class balance
+        """
+        from ..indicators.zigzag_indicator import ZigZagIndicator
+        
+        if 'close' not in price_data.columns:
+            raise ValueError("price_data must contain 'close' column")
+        
+        # Use ZigZag indicator to find extremes
+        zigzag = ZigZagIndicator(threshold=self.threshold)
+        return zigzag.get_zigzag_segment_labels(price_data)
+    
     def generate_fitness_labels(self, price_data: pd.DataFrame) -> pd.DataFrame:
         """Generate labels with additional fitness metrics for evaluation.
         

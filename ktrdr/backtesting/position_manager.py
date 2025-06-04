@@ -263,8 +263,28 @@ class PositionManager:
             last_update_time=timestamp
         )
         
-        # No trade record yet (only when we close the position)
-        return None
+        # Create a partial trade record to indicate successful position opening
+        # Full trade record will be created when position is closed
+        partial_trade = Trade(
+            trade_id=self.next_trade_id,
+            symbol=symbol,
+            side="BUY_ENTRY",  # Indicate this is position opening
+            entry_price=execution_price,
+            entry_time=timestamp,
+            exit_price=0.0,  # Not yet closed
+            exit_time=timestamp,  # Placeholder
+            quantity=quantity,
+            gross_pnl=0.0,  # Not yet realized
+            commission=commission_cost,
+            slippage=(execution_price - price) * quantity,
+            net_pnl=0.0,  # Not yet realized
+            holding_period_hours=0.0,
+            max_favorable_excursion=0.0,
+            max_adverse_excursion=0.0,
+            decision_metadata=decision_metadata
+        )
+        
+        return partial_trade
     
     def _execute_sell(self, 
                      price: float, 

@@ -78,7 +78,7 @@ class StrategyTrainer:
         
         # Step 4: Engineer features
         print("\n4. Engineering features...")
-        features, feature_names = self._engineer_features(
+        features, feature_names, feature_scaler = self._engineer_features(
             fuzzy_data, indicators, price_data, config.get('model', {}).get('features', {})
         )
         print(f"Created {features.shape[1]} features from {len(feature_names)} components")
@@ -114,15 +114,21 @@ class StrategyTrainer:
         
         # Step 10: Save trained model
         print("\n10. Saving trained model...")
+        
+        # Add model architecture info to config for proper loading
+        model_config = config.copy()
+        model_config['model']['input_size'] = features.shape[1]
+        
         model_path = self.model_storage.save_model(
             model=model,
             strategy_name=strategy_name,
             symbol=symbol,
             timeframe=timeframe,
-            config=config,
+            config=model_config,
             training_metrics=training_results,
             feature_names=feature_names,
-            feature_importance=feature_importance
+            feature_importance=feature_importance,
+            scaler=feature_scaler
         )
         
         print(f"\nTraining completed! Model saved to: {model_path}")
@@ -291,7 +297,7 @@ class StrategyTrainer:
     def _engineer_features(self, fuzzy_data: pd.DataFrame,
                           indicators: pd.DataFrame,
                           price_data: pd.DataFrame,
-                          feature_config: Dict[str, Any]) -> Tuple[torch.Tensor, List[str]]:
+                          feature_config: Dict[str, Any]) -> Tuple[torch.Tensor, List[str], Any]:
         """Engineer features for neural network training.
         
         Args:
@@ -301,10 +307,11 @@ class StrategyTrainer:
             feature_config: Feature engineering configuration
             
         Returns:
-            Tuple of (features tensor, feature names)
+            Tuple of (features tensor, feature names, scaler)
         """
         engineer = FeatureEngineer(feature_config)
-        return engineer.prepare_features(fuzzy_data, indicators, price_data)
+        features, feature_names = engineer.prepare_features(fuzzy_data, indicators, price_data)
+        return features, feature_names, engineer.scaler
     
     def _generate_labels(self, price_data: pd.DataFrame,
                         label_config: Dict[str, Any]) -> torch.Tensor:
@@ -322,7 +329,10 @@ class StrategyTrainer:
             lookahead=label_config['label_lookahead']
         )
         
-        labels = labeler.generate_labels(price_data)
+        # Use segment-based labeling for better class balance
+        # This should fix the neural network collapse issue
+        print("Using ZigZag segment labeling (balanced) instead of sparse extreme labeling...")
+        labels = labeler.generate_segment_labels(price_data)
         return torch.LongTensor(labels.values)
     
     def _get_label_distribution(self, labels: torch.Tensor) -> Dict[str, Any]:

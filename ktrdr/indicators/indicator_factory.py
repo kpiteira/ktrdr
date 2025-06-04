@@ -18,6 +18,7 @@ from ktrdr.indicators import (
     ExponentialMovingAverage,
     MACDIndicator,
 )
+from ktrdr.indicators.zigzag_indicator import ZigZagIndicator
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,8 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "ExponentialMovingAverage": ExponentialMovingAverage,
     "MACD": MACDIndicator,
     "MACDIndicator": MACDIndicator,
+    "ZigZag": ZigZagIndicator,
+    "ZigZagIndicator": ZigZagIndicator,
 }
 
 

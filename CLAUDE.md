@@ -43,6 +43,7 @@ Running Python directly will fail because dependencies are managed by uv, not in
 - **Frontend**: Use TypeScript with React hooks and functional components
 - **State Management**: Use Redux Toolkit with slice pattern
 - **Testing**: Write unit tests for all new functionality
+- **Timestamps**: ALWAYS use timezone-aware UTC timestamps (`pd.Timestamp.now(tz='UTC')`) to prevent timezone comparison errors
 
 ## Error Handling Standards
 

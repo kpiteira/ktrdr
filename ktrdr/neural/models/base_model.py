@@ -39,12 +39,14 @@ class BaseNeuralModel(ABC):
     
     @abstractmethod
     def prepare_features(self, fuzzy_data: pd.DataFrame, 
-                        indicators: pd.DataFrame) -> torch.Tensor:
+                        indicators: pd.DataFrame, 
+                        saved_scaler=None) -> torch.Tensor:
         """Convert fuzzy/indicator data to model features.
         
         Args:
             fuzzy_data: DataFrame with fuzzy membership values
             indicators: DataFrame with raw indicator values
+            saved_scaler: Pre-trained scaler for consistent feature scaling
             
         Returns:
             Tensor of prepared features
@@ -99,6 +101,12 @@ class BaseNeuralModel(ABC):
         confidence = float(probs[signal_idx])
         
         signal_map = {0: "BUY", 1: "HOLD", 2: "SELL"}
+        
+        # DEBUG: Log prediction details to identify model collapse
+        from ..logging import get_logger
+        logger = get_logger(__name__)
+        logger.debug(f"Neural prediction - Raw probs: BUY={probs[0]:.6f}, HOLD={probs[1]:.6f}, SELL={probs[2]:.6f}")
+        logger.debug(f"Neural prediction - Signal: {signal_map[signal_idx]}, Confidence: {confidence:.6f}")
         
         return {
             "signal": signal_map[signal_idx],
