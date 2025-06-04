@@ -9,7 +9,6 @@ import time
 from .position_manager import PositionManager, Trade
 from .performance import PerformanceTracker, PerformanceMetrics
 from .model_loader import ModelLoader
-from ..decision.orchestrator import DecisionOrchestrator
 from ..decision.base import Signal
 from ..data.data_manager import DataManager
 
@@ -85,7 +84,8 @@ class BacktestingEngine:
         )
         self.performance_tracker = PerformanceTracker()
         
-        # Initialize decision orchestrator
+        # Initialize decision orchestrator (lazy import to avoid circular dependency)
+        from ..decision.orchestrator import DecisionOrchestrator
         self.orchestrator = DecisionOrchestrator(
             strategy_config_path=config.strategy_config_path,
             model_path=config.model_path,

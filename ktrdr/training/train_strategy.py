@@ -29,7 +29,7 @@ class StrategyTrainer:
         self.model_storage = ModelStorage(models_dir)
         self.data_manager = DataManager()
         self.indicator_engine = IndicatorEngine()
-        self.fuzzy_engine = FuzzyEngine()
+        self.fuzzy_engine = None  # Will be initialized with strategy config
         
     def train_strategy(self,
                       strategy_config_path: str,
@@ -37,7 +37,8 @@ class StrategyTrainer:
                       timeframe: str,
                       start_date: str,
                       end_date: str,
-                      validation_split: float = 0.2) -> Dict[str, Any]:
+                      validation_split: float = 0.2,
+                      data_mode: str = "local") -> Dict[str, Any]:
         """Train a complete neuro-fuzzy strategy.
         
         Args:
@@ -62,7 +63,7 @@ class StrategyTrainer:
         
         # Step 1: Load and prepare data
         print("\n1. Loading market data...")
-        price_data = self._load_price_data(symbol, timeframe, start_date, end_date)
+        price_data = self._load_price_data(symbol, timeframe, start_date, end_date, data_mode)
         print(f"Loaded {len(price_data)} bars of data")
         
         # Step 2: Calculate indicators
@@ -162,7 +163,7 @@ class StrategyTrainer:
         return config
     
     def _load_price_data(self, symbol: str, timeframe: str, 
-                        start_date: str, end_date: str) -> pd.DataFrame:
+                        start_date: str, end_date: str, data_mode: str = "local") -> pd.DataFrame:
         """Load price data for training.
         
         Args:
@@ -174,14 +175,22 @@ class StrategyTrainer:
         Returns:
             OHLCV DataFrame
         """
-        # For now, use the existing data manager
-        # In production, might want to implement date filtering
-        data = self.data_manager.load_data(symbol, timeframe, mode="full")
+        # Load data using specified mode
+        data = self.data_manager.load_data(symbol, timeframe, mode=data_mode)
         
         # Filter by date range if possible
         if hasattr(data.index, 'to_pydatetime'):
+            # Convert dates to timezone-aware if the data index is timezone-aware
             start = pd.to_datetime(start_date)
             end = pd.to_datetime(end_date)
+            
+            # Make dates timezone-aware if needed
+            if data.index.tz is not None:
+                if start.tz is None:
+                    start = start.tz_localize('UTC')
+                if end.tz is None:
+                    end = end.tz_localize('UTC')
+            
             data = data.loc[start:end]
         
         return data
@@ -197,7 +206,58 @@ class StrategyTrainer:
         Returns:
             DataFrame with calculated indicators
         """
-        return self.indicator_engine.calculate_multiple(price_data, indicator_configs)
+        # Fix indicator configs to add 'type' field if missing
+        fixed_configs = []
+        for config in indicator_configs:
+            if isinstance(config, dict) and 'type' not in config:
+                # Infer type from name - keep the original case for matching with fuzzy sets
+                config = config.copy()
+                config['type'] = config['name'].upper()
+            fixed_configs.append(config)
+        
+        # Initialize indicator engine with configs
+        self.indicator_engine = IndicatorEngine(indicators=fixed_configs)
+        # Apply indicators to price data
+        indicator_results = self.indicator_engine.apply(price_data)
+        
+        # Create a mapping from original indicator names to calculated column names
+        # This allows fuzzy sets to match the original indicator names
+        mapped_results = pd.DataFrame(index=indicator_results.index)
+        
+        # Copy price data columns first
+        for col in price_data.columns:
+            if col in indicator_results.columns:
+                mapped_results[col] = indicator_results[col]
+        
+        # Map indicator results to original names for fuzzy matching
+        for config in indicator_configs:
+            original_name = config['name']  # e.g., 'rsi'
+            indicator_type = config['name'].upper()  # e.g., 'RSI'
+            
+            # Find the calculated column that matches this indicator
+            # Look for columns that start with the indicator type
+            for col in indicator_results.columns:
+                if col.upper().startswith(indicator_type):
+                    if indicator_type in ['SMA', 'EMA']:
+                        # For moving averages, create a ratio (price / moving_average)
+                        # This makes the fuzzy sets meaningful (1.0 = at MA, >1.0 = above, <1.0 = below)
+                        mapped_results[original_name] = price_data['close'] / indicator_results[col]
+                    elif indicator_type == 'MACD':
+                        # For MACD, use the main MACD line (not signal or histogram)
+                        # Look for the column that matches the MACD pattern
+                        if col.startswith('MACD_') and '_signal_' not in col and '_hist_' not in col:
+                            mapped_results[original_name] = indicator_results[col]
+                            break
+                    else:
+                        # For other indicators, use the raw values
+                        mapped_results[original_name] = indicator_results[col]
+                        break
+                    
+                    # If we found a non-MACD indicator, break
+                    if indicator_type != 'MACD':
+                        break
+        
+        return mapped_results
     
     def _generate_fuzzy_memberships(self, indicators: pd.DataFrame,
                                    fuzzy_configs: Dict[str, Any]) -> pd.DataFrame:
@@ -210,7 +270,23 @@ class StrategyTrainer:
         Returns:
             DataFrame with fuzzy membership values
         """
-        return self.fuzzy_engine.evaluate_batch(indicators, fuzzy_configs)
+        # Initialize fuzzy engine if not already done
+        if self.fuzzy_engine is None:
+            from ..fuzzy.config import FuzzyConfigLoader
+            # The fuzzy_configs from strategy file are already in the correct format
+            # Just pass them directly to FuzzyConfigLoader
+            fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
+            self.fuzzy_engine = FuzzyEngine(fuzzy_config)
+        
+        # Process each indicator
+        fuzzy_results = {}
+        for indicator_name, indicator_data in indicators.items():
+            if indicator_name in fuzzy_configs:
+                # Fuzzify the indicator
+                membership_values = self.fuzzy_engine.fuzzify(indicator_name, indicator_data)
+                fuzzy_results.update(membership_values)
+        
+        return pd.DataFrame(fuzzy_results, index=indicators.index)
     
     def _engineer_features(self, fuzzy_data: pd.DataFrame,
                           indicators: pd.DataFrame,

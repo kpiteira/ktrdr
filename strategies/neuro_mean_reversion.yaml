@@ -25,17 +25,35 @@ indicators:
 # Fuzzy logic configuration
 fuzzy_sets:
   rsi:
-    oversold: [0, 10, 30]
-    neutral: [25, 50, 75]
-    overbought: [70, 90, 100]
+    oversold:
+      type: triangular
+      parameters: [0, 10, 30]
+    neutral:
+      type: triangular
+      parameters: [25, 50, 75]
+    overbought:
+      type: triangular
+      parameters: [70, 90, 100]
   macd:
-    negative: [-0.1, -0.05, 0]
-    neutral: [-0.02, 0, 0.02]
-    positive: [0, 0.05, 0.1]
-  sma_position:
-    below: [0.95, 0.98, 1.0]
-    near: [0.98, 1.0, 1.02]
-    above: [1.0, 1.02, 1.05]
+    negative:
+      type: triangular
+      parameters: [-0.1, -0.05, 0]
+    neutral:
+      type: triangular
+      parameters: [-0.02, 0, 0.02]
+    positive:
+      type: triangular
+      parameters: [0, 0.05, 0.1]
+  sma:
+    below:
+      type: triangular
+      parameters: [0.95, 0.98, 1.0]
+    near:
+      type: triangular
+      parameters: [0.98, 1.0, 1.02]
+    above:
+      type: triangular
+      parameters: [1.0, 1.02, 1.05]
 
 # Neural network configuration
 model:

@@ -26,6 +26,7 @@ from ktrdr.errors import DataError, ValidationError, ConfigurationError
 from ktrdr.visualization import Visualizer
 from ktrdr.fuzzy.config import FuzzyConfigLoader, FuzzyConfig
 from ktrdr.fuzzy.engine import FuzzyEngine
+from ktrdr.config.strategy_validator import StrategyValidator
 
 # Create a Typer application with help text
 cli_app = typer.Typer(
@@ -1540,3 +1541,128 @@ def ib_load(
     except KeyboardInterrupt:
         console.print("\n⏹️ Loading interrupted by user")
         sys.exit(1)
+
+
+# ===== Strategy Management Commands =====
+
+@cli_app.command("strategy-validate")
+def strategy_validate_command(
+    strategy: str = typer.Argument(..., help="Path to strategy YAML file"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output"),
+):
+    """
+    Validate a trading strategy configuration.
+    
+    Checks if a strategy YAML file has all required sections and valid configuration
+    for neuro-fuzzy training.
+    
+    Example:
+        ktrdr strategy-validate strategies/my_strategy.yaml
+    """
+    from .strategy_commands import validate_strategy
+    validate_strategy(strategy, quiet)
+
+
+@cli_app.command("strategy-upgrade")
+def strategy_upgrade_command(
+    strategy: str = typer.Argument(..., help="Path to strategy YAML file"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output path for upgraded file"),
+    inplace: bool = typer.Option(False, "--inplace", "-i", help="Upgrade in place (overwrites original)"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output"),
+):
+    """
+    Upgrade a strategy to neuro-fuzzy format.
+    
+    Adds missing sections with sensible defaults to make old strategies compatible
+    with the new neuro-fuzzy training system.
+    
+    Examples:
+        ktrdr strategy-upgrade strategies/old_strategy.yaml
+        ktrdr strategy-upgrade strategies/old_strategy.yaml --inplace
+        ktrdr strategy-upgrade strategies/old_strategy.yaml -o strategies/new_strategy.yaml
+    """
+    from .strategy_commands import upgrade_strategy
+    upgrade_strategy(strategy, output, inplace, quiet)
+
+
+@cli_app.command("strategy-list")
+def strategy_list_command(
+    directory: str = typer.Option("strategies", "--directory", "-d", help="Strategies directory"),
+    validate: bool = typer.Option(False, "--validate", "-v", help="Validate each strategy"),
+    verbose: bool = typer.Option(False, "--verbose", help="Show detailed validation results"),
+):
+    """
+    List all strategy files in a directory.
+    
+    Shows strategy names, descriptions, and optionally validates each one.
+    
+    Examples:
+        ktrdr strategy-list
+        ktrdr strategy-list --validate
+        ktrdr strategy-list -d my_strategies --validate --verbose
+    """
+    from .strategy_commands import list_strategies
+    list_strategies(directory, validate, verbose)
+
+
+# ===== Training Commands =====
+
+@cli_app.command("train")
+def train_command(
+    strategy: str = typer.Argument(..., help="Path to strategy YAML configuration file"),
+    symbol: str = typer.Argument(..., help="Trading symbol to train on (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Argument(..., help="Timeframe for training data (e.g., 1h, 4h, 1d)"),
+    start_date: str = typer.Option(..., "--start-date", help="Start date for training data (YYYY-MM-DD)"),
+    end_date: str = typer.Option(..., "--end-date", help="End date for training data (YYYY-MM-DD)"),
+    models_dir: str = typer.Option("models", "--models-dir", help="Directory to store trained models"),
+    validation_split: float = typer.Option(0.2, "--validation-split", help="Fraction of data for validation"),
+    epochs: Optional[int] = typer.Option(None, "--epochs", help="Override number of training epochs"),
+    data_mode: str = typer.Option("local", "--data-mode", help="Data loading mode: 'local', 'ib', or 'full'"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate configuration without training"),
+):
+    """
+    Train a neuro-fuzzy trading strategy.
+    
+    This command trains a neural network model based on the strategy configuration,
+    using historical price data and technical indicators with fuzzy logic.
+    
+    Examples:
+        ktrdr train strategies/neuro_mean_reversion.yaml AAPL 1h --start-date 2024-01-01 --end-date 2024-06-01
+        ktrdr train strategies/momentum.yaml MSFT 4h --start-date 2023-01-01 --end-date 2024-01-01 --epochs 100
+    """
+    from .training_commands import train_strategy
+    train_strategy(strategy, symbol, timeframe, start_date, end_date, models_dir, 
+                  validation_split, epochs, data_mode, verbose, dry_run)
+
+
+# ===== Backtesting Commands =====
+
+@cli_app.command("backtest")
+def backtest_command(
+    strategy: str = typer.Argument(..., help="Path to strategy YAML configuration file"),
+    symbol: str = typer.Argument(..., help="Trading symbol to backtest (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Argument(..., help="Timeframe for backtest data (e.g., 1h, 4h, 1d)"),
+    start_date: str = typer.Option(..., "--start-date", help="Start date for backtest (YYYY-MM-DD)"),
+    end_date: str = typer.Option(..., "--end-date", help="End date for backtest (YYYY-MM-DD)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Path to specific trained model"),
+    capital: float = typer.Option(100000, "--capital", "-c", help="Initial capital for backtest"),
+    commission: float = typer.Option(0.001, "--commission", help="Commission rate as decimal (0.001 = 0.1%)"),
+    slippage: float = typer.Option(0.0005, "--slippage", help="Slippage rate as decimal (0.0005 = 0.05%)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output with progress"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress all output except errors"),
+):
+    """
+    Run a backtest on a trained trading strategy.
+    
+    This command simulates trading using a trained neuro-fuzzy model to evaluate
+    strategy performance on historical data.
+    
+    Examples:
+        ktrdr backtest strategies/neuro_mean_reversion.yaml AAPL 1h --start-date 2024-07-01 --end-date 2024-12-31
+        ktrdr backtest strategies/momentum.yaml MSFT 4h --start-date 2023-01-01 --end-date 2024-01-01 --capital 50000
+    """
+    from .backtesting_commands import run_backtest
+    run_backtest(strategy, symbol, timeframe, start_date, end_date, model,
+                capital, commission, slippage, verbose, output, quiet)

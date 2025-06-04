@@ -76,8 +76,33 @@ class FeatureEngineer:
             features.append(temporal_features)
             feature_names.extend(temporal_names)
         
-        # Combine all features
-        feature_matrix = np.column_stack(features)
+        # Filter out empty arrays
+        non_empty_features = [feat for feat in features if feat.size > 0]
+        feature_names_filtered = []
+        
+        # Also filter feature names to match
+        start_idx = 0
+        for i, feat_array in enumerate(features):
+            if feat_array.size > 0:
+                if i == 0:  # fuzzy features
+                    feature_names_filtered.extend(feature_names[start_idx:start_idx+feat_array.shape[1]])
+                else:
+                    # Calculate how many names belong to this feature group
+                    feat_count = feat_array.shape[1] if len(feat_array.shape) > 1 else 1
+                    feature_names_filtered.extend(feature_names[start_idx:start_idx+feat_count])
+            
+            # Update start index for next feature group
+            if len(feat_array.shape) > 1:
+                start_idx += feat_array.shape[1]
+            else:
+                start_idx += 1
+        
+        # Combine all non-empty features
+        if not non_empty_features:
+            raise ValueError("No valid features found")
+        
+        feature_matrix = np.column_stack(non_empty_features)
+        feature_names = feature_names_filtered
         
         # Handle NaN values
         feature_matrix = np.nan_to_num(feature_matrix, nan=0.0)
@@ -101,8 +126,11 @@ class FeatureEngineer:
         features = []
         names = []
         
+        # Include all fuzzy columns (they should all be membership values)
+        # Fuzzy columns typically have format: indicator_fuzzyset (e.g., rsi_oversold, sma_above)
         for column in fuzzy_data.columns:
-            if 'membership' in column.lower():
+            # Skip any non-fuzzy columns that might be in the dataframe
+            if '_' in column or 'membership' in column.lower():
                 features.append(fuzzy_data[column].values)
                 names.append(column)
         

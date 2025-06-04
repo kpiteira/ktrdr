@@ -84,6 +84,9 @@ logs/
 output/
 examples/*.html
 
+# Trained models (large binary files)
+models/
+
 # Security-related files
 *.key
 *.pem

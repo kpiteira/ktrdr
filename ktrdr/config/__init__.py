@@ -8,6 +8,7 @@ environment-specific overrides and environment variable support.
 from .. import metadata
 from .loader import ConfigLoader
 from .validation import InputValidator, sanitize_parameter, sanitize_parameters
+from .strategy_validator import StrategyValidator
 
 __all__ = [
     "metadata",
@@ -15,4 +16,5 @@ __all__ = [
     "InputValidator",
     "sanitize_parameter",
     "sanitize_parameters",
+    "StrategyValidator",
 ]

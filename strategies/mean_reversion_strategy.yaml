@@ -4,90 +4,84 @@ description: A strategy focused on mean reversion signals with specialized fuzzy
 
 indicators:
   - name: rsi
-    period: 7  # Shorter period for more sensitivity
-    source: close
-  - name: bbands
-    period: 20
-    std_dev: 2.5  # Wider bands
-    source: close
-  - name: atr
     period: 14
     source: close
-  - name: volatility
+  - name: sma
     period: 20
+    source: close
+  - name: ema
+    period: 12
     source: close
 
 # Custom fuzzy set definitions that override the defaults in config/fuzzy.yaml
 fuzzy_sets:
-  # Custom RSI settings more suited for mean reversion
+  # RSI fuzzy sets
   rsi:
-    extreme_oversold:
-      type: triangular
-      parameters: [0, 10, 25]
     oversold:
       type: triangular
-      parameters: [15, 30, 45]
+      parameters: [0, 10, 30]
     neutral:
       type: triangular
-      parameters: [35, 50, 65]
+      parameters: [20, 50, 80]
     overbought:
       type: triangular
-      parameters: [55, 70, 85]
-    extreme_overbought:
-      type: triangular
-      parameters: [75, 90, 100]
+      parameters: [70, 90, 100]
 
-  # More granular Bollinger Bands fuzzy sets
-  bbands:
-    far_below:
-      type: triangular
-      parameters: [-100, -3, -2]
+  # SMA position fuzzy sets (price relative to SMA)
+  sma:
     below:
       type: triangular
-      parameters: [-2.5, -1.5, -0.5]
+      parameters: [0.85, 0.95, 1.0]
     neutral:
       type: triangular
-      parameters: [-1, 0, 1]
+      parameters: [0.98, 1.0, 1.02]
     above:
       type: triangular
-      parameters: [0.5, 1.5, 2.5]
-    far_above:
-      type: triangular
-      parameters: [2, 3, 100]
-  
-  # New indicator: ATR (Average True Range) for volatility measurement
-  atr:
-    low:
-      type: triangular
-      parameters: [0, 0.5, 1.5]
-    medium:
-      type: triangular
-      parameters: [1, 2, 3]
-    high:
-      type: triangular
-      parameters: [2.5, 4, 100]
+      parameters: [1.0, 1.05, 1.15]
 
-  # Volatility indicator
-  volatility:
-    very_low:
+  # EMA position fuzzy sets (price relative to EMA)
+  ema:
+    below:
       type: triangular
-      parameters: [0, 5, 15]
-    low:
+      parameters: [0.85, 0.95, 1.0]
+    neutral:
       type: triangular
-      parameters: [10, 20, 30]
-    normal:
+      parameters: [0.98, 1.0, 1.02]
+    above:
       type: triangular
-      parameters: [25, 40, 55]
-    high:
-      type: triangular
-      parameters: [50, 70, 80]
-    very_high:
-      type: triangular
-      parameters: [75, 90, 100]
+      parameters: [1.0, 1.05, 1.15]
 
 # Neural network configuration for this strategy
 model:
   type: mlp
-  input_size: 15
-  hidden_layers: [30, 15]
-  output_size: 2
+  architecture:
+    hidden_layers: [64, 32, 16]
+    dropout_rate: 0.2
+    activation: "relu"
+    output_activation: "softmax"
+  training:
+    epochs: 100
+    batch_size: 32
+    learning_rate: 0.001
+    optimizer: "adam"
+    loss_function: "cross_entropy"
+    early_stopping_patience: 10
+  features:
+    include_price_features: true
+    include_technical_features: true
+    include_fuzzy_features: true
+    lookback_window: 10
+
+# Training configuration
+training:
+  # Label generation configuration
+  labels:
+    method: "zigzag"
+    zigzag_threshold: 0.05  # 5% threshold for significant moves
+    label_lookahead: 24     # Look ahead 24 hours for labeling
+  
+  # Data split configuration
+  data_split:
+    train: 0.7      # 70% for training
+    validation: 0.2 # 20% for validation
+    test: 0.1       # 10% for testing

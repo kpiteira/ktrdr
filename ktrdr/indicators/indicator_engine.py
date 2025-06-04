@@ -47,10 +47,21 @@ class IndicatorEngine:
 
         if indicators:
             if isinstance(indicators[0], dict):
-                # Create indicators from config dictionaries using factory
-                factory = IndicatorFactory()
-                for indicator_config in indicators:
-                    self.indicators.append(factory.create_indicator(indicator_config))
+                # Create indicators from config dictionaries
+                # Import here to avoid circular dependency
+                from ..config.models import IndicatorConfig, IndicatorsConfig
+                
+                # Convert dict configs to IndicatorConfig objects
+                indicator_configs = []
+                for ind_dict in indicators:
+                    if isinstance(ind_dict, dict):
+                        indicator_configs.append(IndicatorConfig(**ind_dict))
+                    else:
+                        indicator_configs.append(ind_dict)
+                
+                # Create factory with configs and build all indicators
+                factory = IndicatorFactory(indicator_configs)
+                self.indicators = factory.build()
             elif isinstance(indicators[0], BaseIndicator):
                 # Use provided indicator instances directly
                 self.indicators = indicators
