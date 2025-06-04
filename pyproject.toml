@@ -21,6 +21,7 @@ dependencies = [
     "ib_insync>=0.9.85",
     "pandas-ta>=0.3.14b0",
     "pyyaml>=6.0",
+    "scikit-learn>=1.6.1",
 ]
 
 [project.optional-dependencies]

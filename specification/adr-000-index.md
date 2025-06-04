@@ -20,6 +20,16 @@ This document serves as the central index for all Architecture Decision Records 
 - Infrastructure and deployment patterns
 - Ready integration points for Decision Engine
 
+#### ADR-002: Core Decision Engine Architecture
+**Status**: Draft Completed - December 2024  
+**Purpose**: Overall architecture for how trading decisions flow through the system.  
+**Key Content**:
+- Decision orchestrator that coordinates all components
+- Integration points with ADR-003, ADR-004, and ADR-005
+- Position and state management
+- Mode-specific behavior (backtest/paper/live)
+- Clear implementation roadmap for Claude Code
+
 #### ADR-003: Neuro-Fuzzy Strategy Framework
 **Status**: Completed  
 **Purpose**: Design for the neural network layer that consumes fuzzy membership values to generate trading decisions.  
@@ -31,18 +41,53 @@ This document serves as the central index for all Architecture Decision Records 
 - ZigZag label generation for supervised learning
 - Integration points with existing systems
 
-### 📝 In Progress ADRs
-
-#### ADR-002: Core Decision Engine Architecture
-**Status**: Next Priority (Implementation Blocker)  
-**Purpose**: Overall architecture for how trading decisions flow through the system.  
+#### ADR-004: Training System Design
+**Status**: Draft Completed - December 2024  
+**Purpose**: Architecture for training neural networks using historical data and ZigZag labels.  
 **Key Content**:
-- Decision flow from data to execution
-- Integration with existing modules
-- Position and state management
-- Real-time vs backtesting modes
+- Complete training pipeline leveraging existing infrastructure
+- Feature engineering from fuzzy memberships
+- Model versioning with organized directory structure
+- Feature importance analysis
+- CLI interface for single-instrument training
+- Integration with existing data/indicator/fuzzy modules
+
+#### ADR-005: Backtesting System Design  
+**Status**: Draft Completed - December 2024  
+**Purpose**: Historical simulation engine for evaluating trained strategies.  
+**Key Content**:
+- Event-driven architecture with comprehensive position tracking
+- API-first design with FastAPI endpoints
+- Detailed performance metrics and trade analysis
+- Model version management (latest by default, CLI override)
+- CLI interface using the API
+- Architecture ready for future intrabar/multi-timeframe evolution
 
 ### ✅ Recently Completed ADRs
+
+#### ADR-002: Core Decision Engine Architecture
+**Status**: Draft Completed - December 2024  
+**Purpose**: Overall architecture for how trading decisions flow through the system.  
+**Key Content**:
+- Decision orchestrator that coordinates all components
+- Integration points with ADR-003, ADR-004, and ADR-005
+- Position and state management
+- Mode-specific behavior (backtest/paper/live)
+- Clear implementation roadmap for Claude Code
+
+### ✅ Recently Completed ADRs
+
+### ✅ Recently Completed ADRs
+
+#### ADR-002: Core Decision Engine Architecture
+**Status**: Draft Completed - December 2024  
+**Purpose**: Overall architecture for how trading decisions flow through the system.  
+**Key Content**:
+- Decision orchestrator that coordinates all components
+- Integration points with ADR-003, ADR-004, and ADR-005
+- Position and state management
+- Mode-specific behavior (backtest/paper/live)
+- Clear implementation roadmap for Claude Code
 
 #### ADR-004: Training System Design
 **Status**: Draft Completed - December 2024  

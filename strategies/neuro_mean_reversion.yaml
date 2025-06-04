@@ -1,0 +1,120 @@
+# Neuro-Fuzzy Mean Reversion Strategy
+name: "neuro_mean_reversion"
+description: "Neural network trained on RSI/MACD fuzzy outputs for mean reversion"
+version: "1.0"
+
+# Data requirements
+data:
+  symbols: ["AAPL", "MSFT", "GOOGL"]
+  timeframes: ["1h", "4h", "1d"]
+  history_required: 200  # minimum bars for indicators
+
+# Technical indicators configuration
+indicators:
+  - name: rsi
+    period: 14
+    source: close
+  - name: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  - name: sma
+    period: 20
+    source: close
+
+# Fuzzy logic configuration
+fuzzy_sets:
+  rsi:
+    oversold: [0, 10, 30]
+    neutral: [25, 50, 75]
+    overbought: [70, 90, 100]
+  macd:
+    negative: [-0.1, -0.05, 0]
+    neutral: [-0.02, 0, 0.02]
+    positive: [0, 0.05, 0.1]
+  sma_position:
+    below: [0.95, 0.98, 1.0]
+    near: [0.98, 1.0, 1.02]
+    above: [1.0, 1.02, 1.05]
+
+# Neural network configuration
+model:
+  type: "mlp"  # Multi-Layer Perceptron
+  architecture:
+    hidden_layers: [30, 15, 8]  # input_size auto-calculated
+    activation: "relu"
+    output_activation: "softmax"  # for BUY/SELL/HOLD classification
+    dropout: 0.2
+  
+  # Training parameters
+  training:
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 100
+    optimizer: "adam"
+    weight_decay: 0.0001
+    
+    # Learning rate scheduling
+    lr_scheduler:
+      type: "reduce_on_plateau"
+      factor: 0.5
+      patience: 10
+    
+    # Early stopping
+    early_stopping:
+      patience: 15
+      monitor: "val_loss"
+      min_delta: 0.0001
+  
+  # Feature engineering
+  features:
+    include_price_context: true  # include current price vs SMA
+    include_volume_context: true
+    include_raw_indicators: false
+    lookback_periods: 3  # include last N fuzzy values
+    scale_features: true
+    scaling_method: "standard"  # standard or minmax
+
+# Decision logic configuration
+decisions:
+  output_format: "classification"  # BUY=0, HOLD=1, SELL=2
+  confidence_threshold: 0.6  # minimum confidence for action
+  position_awareness: true   # consider current position in decisions
+  
+  # Signal filtering
+  filters:
+    min_signal_separation: 4  # minimum bars between signals
+    volume_filter: false       # require above-average volume
+
+# Training configuration
+training:
+  method: "supervised"
+  labels:
+    source: "zigzag"  # forward-looking ZigZag operator
+    zigzag_threshold: 0.05  # 5% price movement for label generation
+    label_lookahead: 20     # maximum bars to look ahead
+  
+  # Train/validation/test split
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
+    
+  # Fitness evaluation
+  fitness_metrics:
+    primary: "accuracy"
+    secondary: ["precision", "recall", "f1_score"]
+
+# Money management (for future backtesting)
+risk_management:
+  position_sizing: "fixed_fraction"
+  risk_per_trade: 0.02  # 2% of portfolio
+  max_portfolio_risk: 0.10  # 10% total exposure
+
+# Backtesting configuration (for future use)
+backtesting:
+  start_date: "2020-01-01"
+  end_date: "2024-01-01"
+  initial_capital: 100000
+  transaction_costs: 0.001  # 0.1% per trade
+  slippage: 0.0005  # 0.05% average slippage
