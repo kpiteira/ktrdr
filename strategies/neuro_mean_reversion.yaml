@@ -86,6 +86,21 @@ decisions:
     min_signal_separation: 4  # minimum bars between signals
     volume_filter: false       # require above-average volume
 
+# Decision orchestrator settings
+orchestrator:
+  max_position_size: 0.95  # Use max 95% of capital
+  signal_cooldown: 4  # Minimum bars between signals
+  
+  # Mode-specific settings
+  modes:
+    backtest:
+      confidence_threshold: 0.6
+    paper:
+      confidence_threshold: 0.65
+    live:
+      confidence_threshold: 0.7
+      require_confirmation: true
+
 # Training configuration
 training:
   method: "supervised"

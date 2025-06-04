@@ -1,0 +1,492 @@
+"""Decision orchestrator that coordinates the complete decision pipeline."""
+
+import yaml
+import pandas as pd
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, List
+from pathlib import Path
+
+from .base import Signal, Position, TradingDecision
+from .engine import DecisionEngine
+from ..data.data_manager import DataManager
+from ..indicators.indicator_engine import IndicatorEngine
+from ..fuzzy.engine import FuzzyEngine
+from ..fuzzy.config import FuzzyConfig, FuzzySetConfig, MembershipFunctionConfig
+from ..backtesting.model_loader import ModelLoader
+
+
+@dataclass
+class DecisionContext:
+    """Complete context for making a trading decision."""
+    # Market data
+    current_bar: pd.Series
+    recent_bars: pd.DataFrame  # Lookback window
+    
+    # Calculated features
+    indicators: Dict[str, float]
+    fuzzy_memberships: Dict[str, float]
+    
+    # Position state
+    current_position: Position
+    position_entry_price: Optional[float]
+    position_holding_period: Optional[float]
+    unrealized_pnl: Optional[float]
+    
+    # Account state
+    portfolio_value: float
+    available_capital: float
+    
+    # Historical context
+    recent_decisions: List[TradingDecision]
+    last_signal_time: Optional[pd.Timestamp]
+
+
+class PositionState:
+    """Track position state for a single symbol."""
+    
+    def __init__(self, symbol: str):
+        """Initialize position state.
+        
+        Args:
+            symbol: Trading symbol
+        """
+        self.symbol = symbol
+        self.position = Position.FLAT
+        self.entry_price = None
+        self.entry_time = None
+        self.last_signal_time = None
+        self.unrealized_pnl = 0.0
+        
+    @property
+    def holding_period(self) -> Optional[float]:
+        """Holding period in hours."""
+        if self.entry_time:
+            current_time = pd.Timestamp.now()
+            if isinstance(self.entry_time, pd.Timestamp):
+                return (current_time - self.entry_time).total_seconds() / 3600
+        return None
+    
+    def update_from_decision(self, decision: TradingDecision, current_bar: pd.Series):
+        """Update state based on decision.
+        
+        Args:
+            decision: Trading decision
+            current_bar: Current price bar
+        """
+        if decision.signal != Signal.HOLD:
+            self.last_signal_time = current_bar.name if hasattr(current_bar, 'name') else pd.Timestamp.now()
+            
+            if decision.signal == Signal.BUY and self.position == Position.FLAT:
+                self.position = Position.LONG
+                self.entry_price = current_bar['close']
+                self.entry_time = self.last_signal_time
+                self.unrealized_pnl = 0.0
+            elif decision.signal == Signal.SELL and self.position == Position.LONG:
+                # Calculate realized P&L
+                if self.entry_price:
+                    realized_pnl = current_bar['close'] - self.entry_price
+                    # Could store this for performance tracking
+                
+                # Close position
+                self.position = Position.FLAT
+                self.entry_price = None
+                self.entry_time = None
+                self.unrealized_pnl = 0.0
+        
+        # Update unrealized P&L for open positions
+        if self.position == Position.LONG and self.entry_price:
+            self.unrealized_pnl = current_bar['close'] - self.entry_price
+
+
+class DecisionOrchestrator:
+    """Central orchestrator that coordinates the complete decision pipeline."""
+    
+    def __init__(self, 
+                 strategy_config_path: str,
+                 model_path: Optional[str] = None,
+                 mode: str = "backtest"):
+        """Initialize the decision orchestrator.
+        
+        Args:
+            strategy_config_path: Path to strategy YAML file
+            model_path: Path to trained model (if None, loads latest)
+            mode: Operating mode (backtest, paper, live)
+        """
+        self.mode = mode
+        
+        # Load strategy configuration
+        self.strategy_config = self._load_strategy_config(strategy_config_path)
+        self.strategy_name = self.strategy_config['name']
+        
+        # Initialize data pipeline components (existing)
+        self.data_manager = DataManager()
+        self.indicator_engine = IndicatorEngine()
+        
+        # Initialize fuzzy engine with strategy fuzzy sets
+        self.fuzzy_engine = self._initialize_fuzzy_engine()
+        
+        # Load trained model
+        self.model_loader = ModelLoader()
+        self.model = None
+        self.model_metadata = None
+        
+        if model_path:
+            # Load specific model
+            self.model, self.model_metadata = self._load_model_from_path(model_path)
+        
+        # Initialize decision engine
+        self.decision_engine = DecisionEngine(
+            strategy_config=self.strategy_config,
+            model_path=model_path
+        )
+        
+        # State management
+        self.position_states: Dict[str, PositionState] = {}
+        self.decision_history: List[TradingDecision] = []
+        self.max_history = 100
+        
+    def make_decision(self, 
+                     symbol: str, 
+                     timeframe: str,
+                     current_bar: pd.Series,
+                     historical_data: pd.DataFrame,
+                     portfolio_state: Dict[str, Any]) -> TradingDecision:
+        """Main entry point for generating trading decisions.
+        
+        This method:
+        1. Calculates indicators from historical data
+        2. Generates fuzzy memberships
+        3. Prepares decision context
+        4. Gets neural network decision
+        5. Applies orchestrator-level logic
+        6. Returns final trading decision
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: Timeframe (must match model training)
+            current_bar: Latest price bar
+            historical_data: Historical bars including current
+            portfolio_state: Current portfolio/account state
+            
+        Returns:
+            TradingDecision with signal, confidence, and metadata
+        """
+        # Step 1: Calculate indicators
+        indicators = self.indicator_engine.calculate_multiple(
+            data=historical_data,
+            configs=self.strategy_config['indicators']
+        )
+        
+        # Step 2: Generate fuzzy memberships
+        fuzzy_values = self.fuzzy_engine.evaluate_batch(
+            indicators=indicators,
+            fuzzy_config=self.strategy_config['fuzzy_sets']
+        )
+        
+        # Step 3: Prepare decision context
+        context = self._prepare_context(
+            symbol=symbol,
+            current_bar=current_bar,
+            historical_data=historical_data,
+            indicators=indicators.iloc[-1].to_dict(),
+            fuzzy_memberships=fuzzy_values.iloc[-1].to_dict(),
+            portfolio_state=portfolio_state
+        )
+        
+        # Step 4: Load model if needed (for multi-symbol support)
+        if not self.model:
+            self.model, self.model_metadata = self._load_model_for_symbol(symbol, timeframe)
+            self.decision_engine.neural_model.model = self.model
+            self.decision_engine.neural_model.is_trained = True
+        
+        # Step 5: Generate decision using the decision engine
+        decision = self.decision_engine.generate_decision(
+            current_data=current_bar,
+            fuzzy_memberships=context.fuzzy_memberships,
+            indicators=context.indicators
+        )
+        
+        # Step 6: Apply orchestrator-level logic
+        final_decision = self._apply_orchestrator_logic(decision, context)
+        
+        # Step 7: Update state
+        self._update_state(symbol, final_decision, context)
+        
+        return final_decision
+    
+    def _initialize_fuzzy_engine(self) -> FuzzyEngine:
+        """Initialize fuzzy engine from strategy configuration.
+        
+        Returns:
+            FuzzyEngine instance configured with strategy fuzzy sets
+        """
+        # Convert strategy fuzzy sets to FuzzyConfig format
+        fuzzy_sets = {}
+        strategy_fuzzy_sets = self.strategy_config.get('fuzzy_sets', {})
+        
+        for indicator_name, sets in strategy_fuzzy_sets.items():
+            fuzzy_set_configs = {}
+            for set_name, parameters in sets.items():
+                # Assume triangular membership functions for now
+                fuzzy_set_configs[set_name] = MembershipFunctionConfig(
+                    type="triangular",
+                    parameters=parameters
+                )
+            fuzzy_sets[indicator_name] = FuzzySetConfig(fuzzy_set_configs)
+        
+        # Create FuzzyConfig
+        fuzzy_config = FuzzyConfig(fuzzy_sets)
+        
+        return FuzzyEngine(fuzzy_config)
+    
+    def _load_strategy_config(self, config_path: str) -> Dict[str, Any]:
+        """Load strategy configuration from YAML file.
+        
+        Args:
+            config_path: Path to YAML configuration file
+            
+        Returns:
+            Strategy configuration dictionary
+        """
+        config_path = Path(config_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Strategy config not found: {config_path}")
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Validate required sections
+        required_sections = ['name', 'indicators', 'fuzzy_sets', 'model']
+        for section in required_sections:
+            if section not in config:
+                raise ValueError(f"Missing required configuration section: {section}")
+        
+        return config
+    
+    def _load_model_from_path(self, model_path: str) -> tuple:
+        """Load model from specific path.
+        
+        Args:
+            model_path: Path to model directory
+            
+        Returns:
+            Tuple of (model, metadata)
+        """
+        # Parse path to extract strategy/symbol/timeframe
+        path_parts = Path(model_path).name.split("_")
+        if len(path_parts) < 3:
+            raise ValueError(f"Invalid model path format: {model_path}")
+        
+        symbol = path_parts[0]
+        timeframe_version = "_".join(path_parts[1:])
+        
+        # Split timeframe and version
+        if "_v" in timeframe_version:
+            parts = timeframe_version.split("_v")
+            timeframe = parts[0]
+            version = "v" + parts[1]  # Re-add the 'v' prefix
+        else:
+            timeframe = timeframe_version
+            version = None
+        
+        return self.model_loader.load_model(
+            strategy_name=self.strategy_name,
+            symbol=symbol,
+            timeframe=timeframe,
+            version=version
+        )
+    
+    def _load_model_for_symbol(self, symbol: str, timeframe: str) -> tuple:
+        """Load the appropriate model for a symbol/timeframe.
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: Timeframe
+            
+        Returns:
+            Tuple of (model, metadata)
+        """
+        return self.model_loader.load_model(
+            strategy_name=self.strategy_name,
+            symbol=symbol,
+            timeframe=timeframe
+        )
+    
+    def _prepare_context(self, 
+                        symbol: str,
+                        current_bar: pd.Series,
+                        historical_data: pd.DataFrame,
+                        indicators: Dict[str, float],
+                        fuzzy_memberships: Dict[str, float],
+                        portfolio_state: Dict[str, Any]) -> DecisionContext:
+        """Prepare complete context for decision making.
+        
+        Args:
+            symbol: Trading symbol
+            current_bar: Current price bar
+            historical_data: Historical price data
+            indicators: Current indicator values
+            fuzzy_memberships: Current fuzzy membership values
+            portfolio_state: Portfolio state information
+            
+        Returns:
+            DecisionContext with all relevant information
+        """
+        # Get or create position state
+        if symbol not in self.position_states:
+            self.position_states[symbol] = PositionState(symbol)
+        
+        position_state = self.position_states[symbol]
+        
+        # Get recent decisions for this symbol
+        recent_decisions = [
+            d for d in self.decision_history[-20:]  # Last 20 decisions
+            if hasattr(d.reasoning, 'symbol') and d.reasoning.get('symbol') == symbol
+        ]
+        
+        return DecisionContext(
+            current_bar=current_bar,
+            recent_bars=historical_data.tail(20),  # Last 20 bars
+            indicators=indicators,
+            fuzzy_memberships=fuzzy_memberships,
+            current_position=position_state.position,
+            position_entry_price=position_state.entry_price,
+            position_holding_period=position_state.holding_period,
+            unrealized_pnl=position_state.unrealized_pnl,
+            portfolio_value=portfolio_state.get('total_value', 0),
+            available_capital=portfolio_state.get('available_capital', 0),
+            recent_decisions=recent_decisions,
+            last_signal_time=position_state.last_signal_time
+        )
+    
+    def _apply_orchestrator_logic(self, 
+                                 decision: TradingDecision,
+                                 context: DecisionContext) -> TradingDecision:
+        """Apply additional orchestrator-level logic beyond the neural network.
+        
+        Args:
+            decision: Initial decision from neural network
+            context: Decision context
+            
+        Returns:
+            Final decision after orchestrator logic
+        """
+        original_signal = decision.signal
+        
+        # Get orchestrator config if available
+        orchestrator_config = self.strategy_config.get('orchestrator', {})
+        
+        # Risk check: Maximum position size
+        max_position_size = orchestrator_config.get('max_position_size', 0.95)
+        if context.portfolio_value > 0:
+            current_exposure = (context.portfolio_value - context.available_capital) / context.portfolio_value
+            if current_exposure > max_position_size and decision.signal == Signal.BUY:
+                decision.signal = Signal.HOLD
+                decision.reasoning['orchestrator_override'] = f"Position size limit ({max_position_size:.0%})"
+        
+        # Mode-specific logic
+        mode_config = orchestrator_config.get('modes', {}).get(self.mode, {})
+        
+        if self.mode != "backtest":
+            # More strict in live modes
+            if context.available_capital < 1000:  # Minimum capital threshold
+                decision.signal = Signal.HOLD
+                decision.reasoning['orchestrator_override'] = "Insufficient capital"
+        
+        # Apply mode-specific confidence threshold
+        mode_confidence_threshold = mode_config.get('confidence_threshold')
+        if mode_confidence_threshold and decision.confidence < mode_confidence_threshold:
+            decision.signal = Signal.HOLD
+            decision.reasoning['orchestrator_override'] = f"Confidence below {self.mode} threshold ({mode_confidence_threshold})"
+        
+        # Special live trading safety
+        if self.mode == "live":
+            require_confirmation = mode_config.get('require_confirmation', False)
+            if require_confirmation and decision.signal != Signal.HOLD:
+                # In a real system, this might check for additional confirmation
+                # For now, we'll just apply higher confidence requirement
+                if decision.confidence < 0.8:
+                    decision.signal = Signal.HOLD
+                    decision.reasoning['orchestrator_override'] = "Live trading requires high confidence"
+        
+        # Add orchestrator metadata
+        decision.reasoning['orchestrator'] = {
+            'original_signal': original_signal.value,
+            'final_signal': decision.signal.value,
+            'mode': self.mode,
+            'position_state': context.current_position.value,
+            'applied_overrides': decision.reasoning.get('orchestrator_override') is not None
+        }
+        
+        return decision
+    
+    def _update_state(self, symbol: str, decision: TradingDecision, 
+                     context: DecisionContext):
+        """Update internal state after decision.
+        
+        Args:
+            symbol: Trading symbol
+            decision: Final trading decision
+            context: Decision context
+        """
+        # Get or create position state
+        if symbol not in self.position_states:
+            self.position_states[symbol] = PositionState(symbol)
+            
+        # Update position state
+        position_state = self.position_states[symbol]
+        position_state.update_from_decision(decision, context.current_bar)
+        
+        # Add symbol to decision reasoning for tracking
+        decision.reasoning['symbol'] = symbol
+        
+        # Add to history
+        self.decision_history.append(decision)
+        if len(self.decision_history) > self.max_history:
+            self.decision_history.pop(0)
+    
+    def get_position_state(self, symbol: str) -> PositionState:
+        """Get current position state for a symbol.
+        
+        Args:
+            symbol: Trading symbol
+            
+        Returns:
+            PositionState for the symbol
+        """
+        if symbol not in self.position_states:
+            self.position_states[symbol] = PositionState(symbol)
+        return self.position_states[symbol]
+    
+    def get_decision_history(self, symbol: Optional[str] = None, limit: int = 20) -> List[TradingDecision]:
+        """Get recent decision history.
+        
+        Args:
+            symbol: Filter by symbol (None for all)
+            limit: Maximum number of decisions to return
+            
+        Returns:
+            List of recent decisions
+        """
+        decisions = self.decision_history[-limit:]
+        
+        if symbol:
+            decisions = [
+                d for d in decisions 
+                if d.reasoning.get('symbol') == symbol
+            ]
+        
+        return decisions
+    
+    def reset_state(self, symbol: Optional[str] = None):
+        """Reset orchestrator state.
+        
+        Args:
+            symbol: Reset specific symbol (None for all)
+        """
+        if symbol:
+            if symbol in self.position_states:
+                self.position_states[symbol] = PositionState(symbol)
+        else:
+            self.position_states.clear()
+            self.decision_history.clear()
