@@ -37,7 +37,7 @@ const LeftSidebar: FC<LeftSidebarProps> = ({
       label: 'Train', 
       icon: '🧠', 
       description: 'Train neural networks',
-      available: false
+      available: true
     },
     { 
       id: 'run' as const, 

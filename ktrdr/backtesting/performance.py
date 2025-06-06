@@ -146,7 +146,7 @@ class PerformanceTracker:
         # Basic return metrics
         final_equity = self.equity_curve[-1]["portfolio_value"]
         total_return = final_equity - initial_capital
-        total_return_pct = (total_return / initial_capital) * 100
+        total_return_pct = (total_return / initial_capital)  # Return as decimal 0-1
         
         # Calculate time period for annualization
         if start_date and end_date:
@@ -155,11 +155,11 @@ class PerformanceTracker:
         else:
             years = len(self.equity_curve) / (252 * 6.5)  # Assume 6.5 hour trading day
         
-        annualized_return = ((final_equity / initial_capital) ** (1 / max(years, 0.001)) - 1) * 100 if years > 0 else 0
+        annualized_return = ((final_equity / initial_capital) ** (1 / max(years, 0.001)) - 1) if years > 0 else 0  # Return as decimal 0-1
         
         # Volatility and Sharpe ratio
         if len(self.daily_returns) > 1:
-            volatility = np.std(self.daily_returns) * np.sqrt(252) * 100  # Annualized
+            volatility = np.std(self.daily_returns) * np.sqrt(252)  # Annualized, return as decimal 0-1
             avg_return = np.mean(self.daily_returns)
             sharpe_ratio = (avg_return / (np.std(self.daily_returns) + 1e-10)) * np.sqrt(252) if np.std(self.daily_returns) > 0 else 0
         else:
@@ -174,7 +174,7 @@ class PerformanceTracker:
             total_trades = len(trades)
             win_count = len(winning_trades)
             loss_count = len(losing_trades)
-            win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
+            win_rate = (win_count / total_trades) if total_trades > 0 else 0  # Return as decimal 0-1
             
             # P&L metrics
             total_wins = sum(t.net_pnl for t in winning_trades)
@@ -198,7 +198,7 @@ class PerformanceTracker:
         
         # Max drawdown in absolute terms
         max_drawdown_abs = self.max_drawdown * self.peak_equity
-        max_drawdown_pct = self.max_drawdown * 100
+        max_drawdown_pct = self.max_drawdown  # Already as decimal 0-1
         
         # Additional risk metrics
         calmar_ratio = (annualized_return / max_drawdown_pct) if max_drawdown_pct > 0 else 0

@@ -1,0 +1,260 @@
+/* TrainModeView.css */
+
+.train-mode-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--background-primary, #161616);
+  color: var(--text-primary, #fff);
+}
+
+.train-mode-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color, #333);
+  background: var(--background-secondary, #1e1e1e);
+}
+
+.train-mode-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.mode-description {
+  margin: 0;
+  color: var(--text-secondary, #999);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.train-mode-content {
+  flex: 1;
+  display: flex;
+  min-height: 0; /* Important for flex child with overflow */
+}
+
+.strategy-sidebar {
+  width: 400px;
+  min-width: 350px;
+  max-width: 500px;
+  border-right: 1px solid var(--border-color, #333);
+  background: var(--background-secondary, #1e1e1e);
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+  background: var(--background-primary, #161616);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Welcome Panel */
+.welcome-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  overflow-y: auto;
+}
+
+.welcome-content {
+  max-width: 800px;
+  width: 100%;
+  text-align: center;
+}
+
+.welcome-header {
+  margin-bottom: 40px;
+}
+
+.welcome-header h2 {
+  margin: 0 0 12px 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.welcome-header p {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-secondary, #999);
+}
+
+/* Feature Cards */
+.feature-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.feature-card {
+  background: var(--card-background, #242424);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.feature-card:hover {
+  border-color: var(--border-hover, #555);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.feature-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.feature-card h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.feature-card p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--text-secondary, #999);
+  line-height: 1.5;
+}
+
+.feature-command {
+  background: var(--background-primary, #161616);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--primary-color, #2196F3);
+}
+
+.feature-action {
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  font-style: italic;
+}
+
+/* Getting Started Section */
+.getting-started {
+  background: var(--card-background, #242424);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.getting-started h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.getting-started ol {
+  margin: 0 0 16px 0;
+  padding-left: 20px;
+  color: var(--text-primary, #fff);
+}
+
+.getting-started li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.getting-started code {
+  background: var(--background-primary, #161616);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--primary-color, #2196F3);
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary, #999);
+  font-style: italic;
+}
+
+/* Selected Strategy Info */
+.selected-strategy-info {
+  background: var(--info-bg, rgba(33, 150, 243, 0.1));
+  border: 1px solid var(--primary-color, #2196F3);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: left;
+}
+
+.selected-strategy-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--primary-color, #2196F3);
+}
+
+.selected-strategy-info p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary, #fff);
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .train-mode-content {
+    flex-direction: column;
+  }
+  
+  .strategy-sidebar {
+    width: 100%;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color, #333);
+  }
+  
+  .main-content {
+    min-height: 60vh;
+  }
+}
+
+@media (max-width: 768px) {
+  .train-mode-header {
+    padding: 16px 20px;
+  }
+  
+  .train-mode-header h1 {
+    font-size: 20px;
+  }
+  
+  .welcome-panel {
+    padding: 20px;
+  }
+  
+  .welcome-header h2 {
+    font-size: 24px;
+  }
+  
+  .feature-cards {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .feature-card {
+    padding: 20px;
+  }
+  
+  .getting-started {
+    padding: 20px;
+  }
+}

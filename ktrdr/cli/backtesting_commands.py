@@ -130,10 +130,10 @@ def run_backtest(
             console.print("=" * 50)
             
             metrics = results.metrics
-            console.print(f"💰 Total Return: [green]${metrics.total_return:,.2f} ({metrics.total_return_pct:.2f}%)[/green]")
+            console.print(f"💰 Total Return: [green]${metrics.total_return:,.2f} ({metrics.total_return_pct*100:.2f}%)[/green]")
             console.print(f"📈 Sharpe Ratio: [yellow]{metrics.sharpe_ratio:.3f}[/yellow]")
-            console.print(f"📉 Max Drawdown: [red]${metrics.max_drawdown:,.2f} ({metrics.max_drawdown_pct:.2f}%)[/red]")
-            console.print(f"🎯 Win Rate: [blue]{metrics.win_rate:.1f}%[/blue] ({metrics.winning_trades}/{metrics.total_trades})")
+            console.print(f"📉 Max Drawdown: [red]${metrics.max_drawdown:,.2f} ({metrics.max_drawdown_pct*100:.2f}%)[/red]")
+            console.print(f"🎯 Win Rate: [blue]{metrics.win_rate*100:.1f}%[/blue] ({metrics.winning_trades}/{metrics.total_trades})")
             console.print(f"🏷️ Total Trades: [blue]{metrics.total_trades}[/blue]")
             
         return results_dict

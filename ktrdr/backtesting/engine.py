@@ -250,11 +250,11 @@ class BacktestingEngine:
                     self.orchestrator.decision_engine.update_position(decision.signal, current_timestamp)
                     if self.config.verbose:
                         action = "🟢 BUY " if decision.signal == Signal.BUY else "🔴 SELL"
-                        print(f"✅ TRADE EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action} @ ${current_price:.2f} "
-                              f"| Confidence: {decision.confidence:.2f} | Trade #{trades_executed}")
+                        print(f"✅ ORDER EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action} @ ${current_price:.2f} "
+                              f"| Confidence: {decision.confidence:.2f} | Order #{trades_executed}")
                 else:
                     if self.config.verbose:
-                        print(f"❌ TRADE FAILED: {decision.signal.value} signal not executed at {current_timestamp}")
+                        print(f"❌ ORDER FAILED: {decision.signal.value} signal not executed at {current_timestamp}")
             
             # Update position with current market price
             self.position_manager.update_position(current_price, current_timestamp)
@@ -274,8 +274,31 @@ class BacktestingEngine:
             if self.config.verbose and idx > 0:
                 progress = (idx / len(data)) * 100
                 if progress - last_progress_update >= 10:  # Update every 10%
-                    print(f"⏳ Progress: {progress:.0f}% | Portfolio: ${portfolio_value:,.2f} | Trades: {trades_executed}")
+                    print(f"⏳ Progress: {progress:.0f}% | Portfolio: ${portfolio_value:,.2f} | Orders: {trades_executed}")
                     last_progress_update = progress
+        
+        # Force-close any open position at the end of the backtest
+        # This prevents unrealized losses from skewing performance metrics
+        final_bar = data.iloc[-1]
+        final_price = final_bar['close']
+        final_timestamp = final_bar.name if hasattr(final_bar.name, 'strftime') else pd.Timestamp(final_bar.name)
+        
+        forced_trade = self.position_manager.force_close_position(
+            price=final_price,
+            timestamp=final_timestamp,
+            symbol=self.config.symbol,
+            reason="End of backtest period"
+        )
+        
+        if forced_trade:
+            trades_executed += 1  # Count the forced closure
+            if self.config.verbose:
+                print(f"\n🔒 FORCED POSITION CLOSURE:")
+                print(f"   Closed open position at end of backtest")
+                print(f"   Entry: ${forced_trade.entry_price:.2f} @ {forced_trade.entry_time}")
+                print(f"   Exit: ${forced_trade.exit_price:.2f} @ {forced_trade.exit_time}")
+                print(f"   P&L: ${forced_trade.net_pnl:.2f}")
+                print(f"   This trade is included in performance calculations")
         
         # Generate final results
         execution_time = time.time() - execution_start
@@ -285,6 +308,12 @@ class BacktestingEngine:
             print("=" * 60)
             print("✅ Backtest completed!")
             
+            # Summary of orders vs trades for clarity
+            completed_trades = len(self.position_manager.get_trade_history())
+            print(f"\n📋 EXECUTION SUMMARY:")
+            print(f"   Orders executed: {trades_executed} (individual BUY/SELL operations)")
+            print(f"   Trades completed: {completed_trades} (round-trip BUY→SELL pairs)")
+            
             # DEBUG: Print detailed signal analysis
             print(f"\n🔍 SIGNAL ANALYSIS:")
             print(f"   Total bars processed: {len(data):,}")
@@ -292,8 +321,8 @@ class BacktestingEngine:
             print(f"   BUY signals: {signal_counts['BUY']:,}")
             print(f"   SELL signals: {signal_counts['SELL']:,}")
             print(f"   Non-HOLD signals: {len(non_hold_signals):,}")
-            print(f"   Trade attempts: {len(trade_attempts):,}")
-            print(f"   Successful trades: {trades_executed}")
+            print(f"   Order attempts: {len(trade_attempts):,}")
+            print(f"   Successful orders: {trades_executed}")
             
             if non_hold_signals:
                 print(f"\n📊 FIRST 5 NON-HOLD SIGNALS:")
@@ -302,14 +331,14 @@ class BacktestingEngine:
                           f"Confidence: {signal['confidence']:.4f} | Price: ${signal['price']:.2f}")
             
             if trade_attempts:
-                print(f"\n💼 TRADE ATTEMPT ANALYSIS:")
+                print(f"\n💼 ORDER EXECUTION ANALYSIS:")
                 successful = sum(1 for t in trade_attempts if t['trade_executed'])
                 failed = len(trade_attempts) - successful
                 print(f"   Successful: {successful}")
                 print(f"   Failed: {failed}")
                 
                 if failed > 0:
-                    print(f"\n❌ FAILED TRADE ATTEMPTS:")
+                    print(f"\n❌ FAILED ORDER ATTEMPTS:")
                     for i, attempt in enumerate([t for t in trade_attempts if not t['trade_executed']][:5]):
                         print(f"   {i+1}. {attempt['timestamp']} | {attempt['signal']} | "
                               f"Confidence: {attempt['confidence']:.4f} | Price: ${attempt['price']:.2f}")
@@ -441,15 +470,15 @@ class BacktestingEngine:
         
         # Performance metrics (only show if trades were made)
         print(f"💰 Performance Metrics:")
-        print(f"   Total Return: ${metrics.total_return:,.2f} ({metrics.total_return_pct:.2f}%)")
-        print(f"   Annualized Return: {metrics.annualized_return:.2f}%")
+        print(f"   Total Return: ${metrics.total_return:,.2f} ({metrics.total_return_pct*100:.2f}%)")
+        print(f"   Annualized Return: {metrics.annualized_return*100:.2f}%")
         print(f"   Sharpe Ratio: {metrics.sharpe_ratio:.3f}")
-        print(f"   Max Drawdown: ${metrics.max_drawdown:,.2f} ({metrics.max_drawdown_pct:.2f}%)")
-        print(f"   Volatility: {metrics.volatility:.2f}%")
+        print(f"   Max Drawdown: ${metrics.max_drawdown:,.2f} ({metrics.max_drawdown_pct*100:.2f}%)")
+        print(f"   Volatility: {metrics.volatility*100:.2f}%")
         
         print(f"\n📈 Trade Statistics:")
         print(f"   Total Trades: {metrics.total_trades}")
-        print(f"   Win Rate: {metrics.win_rate:.1f}% ({metrics.winning_trades}/{metrics.total_trades})")
+        print(f"   Win Rate: {metrics.win_rate*100:.1f}% ({metrics.winning_trades}/{metrics.total_trades})")
         print(f"   Profit Factor: {metrics.profit_factor:.2f}")
         print(f"   Avg Win: ${metrics.avg_win:.2f} | Avg Loss: ${metrics.avg_loss:.2f}")
         print(f"   Largest Win: ${metrics.largest_win:.2f} | Largest Loss: ${metrics.largest_loss:.2f}")

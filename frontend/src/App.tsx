@@ -14,6 +14,9 @@ import { NoIndicatorsEmpty } from './components/presentation/feedback/EmptyState
 import { PriceDataProvider } from './context/PriceDataContext';
 import { IndicatorInfo } from './store/indicatorRegistry';
 import { createLogger } from './utils/logger';
+import { TrainModeView } from './components/train/TrainModeView';
+import { BacktestOverlay } from './components/research/enhancements/BacktestOverlay';
+import { useSharedContext } from './store/sharedContextStore';
 import './App.css';
 
 /**
@@ -271,7 +274,7 @@ const AppContent: FC = () => {
               />
             </ErrorBoundary>
             
-            {/* Chart Area */}
+            {/* Chart Area - conditionally render based on mode */}
             <div style={{ 
               flex: 1, 
               padding: '1rem',
@@ -281,55 +284,66 @@ const AppContent: FC = () => {
               flexDirection: 'column',
               gap: '1rem'
             }}>
-              {/* Main Price Chart Container - Overlay indicators only */}
-              <ErrorBoundary>
-                <BasicChartContainer
-                  key={getChartKey('main-chart')}
-                  symbol={selectedSymbol}
-                  timeframe={selectedTimeframe}
-                  indicators={overlayIndicators}
-                  chartSynchronizer={chartSynchronizer}
-                  chartId="main-chart"
-                  width={chartDimensions.width}
-                  height={chartDimensions.height.main}
-                  initialTimeRange={lastKnownTimeRangeRef.current} // Use the last known range from ref
-                  onTimeRangeChange={handleTimeRangeChange}
-                  onError={handleMainChartError}
-                />
-              </ErrorBoundary>
-
-              {/* Multi-Panel Oscillator Manager - Individual panels for each oscillator type */}
-              {separateIndicators.length > 0 && (
+              {currentMode === 'train' ? (
                 <ErrorBoundary>
-                  <OscillatorPanelManager
-                    indicators={separateIndicators}
-                    symbol={selectedSymbol}
-                    timeframe={selectedTimeframe}
-                    width={chartDimensions.width}
-                    chartSynchronizer={chartSynchronizer}
-                    onPanelCreated={(panelId) => {
-                      logger.debug(`Panel created: ${panelId}`);
-                    }}
-                    onPanelRemoved={(panelId) => {
-                      logger.debug(`Panel removed: ${panelId}`);
-                    }}
-                    onPanelError={(panelId, error) => {
-                      logger.error(`Panel error in ${panelId}:`, error);
-                      showToast({
-                        type: 'error',
-                        title: 'Panel Error',
-                        message: `Error in ${panelId}: ${error}`
-                      });
-                    }}
-                  />
+                  <TrainModeView />
                 </ErrorBoundary>
-              )}
+              ) : (
+                <>
+                  {/* Research Mode: Main Price Chart Container - Overlay indicators only */}
+                  <ErrorBoundary>
+                    <BasicChartContainer
+                      key={getChartKey('main-chart')}
+                      symbol={selectedSymbol}
+                      timeframe={selectedTimeframe}
+                      indicators={overlayIndicators}
+                      chartSynchronizer={chartSynchronizer}
+                      chartId="main-chart"
+                      width={chartDimensions.width}
+                      height={chartDimensions.height.main}
+                      initialTimeRange={lastKnownTimeRangeRef.current} // Use the last known range from ref
+                      onTimeRangeChange={handleTimeRangeChange}
+                      onError={handleMainChartError}
+                    />
+                  </ErrorBoundary>
 
-              {/* Chart instructions for empty state */}
-              {indicators.length === 0 && (
-                <NoIndicatorsEmpty 
-                  onAddIndicator={() => setRightSidebarCollapsed(false)}
-                />
+                  {/* Multi-Panel Oscillator Manager - Individual panels for each oscillator type */}
+                  {separateIndicators.length > 0 && (
+                    <ErrorBoundary>
+                      <OscillatorPanelManager
+                        indicators={separateIndicators}
+                        symbol={selectedSymbol}
+                        timeframe={selectedTimeframe}
+                        width={chartDimensions.width}
+                        chartSynchronizer={chartSynchronizer}
+                        onPanelCreated={(panelId) => {
+                          logger.debug(`Panel created: ${panelId}`);
+                        }}
+                        onPanelRemoved={(panelId) => {
+                          logger.debug(`Panel removed: ${panelId}`);
+                        }}
+                        onPanelError={(panelId, error) => {
+                          logger.error(`Panel error in ${panelId}:`, error);
+                          showToast({
+                            type: 'error',
+                            title: 'Panel Error',
+                            message: `Error in ${panelId}: ${error}`
+                          });
+                        }}
+                      />
+                    </ErrorBoundary>
+                  )}
+
+                  {/* Chart instructions for empty state */}
+                  {indicators.length === 0 && (
+                    <NoIndicatorsEmpty 
+                      onAddIndicator={() => setRightSidebarCollapsed(false)}
+                    />
+                  )}
+
+                  {/* Backtest Overlay for Research mode */}
+                  <BacktestOverlay />
+                </>
               )}
             </div>
 

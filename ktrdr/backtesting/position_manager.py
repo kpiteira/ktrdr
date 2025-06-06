@@ -131,7 +131,10 @@ class PositionManager:
             Total portfolio value including cash and positions
         """
         if self.current_position:
-            # Update position to calculate current unrealized P&L
+            # Calculate current position market value
+            position_market_value = current_price * self.current_position.quantity
+            
+            # Update position to track unrealized P&L for reporting
             if current_price != self.current_position.current_price:
                 # Calculate unrealized P&L based on current price
                 if self.current_position.status == PositionStatus.LONG:
@@ -140,12 +143,12 @@ class PositionManager:
                     unrealized_pnl = (self.current_position.entry_price - current_price) * self.current_position.quantity
                 else:
                     unrealized_pnl = 0.0
-            else:
-                unrealized_pnl = self.current_position.unrealized_pnl
+                    
+                # Update position's unrealized P&L for tracking
+                self.current_position.unrealized_pnl = unrealized_pnl
             
-            # Total value = cash + position market value
-            position_market_value = current_price * self.current_position.quantity
-            return self.current_capital + unrealized_pnl
+            # CORRECT CALCULATION: Total portfolio value = cash + current position market value
+            return self.current_capital + position_market_value
         return self.current_capital
     
     def can_execute_trade(self, signal: Signal, price: float, quantity: int = None) -> bool:
@@ -362,7 +365,7 @@ class PositionManager:
             Quantity to buy
         """
         # Use a fixed fraction approach (could be made configurable)
-        fraction_to_invest = 0.95  # Use 95% of available capital
+        fraction_to_invest = 0.25  # Use 25% of available capital for moderate position sizing
         available = self.available_capital * fraction_to_invest
         
         # Account for commission in calculation
@@ -429,6 +432,37 @@ class PositionManager:
             "capital": self.current_capital,
             "available_capital": self.available_capital
         }
+    
+    def force_close_position(self, 
+                            price: float, 
+                            timestamp: pd.Timestamp,
+                            symbol: str,
+                            reason: str = "End of backtest") -> Optional[Trade]:
+        """Force-close any open position at the end of the backtest.
+        
+        This ensures that all performance calculations are based on completed trades only,
+        preventing unrealized losses from open positions from skewing the results.
+        
+        Args:
+            price: Current market price to close at
+            timestamp: Timestamp for the forced close
+            symbol: Trading symbol
+            reason: Reason for the forced close (for metadata)
+            
+        Returns:
+            Trade object if a position was closed, None if no open position
+        """
+        if not self.current_position:
+            return None
+        
+        # Force-close the position using the sell logic
+        decision_metadata = {
+            "signal_type": "FORCE_CLOSE",
+            "reason": reason,
+            "forced": True
+        }
+        
+        return self._execute_sell(price, timestamp, symbol, decision_metadata)
     
     def reset(self):
         """Reset position manager to initial state."""
