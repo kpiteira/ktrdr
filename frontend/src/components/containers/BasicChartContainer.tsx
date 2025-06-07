@@ -36,6 +36,7 @@ interface BasicChartContainerProps {
   
   // Callbacks
   onDataLoaded?: (data: ChartData) => void;
+  onChartCreated?: (chart: IChartApi) => void;
   onTimeRangeChange?: (range: { start: string; end: string }) => void;
   onError?: (error: string) => void;
 }
@@ -50,6 +51,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
   chartId = 'basic-chart',
   initialTimeRange,
   onDataLoaded,
+  onChartCreated,
   onTimeRangeChange,
   onError
 }) => {
@@ -217,7 +219,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
           }
         });
 
-        console.log(`ZigZag extremes found: ${extremes.length}`);
+        logger.debug('ZigZag extremes found', { count: extremes.length });
 
         if (extremes.length < 2) {
           // Not enough extremes to interpolate - return sparse data
@@ -275,7 +277,10 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
           value: lastExtreme.value
         });
 
-        console.log(`ZigZag interpolated: ${extremes.length} extremes → ${interpolatedData.length} continuous points`);
+        logger.debug('ZigZag interpolated', { 
+          extremes: extremes.length, 
+          continuousPoints: interpolatedData.length 
+        });
         return interpolatedData;
       }
 
@@ -378,7 +383,12 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
     if (chartSynchronizer && chartId) {
       chartSynchronizer.registerChart(chartId, chart, `Price Chart (${symbol})`);
     }
-  }, [chartSynchronizer, chartId, symbol]);
+    
+    // Notify parent component
+    if (onChartCreated) {
+      onChartCreated(chart);
+    }
+  }, [chartSynchronizer, chartId, symbol, onChartCreated]);
 
   // Handle chart destruction
   const handleChartDestroyed = useCallback(() => {

@@ -75,7 +75,6 @@ export const BacktestResultsPanel: React.FC = () => {
         </div>
         
         <div className="tab-content">
-          {console.log('Current selected tab:', state.resultsPanel.selectedTab)}
           {state.resultsPanel.selectedTab === 'metrics' && (
             <MetricsTab results={results} />
           )}
@@ -226,9 +225,6 @@ const TradesTab: React.FC<TradesTabProps> = ({ backtestId }) => {
   const state = useTrainModeStore();
   const trades = state.backtestTrades[backtestId] || [];
   
-  console.log('TradesTab render:', { backtestId, tradesLength: trades.length });
-  console.log('All backtestTrades:', state.backtestTrades);
-  console.log('Trades for this backtest:', trades);
   
   if (trades.length === 0) {
     return (

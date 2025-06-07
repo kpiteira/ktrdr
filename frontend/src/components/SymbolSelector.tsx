@@ -1,5 +1,8 @@
 import { FC, useEffect, useState } from 'react';
 import LoadingSpinner from './common/LoadingSpinner';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('SymbolSelector');
 
 interface Symbol {
   symbol: string;
@@ -38,7 +41,7 @@ const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChang
       setSymbols(data.data);
       setLoading(false);
     } catch (err) {
-      console.error('[SymbolSelector] Error fetching symbols:', err);
+      logger.error('Failed to fetch available symbols:', err);
       setError(err instanceof Error ? err.message : 'Failed to load symbols');
       setLoading(false);
     }

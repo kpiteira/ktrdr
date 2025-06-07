@@ -12,6 +12,9 @@ import ErrorDisplay from '../../common/ErrorDisplay';
 import EmptyState from '../../common/EmptyState';
 import FuzzyOverlay from './FuzzyOverlay';
 import { ChartFuzzyData } from '../../../api/types/fuzzy';
+import { createLogger } from '../../../utils/logger';
+
+const logger = createLogger('OscillatorChart');
 
 /**
  * Generic presentation component for oscillator charts
@@ -108,7 +111,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
     
     // Don't create chart with invalid dimensions
     if (width <= 0 || height <= 0) {
-      console.warn(`OscillatorChart: Invalid dimensions - width: ${width}, height: ${height}`);
+      logger.warn('Invalid chart dimensions', { width, height });
       return;
     }
 
@@ -335,7 +338,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
       // Check if this is the first oscillator indicator being added
       const isFirstOscillatorIndicator = oscillatorData.indicators.length === 1 && existingIndicatorCount === 0;
       
-      // console.log(`🔧 [OscillatorChart] Chart jumping check:`, {
+      // Debug: Chart jumping check logging available if needed
       //   indicatorCountChanged,
       //   preserveTimeScale,
       //   isFirstOscillatorIndicator,
@@ -362,7 +365,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
               }
             }, 1); // CRITICAL: 1ms timing - tested minimum effective delay
           } else {
-            console.warn(`⚠️ [OscillatorChart] No eye buttons found for chart jumping prevention`);
+            logger.warn('No eye buttons found for chart jumping prevention');
           }
         }, 1); // CRITICAL: 1ms timing - tested minimum effective delay
       }

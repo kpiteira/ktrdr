@@ -22,6 +22,10 @@ services:
       - ../logs:/app/logs
       # Mount config as read-only
       - ../config:/app/config:ro
+      # Mount strategies directory
+      - ../strategies:/app/strategies:ro
+      # Mount models directory for trained models
+      - ../models:/app/models
       # Mount output directory for visualization files
       - ../output:/app/output
       # Cache directories for pip and uv

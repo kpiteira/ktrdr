@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts';
 import LoadingSpinner from '../../common/LoadingSpinner';
 import ErrorDisplay from '../../common/ErrorDisplay';
+import { createLogger } from '../../../utils/logger';
 
 /**
  * Pure presentation component for the basic price chart
@@ -18,6 +19,8 @@ import ErrorDisplay from '../../common/ErrorDisplay';
  * and handling TradingView-specific operations. All data and state
  * management is handled by the container component.
  */
+
+const logger = createLogger('BasicChart');
 
 export interface ChartData {
   candlestick: CandlestickData[];
@@ -150,7 +153,7 @@ const BasicChart: FC<BasicChartProps> = ({
         },
       });
     } catch (error) {
-      console.error('Failed to create chart:', error);
+      logger.error('Failed to create chart:', error);
       throw error;
     }
 
@@ -185,10 +188,10 @@ const BasicChart: FC<BasicChartProps> = ({
               end: new Date(range.to * 1000).toISOString()
             });
           } catch (error) {
-            console.warn('Failed to process time range change:', error);
+            logger.warn('Failed to process time range change:', error);
           }
         } else {
-          console.debug('Ignoring invalid time range from sparse data:', range);
+          logger.debug('Ignoring invalid time range from sparse data:', range);
         }
       });
     }
@@ -203,6 +206,16 @@ const BasicChart: FC<BasicChartProps> = ({
     if (onChartCreated) {
       onChartCreated(chart);
     }
+    
+    // Emit chart ready event for BacktestOverlay integration
+    logger.debug('Emitting chartReady event for BacktestOverlay integration');
+    window.dispatchEvent(new CustomEvent('chartReady', { 
+      detail: { 
+        chartApi: chart,
+        candlestickSeries: candlestickSeries,
+        chartId: 'main-chart' 
+      } 
+    }));
 
     // Cleanup function
     return () => {
@@ -239,7 +252,7 @@ const BasicChart: FC<BasicChartProps> = ({
         rangeBeforeUpdate = null;
       }
     } catch (error) {
-      console.warn('Failed to get visible range (sparse data):', error);
+      logger.warn('Failed to get visible range (sparse data):', error);
       rangeBeforeUpdate = null;
     }
     const existingIndicatorCount = indicatorSeriesRef.current.size;
@@ -312,11 +325,11 @@ const BasicChart: FC<BasicChartProps> = ({
             try {
               series.setData(validDataPoints);
             } catch (error) {
-              console.warn(`Failed to set data for indicator ${indicator.name}:`, error);
+              logger.warn('Failed to set indicator data', { name: indicator.name, error: error.message });
               // Continue without crashing - series will be empty but chart remains functional
             }
           } else {
-            console.warn(`Indicator ${indicator.name} has no valid data points - skipping data update`);
+            logger.warn('Indicator has no valid data points', { name: indicator.name });
           }
         }
         

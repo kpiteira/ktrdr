@@ -4,6 +4,9 @@
  */
 
 import { apiClient } from '../client';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('symbolsAPI');
 import { SymbolInfo } from '../../features/symbols/types';
 
 /**
@@ -30,7 +33,7 @@ export async function getSymbols(): Promise<SymbolInfo[]> {
       return response.data.data;
     } else {
       // Unknown structure, but try to handle it gracefully
-      console.warn('Unexpected API response structure for symbols:', response);
+      logger.warn('Unexpected API response structure for symbols:', response);
       
       if (response && typeof response === 'object') {
         // Try to extract any array we can find
@@ -53,11 +56,11 @@ export async function getSymbols(): Promise<SymbolInfo[]> {
       }
       
       // Return empty array as fallback
-      console.error('Could not find any symbol array in response, returning empty array');
+      logger.error('Could not find any symbol array in response, returning empty array');
       return [];
     }
   } catch (error) {
-    console.error('Error in getSymbols():', error);
+    logger.error('Error in getSymbols():', error);
     // Return mock data in case of error for development
     return [
       { symbol: 'AAPL', name: 'Apple Inc.', exchange: 'NASDAQ', type: 'stock' },
@@ -86,7 +89,7 @@ export async function getSymbolInfo(symbol: string): Promise<SymbolInfo | null> 
     }
     return null;
   } catch (error) {
-    console.error(`Error fetching symbol info for ${symbol}:`, error);
+    logger.error(`Error fetching symbol info for ${symbol}:`, error);
     return null;
   }
 }

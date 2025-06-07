@@ -139,16 +139,11 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
 
       // Debug: Check what we actually created
       const nonZeroData = areaData.filter(point => point.value > 0);
-      console.log(`[FuzzyOverlay] Created series for ${fuzzySet.setName}:`, {
+      logger.debug('Created fuzzy series', { 
+        setName: fuzzySet.setName,
         color: fuzzySet.color,
         dataPoints: areaData.length,
-        nonZeroPoints: nonZeroData.length,
-        sampleData: areaData.slice(0, 3),
-        sampleNonZero: nonZeroData.slice(0, 3),
-        valueRange: {
-          min: Math.min(...areaData.map(p => p.value)),
-          max: Math.max(...areaData.map(p => p.value))
-        }
+        nonZeroPoints: nonZeroData.length
       });
       
       return series;
@@ -164,7 +159,7 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
   const updateFuzzyOverlays = useCallback(() => {
     // Prevent overlapping operations
     if (operationStateRef.current.isOperating) {
-      console.log(`⏳ [FuzzyOverlay] Operation in progress, skipping for ${indicatorId}`);
+      logger.debug('Operation in progress, skipping', { indicatorId });
       return;
     }
     
@@ -194,7 +189,11 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
     
     // Reduced logging for cleaner output
     if (isEnablingFuzzyOverlays || isDisablingFuzzyOverlays) {
-      console.log(`🎯 [FuzzyOverlay] Op ${operationId} ${isEnablingFuzzyOverlays ? 'ENABLE' : 'DISABLE'} for ${indicatorId}`);
+      logger.debug('Fuzzy overlay operation', { 
+        operationId, 
+        action: isEnablingFuzzyOverlays ? 'ENABLE' : 'DISABLE',
+        indicatorId 
+      });
     }
     
     // Get a fresh, stable time range - don't reuse potentially corrupted ranges
@@ -225,12 +224,11 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
           }
           // console.log(`💾 [FuzzyOverlay] Op ${operationId} - Valid time range:`, currentTimeRange);
         } else {
-          console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Invalid time range detected:`, {
-            visibleRange,
+          logger.warn('Invalid time range detected', {
+            operationId,
+            hasVisibleRange: !!visibleRange,
             fromType: typeof visibleRange?.from,
-            toType: typeof visibleRange?.to,
-            fromValue: visibleRange?.from,
-            toValue: visibleRange?.to
+            toType: typeof visibleRange?.to
           });
           
           // Use the last saved range if available and valid
@@ -244,16 +242,16 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
               currentTimeRange = lastRange;
               // console.log(`🔄 [FuzzyOverlay] Op ${operationId} - Using last saved range:`, currentTimeRange);
             } else {
-              console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Last saved range also invalid, skipping time preservation`);
+              logger.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Last saved range also invalid, skipping time preservation`);
               currentTimeRange = null;
             }
           } else {
-            console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - No valid saved range available`);
+            logger.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - No valid saved range available`);
             currentTimeRange = null;
           }
         }
       } catch (error) {
-        console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Failed to get time range:`, error);
+        logger.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Failed to get time range:`, error);
         currentTimeRange = operationStateRef.current.lastSavedRange;
       }
     }
@@ -295,7 +293,7 @@ export const FuzzyOverlay: React.FC<FuzzyOverlayProps> = memo(({
           chartInstance.timeScale().setVisibleRange(currentTimeRange);
           // console.log(`🔄 [FuzzyOverlay] Op ${operationId} - Restored time range:`, currentTimeRange);
         } catch (error) {
-          console.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Failed to restore time range:`, error);
+          logger.warn(`⚠️ [FuzzyOverlay] Op ${operationId} - Failed to restore time range:`, error);
         }
       }
       

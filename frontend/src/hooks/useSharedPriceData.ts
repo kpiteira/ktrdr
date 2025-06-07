@@ -1,5 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { CandlestickData, UTCTimestamp } from 'lightweight-charts';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('useSharedPriceData');
 
 /**
  * Shared price data hook to eliminate duplication between chart containers
@@ -124,7 +127,7 @@ export const useSharedPriceData = (): UseSharedPriceDataResult => {
       setIsLoading(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error loading price data';
-      console.error('[useSharedPriceData] Error loading price data:', errorMessage);
+      logger.error('[useSharedPriceData] Error loading price data:', errorMessage);
       setError(errorMessage);
       setIsLoading(false);
     }

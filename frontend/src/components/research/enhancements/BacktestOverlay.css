@@ -1,0 +1,390 @@
+/* BacktestOverlay.css */
+
+.backtest-mode-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--primary-color, #2196F3);
+  color: white;
+  padding: 12px 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.indicator-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.indicator-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.indicator-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.strategy-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.strategy-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.symbol-timeframe,
+.date-range {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.indicator-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.back-to-results-btn,
+.exit-backtest-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-to-results-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.exit-backtest-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.trade-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.trade-count {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.pnl-summary {
+  font-weight: 500;
+}
+
+/* Trade Details Popup */
+.trade-details-popup {
+  position: absolute;
+  background: var(--card-background, #242424);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 280px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1001;
+  color: var(--text-primary, #fff);
+}
+
+.popup-header {
+  border-bottom: 1px solid var(--border-color, #333);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.popup-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.popup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.detail-row span:first-child {
+  color: var(--text-secondary, #999);
+  font-weight: 500;
+}
+
+.detail-row span:last-child {
+  color: var(--text-primary, #fff);
+  text-align: right;
+}
+
+.detail-row .side.buy {
+  color: var(--success-color, #4CAF50);
+  font-weight: 600;
+}
+
+.detail-row .side.sell {
+  color: var(--error-color, #ef5350);
+  font-weight: 600;
+}
+
+.detail-row .positive {
+  color: var(--success-color, #4CAF50);
+  font-weight: 600;
+}
+
+.detail-row .negative {
+  color: var(--error-color, #ef5350);
+  font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .backtest-mode-indicator {
+    padding: 8px 12px;
+  }
+  
+  .indicator-content {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .indicator-info {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .strategy-details {
+    flex-direction: row;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .indicator-actions {
+    justify-content: flex-end;
+  }
+  
+  .trade-summary {
+    justify-content: center;
+  }
+}
+
+/* Backtest Metrics Overlay */
+.backtest-metrics-overlay {
+  position: fixed;
+  top: 80px; /* Below the mode indicator */
+  right: 20px;
+  width: 320px;
+  background: var(--card-background, #242424);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 999;
+  color: var(--text-primary, #fff);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.metrics-header {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-color, #333);
+  padding-bottom: 12px;
+}
+
+.metrics-header h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.strategy-info {
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  font-weight: 500;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.metric-item {
+  background: var(--background-hover, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.metric-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.metric-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.metric-value.positive {
+  color: var(--success-color, #4CAF50);
+}
+
+.metric-value.negative {
+  color: var(--error-color, #ef5350);
+}
+
+.fuzzy-indicators-info {
+  border-top: 1px solid var(--border-color, #333);
+  padding-top: 16px;
+}
+
+.info-section {
+  margin-bottom: 16px;
+}
+
+.info-section:last-child {
+  margin-bottom: 0;
+}
+
+.info-section h5 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-color, #2196F3);
+}
+
+.indicators-list {
+  background: var(--background-primary, #161616);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.indicator-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.indicator-item:last-child {
+  border-bottom: none;
+}
+
+.indicator-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+}
+
+.indicator-params {
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+  font-family: 'Fira Code', monospace;
+}
+
+.decision-points-summary {
+  background: var(--background-primary, #161616);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.point-stat {
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+}
+
+.point-stat span {
+  color: var(--text-primary, #fff);
+}
+
+/* Responsive Design for Metrics Overlay */
+@media (max-width: 1200px) {
+  .backtest-metrics-overlay {
+    width: 280px;
+    right: 16px;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .metric-item {
+    padding: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .backtest-metrics-overlay {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    margin: 16px 0;
+    max-height: none;
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+}
+
+/* Integration with existing Research mode layout */
+.research-view.with-backtest-overlay {
+  padding-top: 60px; /* Account for fixed backtest indicator */
+}
+
+@media (max-width: 768px) {
+  .research-view.with-backtest-overlay {
+    padding-top: 80px; /* More space on mobile */
+  }
+}

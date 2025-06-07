@@ -7,13 +7,18 @@
 
 import React, { useEffect } from 'react';
 import { useTrainModeStore } from '../../store/trainModeStore';
+import { useSharedContext } from '../../store/sharedContextStore';
 import { StrategyListPanel } from './StrategyListPanel';
 import { BacktestResultsPanel } from './BacktestResultsPanel';
 import { BacktestProgressPanel } from './BacktestProgressPanel';
+import { createLogger } from '../../utils/logger';
 import './TrainModeView.css';
+
+const logger = createLogger('TrainModeView');
 
 export const TrainModeView: React.FC = () => {
   const state = useTrainModeStore();
+  const { backtestContext } = useSharedContext();
   
   // Determine which panel to show in the main content area
   const renderMainContent = () => {
@@ -25,6 +30,11 @@ export const TrainModeView: React.FC = () => {
     // Show results panel when backtest is completed
     if (state.activeBacktest && state.activeBacktest.status === 'completed' && state.viewMode === 'results') {
       return <BacktestResultsPanel />;
+    }
+    
+    // Show results panel if returning from Research mode with backtest context
+    if (backtestContext && !state.activeBacktest) {
+      return <BacktestContextPanel />;
     }
     
     // Default: Show welcome/instruction panel
@@ -114,6 +124,85 @@ const WelcomePanel: React.FC = () => {
             <p>Click "Run Backtest" on the strategy card to begin performance analysis.</p>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Panel to show when returning from Research mode with backtest context
+const BacktestContextPanel: React.FC = () => {
+  const { backtestContext } = useSharedContext();
+  
+  if (!backtestContext) return null;
+  
+  return (
+    <div className="train-mode-content">
+      <div className="context-panel">
+        <div className="context-header">
+          <div className="context-badge">
+            📊 Viewing Backtest Results
+          </div>
+          <h2>Backtest Analysis Complete</h2>
+          <div className="context-info">
+            <span className="strategy-name">{backtestContext.strategy.name}</span>
+            <span className="symbol-timeframe">
+              {backtestContext.symbol} - {backtestContext.timeframe}
+            </span>
+            <span className="date-range">
+              {backtestContext.dateRange.start} to {backtestContext.dateRange.end}
+            </span>
+          </div>
+        </div>
+        
+        <div className="context-content">
+          <div className="context-section">
+            <h3>📈 Analysis Available</h3>
+            <p>
+              You've successfully analyzed this backtest in Research mode. 
+              The analysis included:
+            </p>
+            <ul>
+              <li><strong>Trade Execution Points:</strong> {backtestContext.trades.length} trades visualized on charts</li>
+              <li><strong>Indicator Analysis:</strong> {backtestContext.indicators.length} indicators with fuzzy logic overlays</li>
+              <li><strong>Strategy Performance:</strong> Detailed metrics and risk analysis</li>
+              <li><strong>Decision Points:</strong> Entry and exit signals mapped to market conditions</li>
+            </ul>
+          </div>
+          
+          <div className="context-actions">
+            <button 
+              className="btn-primary"
+              onClick={() => {
+                // Switch back to Research mode
+                window.dispatchEvent(new CustomEvent('switchMode', { detail: { mode: 'research' } }));
+              }}
+            >
+              📊 Return to Research Analysis
+            </button>
+            
+            <button 
+              className="btn-secondary"
+              onClick={() => {
+                // Run a new backtest with the same strategy
+                const strategy = backtestContext.strategy;
+                // TODO: Trigger new backtest modal with pre-filled strategy
+                logger.info('Starting backtest for strategy:', strategy.name);
+              }}
+            >
+              🔄 Run New Backtest
+            </button>
+            
+            <button 
+              className="btn-tertiary"
+              onClick={() => {
+                // Clear context and return to strategy list
+                window.dispatchEvent(new CustomEvent('clearBacktestContext'));
+              }}
+            >
+              ← Back to Strategy List
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

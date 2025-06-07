@@ -3,12 +3,11 @@ import react from '@vitejs/plugin-react';
 import Terminal from 'vite-plugin-terminal';
 import path from 'path';
 
-console.log('🚀 Loading vite.config.ts');
+// Vite configuration for KTRDR frontend
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
-  console.log('🚀 VITE COMMAND:', command);
-  console.log('🚀 VITE MODE:', mode);
+  // Vite build/dev mode configuration
 
   return {
     plugins: [

@@ -1,6 +1,18 @@
 /**
- * Frontend logging utility with structured log levels
- * Works with vite-plugin-terminal to forward browser logs to Docker
+ * KTRDR Strategic Logging Framework
+ * 
+ * Implements clean, meaningful logging that helps users and developers
+ * without creating noise. Uses structured log levels:
+ * 
+ * - INFO: User-facing events (mode changes, data loading, user actions)
+ * - DEBUG: Technical details (component lifecycle, API calls, performance)
+ * - WARN: Performance issues and fallback behaviors
+ * - ERROR: Critical failures that prevent normal operation
+ * 
+ * Default level: INFO (clean startup, user-relevant events only)
+ * Debug mode: Set VITE_LOG_LEVEL=DEBUG or window.__logger.setLevel(0)
+ * 
+ * See loggingGuidelines.md for usage patterns and best practices.
  */
 
 //import terminal from 'virtual:terminal'
@@ -127,8 +139,8 @@ function getDefaultLogLevel(): LogLevel {
     case 'NONE':
       return LogLevel.NONE;
     default:
-      // In development, default to DEBUG; in production, default to INFO
-      return import.meta.env.DEV ? LogLevel.DEBUG : LogLevel.INFO;
+      // Strategic logging: INFO for both dev and prod (DEBUG available when needed)
+      return LogLevel.INFO;
   }
 }
 

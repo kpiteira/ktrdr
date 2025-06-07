@@ -3,6 +3,9 @@ import { useIndicatorManager } from '../../hooks/useIndicatorManager';
 import { useToast } from '../../context/ToastContext';
 import IndicatorSidebar from '../presentation/sidebar/IndicatorSidebar';
 import { IndicatorInfo } from '../../store/indicatorRegistry';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('IndicatorSidebarContainer');
 
 /**
  * Container component for the indicator sidebar
@@ -55,7 +58,7 @@ const IndicatorSidebarContainer: FC<IndicatorSidebarContainerProps> = ({
     }, [onIndicatorAdded, showToast]),
     
     onError: useCallback((error: string) => {
-      console.error('[IndicatorSidebarContainer] Indicator error:', error);
+      logger.error('Indicator operation failed:', error);
       
       // Show error toast with user-friendly message
       const userFriendlyError = error.includes('Network') 

@@ -19,6 +19,9 @@ import {
 } from '../types/trainMode';
 import { apiClient } from '../api/client';
 import { sharedContextActions } from './sharedContextStore';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('trainModeStore');
 
 // Train mode state definition
 export interface TrainModeState {
@@ -192,7 +195,7 @@ export const trainModeActions = {
         }));
       }
     } catch (error) {
-      console.error('Failed to start backtest:', error);
+      logger.error('Failed to start backtest:', error);
       
       // Determine error message based on error type
       let errorMessage = 'Failed to start backtest';
@@ -260,19 +263,13 @@ export const trainModeActions = {
   },
   
   setBacktestTrades: (backtestId: string, trades: Trade[]) => {
-    console.log('setBacktestTrades called:', { backtestId, tradeCount: trades.length });
-    console.log('Trades being stored:', trades);
-    trainModeStore.setState(state => {
-      const newState = {
-        ...state,
-        backtestTrades: {
-          ...state.backtestTrades,
-          [backtestId]: trades
-        }
-      };
-      console.log('New state backtestTrades:', newState.backtestTrades);
-      return newState;
-    });
+    trainModeStore.setState(state => ({
+      ...state,
+      backtestTrades: {
+        ...state.backtestTrades,
+        [backtestId]: trades
+      }
+    }));
   },
   
   setEquityCurve: (backtestId: string, curve: EquityCurve) => {
@@ -311,18 +308,83 @@ export const trainModeActions = {
     
     if (!results) return;
     
+    // Enhanced strategy indicators for Research mode visualization
+    const enhancedIndicators = strategy.indicators && strategy.indicators.length > 0 
+      ? strategy.indicators 
+      : [
+          // Default indicators if strategy doesn't specify them
+          {
+            name: 'Simple Moving Average',
+            type: 'sma',
+            parameters: { period: 20, source: 'close' },
+            fuzzySupport: {
+              enabled: true,
+              sets: ['below', 'near', 'above'],
+              scalingType: 'relative'
+            }
+          },
+          {
+            name: 'Relative Strength Index',
+            type: 'rsi',
+            parameters: { period: 14, source: 'close' },
+            fuzzySupport: {
+              enabled: true,
+              sets: ['oversold', 'neutral', 'overbought'],
+              scalingType: 'fixed',
+              range: { min: 0, max: 100 }
+            }
+          },
+          {
+            name: 'Exponential Moving Average',
+            type: 'ema',
+            parameters: { period: 12, source: 'close' },
+            fuzzySupport: {
+              enabled: true,
+              sets: ['below', 'near', 'above'],
+              scalingType: 'relative'
+            }
+          }
+        ];
+    
+    // Enhanced fuzzy configuration
+    const enhancedFuzzyConfig = strategy.fuzzyConfig && Object.keys(strategy.fuzzyConfig).length > 0
+      ? strategy.fuzzyConfig
+      : {
+          colorScheme: 'trading',
+          opacity: 0.3,
+          membershipThreshold: 0.5,
+          rules: {
+            bullish: {
+              conditions: ['sma_above', 'rsi_oversold_recovery'],
+              confidence: 0.8
+            },
+            bearish: {
+              conditions: ['sma_below', 'rsi_overbought_decline'],
+              confidence: 0.8
+            },
+            neutral: {
+              conditions: ['rsi_neutral', 'price_near_sma'],
+              confidence: 0.6
+            }
+          }
+        };
+    
     // Set up shared context for Research mode
     const context = {
       mode: 'backtest' as const,
-      strategy,
+      strategy: {
+        ...strategy,
+        indicators: enhancedIndicators,
+        fuzzyConfig: enhancedFuzzyConfig
+      },
       symbol: results.symbol,
       timeframe: results.timeframe,
       dateRange: {
         start: results.startDate,
         end: results.endDate
       },
-      indicators: strategy.indicators,
-      fuzzyConfig: strategy.fuzzyConfig,
+      indicators: enhancedIndicators,
+      fuzzyConfig: enhancedFuzzyConfig,
       trades,
       backtestId
     };
@@ -350,7 +412,7 @@ export const trainModeActions = {
 async function pollBacktestStatus(backtestId: string) {
   // Don't start polling if no valid ID
   if (!backtestId) {
-    console.error('Cannot poll backtest status: no valid backtest ID');
+    logger.error('Cannot poll backtest status: no valid backtest ID');
     return;
   }
   
@@ -390,10 +452,10 @@ async function pollBacktestStatus(backtestId: string) {
       } else {
         // API returned success=false
         consecutiveErrors++;
-        console.error(`Backtest status poll failed: ${response.message || 'Unknown error'}`);
+        logger.error(`Backtest status poll failed: ${response.message || 'Unknown error'}`);
         
         if (consecutiveErrors >= maxErrors) {
-          console.error(`Stopping polling after ${maxErrors} consecutive errors`);
+          logger.error(`Stopping polling after ${maxErrors} consecutive errors`);
           if (statusPollingInterval) {
             clearInterval(statusPollingInterval);
             statusPollingInterval = null;
@@ -412,11 +474,11 @@ async function pollBacktestStatus(backtestId: string) {
       }
     } catch (error) {
       consecutiveErrors++;
-      console.error('Failed to poll backtest status:', error);
+      logger.error('Failed to poll backtest status:', error);
       
       // If we hit too many errors, stop polling and mark as failed
       if (consecutiveErrors >= maxErrors) {
-        console.error(`Stopping polling after ${maxErrors} consecutive errors`);
+        logger.error(`Stopping polling after ${maxErrors} consecutive errors`);
         if (statusPollingInterval) {
           clearInterval(statusPollingInterval);
           statusPollingInterval = null;
@@ -441,7 +503,6 @@ async function fetchBacktestResults(backtestId: string) {
   try {
     // Fetch results
     const resultsResponse = await apiClient.get(`/api/v1/backtests/${backtestId}/results`);
-    console.log('Results response:', resultsResponse);
     if (resultsResponse.success) {
       trainModeActions.setBacktestResults(backtestId, {
         backtestId: resultsResponse.backtest_id,
@@ -471,10 +532,7 @@ async function fetchBacktestResults(backtestId: string) {
     
     // Fetch trades
     const tradesResponse = await apiClient.get(`/api/v1/backtests/${backtestId}/trades`);
-    console.log('TradesResponse:', tradesResponse);
     if (tradesResponse.success && tradesResponse.trades) {
-      console.log('Trades data:', tradesResponse.trades);
-      console.log('First trade:', tradesResponse.trades[0]);
       const formattedTrades = tradesResponse.trades.map((t: any) => ({
         tradeId: t.trade_id,
         entryTime: t.entry_time,
@@ -488,10 +546,7 @@ async function fetchBacktestResults(backtestId: string) {
         entryReason: t.entry_reason,
         exitReason: t.exit_reason
       }));
-      console.log('Formatted trades:', formattedTrades);
       trainModeActions.setBacktestTrades(backtestId, formattedTrades);
-    } else {
-      console.log('No trades data found in response');
     }
     
     // Fetch equity curve
@@ -504,7 +559,7 @@ async function fetchBacktestResults(backtestId: string) {
       });
     }
   } catch (error) {
-    console.error('Failed to fetch backtest results:', error);
+    logger.error('Failed to fetch backtest results:', error);
   }
 }
 

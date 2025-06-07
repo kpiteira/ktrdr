@@ -15,8 +15,9 @@ import { PriceDataProvider } from './context/PriceDataContext';
 import { IndicatorInfo } from './store/indicatorRegistry';
 import { createLogger } from './utils/logger';
 import { TrainModeView } from './components/train/TrainModeView';
+import { TrainSettingsSidebar } from './components/train/TrainSettingsSidebar';
 import { BacktestOverlay } from './components/research/enhancements/BacktestOverlay';
-import { useSharedContext } from './store/sharedContextStore';
+import { useSharedContext, sharedContextActions } from './store/sharedContextStore';
 import './App.css';
 
 /**
@@ -41,10 +42,60 @@ const AppContent: FC = () => {
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   
+  // Chart reference for BacktestOverlay integration
+  const mainChartRef = useRef<any>(null);
+  
   // App initialization
   useEffect(() => {
-    logger.info('App initialized', { symbol: selectedSymbol, timeframe: selectedTimeframe });
+    logger.info('KTRDR Trading Research started', { mode: currentMode, version: 'Slice 8' });
   }, []);
+
+  // Listen for mode switch events from Train mode
+  useEffect(() => {
+    const handleModeSwitch = (event: CustomEvent) => {
+      const { mode, backtest } = event.detail;
+      if (mode === 'research') {
+        logger.info('Mode switched to Research', { backtestId: backtest });
+        setCurrentMode('research');
+        
+        // Show toast to inform user
+        showToast({
+          type: 'info',
+          title: 'Switched to Research Mode',
+          message: 'Backtest data is now available for detailed analysis'
+        });
+      } else if (mode === 'train') {
+        logger.info('Mode switched to Train');
+        setCurrentMode('train');
+        
+        // Show toast to inform user
+        showToast({
+          type: 'info',
+          title: 'Switched to Train Mode',
+          message: 'Back to strategy training and backtesting'
+        });
+      }
+    };
+
+    const handleClearBacktestContext = () => {
+      logger.info('Backtest context cleared');
+      sharedContextActions.clearBacktestContext();
+      
+      showToast({
+        type: 'info',
+        title: 'Backtest Context Cleared',
+        message: 'Returned to strategy selection'
+      });
+    };
+
+    window.addEventListener('switchMode', handleModeSwitch as EventListener);
+    window.addEventListener('clearBacktestContext', handleClearBacktestContext as EventListener);
+    
+    return () => {
+      window.removeEventListener('switchMode', handleModeSwitch as EventListener);
+      window.removeEventListener('clearBacktestContext', handleClearBacktestContext as EventListener);
+    };
+  }, [showToast]);
   
   // Chart synchronization
   const chartSynchronizer = useChartSynchronizer();
@@ -80,6 +131,9 @@ const AppContent: FC = () => {
     setSelectedSymbol(symbol);
     setSelectedTimeframe(actualTimeframe);
     
+    // Log symbol/timeframe change
+    logger.info('Symbol changed to', `${symbol} ${actualTimeframe}`);
+    
     // Clear time range when symbol changes
     setTimeRange(null);
   }, []);
@@ -87,14 +141,14 @@ const AppContent: FC = () => {
   // Handle mode changes
   const handleModeChange = useCallback((mode: 'research' | 'train' | 'run') => {
     setCurrentMode(mode);
-    logger.info('Mode changed', { mode });
+    logger.info('Mode changed to', mode);
   }, []);
 
   // Handle timeframe changes from left sidebar
   const handleTimeframeChange = useCallback((timeframe: string) => {
     setSelectedTimeframe(timeframe);
     setTimeRange(null); // Clear time range when timeframe changes
-    logger.info('Timeframe changed', { timeframe });
+    logger.info('Timeframe changed to', timeframe);
   }, []);
 
   // Handle time range changes from the main chart
@@ -140,19 +194,82 @@ const AppContent: FC = () => {
   const handleMainChartError = useCallback((error: string) => {
     logger.error('Main chart error:', error);
   }, []);
+  
+  // Handle main chart creation for BacktestOverlay integration
+  const handleMainChartCreated = useCallback((chart: any) => {
+    // Store chart API reference for BacktestOverlay
+    mainChartRef.current = chart;
+    logger.debug('Main chart created, storing reference for BacktestOverlay');
+  }, []);
 
   // Oscillator errors are now handled by the panel manager
 
-  // Split indicators by chart type with stable references  
+  // Get backtest context for indicator enhancement
+  const { backtestContext } = useSharedContext();
+
+  // Split indicators by chart type with stable references, including backtest indicators
   const overlayIndicators = useMemo(() => {
-    const overlay = indicators.filter(ind => ind.chartType === 'overlay');
-    return overlay;
-  }, [indicators]);
+    const userOverlay = indicators.filter(ind => ind.chartType === 'overlay');
+    
+    // Add backtest strategy indicators when in backtest mode
+    if (backtestContext && currentMode === 'research') {
+      const backtestOverlayIndicators = backtestContext.indicators
+        .filter(ind => ['sma', 'ema', 'zigzag'].includes(ind.type || ind.name)) // Overlay types
+        .map((ind, index) => ({
+          id: `${ind.name}-backtest-${index}`,
+          name: ind.name,
+          displayName: `${ind.name === 'sma' ? 'Simple Moving Average' :
+                        ind.name === 'ema' ? 'Exponential Moving Average' :
+                        ind.name === 'zigzag' ? 'ZigZag' :
+                        ind.name.toUpperCase()} (Strategy)`,
+          chartType: 'overlay' as const,
+          visible: true,
+          parameters: {
+            ...ind.parameters,
+            color: index === 0 ? '#FF6B35' : index === 1 ? '#F7931E' : '#FFD23F' // Distinct colors
+          },
+          // Enable fuzzy overlays for strategy indicators
+          fuzzyVisible: true,
+          fuzzyOpacity: 0.3,
+          fuzzyColorScheme: 'trading'
+        }));
+      
+      return [...userOverlay, ...backtestOverlayIndicators];
+    }
+    
+    return userOverlay;
+  }, [indicators, backtestContext, currentMode]);
 
   const separateIndicators = useMemo(() => {
-    const separate = indicators.filter(ind => ind.chartType === 'separate');
-    return separate;
-  }, [indicators]);
+    const userSeparate = indicators.filter(ind => ind.chartType === 'separate');
+    
+    // Add backtest strategy indicators when in backtest mode
+    if (backtestContext && currentMode === 'research') {
+      const backtestSeparateIndicators = backtestContext.indicators
+        .filter(ind => ['rsi', 'macd'].includes(ind.type || ind.name)) // Separate panel types
+        .map((ind, index) => ({
+          id: `${ind.name}-backtest-${index}`,
+          name: ind.name,
+          displayName: `${ind.name === 'rsi' ? 'Relative Strength Index' :
+                        ind.name === 'macd' ? 'MACD' :
+                        ind.name.toUpperCase()} (Strategy)`,
+          chartType: 'separate' as const,
+          visible: true,
+          parameters: {
+            ...ind.parameters,
+            color: index === 0 ? '#9C27B0' : '#E91E63' // Distinct colors for oscillators
+          },
+          // Enable fuzzy overlays for strategy indicators
+          fuzzyVisible: true,
+          fuzzyOpacity: 0.3,
+          fuzzyColorScheme: 'trading'
+        }));
+      
+      return [...userSeparate, ...backtestSeparateIndicators];
+    }
+    
+    return userSeparate;
+  }, [indicators, backtestContext, currentMode]);
 
 
   // State for chart dimensions with window resize handling
@@ -303,6 +420,7 @@ const AppContent: FC = () => {
                       height={chartDimensions.height.main}
                       initialTimeRange={lastKnownTimeRangeRef.current} // Use the last known range from ref
                       onTimeRangeChange={handleTimeRangeChange}
+                      onChartCreated={handleMainChartCreated}
                       onError={handleMainChartError}
                     />
                   </ErrorBoundary>
@@ -342,22 +460,33 @@ const AppContent: FC = () => {
                   )}
 
                   {/* Backtest Overlay for Research mode */}
-                  <BacktestOverlay />
+                  <BacktestOverlay chartApi={mainChartRef.current} />
                 </>
               )}
             </div>
 
-            {/* Right Sidebar - Indicator management */}
-            <ErrorBoundary>
-              <IndicatorSidebarContainer
-                isCollapsed={rightSidebarCollapsed}
-                onToggleCollapse={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
-                onIndicatorAdded={handleIndicatorAdded}
-                onIndicatorRemoved={handleIndicatorRemoved}
-                onIndicatorUpdated={handleIndicatorUpdated}
-                onIndicatorToggled={handleIndicatorToggled}
-              />
-            </ErrorBoundary>
+            {/* Right Sidebar - Mode-specific sidebars */}
+            {currentMode === 'research' && (
+              <ErrorBoundary>
+                <IndicatorSidebarContainer
+                  isCollapsed={rightSidebarCollapsed}
+                  onToggleCollapse={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+                  onIndicatorAdded={handleIndicatorAdded}
+                  onIndicatorRemoved={handleIndicatorRemoved}
+                  onIndicatorUpdated={handleIndicatorUpdated}
+                  onIndicatorToggled={handleIndicatorToggled}
+                />
+              </ErrorBoundary>
+            )}
+            
+            {currentMode === 'train' && (
+              <ErrorBoundary>
+                <TrainSettingsSidebar
+                  isCollapsed={rightSidebarCollapsed}
+                  onToggleCollapse={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+                />
+              </ErrorBoundary>
+            )}
           </main>
 
           {/* Toast Container */}

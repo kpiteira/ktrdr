@@ -230,7 +230,7 @@ export const useFuzzyOverlay = (
     // Check cache first
     const cachedData = fuzzyCache.get(indicatorId, symbol, timeframe, dateRangeKey);
     if (cachedData && cachedData.data[indicatorName]) {
-      logger.debug(`Using cached fuzzy data for ${indicatorId}`);
+      // Using cached fuzzy data
       const transformedData = transformFuzzyDataForChart(
         cachedData.data[indicatorName],
         colorSchemeRef.current,
@@ -298,14 +298,11 @@ export const useFuzzyOverlay = (
         }));
       }
 
-      logger.debug(`Successfully loaded fuzzy data for ${indicatorName}`, {
-        sets: indicatorData.length,
-        dataPoints: transformedData.reduce((sum, set) => sum + set.data.length, 0)
-      });
+      // Successfully loaded fuzzy data
 
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        logger.debug(`Fuzzy data request aborted for ${indicatorId}`);
+      if (error.name === 'AbortError' || error.message?.includes('canceled')) {
+        // Request was cancelled, this is normal during component unmount or re-renders
         return;
       }
 
@@ -327,7 +324,7 @@ export const useFuzzyOverlay = (
   const toggleVisibility = useCallback(() => {
     setState(prev => {
       const newVisible = !prev.isVisible;
-      logger.debug(`Toggling fuzzy visibility for ${indicatorId}: ${newVisible}`);
+      // Toggling fuzzy visibility
       return { ...prev, isVisible: newVisible };
     });
   }, [indicatorId]);

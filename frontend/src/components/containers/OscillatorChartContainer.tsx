@@ -340,7 +340,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       return lineData;
 
     } catch (error) {
-      console.warn(`[OscillatorChartContainer] Failed to calculate ${indicator.name}:`, error);
+      logger.warn('Failed to calculate indicator', { name: indicator.name, error: error.message });
       return [];
     }
   }, [symbol, timeframe]);
@@ -405,7 +405,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
               type: 'line' as const
             }];
           } catch (error) {
-            console.warn(`[OscillatorChartContainer] Skipping failed indicator ${indicator.name}:`, error);
+            logger.warn('Skipping failed indicator', { name: indicator.name, error: error.message });
             // Return indicator with empty data instead of failing completely
             return [{
               id: indicator.id,
@@ -480,7 +480,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   // Calculate preserve time scale based on synchronization
   const preserveTimeScale = !!chartSynchronizer;
   
-  // console.log(`🔄 [OscillatorChartContainer] Synchronization state:`, {
+  // Debug: Synchronization state logging available if needed
   //   chartSynchronizer: !!chartSynchronizer,
   //   preserveTimeScale,
   //   chartId,

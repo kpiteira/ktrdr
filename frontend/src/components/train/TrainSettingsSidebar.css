@@ -1,0 +1,116 @@
+/* TrainSettingsSidebar.css */
+
+.train-settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  background: var(--background-secondary, #1e1e1e);
+  border-left: 1px solid var(--border-color, #333);
+  transition: width 0.3s ease;
+  flex-shrink: 0;
+}
+
+.train-settings-sidebar.collapsed {
+  width: 40px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #333);
+  background: var(--background-primary, #161616);
+  min-height: 60px;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.collapsed .sidebar-header h3 {
+  display: none;
+}
+
+.collapse-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.collapse-btn:hover {
+  background: var(--background-hover, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary, #fff);
+}
+
+.sidebar-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.coming-soon {
+  text-align: center;
+  color: var(--text-secondary, #999);
+}
+
+.coming-soon h4 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: var(--primary-color, #2196F3);
+}
+
+.coming-soon p {
+  margin: 12px 0;
+  line-height: 1.5;
+}
+
+.coming-soon ul {
+  text-align: left;
+  margin: 16px 0;
+  padding-left: 20px;
+}
+
+.coming-soon li {
+  margin: 8px 0;
+  color: var(--text-secondary, #999);
+}
+
+.coming-soon .note {
+  font-style: italic;
+  font-size: 14px;
+  color: var(--text-tertiary, #666);
+  background: var(--background-hover, rgba(255, 255, 255, 0.02));
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid var(--primary-color, #2196F3);
+  margin-top: 20px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .train-settings-sidebar {
+    width: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .train-settings-sidebar {
+    width: 200px;
+  }
+  
+  .train-settings-sidebar.collapsed {
+    width: 35px;
+  }
+}

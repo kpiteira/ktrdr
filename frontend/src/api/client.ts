@@ -21,8 +21,8 @@ const axiosInstance = axios.create({
 // Request interceptor for API calls
 axiosInstance.interceptors.request.use(
   (config) => {
-    // Log at INFO level - browser will show this when INFO is enabled
-    logger.info(`Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    // Log at DEBUG level to reduce log noise
+    logger.debug(`Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     return config;
   },
   (error) => {
@@ -33,8 +33,8 @@ axiosInstance.interceptors.request.use(
 // Response interceptor for API calls
 axiosInstance.interceptors.response.use(
   (response) => {
-    // Log successful responses at INFO level for visibility
-    logger.info(`Response (${response.status}): ${response.config.method?.toUpperCase()} ${response.config.url}`);
+    // Log successful responses at DEBUG level to reduce log noise
+    logger.debug(`Response (${response.status}): ${response.config.method?.toUpperCase()} ${response.config.url}`);
     return response;
   },
   (error) => {
