@@ -11,6 +11,7 @@ from ib_insync import Stock, Forex, Contract
 from ktrdr.logging import get_logger
 from ktrdr.errors import DataError
 from ktrdr.data.ib_connection_sync import IbConnectionSync, ConnectionConfig
+from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
 
@@ -354,11 +355,8 @@ class IbDataFetcherSync:
             df.set_index("timestamp", inplace=True)
             df.index = pd.to_datetime(df.index)
 
-            # Ensure UTC timezone
-            if df.index.tz is None:
-                df.index = df.index.tz_localize("UTC")
-            else:
-                df.index = df.index.tz_convert("UTC")
+            # Convert to UTC using TimestampManager for consistent handling
+            df.index = TimestampManager.to_utc_series(df.index)
 
             self.metrics["successful_requests"] += 1
             self.metrics["total_bars_fetched"] += len(df)
@@ -599,7 +597,7 @@ class IbDataRangeDiscovery:
         logger.debug(f"Using binary search fallback for {symbol} at {timeframe}")
 
         # Set up binary search bounds
-        end_date = datetime.now()
+        end_date = TimestampManager.now_utc()
         start_date = end_date - timedelta(days=365 * max_lookback_years)
 
         logger.debug(f"Binary search range: {start_date.date()} to {end_date.date()}")
@@ -657,7 +655,7 @@ class IbDataRangeDiscovery:
                     )
 
                     # Cache the result
-                    latest_date = datetime.now()
+                    latest_date = TimestampManager.now_utc()
                     self._cache_range(symbol, timeframe, actual_earliest, latest_date)
 
                     return actual_earliest
@@ -692,7 +690,7 @@ class IbDataRangeDiscovery:
             return None
 
         # Latest date is essentially "now" for live data
-        latest = datetime.now()
+        latest = TimestampManager.now_utc()
 
         # Cache and return
         self._cache_range(symbol, timeframe, earliest, latest)

@@ -4,6 +4,7 @@
  */
 
 import { OHLCVData } from '../../types/data';
+import { UTCTimestamp } from 'lightweight-charts';
 
 /**
  * Normalize data to a range between 0 and 1
@@ -139,4 +140,49 @@ export function transformData(data: OHLCVData, type: string): OHLCVData {
     default:
       return data;
   }
+}
+
+/**
+ * Convert UTC timestamp string to TradingView UTCTimestamp
+ * Handles timezone-aware conversion from backend UTC timestamps
+ * @param timestampStr UTC timestamp string from backend
+ * @returns UTCTimestamp for TradingView charts
+ */
+export function convertToUTCTimestamp(timestampStr: string): UTCTimestamp {
+  // Defensive check for valid input
+  if (!timestampStr || typeof timestampStr !== 'string') {
+    return NaN as UTCTimestamp;
+  }
+  
+  // Handle different timestamp formats properly
+  let utcDate: Date;
+  
+  if (timestampStr.includes('+00:00')) {
+    // Format: "2025-03-07T15:00:00+00:00" - already UTC with explicit timezone
+    utcDate = new Date(timestampStr);
+  } else if (timestampStr.includes('Z')) {
+    // Format: "2025-03-07T15:00:00Z" - already UTC with Z suffix
+    utcDate = new Date(timestampStr);
+  } else {
+    // Format: "2025-03-07T15:00:00" - assume UTC and add Z suffix
+    utcDate = new Date(timestampStr + 'Z');
+  }
+  
+  const timestamp = utcDate.getTime() / 1000;
+  
+  // Only log errors for truly invalid dates (avoid console spam)
+  if (isNaN(timestamp)) {
+    return NaN as UTCTimestamp;
+  }
+  
+  return timestamp as UTCTimestamp;
+}
+
+/**
+ * Convert array of UTC timestamps to TradingView UTCTimestamps
+ * @param timestamps Array of UTC timestamp strings
+ * @returns Array of UTCTimestamps
+ */
+export function convertTimestampsToUTC(timestamps: string[]): UTCTimestamp[] {
+  return timestamps.map(convertToUTCTimestamp);
 }

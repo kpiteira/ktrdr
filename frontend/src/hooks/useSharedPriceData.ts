@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
-import { CandlestickData, UTCTimestamp } from 'lightweight-charts';
+import { CandlestickData } from 'lightweight-charts';
 import { createLogger } from '../utils/logger';
+import { convertToUTCTimestamp } from '../api/utils/dataTransformations';
 
 const logger = createLogger('useSharedPriceData');
 
@@ -103,14 +104,16 @@ export const useSharedPriceData = (): UseSharedPriceDataResult => {
           throw new Error(`Invalid OHLCV data at index ${index}`);
         }
         
+        const timestamp = convertToUTCTimestamp(dateStr);
         return {
-          time: (new Date(dateStr).getTime() / 1000) as UTCTimestamp,
+          time: timestamp,
           open: ohlcv[0],
           high: ohlcv[1],
           low: ohlcv[2],
           close: ohlcv[3]
         };
-      });
+      })
+      .filter(item => !isNaN(item.time as number)); // Filter out invalid timestamps
 
       // Sort by time to ensure correct order
       transformedData.sort((a, b) => (a.time as number) - (b.time as number));

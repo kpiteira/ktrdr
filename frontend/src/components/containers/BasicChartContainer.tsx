@@ -72,9 +72,10 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
     setError(null);
     
     try {
-      // Load data from 2024-01-01 to today for better ZigZag visualization
+      // Load data for last 3 months to match oscillator and fuzzy charts
       const endDate = new Date();
-      const startDate = new Date('2024-01-01');
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 3);
       
       // Build query parameters for date filtering
       const params = new URLSearchParams({

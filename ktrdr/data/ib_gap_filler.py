@@ -21,6 +21,7 @@ from ktrdr.data.data_manager import DataManager
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.config.ib_limits import IbLimitsRegistry
 from ktrdr.config.loader import ConfigLoader
+from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
 
@@ -288,17 +289,14 @@ class GapFillerService:
                 logger.debug(f"Invalid last timestamp for {symbol}_{timeframe}")
                 return False
 
-            # Convert to timezone-aware if needed
-            if last_timestamp.tz is None:
-                last_timestamp = last_timestamp.tz_localize(timezone.utc)
-            else:
-                last_timestamp = last_timestamp.tz_convert(timezone.utc)
+            # Convert to UTC using TimestampManager
+            last_timestamp = TimestampManager.to_utc(last_timestamp)
 
             # Calculate expected next timestamp based on timeframe
             next_expected = self._calculate_next_expected_timestamp(
                 last_timestamp, timeframe
             )
-            current_time = datetime.now(timezone.utc)
+            current_time = TimestampManager.now_utc()
 
             # Check if gap exists (accounting for market hours and weekends)
             gap_hours = (current_time - next_expected).total_seconds() / 3600

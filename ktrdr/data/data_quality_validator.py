@@ -14,6 +14,7 @@ import numpy as np
 
 from ktrdr.logging import get_logger
 from ktrdr.errors import DataError
+from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
 
@@ -47,7 +48,7 @@ class DataQualityIssue:
         self.location = location
         self.corrected = corrected
         self.metadata = metadata or {}
-        self.timestamp = datetime.now()
+        self.timestamp = TimestampManager.now_utc()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for logging/reporting."""
@@ -87,7 +88,7 @@ class DataQualityReport:
         self.validation_type = validation_type
         self.issues: List[DataQualityIssue] = []
         self.corrections_made = 0
-        self.validation_time = datetime.now()
+        self.validation_time = TimestampManager.now_utc()
 
     def add_issue(self, issue: DataQualityIssue):
         """Add a quality issue to the report."""
