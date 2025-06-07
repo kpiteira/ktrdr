@@ -22,6 +22,7 @@ from ktrdr import (
     log_error,
     with_context,
 )
+from ktrdr.utils.timezone_utils import TimestampManager
 
 from ktrdr.errors import (
     DataError,
@@ -329,8 +330,8 @@ class DataManager:
         """
         # Handle the days parameter to calculate start_date if provided
         if days is not None and end_date is None:
-            # If end_date is not provided, use current date
-            end_date = datetime.now()
+            # If end_date is not provided, use current UTC date
+            end_date = TimestampManager.now_utc()
 
         if days is not None:
             # Calculate start_date based on days going backwards from end_date
@@ -353,33 +354,23 @@ class DataManager:
     ) -> Optional[pd.Timestamp]:
         """
         Normalize datetime to UTC timezone-aware timestamp.
+        
+        Note: Using TimestampManager for consistent timezone handling.
 
         Args:
             dt: Input datetime (string, datetime, or Timestamp)
-            default_tz: Default timezone to assume for naive datetimes
+            default_tz: Default timezone to assume for naive datetimes (deprecated, always UTC)
 
         Returns:
             UTC timezone-aware Timestamp or None
         """
-        if dt is None:
-            return None
-
-        if isinstance(dt, str):
-            dt = pd.to_datetime(dt)
-
-        if isinstance(dt, datetime):
-            dt = pd.Timestamp(dt)
-
-        # If timezone-naive, assume it's in the default timezone
-        if dt.tz is None:
-            dt = dt.tz_localize(default_tz)
-
-        # Convert to UTC
-        return dt.tz_convert("UTC")
+        return TimestampManager.to_utc(dt)
 
     def _normalize_dataframe_timezone(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Normalize DataFrame index to UTC timezone-aware.
+        
+        Note: Using TimestampManager for consistent timezone handling.
 
         Args:
             df: DataFrame with datetime index
@@ -387,23 +378,7 @@ class DataManager:
         Returns:
             DataFrame with UTC timezone-aware index
         """
-        if df.empty:
-            return df
-
-        df_copy = df.copy()
-
-        # Ensure index is datetime
-        if not pd.api.types.is_datetime64_any_dtype(df_copy.index):
-            df_copy.index = pd.to_datetime(df_copy.index)
-
-        # If timezone-naive, assume UTC
-        if df_copy.index.tz is None:
-            df_copy.index = df_copy.index.tz_localize("UTC")
-        else:
-            # Convert to UTC
-            df_copy.index = df_copy.index.tz_convert("UTC")
-
-        return df_copy
+        return TimestampManager.convert_dataframe_index(df)
 
     def _ensure_ib_connection(self) -> bool:
         """
