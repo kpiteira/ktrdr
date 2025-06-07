@@ -1,52 +1,14 @@
 {
-  "cache": {
-    "MSFT": {
-      "symbol": "MSFT",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "MICROSOFT CORP",
-      "validated_at": 1748921157.2695584
-    },
-    "AAPL": {
-      "symbol": "AAPL",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "APPLE INC",
-      "validated_at": 1748923430.5981948
-    },
-    "NVDA": {
-      "symbol": "NVDA",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "NVIDIA CORP",
-      "validated_at": 1748923429.774958
-    },
-    "TSLA": {
-      "symbol": "TSLA",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "TESLA INC",
-      "validated_at": 1748923431.378658
-    },
-    "EURUSD": {
-      "symbol": "EURUSD",
-      "asset_type": "CASH",
-      "exchange": "IDEALPRO",
-      "currency": "USD",
-      "description": "European Monetary Union Euro",
-      "validated_at": 1748924338.779733
-    }
-  },
+  "cache": {},
   "failed_symbols": [
-    "TSLA",
+    "JEPI",
+    "RBLX",
+    "GOOGL",
     "MSFT",
+    "TSLA",
+    "EURUSD",
     "NVDA",
-    "AAPL",
-    "EURUSD"
+    "AAPL"
   ],
-  "last_updated": 1748961608.0827658
+  "last_updated": 1749256689.1473982
 }
