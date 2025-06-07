@@ -57,6 +57,8 @@ class TestIbSymbolValidator:
         assert validator.connection is None
         assert len(validator._cache) == 0
         assert len(validator._failed_symbols) == 0
+        assert len(validator._validated_symbols) == 0
+        assert validator._cache_ttl == 86400 * 30  # 30 days
 
     def test_init_with_connection(self, mock_connection):
         """Test initialization with connection."""
@@ -64,6 +66,7 @@ class TestIbSymbolValidator:
         assert validator.connection is mock_connection
         assert len(validator._cache) == 0
         assert len(validator._failed_symbols) == 0
+        assert len(validator._validated_symbols) == 0
 
     def test_normalize_symbol(self, validator):
         """Test symbol normalization."""
@@ -346,22 +349,26 @@ class TestIbSymbolValidator:
     def test_cache_stats(self, validator, sample_contract_info):
         """Test cache statistics."""
         validator._cache["EUR.USD"] = sample_contract_info
+        validator._validated_symbols.add("EUR.USD")
         validator._failed_symbols.add("INVALID")
 
         stats = validator.get_cache_stats()
 
         assert stats["cached_symbols"] == 1
+        assert stats["validated_symbols"] == 1
         assert stats["failed_symbols"] == 1
         assert stats["total_lookups"] == 2
 
     def test_clear_cache(self, validator, sample_contract_info):
         """Test cache clearing."""
         validator._cache["EUR.USD"] = sample_contract_info
+        validator._validated_symbols.add("EUR.USD")
         validator._failed_symbols.add("INVALID")
 
         validator.clear_cache()
 
         assert len(validator._cache) == 0
+        assert len(validator._validated_symbols) == 0
         assert len(validator._failed_symbols) == 0
 
     def test_get_cached_symbols(self, validator, sample_contract_info):
@@ -415,6 +422,212 @@ class TestIbSymbolValidator:
 
         assert results["GOOD"] is not None
         assert results["ERROR"] is None
+
+    def test_protected_revalidation_success(self, validator, sample_contract_info):
+        """Test protected re-validation for previously validated symbol."""
+        symbol = "EUR.USD"
+        
+        # Mark as validated but expire cache
+        validator._validated_symbols.add(symbol)
+        expired_contract_info = sample_contract_info
+        expired_contract_info.validated_at = time.time() - 86400 * 31  # 31 days ago
+        validator._cache[symbol] = expired_contract_info
+        
+        # Mock successful re-validation
+        mock_detail = Mock()
+        mock_detail.contract = Mock()
+        mock_detail.contract.symbol = "EUR"
+        mock_detail.contract.secType = "CASH"
+        mock_detail.contract.primaryExchange = ""
+        mock_detail.contract.exchange = "IDEALPRO"
+        mock_detail.contract.currency = "USD"
+        mock_detail.longName = "Euro vs US Dollar"
+        mock_detail.contractMonth = ""
+        
+        validator.connection.ib.reqContractDetails.return_value = [mock_detail]
+        
+        result = validator.get_contract_details(symbol)
+        
+        # Should succeed and update cache
+        assert result is not None
+        assert symbol in validator._validated_symbols
+        assert symbol not in validator._failed_symbols
+        
+    def test_protected_revalidation_connection_failure(self, validator, sample_contract_info):
+        """Test protected re-validation when connection fails."""
+        symbol = "EUR.USD"
+        
+        # Mark as validated but expire cache
+        validator._validated_symbols.add(symbol)
+        expired_contract_info = sample_contract_info
+        expired_contract_info.validated_at = time.time() - 86400 * 31  # 31 days ago
+        validator._cache[symbol] = expired_contract_info
+        
+        # Mock connection failure
+        validator.connection.is_connected.return_value = False
+        
+        result = validator.get_contract_details(symbol)
+        
+        # Should return None but NOT mark as failed
+        assert result is None
+        assert symbol in validator._validated_symbols  # Still validated
+        assert symbol not in validator._failed_symbols  # NOT marked as failed
+        
+    def test_protected_revalidation_lookup_failure(self, validator, sample_contract_info):
+        """Test protected re-validation when lookup fails but connection is OK."""
+        symbol = "EUR.USD"
+        
+        # Mark as validated but expire cache
+        validator._validated_symbols.add(symbol)
+        expired_contract_info = sample_contract_info
+        expired_contract_info.validated_at = time.time() - 86400 * 31  # 31 days ago
+        validator._cache[symbol] = expired_contract_info
+        
+        # Mock lookup failure (empty result)
+        validator.connection.ib.reqContractDetails.return_value = []
+        
+        result = validator.get_contract_details(symbol)
+        
+        # Should return None but NOT mark as failed
+        assert result is None
+        assert symbol in validator._validated_symbols  # Still validated
+        assert symbol not in validator._failed_symbols  # NOT marked as failed
+
+    def test_normal_validation_new_symbol_success(self, validator):
+        """Test normal validation for new symbol - success."""
+        symbol = "AAPL"
+        
+        # Ensure symbol is not previously validated
+        assert symbol not in validator._validated_symbols
+        assert symbol not in validator._failed_symbols
+        
+        # Mock successful lookup
+        mock_detail = Mock()
+        mock_detail.contract = Mock()
+        mock_detail.contract.symbol = "AAPL"
+        mock_detail.contract.secType = "STK"
+        mock_detail.contract.primaryExchange = "NASDAQ"
+        mock_detail.contract.exchange = "SMART"
+        mock_detail.contract.currency = "USD"
+        mock_detail.longName = "Apple Inc"
+        mock_detail.contractMonth = ""
+        
+        validator.connection.ib.reqContractDetails.return_value = [mock_detail]
+        
+        result = validator.get_contract_details(symbol)
+        
+        # Should succeed and mark as validated
+        assert result is not None
+        assert symbol in validator._validated_symbols
+        assert symbol not in validator._failed_symbols
+        assert symbol in validator._cache
+
+    def test_normal_validation_new_symbol_failure(self, validator):
+        """Test normal validation for new symbol - failure."""
+        symbol = "INVALID"
+        
+        # Ensure symbol is not previously validated
+        assert symbol not in validator._validated_symbols
+        assert symbol not in validator._failed_symbols
+        
+        # Mock lookup failure
+        validator.connection.ib.reqContractDetails.return_value = []
+        
+        result = validator.get_contract_details(symbol)
+        
+        # Should fail and mark as failed
+        assert result is None
+        assert symbol not in validator._validated_symbols
+        assert symbol in validator._failed_symbols
+        assert symbol not in validator._cache
+
+    def test_normal_validation_already_failed_symbol(self, validator):
+        """Test normal validation for symbol already in failed cache."""
+        symbol = "INVALID"
+        
+        # Mark as failed
+        validator._failed_symbols.add(symbol)
+        
+        result = validator.get_contract_details(symbol)
+        
+        # Should return None immediately without lookup
+        assert result is None
+        assert symbol not in validator._validated_symbols
+        assert symbol in validator._failed_symbols
+
+    def test_mark_symbol_validated(self, validator):
+        """Test _mark_symbol_validated method."""
+        symbol = "EUR.USD"
+        contract_info = Mock()
+        
+        # Initially in failed symbols
+        validator._failed_symbols.add(symbol)
+        
+        validator._mark_symbol_validated(symbol, contract_info)
+        
+        # Should be moved to validated and removed from failed
+        assert symbol in validator._validated_symbols
+        assert symbol not in validator._failed_symbols
+        assert validator._cache[symbol] == contract_info
+
+    def test_cache_validation_with_new_ttl(self, validator, sample_contract_info):
+        """Test cache validation with new 30-day TTL."""
+        symbol = "EUR.USD"
+        
+        # Recent validation (within 30 days)
+        recent_contract_info = sample_contract_info
+        recent_contract_info.validated_at = time.time() - 86400 * 15  # 15 days ago
+        validator._cache[symbol] = recent_contract_info
+        
+        assert validator._is_cache_valid(symbol) is True
+        
+        # Old validation (beyond 30 days)
+        old_contract_info = sample_contract_info
+        old_contract_info.validated_at = time.time() - 86400 * 35  # 35 days ago
+        validator._cache[symbol] = old_contract_info
+        
+        assert validator._is_cache_valid(symbol) is False
+
+    def test_backward_compatibility_cache_loading(self, validator):
+        """Test backward compatibility when loading cache without validated_symbols."""
+        # Simulate old cache format (no validated_symbols field)
+        import tempfile
+        import json
+        
+        cache_data = {
+            'cache': {
+                'EUR.USD': {
+                    'symbol': 'EUR.USD',
+                    'asset_type': 'CASH',
+                    'exchange': 'IDEALPRO',
+                    'currency': 'USD',
+                    'description': 'Euro vs US Dollar',
+                    'validated_at': time.time()
+                }
+            },
+            'failed_symbols': ['INVALID'],
+            # Note: no 'validated_symbols' field
+            'last_updated': time.time()
+        }
+        
+        # Write to temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(cache_data, f)
+            temp_file = f.name
+        
+        try:
+            # Create validator with temporary cache file
+            validator_with_old_cache = IbSymbolValidator(cache_file=temp_file)
+            
+            # Should have backward compatibility
+            assert len(validator_with_old_cache._cache) == 1
+            assert len(validator_with_old_cache._validated_symbols) == 1  # Populated from cache
+            assert 'EUR.USD' in validator_with_old_cache._validated_symbols
+            assert len(validator_with_old_cache._failed_symbols) == 1
+            
+        finally:
+            import os
+            os.unlink(temp_file)
 
 
 class TestContractInfo:
