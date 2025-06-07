@@ -417,8 +417,8 @@ class LocalDataLoader:
             # Create directory if it doesn't exist
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Save DataFrame to CSV
-            df.to_csv(file_path)
+            # Save DataFrame to CSV with ISO 8601 timestamp format
+            df.to_csv(file_path, date_format='%Y-%m-%dT%H:%M:%SZ')
             logger.debug(f"Successfully saved {len(df)} rows of data to {file_path}")
 
             return file_path
