@@ -62,7 +62,8 @@ class IbSymbolValidator:
         self.connection = connection
         self._cache: Dict[str, ContractInfo] = {}
         self._failed_symbols: Set[str] = set()
-        self._cache_ttl = 3600  # 1 hour cache TTL
+        self._validated_symbols: Set[str] = set()  # Permanently validated symbols
+        self._cache_ttl = 86400 * 30  # 30 days for re-validation (was 1 hour)
         
         # Set up persistent cache file
         if cache_file:
@@ -291,7 +292,8 @@ class IbSymbolValidator:
 
     def get_contract_details(self, symbol: str) -> Optional[ContractInfo]:
         """
-        Get contract details with priority order: CASH -> STK -> FUT.
+        Get contract details with protected re-validation logic.
+        Never marks previously validated symbols as failed.
 
         Args:
             symbol: Symbol to look up
@@ -301,22 +303,68 @@ class IbSymbolValidator:
         """
         normalized = self._normalize_symbol(symbol)
 
-        # Check cache first
-        if self._is_cache_valid(normalized):
-            return self._cache[normalized]
+        # Check if symbol was ever validated successfully
+        if normalized in self._validated_symbols:
+            # Previously validated - NEVER mark as failed, only re-validate on TTL
+            if self._is_cache_valid(normalized):
+                return self._cache[normalized]
+            else:
+                # Cache expired - attempt re-validation but don't fail on connection issues
+                logger.info(f"🔄 Re-validating previously validated symbol: {normalized}")
+                return self._attempt_revalidation(normalized)
+        else:
+            # Never validated before - use normal validation with failure tracking
+            return self._normal_validation(normalized)
 
-        # Check failed symbols cache
-        if normalized in self._failed_symbols:
-            logger.debug(f"Symbol {normalized} found in failed symbols cache")
+    def _attempt_revalidation(self, symbol: str) -> Optional[ContractInfo]:
+        """Attempt re-validation for previously validated symbol."""
+        try:
+            if not self._ensure_connection():
+                logger.warning(f"Re-validation failed for {symbol} (no connection), keeping as valid")
+                return None
+            
+            contract_info = self._attempt_validation(symbol)
+            if contract_info:
+                self._cache[symbol] = contract_info
+                self._save_cache_to_file()
+                logger.info(f"✅ Re-validation successful for {symbol}")
+                return contract_info
+            else:
+                # Connection issue - return None but DON'T mark as failed
+                logger.warning(f"Re-validation failed for {symbol} (connection issue), keeping as valid")
+                return None
+        except Exception as e:
+            logger.warning(f"Re-validation error for {symbol}: {e}")
             return None
 
-        logger.info(f"🔍 Starting symbol validation for {normalized}")
+    def _normal_validation(self, symbol: str) -> Optional[ContractInfo]:
+        """Normal validation for never-before-validated symbols."""
+        # Check failed symbols cache (only for new symbols)
+        if symbol in self._failed_symbols:
+            logger.debug(f"Symbol {symbol} found in failed symbols cache")
+            return None
+
+        logger.info(f"🔍 Starting symbol validation for {symbol}")
         if not self._ensure_connection():
-            logger.warning(f"Symbol validation skipped for {normalized} - no IB connection available")
+            logger.warning(f"Symbol validation skipped for {symbol} - no IB connection available")
             return None
         
-        logger.info(f"✅ IB connection confirmed, proceeding with contract validation for {normalized}")
+        logger.info(f"✅ IB connection confirmed, proceeding with contract validation for {symbol}")
 
+        # Attempt validation...
+        contract_info = self._attempt_validation(symbol)
+        if contract_info:
+            self._mark_symbol_validated(symbol, contract_info)
+            return contract_info
+        else:
+            # Mark as failed (only for new symbols)
+            self._failed_symbols.add(symbol)
+            self._save_cache_to_file()
+            logger.warning(f"Symbol validation failed for {symbol}")
+            return None
+
+    def _attempt_validation(self, symbol: str) -> Optional[ContractInfo]:
+        """Attempt validation with IB contract lookup."""
         # Priority order: Forex (CASH) -> Stocks (STK) -> Futures (FUT)
         contract_types = [
             ("CASH", self._create_forex_contract),
@@ -326,36 +374,35 @@ class IbSymbolValidator:
 
         for asset_type, contract_creator in contract_types:
             try:
-                logger.debug(f"Attempting to validate {normalized} as {asset_type}")
-                contract = contract_creator(normalized)
+                logger.debug(f"Attempting to validate {symbol} as {asset_type}")
+                contract = contract_creator(symbol)
                 if contract is None:
-                    logger.debug(f"Could not create {asset_type} contract for {normalized}")
+                    logger.debug(f"Could not create {asset_type} contract for {symbol}")
                     continue
 
-                logger.debug(f"Created {asset_type} contract for {normalized}, performing lookup...")
+                logger.debug(f"Created {asset_type} contract for {symbol}, performing lookup...")
                 contract_info = self._lookup_contract(contract)
                 if contract_info:
-                    # Cache successful result
-                    self._cache[normalized] = contract_info
-                    # Save cache to persistent storage
-                    self._save_cache_to_file()
-                    logger.info(
-                        f"Validated {normalized} as {asset_type}: {contract_info.description}"
-                    )
+                    logger.info(f"Validated {symbol} as {asset_type}: {contract_info.description}")
                     return contract_info
                 else:
-                    logger.debug(f"Lookup failed for {normalized} as {asset_type}")
+                    logger.debug(f"Lookup failed for {symbol} as {asset_type}")
 
             except Exception as e:
-                logger.warning(f"Failed to lookup {normalized} as {asset_type}: {e}")
+                logger.warning(f"Failed to lookup {symbol} as {asset_type}: {e}")
                 continue
 
-        # Mark as failed and cache the failure
-        self._failed_symbols.add(normalized)
+        return None
+
+    def _mark_symbol_validated(self, symbol: str, contract_info: ContractInfo):
+        """Mark symbol as permanently validated."""
+        self._validated_symbols.add(symbol)
+        self._cache[symbol] = contract_info
+        # Remove from failed symbols if it was there
+        self._failed_symbols.discard(symbol)
         # Save cache to persistent storage
         self._save_cache_to_file()
-        logger.warning(f"Symbol validation failed for {normalized}")
-        return None
+        logger.info(f"✅ Symbol {symbol} marked as permanently validated")
 
     def batch_validate(self, symbols: List[str]) -> Dict[str, bool]:
         """
@@ -433,7 +480,15 @@ class IbSymbolValidator:
                 # Load failed symbols
                 self._failed_symbols = set(cache_data.get('failed_symbols', []))
                 
-                logger.info(f"Loaded {len(self._cache)} cached symbols and {len(self._failed_symbols)} failed symbols from {self._cache_file}")
+                # Load validated symbols (new field)
+                self._validated_symbols = set(cache_data.get('validated_symbols', []))
+                
+                # For backward compatibility: assume any cached symbol was validated
+                if not self._validated_symbols and self._cache:
+                    self._validated_symbols = set(self._cache.keys())
+                    logger.info(f"Backward compatibility: marked {len(self._validated_symbols)} cached symbols as validated")
+                
+                logger.info(f"Loaded {len(self._cache)} cached symbols, {len(self._validated_symbols)} validated symbols, and {len(self._failed_symbols)} failed symbols from {self._cache_file}")
             else:
                 logger.info(f"No existing cache file found at {self._cache_file}")
                 
@@ -442,6 +497,7 @@ class IbSymbolValidator:
             # Continue with empty cache
             self._cache = {}
             self._failed_symbols = set()
+            self._validated_symbols = set()
     
     def _recreate_contract_from_data(self, data: dict) -> Optional[Contract]:
         """
@@ -486,6 +542,7 @@ class IbSymbolValidator:
             cache_data = {
                 'cache': {},
                 'failed_symbols': list(self._failed_symbols),
+                'validated_symbols': list(self._validated_symbols),  # Save validated symbols
                 'last_updated': time.time()
             }
             
@@ -522,6 +579,7 @@ class IbSymbolValidator:
         """
         return {
             "cached_symbols": len(self._cache),
+            "validated_symbols": len(self._validated_symbols),
             "failed_symbols": len(self._failed_symbols),
             "total_lookups": len(self._cache) + len(self._failed_symbols),
         }
@@ -530,6 +588,7 @@ class IbSymbolValidator:
         """Clear all cached results."""
         self._cache.clear()
         self._failed_symbols.clear()
+        self._validated_symbols.clear()
         # Clear persistent cache file
         try:
             if self._cache_file.exists():
