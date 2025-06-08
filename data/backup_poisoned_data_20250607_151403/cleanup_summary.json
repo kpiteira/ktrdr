@@ -1,0 +1,28 @@
+{
+  "cleanup_timestamp": "2025-06-07T15:14:03.239307",
+  "backup_location": "/Users/karl/Documents/dev/ktrdr2/data/backup_poisoned_data_20250607_151403",
+  "backed_up_files": [
+    "NVDA_1h.csv",
+    "AAPL_5m.csv",
+    "MSFT_1d.csv",
+    "TSLA_1h.csv",
+    "JEPI_1d.csv",
+    "EURUSD_1h.csv",
+    "AAPL_1d.csv",
+    "AAPL_1h.csv",
+    "GOOGL_1d.csv",
+    "MSFT_1h.csv",
+    "RBLX_1d.csv",
+    "MSFT_1m.csv"
+  ],
+  "symbol_cache_backed_up": true,
+  "total_files_backed_up": 12,
+  "cleanup_reason": "Timezone-poisoned data cleanup after TimestampManager implementation",
+  "instructions": [
+    "Data files contained incorrect timestamps due to timezone handling issues",
+    "Backup created before removal to allow recovery if needed",
+    "Symbol cache reset to allow re-validation of previously failed symbols",
+    "Re-download data from IB to get clean, timezone-aware data",
+    "Use the data API or CLI to fetch fresh data with proper UTC timestamps"
+  ]
+}

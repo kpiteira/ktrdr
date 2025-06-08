@@ -22,6 +22,24 @@ export interface ApiError {
 }
 
 /**
+ * Trading hours information
+ */
+export interface TradingHoursInfo {
+  timezone: string;
+  regular_hours: {
+    start: string;
+    end: string;
+    name: string;
+  };
+  extended_hours: Array<{
+    start: string;
+    end: string;
+    name: string;
+  }>;
+  trading_days: number[];
+}
+
+/**
  * Symbol information
  */
 export interface SymbolInfo {
@@ -30,6 +48,8 @@ export interface SymbolInfo {
   exchange?: string;
   type?: string;
   currency?: string;
+  available_timeframes?: string[];
+  trading_hours?: TradingHoursInfo;
 }
 
 /**
@@ -49,11 +69,21 @@ export interface PaginationParams {
 }
 
 /**
+ * Data filtering options
+ */
+export interface DataFilters {
+  trading_hours_only?: boolean;
+  include_extended?: boolean;
+}
+
+/**
  * Data load request parameters
  */
 export interface DataLoadParams extends DateRangeParams, PaginationParams {
   symbol: string;
   timeframe: string;
+  mode?: 'local' | 'tail' | 'backfill' | 'full';
+  filters?: DataFilters;
 }
 
 /**
