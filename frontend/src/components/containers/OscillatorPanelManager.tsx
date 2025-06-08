@@ -28,6 +28,11 @@ interface OscillatorPanelManagerProps {
   symbol: string;
   /** Timeframe being displayed */
   timeframe: string;
+  /** Trading hours filtering */
+  tradingHoursOnly?: boolean;
+  includeExtended?: boolean;
+  /** Timezone for display */
+  timezone?: string;
   /** Container width */
   width?: number;
   /** Chart synchronizer instance */
@@ -91,6 +96,9 @@ const OscillatorPanelManager: FC<OscillatorPanelManagerProps> = ({
   indicators,
   symbol,
   timeframe,
+  tradingHoursOnly = false,
+  includeExtended = false,
+  timezone = 'UTC',
   width = 800,
   chartSynchronizer,
   onPanelCreated,
@@ -481,6 +489,9 @@ const OscillatorPanelManager: FC<OscillatorPanelManagerProps> = ({
               height={panel.height}
               symbol={symbol}
               timeframe={timeframe}
+              tradingHoursOnly={tradingHoursOnly}
+              includeExtended={includeExtended}
+              timezone={timezone}
               indicators={panelIndicators}
               chartSynchronizer={chartSynchronizer}
               chartId={panel.id}

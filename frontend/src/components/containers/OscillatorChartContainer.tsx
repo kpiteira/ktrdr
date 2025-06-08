@@ -38,6 +38,13 @@ interface OscillatorChartContainerProps {
   symbol: string;
   timeframe: string;
   
+  // Trading hours filtering
+  tradingHoursOnly?: boolean;
+  includeExtended?: boolean;
+  
+  // Timezone configuration
+  timezone?: string; // Exchange timezone from symbol trading hours
+  
   // Indicator data from parent - filtered to only oscillator types
   indicators?: IndicatorInfo[];
   
@@ -65,6 +72,9 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   height = 200,
   symbol,
   timeframe,
+  tradingHoursOnly = false,
+  includeExtended = false,
+  timezone = 'UTC', // Default to UTC if no timezone provided
   indicators = [],
   chartSynchronizer,
   chartId = 'oscillator-chart',
@@ -183,21 +193,61 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       const startDate = new Date();
       startDate.setMonth(startDate.getMonth() - 3);
       
-      // Build query parameters for date filtering
+      // Build query parameters for the GET API
       const params = new URLSearchParams({
         start_date: startDate.toISOString().split('T')[0],
         end_date: endDate.toISOString().split('T')[0]
       });
       
-      const response = await fetch(`/api/v1/data/${symbol}/${timeframe}?${params.toString()}`);
+      // Add trading hours filtering parameters if enabled
+      if (tradingHoursOnly) {
+        params.append('trading_hours_only', 'true');
+        if (includeExtended) {
+          params.append('include_extended', 'true');
+        }
+      }
+
+      const url = `/api/v1/data/${symbol}/${timeframe}?${params.toString()}`;
+      logger.info('🔄 [Oscillator] Loading price data from GET API:', {
+        url,
+        symbol,
+        timeframe,
+        tradingHoursOnly,
+        includeExtended,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0]
+      });
+      
+      const response = await fetch(url);
+
+      logger.info('📡 [Oscillator] Data load API response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        url: response.url
+      });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        logger.error('❌ [Oscillator] Data load API HTTP error:', {
+          status: response.status,
+          statusText: response.statusText,
+          requestPayload,
+          errorBody: errorText
+        });
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
+      logger.info('📋 [Oscillator] Data load API response data:', {
+        success: result.success,
+        dataKeys: Object.keys(result.data || {}),
+        dates: result.data?.dates?.length || 0,
+        ohlcv: result.data?.ohlcv?.length || 0
+      });
       
       if (!result.success || !result.data || !result.data.dates || !result.data.ohlcv) {
+        logger.error('❌ [Oscillator] Invalid data load API response format:', result);
         throw new Error('Invalid response format from data API');
       }
       
@@ -216,15 +266,27 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
           close: ohlcv[3]
         };
       });
+
+      logger.info('✅ [Oscillator] Successfully loaded price data:', {
+        symbol,
+        timeframe,
+        tradingHoursOnly,
+        dataPoints: transformedData.length,
+        dateRange: {
+          start: transformedData[0]?.time,
+          end: transformedData[transformedData.length - 1]?.time
+        }
+      });
       
       setPriceData(transformedData);
       
     } catch (err) {
+      logger.error('❌ [Oscillator] Failed to load price data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setIsLoading(false);
     }
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe, tradingHoursOnly, includeExtended]);
 
   // Calculate oscillator data for a given indicator
   const calculateOscillatorData = useCallback(async (indicator: IndicatorInfo, baseData: CandlestickData[]) => {
@@ -524,6 +586,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       oscillatorData={oscillatorData}
       isLoading={isLoading}
       error={error}
+      timezone={timezone}
       fuzzyData={activeFuzzyData}
       fuzzyVisible={activeFuzzyVisible}
       fuzzyOpacity={activeFuzzyOpacity}

@@ -50,23 +50,33 @@ export async function loadData({
   symbol, 
   timeframe, 
   startDate, 
-  endDate 
+  endDate,
+  mode = 'local',
+  filters
 }: { 
   symbol: string; 
   timeframe: string; 
   startDate?: string; 
   endDate?: string;
+  mode?: 'local' | 'tail' | 'backfill' | 'full';
+  filters?: {
+    trading_hours_only?: boolean;
+    include_extended?: boolean;
+  };
 }): Promise<OHLCVData> {
   
   try {
-    // Build query parameters for date filtering
-    const params = new URLSearchParams();
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
-    const queryString = params.toString();
-    const url = `data/${symbol}/${timeframe}${queryString ? `?${queryString}` : ''}`;
+    // Use the new POST endpoint with request body
+    const requestBody = {
+      symbol,
+      timeframe,
+      mode,
+      ...(startDate && { start_date: startDate }),
+      ...(endDate && { end_date: endDate }),
+      ...(filters && { filters })
+    };
     
-    const response = await apiClient.get(url);
+    const response = await apiClient.post('data/load', requestBody);
     
     
     // Handle different possible response structures

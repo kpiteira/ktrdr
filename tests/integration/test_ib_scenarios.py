@@ -101,9 +101,9 @@ def test_csv_with_gap(temp_data_dir):
         'volume': [1000 + i * 100 for i in range(len(dates))]
     }, index=dates)
     
-    # Save to CSV
+    # Save to CSV with ISO 8601 timestamp format
     csv_path = Path(temp_data_dir) / f"{TEST_SYMBOL}_{TEST_TIMEFRAME}.csv"
-    data.to_csv(csv_path)
+    data.to_csv(csv_path, date_format='%Y-%m-%dT%H:%M:%SZ')
     
     return csv_path, len(dates)
 

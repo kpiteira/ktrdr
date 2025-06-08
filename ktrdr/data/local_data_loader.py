@@ -21,6 +21,7 @@ from ktrdr import (
     log_error,
     with_context,
 )
+from ktrdr.utils.timezone_utils import TimestampManager
 
 from ktrdr.config import ConfigLoader, InputValidator, sanitize_parameter
 from ktrdr.errors import (
@@ -292,7 +293,7 @@ class LocalDataLoader:
 
                 if date_col:
                     # Convert date column to datetime and set as index
-                    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+                    df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
                     df.set_index(date_col, inplace=True)
                     logger.info(f"Successfully parsed date column: {date_col}")
                 else:
@@ -308,6 +309,11 @@ class LocalDataLoader:
 
             # Make sure column names are all lowercase for consistency
             df.columns = [col.lower() for col in df.columns]
+            
+            # Convert to UTC timezone using TimestampManager for consistent handling
+            if isinstance(df.index, pd.DatetimeIndex):
+                logger.debug(f"Converting CSV timestamps to UTC for {symbol}")
+                df.index = TimestampManager.to_utc_series(df.index)
 
             # Validate the DataFrame structure (with more tolerance)
             try:
@@ -411,8 +417,8 @@ class LocalDataLoader:
             # Create directory if it doesn't exist
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Save DataFrame to CSV
-            df.to_csv(file_path)
+            # Save DataFrame to CSV with ISO 8601 timestamp format
+            df.to_csv(file_path, date_format='%Y-%m-%dT%H:%M:%SZ')
             logger.debug(f"Successfully saved {len(df)} rows of data to {file_path}")
 
             return file_path
@@ -504,53 +510,21 @@ class LocalDataLoader:
             if isinstance(start_date, str):
                 start_date = pd.to_datetime(start_date)
 
-            # Handle timezone compatibility for start_date
-            if hasattr(start_date, "tz") and start_date.tz is not None:
-                # start_date is timezone-aware
-                if df.index.tz is None:
-                    # df.index is naive, localize to UTC for comparison
-                    df_index_aware = df.index.tz_localize("UTC")
-                    mask = df_index_aware >= start_date
-                    df = df[mask]
-                else:
-                    # Both timezone-aware, compare directly
-                    df = df[df.index >= start_date]
-            else:
-                # start_date is naive
-                if df.index.tz is not None:
-                    # df.index is timezone-aware, convert to naive UTC for comparison
-                    df_index_naive = df.index.tz_convert("UTC").tz_localize(None)
-                    mask = df_index_naive >= start_date
-                    df = df[mask]
-                else:
-                    # Both naive, compare directly
-                    df = df[df.index >= start_date]
+            # Convert start_date to UTC for consistent comparison
+            start_date_utc = TimestampManager.to_utc(start_date)
+            if start_date_utc is not None:
+                # Both df.index and start_date are now UTC timezone-aware
+                df = df[df.index >= start_date_utc]
 
         if end_date is not None:
             if isinstance(end_date, str):
                 end_date = pd.to_datetime(end_date)
 
-            # Handle timezone compatibility for end_date
-            if hasattr(end_date, "tz") and end_date.tz is not None:
-                # end_date is timezone-aware
-                if df.index.tz is None:
-                    # df.index is naive, localize to UTC for comparison
-                    df_index_aware = df.index.tz_localize("UTC")
-                    mask = df_index_aware <= end_date
-                    df = df[mask]
-                else:
-                    # Both timezone-aware, compare directly
-                    df = df[df.index <= end_date]
-            else:
-                # end_date is naive
-                if df.index.tz is not None:
-                    # df.index is timezone-aware, convert to naive UTC for comparison
-                    df_index_naive = df.index.tz_convert("UTC").tz_localize(None)
-                    mask = df_index_naive <= end_date
-                    df = df[mask]
-                else:
-                    # Both naive, compare directly
-                    df = df[df.index <= end_date]
+            # Convert end_date to UTC for consistent comparison  
+            end_date_utc = TimestampManager.to_utc(end_date)
+            if end_date_utc is not None:
+                # Both df.index and end_date are now UTC timezone-aware
+                df = df[df.index <= end_date_utc]
 
         return df
 

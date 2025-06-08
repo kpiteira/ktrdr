@@ -53,6 +53,9 @@ interface OscillatorChartProps {
   isLoading: boolean;
   error: string | null;
   
+  // Timezone configuration
+  timezone?: string; // Exchange timezone (e.g., "America/New_York", "UTC")
+  
   // Fuzzy overlay props
   fuzzyData?: ChartFuzzyData[] | null;
   fuzzyVisible?: boolean;
@@ -86,6 +89,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
   oscillatorData,
   isLoading,
   error,
+  timezone = 'UTC', // Default to UTC if no timezone provided
   fuzzyData,
   fuzzyVisible = false,
   fuzzyOpacity = 0.3,
@@ -167,6 +171,45 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
         rightBarStaysOnScroll: true,
         shiftVisibleRangeOnNewBar: false,
       },
+      localization: {
+        // Configure timezone display for chart labels
+        timeFormatter: (time: number) => {
+          try {
+            const date = new Date(time * 1000);
+            return new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              hour12: false,
+              hour: '2-digit',
+              minute: '2-digit',
+              day: '2-digit',
+              month: '2-digit',
+              year: '2-digit'
+            }).format(date);
+          } catch (error) {
+            // Fallback to UTC if timezone is invalid
+            logger.warn(`Invalid timezone ${timezone}, falling back to UTC`);
+            const date = new Date(time * 1000);
+            return date.toISOString().slice(0, 16).replace('T', ' ');
+          }
+        },
+        // You can also customize date formatting for longer time periods
+        dateFormatter: (time: number) => {
+          try {
+            const date = new Date(time * 1000);
+            return new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            }).format(date);
+          } catch (error) {
+            // Fallback to UTC if timezone is invalid
+            logger.warn(`Invalid timezone ${timezone}, falling back to UTC`);
+            const date = new Date(time * 1000);
+            return date.toISOString().slice(0, 10);
+          }
+        }
+      },
     });
 
     chartRef.current = chart;
@@ -219,7 +262,7 @@ const OscillatorChart: FC<OscillatorChartProps> = ({
         }
       }
     };
-  }, [width, height]);
+  }, [width, height, timezone]);
 
   // Update chart data when it changes
   useEffect(() => {

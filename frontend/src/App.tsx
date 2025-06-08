@@ -1,4 +1,6 @@
 import { FC, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { TradingHoursFilterPanel } from './components/presentation/panels/TradingHoursFilterPanel';
+import { useTradingHoursFilter } from './hooks/useTradingHoursFilter';
 import { useChartSynchronizer } from './hooks/useChartSynchronizer';
 import { useKeyboardShortcuts, createCommonShortcuts } from './hooks/useKeyboardShortcuts';
 import { useToast, ToastProvider } from './context/ToastContext';
@@ -37,6 +39,7 @@ const AppContent: FC = () => {
   // Core application state
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
+  const [selectedSymbolData, setSelectedSymbolData] = useState<any>(null);
   const [currentMode, setCurrentMode] = useState<'research' | 'train' | 'run'>('research');
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
@@ -44,6 +47,16 @@ const AppContent: FC = () => {
   
   // Chart reference for BacktestOverlay integration
   const mainChartRef = useRef<any>(null);
+  
+  // Trading hours filter state
+  const tradingHoursFilter = useTradingHoursFilter();
+  
+  // Initialize trading hours filter with current symbol
+  useEffect(() => {
+    if (selectedSymbol) {
+      tradingHoursFilter.setSelectedSymbol(selectedSymbol);
+    }
+  }, [selectedSymbol, tradingHoursFilter.setSelectedSymbol]);
   
   // App initialization
   useEffect(() => {
@@ -114,7 +127,7 @@ const AppContent: FC = () => {
   const [indicators, setIndicators] = useState<IndicatorInfo[]>([]);
 
   // Handle symbol changes from the symbol selector
-  const handleSymbolChange = useCallback((symbol: string, timeframe: string) => {
+  const handleSymbolChange = useCallback((symbol: string, timeframe: string, symbolData?: any) => {
     // Ensure we always have a valid timeframe
     let actualTimeframe = timeframe;
     if (!timeframe || timeframe === 'undefined' || timeframe === undefined || timeframe === '') {
@@ -130,13 +143,27 @@ const AppContent: FC = () => {
     // Update state
     setSelectedSymbol(symbol);
     setSelectedTimeframe(actualTimeframe);
+    setSelectedSymbolData(symbolData);
+    
+    // Update trading hours filter with selected symbol
+    tradingHoursFilter.setSelectedSymbol(symbol);
     
     // Log symbol/timeframe change
-    logger.info('Symbol changed to', `${symbol} ${actualTimeframe}`);
+    logger.info('🔄 App: Symbol changed to', {
+      symbol,
+      timeframe: actualTimeframe,
+      originalTimeframe: timeframe,
+      symbolData,
+      timezone: symbolData?.trading_hours?.timezone,
+      tradingHoursFilter: {
+        tradingHoursOnly: tradingHoursFilter.tradingHoursOnly,
+        includeExtended: tradingHoursFilter.includeExtended
+      }
+    });
     
     // Clear time range when symbol changes
     setTimeRange(null);
-  }, []);
+  }, [tradingHoursFilter]);
 
   // Handle mode changes
   const handleModeChange = useCallback((mode: 'research' | 'train' | 'run') => {
@@ -413,6 +440,9 @@ const AppContent: FC = () => {
                       key={getChartKey('main-chart')}
                       symbol={selectedSymbol}
                       timeframe={selectedTimeframe}
+                      tradingHoursOnly={tradingHoursFilter.tradingHoursOnly}
+                      includeExtended={tradingHoursFilter.includeExtended}
+                      timezone={selectedSymbolData?.trading_hours?.timezone || 'UTC'}
                       indicators={overlayIndicators}
                       chartSynchronizer={chartSynchronizer}
                       chartId="main-chart"
@@ -432,6 +462,9 @@ const AppContent: FC = () => {
                         indicators={separateIndicators}
                         symbol={selectedSymbol}
                         timeframe={selectedTimeframe}
+                        tradingHoursOnly={tradingHoursFilter.tradingHoursOnly}
+                        includeExtended={tradingHoursFilter.includeExtended}
+                        timezone={selectedSymbolData?.trading_hours?.timezone || 'UTC'}
                         width={chartDimensions.width}
                         chartSynchronizer={chartSynchronizer}
                         onPanelCreated={(panelId) => {
@@ -468,14 +501,33 @@ const AppContent: FC = () => {
             {/* Right Sidebar - Mode-specific sidebars */}
             {currentMode === 'research' && (
               <ErrorBoundary>
-                <IndicatorSidebarContainer
-                  isCollapsed={rightSidebarCollapsed}
-                  onToggleCollapse={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
-                  onIndicatorAdded={handleIndicatorAdded}
-                  onIndicatorRemoved={handleIndicatorRemoved}
-                  onIndicatorUpdated={handleIndicatorUpdated}
-                  onIndicatorToggled={handleIndicatorToggled}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <IndicatorSidebarContainer
+                    isCollapsed={rightSidebarCollapsed}
+                    onToggleCollapse={() => setRightSidebarCollapsed(!rightSidebarCollapsed)}
+                    onIndicatorAdded={handleIndicatorAdded}
+                    onIndicatorRemoved={handleIndicatorRemoved}
+                    onIndicatorUpdated={handleIndicatorUpdated}
+                    onIndicatorToggled={handleIndicatorToggled}
+                  />
+                  
+                  {/* Trading Hours Filter Panel - only show when not collapsed */}
+                  {!rightSidebarCollapsed && (
+                    <div style={{ 
+                      padding: '1rem', 
+                      borderTop: '1px solid #e0e0e0',
+                      backgroundColor: '#f8f9fa'
+                    }}>
+                      <TradingHoursFilterPanel
+                        symbol={selectedSymbolData}
+                        tradingHoursOnly={tradingHoursFilter.tradingHoursOnly}
+                        includeExtended={tradingHoursFilter.includeExtended}
+                        onToggleTradingHoursOnly={tradingHoursFilter.toggleTradingHoursOnly}
+                        onToggleIncludeExtended={tradingHoursFilter.toggleIncludeExtended}
+                      />
+                    </div>
+                  )}
+                </div>
               </ErrorBoundary>
             )}
             

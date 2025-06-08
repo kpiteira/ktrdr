@@ -56,6 +56,7 @@ class DataService(BaseService):
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "local",
         include_metadata: bool = True,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Load OHLCV data for a symbol and timeframe.
@@ -91,6 +92,10 @@ class DataService(BaseService):
                 repair=False,
             )
 
+            # Apply trading hours filtering if requested
+            if filters and filters.get("trading_hours_only") and df is not None and not df.empty:
+                df = self._filter_trading_hours(df, symbol, filters.get("include_extended", False))
+            
             execution_time = time.time() - start_time
             
             # Return enhanced format with metrics
@@ -203,6 +208,9 @@ class DataService(BaseService):
                 symbol_timeframes[symbol] = []
             symbol_timeframes[symbol].append(timeframe)
 
+        # Load symbol metadata from symbol cache
+        symbol_metadata = self._get_symbols_metadata()
+        
         # Build result with minimal information (without loading files)
         result = []
         for symbol in symbols:
@@ -219,13 +227,22 @@ class DataService(BaseService):
                 except Exception as e:
                     logger.warning(f"Error getting date range for {symbol}: {str(e)}")
 
+            # Get metadata from symbol cache if available
+            metadata = symbol_metadata.get(symbol, {})
+            
             symbol_info = {
                 "symbol": symbol,
-                "name": symbol,  # Using symbol as name for now
-                "type": "unknown",  # Could be enhanced with symbol type detection
-                "exchange": "unknown",  # Could be enhanced with exchange information
+                "name": metadata.get("description", symbol),  # Use description from cache
+                "type": self._map_asset_type(metadata.get("asset_type", "unknown")),
+                "exchange": metadata.get("exchange", "unknown"),
+                "currency": metadata.get("currency", "unknown"),
                 "available_timeframes": timeframes,
             }
+            
+            # Add trading hours if available
+            trading_hours = metadata.get("trading_hours")
+            if trading_hours:
+                symbol_info["trading_hours"] = trading_hours
 
             # Add date range if available
             if date_range:
@@ -240,6 +257,110 @@ class DataService(BaseService):
             f"Retrieved {len(result)} unique symbols (from {len(available_files)} data files) in {elapsed:.3f}s"
         )
         return result
+    
+    def _get_symbols_metadata(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get symbol metadata from the symbol validation cache.
+        
+        Returns:
+            Dictionary mapping symbol to metadata
+        """
+        try:
+            import json
+            from pathlib import Path
+            
+            # Try to get data directory from settings
+            try:
+                from ktrdr.config.settings import get_settings
+                settings = get_settings()
+                data_dir = Path(settings.data_dir) if hasattr(settings, 'data_dir') else Path("data")
+            except:
+                data_dir = Path("data")
+            
+            cache_file = data_dir / "symbol_discovery_cache.json"
+            
+            if cache_file.exists():
+                with open(cache_file, 'r') as f:
+                    cache_data = json.load(f)
+                
+                return cache_data.get('cache', {})
+        except Exception as e:
+            logger.warning(f"Could not load symbol metadata from cache: {e}")
+        
+        return {}
+    
+    def _map_asset_type(self, ib_asset_type: str) -> str:
+        """
+        Map IB asset types to user-friendly types.
+        
+        Args:
+            ib_asset_type: IB asset type (STK, CASH, FUT, etc.)
+            
+        Returns:
+            User-friendly asset type
+        """
+        mapping = {
+            "STK": "stock",
+            "CASH": "forex",
+            "FUT": "futures",
+            "OPT": "options",
+            "IND": "index",
+            "unknown": "unknown"
+        }
+        return mapping.get(ib_asset_type, "unknown")
+    
+    def _filter_trading_hours(self, df: pd.DataFrame, symbol: str, include_extended: bool = False) -> pd.DataFrame:
+        """
+        Filter dataframe to only include trading hours.
+        
+        Args:
+            df: DataFrame with datetime index
+            symbol: Symbol to get trading hours for
+            include_extended: Whether to include extended hours
+            
+        Returns:
+            Filtered DataFrame
+        """
+        try:
+            from ktrdr.utils.timezone_utils import TimestampManager
+            from ktrdr.data.trading_hours import TradingHoursManager
+            
+            # Get symbol metadata for trading hours
+            symbol_metadata = self._get_symbols_metadata()
+            metadata = symbol_metadata.get(symbol, {})
+            trading_hours = metadata.get("trading_hours")
+            
+            if not trading_hours:
+                logger.warning(f"No trading hours metadata for {symbol}, returning unfiltered data")
+                return df
+            
+            # Filter dataframe to trading hours
+            mask = []
+            for timestamp in df.index:
+                try:
+                    exchange = metadata.get("exchange", "")
+                    asset_type = metadata.get("asset_type", "STK")
+                    
+                    # Use TradingHoursManager to check if market is open
+                    is_open = TradingHoursManager.is_market_open(
+                        timestamp, exchange, asset_type, include_extended=include_extended
+                    )
+                    mask.append(is_open)
+                except Exception as e:
+                    logger.debug(f"Error checking market hours for {timestamp}: {e}")
+                    mask.append(True)  # Include by default if check fails
+            
+            filtered_df = df[mask]
+            
+            original_count = len(df)
+            filtered_count = len(filtered_df)
+            logger.info(f"Trading hours filter: {original_count} -> {filtered_count} bars ({symbol})")
+            
+            return filtered_df
+            
+        except Exception as e:
+            logger.error(f"Error filtering trading hours for {symbol}: {e}")
+            return df  # Return original data if filtering fails
 
     @log_entry_exit(logger=logger)
     async def get_available_timeframes_for_symbol(self, symbol: str) -> List[str]:
@@ -369,6 +490,96 @@ class DataService(BaseService):
                 details={"symbol": symbol, "timeframe": timeframe},
             ) from e
 
+    def _filter_trading_hours(self, df: pd.DataFrame, trading_hours: Dict[str, Any], include_extended: bool = False) -> pd.DataFrame:
+        """
+        Filter DataFrame to trading hours only.
+        
+        Args:
+            df: DataFrame with datetime index
+            trading_hours: Trading hours configuration
+            include_extended: Whether to include extended trading hours
+            
+        Returns:
+            Filtered DataFrame
+        """
+        try:
+            if df is None or df.empty:
+                return df
+                
+            # Ensure we have a datetime index
+            if not isinstance(df.index, pd.DatetimeIndex):
+                logger.warning("DataFrame doesn't have datetime index, cannot filter trading hours")
+                return df
+                
+            # Get timezone and trading hours info
+            timezone = trading_hours.get('timezone', 'UTC')
+            regular_hours = trading_hours.get('regular_hours', {})
+            extended_hours = trading_hours.get('extended_hours', [])
+            trading_days = trading_hours.get('trading_days', [0, 1, 2, 3, 4])  # Default to weekdays
+            
+            # Convert index to the exchange timezone
+            df_tz = df.copy()
+            if df_tz.index.tz is None:
+                df_tz.index = df_tz.index.tz_localize('UTC')
+            df_tz.index = df_tz.index.tz_convert(timezone)
+            
+            # Create boolean mask for filtering
+            mask = pd.Series(False, index=df_tz.index)
+            
+            # Filter by trading days
+            day_mask = df_tz.index.dayofweek.isin(trading_days)
+            
+            # Add regular hours
+            if regular_hours:
+                start_time = regular_hours.get('start', '09:30')
+                end_time = regular_hours.get('end', '16:00')
+                
+                # Parse time strings
+                start_hour, start_min = map(int, start_time.split(':'))
+                end_hour, end_min = map(int, end_time.split(':'))
+                
+                # Create time-based mask
+                time_mask = (
+                    (df_tz.index.hour > start_hour) | 
+                    ((df_tz.index.hour == start_hour) & (df_tz.index.minute >= start_min))
+                ) & (
+                    (df_tz.index.hour < end_hour) | 
+                    ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
+                )
+                
+                mask |= day_mask & time_mask
+            
+            # Add extended hours if requested
+            if include_extended and extended_hours:
+                for session in extended_hours:
+                    start_time = session.get('start', '04:00')
+                    end_time = session.get('end', '20:00')
+                    
+                    # Parse time strings  
+                    start_hour, start_min = map(int, start_time.split(':'))
+                    end_hour, end_min = map(int, end_time.split(':'))
+                    
+                    # Create time-based mask for extended session
+                    extended_mask = (
+                        (df_tz.index.hour > start_hour) | 
+                        ((df_tz.index.hour == start_hour) & (df_tz.index.minute >= start_min))
+                    ) & (
+                        (df_tz.index.hour < end_hour) | 
+                        ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
+                    )
+                    
+                    mask |= day_mask & extended_mask
+            
+            # Apply the filter
+            filtered_df = df[mask]
+            
+            logger.debug(f"Trading hours filter: {len(df)} -> {len(filtered_df)} data points")
+            return filtered_df
+            
+        except Exception as e:
+            logger.error(f"Error filtering trading hours: {str(e)}")
+            # Return original data on error
+            return df
 
     async def health_check(self) -> Dict[str, Any]:
         """

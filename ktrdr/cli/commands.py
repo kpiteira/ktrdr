@@ -346,7 +346,7 @@ def compute_indicator(
                 console.print(f"- {indicator.name}: {indicator.params}")
 
         elif format == "csv":
-            output = display_df.to_csv()
+            output = display_df.to_csv(date_format='%Y-%m-%dT%H:%M:%SZ')
             if output_file:
                 with open(output_file, "w") as f:
                     f.write(output)
@@ -1089,7 +1089,7 @@ def fuzzify(
                 console.print(f"- {fuzzy_set}: [{params[0]}, {params[1]}, {params[2]}]")
 
         elif format == "csv":
-            output = display_df.to_csv()
+            output = display_df.to_csv(date_format='%Y-%m-%dT%H:%M:%SZ')
             if output_file:
                 with open(output_file, "w") as f:
                     f.write(output)
@@ -1691,3 +1691,98 @@ def backtest_command(
     from .backtesting_commands import run_backtest
     run_backtest(strategy, symbol, timeframe, start_date, end_date, model,
                 capital, commission, slippage, data_mode, verbose, output, quiet)
+
+
+# ===== Data Cleanup Commands =====
+
+@cli_app.command("cleanup-data")
+def cleanup_data_command(
+    confirm: bool = typer.Option(False, "--confirm", help="Skip confirmation prompt"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without making changes"),
+):
+    """
+    Clean up timezone-poisoned data files and reset symbol cache.
+    
+    This command backs up and removes data files that may contain incorrect 
+    timestamps due to timezone issues present before TimestampManager fixes.
+    
+    The script will:
+    - Create a timestamped backup of all CSV data files
+    - Back up the symbol discovery cache
+    - Reset failed symbols in the cache (clear for re-validation)
+    - Remove the poisoned data files
+    - Provide instructions for re-downloading clean data
+    
+    After running this command, use the data API or fetch commands to 
+    re-download fresh data with proper UTC timestamps.
+    
+    Examples:
+        ktrdr cleanup-data                    # Interactive mode with confirmation
+        ktrdr cleanup-data --confirm          # Skip confirmation prompt  
+        ktrdr cleanup-data --dry-run          # Show what would be done
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+    
+    console = Console()
+    
+    # Get the cleanup script path
+    project_root = Path(__file__).parent.parent.parent
+    cleanup_script = project_root / "scripts" / "cleanup_poisoned_data.py"
+    
+    if not cleanup_script.exists():
+        console.print("[red]Error: Cleanup script not found at {cleanup_script}[/red]")
+        raise typer.Exit(1)
+    
+    if dry_run:
+        console.print("[yellow]DRY RUN MODE - No changes will be made[/yellow]")
+        console.print(f"Would execute: {cleanup_script}")
+        
+        # Show what files would be affected
+        data_dir = project_root / "data"
+        if data_dir.exists():
+            csv_files = list(data_dir.glob("*.csv"))
+            cache_file = data_dir / "symbol_discovery_cache.json"
+            
+            console.print(f"\n📁 Data directory: {data_dir}")
+            console.print(f"📄 CSV files that would be backed up and removed: {len(csv_files)}")
+            for csv_file in csv_files:
+                console.print(f"   - {csv_file.name}")
+            
+            if cache_file.exists():
+                console.print(f"🗃️  Symbol cache that would be backed up and reset: {cache_file.name}")
+            else:
+                console.print("🗃️  No symbol cache found")
+        else:
+            console.print(f"📁 No data directory found at: {data_dir}")
+        
+        return
+    
+    if not confirm:
+        console.print("[yellow]⚠️  This will backup and remove existing data files![/yellow]")
+        console.print("The files contain timezone-poisoned data and should be re-downloaded.")
+        console.print("A backup will be created before removal.")
+        
+        if not typer.confirm("Continue with data cleanup?"):
+            console.print("Cleanup cancelled.")
+            raise typer.Exit(0)
+    
+    # Execute the cleanup script
+    try:
+        console.print(f"🚀 Running cleanup script: {cleanup_script}")
+        result = subprocess.run([sys.executable, str(cleanup_script)], 
+                              capture_output=False, text=True)
+        
+        if result.returncode == 0:
+            console.print("\n[green]✅ Data cleanup completed successfully![/green]")
+            console.print("\n📋 Next steps:")
+            console.print("1. Use 'ktrdr fetch' commands to re-download clean data")
+            console.print("2. Or use the data API to load fresh data with proper timestamps")
+        else:
+            console.print(f"[red]❌ Cleanup script failed with exit code {result.returncode}[/red]")
+            raise typer.Exit(result.returncode)
+            
+    except Exception as e:
+        console.print(f"[red]❌ Error running cleanup script: {e}[/red]")
+        raise typer.Exit(1)

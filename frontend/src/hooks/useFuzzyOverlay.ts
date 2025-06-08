@@ -14,6 +14,7 @@ import {
 } from '../api/types/fuzzy';
 import { createFuzzyColorConfig } from '../utils/fuzzyColors';
 import { createLogger } from '../utils/logger';
+import { convertToUTCTimestamp } from '../api/utils/dataTransformations';
 
 const logger = createLogger('useFuzzyOverlay');
 
@@ -136,10 +137,14 @@ const transformFuzzyDataForChart = (
     // Convert membership points to chart format with dynamic scaling
     const chartData = setData.membership
       .filter(point => point.value !== null)
-      .map(point => ({
-        time: new Date(point.timestamp).getTime() / 1000, // Convert to Unix timestamp
-        value: scaling.minValue + ((point.value as number) * range) // Scale 0-1 to indicator range
-      }));
+      .map(point => {
+        const timestamp = convertToUTCTimestamp(point.timestamp);
+        return {
+          time: timestamp,
+          value: scaling.minValue + ((point.value as number) * range) // Scale 0-1 to indicator range
+        };
+      })
+      .filter(point => !isNaN(point.time as number)); // Filter out invalid timestamps
 
     return {
       setName: setData.set,

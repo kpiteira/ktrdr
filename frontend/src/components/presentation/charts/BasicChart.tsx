@@ -52,6 +52,9 @@ interface BasicChartProps {
   isLoading: boolean;
   error: string | null;
   
+  // Timezone configuration
+  timezone?: string; // Exchange timezone (e.g., "America/New_York", "UTC")
+  
   // Chart synchronization
   onChartCreated?: (chart: IChartApi) => void;
   onChartDestroyed?: () => void;
@@ -76,6 +79,7 @@ const BasicChart: FC<BasicChartProps> = ({
   chartInfo,
   isLoading,
   error,
+  timezone = 'UTC', // Default to UTC if no timezone provided
   onChartCreated,
   onChartDestroyed,
   onTimeRangeChange,
@@ -150,6 +154,52 @@ const BasicChart: FC<BasicChartProps> = ({
           minBarSpacing: 0.5,
           rightBarStaysOnScroll: true,
           shiftVisibleRangeOnNewBar: false,
+        },
+        localization: {
+          // Configure timezone display for chart labels
+          timeFormatter: (time: number) => {
+            try {
+              const date = new Date(time * 1000);
+              const formatted = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                day: '2-digit',
+                month: '2-digit',
+                year: '2-digit'
+              }).format(date);
+              
+              // Debug logging (only log occasionally to avoid spam)
+              if (Math.random() < 0.001) {
+                logger.debug(`TimeFormatter: timezone=${timezone}, UTC=${date.toISOString()}, formatted=${formatted}`);
+              }
+              
+              return formatted;
+            } catch (error) {
+              // Fallback to UTC if timezone is invalid
+              logger.warn(`Invalid timezone ${timezone}, falling back to UTC`);
+              const date = new Date(time * 1000);
+              return date.toISOString().slice(0, 16).replace('T', ' ');
+            }
+          },
+          // You can also customize date formatting for longer time periods
+          dateFormatter: (time: number) => {
+            try {
+              const date = new Date(time * 1000);
+              return new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+              }).format(date);
+            } catch (error) {
+              // Fallback to UTC if timezone is invalid
+              logger.warn(`Invalid timezone ${timezone}, falling back to UTC`);
+              const date = new Date(time * 1000);
+              return date.toISOString().slice(0, 10);
+            }
+          }
         },
       });
     } catch (error) {
@@ -229,7 +279,7 @@ const BasicChart: FC<BasicChartProps> = ({
         }
       }
     };
-  }, [width, height]);
+  }, [width, height, timezone]);
 
   // Update chart data when it changes
   useEffect(() => {
