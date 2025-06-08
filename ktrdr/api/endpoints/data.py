@@ -389,6 +389,14 @@ async def load_data(
         clean_symbol = request.symbol.strip().upper()
         
         # Use DataService which delegates to DataManager for intelligent loading
+        # Extract filters from request
+        filters_dict = None
+        if request.filters:
+            filters_dict = {
+                "trading_hours_only": request.filters.trading_hours_only,
+                "include_extended": request.filters.include_extended
+            }
+        
         result = await data_service.load_data(
             symbol=clean_symbol,
             timeframe=request.timeframe,
@@ -396,6 +404,7 @@ async def load_data(
             end_date=request.end_date,
             mode=request.mode,  # Let DataManager decide whether to use IB or not
             include_metadata=True,
+            filters=filters_dict,
         )
         
         # Convert to response model

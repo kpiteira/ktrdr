@@ -115,6 +115,22 @@ class DataLoadResponse(ApiResponse[OHLCVData]):
     pass
 
 
+class TradingHoursInfo(BaseModel):
+    """
+    Trading hours information for a symbol.
+    
+    Attributes:
+        timezone (str): Exchange timezone (e.g., 'America/New_York')
+        regular_hours (Dict): Regular trading session info
+        extended_hours (List[Dict]): Extended trading sessions
+        trading_days (List[int]): Days of week when trading occurs
+    """
+    timezone: str = Field(..., description="Exchange timezone")
+    regular_hours: Dict[str, Any] = Field(..., description="Regular trading session")
+    extended_hours: List[Dict[str, Any]] = Field(..., description="Extended trading sessions")
+    trading_days: List[int] = Field(..., description="Days of week when trading occurs (0=Monday)")
+
+
 class SymbolInfo(BaseModel):
     """
     Information about a trading symbol.
@@ -124,15 +140,21 @@ class SymbolInfo(BaseModel):
         name (str): Full name of the instrument
         type (str): Instrument type (stock, forex, crypto, etc.)
         exchange (str): Exchange where the instrument is traded
+        currency (str): Currency denomination
         available_timeframes (List[str]): Available timeframes for this symbol
+        trading_hours (Optional[TradingHoursInfo]): Trading hours metadata
     """
 
     symbol: str = Field(..., description="Trading symbol identifier")
     name: str = Field(..., description="Full name of the instrument")
     type: str = Field(..., description="Instrument type (stock, forex, crypto, etc.)")
     exchange: str = Field(..., description="Exchange where the instrument is traded")
+    currency: str = Field(..., description="Currency denomination")
     available_timeframes: List[str] = Field(
         ..., description="Available timeframes for this symbol"
+    )
+    trading_hours: Optional[TradingHoursInfo] = Field(
+        None, description="Trading hours metadata for this symbol"
     )
 
 
@@ -201,6 +223,18 @@ class DataRangeResponse(ApiResponse[DataRangeInfo]):
     pass
 
 
+class DataFilters(BaseModel):
+    """
+    Data filtering options.
+    
+    Attributes:
+        trading_hours_only (bool): Only include data during trading hours
+        include_extended (bool): Include extended hours if trading_hours_only is True
+    """
+    trading_hours_only: bool = Field(False, description="Only include data during trading hours")
+    include_extended: bool = Field(False, description="Include extended hours (pre-market, after-hours)")
+
+
 class DataLoadRequest(BaseModel):
     """
     Request model for loading data via DataManager.
@@ -224,6 +258,7 @@ class DataLoadRequest(BaseModel):
     )
     start_date: Optional[datetime] = Field(None, description="Optional start date override")
     end_date: Optional[datetime] = Field(None, description="Optional end date override")
+    filters: Optional[DataFilters] = Field(None, description="Data filtering options")
     
     model_config = {
         "json_schema_extra": {
