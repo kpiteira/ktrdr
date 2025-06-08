@@ -10,7 +10,7 @@ Core Principle:
 - Prevents timezone inconsistencies between data paths
 """
 
-from typing import Union, Optional
+from typing import Union, Optional, Dict
 from datetime import datetime
 import pandas as pd
 import pytz
@@ -286,6 +286,115 @@ class TimestampManager:
         except Exception as e:
             logger.warning(f"Error determining trading session for {timestamp}: {e}")
             return 'unknown'
+
+
+    @staticmethod
+    def is_market_hours_enhanced(timestamp: pd.Timestamp, symbol: str = None, 
+                                exchange_tz: str = 'America/New_York') -> bool:
+        """
+        Enhanced market hours check using symbol-specific trading hours metadata.
+        
+        Args:
+            timestamp: UTC timestamp to check
+            symbol: Optional symbol to get specific trading hours
+            exchange_tz: Exchange timezone (default: US Eastern, used if no symbol provided)
+            
+        Returns:
+            True if within regular market hours
+        """
+        try:
+            # If symbol provided, try to get specific trading hours
+            if symbol:
+                try:
+                    from ktrdr.data.trading_hours import TradingHoursManager
+                    # Try to get symbol-specific trading hours from cache
+                    symbol_info = TimestampManager._get_symbol_trading_hours(symbol)
+                    if symbol_info and symbol_info.get('trading_hours'):
+                        exchange = symbol_info['exchange']
+                        asset_type = symbol_info['asset_type']
+                        return TradingHoursManager.is_market_open(timestamp, exchange, asset_type)
+                except Exception as e:
+                    logger.debug(f"Could not get symbol-specific trading hours for {symbol}: {e}")
+            
+            # Fall back to generic US market hours check
+            return TimestampManager.is_market_hours(timestamp, exchange_tz)
+        
+        except Exception as e:
+            logger.error(f"Failed enhanced market hours check: {timestamp}, symbol: {symbol}, error: {e}")
+            return False
+    
+    @staticmethod
+    def get_market_status_enhanced(timestamp: pd.Timestamp, symbol: str = None) -> str:
+        """
+        Get detailed market status using symbol-specific trading hours.
+        
+        Args:
+            timestamp: UTC timestamp to check
+            symbol: Optional symbol to get specific trading hours
+            
+        Returns:
+            Market status string ("Open", "Closed", "Pre-Market", "After-Hours", "Unknown")
+        """
+        try:
+            # If symbol provided, try to get specific trading hours
+            if symbol:
+                try:
+                    from ktrdr.data.trading_hours import TradingHoursManager
+                    symbol_info = TimestampManager._get_symbol_trading_hours(symbol)
+                    if symbol_info and symbol_info.get('trading_hours'):
+                        exchange = symbol_info['exchange']
+                        asset_type = symbol_info['asset_type']
+                        return TradingHoursManager.get_market_status(timestamp, exchange, asset_type)
+                except Exception as e:
+                    logger.debug(f"Could not get symbol-specific market status for {symbol}: {e}")
+            
+            # Fall back to generic trading session
+            return TimestampManager.get_trading_session(timestamp)
+        
+        except Exception as e:
+            logger.error(f"Failed enhanced market status check: {timestamp}, symbol: {symbol}, error: {e}")
+            return "Unknown"
+    
+    @staticmethod
+    def _get_symbol_trading_hours(symbol: str) -> Optional[Dict]:
+        """
+        Get trading hours metadata for a symbol from the symbol cache.
+        
+        Args:
+            symbol: Symbol to look up
+            
+        Returns:
+            Dictionary with exchange, asset_type, and trading_hours, or None if not found
+        """
+        try:
+            import json
+            from pathlib import Path
+            
+            # Try to get data directory from settings
+            try:
+                from ktrdr.config.settings import get_settings
+                settings = get_settings()
+                data_dir = Path(settings.data_dir) if hasattr(settings, 'data_dir') else Path("data")
+            except:
+                data_dir = Path("data")
+            
+            cache_file = data_dir / "symbol_discovery_cache.json"
+            
+            if cache_file.exists():
+                with open(cache_file, 'r') as f:
+                    cache_data = json.load(f)
+                
+                symbol_info = cache_data.get('cache', {}).get(symbol)
+                if symbol_info:
+                    return {
+                        'exchange': symbol_info.get('exchange'),
+                        'asset_type': symbol_info.get('asset_type'),
+                        'trading_hours': symbol_info.get('trading_hours')
+                    }
+        except Exception as e:
+            logger.debug(f"Could not load symbol trading hours from cache: {e}")
+        
+        return None
 
 
 # Convenience functions for backward compatibility

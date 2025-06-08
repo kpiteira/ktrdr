@@ -14,6 +14,7 @@ from ib_insync import Contract, Forex, Stock, Future
 
 from ktrdr.logging import get_logger
 from ktrdr.data.ib_connection_sync import IbConnectionSync
+from ktrdr.data.trading_hours import TradingHoursManager, TradingHours
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,7 @@ class ContractInfo:
         currency: Contract currency
         description: Contract description
         validated_at: Timestamp when validation occurred
+        trading_hours: Trading hours metadata for this contract
     """
 
     symbol: str
@@ -40,6 +42,7 @@ class ContractInfo:
     currency: str
     description: str
     validated_at: float
+    trading_hours: Optional[Dict] = None  # Serialized TradingHours
 
 
 class IbSymbolValidator:
@@ -250,14 +253,25 @@ class IbSymbolValidator:
             logger.info(f"   Full name: {detail.longName or 'N/A'}")
             logger.info(f"   Currency: {contract_details.currency}")
 
+            # Get trading hours metadata
+            exchange = contract_details.primaryExchange or contract_details.exchange
+            trading_hours = TradingHoursManager.get_trading_hours(exchange, contract_details.secType)
+            trading_hours_dict = None
+            if trading_hours:
+                trading_hours_dict = TradingHoursManager.to_dict(trading_hours)
+                logger.debug(f"Added trading hours for {contract_details.symbol} on {exchange}")
+            else:
+                logger.debug(f"No trading hours found for {exchange} ({contract_details.secType})")
+
             return ContractInfo(
                 symbol=contract_details.symbol,
                 contract=contract_details,
                 asset_type=contract_details.secType,
-                exchange=contract_details.primaryExchange or contract_details.exchange,
+                exchange=exchange,
                 currency=contract_details.currency,
                 description=detail.longName or detail.contractMonth or "",
                 validated_at=time.time(),
+                trading_hours=trading_hours_dict,
             )
 
         except Exception as e:
@@ -473,7 +487,8 @@ class IbSymbolValidator:
                             exchange=data['exchange'],
                             currency=data['currency'],
                             description=data['description'],
-                            validated_at=data['validated_at']
+                            validated_at=data['validated_at'],
+                            trading_hours=data.get('trading_hours')
                         )
                         self._cache[symbol] = contract_info
                 
@@ -554,7 +569,8 @@ class IbSymbolValidator:
                     'exchange': contract_info.exchange,
                     'currency': contract_info.currency,
                     'description': contract_info.description,
-                    'validated_at': contract_info.validated_at
+                    'validated_at': contract_info.validated_at,
+                    'trading_hours': contract_info.trading_hours
                 }
             
             # Write to temporary file first, then rename for atomic operation
