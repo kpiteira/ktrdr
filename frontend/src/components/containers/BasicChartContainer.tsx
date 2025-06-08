@@ -28,6 +28,9 @@ interface BasicChartContainerProps {
   tradingHoursOnly?: boolean;
   includeExtended?: boolean;
   
+  // Timezone configuration
+  timezone?: string; // Exchange timezone from symbol trading hours
+  
   // Indicator data from parent
   indicators?: IndicatorInfo[];
   
@@ -52,6 +55,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
   timeframe,
   tradingHoursOnly = false,
   includeExtended = false,
+  timezone = 'UTC', // Default to UTC if no timezone provided
   indicators = [],
   chartSynchronizer,
   chartId = 'basic-chart',
@@ -161,6 +165,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
         symbol,
         timeframe,
         tradingHoursOnly,
+        timezone,
         dataPoints: transformedData.length,
         dateRange: {
           start: transformedData[0]?.time,
@@ -480,6 +485,7 @@ const BasicChartContainer: FC<BasicChartContainerProps> = ({
       chartInfo={chartInfo}
       isLoading={isLoading}
       error={error}
+      timezone={timezone}
       onChartCreated={handleChartCreated}
       onChartDestroyed={handleChartDestroyed}
       onTimeRangeChange={handleTimeRangeChange}

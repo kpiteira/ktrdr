@@ -107,11 +107,28 @@ export const TradingHoursFilterPanel: React.FC<TradingHoursFilterPanelProps> = (
           </div>
         )}
 
+        {/* Timezone Display */}
+        {symbol?.trading_hours && (
+          <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-700">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Chart Timezone:
+            </span>
+            <div className="flex items-center space-x-2">
+              <div className="px-2 py-1 bg-blue-100 dark:bg-blue-800 rounded text-sm font-mono text-blue-800 dark:text-blue-200">
+                {tradingHours.timezone}
+              </div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                (Exchange Local)
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Trading Hours Info */}
         {symbol?.trading_hours && (
           <div className="mt-4 p-3 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-600">
             <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {symbol.exchange} Trading Hours ({tradingHours.timezone})
+              {symbol.exchange} Trading Hours
             </div>
             
             {/* Regular Hours */}

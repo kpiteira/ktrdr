@@ -39,6 +39,7 @@ const AppContent: FC = () => {
   // Core application state
   const [selectedSymbol, setSelectedSymbol] = useState('MSFT');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
+  const [selectedSymbolData, setSelectedSymbolData] = useState<any>(null);
   const [currentMode, setCurrentMode] = useState<'research' | 'train' | 'run'>('research');
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
@@ -49,6 +50,13 @@ const AppContent: FC = () => {
   
   // Trading hours filter state
   const tradingHoursFilter = useTradingHoursFilter();
+  
+  // Initialize trading hours filter with current symbol
+  useEffect(() => {
+    if (selectedSymbol) {
+      tradingHoursFilter.setSelectedSymbol(selectedSymbol);
+    }
+  }, [selectedSymbol, tradingHoursFilter.setSelectedSymbol]);
   
   // App initialization
   useEffect(() => {
@@ -119,7 +127,7 @@ const AppContent: FC = () => {
   const [indicators, setIndicators] = useState<IndicatorInfo[]>([]);
 
   // Handle symbol changes from the symbol selector
-  const handleSymbolChange = useCallback((symbol: string, timeframe: string) => {
+  const handleSymbolChange = useCallback((symbol: string, timeframe: string, symbolData?: any) => {
     // Ensure we always have a valid timeframe
     let actualTimeframe = timeframe;
     if (!timeframe || timeframe === 'undefined' || timeframe === undefined || timeframe === '') {
@@ -135,6 +143,7 @@ const AppContent: FC = () => {
     // Update state
     setSelectedSymbol(symbol);
     setSelectedTimeframe(actualTimeframe);
+    setSelectedSymbolData(symbolData);
     
     // Update trading hours filter with selected symbol
     tradingHoursFilter.setSelectedSymbol(symbol);
@@ -144,6 +153,8 @@ const AppContent: FC = () => {
       symbol,
       timeframe: actualTimeframe,
       originalTimeframe: timeframe,
+      symbolData,
+      timezone: symbolData?.trading_hours?.timezone,
       tradingHoursFilter: {
         tradingHoursOnly: tradingHoursFilter.tradingHoursOnly,
         includeExtended: tradingHoursFilter.includeExtended
@@ -431,6 +442,7 @@ const AppContent: FC = () => {
                       timeframe={selectedTimeframe}
                       tradingHoursOnly={tradingHoursFilter.tradingHoursOnly}
                       includeExtended={tradingHoursFilter.includeExtended}
+                      timezone={selectedSymbolData?.trading_hours?.timezone || 'UTC'}
                       indicators={overlayIndicators}
                       chartSynchronizer={chartSynchronizer}
                       chartId="main-chart"
@@ -452,6 +464,7 @@ const AppContent: FC = () => {
                         timeframe={selectedTimeframe}
                         tradingHoursOnly={tradingHoursFilter.tradingHoursOnly}
                         includeExtended={tradingHoursFilter.includeExtended}
+                        timezone={selectedSymbolData?.trading_hours?.timezone || 'UTC'}
                         width={chartDimensions.width}
                         chartSynchronizer={chartSynchronizer}
                         onPanelCreated={(panelId) => {
@@ -506,7 +519,7 @@ const AppContent: FC = () => {
                       backgroundColor: '#f8f9fa'
                     }}>
                       <TradingHoursFilterPanel
-                        symbol={tradingHoursFilter.selectedSymbolData}
+                        symbol={selectedSymbolData}
                         tradingHoursOnly={tradingHoursFilter.tradingHoursOnly}
                         includeExtended={tradingHoursFilter.includeExtended}
                         onToggleTradingHoursOnly={tradingHoursFilter.toggleTradingHoursOnly}

@@ -2,7 +2,7 @@
  * Custom hook for managing trading hours filtering state
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { DataFilters, SymbolInfo } from '../api/types';
 
 interface TradingHoursFilterState {
@@ -11,13 +11,24 @@ interface TradingHoursFilterState {
 }
 
 interface TradingHoursFilterHook {
+  // Core filter state
+  tradingHoursOnly: boolean;
+  includeExtended: boolean;
   filters: TradingHoursFilterState;
   apiFilters: DataFilters | undefined;
+  
+  // Symbol data
+  selectedSymbolData: SymbolInfo | null;
+  setSelectedSymbol: (symbol: string) => void;
+  
+  // Filter actions
   setTradingHoursOnly: (enabled: boolean) => void;
   setIncludeExtended: (enabled: boolean) => void;
   toggleTradingHoursOnly: () => void;
   toggleIncludeExtended: () => void;
   reset: () => void;
+  
+  // Utility functions
   isMarketOpen: (timestamp: Date, symbol?: SymbolInfo) => boolean;
   getMarketStatus: (timestamp: Date, symbol?: SymbolInfo) => string;
   formatInExchangeTime: (timestamp: Date, symbol?: SymbolInfo) => string;
@@ -34,6 +45,34 @@ export const useTradingHoursFilter = (
     tradingHoursOnly: initialTradingHoursOnly,
     includeExtended: initialIncludeExtended,
   });
+
+  // Symbol data state
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('');
+  const [symbolsData, setSymbolsData] = useState<SymbolInfo[]>([]);
+  
+  // Fetch symbols data when component mounts
+  useEffect(() => {
+    const fetchSymbols = async () => {
+      try {
+        const response = await fetch('/api/v1/symbols');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setSymbolsData(data.data);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch symbols for trading hours filter:', error);
+      }
+    };
+    
+    fetchSymbols();
+  }, []);
+
+  // Get selected symbol data
+  const selectedSymbolData = useMemo(() => {
+    return symbolsData.find(s => s.symbol === selectedSymbol) || null;
+  }, [symbolsData, selectedSymbol]);
 
   // Convert to API format - only include if trading hours filtering is enabled
   const apiFilters = useMemo((): DataFilters | undefined => {
@@ -217,13 +256,24 @@ export const useTradingHoursFilter = (
   }, []);
 
   return {
+    // Core filter state
+    tradingHoursOnly: filters.tradingHoursOnly,
+    includeExtended: filters.includeExtended,
     filters,
     apiFilters,
+    
+    // Symbol data
+    selectedSymbolData,
+    setSelectedSymbol,
+    
+    // Filter actions
     setTradingHoursOnly,
     setIncludeExtended,
     toggleTradingHoursOnly,
     toggleIncludeExtended,
     reset,
+    
+    // Utility functions
     isMarketOpen,
     getMarketStatus,
     formatInExchangeTime,

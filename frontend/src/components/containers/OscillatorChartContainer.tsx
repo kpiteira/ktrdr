@@ -42,6 +42,9 @@ interface OscillatorChartContainerProps {
   tradingHoursOnly?: boolean;
   includeExtended?: boolean;
   
+  // Timezone configuration
+  timezone?: string; // Exchange timezone from symbol trading hours
+  
   // Indicator data from parent - filtered to only oscillator types
   indicators?: IndicatorInfo[];
   
@@ -71,6 +74,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
   timeframe,
   tradingHoursOnly = false,
   includeExtended = false,
+  timezone = 'UTC', // Default to UTC if no timezone provided
   indicators = [],
   chartSynchronizer,
   chartId = 'oscillator-chart',
@@ -582,6 +586,7 @@ const OscillatorChartContainer: FC<OscillatorChartContainerProps> = ({
       oscillatorData={oscillatorData}
       isLoading={isLoading}
       error={error}
+      timezone={timezone}
       fuzzyData={activeFuzzyData}
       fuzzyVisible={activeFuzzyVisible}
       fuzzyOpacity={activeFuzzyOpacity}

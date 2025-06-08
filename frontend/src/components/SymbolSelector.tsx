@@ -8,7 +8,7 @@ const logger = createLogger('SymbolSelector');
 
 interface SymbolSelectorProps {
   selectedSymbol: string;
-  onSymbolChange: (symbol: string, timeframe: string) => void;
+  onSymbolChange: (symbol: string, timeframe: string, symbolData?: SymbolInfo) => void;
 }
 
 interface Symbol extends SymbolInfo {
@@ -64,6 +64,25 @@ const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChang
 
       setSymbols(data.data);
       setLoading(false);
+      
+      // If we have a selected symbol, notify the parent with the symbol data
+      if (selectedSymbol) {
+        const symbolData = data.data.find((s: any) => s.symbol === selectedSymbol);
+        if (symbolData) {
+          // Determine timeframe
+          let timeframe = '1h'; // Default fallback
+          if (symbolData.available_timeframes && symbolData.available_timeframes.length > 0) {
+            timeframe = symbolData.available_timeframes[0];
+          } else if (selectedSymbol === 'AAPL') {
+            timeframe = '1d';
+          } else if (selectedSymbol === 'MSFT') {
+            timeframe = '1h';
+          }
+          
+          // Notify parent with current selection
+          onSymbolChange(selectedSymbol, timeframe, symbolData);
+        }
+      }
     } catch (err) {
       logger.error('❌ Failed to fetch available symbols:', err);
       setError(err instanceof Error ? err.message : 'Failed to load symbols');
@@ -142,7 +161,7 @@ const SymbolSelector: FC<SymbolSelectorProps> = ({ selectedSymbol, onSymbolChang
             timeframe = '1h'; // Known timeframe for MSFT
           }
           
-          onSymbolChange(symbol, timeframe);
+          onSymbolChange(symbol, timeframe, symbolData);
         }}
         style={{
           padding: '0.5rem',

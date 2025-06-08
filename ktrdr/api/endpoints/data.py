@@ -179,6 +179,8 @@ async def get_cached_data(
     timeframe: str = Path(..., description="Data timeframe (e.g. 1d, 1h)"),
     start_date: Optional[str] = Query(None, description="Optional start date filter (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="Optional end date filter (YYYY-MM-DD)"),
+    trading_hours_only: Optional[bool] = Query(False, description="Filter to trading hours only"),
+    include_extended: Optional[bool] = Query(False, description="Include extended trading hours when filtering"),
     data_service: DataService = Depends(get_data_service),
 ) -> DataLoadResponse:
     """
@@ -193,6 +195,8 @@ async def get_cached_data(
         timeframe: Data timeframe (e.g., '1d', '1h')
         start_date: Optional start date for filtering (YYYY-MM-DD format)
         end_date: Optional end date for filtering (YYYY-MM-DD format)
+        trading_hours_only: Filter data to trading hours only
+        include_extended: Include extended trading hours (pre-market, after-hours)
         
     Returns:
         DataLoadResponse containing OHLCV data in array format
@@ -202,7 +206,7 @@ async def get_cached_data(
         GET /api/v1/data/MSFT/1h?start_date=2023-01-01&end_date=2023-06-01
     """
     try:
-        logger.info(f"Getting cached data for {symbol} ({timeframe}) - frontend request")
+        logger.info(f"Getting cached data for {symbol} ({timeframe}) - frontend request, trading_hours_only={trading_hours_only}, include_extended={include_extended}")
         
         # Validate symbol
         if not symbol or not symbol.strip():
@@ -247,6 +251,28 @@ async def get_cached_data(
             validate=True,
             repair=False,
         )
+        
+        # Apply trading hours filtering if requested
+        if trading_hours_only and df is not None and not df.empty:
+            try:
+                # Get symbol info to access trading hours
+                symbols_data = await data_service.get_available_symbols()
+                symbol_info = next((s for s in symbols_data if s.get('symbol') == clean_symbol), None)
+                
+                if symbol_info and symbol_info.get('trading_hours'):
+                    trading_hours = symbol_info['trading_hours']
+                    original_count = len(df)
+                    
+                    # Apply trading hours filter using the data service helper
+                    df = data_service._filter_trading_hours(df, trading_hours, include_extended)
+                    
+                    filtered_count = len(df) if df is not None else 0
+                    logger.info(f"Trading hours filter applied: {original_count} -> {filtered_count} data points (include_extended={include_extended})")
+                else:
+                    logger.warning(f"No trading hours info found for {clean_symbol}, skipping trading hours filter")
+            except Exception as e:
+                logger.warning(f"Failed to apply trading hours filter for {clean_symbol}: {str(e)}")
+                # Continue without filtering on error
         
         # Convert to API format
         if df is None or df.empty:

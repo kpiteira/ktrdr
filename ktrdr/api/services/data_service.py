@@ -490,6 +490,96 @@ class DataService(BaseService):
                 details={"symbol": symbol, "timeframe": timeframe},
             ) from e
 
+    def _filter_trading_hours(self, df: pd.DataFrame, trading_hours: Dict[str, Any], include_extended: bool = False) -> pd.DataFrame:
+        """
+        Filter DataFrame to trading hours only.
+        
+        Args:
+            df: DataFrame with datetime index
+            trading_hours: Trading hours configuration
+            include_extended: Whether to include extended trading hours
+            
+        Returns:
+            Filtered DataFrame
+        """
+        try:
+            if df is None or df.empty:
+                return df
+                
+            # Ensure we have a datetime index
+            if not isinstance(df.index, pd.DatetimeIndex):
+                logger.warning("DataFrame doesn't have datetime index, cannot filter trading hours")
+                return df
+                
+            # Get timezone and trading hours info
+            timezone = trading_hours.get('timezone', 'UTC')
+            regular_hours = trading_hours.get('regular_hours', {})
+            extended_hours = trading_hours.get('extended_hours', [])
+            trading_days = trading_hours.get('trading_days', [0, 1, 2, 3, 4])  # Default to weekdays
+            
+            # Convert index to the exchange timezone
+            df_tz = df.copy()
+            if df_tz.index.tz is None:
+                df_tz.index = df_tz.index.tz_localize('UTC')
+            df_tz.index = df_tz.index.tz_convert(timezone)
+            
+            # Create boolean mask for filtering
+            mask = pd.Series(False, index=df_tz.index)
+            
+            # Filter by trading days
+            day_mask = df_tz.index.dayofweek.isin(trading_days)
+            
+            # Add regular hours
+            if regular_hours:
+                start_time = regular_hours.get('start', '09:30')
+                end_time = regular_hours.get('end', '16:00')
+                
+                # Parse time strings
+                start_hour, start_min = map(int, start_time.split(':'))
+                end_hour, end_min = map(int, end_time.split(':'))
+                
+                # Create time-based mask
+                time_mask = (
+                    (df_tz.index.hour > start_hour) | 
+                    ((df_tz.index.hour == start_hour) & (df_tz.index.minute >= start_min))
+                ) & (
+                    (df_tz.index.hour < end_hour) | 
+                    ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
+                )
+                
+                mask |= day_mask & time_mask
+            
+            # Add extended hours if requested
+            if include_extended and extended_hours:
+                for session in extended_hours:
+                    start_time = session.get('start', '04:00')
+                    end_time = session.get('end', '20:00')
+                    
+                    # Parse time strings  
+                    start_hour, start_min = map(int, start_time.split(':'))
+                    end_hour, end_min = map(int, end_time.split(':'))
+                    
+                    # Create time-based mask for extended session
+                    extended_mask = (
+                        (df_tz.index.hour > start_hour) | 
+                        ((df_tz.index.hour == start_hour) & (df_tz.index.minute >= start_min))
+                    ) & (
+                        (df_tz.index.hour < end_hour) | 
+                        ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
+                    )
+                    
+                    mask |= day_mask & extended_mask
+            
+            # Apply the filter
+            filtered_df = df[mask]
+            
+            logger.debug(f"Trading hours filter: {len(df)} -> {len(filtered_df)} data points")
+            return filtered_df
+            
+        except Exception as e:
+            logger.error(f"Error filtering trading hours: {str(e)}")
+            # Return original data on error
+            return df
 
     async def health_check(self) -> Dict[str, Any]:
         """
