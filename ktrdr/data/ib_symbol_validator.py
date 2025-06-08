@@ -15,6 +15,7 @@ from ib_insync import Contract, Forex, Stock, Future
 from ktrdr.logging import get_logger
 from ktrdr.data.ib_connection_sync import IbConnectionSync
 from ktrdr.data.trading_hours import TradingHoursManager, TradingHours
+from ktrdr.data.ib_trading_hours_parser import IBTradingHoursParser
 
 logger = get_logger(__name__)
 
@@ -253,15 +254,23 @@ class IbSymbolValidator:
             logger.info(f"   Full name: {detail.longName or 'N/A'}")
             logger.info(f"   Currency: {contract_details.currency}")
 
-            # Get trading hours metadata
+            # Get trading hours metadata from IB contract details
             exchange = contract_details.primaryExchange or contract_details.exchange
-            trading_hours = TradingHoursManager.get_trading_hours(exchange, contract_details.secType)
             trading_hours_dict = None
+            
+            # Try to parse real IB trading hours first
+            trading_hours = IBTradingHoursParser.create_from_contract_details(detail)
             if trading_hours:
                 trading_hours_dict = TradingHoursManager.to_dict(trading_hours)
-                logger.debug(f"Added trading hours for {contract_details.symbol} on {exchange}")
+                logger.debug(f"Added IB trading hours for {contract_details.symbol} on {exchange}")
             else:
-                logger.debug(f"No trading hours found for {exchange} ({contract_details.secType})")
+                # Fall back to static trading hours if IB parsing fails
+                trading_hours = TradingHoursManager.get_trading_hours(exchange, contract_details.secType)
+                if trading_hours:
+                    trading_hours_dict = TradingHoursManager.to_dict(trading_hours)
+                    logger.debug(f"Added static trading hours for {contract_details.symbol} on {exchange}")
+                else:
+                    logger.debug(f"No trading hours available for {exchange} ({contract_details.secType})")
 
             return ContractInfo(
                 symbol=contract_details.symbol,
