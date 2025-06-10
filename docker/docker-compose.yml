@@ -1,4 +1,13 @@
 services:
+  # ⚠️  CRITICAL WARNING FOR MCP DEVELOPMENT ⚠️
+  # NEVER BUILD, RESTART, OR TOUCH THE backend OR frontend CONTAINERS!
+  # When working on MCP features, ONLY use commands that target the MCP container:
+  #   ✅ docker-compose restart mcp
+  #   ✅ docker-compose build mcp  
+  #   ✅ docker-compose up -d mcp
+  #   ❌ docker-compose --profile research up -d (rebuilds ALL containers)
+  #   ❌ docker-compose build (rebuilds ALL containers)
+  
   # FastAPI backend service - Development configuration
   backend:
     build:
@@ -81,6 +90,37 @@ services:
     networks:
       - ktrdr-network
 
+  # MCP Server for Claude research integration - Optional research profile
+  mcp:
+    profiles: ["research"]
+    build:
+      context: ../mcp
+      dockerfile: Dockerfile
+      cache_from:
+        - ktrdr-mcp:dev
+    image: ktrdr-mcp:dev
+    container_name: ktrdr-mcp
+    restart: "no"  # MCP servers run on-demand when clients connect, not as persistent services
+    volumes:
+      # Read-only access to market data
+      - ../data:/data:ro
+      # Write access to research areas
+      - ../strategies:/app/strategies:rw
+      - ../models:/app/models:rw
+      - mcp-experiments:/app/experiments:rw
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      # API connection to backend via localhost (simple and reliable)
+      - KTRDR_API_URL=http://localhost:8000/api/v1
+      - EXPERIMENT_DB_PATH=/app/experiments/experiments.db
+    # Removed depends_on to make MCP rebuilding completely independent
+    # MCP will connect to backend via localhost when it starts
+    network_mode: host  # Use host network to access localhost directly
+    # Keep container alive for Claude to connect via: docker exec -i ktrdr-mcp python -m src.main
+    command: tail -f /dev/null
+
 networks:
   ktrdr-network:
     driver: bridge
@@ -89,3 +129,4 @@ volumes:
   pip-cache:
   uv-cache:
   npm-cache:
+  mcp-experiments:

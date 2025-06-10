@@ -1,0 +1,25 @@
+"""Tests for MCP server"""
+import pytest
+from src.server import KTRDRMCPServer
+
+@pytest.mark.asyncio
+async def test_hello_tool():
+    """Test hello tool works"""
+    server = KTRDRMCPServer()
+    
+    result = await server.handle_hello({"name": "Test"})
+    
+    assert result["message"] == "Hello Test! KTRDR MCP Server is working."
+    assert result["status"] == "connected"
+    assert "version" in result
+
+@pytest.mark.asyncio
+async def test_hello_tool_default_name():
+    """Test hello tool with default name"""
+    server = KTRDRMCPServer()
+    
+    result = await server.handle_hello({})
+    
+    assert result["message"] == "Hello World! KTRDR MCP Server is working."
+    assert result["status"] == "connected"
+    assert result["version"] == "0.1.0"
