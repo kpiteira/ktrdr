@@ -42,6 +42,7 @@ from ktrdr.data.ib_data_loader import IbDataLoader
 from ktrdr.data.ib_connection_strategy import get_connection_strategy
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.gap_classifier import GapClassifier, GapClassification
+from ktrdr.data.timeframe_constants import TimeframeConstants
 
 # Get module logger
 logger = get_logger(__name__)
@@ -513,19 +514,8 @@ class DataManager:
         if len(range_data) < 2:
             return gaps
         
-        # Calculate expected frequency
-        freq_map = {
-            '1m': pd.Timedelta(minutes=1),
-            '5m': pd.Timedelta(minutes=5),
-            '15m': pd.Timedelta(minutes=15),
-            '30m': pd.Timedelta(minutes=30),
-            '1h': pd.Timedelta(hours=1),
-            '4h': pd.Timedelta(hours=4),
-            '1d': pd.Timedelta(days=1),
-            '1w': pd.Timedelta(weeks=1),
-        }
-        
-        expected_freq = freq_map.get(timeframe, pd.Timedelta(days=1))
+        # Calculate expected frequency using centralized constants
+        expected_freq = TimeframeConstants.get_pandas_timedelta(timeframe)
         
         # Look for gaps larger than expected frequency
         for i in range(len(range_data) - 1):

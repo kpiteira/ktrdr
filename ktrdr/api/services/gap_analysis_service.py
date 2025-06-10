@@ -13,6 +13,7 @@ from ktrdr.logging import get_logger
 from ktrdr.data.gap_classifier import GapClassifier, GapInfo, GapClassification
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.utils.timezone_utils import TimestampManager
+from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.api.models.gap_analysis import (
     GapAnalysisRequest, GapAnalysisResponse, GapAnalysisSummary, 
     GapInfoModel, GapAnalysisMode, BatchGapAnalysisRequest, BatchGapAnalysisResponse
@@ -35,17 +36,8 @@ class GapAnalysisService:
         self.local_data_loader = LocalDataLoader(data_dir=self.data_dir)
         self.gap_classifier = GapClassifier()
         
-        # Timeframe definitions for expected bar calculation
-        self.timeframe_minutes = {
-            "1m": 1,
-            "5m": 5,
-            "15m": 15,
-            "30m": 30,
-            "1h": 60,
-            "4h": 240,
-            "1d": 1440,  # 24 hours
-            "1w": 10080,  # 7 days
-        }
+        # Use centralized timeframe constants
+        self.timeframe_minutes = TimeframeConstants.TIMEFRAME_MINUTES
         
         logger.info(f"Initialized GapAnalysisService with data_dir: {self.data_dir}")
     
@@ -232,7 +224,7 @@ class GapAnalysisService:
             gaps.append(gap_info)
         
         # Check for gaps between data points
-        timeframe_delta = timedelta(minutes=self.timeframe_minutes.get(timeframe, 60))
+        timeframe_delta = TimeframeConstants.get_timedelta(timeframe)
         
         for i in range(len(df_sorted) - 1):
             current_time = df_sorted.index[i]

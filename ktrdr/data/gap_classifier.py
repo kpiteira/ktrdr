@@ -21,6 +21,7 @@ from ktrdr.logging import get_logger
 from ktrdr.data.local_data_loader import TimestampManager
 from ktrdr.utils.timezone_utils import TimestampManager
 from ktrdr.data.trading_hours import TradingHoursManager
+from ktrdr.data.timeframe_constants import TimeframeConstants
 
 logger = get_logger(__name__)
 
@@ -64,17 +65,8 @@ class GapClassifier:
         self.symbol_cache_path = symbol_cache_path or "data/symbol_discovery_cache.json"
         self.symbol_metadata = self._load_symbol_metadata()
         
-        # Timeframe definitions for gap calculation
-        self.timeframe_minutes = {
-            "1m": 1,
-            "5m": 5,
-            "15m": 15,
-            "30m": 30,
-            "1h": 60,
-            "4h": 240,
-            "1d": 1440,  # 24 hours
-            "1w": 10080,  # 7 days
-        }
+        # Use centralized timeframe constants
+        self.timeframe_minutes = TimeframeConstants.TIMEFRAME_MINUTES
         
         logger.info(f"Initialized GapClassifier with {len(self.symbol_metadata)} symbols")
     
@@ -182,7 +174,7 @@ class GapClassifier:
     
     def _is_intraday_timeframe(self, timeframe: str) -> bool:
         """Check if timeframe is intraday (< 1 day)."""
-        return timeframe in ['1m', '5m', '15m', '30m', '1h', '4h']
+        return TimeframeConstants.is_intraday(timeframe)
     
     def _spans_weekend(self, start_time: datetime, end_time: datetime, 
                       trading_hours: Dict) -> bool:
