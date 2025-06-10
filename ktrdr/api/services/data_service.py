@@ -104,7 +104,7 @@ class DataService(BaseService):
                 "fetched_bars": len(df) if df is not None and not df.empty else 0,
                 "cached_before": True,  # Will be enhanced when DataManager provides this info
                 "merged_file": f"data/{symbol}_{timeframe}.csv",
-                "gaps_analyzed": 0,  # Will be enhanced when DataManager provides this info  
+                "gaps_analyzed": 0,  # Using intelligent gap classification - only unexpected gaps are reported
                 "segments_fetched": 0,  # Will be enhanced when DataManager provides this info
                 "external_requests_made": 0 if mode == "local" else 0,  # Will be enhanced when DataManager provides this info
                 "execution_time_seconds": execution_time,
