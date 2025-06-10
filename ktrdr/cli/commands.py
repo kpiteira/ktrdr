@@ -1693,6 +1693,13 @@ def backtest_command(
                 capital, commission, slippage, data_mode, verbose, output, quiet)
 
 
+# ===== Gap Analysis Commands =====
+
+# Import and register gap analysis commands
+from .gap_commands import register_gap_commands
+register_gap_commands(cli_app)
+
+
 # ===== Data Cleanup Commands =====
 
 @cli_app.command("cleanup-data")
