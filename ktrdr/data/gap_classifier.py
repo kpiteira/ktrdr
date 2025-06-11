@@ -11,7 +11,7 @@ and the trading_hours.py infrastructure.
 
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from dataclasses import dataclass
 import json
 import pandas as pd
@@ -138,7 +138,7 @@ class GapClassifier:
         return GapClassification.UNEXPECTED
     
     def analyze_gap(self, start_time: datetime, end_time: datetime,
-                   symbol: str, timeframe: str) -> GapInfo:
+                   symbol: str, timeframe: str, context_data: Optional[pd.DataFrame] = None) -> GapInfo:
         """
         Perform comprehensive gap analysis including classification and context.
         
@@ -147,18 +147,30 @@ class GapClassifier:
             end_time: Gap end timestamp (UTC)
             symbol: Trading symbol  
             timeframe: Data timeframe
+            context_data: Optional DataFrame with surrounding data for volume analysis
             
         Returns:
             GapInfo object with detailed analysis
         """
+        # Check for IB "no data available" indicators in surrounding context
+        ib_no_data_detected = self._check_ib_no_data_indicators(start_time, end_time, context_data)
+        
         # Classify the gap
         classification = self.classify_gap(start_time, end_time, symbol, timeframe)
+        
+        # If we detected IB "no data" indicators and it's not already classified as expected,
+        # consider upgrading to expected classification
+        if ib_no_data_detected and classification == GapClassification.UNEXPECTED:
+            # Check if this could be reclassified as expected based on IB data indicators
+            if self._should_reclassify_based_on_ib_indicators(start_time, end_time, symbol, timeframe):
+                classification = GapClassification.EXPECTED_TRADING_HOURS
+                logger.info(f"🔄 Reclassified gap as EXPECTED_TRADING_HOURS due to IB volume=-1 indicators: {start_time} to {end_time}")
         
         # Calculate gap metrics
         duration_hours = (end_time - start_time).total_seconds() / 3600
         bars_missing = self._calculate_bars_missing(start_time, end_time, timeframe)
         day_context = self._generate_day_context(start_time, end_time)
-        note = self._generate_gap_note(classification, start_time, end_time, symbol, timeframe)
+        note = self._generate_gap_note(classification, start_time, end_time, symbol, timeframe, ib_no_data_detected)
         
         return GapInfo(
             start_time=start_time,
@@ -339,7 +351,7 @@ class GapClassifier:
         
         return False
     
-    def _is_holiday_date(self, date_obj: datetime.date) -> bool:
+    def _is_holiday_date(self, date_obj: date) -> bool:
         """Check if a specific date is a major holiday."""
         month = date_obj.month
         day = date_obj.day
@@ -351,6 +363,14 @@ class GapClassifier:
         
         # New Year period (Dec 31 - Jan 2)
         if (month == 12 and day == 31) or (month == 1 and day in [1, 2]):
+            return True
+        
+        # Good Friday (variable date - Friday before Easter)
+        if self._is_good_friday(date_obj):
+            return True
+        
+        # Easter Monday (day after Easter)
+        if self._is_easter_monday(date_obj):
             return True
         
         # Martin Luther King Day (3rd Monday in January)
@@ -391,7 +411,7 @@ class GapClassifier:
         
         return False
     
-    def _is_nth_weekday(self, date_obj: datetime.date, weekday: int, n: int) -> bool:
+    def _is_nth_weekday(self, date_obj: date, weekday: int, n: int) -> bool:
         """Check if date is the nth occurrence of weekday in the month."""
         # weekday: 0=Monday, 1=Tuesday, ..., 6=Sunday
         first_day = date_obj.replace(day=1)
@@ -404,7 +424,7 @@ class GapClassifier:
         # Check if it's in the same month and matches our date
         return nth_date.month == date_obj.month and nth_date == date_obj
     
-    def _is_last_weekday(self, date_obj: datetime.date, weekday: int) -> bool:
+    def _is_last_weekday(self, date_obj: date, weekday: int) -> bool:
         """Check if date is the last occurrence of weekday in the month."""
         # Find the last day of the month
         if date_obj.month == 12:
@@ -417,6 +437,48 @@ class GapClassifier:
             last_day -= timedelta(days=1)
         
         return last_day == date_obj
+    
+    def _calculate_easter(self, year: int) -> date:
+        """
+        Calculate Easter date for a given year using the algorithm.
+        
+        Args:
+            year: Year to calculate Easter for
+            
+        Returns:
+            Date of Easter Sunday for that year
+        """
+        # Easter calculation algorithm (Gregorian calendar)
+        # Based on the algorithm by Jean Meeus
+        
+        a = year % 19
+        b = year // 100
+        c = year % 100
+        d = b // 4
+        e = b % 4
+        f = (b + 8) // 25
+        g = (b - f + 1) // 3
+        h = (19 * a + b - d - g + 15) % 30
+        i = c // 4
+        k = c % 4
+        l = (32 + 2 * e + 2 * i - h - k) % 7
+        m = (a + 11 * h + 22 * l) // 451
+        n = (h + l - 7 * m + 114) // 31
+        p = (h + l - 7 * m + 114) % 31
+        
+        return date(year, n, p + 1)
+    
+    def _is_good_friday(self, date_obj: date) -> bool:
+        """Check if date is Good Friday (2 days before Easter)."""
+        easter = self._calculate_easter(date_obj.year)
+        good_friday = easter - timedelta(days=2)
+        return date_obj == good_friday
+    
+    def _is_easter_monday(self, date_obj: date) -> bool:
+        """Check if date is Easter Monday (day after Easter).""" 
+        easter = self._calculate_easter(date_obj.year)
+        easter_monday = easter + timedelta(days=1)
+        return date_obj == easter_monday
     
     def _is_outside_trading_hours(self, start_time: datetime, end_time: datetime,
                                  trading_hours: Dict) -> bool:
@@ -628,9 +690,92 @@ class GapClassifier:
         except Exception:
             return "Unknown"
     
+    def _check_ib_no_data_indicators(self, start_time: datetime, end_time: datetime, 
+                                    context_data: Optional[pd.DataFrame]) -> bool:
+        """
+        Check for IB "no data available" indicators (volume=-1) in surrounding data.
+        
+        Args:
+            start_time: Gap start time
+            end_time: Gap end time  
+            context_data: DataFrame with surrounding data
+            
+        Returns:
+            True if IB "no data" indicators are detected
+        """
+        if context_data is None or context_data.empty or 'volume' not in context_data.columns:
+            return False
+        
+        # Ensure timezone consistency - convert all to UTC timezone-aware
+        start_time = TimestampManager.to_utc(start_time)
+        end_time = TimestampManager.to_utc(end_time)
+        
+        # Look for volume=-1 in the period around the gap
+        gap_window = timedelta(hours=6)  # Look 6 hours before and after gap
+        window_start = start_time - gap_window
+        window_end = end_time + gap_window
+        
+        # Convert to pandas Timestamp for comparison with DataFrame index
+        # Handle timezone-aware datetime properly
+        if window_start.tzinfo is not None:
+            window_start_ts = pd.Timestamp(window_start).tz_convert('UTC')
+        else:
+            window_start_ts = pd.Timestamp(window_start, tz='UTC')
+            
+        if window_end.tzinfo is not None:
+            window_end_ts = pd.Timestamp(window_end).tz_convert('UTC')
+        else:
+            window_end_ts = pd.Timestamp(window_end, tz='UTC')
+        
+        # Filter to window around gap
+        mask = (context_data.index >= window_start_ts) & (context_data.index <= window_end_ts)
+        window_data = context_data[mask]
+        
+        if window_data.empty:
+            return False
+        
+        # Check for volume=-1 indicators
+        no_data_indicators = (window_data['volume'] == -1).sum()
+        total_bars = len(window_data)
+        
+        # If more than 20% of bars in the window have volume=-1, consider it a "no data" period
+        if total_bars > 0 and (no_data_indicators / total_bars) > 0.2:
+            logger.debug(f"IB 'no data' indicators detected: {no_data_indicators}/{total_bars} bars have volume=-1 around gap {start_time} to {end_time}")
+            return True
+        
+        return False
+    
+    def _should_reclassify_based_on_ib_indicators(self, start_time: datetime, end_time: datetime,
+                                                 symbol: str, timeframe: str) -> bool:
+        """
+        Determine if a gap should be reclassified based on IB data indicators.
+        
+        Args:
+            start_time: Gap start time
+            end_time: Gap end time
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            
+        Returns:
+            True if gap should be reclassified as expected
+        """
+        # Only reclassify short to medium gaps (< 72 hours) that could be data feed issues
+        duration_hours = (end_time - start_time).total_seconds() / 3600
+        
+        # Don't reclassify very long gaps (likely real market closures)
+        if duration_hours > 72:  # 3 days
+            return False
+        
+        # For forex, be more liberal with reclassification since volume data is unreliable
+        if symbol in ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD']:
+            return duration_hours <= 48  # 2 days max for forex
+        
+        # For other instruments, be more conservative
+        return duration_hours <= 24  # 1 day max for stocks/other
+    
     def _generate_gap_note(self, classification: GapClassification,
                           start_time: datetime, end_time: datetime,
-                          symbol: str, timeframe: str) -> str:
+                          symbol: str, timeframe: str, ib_no_data_detected: bool = False) -> str:
         """
         Generate explanatory note for the gap.
         
@@ -640,29 +785,37 @@ class GapClassifier:
             end_time: Gap end (UTC)
             symbol: Trading symbol
             timeframe: Data timeframe
+            ib_no_data_detected: Whether IB "no data" indicators were detected
             
         Returns:
             Human-readable explanation of the gap
         """
         duration_hours = (end_time - start_time).total_seconds() / 3600
+        ib_note = " (IB volume=-1 detected)" if ib_no_data_detected else ""
         
         if classification == GapClassification.EXPECTED_WEEKEND:
-            return f"Weekend gap for {timeframe} data - normal market closure"
+            return f"Weekend gap for {timeframe} data - normal market closure{ib_note}"
         
         elif classification == GapClassification.EXPECTED_TRADING_HOURS:
-            return f"Gap outside trading hours for {timeframe} data - normal non-market period"
+            base_note = f"Gap outside trading hours for {timeframe} data - normal non-market period"
+            if ib_no_data_detected:
+                base_note += " (confirmed by IB 'no data' indicators)"
+            return base_note
         
         elif classification == GapClassification.EXPECTED_HOLIDAY:
-            return f"Likely holiday gap ({duration_hours:.1f}h) - adjacent to weekend"
+            return f"Likely holiday gap ({duration_hours:.1f}h) - adjacent to weekend{ib_note}"
         
         elif classification == GapClassification.MARKET_CLOSURE:
-            return f"Extended market closure ({duration_hours/24:.1f} days) - investigate broker/exchange"
+            return f"Extended market closure ({duration_hours/24:.1f} days) - investigate broker/exchange{ib_note}"
         
         elif classification == GapClassification.UNEXPECTED:
-            return f"Unexpected gap ({duration_hours:.1f}h) during trading period - needs investigation"
+            base_note = f"Unexpected gap ({duration_hours:.1f}h) during trading period - needs investigation"
+            if ib_no_data_detected:
+                base_note += " (IB volume=-1 suggests data feed issue)"
+            return base_note
         
         else:
-            return f"Gap of {duration_hours:.1f} hours"
+            return f"Gap of {duration_hours:.1f} hours{ib_note}"
     
     def get_symbol_trading_hours(self, symbol: str) -> Optional[Dict]:
         """

@@ -272,11 +272,27 @@ class IbDataLoader:
             if data is not None and not data.empty:
                 self.stats["successful_requests"] += 1
                 
-                # Validate data quality if requested
+                # Validate data quality if requested - but DON'T auto-correct IB data
                 if self.validator:
-                    data, quality_report = self.validator.validate_data(data, symbol, timeframe)
+                    # Create a non-correcting validator for IB data to avoid silent corrections
+                    from ktrdr.data.data_quality_validator import DataQualityValidator
+                    non_correcting_validator = DataQualityValidator(auto_correct=False)
+                    
+                    data_original, quality_report = non_correcting_validator.validate_data(data, symbol, timeframe, "ib_raw")
+                    
                     if len(quality_report.issues) > 0:
-                        logger.warning(f"Data quality issues corrected: {len(quality_report.issues)}")
+                        logger.warning(f"⚠️  IB DATA QUALITY ISSUES DETECTED (NOT AUTO-CORRECTED):")
+                        for issue in quality_report.issues:
+                            logger.warning(f"⚠️  - {issue.issue_type}: {issue.description}")
+                            if issue.issue_type == "negative_volume":
+                                logger.warning(f"⚠️  - IB sent {issue.metadata.get('no_data_count', 0)} bars with volume=-1")
+                                logger.warning(f"⚠️  - Volume=-1 indicates 'no data available' but IB provided OHLC prices!")
+                        
+                        # Important: Use original data, not "corrected" data
+                        data = data_original
+                        logger.warning(f"⚠️  PRESERVING ORIGINAL IB DATA - No auto-corrections applied")
+                    else:
+                        logger.info(f"✅ IB data quality check passed - no issues detected")
                 
                 logger.info(f"Successfully fetched {len(data)} bars for {symbol} {timeframe}")
                 return data
