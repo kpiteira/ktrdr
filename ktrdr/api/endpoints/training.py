@@ -5,19 +5,12 @@ This module implements the API endpoints for neural network model training,
 using the existing CLI training functionality as the foundation.
 """
 
-import asyncio
-import json
-import uuid
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
-from ktrdr.training.train_strategy import StrategyTrainer
-from ktrdr.training.model_storage import ModelStorage
-from ktrdr.backtesting.model_loader import ModelLoader
+from ktrdr.api.services.training_service import TrainingService
 from ktrdr.errors import ValidationError, DataError
 
 logger = get_logger(__name__)
@@ -25,8 +18,6 @@ logger = get_logger(__name__)
 # Create router for training endpoints
 router = APIRouter(prefix="/training")
 
-# In-memory storage for training task status (in production, use Redis or database)
-_training_tasks: Dict[str, Dict[str, Any]] = {}
 
 # Request/Response models
 class TrainingConfig(BaseModel):
@@ -65,7 +56,7 @@ class TrainingRequest(BaseModel):
 
 class TrainingStartResponse(BaseModel):
     """Response model for training start."""
-    success: bool = True
+    success: bool
     task_id: str
     status: str
     message: str
@@ -85,7 +76,7 @@ class CurrentMetrics(BaseModel):
 
 class TrainingStatusResponse(BaseModel):
     """Response model for training status."""
-    success: bool = True
+    success: bool
     task_id: str
     status: str  # "pending", "training", "completed", "failed"
     progress: int  # 0-100
@@ -128,7 +119,7 @@ class ModelInfo(BaseModel):
 
 class PerformanceResponse(BaseModel):
     """Response model for model performance."""
-    success: bool = True
+    success: bool
     task_id: str
     status: str
     training_metrics: Optional[TrainingMetrics] = None
@@ -136,119 +127,22 @@ class PerformanceResponse(BaseModel):
     model_info: Optional[ModelInfo] = None
 
 
-# Dependency for model storage
-def get_model_storage() -> ModelStorage:
-    """Get model storage instance."""
-    return ModelStorage()
+# Singleton training service instance
+_training_service: Optional[TrainingService] = None
 
-
-async def _run_training_task(task_id: str, request: TrainingRequest):
-    """Run training task in background."""
-    try:
-        logger.info(f"Starting background training task {task_id}")
-        
-        # Update status to training
-        _training_tasks[task_id].update({
-            "status": "training",
-            "progress": 0,
-            "current_epoch": 0,
-            "total_epochs": request.config.epochs
-        })
-        
-        # Create temporary strategy config for training
-        # In practice, this would load an existing strategy file
-        temp_strategy_config = {
-            "name": f"temp_strategy_{task_id}",
-            "description": f"Temporary strategy for training task {task_id}",
-            "model": {
-                "type": request.config.model_type,
-                "training": {
-                    "epochs": request.config.epochs,
-                    "learning_rate": request.config.learning_rate,
-                    "batch_size": request.config.batch_size,
-                    "validation_split": request.config.validation_split,
-                    "early_stopping": request.config.early_stopping,
-                    "optimizer": request.config.optimizer,
-                    "dropout_rate": request.config.dropout_rate
-                },
-                "architecture": {
-                    "hidden_layers": request.config.hidden_layers
-                }
-            }
-        }
-        
-        # Create temporary strategy file
-        import tempfile
-        import yaml
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as tmp_file:
-            yaml.dump(temp_strategy_config, tmp_file)
-            strategy_path = tmp_file.name
-        
-        try:
-            # Create trainer and run training
-            trainer = StrategyTrainer(models_dir="models")
-            
-            # Simulate progress updates (in real implementation, this would come from trainer callbacks)
-            for epoch in range(0, request.config.epochs, 10):
-                if _training_tasks[task_id]["status"] != "training":
-                    break
-                    
-                progress = min(int((epoch / request.config.epochs) * 100), 99)
-                _training_tasks[task_id].update({
-                    "progress": progress,
-                    "current_epoch": epoch,
-                    "current_metrics": {
-                        "train_loss": 0.1 - (epoch * 0.001),  # Simulated decreasing loss
-                        "val_loss": 0.12 - (epoch * 0.0008),
-                        "train_accuracy": 0.7 + (epoch * 0.002),  # Simulated increasing accuracy
-                        "val_accuracy": 0.68 + (epoch * 0.0015)
-                    }
-                })
-                
-                # Simulate some training time
-                await asyncio.sleep(0.1)
-            
-            # Run actual training
-            results = trainer.train_strategy(
-                strategy_config_path=strategy_path,
-                symbol=request.symbol,
-                timeframe=request.timeframe,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                validation_split=request.config.validation_split,
-                data_mode="local"
-            )
-            
-            # Update status to completed
-            _training_tasks[task_id].update({
-                "status": "completed",
-                "progress": 100,
-                "current_epoch": request.config.epochs,
-                "completed_at": datetime.utcnow().isoformat() + "Z",
-                "results": results,
-                "model_path": results.get("model_path") if results else None
-            })
-            
-            logger.info(f"Training task {task_id} completed successfully")
-            
-        finally:
-            # Clean up temporary file
-            Path(strategy_path).unlink(missing_ok=True)
-            
-    except Exception as e:
-        logger.error(f"Training task {task_id} failed: {str(e)}")
-        _training_tasks[task_id].update({
-            "status": "failed",
-            "error": str(e),
-            "completed_at": datetime.utcnow().isoformat() + "Z"
-        })
+# Dependency for training service
+async def get_training_service() -> TrainingService:
+    """Get training service instance (singleton)."""
+    global _training_service
+    if _training_service is None:
+        _training_service = TrainingService()
+    return _training_service
 
 
 @router.post("/start", response_model=TrainingStartResponse)
 async def start_training(
     request: TrainingRequest,
-    background_tasks: BackgroundTasks
+    service: TrainingService = Depends(get_training_service)
 ) -> TrainingStartResponse:
     """
     Start neural network model training.
@@ -257,133 +151,108 @@ async def start_training(
     with a task ID for tracking progress.
     """
     try:
-        # Generate task ID if not provided
-        task_id = request.task_id or f"training_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-        
-        # Initialize task tracking
-        _training_tasks[task_id] = {
-            "task_id": task_id,
-            "symbol": request.symbol,
-            "timeframe": request.timeframe,
-            "config": request.config.model_dump(),
-            "status": "pending",
-            "progress": 0,
-            "started_at": datetime.utcnow().isoformat() + "Z",
-            "error": None
-        }
-        
-        # Start background training
-        background_tasks.add_task(_run_training_task, task_id, request)
-        
-        logger.info(f"Started training task {task_id} for {request.symbol}")
-        
-        return TrainingStartResponse(
-            task_id=task_id,
-            status="training_started",
-            message=f"Neural network training started for {request.symbol}",
+        result = await service.start_training(
             symbol=request.symbol,
             timeframe=request.timeframe,
-            config=request.config,
-            estimated_duration_minutes=30  # Rough estimate
+            config=request.config.model_dump(),
+            start_date=request.start_date,
+            end_date=request.end_date,
+            task_id=request.task_id
         )
         
+        return TrainingStartResponse(
+            success=result["success"],
+            task_id=result["task_id"],
+            status=result["status"],
+            message=result["message"],
+            symbol=result["symbol"],
+            timeframe=result["timeframe"],
+            config=TrainingConfig(**result["config"]),
+            estimated_duration_minutes=result.get("estimated_duration_minutes")
+        )
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except DataError as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to start training: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to start training: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to start training")
 
 
 @router.get("/{task_id}", response_model=TrainingStatusResponse)
-async def get_training_status(task_id: str) -> TrainingStatusResponse:
+async def get_training_status(
+    task_id: str,
+    service: TrainingService = Depends(get_training_service)
+) -> TrainingStatusResponse:
     """
     Get the current status and progress of a training task.
     """
-    if task_id not in _training_tasks:
-        raise HTTPException(status_code=404, detail=f"Training task {task_id} not found")
-    
-    task = _training_tasks[task_id]
-    
-    # Calculate estimated completion time
-    estimated_completion = None
-    if task["status"] == "training" and task["progress"] > 0:
-        # Simple estimation based on current progress
-        started_at = datetime.fromisoformat(task["started_at"].replace("Z", "+00:00"))
-        elapsed_minutes = (datetime.utcnow().replace(tzinfo=started_at.tzinfo) - started_at).total_seconds() / 60
-        if task["progress"] > 0:
-            total_estimated_minutes = (elapsed_minutes / task["progress"]) * 100
-            remaining_minutes = total_estimated_minutes - elapsed_minutes
-            if remaining_minutes > 0:
-                estimated_completion = (datetime.utcnow().replace(tzinfo=started_at.tzinfo) + 
-                                      timedelta(minutes=remaining_minutes)).isoformat().replace("+00:00", "Z")
-    
-    current_metrics = None
-    if "current_metrics" in task:
-        current_metrics = CurrentMetrics(**task["current_metrics"])
-    
-    return TrainingStatusResponse(
-        task_id=task_id,
-        status=task["status"],
-        progress=task["progress"],
-        current_epoch=task.get("current_epoch"),
-        total_epochs=task.get("total_epochs"),
-        symbol=task["symbol"],
-        timeframe=task["timeframe"],
-        started_at=task["started_at"],
-        estimated_completion=estimated_completion,
-        current_metrics=current_metrics,
-        error=task.get("error")
-    )
+    try:
+        status = await service.get_training_status(task_id)
+        
+        current_metrics = None
+        if status.get("current_metrics"):
+            current_metrics = CurrentMetrics(**status["current_metrics"])
+        
+        return TrainingStatusResponse(
+            success=status["success"],
+            task_id=status["task_id"],
+            status=status["status"],
+            progress=status["progress"],
+            current_epoch=status.get("current_epoch"),
+            total_epochs=status.get("total_epochs"),
+            symbol=status["symbol"],
+            timeframe=status["timeframe"],
+            started_at=status["started_at"],
+            estimated_completion=status.get("estimated_completion"),
+            current_metrics=current_metrics,
+            error=status.get("error")
+        )
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get training status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get training status")
 
 
 @router.get("/{task_id}/performance", response_model=PerformanceResponse)
-async def get_model_performance(task_id: str) -> PerformanceResponse:
+async def get_model_performance(
+    task_id: str,
+    service: TrainingService = Depends(get_training_service)
+) -> PerformanceResponse:
     """
     Get detailed performance metrics for a completed training session.
     """
-    if task_id not in _training_tasks:
-        raise HTTPException(status_code=404, detail=f"Training task {task_id} not found")
-    
-    task = _training_tasks[task_id]
-    
-    if task["status"] != "completed":
-        raise HTTPException(status_code=400, detail=f"Training task {task_id} is not completed (status: {task['status']})")
-    
-    # Extract metrics from training results
-    results = task.get("results", {})
-    
-    # Create training metrics (these would come from actual training results)
-    training_metrics = TrainingMetrics(
-        final_train_loss=0.032,  # These would come from actual results
-        final_val_loss=0.038,
-        final_train_accuracy=0.92,
-        final_val_accuracy=0.89,
-        epochs_completed=task.get("current_epoch", task.get("total_epochs")),
-        early_stopped=False,  # Would be determined from actual training
-        training_time_minutes=25.5
-    )
-    
-    # Create test metrics (these would come from model evaluation)
-    test_metrics = TestMetrics(
-        test_loss=0.041,
-        test_accuracy=0.88,
-        precision=0.87,
-        recall=0.89,
-        f1_score=0.88
-    )
-    
-    # Create model info
-    model_info = ModelInfo(
-        model_size_mb=12.5,
-        parameters_count=125430,
-        architecture=f"mlp_{'_'.join(map(str, task['config']['hidden_layers']))}"
-    )
-    
-    return PerformanceResponse(
-        task_id=task_id,
-        status=task["status"],
-        training_metrics=training_metrics,
-        test_metrics=test_metrics,
-        model_info=model_info
-    )
-
-
-# Note: Models endpoints are implemented in models.py
+    try:
+        performance = await service.get_model_performance(task_id)
+        
+        training_metrics = None
+        if performance.get("training_metrics"):
+            training_metrics = TrainingMetrics(**performance["training_metrics"])
+        
+        test_metrics = None
+        if performance.get("test_metrics"):
+            test_metrics = TestMetrics(**performance["test_metrics"])
+            
+        model_info = None
+        if performance.get("model_info"):
+            model_info = ModelInfo(**performance["model_info"])
+        
+        return PerformanceResponse(
+            success=performance["success"],
+            task_id=performance["task_id"],
+            status=performance["status"],
+            training_metrics=training_metrics,
+            test_metrics=test_metrics,
+            model_info=model_info
+        )
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except DataError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get model performance: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get model performance")
