@@ -15,6 +15,7 @@ import numpy as np
 from ktrdr.logging import get_logger
 from ktrdr.errors import DataError
 from ktrdr.utils.timezone_utils import TimestampManager
+from ktrdr.data.gap_classifier import GapClassifier, GapClassification
 
 logger = get_logger(__name__)
 
@@ -133,6 +134,9 @@ class DataQualityReport:
 
         Returns:
             True if data passes health checks
+            
+        Note:
+            "info" level issues are not counted as health problems
         """
         critical_count = sum(1 for issue in self.issues if issue.severity == "critical")
         high_count = sum(1 for issue in self.issues if issue.severity == "high")
@@ -156,17 +160,6 @@ class DataQualityValidator:
     providing comprehensive data quality checking for both IB and local data.
     """
 
-    # Timeframe to pandas frequency mapping
-    TIMEFRAME_FREQUENCIES = {
-        "1m": "1min",
-        "5m": "5min",
-        "15m": "15min",
-        "30m": "30min",
-        "1h": "1h",
-        "4h": "4h",
-        "1d": "1D",
-        "1w": "1W",
-    }
 
     def __init__(self, auto_correct: bool = True, max_gap_percentage: float = 10.0):
         """
@@ -239,7 +232,7 @@ class DataQualityValidator:
             df_validated = self._handle_missing_values(df_validated, report)
 
             # 6. Detect timestamp gaps
-            self._detect_timestamp_gaps(df_validated, timeframe, report)
+            self._detect_timestamp_gaps(df_validated, timeframe, symbol, report)
 
             # 7. Detect price outliers and anomalies
             self._detect_price_outliers(df_validated, report)
@@ -384,24 +377,61 @@ class DataQualityValidator:
                         df_corrected.loc[non_positive, col] = np.nan
                         logger.warning(f"Corrected {count} non-positive {col} prices")
 
-        # Check for negative volume
+        # Check for negative volume (IB data indicators)
         if "volume" in df.columns:
             negative_volume = df["volume"] < 0
+            no_data_volume = df["volume"] == -1  # IB's explicit "no data available" indicator
+            other_negative = negative_volume & ~no_data_volume
+            
             if negative_volume.any():
                 count = negative_volume.sum()
-                issue = DataQualityIssue(
-                    issue_type="negative_volume",
-                    severity="medium",
-                    description=f"{count} bars with negative volume",
-                    location="volume column",
-                    corrected=self.auto_correct,
-                    metadata={"count": count},
-                )
-                report.add_issue(issue)
+                no_data_count = no_data_volume.sum()
+                other_neg_count = other_negative.sum()
+                
+                # Log summary of negative volume values found
+                if no_data_count > 0:
+                    logger.debug(f"Found {no_data_count} bars with volume=-1 (IB indicators)")
+                if other_neg_count > 0:
+                    logger.debug(f"Found {other_neg_count} bars with invalid negative volumes")
 
-                if self.auto_correct:
-                    df_corrected.loc[negative_volume, "volume"] = 0
-                    logger.warning(f"Corrected {count} negative volume values")
+                # Different treatment for volume=-1 vs other negative volumes
+                if other_neg_count > 0:
+                    # Other negative volumes are actual data quality issues
+                    issue = DataQualityIssue(
+                        issue_type="invalid_negative_volume",
+                        severity="medium",
+                        description=f"{other_neg_count} bars with invalid negative volumes (not -1)",
+                        location="volume column",
+                        corrected=self.auto_correct,
+                        metadata={
+                            "invalid_negative_count": other_neg_count,
+                            "note": "Negative volumes other than -1 indicate data corruption"
+                        },
+                    )
+                    report.add_issue(issue)
+                    
+                    if self.auto_correct:
+                        # Only correct non-(-1) negative volumes
+                        df_corrected.loc[other_negative, "volume"] = 0
+                        logger.warning(f"Corrected {other_neg_count} invalid negative volume values to 0")
+
+                if no_data_count > 0:
+                    # Volume=-1 is informational, not an error to be "corrected"
+                    issue = DataQualityIssue(
+                        issue_type="ib_volume_indicator",
+                        severity="info",  # Changed from "low" to "info" - this is not an error
+                        description=f"{no_data_count} bars with volume=-1 (IB 'volume data not available' indicator)",
+                        location="volume column",
+                        corrected=False,  # Don't "correct" this - it's valid IB data
+                        metadata={
+                            "ib_no_data_count": no_data_count,
+                            "note": "Volume=-1 is IB's way of indicating 'volume data not available' but price data is valid"
+                        },
+                    )
+                    report.add_issue(issue)
+                    
+                    logger.info(f"📊 IB Volume Indicator: {no_data_count} bars have volume=-1 (volume data not available, price data valid)")
+                    # DO NOT AUTO-CORRECT volume=-1 - it's valid IB data indicating no volume info available
 
         # Check OHLC relationships (only where all values are valid)
         if all(col in df.columns for col in ["open", "high", "low", "close"]):
@@ -496,16 +526,50 @@ class DataQualityValidator:
         return df_corrected
 
     def _detect_timestamp_gaps(
-        self, df: pd.DataFrame, timeframe: str, report: DataQualityReport
+        self, df: pd.DataFrame, timeframe: str, symbol: str, report: DataQualityReport
     ):
-        """Detect gaps in time series data using improved logic from DataManager."""
-        logger.debug("Detecting timestamp gaps")
+        """Detect gaps in time series data using intelligent gap classification."""
+        logger.debug("Detecting timestamp gaps using intelligent gap classifier")
 
         if df.empty or len(df) <= 1:
             return
 
-        # Get the pandas frequency string for this timeframe
-        freq = self.TIMEFRAME_FREQUENCIES.get(timeframe)
+        # Use the existing gap classifier for intelligent detection
+        from ktrdr.data.gap_classifier import GapClassifier, GapClassification
+        
+        gap_classifier = GapClassifier()
+        
+        # Get data range
+        start_date = df.index.min()
+        end_date = df.index.max()
+        
+        # Convert to datetime if needed
+        if isinstance(start_date, pd.Timestamp):
+            start_date = start_date.to_pydatetime()
+        if isinstance(end_date, pd.Timestamp):
+            end_date = end_date.to_pydatetime()
+        
+        # Ensure timezone awareness
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=pd.Timestamp.now().tz)
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=pd.Timestamp.now().tz)
+        
+        # For data quality validation, we'll detect gaps using basic logic but filter using intelligent classification
+        # This maintains compatibility while using intelligent gap analysis
+        
+        # Get the pandas frequency string for this timeframe using centralized constants
+        timeframe_frequencies = {
+            "1m": "1min",
+            "5m": "5min",
+            "15m": "15min", 
+            "30m": "30min",
+            "1h": "1h",
+            "4h": "4h",
+            "1d": "1D",
+            "1w": "1W",
+        }
+        freq = timeframe_frequencies.get(timeframe)
         if not freq:
             logger.warning(
                 f"Unknown timeframe '{timeframe}', gap detection may be inaccurate"
@@ -519,15 +583,13 @@ class DataQualityValidator:
                 freq = "1D"
 
         # Create the expected complete index
-        start_date = df.index.min()
-        end_date = df.index.max()
         expected_index = pd.date_range(start=start_date, end=end_date, freq=freq)
 
         # Find missing times
         missing_times = expected_index.difference(df.index)
 
         # Group consecutive missing times into gaps
-        gaps = []
+        raw_gaps = []
         if len(missing_times) > 0:
             gap_start = missing_times[0]
             prev_time = gap_start
@@ -539,25 +601,47 @@ class DataQualityValidator:
                 # If there's a gap between missing times, this means we have two separate gaps
                 if current_time - prev_time > expected_diff:
                     # Record the previous gap
-                    gaps.append((gap_start, prev_time))
+                    raw_gaps.append((gap_start, prev_time))
                     # Start a new gap
                     gap_start = current_time
 
                 prev_time = current_time
 
             # Add the last gap
-            gaps.append((gap_start, prev_time))
+            raw_gaps.append((gap_start, prev_time))
 
-            # Filter out gaps that are shorter than 1 period (gap_threshold=1)
-            gaps = [
-                (start, end)
-                for start, end in gaps
-                if ((end - start) / pd.Timedelta(freq)) >= 1
-            ]
+        # Filter gaps using intelligent classification
+        # Only report unexpected gaps and market closures for data quality issues
+        significant_gaps = []
+        for gap_start, gap_end in raw_gaps:
+            # Convert to datetime for gap classifier
+            gap_start_dt = gap_start.to_pydatetime() if hasattr(gap_start, 'to_pydatetime') else gap_start
+            gap_end_dt = gap_end.to_pydatetime() if hasattr(gap_end, 'to_pydatetime') else gap_end
+            
+            # Ensure timezone awareness
+            if gap_start_dt.tzinfo is None:
+                gap_start_dt = gap_start_dt.replace(tzinfo=start_date.tzinfo)
+            if gap_end_dt.tzinfo is None:
+                gap_end_dt = gap_end_dt.replace(tzinfo=end_date.tzinfo)
+            
+            # Use the actual symbol for intelligent gap classification, pass context data for volume analysis
+            gap_info = gap_classifier.analyze_gap(gap_start_dt, gap_end_dt, symbol, timeframe, df)
+            
+            # Only include unexpected gaps and market closures in data quality issues
+            if gap_info.classification in [GapClassification.UNEXPECTED, GapClassification.MARKET_CLOSURE]:
+                significant_gaps.append((gap_start, gap_end))
+                logger.debug(f"Significant gap: {gap_start} to {gap_end} ({gap_info.classification.value})")
+            else:
+                logger.debug(f"Expected gap filtered out: {gap_start} to {gap_end} ({gap_info.classification.value})")
 
-        # Report gaps
-        if gaps:
-            gap_percentage = (len(missing_times) / len(expected_index)) * 100
+        # Report only significant gaps
+        if significant_gaps:
+            # Calculate percentage based on significant gaps only
+            significant_missing = sum(
+                len(pd.date_range(start=gap_start, end=gap_end, freq=freq)) - 1
+                for gap_start, gap_end in significant_gaps
+            )
+            gap_percentage = (significant_missing / len(expected_index)) * 100
 
             # Determine severity based on gap percentage
             if gap_percentage > self.max_gap_percentage:
@@ -570,22 +654,30 @@ class DataQualityValidator:
             issue = DataQualityIssue(
                 issue_type="timestamp_gaps",
                 severity=severity,
-                description=f"{len(gaps)} gaps detected ({len(missing_times)} missing periods, {gap_percentage:.2f}%)",
+                description=f"{len(significant_gaps)} significant gaps detected ({significant_missing} missing periods, {gap_percentage:.2f}%)",
                 location="time series",
                 metadata={
-                    "gap_count": len(gaps),
-                    "missing_periods": len(missing_times),
+                    "gap_count": len(significant_gaps),
+                    "missing_periods": significant_missing,
                     "gap_percentage": gap_percentage,
+                    "total_raw_gaps": len(raw_gaps),
+                    "filtered_expected_gaps": len(raw_gaps) - len(significant_gaps),
                     "gaps": [
-                        (start.isoformat(), end.isoformat()) for start, end in gaps[:5]
-                    ],  # First 5 gaps
+                        (start.isoformat(), end.isoformat()) for start, end in significant_gaps[:5]
+                    ],  # First 5 significant gaps
                 },
             )
             report.add_issue(issue)
 
             logger.info(
-                f"Detected {len(gaps)} gaps in data ({gap_percentage:.2f}% missing)"
+                f"Detected {len(significant_gaps)} significant gaps out of {len(raw_gaps)} total gaps "
+                f"({significant_missing} missing periods, {gap_percentage:.2f}% missing) using intelligent classification"
             )
+        else:
+            if raw_gaps:
+                logger.info(
+                    f"Found {len(raw_gaps)} gaps but all were classified as expected (weekends, holidays, etc.) - no data quality issues"
+                )
 
     def _detect_price_outliers(
         self,
