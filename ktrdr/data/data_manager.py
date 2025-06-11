@@ -41,6 +41,8 @@ from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.ib_data_loader import IbDataLoader
 from ktrdr.data.ib_connection_strategy import get_connection_strategy
 from ktrdr.data.data_quality_validator import DataQualityValidator
+from ktrdr.data.gap_classifier import GapClassifier, GapClassification
+from ktrdr.data.timeframe_constants import TimeframeConstants
 
 # Get module logger
 logger = get_logger(__name__)
@@ -154,6 +156,9 @@ class DataManager:
             auto_correct=True,  # Enable auto-correction by default
             max_gap_percentage=max_gap_percentage,
         )
+        
+        # Initialize the intelligent gap classifier
+        self.gap_classifier = GapClassifier()
 
         logger.info(
             f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
@@ -404,25 +409,28 @@ class DataManager:
         requested_start: datetime,
         requested_end: datetime,
         timeframe: str,
+        symbol: str,
     ) -> List[Tuple[datetime, datetime]]:
         """
-        Analyze gaps between existing data and requested range.
+        Analyze gaps between existing data and requested range using intelligent gap classification.
         
-        This method implements intelligent gap analysis to identify only the missing
-        segments that need to be fetched from IB, avoiding redundant data requests.
+        This method uses the intelligent gap classifier to identify only unexpected gaps
+        that need to be fetched from IB, avoiding redundant requests for expected gaps
+        (weekends, holidays, non-trading hours).
         
         Args:
             existing_data: DataFrame with existing local data (can be None)
             requested_start: Start of requested date range
             requested_end: End of requested date range
             timeframe: Data timeframe for trading calendar awareness
+            symbol: Trading symbol for intelligent classification
             
         Returns:
             List of (start_time, end_time) tuples representing gaps to fill
         """
-        gaps = []
+        gaps_to_fill = []
         
-        # If no existing data, entire range is a gap
+        # If no existing data, entire range is a gap to fill
         if existing_data is None or existing_data.empty:
             logger.info(f"No existing data found - entire range is a gap: {requested_start} to {requested_end}")
             return [(requested_start, requested_end)]
@@ -439,19 +447,20 @@ class DataManager:
         logger.debug(f"Existing data range: {data_start} to {data_end}")
         logger.debug(f"Requested range: {requested_start} to {requested_end}")
         
+        # Use the provided symbol for intelligent gap classification
+        
+        # Check for all potential gaps and classify them
+        all_gaps = []
+        
         # Gap before existing data
         if requested_start < data_start:
             gap_end = min(data_start, requested_end)
-            if self._is_meaningful_gap(requested_start, gap_end, timeframe):
-                gaps.append((requested_start, gap_end))
-                logger.debug(f"Found gap before existing data: {requested_start} to {gap_end}")
+            all_gaps.append((requested_start, gap_end))
         
         # Gap after existing data
         if requested_end > data_end:
             gap_start = max(data_end, requested_start)
-            if self._is_meaningful_gap(gap_start, requested_end, timeframe):
-                gaps.append((gap_start, requested_end))
-                logger.debug(f"Found gap after existing data: {gap_start} to {requested_end}")
+            all_gaps.append((gap_start, requested_end))
         
         # Gaps within existing data (holes in the dataset)
         if requested_start < data_end and requested_end > data_start:
@@ -461,21 +470,21 @@ class DataManager:
                 min(requested_end, data_end),
                 timeframe
             )
-            gaps.extend(internal_gaps)
+            all_gaps.extend(internal_gaps)
         
-        # Filter out non-trading periods and very small gaps
-        filtered_gaps = []
-        for gap_start, gap_end in gaps:
-            if self._is_meaningful_gap(gap_start, gap_end, timeframe):
-                filtered_gaps.append((gap_start, gap_end))
+        # Use intelligent gap classifier to filter out expected gaps
+        for gap_start, gap_end in all_gaps:
+            gap_info = self.gap_classifier.analyze_gap(gap_start, gap_end, symbol, timeframe)
+            
+            # Only fill unexpected gaps and market closures
+            if gap_info.classification in [GapClassification.UNEXPECTED, GapClassification.MARKET_CLOSURE]:
+                gaps_to_fill.append((gap_start, gap_end))
+                logger.info(f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})")
             else:
-                logger.debug(f"Filtered out insignificant gap: {gap_start} to {gap_end}")
+                logger.debug(f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) - {gap_info.note}")
         
-        logger.info(f"🔍 GAP ANALYSIS COMPLETE: Found {len(filtered_gaps)} meaningful gaps to fill")
-        for i, (gap_start, gap_end) in enumerate(filtered_gaps):
-            duration = gap_end - gap_start
-            logger.info(f"📍 GAP {i+1}: {gap_start} → {gap_end} (duration: {duration})")
-        return filtered_gaps
+        logger.info(f"🔍 INTELLIGENT GAP ANALYSIS COMPLETE: Found {len(gaps_to_fill)} unexpected gaps to fill (filtered out {len(all_gaps) - len(gaps_to_fill)} expected gaps)")
+        return gaps_to_fill
     
     def _find_internal_gaps(
         self,
@@ -505,19 +514,8 @@ class DataManager:
         if len(range_data) < 2:
             return gaps
         
-        # Calculate expected frequency
-        freq_map = {
-            '1m': pd.Timedelta(minutes=1),
-            '5m': pd.Timedelta(minutes=5),
-            '15m': pd.Timedelta(minutes=15),
-            '30m': pd.Timedelta(minutes=30),
-            '1h': pd.Timedelta(hours=1),
-            '4h': pd.Timedelta(hours=4),
-            '1d': pd.Timedelta(days=1),
-            '1w': pd.Timedelta(weeks=1),
-        }
-        
-        expected_freq = freq_map.get(timeframe, pd.Timedelta(days=1))
+        # Calculate expected frequency using centralized constants
+        expected_freq = TimeframeConstants.get_pandas_timedelta(timeframe)
         
         # Look for gaps larger than expected frequency
         for i in range(len(range_data) - 1):
@@ -525,15 +523,13 @@ class DataManager:
             next_time = range_data.index[i + 1]
             gap_size = next_time - current_time
             
-            # Consider it a gap if it's significantly larger than expected frequency
-            # and accounts for non-trading periods
-            if gap_size > expected_freq * 3:  # Allow some tolerance
+            # Consider it a gap if it's larger than expected frequency
+            # (intelligent classification will happen later)
+            if gap_size > expected_freq * 1.5:  # Minimal tolerance - classification will filter
                 gap_start = current_time + expected_freq
                 gap_end = next_time
-                
-                if self._is_meaningful_gap(gap_start, gap_end, timeframe):
-                    gaps.append((gap_start, gap_end))
-                    logger.debug(f"Found internal gap: {gap_start} to {gap_end}")
+                gaps.append((gap_start, gap_end))
+                logger.debug(f"Found internal gap: {gap_start} to {gap_end}")
         
         return gaps
     
@@ -804,7 +800,7 @@ class DataManager:
             logger.info(f"🔍 GAP ANALYSIS: Existing data range = {existing_data.index.min()} to {existing_data.index.max()}")
         else:
             logger.info(f"🔍 GAP ANALYSIS: No existing data found")
-        gaps = self._analyze_gaps(existing_data, requested_start, requested_end, timeframe)
+        gaps = self._analyze_gaps(existing_data, requested_start, requested_end, timeframe, symbol)
         
         if not gaps:
             logger.info(f"✅ No gaps found - existing data covers requested range!")

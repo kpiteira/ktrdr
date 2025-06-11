@@ -19,6 +19,7 @@ import pandas as pd
 from ktrdr.logging import get_logger
 from ktrdr.data.data_manager import DataManager
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.gap_classifier import GapClassifier, GapClassification
 from ktrdr.config.ib_limits import IbLimitsRegistry
 from ktrdr.config.loader import ConfigLoader
 from ktrdr.utils.timezone_utils import TimestampManager
@@ -60,22 +61,37 @@ class GapFillerService:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
-        # Configuration
-        self.check_interval = 300  # Check every 5 minutes
-        self.max_gap_days = 365  # Allow gaps up to 1 year (reasonable limit)
-        self.batch_size = 10  # Process max 10 symbols per cycle
+        # Load configuration
+        self.config = self._load_config()
+        
+        # Configuration with fallbacks
+        self.check_interval = self._get_check_interval()
+        self.max_gap_days = self.config.get('gap_filling', {}).get('max_gap_age_days', 365)
+        self.batch_size = self.config.get('gap_filling', {}).get('batch_size', 10)
+        self.fill_unexpected_only = self.config.get('gap_filling', {}).get('fill_unexpected_only', True)
 
         # Supported timeframes for gap filling
         self.supported_timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+
+        # Initialize gap classifier for intelligent gap detection
+        self.gap_classifier = GapClassifier()
 
         # Statistics
         self.stats = {
             "gaps_detected": 0,
             "gaps_filled": 0,
             "gaps_failed": 0,
+            "gaps_expected_skipped": 0,  # New: track expected gaps we skip
             "last_scan_time": None,
             "symbols_processed": set(),
             "errors": [],
+            "gap_classifications": {  # Track gap types
+                "unexpected": 0,
+                "expected_weekend": 0,
+                "expected_trading_hours": 0,
+                "expected_holiday": 0,
+                "market_closure": 0,
+            }
         }
 
         logger.info(f"Initialized GapFillerService with data_dir: {self.data_dir}")
@@ -92,6 +108,40 @@ class GapFillerService:
         except Exception:
             # Fall back to default if config loading fails
             return "data"
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Load IB sync configuration from settings."""
+        try:
+            config_loader = ConfigLoader()
+            config = config_loader.load_from_env(default_path="config/settings.yaml")
+            if hasattr(config, "ib_sync"):
+                # Convert to dict for easier access
+                return config.ib_sync.__dict__ if hasattr(config.ib_sync, '__dict__') else {}
+            return {}
+        except Exception as e:
+            logger.warning(f"Failed to load ib_sync config: {e}, using defaults")
+            return {}
+
+    def _get_check_interval(self) -> int:
+        """Get appropriate check interval based on configuration."""
+        frequency = self.config.get('frequency', 'daily')
+        
+        if frequency == 'disabled':
+            return 86400  # Check once per day but don't actually process
+        elif frequency == 'manual':
+            return 3600  # Check hourly for manual triggers
+        elif frequency == 'hourly':
+            return 3600  # Check every hour
+        elif frequency == 'daily':
+            # Check if emergency gap detection is enabled
+            emergency_config = self.config.get('emergency_gap_detection', {})
+            if emergency_config.get('enabled', True):
+                return emergency_config.get('check_interval', 3600)  # Default 1 hour
+            else:
+                return 3600  # Check hourly for daily sync scheduling
+        else:
+            logger.warning(f"Unknown sync frequency '{frequency}', defaulting to daily")
+            return 3600
 
     def start(self) -> bool:
         """
@@ -171,6 +221,11 @@ class GapFillerService:
 
     def _scan_and_fill_gaps(self) -> None:
         """Scan for gaps and fill them."""
+        # Check if we should run gap scan based on frequency
+        if not self._should_run_gap_scan():
+            logger.debug("Gap scan skipped due to frequency configuration")
+            return
+            
         logger.debug("Scanning for data gaps...")
 
         # Get list of symbols from existing CSV files
@@ -316,8 +371,36 @@ class GapFillerService:
                 )
                 return False
 
-            logger.info(f"Gap detected for {symbol}_{timeframe}: {gap_hours:.1f} hours")
+            # Perform intelligent gap analysis using the new classifier
+            gap_info = self.gap_classifier.analyze_gap(
+                start_time=next_expected,
+                end_time=current_time,
+                symbol=symbol,
+                timeframe=timeframe
+            )
+
+            # Update classification statistics
+            classification_key = gap_info.classification.value
+            if classification_key in self.stats["gap_classifications"]:
+                self.stats["gap_classifications"][classification_key] += 1
+
+            # Log gap detection with classification
+            logger.info(
+                f"Gap detected for {symbol}_{timeframe}: {gap_hours:.1f}h "
+                f"[{gap_info.classification.value}] - {gap_info.note}"
+            )
             self.stats["gaps_detected"] += 1
+
+            # Decide whether to fill based on classification and configuration
+            should_fill = self._should_fill_gap(gap_info)
+            
+            if not should_fill:
+                logger.debug(
+                    f"Skipping gap for {symbol}_{timeframe}: "
+                    f"{gap_info.classification.value} - {gap_info.note}"
+                )
+                self.stats["gaps_expected_skipped"] += 1
+                return False
 
             # Fill the gap using the enhanced DataManager (intelligent gap analysis)
             try:
@@ -359,6 +442,56 @@ class GapFillerService:
             logger.error(f"Error checking gap for {symbol}_{timeframe}: {e}")
             return False
 
+    def _should_fill_gap(self, gap_info: Any) -> bool:
+        """
+        Determine if a gap should be filled based on classification and configuration.
+        
+        Args:
+            gap_info: GapInfo object from gap analysis
+            
+        Returns:
+            True if gap should be filled
+        """
+        # Check sync frequency setting
+        frequency = self.config.get('frequency', 'daily')
+        if frequency == 'disabled':
+            logger.debug("Gap filling disabled by configuration")
+            return False
+        
+        # If configured to fill unexpected only, check classification
+        if self.fill_unexpected_only:
+            # Only fill unexpected gaps and market closures
+            fill_classifications = ['unexpected', 'market_closure']
+            should_fill = gap_info.classification.value in fill_classifications
+            
+            if not should_fill:
+                logger.debug(f"Skipping {gap_info.classification.value} gap (unexpected_only=True)")
+            
+            return should_fill
+        else:
+            # Use the classifier's default logic
+            return self.gap_classifier.is_gap_worth_filling(gap_info)
+
+    def _should_run_gap_scan(self) -> bool:
+        """
+        Determine if gap scan should run based on frequency and schedule.
+        
+        Returns:
+            True if scan should run
+        """
+        frequency = self.config.get('frequency', 'daily')
+        
+        if frequency == 'disabled':
+            return False
+        elif frequency == 'manual':
+            # Only run on explicit force_scan calls
+            return False
+        elif frequency in ['hourly', 'daily']:
+            # For daily frequency, implement simple scheduling logic
+            # For now, always return True - more sophisticated scheduling can be added later
+            return True
+        else:
+            return True
 
     def _calculate_next_expected_timestamp(
         self, last_timestamp: datetime, timeframe: str
@@ -386,6 +519,13 @@ class GapFillerService:
             "running": self._running,
             "check_interval": self.check_interval,
             "supported_timeframes": self.supported_timeframes,
+            "configuration": {
+                "frequency": self.config.get('frequency', 'daily'),
+                "max_gap_days": self.max_gap_days,
+                "batch_size": self.batch_size,
+                "fill_unexpected_only": self.fill_unexpected_only,
+                "auto_start_on_api_startup": self.config.get('auto_start_on_api_startup', True),
+            }
         }
 
     def force_scan(self) -> Dict[str, Any]:

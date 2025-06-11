@@ -31,5 +31,36 @@ security:
     - "*_credentials*"
     - "*.cert"
 
+# IB Data Sync Configuration
+ib_sync:
+  # Sync frequency: manual, hourly, daily, disabled
+  frequency: "daily"
+  
+  # Schedule for daily sync (after market close)
+  daily_schedule:
+    time: "18:00"  # 6 PM EST
+    timezone: "America/New_York"
+  
+  # Emergency gap detection (checks for critical gaps more frequently)
+  emergency_gap_detection:
+    enabled: true
+    check_interval: 3600  # 1 hour instead of 5 minutes
+    critical_threshold_multiplier: 3.0  # Only gaps 3x normal threshold
+  
+  # Manual override settings
+  force_sync_on_command: true
+  
+  # Background service control
+  auto_start_on_api_startup: true
+  
+  # Gap filling behavior
+  gap_filling:
+    # Maximum age of gaps to fill (in days)
+    max_gap_age_days: 365
+    # Batch size for processing symbols per cycle
+    batch_size: 10
+    # Only fill unexpected gaps by default
+    fill_unexpected_only: true
+
 # Global debug flag (enables additional debug features when true)
 debug: false

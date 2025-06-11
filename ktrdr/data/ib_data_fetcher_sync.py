@@ -193,13 +193,13 @@ class IbDataFetcherSync:
 
     def format_ib_datetime(self, dt: Optional[datetime]) -> str:
         """
-        Format datetime for IB API.
+        Format datetime for IB API with explicit UTC timezone specification.
 
         Args:
-            dt: Datetime to format
+            dt: Datetime to format (should be UTC)
 
         Returns:
-            Formatted string 'YYYYMMDD HH:MM:SS' or empty string
+            Formatted string 'YYYYMMDD HH:MM:SS UTC' or empty string
         """
         if dt is None:
             return ""
@@ -208,8 +208,12 @@ class IbDataFetcherSync:
         if isinstance(dt, pd.Timestamp):
             dt = dt.to_pydatetime()
 
-        # Format as IB expects
-        return dt.strftime("%Y%m%d %H:%M:%S")
+        # Ensure datetime is UTC (convert if needed)
+        from ktrdr.utils.timezone_utils import TimestampManager
+        dt_utc = TimestampManager.to_utc(dt)
+
+        # Format as IB expects with explicit UTC timezone specification
+        return dt_utc.strftime("%Y%m%d %H:%M:%S UTC")
 
     def fetch_historical_data(
         self,
@@ -339,7 +343,21 @@ class IbDataFetcherSync:
 
             # Convert to DataFrame
             data = []
-            for bar in bars:
+            logger.debug(f"Processing {len(bars)} bars from IB")
+            
+            volume_analysis = {"positive": 0, "zero": 0, "negative_one": 0, "other_negative": 0}
+            
+            for i, bar in enumerate(bars):
+                # Analyze volume distribution
+                if bar.volume > 0:
+                    volume_analysis["positive"] += 1
+                elif bar.volume == 0:
+                    volume_analysis["zero"] += 1
+                elif bar.volume == -1:
+                    volume_analysis["negative_one"] += 1
+                else:
+                    volume_analysis["other_negative"] += 1
+                
                 data.append(
                     {
                         "timestamp": bar.date,
@@ -350,6 +368,13 @@ class IbDataFetcherSync:
                         "volume": bar.volume,
                     }
                 )
+            
+            logger.info(f"🔍 RAW IB VOLUME ANALYSIS: {volume_analysis}")
+            
+            if volume_analysis["negative_one"] > 0:
+                logger.warning(f"⚠️  IB SENT {volume_analysis['negative_one']} BARS WITH VOLUME=-1 BUT VALID OHLC PRICES!")
+                logger.warning(f"⚠️  This suggests IB is providing price data but marking volume as 'no data available'")
+                logger.warning(f"⚠️  This is raw IB data BEFORE any processing by our system")
 
             df = pd.DataFrame(data)
             df.set_index("timestamp", inplace=True)
