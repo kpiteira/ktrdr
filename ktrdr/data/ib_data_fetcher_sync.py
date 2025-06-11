@@ -295,6 +295,22 @@ class IbDataFetcherSync:
         """
         if not self.connection.ensure_connection():
             raise ConnectionError("Not connected to IB")
+        
+        # CRITICAL: Validate dates upfront to prevent misclassified error 162s
+        now_utc = TimestampManager.now_utc()
+        if start > now_utc:
+            raise DataError(
+                f"🔮 FUTURE DATE REQUEST: Start date {start} is in the future (now: {now_utc})",
+                details={
+                    "symbol": symbol,
+                    "start_date": start.isoformat(),
+                    "now_utc": now_utc.isoformat(),
+                    "error_type": "future_date_request"
+                }
+            )
+        if end > now_utc:
+            logger.warning(f"🔮 End date {end} is in the future, adjusting to now ({now_utc})")
+            end = now_utc
 
         start_time = time.time()
 
@@ -336,6 +352,14 @@ class IbDataFetcherSync:
                 and "last_error" in self.connection.metrics
             ):
                 self.connection.metrics["last_error"] = None
+            
+            # Set error handler context for intelligent error classification
+            self.error_handler.set_request_context(
+                symbol=symbol,
+                start_date=start,
+                end_date=end,
+                timeframe=timeframe
+            )
 
             # Use thread-safe historical data request
             bars = self._run_in_connection_loop(
@@ -640,8 +664,17 @@ class IbDataRangeDiscovery:
             # Get contract for the symbol
             contract = self.data_fetcher.get_contract(symbol)
 
+            # Set context for enhanced error handling
+            now_utc = TimestampManager.now_utc()
+            self.data_fetcher.error_handler.set_request_context(
+                symbol=symbol,
+                start_date=now_utc - timedelta(days=365*10),  # Assume we're looking back 10 years max
+                end_date=now_utc,
+                timeframe=timeframe
+            )
+
             # Use reqHeadTimeStamp API - much faster than binary search!
-            logger.debug(f"Requesting head timestamp for {symbol}")
+            logger.debug(f"🔍 Requesting head timestamp for {symbol} using IB API")
             head_timestamp = self.data_fetcher._run_in_connection_loop(
                 self.data_fetcher.connection.ib.reqHeadTimeStampAsync(
                     contract=contract,
@@ -656,14 +689,20 @@ class IbDataRangeDiscovery:
                 if hasattr(head_timestamp, "tzinfo") and head_timestamp.tzinfo is None:
                     head_timestamp = head_timestamp.replace(tzinfo=timezone.utc)
 
-                logger.info(f"Head timestamp for {symbol}: {head_timestamp}")
+                # Convert to consistent timezone using TimestampManager
+                head_timestamp = TimestampManager.to_utc(head_timestamp)
+                
+                logger.info(f"📅 Head timestamp for {symbol}: {head_timestamp}")
                 return head_timestamp
             else:
-                logger.warning(f"No head timestamp returned for {symbol}")
+                logger.warning(f"⚠️ No head timestamp returned for {symbol}")
                 return None
 
         except Exception as e:
-            logger.debug(f"Head timestamp request failed for {symbol}: {e}")
+            logger.debug(f"❌ Head timestamp request failed for {symbol}: {e}")
+            # Check if this is an error 162 that we can classify better
+            if "162" in str(e) or "no data" in str(e).lower():
+                logger.info(f"📊 Symbol {symbol} appears to have limited historical data availability")
             return None
 
     def get_earliest_data_point(

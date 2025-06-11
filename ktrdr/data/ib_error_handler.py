@@ -9,9 +9,11 @@ import time
 from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
+from datetime import datetime, timezone
 
 from ktrdr.logging import get_logger
 from ktrdr.config.ib_limits import IbLimitsRegistry
+from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
 
@@ -20,6 +22,8 @@ class IbErrorType(Enum):
     """Classification of IB error types for appropriate handling."""
     PACING_VIOLATION = "pacing_violation"
     NO_DATA_AVAILABLE = "no_data_available"
+    FUTURE_DATE_REQUEST = "future_date_request"  # NEW: Future date validation error
+    HISTORICAL_DATA_LIMIT = "historical_data_limit"  # NEW: Data not available for historical period
     CONNECTION_ERROR = "connection_error"
     PERMISSION_ERROR = "permission_error"
     INVALID_REQUEST = "invalid_request"
@@ -126,39 +130,42 @@ class IbErrorHandler:
         self.pace_violation_count = 0
         self.last_pace_violation_time = 0.0
         self.total_wait_time = 0.0
+        self.last_request_context = {}  # Store context for better error classification
         
-    def classify_error(self, error_code: int, error_message: str) -> IbErrorInfo:
+    def set_request_context(self, symbol: str, start_date: datetime, end_date: datetime, timeframe: str) -> None:
         """
-        Classify an IB error for appropriate handling.
+        Set context for the current request to enable intelligent error classification.
+        
+        Args:
+            symbol: Trading symbol being requested
+            start_date: Start date of the request
+            end_date: End date of the request
+            timeframe: Timeframe being requested
+        """
+        self.last_request_context = {
+            "symbol": symbol,
+            "start_date": start_date,
+            "end_date": end_date,
+            "timeframe": timeframe,
+            "is_future_request": end_date > TimestampManager.now_utc(),
+            "request_time": TimestampManager.now_utc()
+        }
+        
+    def classify_error(self, error_code: int, error_message: str, use_context: bool = True) -> IbErrorInfo:
+        """
+        Classify an IB error for appropriate handling with enhanced 162 classification.
         
         Args:
             error_code: IB error code
             error_message: Full error message from IB
+            use_context: Whether to use request context for enhanced classification
             
         Returns:
             IbErrorInfo with classification and handling guidance
         """
-        # Special handling for error 162 - depends on message content
+        # Enhanced handling for error 162 - the most problematic one
         if error_code == 162:
-            if "no data" in error_message.lower():
-                return IbErrorInfo(
-                    error_code=162,
-                    error_message=error_message,
-                    error_type=IbErrorType.NO_DATA_AVAILABLE,
-                    is_retryable=False,
-                    suggested_wait_time=0.0,
-                    description="No historical data available for requested period"
-                )
-            else:
-                # Other 162 errors are likely pacing violations
-                return IbErrorInfo(
-                    error_code=162,
-                    error_message=error_message,
-                    error_type=IbErrorType.PACING_VIOLATION,
-                    is_retryable=True,
-                    suggested_wait_time=60.0,
-                    description="HMDS pacing violation - too many requests"
-                )
+            return self._classify_error_162(error_message, use_context)
         
         # Use predefined classification if available
         if error_code in self.ERROR_CLASSIFICATIONS:
@@ -183,6 +190,78 @@ class IbErrorHandler:
             description=f"Unknown error code {error_code}"
         )
     
+    def _classify_error_162(self, error_message: str, use_context: bool) -> IbErrorInfo:
+        """
+        Enhanced classification for error 162 with context awareness.
+        
+        Error 162 can mean:
+        1. Future date request (user error)
+        2. Historical data limit reached (symbol limitation)  
+        3. Actual pacing violation (retry needed)
+        4. Temporary server issue (retry needed)
+        
+        Args:
+            error_message: Full error message from IB
+            use_context: Whether to use request context
+            
+        Returns:
+            IbErrorInfo with specific 162 classification
+        """
+        message_lower = error_message.lower()
+        
+        # Check if we have request context for intelligent classification
+        if use_context and self.last_request_context:
+            context = self.last_request_context
+            
+            # 1. Future date request detection
+            if context.get("is_future_request", False):
+                logger.warning(f"🔮 Error 162 for FUTURE DATE request: {context['end_date']} > now")
+                return IbErrorInfo(
+                    error_code=162,
+                    error_message=error_message,
+                    error_type=IbErrorType.FUTURE_DATE_REQUEST,
+                    is_retryable=False,
+                    suggested_wait_time=0.0,
+                    description="Cannot request data for future dates"
+                )
+            
+            # 2. Very old historical data (likely symbol limitation)
+            start_date = context.get("start_date")
+            if start_date:
+                days_ago = (TimestampManager.now_utc() - start_date).days
+                if days_ago > 365 * 5:  # More than 5 years ago
+                    logger.info(f"📅 Error 162 for VERY OLD data: {days_ago} days ago for {context['symbol']}")
+                    return IbErrorInfo(
+                        error_code=162,
+                        error_message=error_message,
+                        error_type=IbErrorType.HISTORICAL_DATA_LIMIT,
+                        is_retryable=False,
+                        suggested_wait_time=0.0,
+                        description=f"Historical data not available {days_ago} days ago for {context['symbol']}"
+                    )
+        
+        # 3. Message-based classification (fallback when no context)
+        if any(phrase in message_lower for phrase in ["no data", "no historical data", "insufficient data"]):
+            return IbErrorInfo(
+                error_code=162,
+                error_message=error_message,
+                error_type=IbErrorType.NO_DATA_AVAILABLE,
+                is_retryable=False,
+                suggested_wait_time=0.0,
+                description="No historical data available for requested period"
+            )
+        
+        # 4. Assume pacing violation for other 162 errors (most common case)
+        logger.warning(f"🚦 Assuming error 162 is PACING VIOLATION: {error_message}")
+        return IbErrorInfo(
+            error_code=162,
+            error_message=error_message,
+            error_type=IbErrorType.PACING_VIOLATION,
+            is_retryable=True,
+            suggested_wait_time=60.0,
+            description="Assumed HMDS pacing violation based on error 162"
+        )
+    
     def handle_error(self, error_code: int, error_message: str, req_id: Optional[int] = None) -> Tuple[bool, float]:
         """
         Handle an IB error with appropriate logging and recovery guidance.
@@ -204,6 +283,16 @@ class IbErrorHandler:
         
         elif error_info.error_type == IbErrorType.NO_DATA_AVAILABLE:
             logger.info(f"IB: No data available for request (code {error_code})")
+            return False, 0.0
+        
+        elif error_info.error_type == IbErrorType.FUTURE_DATE_REQUEST:
+            logger.error(f"🔮 FUTURE DATE ERROR: {error_message}")
+            logger.error("⚠️  Cannot request data for future dates - check your date parameters!")
+            return False, 0.0
+            
+        elif error_info.error_type == IbErrorType.HISTORICAL_DATA_LIMIT:
+            logger.warning(f"📅 HISTORICAL LIMIT: {error_message}")
+            logger.warning("💡 Try requesting more recent data or use a different data source for older periods")
             return False, 0.0
         
         elif error_info.error_type == IbErrorType.PACING_VIOLATION:

@@ -280,18 +280,96 @@
         ],
         "holidays": []
       }
+    },
+    "GBPUSD": {
+      "symbol": "GBPUSD",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "USD",
+      "description": "British pound",
+      "validated_at": 1749647809.239158,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "17:15",
+          "end": "17:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      }
+    },
+    "USDCHF": {
+      "symbol": "USDCHF",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "CHF",
+      "description": "United States dollar",
+      "validated_at": 1749648003.9807515,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "17:15",
+          "end": "17:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      }
+    },
+    "CHFUSD": {
+      "symbol": "CHFUSD",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "USD",
+      "description": "Swiss franc",
+      "validated_at": 1749651514.976365,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "17:15",
+          "end": "17:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      }
     }
   },
   "failed_symbols": [],
   "validated_symbols": [
-    "RBLX",
-    "AAPL",
     "JEPI",
+    "AAPL",
     "TSLA",
+    "RBLX",
+    "NVDA",
+    "USDCHF",
     "GOOGL",
-    "EURUSD",
+    "GBPUSD",
     "MSFT",
-    "NVDA"
+    "EURUSD",
+    "CHFUSD"
   ],
-  "last_updated": 1749359141.054704
+  "last_updated": 1749651514.976469
 }

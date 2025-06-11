@@ -8,6 +8,8 @@ import sys
 import json
 import yaml
 import os
+import asyncio
+import signal
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 
@@ -15,10 +17,13 @@ import typer
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+from rich.live import Live
 
 from ktrdr import get_logger
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.data_manager import DataManager
+# Note: async_data_loader import moved to function to control logging
 from ktrdr.config.validation import InputValidator
 from ktrdr.config.models import IndicatorConfig, IndicatorsConfig
 from ktrdr.indicators import IndicatorFactory, BaseIndicator
@@ -384,6 +389,367 @@ def compute_indicator(
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+@cli_app.command("load-data")
+def load_data_async_cli(
+    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Timeframe (e.g., 1d, 1h)"),
+    mode: str = typer.Option("tail", "--mode", "-m", help="Loading mode (local, tail, backfill, full)"),
+    start_date: Optional[str] = typer.Option(None, "--start", help="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = typer.Option(None, "--end", help="End date (YYYY-MM-DD)"),
+    validate: bool = typer.Option(True, "--validate/--no-validate", help="Validate loaded data"),
+    repair: bool = typer.Option(False, "--repair/--no-repair", help="Repair data issues"),
+    show_progress: bool = typer.Option(True, "--progress/--no-progress", help="Show progress bar"),
+    output_format: str = typer.Option("table", "--format", "-f", help="Output format (table, json, csv)"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output"),
+):
+    """
+    Load data asynchronously with cancellation support and progress tracking.
+    
+    This command uses intelligent gap analysis and IB integration to load data
+    efficiently. It supports various loading modes:
+    
+    - local: Load only from local cache (fast, no external calls)
+    - tail: Load recent data to fill gaps up to now
+    - backfill: Load historical data before earliest available
+    - full: Load both historical and recent data (comprehensive)
+    
+    The command shows real-time progress and can be cancelled with Ctrl+C.
+    """
+    try:
+        # Input validation
+        symbol = InputValidator.validate_string(
+            symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
+        )
+        timeframe = InputValidator.validate_string(
+            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
+        )
+        
+        # Parse dates if provided
+        start_dt = None
+        end_dt = None
+        if start_date:
+            try:
+                start_dt = pd.to_datetime(start_date).to_pydatetime()
+            except ValueError:
+                raise ValidationError(
+                    message="Invalid start date format. Use YYYY-MM-DD",
+                    error_code="VALIDATION-InvalidDate",
+                    details={"start_date": start_date}
+                )
+        if end_date:
+            try:
+                end_dt = pd.to_datetime(end_date).to_pydatetime()
+            except ValueError:
+                raise ValidationError(
+                    message="Invalid end date format. Use YYYY-MM-DD",
+                    error_code="VALIDATION-InvalidDate",
+                    details={"end_date": end_date}
+                )
+        
+        # Run the async operation
+        asyncio.run(_run_async_load(
+            symbol, timeframe, start_dt, end_dt, mode, validate, repair,
+            show_progress, output_format, quiet
+        ))
+        
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        error_console.print("\n[yellow]Operation cancelled by user[/yellow]")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+async def _run_async_load(
+    symbol: str,
+    timeframe: str,
+    start_date: Optional[Any],
+    end_date: Optional[Any],
+    mode: str,
+    validate: bool,
+    repair: bool,
+    show_progress: bool,
+    output_format: str,
+    quiet: bool
+):
+    """Run the async data loading operation with progress tracking."""
+    
+    # Create async data loader
+    async_loader = AsyncDataLoader()
+    
+    # Track cancellation
+    cancelled = False
+    operation_id = None
+    
+    def signal_handler(signum, frame):
+        """Handle Ctrl+C for graceful cancellation."""
+        nonlocal cancelled, operation_id
+        cancelled = True
+        if operation_id:
+            console.print("\n[yellow]🛑 Cancellation requested... please wait[/yellow]")
+            asyncio.create_task(async_loader.cancel_operation(operation_id))
+    
+    # Set up signal handler
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    # Progress tracking
+    progress_data = {}
+    
+    def progress_callback(progress: AsyncLoadProgress):
+        """Update progress display."""
+        progress_data.update({
+            'status': progress.status,
+            'percentage': progress.progress_percentage,
+            'operation': progress.current_operation,
+            'fetched_bars': progress.fetched_bars,
+            'duration': progress.duration_seconds
+        })
+    
+    try:
+        if not quiet:
+            console.print(f"🚀 [bold]Loading data for {symbol} ({timeframe})[/bold]")
+            console.print(f"📋 Mode: {mode} | Validate: {validate} | Repair: {repair}")
+            if start_date or end_date:
+                console.print(f"📅 Date range: {start_date or 'earliest'} to {end_date or 'latest'}")
+            console.print()
+        
+        # Progress display setup
+        if show_progress and not quiet:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                task = progress.add_task("Loading data...", total=100)
+                
+                # Start the async load
+                load_task = asyncio.create_task(async_loader.load_data_async(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_date=start_date,
+                    end_date=end_date,
+                    mode=mode,
+                    validate=validate,
+                    repair=repair,
+                    progress_callback=progress_callback
+                ))
+                
+                operation_id = f"cli_load_{int(asyncio.get_event_loop().time())}"
+                
+                # Update progress until complete
+                while not load_task.done():
+                    if cancelled:
+                        break
+                    
+                    if progress_data:
+                        progress.update(
+                            task,
+                            completed=progress_data['percentage'],
+                            description=progress_data['operation']
+                        )
+                    
+                    await asyncio.sleep(0.1)
+                
+                # Get result
+                df, final_progress = await load_task
+                progress.update(task, completed=100, description="Completed")
+        else:
+            # No progress display
+            df, final_progress = await async_loader.load_data_async(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                mode=mode,
+                validate=validate,
+                repair=repair,
+                progress_callback=progress_callback if not quiet else None
+            )
+        
+        # Report results
+        if not quiet:
+            if final_progress.status == AsyncLoadStatus.COMPLETED:
+                console.print(f"✅ [bold green]Successfully loaded {final_progress.fetched_bars} bars[/bold green]")
+                if final_progress.duration_seconds:
+                    console.print(f"⏱️  Duration: {final_progress.duration_seconds:.2f} seconds")
+            elif final_progress.status == AsyncLoadStatus.CANCELLED:
+                console.print("⚠️  [yellow]Operation was cancelled[/yellow]")
+                return
+            else:
+                console.print(f"❌ [bold red]Operation failed: {final_progress.error_message}[/bold red]")
+                return
+        
+        # Format output
+        if df is not None and not df.empty:
+            if output_format == "json":
+                result = {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "mode": mode,
+                    "bars_loaded": len(df),
+                    "date_range": {
+                        "start": df.index.min().isoformat() if not df.empty else None,
+                        "end": df.index.max().isoformat() if not df.empty else None
+                    },
+                    "duration_seconds": final_progress.duration_seconds,
+                    "status": final_progress.status.value
+                }
+                print(json.dumps(result, indent=2))
+            elif output_format == "csv":
+                print(df.head(10).to_csv())
+            else:  # table
+                if not quiet:
+                    console.print(f"\n📊 [bold]Data Summary[/bold]")
+                    console.print(f"Rows: {len(df)}")
+                    console.print(f"Date range: {df.index.min()} to {df.index.max()}")
+                    console.print(f"Columns: {', '.join(df.columns)}")
+        else:
+            if not quiet:
+                console.print("ℹ️  No data was loaded")
+    
+    except asyncio.CancelledError:
+        if not quiet:
+            console.print("⚠️  [yellow]Operation cancelled[/yellow]")
+    except Exception as e:
+        if not quiet:
+            console.print(f"❌ [bold red]Error: {str(e)}[/bold red]")
+        raise
+
+
+@cli_app.command("data-status")
+def data_status():
+    """
+    Show status of all active data loading operations.
+    
+    This command displays the current status of any running async data
+    loading operations, including progress, duration, and operation details.
+    """
+    try:
+        async_loader = AsyncDataLoader()
+        
+        # Get all operations
+        active_ops = async_loader.get_active_operations()
+        all_ops = async_loader.get_all_operations()
+        
+        if not all_ops:
+            console.print("ℹ️  No data loading operations found")
+            return
+        
+        # Show active operations
+        if active_ops:
+            console.print(f"🚀 [bold]Active Operations ({len(active_ops)})[/bold]")
+            
+            table = Table()
+            table.add_column("Operation ID", style="cyan")
+            table.add_column("Symbol", style="green")
+            table.add_column("Status", style="yellow")
+            table.add_column("Progress", style="blue")
+            table.add_column("Duration", style="magenta")
+            table.add_column("Current Operation", style="white")
+            
+            for op_id, progress in active_ops.items():
+                duration = f"{progress.duration_seconds:.1f}s" if progress.duration_seconds else "0s"
+                table.add_row(
+                    op_id,
+                    progress.metadata.get('symbol', 'N/A'),
+                    progress.status.value.upper(),
+                    f"{progress.progress_percentage:.1f}%",
+                    duration,
+                    progress.current_operation[:50] + "..." if len(progress.current_operation) > 50 else progress.current_operation
+                )
+            
+            console.print(table)
+            console.print()
+        
+        # Show recent completed operations
+        completed_ops = {
+            op_id: progress for op_id, progress in all_ops.items()
+            if progress.status in [AsyncLoadStatus.COMPLETED, AsyncLoadStatus.FAILED, AsyncLoadStatus.CANCELLED]
+        }
+        
+        if completed_ops:
+            console.print(f"📋 [bold]Recent Operations ({len(completed_ops)})[/bold]")
+            
+            table = Table()
+            table.add_column("Operation ID", style="cyan")
+            table.add_column("Symbol", style="green") 
+            table.add_column("Status", style="yellow")
+            table.add_column("Bars", style="blue")
+            table.add_column("Duration", style="magenta")
+            table.add_column("End Time", style="white")
+            
+            # Sort by end time, most recent first
+            sorted_ops = sorted(
+                completed_ops.items(),
+                key=lambda x: x[1].end_time or x[1].start_time,
+                reverse=True
+            )[:10]  # Show last 10
+            
+            for op_id, progress in sorted_ops:
+                duration = f"{progress.duration_seconds:.1f}s" if progress.duration_seconds else "0s"
+                end_time = progress.end_time.strftime("%H:%M:%S") if progress.end_time else "N/A"
+                
+                # Color code status
+                status_display = progress.status.value.upper()
+                if progress.status == AsyncLoadStatus.COMPLETED:
+                    status_display = f"[green]{status_display}[/green]"
+                elif progress.status == AsyncLoadStatus.FAILED:
+                    status_display = f"[red]{status_display}[/red]"
+                elif progress.status == AsyncLoadStatus.CANCELLED:
+                    status_display = f"[yellow]{status_display}[/yellow]"
+                
+                table.add_row(
+                    op_id,
+                    progress.metadata.get('symbol', 'N/A'),
+                    status_display,
+                    str(progress.fetched_bars),
+                    duration,
+                    end_time
+                )
+            
+            console.print(table)
+        
+    except Exception as e:
+        error_console.print(f"[bold red]Error getting data status:[/bold red] {str(e)}")
+        sys.exit(1)
+
+
+@cli_app.command("cancel-data")
+def cancel_data_operation(
+    operation_id: str = typer.Argument(..., help="Operation ID to cancel"),
+):
+    """
+    Cancel a running data loading operation.
+    
+    Use 'ktrdr data-status' to see active operation IDs.
+    """
+    try:
+        async_loader = AsyncDataLoader()
+        
+        # Try to cancel the operation
+        success = asyncio.run(async_loader.cancel_operation(operation_id))
+        
+        if success:
+            console.print(f"✅ [green]Cancellation requested for operation: {operation_id}[/green]")
+            console.print("ℹ️  The operation may take a moment to stop gracefully")
+        else:
+            console.print(f"⚠️  [yellow]Could not cancel operation {operation_id}[/yellow]")
+            console.print("ℹ️  Operation may not exist or already be completed")
+        
+    except Exception as e:
+        error_console.print(f"[bold red]Error cancelling operation:[/bold red] {str(e)}")
         sys.exit(1)
 
 
@@ -1833,4 +2199,284 @@ def cleanup_data_command(
             
     except Exception as e:
         console.print(f"[red]❌ Error running cleanup script: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@cli_app.command("load-data")
+def async_load_data(
+    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, EURUSD)"),
+    timeframe: str = typer.Option("1h", "-t", "--timeframe", help="Timeframe (e.g., 1h, 1d)"),
+    mode: str = typer.Option("tail", "-m", "--mode", help="Loading mode"),
+    start: Optional[str] = typer.Option(None, "--start", help="Start date (YYYY-MM-DD or ISO format)"),
+    end: Optional[str] = typer.Option(None, "--end", help="End date (YYYY-MM-DD or ISO format)"),
+    progress: bool = typer.Option(False, "-p", "--progress", help="Show real-time progress"),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="Enable verbose output")
+):
+    """Load data asynchronously with cancellation support (NEW)."""
+    
+    # Setup clean logging FIRST - before any imports that might trigger logs
+    import logging
+    if not verbose:
+        # Suppress all backend logs for clean CLI output
+        logging.getLogger('ktrdr').setLevel(logging.CRITICAL)
+        logging.getLogger('ktrdr.data').setLevel(logging.CRITICAL)
+        logging.getLogger('ktrdr.api').setLevel(logging.CRITICAL)
+        logging.getLogger('ktrdr.logging').setLevel(logging.CRITICAL)
+        # Also suppress root logger noise
+        logging.getLogger('').setLevel(logging.ERROR)
+    else:
+        # Show debug logs when verbose is requested
+        logging.getLogger('ktrdr').setLevel(logging.DEBUG)
+    
+    # Validate mode parameter
+    valid_modes = ["local", "tail", "backfill", "full"]
+    if mode not in valid_modes:
+        console.print(f"[red]❌ Invalid mode '{mode}'. Must be one of: {', '.join(valid_modes)}[/red]")
+        raise typer.Exit(1)
+    
+    try:
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
+        
+        # Parse date arguments
+        start_date = None
+        end_date = None
+        
+        if start:
+            start_date = pd.to_datetime(start)
+            console.print(f"[blue]Start date: {start_date}[/blue]")
+        
+        if end:
+            end_date = pd.to_datetime(end)
+            console.print(f"[blue]End date: {end_date}[/blue]")
+        
+        async def load_with_progress():
+            # Import here to control when logging happens
+            from ktrdr.data.async_data_loader import get_async_data_loader
+            loader = get_async_data_loader()
+            
+            # Create job
+            job_id = loader.create_job(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                mode=mode
+            )
+            
+            if verbose:
+                console.print(f"[green]📝 Created job {job_id} for {symbol} ({timeframe}, {mode})[/green]")
+            else:
+                console.print(f"[green]Loading {symbol} data ({timeframe}, {mode})...[/green]")
+            
+            # Setup cancellation
+            cancelled = False
+            
+            def signal_handler(sig, frame):
+                nonlocal cancelled
+                cancelled = True
+                console.print("\n[yellow]🛑 Cancellation requested...[/yellow]")
+                loader.cancel_job(job_id)
+            
+            signal.signal(signal.SIGINT, signal_handler)
+            
+            # Progress tracking
+            last_progress = None
+            
+            def update_progress(progress_info):
+                nonlocal last_progress
+                last_progress = progress_info
+            
+            if progress:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    MofNCompleteColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    console=console,
+                    refresh_per_second=4
+                ) as rich_progress:
+                    
+                    task = rich_progress.add_task(f"Loading {symbol} data...", total=100)
+                    
+                    # Start job with progress callback
+                    await loader.start_job(job_id, update_progress)
+                    
+                    # Monitor progress
+                    while True:
+                        job_status = loader.get_job_status(job_id)
+                        if not job_status:
+                            break
+                        
+                        status = job_status["status"]
+                        percentage = job_status["progress_percentage"]
+                        current_segment = job_status["current_segment"]
+                        
+                        # Update progress bar
+                        rich_progress.update(
+                            task, 
+                            completed=percentage,
+                            description=f"Loading {symbol} ({current_segment or 'starting...'})"
+                        )
+                        
+                        if status in ["completed", "failed", "cancelled"]:
+                            break
+                        
+                        await asyncio.sleep(0.1)
+            else:
+                # Start job without progress display
+                await loader.start_job(job_id)
+                
+                # Simple status monitoring
+                while True:
+                    job_status = loader.get_job_status(job_id)
+                    if not job_status:
+                        break
+                    
+                    status = job_status["status"]
+                    if status in ["completed", "failed", "cancelled"]:
+                        break
+                    
+                    await asyncio.sleep(1.0)
+            
+            # Final status
+            final_status = loader.get_job_status(job_id)
+            if final_status:
+                status = final_status["status"]
+                
+                if status == "completed":
+                    bars = final_status["bars_fetched"]
+                    duration = final_status["duration_seconds"]
+                    console.print(f"[green]✅ Successfully loaded {bars} bars in {duration:.1f}s[/green]")
+                    if verbose:
+                        console.print(f"[dim]Job ID: {job_id}[/dim]")
+                elif status == "cancelled":
+                    console.print("[yellow]🛑 Data loading was cancelled[/yellow]")
+                elif status == "failed":
+                    error = final_status["error_message"]
+                    console.print(f"[red]❌ Data loading failed: {error}[/red]")
+                    if verbose:
+                        console.print(f"[dim]Job ID: {job_id}[/dim]")
+        
+        # Run the async operation
+        asyncio.run(load_with_progress())
+        
+    except Exception as e:
+        logger.error(f"Failed to load data: {e}")
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@cli_app.command("data-status")
+def data_status(
+    job_id: Optional[str] = typer.Option(None, "--job-id", help="Show status for specific job"),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="Show detailed information")
+):
+    """Show status of data loading operations (NEW)."""
+    try:
+        from ktrdr.data.async_data_loader import get_async_data_loader
+        loader = get_async_data_loader()
+        
+        if job_id:
+            # Show specific job
+            status = loader.get_job_status(job_id)
+            if not status:
+                console.print(f"[red]❌ Job {job_id} not found[/red]")
+                return
+            
+            table = Table(title=f"Job {job_id} Status")
+            table.add_column("Property", style="cyan")
+            table.add_column("Value", style="green")
+            
+            table.add_row("Status", status["status"])
+            table.add_row("Symbol", status["symbol"])
+            table.add_row("Timeframe", status["timeframe"])
+            table.add_row("Mode", status["mode"])
+            table.add_row("Progress", f"{status['progress_percentage']:.1f}%")
+            table.add_row("Segments", f"{status['completed_segments']}/{status['total_segments']}")
+            table.add_row("Bars Fetched", str(status["bars_fetched"]))
+            
+            if status["duration_seconds"]:
+                table.add_row("Duration", f"{status['duration_seconds']:.1f}s")
+            
+            if status["error_message"]:
+                table.add_row("Error", status["error_message"])
+            
+            console.print(table)
+            
+        else:
+            # Show all jobs
+            jobs = loader.list_jobs()
+            
+            if not jobs:
+                console.print("[yellow]📭 No data loading jobs found[/yellow]")
+                return
+            
+            table = Table(title="Data Loading Jobs")
+            table.add_column("Job ID", style="cyan")
+            table.add_column("Symbol", style="green")
+            table.add_column("Timeframe", style="blue")
+            table.add_column("Mode", style="magenta")
+            table.add_column("Status", style="yellow")
+            table.add_column("Progress", style="white")
+            
+            if verbose:
+                table.add_column("Duration", style="dim")
+                table.add_column("Created", style="dim")
+            
+            for job in jobs:
+                status_emoji = {
+                    "pending": "⏳",
+                    "running": "🔄", 
+                    "completed": "✅",
+                    "failed": "❌",
+                    "cancelled": "🛑"
+                }.get(job["status"], "❓")
+                
+                progress_text = f"{job['progress_percentage']:.0f}%"
+                if job["status"] == "running":
+                    progress_text += f" ({job['current_segment']})"
+                
+                row = [
+                    job["job_id"],
+                    job["symbol"],
+                    job["timeframe"],
+                    job["mode"],
+                    f"{status_emoji} {job['status']}",
+                    progress_text
+                ]
+                
+                if verbose:
+                    duration = f"{job['duration_seconds']:.1f}s" if job['duration_seconds'] else "-"
+                    created = job["created_at"][:16].replace("T", " ")  # Truncate datetime
+                    row.extend([duration, created])
+                
+                table.add_row(*row)
+            
+            console.print(table)
+            
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@cli_app.command("cancel-data")
+def cancel_data(
+    job_id: str = typer.Argument(..., help="Job ID to cancel")
+):
+    """Cancel a running data loading operation (NEW)."""
+    try:
+        from ktrdr.data.async_data_loader import get_async_data_loader
+        loader = get_async_data_loader()
+        
+        success = loader.cancel_job(job_id)
+        
+        if success:
+            console.print(f"[green]🛑 Cancellation requested for job {job_id}[/green]")
+            console.print("[yellow]Note: Job may take a moment to respond to cancellation[/yellow]")
+        else:
+            console.print(f"[red]❌ Could not cancel job {job_id} (not found or already finished)[/red]")
+            
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1)
