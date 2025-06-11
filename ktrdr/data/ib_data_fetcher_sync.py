@@ -11,6 +11,7 @@ from ib_insync import Stock, Forex, Contract
 from ktrdr.logging import get_logger
 from ktrdr.errors import DataError
 from ktrdr.data.ib_connection_sync import IbConnectionSync, ConnectionConfig
+from ktrdr.data.ib_error_handler import IbErrorHandler
 from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
@@ -47,12 +48,17 @@ class IbDataFetcherSync:
 
         self.ib = self.connection.ib
 
+        # Error handler for pace violations and retry logic
+        self.error_handler = IbErrorHandler()
+
         # Metrics
         self.metrics = {
             "total_requests": 0,
             "successful_requests": 0,
             "failed_requests": 0,
             "total_bars_fetched": 0,
+            "pace_violations": 0,
+            "retries_attempted": 0,
         }
 
     def get_contract(self, symbol: str, instrument_type: str = "stock") -> Contract:
@@ -224,9 +230,56 @@ class IbDataFetcherSync:
         instrument_type: str = "stock",
         what_to_show: str = "TRADES",
         timeout_seconds: int = 120,
+        max_retries: int = 3,
     ) -> pd.DataFrame:
         """
-        Fetch historical data from IB with proper timeout and error handling.
+        Fetch historical data from IB with pace violation detection and retry logic.
+
+        Args:
+            symbol: Symbol to fetch
+            timeframe: Timeframe like '1h', '1d'
+            start: Start datetime
+            end: End datetime
+            instrument_type: Type of instrument
+            what_to_show: IB data type (TRADES, BID, ASK, MIDPOINT)
+            timeout_seconds: Request timeout in seconds
+            max_retries: Maximum number of retries for pace violations
+
+        Returns:
+            DataFrame with OHLCV data
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                return self._fetch_historical_data_single_attempt(
+                    symbol, timeframe, start, end, instrument_type, what_to_show, timeout_seconds
+                )
+            except DataError as e:
+                # Check if this is a pace violation that we should retry
+                if attempt < max_retries and self._should_retry_error(str(e)):
+                    self.metrics["retries_attempted"] += 1
+                    wait_time = self._calculate_retry_wait_time(attempt)
+                    logger.warning(f"🔄 Retry {attempt + 1}/{max_retries} for {symbol} after {wait_time}s wait")
+                    self.error_handler.wait_for_recovery(wait_time)
+                    continue
+                else:
+                    # Not retryable or max retries exceeded
+                    raise
+        
+        # Should never reach here
+        raise DataError(f"Failed to fetch {symbol} after {max_retries} retries")
+
+    def _fetch_historical_data_single_attempt(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        instrument_type: str = "stock",
+        what_to_show: str = "TRADES",
+        timeout_seconds: int = 120,
+    ) -> pd.DataFrame:
+        """
+        Single attempt to fetch historical data from IB with proper error handling.
 
         Args:
             symbol: Symbol to fetch
@@ -315,26 +368,28 @@ class IbDataFetcherSync:
                 error_code = error_info.get("errorCode")
                 error_msg = error_info.get("errorString")
 
-                # Filter out informational messages that aren't actually errors
-                informational_codes = [
-                    2106,  # HMDS data farm connection is OK
-                    2107,  # HMDS data farm connection is OK (historical data)
-                    2108,  # HMDS data farm connection is inactive
-                    2119,  # Market data farm connection is OK
-                    2174,  # Time zone warning (not an error)
-                ]
-
                 # Check if error occurred during our request (within last few seconds)
                 error_time = error_info.get("time", 0)
-                if error_time > start_time and error_code not in informational_codes:
-                    logger.error(
-                        f"IB error during request for {symbol}: {error_code} - {error_msg}"
+                if error_time > start_time:
+                    # Use the error handler to classify and handle the error
+                    should_retry, wait_time = self.error_handler.handle_error(
+                        error_code, error_msg, req_id=None
                     )
-                    self.metrics["failed_requests"] += 1
-                    raise DataError(
-                        f"IB error {error_code}: {error_msg}",
-                        details={"symbol": symbol},
-                    )
+                    
+                    if should_retry:
+                        # For pace violations, raise a retryable error
+                        self.metrics["pace_violations"] += 1
+                        raise DataError(
+                            f"IB pace violation {error_code}: {error_msg}",
+                            details={"symbol": symbol, "retryable": True, "wait_time": wait_time},
+                        )
+                    elif error_code not in [2106, 2107, 2108, 2119, 2174]:  # Skip informational
+                        # For non-retryable errors, still fail
+                        self.metrics["failed_requests"] += 1
+                        raise DataError(
+                            f"IB error {error_code}: {error_msg}",
+                            details={"symbol": symbol, "retryable": False},
+                        )
 
             if not bars:
                 logger.warning(f"No data returned for {symbol}")
@@ -402,8 +457,49 @@ class IbDataFetcherSync:
                 details={"symbol": symbol, "error": str(e), "elapsed_seconds": elapsed},
             )
 
+    def _should_retry_error(self, error_message: str) -> bool:
+        """
+        Determine if an error should be retried.
+        
+        Args:
+            error_message: Error message to analyze
+            
+        Returns:
+            True if error should be retried
+        """
+        # Check for pace violation indicators
+        pace_indicators = [
+            "pace violation",
+            "pacing violation", 
+            "IB pace violation",
+            "error 162",
+            "error 165"
+        ]
+        
+        error_lower = error_message.lower()
+        return any(indicator in error_lower for indicator in pace_indicators)
+    
+    def _calculate_retry_wait_time(self, attempt: int) -> float:
+        """
+        Calculate wait time for retry attempt with exponential backoff.
+        
+        Args:
+            attempt: Retry attempt number (0-based)
+            
+        Returns:
+            Wait time in seconds
+        """
+        # Base wait time for pace violations (conservative)
+        base_wait = 60.0  # 1 minute base wait
+        
+        # Exponential backoff: 60s, 120s, 240s
+        wait_time = base_wait * (2 ** attempt)
+        
+        # Cap at 5 minutes max
+        return min(wait_time, 300.0)
+
     def get_metrics(self) -> Dict[str, Any]:
-        """Get fetcher metrics."""
+        """Get fetcher metrics including error handler stats."""
         metrics = self.metrics.copy()
 
         # Calculate success rate
@@ -412,6 +508,10 @@ class IbDataFetcherSync:
             metrics["success_rate"] = metrics["successful_requests"] / total
         else:
             metrics["success_rate"] = 0
+
+        # Add error handler stats
+        error_stats = self.error_handler.get_stats()
+        metrics.update(error_stats)
 
         return metrics
 

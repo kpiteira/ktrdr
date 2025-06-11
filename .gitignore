@@ -74,7 +74,7 @@ frontend/.turbo
 **/.svelte-kit
 
 # Project specific
-data/*.csv
+data/** 
 config/*.secret.yaml
 logs/
 .DS_Store

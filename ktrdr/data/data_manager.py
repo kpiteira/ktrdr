@@ -61,17 +61,6 @@ class DataManager:
         default_repair_method: Default method for repairing missing values
     """
 
-    # Standard timeframe frequencies for resampling and gap detection
-    TIMEFRAME_FREQUENCIES = {
-        "1m": "1min",
-        "5m": "5min",
-        "15m": "15min",
-        "30m": "30min",
-        "1h": "1H",
-        "4h": "4H",
-        "1d": "1D",
-        "1w": "1W",
-    }
 
     # Mapping of repair methods to their functions
     REPAIR_METHODS = {
@@ -474,14 +463,23 @@ class DataManager:
         
         # Use intelligent gap classifier to filter out expected gaps
         for gap_start, gap_end in all_gaps:
-            gap_info = self.gap_classifier.analyze_gap(gap_start, gap_end, symbol, timeframe)
+            gap_duration = gap_end - gap_start
             
-            # Only fill unexpected gaps and market closures
-            if gap_info.classification in [GapClassification.UNEXPECTED, GapClassification.MARKET_CLOSURE]:
+            # For large gaps (> 7 days), always consider them worth filling regardless of classification
+            # This handles backfill scenarios where we want historical data
+            if gap_duration > timedelta(days=7):
                 gaps_to_fill.append((gap_start, gap_end))
-                logger.info(f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})")
+                logger.info(f"📍 LARGE HISTORICAL GAP TO FILL: {gap_start} → {gap_end} (duration: {gap_duration})")
             else:
-                logger.debug(f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) - {gap_info.note}")
+                # For smaller gaps, use intelligent classification
+                gap_info = self.gap_classifier.analyze_gap(gap_start, gap_end, symbol, timeframe)
+                
+                # Only fill unexpected gaps and market closures
+                if gap_info.classification in [GapClassification.UNEXPECTED, GapClassification.MARKET_CLOSURE]:
+                    gaps_to_fill.append((gap_start, gap_end))
+                    logger.info(f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})")
+                else:
+                    logger.debug(f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) - {gap_info.note}")
         
         logger.info(f"🔍 INTELLIGENT GAP ANALYSIS COMPLETE: Found {len(gaps_to_fill)} unexpected gaps to fill (filtered out {len(all_gaps) - len(gaps_to_fill)} expected gaps)")
         return gaps_to_fill
@@ -854,11 +852,24 @@ class DataManager:
             
         # Combine and sort all data
         logger.info(f"🔄 Merging {len(all_data_frames)} data sources...")
+        
+        # Log details about each data source for debugging
+        for i, df in enumerate(all_data_frames):
+            if not df.empty:
+                logger.info(f"📊 Data source {i+1}: {len(df)} bars from {df.index.min()} to {df.index.max()}")
+            else:
+                logger.warning(f"📊 Data source {i+1}: EMPTY DataFrame")
+        
         combined_data = pd.concat(all_data_frames, ignore_index=False)
+        logger.info(f"🔗 After concat: {len(combined_data)} total bars")
         
         # Remove duplicates and sort
+        duplicates_count = combined_data.index.duplicated().sum()
+        if duplicates_count > 0:
+            logger.info(f"🗑️ Removing {duplicates_count} duplicate timestamps")
         combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
         combined_data = combined_data.sort_index()
+        logger.info(f"✅ After deduplication and sorting: {len(combined_data)} bars")
         
         # Filter to requested range
         mask = (combined_data.index >= requested_start) & (combined_data.index <= requested_end)
@@ -1009,25 +1020,28 @@ class DataManager:
         self, df: pd.DataFrame, timeframe: str, gap_threshold: int = 1
     ) -> List[Tuple[datetime, datetime]]:
         """
-        Detect gaps in time series data using unified validator.
+        Detect significant gaps in time series data using intelligent gap classification.
+        
+        This method finds gaps that would be considered data quality issues
+        (excludes weekends, holidays, and non-trading hours).
 
         Args:
             df: DataFrame containing OHLCV data
             timeframe: The timeframe of the data (e.g., '1h', '1d')
-            gap_threshold: Number of consecutive missing periods to consider as a gap
+            gap_threshold: Number of consecutive missing periods to consider as a gap (legacy parameter, maintained for compatibility)
 
         Returns:
-            List of (start_time, end_time) tuples representing gaps
+            List of (start_time, end_time) tuples representing significant gaps only
         """
         if df.empty or len(df) <= 1:
             return []
 
-        # Delegate to unified validator
+        # Use the unified validator which now uses intelligent gap classification
         _, quality_report = self.data_validator.validate_data(
             df, "GAP_CHECK", timeframe, validation_type="local"
         )
 
-        # Extract gap information from the quality report
+        # Extract gap information from the quality report (only significant gaps)
         gaps = []
         gap_issues = quality_report.get_issues_by_type("timestamp_gaps")
         for issue in gap_issues:
@@ -1040,7 +1054,7 @@ class DataManager:
                     gap_end = datetime.fromisoformat(gap_end_str.replace("Z", "+00:00"))
                     gaps.append((gap_start, gap_end))
 
-        logger.info(f"Detected {len(gaps)} gaps in data using unified validator")
+        logger.info(f"Detected {len(gaps)} significant gaps using intelligent classification")
         return gaps
 
     @log_entry_exit(logger=logger)
@@ -1343,8 +1357,18 @@ class DataManager:
             logger.warning("Cannot resample empty DataFrame")
             return df
 
-        # Validate target_timeframe
-        target_freq = self.TIMEFRAME_FREQUENCIES.get(target_timeframe)
+        # Validate target_timeframe using centralized constants
+        timeframe_frequencies = {
+            "1m": "1min",
+            "5m": "5min", 
+            "15m": "15min",
+            "30m": "30min",
+            "1h": "1H",
+            "4h": "4H", 
+            "1d": "1D",
+            "1w": "1W",
+        }
+        target_freq = timeframe_frequencies.get(target_timeframe)
         if not target_freq:
             raise DataError(
                 message=f"Invalid target timeframe: {target_timeframe}",
@@ -1352,13 +1376,13 @@ class DataManager:
                 details={
                     "parameter": "target_timeframe",
                     "value": target_timeframe,
-                    "valid_options": list(self.TIMEFRAME_FREQUENCIES.keys()),
+                    "valid_options": list(timeframe_frequencies.keys()),
                 },
             )
 
         # If source_timeframe is provided, validate it
         if source_timeframe:
-            source_freq = self.TIMEFRAME_FREQUENCIES.get(source_timeframe)
+            source_freq = timeframe_frequencies.get(source_timeframe)
             if not source_freq:
                 raise DataError(
                     message=f"Invalid source timeframe: {source_timeframe}",
@@ -1366,7 +1390,7 @@ class DataManager:
                     details={
                         "parameter": "source_timeframe",
                         "value": source_timeframe,
-                        "valid_options": list(self.TIMEFRAME_FREQUENCIES.keys()),
+                        "valid_options": list(timeframe_frequencies.keys()),
                     },
                 )
 

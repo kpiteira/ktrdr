@@ -231,35 +231,15 @@ class GapAnalysisService:
             next_time = df_sorted.index[i + 1]
             expected_next = current_time + timeframe_delta
             
-            # Use appropriate tolerance based on timeframe
-            # For hourly data, allow up to 30 minutes variance
-            # For daily data, allow up to 8 hours variance
-            if timeframe in ['1h', '4h']:
-                tolerance = timedelta(minutes=30)
-                min_reportable_gap = timedelta(minutes=45)  # 45 minutes for hourly data
-            elif timeframe == '1d':
-                tolerance = timedelta(hours=8)
-                min_reportable_gap = timedelta(hours=18)  # 18 hours for daily data
-            else:
-                tolerance = timedelta(minutes=5)  # 5 minutes for intraday
-                min_reportable_gap = timeframe_delta * 0.75  # 75% of timeframe for other intervals
-            
             # Calculate actual gap duration
             gap_duration = next_time - expected_next
             
-            # Only report gaps that are both significant and larger than tolerance
-            if gap_duration > tolerance and gap_duration >= min_reportable_gap:
-                # Double-check that gap is actually meaningful
-                gap_duration_hours = gap_duration.total_seconds() / 3600
-                
-                # For hourly data, don't report gaps smaller than 45 minutes
-                if timeframe == '1h' and gap_duration_hours < 0.75:
-                    continue
-                    
-                # For daily data, don't report gaps smaller than 18 hours  
-                if timeframe == '1d' and gap_duration_hours < 18:
-                    continue
-                
+            # Use minimal threshold - let GapClassifier determine significance
+            # Only skip very small gaps that are clearly just timing variations
+            min_threshold = timeframe_delta * 0.5  # 50% of timeframe
+            
+            if gap_duration > min_threshold:
+                # Let GapClassifier handle all intelligence about whether this gap is significant
                 gap_info = self.gap_classifier.analyze_gap(expected_next, next_time, symbol, timeframe)
                 gaps.append(gap_info)
         
