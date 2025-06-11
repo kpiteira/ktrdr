@@ -297,6 +297,13 @@ async def _load_data_async(
     quiet: bool,
 ):
     """Async implementation of load-data command using API."""
+    # Reduce HTTP logging noise unless verbose mode
+    if not verbose:
+        import logging
+        httpx_logger = logging.getLogger("httpx")
+        original_level = httpx_logger.level
+        httpx_logger.setLevel(logging.WARNING)
+    
     try:
         # Check API connection
         if not await check_api_connection():
@@ -364,7 +371,8 @@ async def _load_data_async(
                     TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                     TimeElapsedColumn(),
                     console=console,
-                    transient=True,
+                    transient=False,  # Keep progress visible
+                    refresh_per_second=2,  # Reduce refresh rate
                 ) as progress:
                     task = progress.add_task("Loading data...", total=100)
                     
@@ -467,6 +475,10 @@ async def _load_data_async(
             error_code="CLI-LoadDataError",
             details={"symbol": symbol, "timeframe": timeframe, "mode": mode, "error": str(e)},
         ) from e
+    finally:
+        # Restore HTTP logging level
+        if not verbose:
+            httpx_logger.setLevel(original_level)
 
 
 async def _process_data_load_response(

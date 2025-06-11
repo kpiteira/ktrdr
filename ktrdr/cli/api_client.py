@@ -197,6 +197,39 @@ class KtrdrApiClient:
                 ) from e
     
     # =============================================================================
+    # Generic HTTP Methods
+    # =============================================================================
+    
+    async def get(
+        self, 
+        endpoint: str, 
+        params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Make a GET request to the API."""
+        return await self._make_request("GET", endpoint, params=params, timeout=timeout)
+    
+    async def post(
+        self,
+        endpoint: str,
+        json: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Make a POST request to the API."""
+        return await self._make_request("POST", endpoint, json_data=json, params=params, timeout=timeout)
+    
+    async def delete(
+        self,
+        endpoint: str,
+        json: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Make a DELETE request to the API."""
+        return await self._make_request("DELETE", endpoint, json_data=json, params=params, timeout=timeout)
+    
+    # =============================================================================
     # Data Management Endpoints
     # =============================================================================
     
@@ -292,7 +325,7 @@ class KtrdrApiClient:
             params["async_mode"] = "true"
         
         # Use longer timeout for data loading operations (shorter for async mode)
-        request_timeout = timeout or (30.0 if async_mode else 300.0)
+        request_timeout = timeout or (10.0 if async_mode else 300.0)
         
         response = await self._make_request(
             "POST",
@@ -546,6 +579,7 @@ class KtrdrApiClient:
             "DELETE",
             f"/operations/{operation_id}",
             json_data=payload if payload else None,
+            timeout=5.0,  # Quick timeout for cancellation
         )
         
         if not response.get("success"):
