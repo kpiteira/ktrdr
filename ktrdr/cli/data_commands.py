@@ -9,6 +9,7 @@ This module contains all CLI commands related to data operations:
 """
 
 import asyncio
+import signal
 import sys
 import json
 from typing import Optional
@@ -313,29 +314,24 @@ async def _load_data_async(
             console.print()
         
         # Show progress if requested
-        if show_progress and not quiet:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-                transient=True,
-            ) as progress:
-                task = progress.add_task("Loading data via API...", total=None)
-                
-                # Make API call for data loading
-                response = await api_client.load_data(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    mode=mode,
-                    start_date=start_date,
-                    end_date=end_date,
-                    trading_hours_only=trading_hours_only,
-                    include_extended=include_extended,
-                )
-                
-                progress.update(task, description="Completed", total=100, completed=100)
-        else:
-            # Make API call without progress display
+        # Use async mode for cancellable operations
+        async_mode = True  # Always use async mode for cancellation support
+        
+        # Set up cancellation handling
+        cancelled = False
+        operation_id = None
+        
+        def signal_handler(signum, frame):
+            """Handle Ctrl+C for graceful cancellation."""
+            nonlocal cancelled
+            cancelled = True
+            console.print("\n[yellow]🛑 Cancellation requested... stopping operation[/yellow]")
+        
+        # Set up signal handler for Ctrl+C
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        try:
+            # Start async operation
             response = await api_client.load_data(
                 symbol=symbol,
                 timeframe=timeframe,
@@ -344,78 +340,126 @@ async def _load_data_async(
                 end_date=end_date,
                 trading_hours_only=trading_hours_only,
                 include_extended=include_extended,
+                async_mode=async_mode,
             )
-        
-        # Process response
-        success = response.get("success", False)
-        data = response.get("data", {})
-        error_info = response.get("error")
-        
-        if success:
-            # Success or partial success
-            status = data.get("status", "unknown")
-            fetched_bars = data.get("fetched_bars", 0)
-            execution_time = data.get("execution_time_seconds", 0)
             
-            if not quiet:
-                if status == "success":
-                    console.print(f"✅ [bold green]Successfully loaded {fetched_bars} bars[/bold green]")
-                elif status == "partial":
-                    console.print(f"⚠️  [yellow]Partially loaded {fetched_bars} bars[/yellow]")
-                    if error_info:
-                        console.print(f"⚠️  Warning: {error_info.get('message', 'Unknown issue')}")
-                else:
-                    console.print(f"ℹ️  Data loading completed with status: {status}")
-                
-                if execution_time:
-                    console.print(f"⏱️  Duration: {api_client.format_duration(execution_time)}")
-                
-                # Show additional metrics if available
-                if verbose and data:
-                    console.print(f"\n📊 [bold]Detailed metrics:[/bold]")
-                    for key, value in data.items():
-                        if key not in ["status", "fetched_bars", "execution_time_seconds"]:
-                            console.print(f"   {key}: {value}")
+            # Get operation ID from response
+            if response.get("success") and response.get("data", {}).get("operation_id"):
+                operation_id = response["data"]["operation_id"]
+                if not quiet:
+                    console.print(f"⚡ Started operation: {operation_id}")
+            else:
+                # Fallback to sync mode if async not supported
+                if not quiet:
+                    console.print("ℹ️  Using synchronous mode")
+                # Process sync response directly
+                return await _process_data_load_response(response, symbol, timeframe, mode, output_format, verbose, quiet, api_client)
             
-            # Format output
-            if output_format == "json":
-                result = {
-                    "symbol": symbol,
-                    "timeframe": timeframe,
-                    "mode": mode,
-                    "success": success,
-                    "status": status,
-                    "bars_loaded": fetched_bars,
-                    "execution_time_seconds": execution_time,
-                    "details": data,
+            # Monitor operation progress
+            if show_progress and not quiet:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TimeElapsedColumn(),
+                    console=console,
+                    transient=True,
+                ) as progress:
+                    task = progress.add_task("Loading data...", total=100)
+                    
+                    # Poll operation status
+                    while not cancelled:
+                        try:
+                            status_response = await api_client.get_operation_status(operation_id)
+                            operation_data = status_response.get("data", {})
+                            
+                            status = operation_data.get("status")
+                            progress_info = operation_data.get("progress", {})
+                            progress_percentage = progress_info.get("percentage", 0)
+                            current_step = progress_info.get("current_step", "Loading...")
+                            
+                            # Update progress display
+                            progress.update(
+                                task,
+                                completed=progress_percentage,
+                                description=current_step[:50] + "..." if len(current_step) > 50 else current_step
+                            )
+                            
+                            # Check if operation completed
+                            if status in ["completed", "failed", "cancelled"]:
+                                progress.update(task, completed=100, description="Completed")
+                                break
+                            
+                            # Sleep before next poll
+                            await asyncio.sleep(1.0)
+                            
+                        except Exception as e:
+                            if not quiet:
+                                console.print(f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]")
+                            break
+            else:
+                # Simple polling without progress display
+                while not cancelled:
+                    try:
+                        status_response = await api_client.get_operation_status(operation_id)
+                        operation_data = status_response.get("data", {})
+                        status = operation_data.get("status")
+                        
+                        if status in ["completed", "failed", "cancelled"]:
+                            break
+                        
+                        await asyncio.sleep(2.0)
+                        
+                    except Exception as e:
+                        if not quiet:
+                            console.print(f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]")
+                        break
+            
+            # Handle cancellation
+            if cancelled and operation_id:
+                try:
+                    cancel_response = await api_client.cancel_operation(
+                        operation_id=operation_id,
+                        reason="User requested cancellation via CLI"
+                    )
+                    if not quiet:
+                        console.print("✅ [yellow]Operation cancelled successfully[/yellow]")
+                    return
+                except Exception as e:
+                    if not quiet:
+                        console.print(f"[red]Failed to cancel operation: {str(e)}[/red]")
+                    return
+            
+            # Get final operation status
+            try:
+                final_response = await api_client.get_operation_status(operation_id)
+                operation_data = final_response.get("data", {})
+                
+                # Convert operation data to load response format
+                result_summary = operation_data.get("result_summary", {})
+                response = {
+                    "success": operation_data.get("status") == "completed",
+                    "data": {
+                        "status": result_summary.get("status", operation_data.get("status")),
+                        "fetched_bars": result_summary.get("fetched_bars", 0),
+                        "execution_time_seconds": result_summary.get("execution_time_seconds", 0),
+                        "operation_id": operation_id,
+                    },
+                    "error": {"message": operation_data.get("error_message")} if operation_data.get("error_message") else None
                 }
-                if error_info:
-                    result["warning"] = error_info
-                print(json.dumps(result, indent=2))
-        else:
-            # Failed
-            error_msg = error_info.get("message", "Unknown error") if error_info else "Unknown error"
-            
-            if not quiet:
-                console.print(f"❌ [bold red]Data loading failed![/bold red]")
-                console.print(f"🚨 Error: {error_msg}")
                 
-                if verbose and error_info:
-                    console.print(f"\n🔍 [bold]Error details:[/bold]")
-                    for key, value in error_info.items():
-                        console.print(f"   {key}: {value}")
+            except Exception as e:
+                if not quiet:
+                    console.print(f"[red]Failed to get final operation status: {str(e)}[/red]")
+                return
             
-            if output_format == "json":
-                result = {
-                    "symbol": symbol,
-                    "timeframe": timeframe,
-                    "mode": mode,
-                    "success": False,
-                    "error": error_info or {"message": error_msg},
-                }
-                print(json.dumps(result, indent=2))
-            
-            sys.exit(1)
+        finally:
+            # Restore default signal handler
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+        
+        # Process the final response using the helper function
+        await _process_data_load_response(response, symbol, timeframe, mode, output_format, verbose, quiet, api_client)
             
     except Exception as e:
         raise DataError(
@@ -423,6 +467,89 @@ async def _load_data_async(
             error_code="CLI-LoadDataError",
             details={"symbol": symbol, "timeframe": timeframe, "mode": mode, "error": str(e)},
         ) from e
+
+
+async def _process_data_load_response(
+    response: dict,
+    symbol: str,
+    timeframe: str,
+    mode: str,
+    output_format: str,
+    verbose: bool,
+    quiet: bool,
+    api_client,
+) -> None:
+    """Process and display data load response."""
+    # Process response
+    success = response.get("success", False)
+    data = response.get("data", {})
+    error_info = response.get("error")
+    
+    if success:
+        # Success or partial success
+        status = data.get("status", "unknown")
+        fetched_bars = data.get("fetched_bars", 0)
+        execution_time = data.get("execution_time_seconds", 0)
+        
+        if not quiet:
+            if status == "success":
+                console.print(f"✅ [bold green]Successfully loaded {fetched_bars} bars[/bold green]")
+            elif status == "partial":
+                console.print(f"⚠️  [yellow]Partially loaded {fetched_bars} bars[/yellow]")
+                if error_info:
+                    console.print(f"⚠️  Warning: {error_info.get('message', 'Unknown issue')}")
+            else:
+                console.print(f"ℹ️  Data loading completed with status: {status}")
+            
+            if execution_time:
+                console.print(f"⏱️  Duration: {api_client.format_duration(execution_time)}")
+            
+            # Show additional metrics if available
+            if verbose and data:
+                console.print(f"\n📊 [bold]Detailed metrics:[/bold]")
+                for key, value in data.items():
+                    if key not in ["status", "fetched_bars", "execution_time_seconds"]:
+                        console.print(f"   {key}: {value}")
+        
+        # Format output
+        if output_format == "json":
+            result = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "mode": mode,
+                "success": success,
+                "status": status,
+                "bars_loaded": fetched_bars,
+                "execution_time_seconds": execution_time,
+                "details": data,
+            }
+            if error_info:
+                result["warning"] = error_info
+            print(json.dumps(result, indent=2))
+    else:
+        # Failed
+        error_msg = error_info.get("message", "Unknown error") if error_info else "Unknown error"
+        
+        if not quiet:
+            console.print(f"❌ [bold red]Data loading failed![/bold red]")
+            console.print(f"🚨 Error: {error_msg}")
+            
+            if verbose and error_info:
+                console.print(f"\n🔍 [bold]Error details:[/bold]")
+                for key, value in error_info.items():
+                    console.print(f"   {key}: {value}")
+        
+        if output_format == "json":
+            result = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "mode": mode,
+                "success": False,
+                "error": error_info or {"message": error_msg},
+            }
+            print(json.dumps(result, indent=2))
+        
+        sys.exit(1)
 
 
 @data_app.command("range")

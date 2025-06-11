@@ -306,24 +306,26 @@ class DataLoadOperationResponse(BaseModel):
     gap analysis results and data source metrics.
     
     Attributes:
-        status (str): Operation status - 'success', 'partial', or 'failed'
+        status (str): Operation status - 'success', 'partial', 'failed', or 'started'
+        operation_id (Optional[str]): Operation ID for async operations
         fetched_bars (int): Number of bars fetched
         cached_before (bool): Whether data existed before operation
         merged_file (str): Path to the merged CSV file
         gaps_analyzed (int): Number of gaps identified by DataManager
         segments_fetched (int): Number of segments successfully fetched
-        external_requests_made (int): Number of external API calls made (e.g., IB)
+        ib_requests_made (int): Number of IB API calls made
         execution_time_seconds (float): Total execution time
         error_message (Optional[str]): Error message if operation failed
     """
     
-    status: Literal["success", "partial", "failed"] = Field(..., description="Operation status")
+    status: Literal["success", "partial", "failed", "started"] = Field(..., description="Operation status")
+    operation_id: Optional[str] = Field(None, description="Operation ID for async operations")
     fetched_bars: int = Field(..., description="Number of bars fetched")
     cached_before: bool = Field(..., description="Whether data existed before operation")
     merged_file: str = Field(..., description="Path to the merged CSV file")
     gaps_analyzed: int = Field(..., description="Number of gaps identified by DataManager")
     segments_fetched: int = Field(..., description="Number of segments successfully fetched")
-    external_requests_made: int = Field(..., description="Number of external API calls made (e.g., IB)")
+    ib_requests_made: int = Field(..., description="Number of IB API calls made")
     execution_time_seconds: float = Field(..., description="Total execution time")
     error_message: Optional[str] = Field(None, description="Error message if operation failed")
 

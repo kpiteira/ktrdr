@@ -356,7 +356,9 @@ async def get_cached_data(
     """,
 )
 async def load_data(
-    request: DataLoadRequest, data_service: DataService = Depends(get_data_service)
+    request: DataLoadRequest, 
+    async_mode: bool = Query(False, description="Use async operation tracking"),
+    data_service: DataService = Depends(get_data_service)
 ) -> DataLoadApiResponse:
     """
     Load data using enhanced DataManager with IB integration.
@@ -368,14 +370,29 @@ async def load_data(
     - IB rate limit compliance
     - Partial failure resilience
     
+    **Modes:**
+    - Sync mode (async_mode=false): Returns results immediately (default)
+    - Async mode (async_mode=true): Returns operation ID for tracking
+    
     Args:
         request: Enhanced data loading request with mode support
+        async_mode: Use async operation tracking for cancellable operations
         
     Returns:
-        Detailed response with operation metrics and status
+        Detailed response with operation metrics/status or operation ID
         
-    Example request:
+    Example request (sync):
         ```json
+        {
+          "symbol": "AAPL",
+          "timeframe": "1h", 
+          "mode": "tail"
+        }
+        ```
+        
+    Example request (async):
+        ```
+        POST /api/v1/data/load?async_mode=true
         {
           "symbol": "AAPL",
           "timeframe": "1h",
@@ -383,25 +400,31 @@ async def load_data(
         }
         ```
         
-    Example response:
+    Example response (sync):
         ```json
         {
           "success": true,
           "data": {
             "status": "success",
             "fetched_bars": 168,
-            "cached_before": true,
-            "merged_file": "data/AAPL_1h.csv",
-            "gaps_analyzed": 2,
-            "segments_fetched": 1,
-            "ib_requests_made": 3,
             "execution_time_seconds": 2.456
+          }
+        }
+        ```
+        
+    Example response (async):
+        ```json
+        {
+          "success": true,
+          "data": {
+            "operation_id": "op_data_load_20241201_abc123",
+            "status": "started"
           }
         }
         ```
     """
     try:
-        logger.info(f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}")
+        logger.info(f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}, async: {async_mode}")
         
         # Validate request
         if not request.symbol or not request.symbol.strip():
@@ -414,7 +437,6 @@ async def load_data(
         # Clean symbol
         clean_symbol = request.symbol.strip().upper()
         
-        # Use DataService which delegates to DataManager for intelligent loading
         # Extract filters from request
         filters_dict = None
         if request.filters:
@@ -423,15 +445,45 @@ async def load_data(
                 "include_extended": request.filters.include_extended
             }
         
-        result = await data_service.load_data(
-            symbol=clean_symbol,
-            timeframe=request.timeframe,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            mode=request.mode,  # Let DataManager decide whether to use IB or not
-            include_metadata=True,
-            filters=filters_dict,
-        )
+        if async_mode:
+            # Async mode - start operation and return operation ID
+            operation_id = await data_service.start_data_loading_operation(
+                symbol=clean_symbol,
+                timeframe=request.timeframe,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                mode=request.mode,
+                filters=filters_dict,
+            )
+            
+            # Return operation ID for tracking
+            response_data = DataLoadOperationResponse(
+                operation_id=operation_id,
+                status="started",
+                fetched_bars=0,
+                cached_before=False,
+                merged_file="",
+                gaps_analyzed=0,
+                segments_fetched=0,
+                ib_requests_made=0,
+                execution_time_seconds=0.0,
+                error_message=None,
+            )
+            
+            logger.info(f"Started async data loading operation: {operation_id}")
+            return DataLoadApiResponse(success=True, data=response_data, error=None)
+        
+        else:
+            # Sync mode - execute immediately and return results
+            result = await data_service.load_data(
+                symbol=clean_symbol,
+                timeframe=request.timeframe,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                mode=request.mode,
+                include_metadata=True,
+                filters=filters_dict,
+            )
         
         # Convert to response model
         response_data = DataLoadOperationResponse(**result)

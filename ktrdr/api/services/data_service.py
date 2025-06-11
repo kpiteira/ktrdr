@@ -5,6 +5,7 @@ This module provides services for accessing OHLCV data and related functionality
 bridging the API endpoints with the core KTRDR data modules.
 """
 
+import asyncio
 import logging
 from typing import Dict, List, Optional, Union, Any
 from datetime import datetime
@@ -15,6 +16,8 @@ from ktrdr import get_logger, log_entry_exit, log_performance, log_data_operatio
 from ktrdr.data import DataManager
 from ktrdr.errors import DataError, DataNotFoundError, retry_with_backoff, RetryConfig
 from ktrdr.api.services.base import BaseService
+from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.api.models.operations import OperationType, OperationMetadata, OperationProgress
 
 # Setup module-level logger
 logger = get_logger(__name__)
@@ -37,6 +40,7 @@ class DataService(BaseService):
         """
         super().__init__()  # Initialize BaseService
         self.data_manager = DataManager(data_dir=data_dir)
+        self.operations_service = get_operations_service()
         self.logger.info("DataService initialized")
 
     @log_entry_exit(logger=logger, log_args=True)
@@ -133,6 +137,196 @@ class DataService(BaseService):
                 "execution_time_seconds": execution_time,
                 "error_message": str(e),
             }
+
+    async def start_data_loading_operation(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[Union[str, datetime]] = None,
+        end_date: Optional[Union[str, datetime]] = None,
+        mode: str = "tail",
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        Start a data loading operation that can be tracked and cancelled.
+        
+        This method creates an operation, registers it with the operations service,
+        and starts the data loading process in the background.
+        
+        Args:
+            symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
+            timeframe: Data timeframe (e.g., '1d', '1h')
+            start_date: Optional start date for filtering
+            end_date: Optional end date for filtering
+            mode: Loading mode (tail, backfill, full)
+            filters: Optional filters (trading_hours_only, include_extended)
+            
+        Returns:
+            Operation ID for tracking the operation
+        """
+        # Create operation metadata
+        metadata = OperationMetadata(
+            symbol=symbol,
+            timeframe=timeframe,
+            mode=mode,
+            start_date=start_date if isinstance(start_date, datetime) else None,
+            end_date=end_date if isinstance(end_date, datetime) else None,
+            parameters=filters or {},
+        )
+        
+        # Create operation
+        operation = await self.operations_service.create_operation(
+            operation_type=OperationType.DATA_LOAD,
+            metadata=metadata,
+        )
+        
+        operation_id = operation.operation_id
+        logger.info(f"Created data loading operation: {operation_id}")
+        
+        # Start the data loading task
+        task = asyncio.create_task(self._run_data_loading_operation(
+            operation_id, symbol, timeframe, start_date, end_date, mode, filters
+        ))
+        
+        # Register task with operations service
+        await self.operations_service.start_operation(operation_id, task)
+        
+        return operation_id
+    
+    async def _run_data_loading_operation(
+        self,
+        operation_id: str,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[Union[str, datetime]],
+        end_date: Optional[Union[str, datetime]],
+        mode: str,
+        filters: Optional[Dict[str, Any]],
+    ) -> None:
+        """
+        Run the actual data loading operation with progress tracking.
+        
+        This method performs the data loading while updating operation progress
+        and handling cancellation requests.
+        """
+        try:
+            logger.info(f"Starting data loading operation: {operation_id}")
+            
+            # Update progress - starting
+            await self.operations_service.update_progress(
+                operation_id,
+                OperationProgress(
+                    percentage=0.0,
+                    current_step="Initializing data loading",
+                    steps_completed=0,
+                    steps_total=10,  # Estimated steps
+                )
+            )
+            
+            # Check for cancellation before starting heavy work
+            operation = await self.operations_service.get_operation(operation_id)
+            if operation and operation.is_cancelled_requested:
+                logger.info(f"Operation {operation_id} was cancelled before starting")
+                return
+            
+            # Update progress - analyzing requirements
+            await self.operations_service.update_progress(
+                operation_id,
+                OperationProgress(
+                    percentage=10.0,
+                    current_step="Analyzing data requirements",
+                    steps_completed=1,
+                    steps_total=10,
+                )
+            )
+            
+            # Simulate some work (this would be the actual DataManager call)
+            start_time = time.time()
+            
+            # Update progress - loading data
+            await self.operations_service.update_progress(
+                operation_id,
+                OperationProgress(
+                    percentage=30.0,
+                    current_step=f"Loading {symbol} data ({mode} mode)",
+                    steps_completed=3,
+                    steps_total=10,
+                )
+            )
+            
+            # Check for cancellation during operation
+            operation = await self.operations_service.get_operation(operation_id)
+            if operation and operation.is_cancelled_requested:
+                logger.info(f"Operation {operation_id} was cancelled during execution")
+                return
+            
+            # Call the actual data loading method
+            try:
+                # This is where we'd call the enhanced DataManager
+                # For now, use the existing load_data method
+                result = await self.load_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_date=start_date,
+                    end_date=end_date,
+                    mode=mode,
+                    filters=filters,
+                )
+                
+                # Update progress - processing results
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=80.0,
+                        current_step="Processing loaded data",
+                        steps_completed=8,
+                        steps_total=10,
+                        items_processed=result.get("fetched_bars", 0),
+                        items_total=result.get("fetched_bars", 0),
+                    )
+                )
+                
+                # Check for cancellation before completing
+                operation = await self.operations_service.get_operation(operation_id)
+                if operation and operation.is_cancelled_requested:
+                    logger.info(f"Operation {operation_id} was cancelled before completion")
+                    return
+                
+                # Complete the operation
+                execution_time = time.time() - start_time
+                result_summary = {
+                    "status": result.get("status", "success"),
+                    "fetched_bars": result.get("fetched_bars", 0),
+                    "execution_time_seconds": execution_time,
+                    "mode": mode,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                }
+                
+                await self.operations_service.complete_operation(
+                    operation_id, result_summary
+                )
+                
+                logger.info(f"Completed data loading operation: {operation_id}")
+                
+            except Exception as e:
+                # Handle operation failure
+                await self.operations_service.fail_operation(
+                    operation_id, f"Data loading failed: {str(e)}"
+                )
+                logger.error(f"Data loading operation failed: {operation_id} - {str(e)}")
+                
+        except asyncio.CancelledError:
+            # Handle task cancellation
+            logger.info(f"Data loading operation cancelled: {operation_id}")
+            # The operations service will have already marked it as cancelled
+            raise
+        except Exception as e:
+            # Handle unexpected errors
+            await self.operations_service.fail_operation(
+                operation_id, f"Unexpected error: {str(e)}"
+            )
+            logger.error(f"Unexpected error in data loading operation: {operation_id} - {str(e)}")
 
     def _convert_df_to_api_format(
         self,

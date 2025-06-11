@@ -265,6 +265,7 @@ class KtrdrApiClient:
         end_date: Optional[str] = None,
         trading_hours_only: bool = False,
         include_extended: bool = False,
+        async_mode: bool = False,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Load data via DataManager with IB integration."""
@@ -285,13 +286,19 @@ class KtrdrApiClient:
                 "include_extended": include_extended,
             }
         
-        # Use longer timeout for data loading operations
-        request_timeout = timeout or 300.0  # 5 minutes default
+        # Add async_mode parameter if specified
+        params = {}
+        if async_mode:
+            params["async_mode"] = "true"
+        
+        # Use longer timeout for data loading operations (shorter for async mode)
+        request_timeout = timeout or (30.0 if async_mode else 300.0)
         
         response = await self._make_request(
             "POST",
             "/data/load",
             json_data=payload,
+            params=params,
             timeout=request_timeout,
         )
         
