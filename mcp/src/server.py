@@ -304,6 +304,39 @@ async def search_knowledge(topic: Optional[str] = None,
         logger.error("Failed to search knowledge", error=str(e))
         raise
 
+@mcp.tool()
+async def get_available_indicators() -> List[Dict[str, Any]]:
+    """Get list of available indicators that can be used in strategies
+    
+    Returns:
+        List of available indicators with their parameters and descriptions
+    """
+    try:
+        async with get_api_client() as client:
+            indicators = await client.get_indicators()
+            logger.info("Retrieved indicators", count=len(indicators))
+            return indicators
+    except Exception as e:
+        logger.error("Failed to get available indicators", error=str(e))
+        raise
+
+@mcp.tool()
+async def get_available_strategies() -> List[Dict[str, Any]]:
+    """Get list of available trading strategies
+    
+    Returns:
+        List of strategies with their configuration and training status
+    """
+    try:
+        async with get_api_client() as client:
+            response = await client.get_strategies()
+            strategies = response.get("strategies", [])
+            logger.info("Retrieved strategies", count=len(strategies))
+            return strategies
+    except Exception as e:
+        logger.error("Failed to get available strategies", error=str(e))
+        raise
+
 # Neural Network Training Tools
 
 @mcp.tool()
@@ -591,8 +624,9 @@ async def test_model_prediction(model_name: str, symbol: str,
 
 @mcp.tool()
 async def run_strategy_backtest(experiment_id: str,
-                               strategy_config: Dict[str, Any],
+                               strategy_name: str,
                                symbol: str,
+                               timeframe: str,
                                start_date: str,
                                end_date: str,
                                initial_capital: float = 10000.0,
@@ -605,8 +639,9 @@ async def run_strategy_backtest(experiment_id: str,
     
     Args:
         experiment_id: ID of experiment to track this backtest
-        strategy_config: Complete strategy configuration dictionary
+        strategy_name: Name of existing strategy to backtest
         symbol: Trading symbol to backtest on (e.g., 'AAPL', 'TSLA')
+        timeframe: Data timeframe ('1m', '5m', '1h', '1d')
         start_date: Backtest start date (YYYY-MM-DD)
         end_date: Backtest end date (YYYY-MM-DD) 
         initial_capital: Starting capital for the backtest
@@ -618,50 +653,34 @@ async def run_strategy_backtest(experiment_id: str,
     try:
         # Generate backtest name if not provided
         if not backtest_name:
-            backtest_name = f"{symbol}_{start_date}_{end_date}"
+            backtest_name = f"{strategy_name}_{symbol}_{start_date}_{end_date}"
         
         # Store backtest task in experiment
         storage = await get_storage()
         
-        # Create strategy record if it doesn't exist
-        strategy_name = strategy_config.get("name", f"strategy_{experiment_id}")
-        strategy_id = await storage.save_strategy(
-            name=strategy_name,
-            config=strategy_config,
-            description=strategy_config.get("description", "")
-        )
-        
-        # Start backtest through backend API
+        # Start backtest through backend API (CORRECTED API CALL)
         async with get_api_client() as client:
             backtest_result = await client.run_backtest(
-                strategy_config=strategy_config,
+                strategy_name=strategy_name,
                 symbol=symbol,
+                timeframe=timeframe,
                 start_date=start_date,
-                end_date=end_date
+                end_date=end_date,
+                initial_capital=initial_capital
             )
         
-        # Save backtest results in storage
-        backtest_id = await storage.save_backtest(
-            strategy_id=strategy_id,
-            symbol=symbol,
-            start_date=start_date,
-            end_date=end_date,
-            results=backtest_result.get("results", {}),
-            metrics=backtest_result.get("metrics", {})
-        )
-        
-        logger.info("Backtest completed", backtest_id=backtest_id, symbol=symbol)
+        logger.info("Backtest started", strategy_name=strategy_name, symbol=symbol)
         return {
-            "backtest_id": backtest_id,
             "experiment_id": experiment_id,
-            "strategy_id": strategy_id,
+            "strategy_name": strategy_name,
             "symbol": symbol,
+            "timeframe": timeframe,
             "start_date": start_date,
             "end_date": end_date,
             "initial_capital": initial_capital,
             "backend_response": backtest_result,
-            "status": "completed",
-            "message": f"Backtest completed for {symbol} from {start_date} to {end_date}"
+            "status": "started",
+            "message": f"Backtest started for {strategy_name} on {symbol} from {start_date} to {end_date}"
         }
         
     except Exception as e:

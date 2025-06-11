@@ -137,7 +137,7 @@ class KTRDRAPIClient:
         """Get data information for a symbol"""
         return await self._request("GET", f"/data/info/{symbol}")
     
-    # Indicator Endpoints
+    # Indicator Endpoints  
     async def get_indicators(self) -> List[Dict[str, Any]]:
         """Get available indicators"""
         response = await self._request("GET", "/indicators")
@@ -181,25 +181,40 @@ class KTRDRAPIClient:
         """Save a strategy configuration"""
         return await self._request("POST", f"/strategies/{strategy_name}", json=config)
     
-    # Backtesting Endpoints
-    async def run_backtest(self, strategy_config: Dict[str, Any], 
-                          symbol: str,
-                          start_date: str,
-                          end_date: str) -> Dict[str, Any]:
+    # Backtesting Endpoints (CORRECTED PATHS)
+    async def run_backtest(self, strategy_name: str, symbol: str, timeframe: str,
+                          start_date: str, end_date: str, 
+                          initial_capital: float = 100000.0,
+                          commission: float = 0.001,
+                          slippage: float = 0.0005,
+                          data_mode: str = "local") -> Dict[str, Any]:
         """Run backtest for a strategy"""
         payload = {
-            "strategy_config": strategy_config,
+            "strategy_name": strategy_name,
             "symbol": symbol,
+            "timeframe": timeframe,
             "start_date": start_date,
-            "end_date": end_date
+            "end_date": end_date,
+            "initial_capital": initial_capital,
+            "commission": commission,
+            "slippage": slippage,
+            "data_mode": data_mode
         }
-        return await self._request("POST", "/backtesting/run", json=payload)
+        return await self._request("POST", "/backtests/", json=payload)
+    
+    async def get_backtest_status(self, backtest_id: str) -> Dict[str, Any]:
+        """Get backtest status"""
+        return await self._request("GET", f"/backtests/{backtest_id}")
     
     async def get_backtest_results(self, backtest_id: str) -> Dict[str, Any]:
         """Get backtest results"""
-        return await self._request("GET", f"/backtesting/results/{backtest_id}")
+        return await self._request("GET", f"/backtests/{backtest_id}/results")
     
-    # Neural Network Training Endpoints
+    async def get_backtest_trades(self, backtest_id: str) -> Dict[str, Any]:
+        """Get backtest trades"""
+        return await self._request("GET", f"/backtests/{backtest_id}/trades")
+    
+    # Neural Network Training Endpoints (TO BE IMPLEMENTED)
     async def start_neural_training(self, symbol: str, timeframe: str,
                                    config: Dict[str, Any],
                                    start_date: Optional[str] = None,
@@ -218,15 +233,15 @@ class KTRDRAPIClient:
         if task_id:
             payload["task_id"] = task_id
         
-        return await self._request("POST", "/neural/train", json=payload)
+        return await self._request("POST", "/training/start", json=payload)
     
     async def get_training_status(self, task_id: str) -> Dict[str, Any]:
         """Get neural network training status"""
-        return await self._request("GET", f"/neural/training/{task_id}/status")
+        return await self._request("GET", f"/training/{task_id}")
     
     async def get_model_performance(self, task_id: str) -> Dict[str, Any]:
         """Get trained model performance metrics"""
-        return await self._request("GET", f"/neural/training/{task_id}/performance")
+        return await self._request("GET", f"/training/{task_id}/performance")
     
     async def save_trained_model(self, task_id: str, model_name: str, 
                                 description: str = "") -> Dict[str, Any]:
@@ -236,11 +251,11 @@ class KTRDRAPIClient:
             "model_name": model_name,
             "description": description
         }
-        return await self._request("POST", "/neural/models/save", json=payload)
+        return await self._request("POST", "/models/save", json=payload)
     
     async def load_trained_model(self, model_name: str) -> Dict[str, Any]:
         """Load a trained neural network model"""
-        return await self._request("POST", f"/neural/models/{model_name}/load")
+        return await self._request("POST", f"/models/{model_name}/load")
     
     async def test_model_prediction(self, model_name: str, symbol: str,
                                    timeframe: str = "1h",
@@ -254,11 +269,11 @@ class KTRDRAPIClient:
         if test_date:
             payload["test_date"] = test_date
             
-        return await self._request("POST", "/neural/models/predict", json=payload)
+        return await self._request("POST", "/models/predict", json=payload)
     
     async def list_trained_models(self) -> List[Dict[str, Any]]:
         """List all trained neural network models"""
-        response = await self._request("GET", "/neural/models")
+        response = await self._request("GET", "/models")
         return response.get("models", [])
 
 # Singleton instance for easy access
