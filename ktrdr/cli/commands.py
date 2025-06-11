@@ -1620,20 +1620,61 @@ def train_command(
     data_mode: str = typer.Option("local", "--data-mode", help="Data loading mode: 'local', 'ib', or 'full'"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Validate configuration without training"),
+    save_model: Optional[str] = typer.Option(None, "--save-model", help="Save trained model with this name"),
 ):
     """
-    Train a neuro-fuzzy trading strategy.
+    Train a neuro-fuzzy trading strategy using the KTRDR API.
     
     This command trains a neural network model based on the strategy configuration,
     using historical price data and technical indicators with fuzzy logic.
     
     Examples:
         ktrdr train strategies/neuro_mean_reversion.yaml AAPL 1h --start-date 2024-01-01 --end-date 2024-06-01
-        ktrdr train strategies/momentum.yaml MSFT 4h --start-date 2023-01-01 --end-date 2024-01-01 --epochs 100
+        ktrdr train strategies/momentum.yaml MSFT 4h --start-date 2023-01-01 --end-date 2024-01-01 --epochs 100 --save-model msft_momentum_v1
     """
     from .training_commands import train_strategy
     train_strategy(strategy, symbol, timeframe, start_date, end_date, models_dir, 
-                  validation_split, epochs, data_mode, verbose, dry_run)
+                  validation_split, epochs, data_mode, verbose, dry_run, save_model)
+
+
+@cli_app.command("list-models")
+def list_models_command(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information")
+):
+    """
+    List all available trained neural network models.
+    
+    This command connects to the KTRDR API to list all models that have been
+    trained and saved using the neural network training system.
+    
+    Examples:
+        ktrdr list-models
+        ktrdr list-models --verbose
+    """
+    from .training_commands import list_models
+    list_models(verbose)
+
+
+@cli_app.command("test-model")
+def test_model_command(
+    model_name: str = typer.Argument(..., help="Name of the model to test"),
+    symbol: str = typer.Argument(..., help="Trading symbol to test on (e.g., AAPL, MSFT)"),
+    timeframe: str = typer.Option("1h", "--timeframe", "-t", help="Timeframe for prediction"),
+    test_date: Optional[str] = typer.Option(None, "--test-date", help="Specific date to test (YYYY-MM-DD)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed prediction information")
+):
+    """
+    Test a trained neural network model's prediction capability.
+    
+    This command loads a previously saved model via the KTRDR API and tests its
+    prediction capability on market data for a specific symbol and date.
+    
+    Examples:
+        ktrdr test-model aapl_momentum_v1 AAPL
+        ktrdr test-model msft_strategy MSFT --timeframe 4h --test-date 2024-06-01
+    """
+    from .training_commands import test_model
+    test_model(model_name, symbol, timeframe, test_date, verbose)
 
 
 # ===== Model Debugging Commands =====
