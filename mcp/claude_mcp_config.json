@@ -1,0 +1,7 @@
+{
+  "ktrdr": {
+    "command": "docker",
+    "args": ["exec", "-i", "ktrdr-mcp", "python", "-m", "src.main"],
+    "description": "KTRDR Trading Strategy Research Tools"
+  }
+}

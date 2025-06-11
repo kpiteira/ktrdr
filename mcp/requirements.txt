@@ -1,0 +1,26 @@
+# MCP SDK with CLI support
+mcp[cli]>=1.2.0
+
+# Async support
+aiohttp>=3.9.0
+asyncio>=3.4.3
+
+# API client
+httpx>=0.25.0
+
+# Database
+aiosqlite>=0.19.0
+sqlalchemy>=2.0.0
+
+# Utilities
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+structlog>=23.0.0
+pyyaml>=6.0
+
+# Development
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+black>=23.0.0
+mypy>=1.0.0
