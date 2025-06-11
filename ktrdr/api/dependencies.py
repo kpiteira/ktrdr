@@ -12,6 +12,7 @@ from ktrdr.api.config import APIConfig
 from ktrdr.api.services.data_service import DataService
 from ktrdr.api.services.indicator_service import IndicatorService
 from ktrdr.api.services.fuzzy_service import FuzzyService
+from ktrdr.api.services.operations_service import get_operations_service, OperationsService
 from ktrdr.data.data_manager import DataManager
 
 
@@ -72,9 +73,21 @@ def get_data_manager() -> DataManager:
     return DataManager()
 
 
+# Operations service dependency  
+def get_operations_service_dep() -> OperationsService:
+    """
+    Dependency for providing the operations service.
+
+    Returns:
+        OperationsService: Global operations service instance
+    """
+    return get_operations_service()
+
+
 # Define common dependencies with annotations for usage in route functions
 ConfigDep = Annotated[APIConfig, Depends(get_api_config)]
 DataServiceDep = Annotated[DataService, Depends(get_data_service)]
 IndicatorServiceDep = Annotated[IndicatorService, Depends(get_indicator_service)]
 FuzzyServiceDep = Annotated[FuzzyService, Depends(get_fuzzy_service)]
 DataManagerDep = Annotated[DataManager, Depends(get_data_manager)]
+OperationsServiceDep = Annotated[OperationsService, Depends(get_operations_service_dep)]

@@ -480,6 +480,87 @@ class KtrdrApiClient:
         return response.get("data", {})
     
     # =============================================================================
+    # Operations Management Endpoints
+    # =============================================================================
+    
+    async def list_operations(
+        self,
+        status: Optional[str] = None,
+        operation_type: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        active_only: bool = False,
+    ) -> Dict[str, Any]:
+        """List operations with optional filtering."""
+        params = {
+            "limit": limit,
+            "offset": offset,
+            "active_only": active_only,
+        }
+        if status:
+            params["status"] = status
+        if operation_type:
+            params["operation_type"] = operation_type
+            
+        response = await self._make_request("GET", "/operations", params=params)
+        if not response.get("success"):
+            raise DataError(
+                message="Failed to list operations",
+                error_code="API-ListOperationsError",
+                details={"response": response},
+            )
+        return response
+    
+    async def get_operation_status(self, operation_id: str) -> Dict[str, Any]:
+        """Get detailed status for a specific operation."""
+        response = await self._make_request("GET", f"/operations/{operation_id}")
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to get operation status for {operation_id}",
+                error_code="API-GetOperationStatusError",
+                details={"response": response, "operation_id": operation_id},
+            )
+        return response
+    
+    async def cancel_operation(
+        self,
+        operation_id: str,
+        reason: Optional[str] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """Cancel a running operation."""
+        payload = {}
+        if reason:
+            payload["reason"] = reason
+        if force:
+            payload["force"] = force
+            
+        response = await self._make_request(
+            "DELETE",
+            f"/operations/{operation_id}",
+            json_data=payload if payload else None,
+        )
+        
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to cancel operation {operation_id}",
+                error_code="API-CancelOperationError",
+                details={"response": response, "operation_id": operation_id},
+            )
+        return response
+    
+    async def retry_operation(self, operation_id: str) -> Dict[str, Any]:
+        """Retry a failed operation."""
+        response = await self._make_request("POST", f"/operations/{operation_id}/retry")
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to retry operation {operation_id}",
+                error_code="API-RetryOperationError",
+                details={"response": response, "operation_id": operation_id},
+            )
+        return response
+    
+    # =============================================================================
     # Helper Methods
     # =============================================================================
     
