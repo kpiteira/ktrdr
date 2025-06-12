@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union
 from dataclasses import dataclass, asdict
+from datetime import datetime
 from ib_insync import Contract, Forex, Stock, Future
 
 from ktrdr.logging import get_logger
@@ -34,6 +35,9 @@ class ContractInfo:
         description: Contract description
         validated_at: Timestamp when validation occurred
         trading_hours: Trading hours metadata for this contract
+        head_timestamp: Earliest available data timestamp for this symbol (ISO format)
+        head_timestamp_timeframes: Dict of timeframe -> earliest timestamp mapping
+        head_timestamp_fetched_at: When head timestamp was last fetched
     """
 
     symbol: str
@@ -44,6 +48,9 @@ class ContractInfo:
     description: str
     validated_at: float
     trading_hours: Optional[Dict] = None  # Serialized TradingHours
+    head_timestamp: Optional[str] = None  # ISO format for JSON serialization
+    head_timestamp_timeframes: Optional[Dict[str, str]] = None  # timeframe -> ISO timestamp
+    head_timestamp_fetched_at: Optional[float] = None  # Timestamp when head data was fetched
 
 
 class IbSymbolValidator:
@@ -232,27 +239,27 @@ class IbSymbolValidator:
                 return None
 
             # Request contract details using async method to avoid event loop conflicts
-            logger.info(f"🔍 Requesting contract details for: {contract}")
-            logger.info(f"   Contract type: {type(contract).__name__}")
-            logger.info(f"   Contract details: symbol={getattr(contract, 'symbol', 'N/A')}, secType={getattr(contract, 'secType', 'N/A')}, exchange={getattr(contract, 'exchange', 'N/A')}")
+            logger.debug(f"🔍 Requesting contract details for: {contract}")
+            logger.debug(f"   Contract type: {type(contract).__name__}")
+            logger.debug(f"   Contract details: symbol={getattr(contract, 'symbol', 'N/A')}, secType={getattr(contract, 'secType', 'N/A')}, exchange={getattr(contract, 'exchange', 'N/A')}")
             
             # Use synchronous method but run it in a separate thread to avoid event loop conflicts
             details = self._run_sync_in_thread(contract)
             
-            logger.info(f"📋 IB returned {len(details) if details else 0} contract details")
+            logger.debug(f"📋 IB returned {len(details) if details else 0} contract details")
 
             if not details:
-                logger.info(f"❌ No contract details returned for: {contract}")
-                logger.info(f"   This means IB has no security definition for this contract specification")
+                logger.debug(f"❌ No contract details returned for: {contract}")
+                logger.debug(f"   This means IB has no security definition for this contract specification")
                 return None
 
             # Use first result
             detail = details[0]
             contract_details = detail.contract
             
-            logger.info(f"✅ Contract found: {contract_details.symbol} ({contract_details.secType}) on {contract_details.exchange}")
-            logger.info(f"   Full name: {detail.longName or 'N/A'}")
-            logger.info(f"   Currency: {contract_details.currency}")
+            logger.debug(f"✅ Contract found: {contract_details.symbol} ({contract_details.secType}) on {contract_details.exchange}")
+            logger.debug(f"   Full name: {detail.longName or 'N/A'}")
+            logger.debug(f"   Currency: {contract_details.currency}")
 
             # Get trading hours metadata from IB contract details
             exchange = contract_details.primaryExchange or contract_details.exchange
@@ -427,6 +434,332 @@ class IbSymbolValidator:
         self._save_cache_to_file()
         logger.info(f"✅ Symbol {symbol} marked as permanently validated")
 
+    def fetch_head_timestamp(self, symbol: str, timeframe: Optional[str] = None, force_refresh: bool = False) -> Optional[str]:
+        """
+        Fetch the earliest available data timestamp for a symbol using IB's head timestamp API.
+        
+        Args:
+            symbol: Symbol to fetch head timestamp for
+            timeframe: Specific timeframe to fetch for (optional, uses default if not provided)
+            force_refresh: If True, ignore cache and fetch fresh data
+            
+        Returns:
+            ISO formatted earliest timestamp string or None if unavailable
+        """
+        normalized = self._normalize_symbol(symbol)
+        
+        # Check if we have valid cached head timestamp for this timeframe
+        if not force_refresh and normalized in self._cache:
+            contract_info = self._cache[normalized]
+            if (contract_info.head_timestamp_fetched_at and
+                time.time() - contract_info.head_timestamp_fetched_at < 86400):  # 24 hour cache
+                
+                # Try to get timeframe-specific timestamp first
+                if timeframe and contract_info.head_timestamp_timeframes:
+                    timeframe_timestamp = contract_info.head_timestamp_timeframes.get(timeframe)
+                    if timeframe_timestamp:
+                        logger.debug(f"📅 Using cached head timestamp for {symbol} ({timeframe}): {timeframe_timestamp}")
+                        return timeframe_timestamp
+                
+                # Fall back to default head timestamp
+                if contract_info.head_timestamp:
+                    logger.debug(f"📅 Using cached default head timestamp for {symbol}: {contract_info.head_timestamp}")
+                    return contract_info.head_timestamp
+        
+        # Need to fetch from IB
+        logger.info(f"📅 Fetching head timestamp from IB for {symbol}")
+        
+        if not self._ensure_connection():
+            logger.warning(f"Cannot fetch head timestamp for {symbol} - no IB connection")
+            return None
+        
+        # Get contract info first
+        contract_info = self.get_contract_details(normalized)
+        if not contract_info:
+            logger.warning(f"Cannot fetch head timestamp for {symbol} - contract not found")
+            return None
+        
+        try:
+            # Use the head timestamp API via thread
+            head_timestamp = self._fetch_head_timestamp_via_thread(contract_info.contract)
+            
+            if head_timestamp:
+                # Convert to ISO format for storage
+                head_timestamp_iso = head_timestamp.isoformat()
+                
+                # Update the cached contract info
+                contract_info.head_timestamp = head_timestamp_iso
+                contract_info.head_timestamp_fetched_at = time.time()
+                
+                # Initialize timeframes dict if not present
+                if contract_info.head_timestamp_timeframes is None:
+                    contract_info.head_timestamp_timeframes = {}
+                
+                # Store the head timestamp for the requested timeframe or default
+                cache_key = timeframe if timeframe else "default"
+                contract_info.head_timestamp_timeframes[cache_key] = head_timestamp_iso
+                
+                # Also store as default if this is the first time we're fetching
+                if "default" not in contract_info.head_timestamp_timeframes:
+                    contract_info.head_timestamp_timeframes["default"] = head_timestamp_iso
+                
+                # Update cache
+                self._cache[normalized] = contract_info
+                self._save_cache_to_file()
+                
+                logger.info(f"📅 HEAD TIMESTAMP for {symbol}: {head_timestamp_iso}")
+                return head_timestamp_iso
+            else:
+                logger.warning(f"📅 No head timestamp available for {symbol}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to fetch head timestamp for {symbol}: {e}")
+            return None
+
+    def _fetch_head_timestamp_via_thread(self, contract: Contract):
+        """
+        Fetch head timestamp using IB API in a separate thread to avoid event loop conflicts.
+        
+        Args:
+            contract: IB contract to fetch head timestamp for
+            
+        Returns:
+            datetime object or None if failed
+        """
+        import threading
+        import time
+        from datetime import datetime, timezone
+        
+        result = {"timestamp": None, "error": None, "completed": False}
+        
+        def thread_fetch():
+            """Head timestamp fetch function to run in separate thread."""
+            try:
+                # Create a new temporary IB connection just for this lookup
+                from ib_insync import IB
+                import asyncio
+                
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Create IB instance
+                ib = IB()
+                
+                async def do_fetch():
+                    """Async head timestamp fetch function."""
+                    try:
+                        # Connect to IB using same config as the main connection
+                        await ib.connectAsync(
+                            self.connection.config.host,
+                            self.connection.config.port,
+                            clientId=self.connection.config.client_id + 2000,  # Use different client ID
+                            readonly=True,
+                            timeout=15
+                        )
+                        
+                        # Request head timestamp
+                        logger.info(f"🔍 Thread: Requesting head timestamp for {contract}")
+                        
+                        # For forex pairs, try different whatToShow options
+                        whatToShow_options = ["TRADES", "BID", "ASK", "MIDPOINT"] if contract.secType == "CASH" else ["TRADES"]
+                        
+                        head_timestamp = None
+                        for whatToShow in whatToShow_options:
+                            try:
+                                logger.info(f"🔍 Thread: Trying head timestamp with whatToShow={whatToShow}")
+                                head_timestamp = await ib.reqHeadTimeStampAsync(
+                                    contract=contract,
+                                    whatToShow=whatToShow,
+                                    useRTH=False,  # Include all trading hours
+                                    formatDate=1,  # Return as datetime
+                                )
+                                
+                                if head_timestamp:
+                                    logger.info(f"🔍 Thread: SUCCESS with {whatToShow}: {head_timestamp}")
+                                    break
+                                else:
+                                    logger.warning(f"🔍 Thread: No head timestamp with {whatToShow}")
+                            except Exception as e:
+                                logger.warning(f"🔍 Thread: Error with {whatToShow}: {e}")
+                                continue
+                        
+                        if head_timestamp:
+                            logger.info(f"🔍 Thread: Got head timestamp: {head_timestamp}")
+                            # Ensure timezone awareness
+                            if hasattr(head_timestamp, "tzinfo") and head_timestamp.tzinfo is None:
+                                head_timestamp = head_timestamp.replace(tzinfo=timezone.utc)
+                            result["timestamp"] = head_timestamp
+                        else:
+                            logger.warning(f"🔍 Thread: No head timestamp returned from any whatToShow option")
+                        
+                    except Exception as e:
+                        logger.warning(f"Thread head timestamp fetch failed: {e}")
+                        result["error"] = str(e)
+                    finally:
+                        # Always disconnect
+                        try:
+                            if ib.isConnected():
+                                ib.disconnect()
+                        except:
+                            pass
+                
+                # Run the fetch
+                loop.run_until_complete(do_fetch())
+                result["completed"] = True
+                
+            except Exception as e:
+                result["error"] = str(e)
+                result["completed"] = True
+            finally:
+                # Clean up the loop
+                try:
+                    loop.close()
+                    asyncio.set_event_loop(None)
+                except:
+                    pass
+        
+        # Run in thread with timeout
+        thread = threading.Thread(target=thread_fetch, daemon=True)
+        thread.start()
+        
+        # Wait for completion with timeout
+        timeout_seconds = 30
+        start_time = time.time()
+        
+        while not result["completed"] and (time.time() - start_time) < timeout_seconds:
+            time.sleep(0.1)
+        
+        if not result["completed"]:
+            logger.error("Head timestamp fetch timed out")
+            return None
+        
+        if result["error"]:
+            logger.error(f"Head timestamp fetch failed: {result['error']}")
+            return None
+        
+        return result["timestamp"]
+
+    def get_head_timestamp(self, symbol: str, timeframe: Optional[str] = None) -> Optional[str]:
+        """
+        Get cached head timestamp for a symbol, fetching if not available.
+        
+        Args:
+            symbol: Symbol to get head timestamp for
+            timeframe: Optional specific timeframe to check
+            
+        Returns:
+            ISO formatted earliest timestamp string or None if unavailable
+        """
+        normalized = self._normalize_symbol(symbol)
+        
+        # Try to get from cache first
+        if normalized in self._cache:
+            contract_info = self._cache[normalized]
+            
+            # Try timeframe-specific timestamp first
+            if timeframe and contract_info.head_timestamp_timeframes:
+                timeframe_timestamp = contract_info.head_timestamp_timeframes.get(timeframe)
+                if timeframe_timestamp:
+                    return timeframe_timestamp
+            
+            # Fall back to default head timestamp
+            if contract_info.head_timestamp:
+                return contract_info.head_timestamp
+        
+        # Not in cache, try to fetch
+        return self.fetch_head_timestamp(normalized, timeframe)
+
+    def validate_date_range_against_head_timestamp(
+        self, 
+        symbol: str, 
+        start_date: datetime, 
+        timeframe: Optional[str] = None
+    ) -> tuple[bool, Optional[str], Optional[datetime]]:
+        """
+        Validate if a requested start date is within available data range.
+        
+        Args:
+            symbol: Symbol to validate
+            start_date: Requested start date
+            timeframe: Optional timeframe (currently uses default)
+            
+        Returns:
+            Tuple of (is_valid, error_message, suggested_start_date)
+        """
+        head_timestamp_str = self.get_head_timestamp(symbol, timeframe)
+        
+        if not head_timestamp_str:
+            # No head timestamp available, allow the request
+            logger.debug(f"📅 No head timestamp for {symbol}, allowing request")
+            return True, None, None
+        
+        try:
+            # Parse head timestamp
+            from datetime import datetime
+            head_timestamp = datetime.fromisoformat(head_timestamp_str.replace('Z', '+00:00'))
+            
+            # Compare dates
+            if start_date < head_timestamp:
+                days_before = (head_timestamp - start_date).days
+                
+                # Always suggest adjustment to head timestamp instead of failing
+                if days_before > 7:  # More than a week difference, warn user
+                    warning_msg = f"Data for {symbol} starts from {head_timestamp.date()}, requested from {start_date.date()} ({days_before} days earlier)"
+                    logger.warning(f"📅 VALIDATION ADJUSTED: {warning_msg}")
+                    logger.warning(f"📅 Adjusting start date to earliest available: {head_timestamp.date()}")
+                    return True, warning_msg, head_timestamp
+                else:
+                    # Small gap, just adjust quietly
+                    logger.info(f"📅 VALIDATION ADJUSTED: Moving start date from {start_date.date()} to {head_timestamp.date()}")
+                    return True, None, head_timestamp
+            
+            # Request is within available range
+            return True, None, None
+            
+        except Exception as e:
+            logger.warning(f"Error validating date range for {symbol}: {e}")
+            # Allow request if validation fails
+            return True, None, None
+
+    def trigger_symbol_revalidation(self, symbol: str, force_head_timestamp_refresh: bool = True):
+        """
+        Trigger re-validation of a symbol, including fresh head timestamp fetch.
+        
+        This method should be called when we need to refresh cached symbol data,
+        particularly when head timestamp information is missing or stale.
+        
+        Args:
+            symbol: Symbol to re-validate
+            force_head_timestamp_refresh: Whether to force refresh of head timestamp
+        """
+        normalized = self._normalize_symbol(symbol)
+        logger.info(f"🔄 Triggering re-validation for symbol: {normalized}")
+        
+        # Remove from cache to force fresh validation
+        if normalized in self._cache:
+            old_info = self._cache[normalized]
+            logger.debug(f"Removing cached info for {normalized}: {old_info.description}")
+            del self._cache[normalized]
+        
+        # Don't remove from validated_symbols - we still trust it's a valid symbol
+        # Just refresh the cached contract info
+        
+        # Perform fresh validation
+        contract_info = self._normal_validation(normalized)
+        
+        if contract_info:
+            # Fetch head timestamp if requested
+            if force_head_timestamp_refresh:
+                self.fetch_head_timestamp(normalized, force_refresh=True)
+            
+            logger.info(f"✅ Re-validation completed for {normalized}")
+        else:
+            logger.warning(f"⚠️ Re-validation failed for {normalized}")
+        
+        return contract_info is not None
+
     def batch_validate(self, symbols: List[str]) -> Dict[str, bool]:
         """
         Validate multiple symbols in batch.
@@ -497,7 +830,10 @@ class IbSymbolValidator:
                             currency=data['currency'],
                             description=data['description'],
                             validated_at=data['validated_at'],
-                            trading_hours=data.get('trading_hours')
+                            trading_hours=data.get('trading_hours'),
+                            head_timestamp=data.get('head_timestamp'),
+                            head_timestamp_timeframes=data.get('head_timestamp_timeframes'),
+                            head_timestamp_fetched_at=data.get('head_timestamp_fetched_at')
                         )
                         self._cache[symbol] = contract_info
                 
@@ -579,7 +915,10 @@ class IbSymbolValidator:
                     'currency': contract_info.currency,
                     'description': contract_info.description,
                     'validated_at': contract_info.validated_at,
-                    'trading_hours': contract_info.trading_hours
+                    'trading_hours': contract_info.trading_hours,
+                    'head_timestamp': contract_info.head_timestamp,
+                    'head_timestamp_timeframes': contract_info.head_timestamp_timeframes,
+                    'head_timestamp_fetched_at': contract_info.head_timestamp_fetched_at
                 }
             
             # Write to temporary file first, then rename for atomic operation

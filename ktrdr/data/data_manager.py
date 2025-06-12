@@ -154,6 +154,40 @@ class DataManager:
             f"default_repair_method='{default_repair_method}'"
         )
 
+    def _check_cancellation(self, cancellation_token: Optional[Any], operation_description: str = "operation") -> bool:
+        """
+        Check if cancellation has been requested.
+        
+        Args:
+            cancellation_token: Token to check for cancellation
+            operation_description: Description of current operation for logging
+            
+        Returns:
+            True if cancellation was requested, False otherwise
+            
+        Raises:
+            asyncio.CancelledError: If cancellation was requested
+        """
+        if cancellation_token is None:
+            return False
+        
+        # Check if token has cancellation method
+        is_cancelled = False
+        if hasattr(cancellation_token, 'is_cancelled_requested'):
+            is_cancelled = cancellation_token.is_cancelled_requested
+        elif hasattr(cancellation_token, 'is_set'):
+            is_cancelled = cancellation_token.is_set()
+        elif hasattr(cancellation_token, 'cancelled'):
+            is_cancelled = cancellation_token.cancelled()
+        
+        if is_cancelled:
+            logger.info(f"🛑 Cancellation requested during {operation_description}")
+            # Import here to avoid circular imports
+            import asyncio
+            raise asyncio.CancelledError(f"Operation cancelled during {operation_description}")
+        
+        return False
+
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
     def load_data(
@@ -167,6 +201,7 @@ class DataManager:
         repair: bool = False,
         repair_outliers: bool = True,
         strict: bool = False,
+        cancellation_token: Optional[Any] = None,
     ) -> pd.DataFrame:
         """
         Load data with optional validation and repair using unified validator.
@@ -181,6 +216,7 @@ class DataManager:
             repair: Whether to repair any detected issues (default: False)
             repair_outliers: Whether to repair detected outliers when repair=True (default: True)
             strict: If True, raises an exception for integrity issues instead of warning (default: False)
+            cancellation_token: Optional cancellation token to check for early termination
 
         Returns:
             DataFrame containing validated (and optionally repaired) OHLCV data
@@ -203,7 +239,7 @@ class DataManager:
             df = self.data_loader.load(symbol, timeframe, start_date, end_date)
         else:
             # Enhanced modes: use intelligent gap analysis with IB integration
-            df = self._load_with_fallback(symbol, timeframe, start_date, end_date, mode)
+            df = self._load_with_fallback(symbol, timeframe, start_date, end_date, mode, cancellation_token)
 
         # Check if df is None (happens when fallback returns None)
         if df is None:
@@ -399,6 +435,7 @@ class DataManager:
         requested_end: datetime,
         timeframe: str,
         symbol: str,
+        mode: str = "tail",
     ) -> List[Tuple[datetime, datetime]]:
         """
         Analyze gaps between existing data and requested range using intelligent gap classification.
@@ -452,7 +489,8 @@ class DataManager:
             all_gaps.append((gap_start, requested_end))
         
         # Gaps within existing data (holes in the dataset)
-        if requested_start < data_end and requested_end > data_start:
+        # For backfill/full mode, skip micro-gap analysis to avoid thousands of tiny segments
+        if requested_start < data_end and requested_end > data_start and mode == "tail":
             internal_gaps = self._find_internal_gaps(
                 existing_data, 
                 max(requested_start, data_start),
@@ -460,6 +498,9 @@ class DataManager:
                 timeframe
             )
             all_gaps.extend(internal_gaps)
+            logger.debug(f"Found {len(internal_gaps)} internal gaps (mode: {mode})")
+        elif mode in ["backfill", "full"]:
+            logger.info(f"🚀 BACKFILL MODE: Skipping micro-gap analysis to focus on large historical periods")
         
         # Use intelligent gap classifier to filter out expected gaps
         for gap_start, gap_end in all_gaps:
@@ -477,7 +518,7 @@ class DataManager:
                 # Only fill unexpected gaps and market closures
                 if gap_info.classification in [GapClassification.UNEXPECTED, GapClassification.MARKET_CLOSURE]:
                     gaps_to_fill.append((gap_start, gap_end))
-                    logger.info(f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})")
+                    logger.debug(f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})")
                 else:
                     logger.debug(f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) - {gap_info.note}")
         
@@ -647,7 +688,7 @@ class DataManager:
         logger.info(f"⚡ SEGMENTATION: Split {len(gaps)} gaps into {len(segments)} IB-compliant segments")
         for i, (seg_start, seg_end) in enumerate(segments):
             duration = seg_end - seg_start
-            logger.info(f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})")
+            logger.debug(f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})")
         return segments
 
     def _fetch_segments_with_resilience(
@@ -655,6 +696,7 @@ class DataManager:
         symbol: str,
         timeframe: str,
         segments: List[Tuple[datetime, datetime]],
+        cancellation_token: Optional[Any] = None,
     ) -> Tuple[List[pd.DataFrame], int, int]:
         """
         Fetch multiple segments with failure resilience.
@@ -681,10 +723,13 @@ class DataManager:
         logger.info(f"Fetching {len(segments)} segments with failure resilience")
         
         for i, (segment_start, segment_end) in enumerate(segments):
+            # Check for cancellation before each segment
+            self._check_cancellation(cancellation_token, f"segment {i+1}/{len(segments)}")
+            
             try:
                 duration = segment_end - segment_start
-                logger.info(f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end}")
-                logger.info(f"🚀 IB REQUEST {i+1}: Duration = {duration} (within IB limit)")
+                logger.debug(f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end}")
+                logger.debug(f"🚀 IB REQUEST {i+1}: Duration = {duration} (within IB limit)")
                 
                 # Use the "dumb" IbDataLoader to fetch exactly what we ask for
                 segment_data = self.ib_data_loader.load_data_range(
@@ -692,7 +737,8 @@ class DataManager:
                     timeframe=timeframe,
                     start=segment_start,
                     end=segment_end,
-                    operation_type="data_manager"
+                    operation_type="data_manager",
+                    cancellation_token=cancellation_token
                 )
                 
                 if segment_data is not None and not segment_data.empty:
@@ -713,6 +759,105 @@ class DataManager:
         return successful_data, successful_count, failed_count
 
     @log_entry_exit(logger=logger, log_args=True)
+    def _validate_request_against_head_timestamp(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> Tuple[bool, Optional[str], Optional[datetime]]:
+        """
+        Validate request date range against cached head timestamp data.
+        
+        This method checks if the requested start date is within the available
+        data range for the symbol, helping prevent unnecessary error 162s.
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            start_date: Requested start date
+            end_date: Requested end date
+            
+        Returns:
+            Tuple of (is_valid, error_message, adjusted_start_date)
+        """
+        if not self.enable_ib or not self.ib_data_loader:
+            return True, None, None
+        
+        try:
+            # Get symbol validator from IB data loader
+            validator = self.ib_data_loader._get_symbol_validator()
+            
+            # Check if we have head timestamp data for this symbol
+            result = validator.validate_date_range_against_head_timestamp(
+                symbol, start_date, timeframe
+            )
+            
+            is_valid, error_message, suggested_start = result
+            
+            if not is_valid:
+                # Request is definitely outside available range
+                logger.warning(f"📅 HEAD TIMESTAMP VALIDATION FAILED: {error_message}")
+                return False, error_message, suggested_start
+            elif suggested_start and suggested_start != start_date:
+                # Request can be adjusted to valid range
+                logger.info(f"📅 HEAD TIMESTAMP VALIDATION ADJUSTED: {start_date} → {suggested_start}")
+                return True, None, suggested_start
+            else:
+                # Request is valid as-is
+                logger.debug(f"📅 HEAD TIMESTAMP VALIDATION PASSED: {symbol} from {start_date}")
+                return True, None, None
+                
+        except Exception as e:
+            logger.warning(f"Head timestamp validation failed for {symbol}: {e}")
+            # Don't block requests if validation fails
+            return True, None, None
+
+    def _ensure_symbol_has_head_timestamp(self, symbol: str, timeframe: str) -> bool:
+        """
+        Ensure symbol has head timestamp data, triggering validation if needed.
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            
+        Returns:
+            True if head timestamp is available, False otherwise
+        """
+        if not self.enable_ib or not self.ib_data_loader:
+            return False
+        
+        try:
+            validator = self.ib_data_loader._get_symbol_validator()
+            
+            # Check if we already have head timestamp
+            head_timestamp = validator.get_head_timestamp(symbol, timeframe)
+            
+            if head_timestamp:
+                logger.debug(f"📅 Head timestamp already available for {symbol}: {head_timestamp}")
+                return True
+            
+            # No head timestamp available, trigger re-validation
+            logger.info(f"📅 No head timestamp for {symbol}, triggering symbol re-validation")
+            success = validator.trigger_symbol_revalidation(symbol, force_head_timestamp_refresh=True)
+            
+            if success:
+                # Check if we now have head timestamp
+                head_timestamp = validator.get_head_timestamp(symbol, timeframe)
+                if head_timestamp:
+                    logger.info(f"📅 Successfully obtained head timestamp for {symbol}: {head_timestamp}")
+                    return True
+                else:
+                    logger.warning(f"📅 Re-validation succeeded but no head timestamp available for {symbol}")
+                    return False
+            else:
+                logger.warning(f"📅 Symbol re-validation failed for {symbol}")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
+            return False
+
     def _load_with_fallback(
         self,
         symbol: str,
@@ -720,6 +865,7 @@ class DataManager:
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
+        cancellation_token: Optional[Any] = None,
     ) -> Optional[pd.DataFrame]:
         """
         Load data with intelligent gap analysis and resilient segment fetching.
@@ -777,10 +923,34 @@ class DataManager:
 
         logger.info(f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}")
 
+        # Step 0: Ensure symbol has head timestamp data and validate request range
+        logger.info(f"📅 STEP 0: Validating request against head timestamp data")
+        self._check_cancellation(cancellation_token, "head timestamp validation")
+        
+        # First ensure we have head timestamp data for this symbol
+        has_head_timestamp = self._ensure_symbol_has_head_timestamp(symbol, timeframe)
+        
+        if has_head_timestamp:
+            # Validate the request range against head timestamp
+            is_valid, error_message, adjusted_start = self._validate_request_against_head_timestamp(
+                symbol, timeframe, requested_start, requested_end
+            )
+            
+            if not is_valid:
+                logger.error(f"📅 Request validation failed: {error_message}")
+                logger.error(f"📅 Cannot load data for {symbol} from {requested_start} - data not available")
+                return None
+            elif adjusted_start:
+                logger.info(f"📅 Request adjusted based on head timestamp: {requested_start} → {adjusted_start}")
+                requested_start = adjusted_start
+        else:
+            logger.info(f"📅 No head timestamp available for {symbol}, proceeding with original request")
+
         # Step 1: Load existing local data (ALL modes need this for gap analysis)
         existing_data = None
         try:
             logger.info(f"📁 Loading existing local data for {symbol}")
+            self._check_cancellation(cancellation_token, "loading existing data")
             existing_data = self.data_loader.load(symbol, timeframe)
             if existing_data is not None and not existing_data.empty:
                 existing_data = self._normalize_dataframe_timezone(existing_data)
@@ -793,12 +963,13 @@ class DataManager:
 
         # Step 2: Intelligent gap analysis
         logger.info(f"🔍 GAP ANALYSIS: Starting intelligent gap detection for {symbol} {timeframe}")
-        logger.info(f"🔍 GAP ANALYSIS: Requested range = {requested_start} to {requested_end}")
+        self._check_cancellation(cancellation_token, "gap analysis")
+        logger.debug(f"🔍 GAP ANALYSIS: Requested range = {requested_start} to {requested_end}")
         if existing_data is not None and not existing_data.empty:
-            logger.info(f"🔍 GAP ANALYSIS: Existing data range = {existing_data.index.min()} to {existing_data.index.max()}")
+            logger.debug(f"🔍 GAP ANALYSIS: Existing data range = {existing_data.index.min()} to {existing_data.index.max()}")
         else:
-            logger.info(f"🔍 GAP ANALYSIS: No existing data found")
-        gaps = self._analyze_gaps(existing_data, requested_start, requested_end, timeframe, symbol)
+            logger.debug(f"🔍 GAP ANALYSIS: No existing data found")
+        gaps = self._analyze_gaps(existing_data, requested_start, requested_end, timeframe, symbol, mode)
         
         if not gaps:
             logger.info(f"✅ No gaps found - existing data covers requested range!")
@@ -812,6 +983,7 @@ class DataManager:
 
         # Step 3: Split gaps into IB-compliant segments
         logger.info(f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments...")
+        self._check_cancellation(cancellation_token, "segmentation")
         segments = self._split_into_segments(gaps, timeframe)
         logger.info(f"⚡ SEGMENTATION COMPLETE: Created {len(segments)} segments for IB fetching")
         
@@ -824,8 +996,9 @@ class DataManager:
         
         if self._ensure_ib_connection():
             logger.info(f"🚀 Fetching {len(segments)} segments using resilient strategy...")
+            self._check_cancellation(cancellation_token, "IB connection check")
             successful_frames, successful_count, failed_count = self._fetch_segments_with_resilience(
-                symbol, timeframe, segments
+                symbol, timeframe, segments, cancellation_token
             )
             fetched_data_frames = successful_frames
             
@@ -856,9 +1029,9 @@ class DataManager:
         # Log details about each data source for debugging
         for i, df in enumerate(all_data_frames):
             if not df.empty:
-                logger.info(f"📊 Data source {i+1}: {len(df)} bars from {df.index.min()} to {df.index.max()}")
+                logger.debug(f"📊 Data source {i+1}: {len(df)} bars from {df.index.min()} to {df.index.max()}")
             else:
-                logger.warning(f"📊 Data source {i+1}: EMPTY DataFrame")
+                logger.debug(f"📊 Data source {i+1}: EMPTY DataFrame")
         
         combined_data = pd.concat(all_data_frames, ignore_index=False)
         logger.info(f"🔗 After concat: {len(combined_data)} total bars")

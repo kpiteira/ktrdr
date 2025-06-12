@@ -310,8 +310,8 @@ class IbConnectionSync:
                 self._event_loop.call_soon_threadsafe(self._event_loop.stop)
                 
                 # Wait a bit for the loop to stop, then close it
-                import time
-                time.sleep(0.1)
+                import time as time_module
+                time_module.sleep(0.1)
                 
                 if not self._event_loop.is_closed():
                     self._event_loop.close()

@@ -385,3 +385,157 @@ async def _check_status_async(
             error_code="CLI-IBStatusError",
             details={"error": str(e)},
         ) from e
+
+
+@ib_app.command("test-head-timestamp")
+def test_head_timestamp(
+    symbol: str = typer.Argument(..., help="Trading symbol (e.g., USDCAD, AAPL)"),
+    timeframe: Optional[str] = typer.Option(None, "--timeframe", "-t", help="Specific timeframe to test (e.g., 1h, 1d)"),
+    force_refresh: bool = typer.Option(False, "--force", "-f", help="Force refresh even if cached"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+):
+    """
+    Test head timestamp fetching for a symbol.
+    
+    This command tests the enhanced head timestamp functionality that fetches
+    the earliest available data point for a symbol from IB. This is crucial
+    for proper error 162 classification and data availability validation.
+    
+    Examples:
+        ktrdr ib test-head-timestamp USDCAD
+        ktrdr ib test-head-timestamp AAPL --force --verbose
+        ktrdr ib test-head-timestamp EURUSD --verbose
+    """
+    try:
+        # Input validation
+        symbol = InputValidator.validate_string(
+            symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
+        )
+        
+        # Run the test
+        _test_head_timestamp_sync(symbol, timeframe, force_refresh, verbose)
+        
+    except ValidationError as e:
+        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Validation error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        sys.exit(1)
+
+
+def _test_head_timestamp_sync(
+    symbol: str,
+    timeframe: Optional[str],
+    force_refresh: bool,
+    verbose: bool,
+):
+    """Synchronous implementation of head timestamp test."""
+    try:
+        from ktrdr.data.ib_symbol_validator import IbSymbolValidator
+        from ktrdr.data.ib_connection_sync import IbConnectionSync
+        from ktrdr.config.ib_config import get_ib_config
+        
+        if verbose:
+            console.print(f"📅 Testing head timestamp fetch for {symbol}")
+            if timeframe:
+                console.print(f"📊 Specific timeframe: {timeframe}")
+            
+        # Create connection with a different client ID to avoid conflicts
+        config = get_ib_config()
+        # Use client ID 10 for testing to avoid conflicts with main application
+        config.client_id = 10
+        connection = IbConnectionSync(config)
+        
+        # Create validator
+        validator = IbSymbolValidator(connection)
+        
+        try:
+            # Test connection
+            if not connection.ensure_connection():
+                error_console.print(f"[bold red]Error:[/bold red] Could not connect to IB")
+                error_console.print("Make sure IB Gateway/TWS is running and not using client ID 10")
+                sys.exit(1)
+            
+            if verbose:
+                console.print(f"✅ Connected to IB successfully")
+            
+            # Check current head timestamp in cache
+            cached_timestamp = validator.get_head_timestamp(symbol, timeframe)
+            if cached_timestamp and not force_refresh:
+                timeframe_label = f" ({timeframe})" if timeframe else ""
+                console.print(f"📋 [yellow]Cached head timestamp found{timeframe_label}:[/yellow] {cached_timestamp}")
+                console.print(f"💡 Use --force to refresh from IB")
+            else:
+                if force_refresh and cached_timestamp:
+                    timeframe_label = f" ({timeframe})" if timeframe else ""
+                    console.print(f"🔄 Forcing refresh of cached timestamp{timeframe_label}: {cached_timestamp}")
+                
+                # Fetch head timestamp from IB
+                timeframe_label = f" for {timeframe}" if timeframe else ""
+                console.print(f"🚀 Fetching head timestamp from IB for {symbol}{timeframe_label}...")
+                
+                if force_refresh:
+                    # Trigger re-validation with head timestamp refresh
+                    success = validator.trigger_symbol_revalidation(symbol, force_head_timestamp_refresh=True)
+                    if success:
+                        # If we have a specific timeframe, fetch it specifically
+                        if timeframe:
+                            validator.fetch_head_timestamp(symbol, timeframe, force_refresh=True)
+                        new_timestamp = validator.get_head_timestamp(symbol, timeframe)
+                        if new_timestamp:
+                            console.print(f"✅ [green]Head timestamp refreshed:[/green] {new_timestamp}")
+                        else:
+                            console.print(f"⚠️  [yellow]Head timestamp refresh completed but no timestamp available[/yellow]")
+                    else:
+                        console.print(f"❌ [red]Head timestamp refresh failed[/red]")
+                else:
+                    # Just fetch head timestamp without full re-validation
+                    timestamp = validator.fetch_head_timestamp(symbol, timeframe)
+                    if timestamp:
+                        console.print(f"✅ [green]Head timestamp:[/green] {timestamp}")
+                    else:
+                        console.print(f"⚠️  [yellow]No head timestamp available for {symbol}[/yellow]")
+            
+            # Show contract info
+            contract_info = validator.get_contract_details(symbol)
+            if contract_info:
+                console.print(f"\n📋 [bold]Contract Information:[/bold]")
+                console.print(f"   Asset Type: {contract_info.asset_type}")
+                console.print(f"   Exchange: {contract_info.exchange}")
+                console.print(f"   Currency: {contract_info.currency}")
+                console.print(f"   Description: {contract_info.description}")
+                if contract_info.head_timestamp:
+                    console.print(f"   Head Timestamp: {contract_info.head_timestamp}")
+                    if contract_info.head_timestamp_fetched_at:
+                        import time
+                        fetched_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(contract_info.head_timestamp_fetched_at))
+                        console.print(f"   Fetched At: {fetched_time}")
+                
+                # Show timeframe-specific timestamps if available
+                if contract_info.head_timestamp_timeframes:
+                    console.print(f"   Timeframe Timestamps:")
+                    for tf, timestamp in contract_info.head_timestamp_timeframes.items():
+                        console.print(f"     {tf}: {timestamp}")
+                
+                if verbose:
+                    console.print(f"   Trading Hours: {'Available' if contract_info.trading_hours else 'Not available'}")
+            else:
+                console.print(f"⚠️  [yellow]No contract information found for {symbol}[/yellow]")
+                
+        finally:
+            # Clean up connection
+            if connection.is_connected():
+                connection.disconnect()
+                if verbose:
+                    console.print(f"🔌 Disconnected from IB")
+            
+    except Exception as e:
+        raise DataError(
+            message=f"Failed to test head timestamp for {symbol}",
+            error_code="CLI-IBHeadTimestampError", 
+            details={"symbol": symbol, "error": str(e)},
+        ) from e

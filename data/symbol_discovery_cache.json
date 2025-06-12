@@ -24,7 +24,10 @@
           6
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "AAPL": {
       "symbol": "AAPL",
@@ -60,7 +63,12 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": "1980-12-12T14:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "default": "1980-12-12T14:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1749684848.001567
     },
     "GOOGL": {
       "symbol": "GOOGL",
@@ -96,7 +104,10 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "RBLX": {
       "symbol": "RBLX",
@@ -132,7 +143,10 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "NVDA": {
       "symbol": "NVDA",
@@ -168,7 +182,10 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "TSLA": {
       "symbol": "TSLA",
@@ -204,7 +221,10 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "JEPI": {
       "symbol": "JEPI",
@@ -213,7 +233,10 @@
       "currency": "USD",
       "description": "JPMORGAN EQUITY PREMIUM INCO",
       "validated_at": 1749334435.2776425,
-      "trading_hours": null
+      "trading_hours": null,
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "MSFT": {
       "symbol": "MSFT",
@@ -279,7 +302,10 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "GBPUSD": {
       "symbol": "GBPUSD",
@@ -304,7 +330,13 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1749694806.8281493
     },
     "USDCHF": {
       "symbol": "USDCHF",
@@ -329,7 +361,10 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "CHFUSD": {
       "symbol": "CHFUSD",
@@ -354,7 +389,10 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
     },
     "USDCAD": {
       "symbol": "USDCAD",
@@ -362,7 +400,7 @@
       "exchange": "IDEALPRO",
       "currency": "CAD",
       "description": "United States dollar",
-      "validated_at": 1749662158.5759864,
+      "validated_at": 1749691282.839818,
       "trading_hours": {
         "timezone": "America/New_York",
         "regular_hours": {
@@ -379,23 +417,28 @@
           4
         ],
         "holidays": []
-      }
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1749691283.981772
     }
   },
   "failed_symbols": [],
   "validated_symbols": [
-    "JEPI",
-    "NVDA",
-    "GOOGL",
-    "AAPL",
-    "USDCAD",
     "MSFT",
-    "GBPUSD",
-    "CHFUSD",
-    "EURUSD",
-    "USDCHF",
     "RBLX",
-    "TSLA"
+    "GBPUSD",
+    "JEPI",
+    "EURUSD",
+    "GOOGL",
+    "CHFUSD",
+    "AAPL",
+    "TSLA",
+    "USDCAD",
+    "NVDA",
+    "USDCHF"
   ],
-  "last_updated": 1749662158.5762522
+  "last_updated": 1749694806.8282003
 }

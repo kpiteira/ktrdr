@@ -70,6 +70,40 @@ class IbDataLoader:
             "symbol_discoveries": 0,
             "symbol_cache_hits": 0
         }
+
+    def _check_cancellation(self, cancellation_token: Optional[Any], operation_description: str = "operation") -> bool:
+        """
+        Check if cancellation has been requested.
+        
+        Args:
+            cancellation_token: Token to check for cancellation
+            operation_description: Description of current operation for logging
+            
+        Returns:
+            True if cancellation was requested, False otherwise
+            
+        Raises:
+            asyncio.CancelledError: If cancellation was requested
+        """
+        if cancellation_token is None:
+            return False
+        
+        # Check if token has cancellation method
+        is_cancelled = False
+        if hasattr(cancellation_token, 'is_cancelled_requested'):
+            is_cancelled = cancellation_token.is_cancelled_requested
+        elif hasattr(cancellation_token, 'is_set'):
+            is_cancelled = cancellation_token.is_set()
+        elif hasattr(cancellation_token, 'cancelled'):
+            is_cancelled = cancellation_token.cancelled()
+        
+        if is_cancelled:
+            logger.info(f"🛑 Cancellation requested during {operation_description}")
+            # Import here to avoid circular imports
+            import asyncio
+            raise asyncio.CancelledError(f"Operation cancelled during {operation_description}")
+        
+        return False
     
     def _get_symbol_validator(self) -> IbSymbolValidator:
         """
@@ -213,7 +247,8 @@ class IbDataLoader:
                        timeframe: str, 
                        start: datetime, 
                        end: datetime,
-                       operation_type: str = "api_call") -> pd.DataFrame:
+                       operation_type: str = "api_call",
+                       cancellation_token: Optional[Any] = None) -> pd.DataFrame:
         """
         Load data for a specific date range using single IB request.
         
@@ -239,6 +274,9 @@ class IbDataLoader:
         start_time = time.time()
         
         try:
+            # Check for cancellation before starting
+            self._check_cancellation(cancellation_token, f"IB data fetch for {symbol}")
+            
             # Step 1: Discover symbol and determine correct instrument type
             instrument_type = self._determine_instrument_type(symbol)
             logger.info(f"🎯 Using instrument type '{instrument_type}' for {symbol}")
@@ -261,6 +299,10 @@ class IbDataLoader:
             
             # Step 5: Fetch data from IB with discovered instrument type
             logger.info(f"Fetching {symbol} ({instrument_type}) {timeframe} from {start} to {end}")
+            
+            # Apply proactive pace limiting if we have direct access to error handler
+            if hasattr(fetcher, 'error_handler'):
+                fetcher.error_handler.check_proactive_pace_limit(symbol, timeframe, cancellation_token)
             
             data = fetcher.fetch_historical_data(symbol, timeframe, start, end, instrument_type)
             

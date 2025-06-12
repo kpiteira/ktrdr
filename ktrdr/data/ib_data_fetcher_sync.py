@@ -335,14 +335,27 @@ class IbDataFetcherSync:
                 what_to_show = "BID"
                 logger.info(f"Adjusted whatToShow to 'BID' for forex instrument")
 
-            logger.info(
+            logger.debug(
                 f"🌐 IB API CALL: Requesting historical data for {symbol} ({instrument_type})"
             )
-            logger.info(
+            logger.debug(
                 f"🌐 IB API PARAMS: bar_size={bar_size}, duration={duration_str}, "
                 f"end={end_dt_str}, whatToShow={what_to_show}, timeout={timeout_seconds}s"
             )
 
+            # Set error handler context for intelligent error classification FIRST
+            # This must be done before pace limiting so the request key includes date range
+            self.error_handler.set_request_context(
+                symbol=symbol,
+                start_date=start,
+                end_date=end,
+                timeframe=timeframe
+            )
+            
+            # PROACTIVE PACE LIMITING - Check limits before making request
+            logger.debug(f"🚦 Checking proactive pace limits for {symbol} {timeframe}")
+            self.error_handler.check_proactive_pace_limit(symbol, timeframe)
+            
             # Make the request with proper error handling
             self.metrics["total_requests"] += 1
 
@@ -352,14 +365,6 @@ class IbDataFetcherSync:
                 and "last_error" in self.connection.metrics
             ):
                 self.connection.metrics["last_error"] = None
-            
-            # Set error handler context for intelligent error classification
-            self.error_handler.set_request_context(
-                symbol=symbol,
-                start_date=start,
-                end_date=end,
-                timeframe=timeframe
-            )
 
             # Use thread-safe historical data request
             bars = self._run_in_connection_loop(
@@ -448,12 +453,12 @@ class IbDataFetcherSync:
                     }
                 )
             
-            logger.info(f"🔍 RAW IB VOLUME ANALYSIS: {volume_analysis}")
+            logger.debug(f"🔍 RAW IB VOLUME ANALYSIS: {volume_analysis}")
             
             if volume_analysis["negative_one"] > 0:
-                logger.warning(f"⚠️  IB SENT {volume_analysis['negative_one']} BARS WITH VOLUME=-1 BUT VALID OHLC PRICES!")
-                logger.warning(f"⚠️  This suggests IB is providing price data but marking volume as 'no data available'")
-                logger.warning(f"⚠️  This is raw IB data BEFORE any processing by our system")
+                logger.debug(f"⚠️  IB SENT {volume_analysis['negative_one']} BARS WITH VOLUME=-1 BUT VALID OHLC PRICES!")
+                logger.debug(f"⚠️  This suggests IB is providing price data but marking volume as 'no data available'")
+                logger.debug(f"⚠️  This is raw IB data BEFORE any processing by our system")
 
             df = pd.DataFrame(data)
             df.set_index("timestamp", inplace=True)

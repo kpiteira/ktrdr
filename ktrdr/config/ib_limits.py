@@ -93,14 +93,14 @@ class IbLimitsRegistry:
     # =============================================================================
     
     SAFE_DELAYS = {
-        # Request delays
-        "between_requests": 2.0,                 # 2 seconds between different requests (conservative)
-        "identical_requests": 16.0,              # 16 seconds between identical requests (buffer)
-        "burst_recovery": 5.0,                   # 5 seconds after burst of requests
+        # Request delays (conservative but reasonable)
+        "between_requests": 1.0,                 # 1 second between different requests (reasonable)
+        "identical_requests": 15.0,              # 15 seconds between truly identical requests (IB recommendation)
+        "burst_recovery": 3.0,                   # 3 seconds after burst of requests
         "connection_delay": 1.0,                 # 1 second after connection established
         
         # Progressive loading delays
-        "progressive_chunk_delay": 3.0,          # 3 seconds between chunks in progressive loading
+        "progressive_chunk_delay": 2.0,          # 2 seconds between chunks in progressive loading
         "progressive_retry_delay": 10.0,         # 10 seconds before retrying failed chunk
         
         # Error recovery delays

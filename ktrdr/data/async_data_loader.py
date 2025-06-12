@@ -350,7 +350,8 @@ class AsyncDataLoader:
             end_date=job.end_date,
             mode=job.mode,
             validate=True,
-            repair=False
+            repair=False,
+            cancellation_token=job  # Pass the job itself as cancellation token
         )
     
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
