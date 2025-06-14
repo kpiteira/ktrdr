@@ -15,12 +15,12 @@ from typing import Dict, Any, Type, List, Callable
 from ktrdr.indicators import BaseIndicator
 from ktrdr.errors import DataError
 
-from .indicator_registry import get_registered_indicators
-from .validation_utils import (
+from tests.indicators.indicator_registry import get_registered_indicators
+from tests.indicators.validation_utils import (
     validate_indicator_against_reference,
     generate_indicator_report,
 )
-from .reference_datasets import (
+from tests.indicators.reference_datasets import (
     create_reference_dataset_1,
     create_reference_dataset_2,
     create_reference_dataset_3,

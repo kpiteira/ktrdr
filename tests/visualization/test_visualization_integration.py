@@ -21,7 +21,7 @@ from ktrdr.visualization import (
 from ktrdr.errors import ConfigurationError, DataError
 
 # Import test fixtures
-from test_fixtures import (
+from tests.visualization.test_fixtures import (
     sample_price_data,
     sample_indicators,
     histogram_data,

@@ -73,6 +73,31 @@ The project provides a comprehensive CLI via `uv run ktrdr` with the following c
 
 All commands support `--help` for detailed usage and common options like `--verbose`, `--output`, `--data-dir`.
 
+## 🔥 Development Best Practices
+
+### Commit Discipline
+- **NEVER commit more than 20-30 files at once** - Large commits (145+ files) are unmanageable and make code review impossible
+- **Make frequent, focused commits** - Each commit should represent one logical change
+- **Always run tests before committing** - Use `uv run pytest` to catch regressions
+- **Always run linting before committing** - Use `uv run black ktrdr tests` and `uv run mypy ktrdr`
+
+### Testing Discipline  
+- **Run unit tests systematically** before and after any significant changes
+- **Never skip failing tests** - Fix or properly skip tests that don't pass
+- **Test-driven development** - Write tests for new functionality
+- **Separate test types**:
+  - Unit tests: `uv run pytest tests/` (excludes e2e_real)
+  - Integration tests: `uv run pytest tests/integration/`
+  - Real E2E tests: `./scripts/run_real_e2e_tests.sh`
+
+### Pre-Commit Checklist
+1. `uv run pytest` - All unit tests pass
+2. `uv run black ktrdr tests` - Code formatting
+3. `uv run mypy ktrdr` - Type checking
+4. Review changed files - No debug code or secrets
+5. Write meaningful commit message
+6. Keep commits small and focused (< 30 files)
+
 ## Architecture Overview
 
 - **Development Strategy**: Uses vertical slice approach, delivering end-to-end functionality

@@ -18,7 +18,7 @@ from ktrdr.visualization.data_adapter import DataAdapter
 from ktrdr.errors import ConfigurationError
 
 # Import test fixtures
-from test_fixtures import sample_price_data, sample_indicators, histogram_data
+from tests.visualization.test_fixtures import sample_price_data, sample_indicators, histogram_data
 
 
 class TestHtmlGeneration:

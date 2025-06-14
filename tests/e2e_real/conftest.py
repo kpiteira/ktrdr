@@ -51,12 +51,15 @@ def pytest_addoption(parser):
         default="4003",
         help="IB Gateway port (default: 4003)",
     )
-    parser.addoption(
-        "--api-base-url",
-        action="store", 
-        default="http://localhost:8000",
-        help="API base URL for real E2E tests (default: http://localhost:8000)",
-    )
+    try:
+        parser.addoption(
+            "--api-base-url",
+            action="store", 
+            default="http://localhost:8000",
+            help="API base URL for real E2E tests (default: http://localhost:8000)",
+        )
+    except ValueError:
+        pass  # Option already exists
 
 
 def pytest_collection_modifyitems(config, items):

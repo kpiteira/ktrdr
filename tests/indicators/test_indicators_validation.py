@@ -14,12 +14,12 @@ from typing import Dict, Any, List
 from ktrdr.indicators import SimpleMovingAverage, ExponentialMovingAverage, RSIIndicator
 from ktrdr.errors import DataError
 
-from .validation_utils import (
+from tests.indicators.validation_utils import (
     validate_indicator_against_reference,
     generate_indicator_report,
     IndicatorValidationResult,
 )
-from .reference_datasets import (
+from tests.indicators.reference_datasets import (
     create_reference_dataset_1,
     create_reference_dataset_2,
     create_reference_dataset_3,
