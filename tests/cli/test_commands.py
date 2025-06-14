@@ -72,9 +72,13 @@ def mock_api_client():
 
 def test_data_show_basic(runner, mock_api_client, sample_api_response):
     """Test the basic functionality of the data show command."""
-    # Mock the API client response
-    mock_api_client.post.return_value.json.return_value = sample_api_response
-    mock_api_client.post.return_value.status_code = 200
+    # Mock the async get_cached_data method to return just the data portion
+    # (since get_cached_data returns response.get("data", {}), not the full response)
+    import asyncio
+    async def mock_get_cached_data(*args, **kwargs):
+        return sample_api_response["data"]
+    
+    mock_api_client.get_cached_data = mock_get_cached_data
     
     with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "AAPL"])
@@ -85,12 +89,16 @@ def test_data_show_basic(runner, mock_api_client, sample_api_response):
         # Check output contains expected data
         assert "AAPL" in result.stdout
         assert "3" in result.stdout  # Number of rows
+        assert "102.0000" in result.stdout  # Sample data point
 
 
 def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
     """Test the data show command with custom number of rows."""
-    mock_api_client.post.return_value.json.return_value = sample_api_response
-    mock_api_client.post.return_value.status_code = 200
+    import asyncio
+    async def mock_get_cached_data(*args, **kwargs):
+        return sample_api_response["data"]
+    
+    mock_api_client.get_cached_data = mock_get_cached_data
     
     with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "AAPL", "--rows", "2"])
@@ -101,8 +109,11 @@ def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
 
 def test_data_show_with_timeframe(runner, mock_api_client, sample_api_response):
     """Test the data show command with timeframe option."""
-    mock_api_client.post.return_value.json.return_value = sample_api_response
-    mock_api_client.post.return_value.status_code = 200
+    import asyncio
+    async def mock_get_cached_data(*args, **kwargs):
+        return sample_api_response["data"]
+    
+    mock_api_client.get_cached_data = mock_get_cached_data
     
     with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "AAPL", "--timeframe", "1h"])
@@ -112,8 +123,11 @@ def test_data_show_with_timeframe(runner, mock_api_client, sample_api_response):
 
 def test_data_show_json_format(runner, mock_api_client, sample_api_response):
     """Test the data show command with JSON output format."""
-    mock_api_client.post.return_value.json.return_value = sample_api_response
-    mock_api_client.post.return_value.status_code = 200
+    import asyncio
+    async def mock_get_cached_data(*args, **kwargs):
+        return sample_api_response["data"]
+    
+    mock_api_client.get_cached_data = mock_get_cached_data
     
     with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "AAPL", "--format", "json"])
@@ -125,19 +139,38 @@ def test_data_show_json_format(runner, mock_api_client, sample_api_response):
 
 def test_data_show_no_data(runner, mock_api_client):
     """Test the data show command when no data is found."""
-    # Mock API response for no data
-    no_data_response = {
-        "success": False,
-        "error": "No data found for symbol XYZ"
-    }
-    mock_api_client.post.return_value.json.return_value = no_data_response
-    mock_api_client.post.return_value.status_code = 404
+    # Mock get_cached_data to raise DataError (which is what happens when API returns success: False)
+    from ktrdr.errors import DataError
+    async def mock_get_cached_data(*args, **kwargs):
+        raise DataError(
+            message="Failed to get cached data for XYZ (1d)",
+            error_code="API-GetCachedDataError"
+        )
+    
+    mock_api_client.get_cached_data = mock_get_cached_data
     
     with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "XYZ"])
 
-        # Should handle gracefully, might exit with error code
-        assert "XYZ" in result.stdout or "XYZ" in result.stderr
+        # Should handle gracefully with error handling
+        assert result.exit_code != 0  # Should exit with error due to DataError
+
+
+def test_data_show_empty_data(runner, mock_api_client):
+    """Test the data show command when data is empty but API call succeeds."""
+    # Mock get_cached_data to return empty data (should be handled gracefully)
+    import asyncio
+    async def mock_get_cached_data(*args, **kwargs):
+        return {"dates": [], "ohlcv": [], "metadata": {}}
+    
+    mock_api_client.get_cached_data = mock_get_cached_data
+    
+    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
+        result = runner.invoke(cli_app, ["data", "show", "AAPL"])
+
+        # Should exit successfully but show no data message
+        assert result.exit_code == 0
+        assert "No cached data found" in result.stdout or "No data points available" in result.stdout
 
 
 def test_data_show_api_connection_error(runner):
