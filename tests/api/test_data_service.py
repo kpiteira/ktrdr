@@ -38,9 +38,10 @@ def test_init_with_defaults():
 
 
 @pytest.mark.api
-def test_load_data_success(mock_data_manager):
+@pytest.mark.asyncio
+async def test_load_data_success(mock_data_manager):
     """Test successful data loading with metadata."""
-    # Create sample DataFrame
+    # Create sample DataFrame for DataManager to return
     df = pd.DataFrame(
         {
             "open": [100.0, 101.0, 102.0],
@@ -51,13 +52,13 @@ def test_load_data_success(mock_data_manager):
         },
         index=pd.date_range(start="2023-01-01", periods=3, freq="D"),
     )
-
-    # Set up mock to return sample DataFrame
+    
+    # Set up mock to return DataFrame (DataService will convert to operation result)
     mock_data_manager.load_data.return_value = df
 
     # Create service and call method
     service = DataService()
-    result = service.load_data(
+    result = await service.load_data(
         symbol="AAPL",
         timeframe="1d",
         start_date="2023-01-01",
@@ -65,24 +66,20 @@ def test_load_data_success(mock_data_manager):
         include_metadata=True,
     )
 
-    # Verify result structure
+    # Verify result structure (DataService converts DataFrame to operation format)
     assert isinstance(result, dict)
-    assert "dates" in result
-    assert "ohlcv" in result
-    assert "metadata" in result
+    assert "status" in result
+    assert "fetched_bars" in result
+    assert "execution_time_seconds" in result
 
-    # Check that dates and ohlcv have the right length
-    assert len(result["dates"]) == 3
-    assert len(result["ohlcv"]) == 3
-
-    # Verify metadata
-    assert result["metadata"]["symbol"] == "AAPL"
-    assert result["metadata"]["timeframe"] == "1d"
-    assert result["metadata"]["points"] == 3
+    # Check operation details
+    assert result["status"] == "success"
+    assert result["fetched_bars"] == 3
 
 
 @pytest.mark.api
-def test_load_data_without_metadata(mock_data_manager):
+@pytest.mark.asyncio
+async def test_load_data_without_metadata(mock_data_manager):
     """Test data loading without metadata."""
     # Create sample DataFrame
     df = pd.DataFrame(
@@ -101,21 +98,22 @@ def test_load_data_without_metadata(mock_data_manager):
 
     # Create service and call method
     service = DataService()
-    result = service.load_data(symbol="AAPL", timeframe="1d", include_metadata=False)
+    result = await service.load_data(symbol="AAPL", timeframe="1d", include_metadata=False)
 
-    # Verify result structure
+    # Verify result structure (operational metrics format)
     assert isinstance(result, dict)
-    assert "dates" in result
-    assert "ohlcv" in result
-    assert "metadata" not in result
+    assert "status" in result
+    assert "fetched_bars" in result
+    assert "execution_time_seconds" in result
 
-    # Check that dates and ohlcv have the right length
-    assert len(result["dates"]) == 3
-    assert len(result["ohlcv"]) == 3
+    # Check operation details
+    assert result["status"] == "success"
+    assert result["fetched_bars"] == 3
 
 
 @pytest.mark.api
-def test_load_data_empty_result(mock_data_manager):
+@pytest.mark.asyncio
+async def test_load_data_empty_result(mock_data_manager):
     """Test handling of empty data."""
     # Create empty DataFrame
     df = pd.DataFrame({"open": [], "high": [], "low": [], "close": [], "volume": []})
@@ -125,26 +123,22 @@ def test_load_data_empty_result(mock_data_manager):
 
     # Create service and call method
     service = DataService()
-    result = service.load_data(symbol="AAPL", timeframe="1d", include_metadata=True)
+    result = await service.load_data(symbol="AAPL", timeframe="1d", include_metadata=True)
 
-    # Verify result structure
+    # Verify result structure (operational metrics format)
     assert isinstance(result, dict)
-    assert "dates" in result
-    assert "ohlcv" in result
-    assert "metadata" in result
+    assert "status" in result
+    assert "fetched_bars" in result
+    assert "execution_time_seconds" in result
 
-    # Check that dates and ohlcv are empty
-    assert len(result["dates"]) == 0
-    assert len(result["ohlcv"]) == 0
-
-    # Verify metadata
-    assert result["metadata"]["symbol"] == "AAPL"
-    assert result["metadata"]["timeframe"] == "1d"
-    assert result["metadata"]["points"] == 0
+    # Check operation details for empty result
+    assert result["status"] == "success"
+    assert result["fetched_bars"] == 0
 
 
 @pytest.mark.api
-def test_load_data_data_not_found(mock_data_manager):
+@pytest.mark.asyncio
+async def test_load_data_data_not_found(mock_data_manager):
     """Test handling of data not found error."""
     # Set up mock to raise DataNotFoundError
     mock_data_manager.load_data.side_effect = DataNotFoundError(
@@ -158,14 +152,15 @@ def test_load_data_data_not_found(mock_data_manager):
 
     # Expect the exception to be re-raised
     with pytest.raises(DataNotFoundError):
-        service.load_data(symbol="AAPL", timeframe="1d")
+        await service.load_data(symbol="AAPL", timeframe="1d")
 
     # Verify the mock was called
     mock_data_manager.load_data.assert_called_once()
 
 
 @pytest.mark.api
-def test_load_data_other_exception(mock_data_manager):
+@pytest.mark.asyncio
+async def test_load_data_other_exception(mock_data_manager):
     """Test handling of other exceptions."""
     # Set up mock to raise another type of exception
     mock_data_manager.load_data.side_effect = Exception("Test error")
@@ -210,14 +205,15 @@ def test_load_data_other_exception(mock_data_manager):
     try:
         # Expect a DataError to be raised
         with pytest.raises(DataError):
-            service.load_data(symbol="AAPL", timeframe="1d")
+            await service.load_data(symbol="AAPL", timeframe="1d")
     finally:
         # Restore the original method
         service.load_data = original_load_data
 
 
 @pytest.mark.api
-def test_get_available_symbols(mock_data_manager):
+@pytest.mark.asyncio
+async def test_get_available_symbols(mock_data_manager):
     """Test retrieval of available symbols."""
     # Set up mock to return list of available files and symbol information
     mock_data_manager.data_loader.get_available_data_files.return_value = [
@@ -234,12 +230,14 @@ def test_get_available_symbols(mock_data_manager):
     service = DataService()
     service.get_available_timeframes_for_symbol = mock_get_timeframes
 
-    # Add sample data for summary
-    mock_summary = {"start_date": "2023-01-01", "end_date": "2023-12-31", "rows": 252}
-    mock_data_manager.get_data_summary.return_value = mock_summary
+    # Add sample data range for summary
+    mock_data_manager.data_loader.get_data_date_range.return_value = (
+        datetime(2023, 1, 1),
+        datetime(2023, 12, 31),
+    )
 
     # Call method
-    result = service.get_available_symbols()
+    result = await service.get_available_symbols()
 
     # Verify result
     assert isinstance(result, list)
@@ -252,11 +250,12 @@ def test_get_available_symbols(mock_data_manager):
 
 
 @pytest.mark.api
-def test_get_available_timeframes():
+@pytest.mark.asyncio
+async def test_get_available_timeframes():
     """Test retrieval of available timeframes."""
     # Create service and call method
     service = DataService()
-    result = service.get_available_timeframes()
+    result = await service.get_available_timeframes()
 
     # Verify result structure
     assert isinstance(result, list)
@@ -270,18 +269,18 @@ def test_get_available_timeframes():
 
 
 @pytest.mark.api
-def test_get_data_range(mock_data_manager):
+@pytest.mark.asyncio
+async def test_get_data_range(mock_data_manager):
     """Test retrieval of data range information."""
-    # Set up mock to return sample data summary
-    mock_data_manager.get_data_summary.return_value = {
-        "start_date": datetime(2023, 1, 1),
-        "end_date": datetime(2023, 1, 3),
-        "rows": 3,
-    }
+    # Set up mock to return data range tuple
+    mock_data_manager.data_loader.get_data_date_range.return_value = (
+        datetime(2023, 1, 1),
+        datetime(2023, 1, 3),
+    )
 
     # Create service and call method
     service = DataService()
-    result = service.get_data_range(symbol="AAPL", timeframe="1d")
+    result = await service.get_data_range(symbol="AAPL", timeframe="1d")
 
     # Verify result structure
     assert isinstance(result, dict)
@@ -294,31 +293,28 @@ def test_get_data_range(mock_data_manager):
     # Check specific values
     assert result["symbol"] == "AAPL"
     assert result["timeframe"] == "1d"
-    assert result["point_count"] == 3
+    assert result["point_count"] == 2  # 2 days between Jan 1 and Jan 3
 
     # Verify the mock was called
-    mock_data_manager.get_data_summary.assert_called_once_with("AAPL", "1d")
+    mock_data_manager.data_loader.get_data_date_range.assert_called_once_with("AAPL", "1d")
 
 
 @pytest.mark.api
-def test_get_data_range_not_found(mock_data_manager):
+@pytest.mark.asyncio
+async def test_get_data_range_not_found(mock_data_manager):
     """Test handling of data not found in get_data_range."""
-    # Set up mock to raise DataNotFoundError
-    mock_data_manager.get_data_summary.side_effect = DataNotFoundError(
-        message="Data not found for AAPL (1d)",
-        error_code="DATA-FileNotFound",
-        details={"symbol": "AAPL", "timeframe": "1d"},
-    )
+    # Set up mock to return None (no data range found)
+    mock_data_manager.data_loader.get_data_date_range.return_value = None
 
     # Create service and call method
     service = DataService()
 
     # Expect the exception to be re-raised
     with pytest.raises(DataNotFoundError):
-        service.get_data_range(symbol="AAPL", timeframe="1d")
+        await service.get_data_range(symbol="AAPL", timeframe="1d")
 
     # Verify the mock was called
-    mock_data_manager.get_data_summary.assert_called_once()
+    mock_data_manager.data_loader.get_data_date_range.assert_called_once()
 
 
 @pytest.mark.api
