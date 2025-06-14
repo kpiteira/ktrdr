@@ -142,22 +142,26 @@ class TestIbConnectionPool:
                 assert connection.in_use
                 assert connection.created_by == "test_component"
 
-                # Verify client ID was allocated
+                # Verify client ID was allocated with preference strategy
                 mock_client_id_registry["allocate"].assert_called_once_with(
-                    ClientIdPurpose.DATA_MANAGER, "test_component", None
+                    ClientIdPurpose.DATA_MANAGER, "test_component", 1
                 )
 
     @pytest.mark.asyncio
     async def test_connection_acquisition_failure(
-        self, connection_pool, mock_client_id_registry
+        self, connection_pool, mock_client_id_registry, mock_ib_instance
     ):
         """Test connection acquisition failure."""
+        # Mock client ID allocation failure BEFORE starting pool
+        mock_client_id_registry["allocate"].side_effect = [None]  # Override side_effect with None
+        
         await connection_pool.start()
 
-        # Mock client ID allocation failure
-        mock_client_id_registry["allocate"].return_value = None
-
-        with pytest.raises(ConnectionError, match="Could not acquire connection"):
+        with (
+            patch("ktrdr.data.ib_connection_pool.IB", return_value=mock_ib_instance),
+            patch.object(connection_pool, "_connect_ib", return_value=True),
+            pytest.raises(ConnectionError, match="Could not acquire connection")
+        ):
             async with connection_pool.acquire_connection(
                 purpose=ClientIdPurpose.DATA_MANAGER, requested_by="test_component"
             ):
