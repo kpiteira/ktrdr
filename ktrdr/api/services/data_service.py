@@ -148,7 +148,7 @@ class DataService(BaseService):
                 "merged_file": f"data/{symbol}_{timeframe}.csv",
                 "gaps_analyzed": 0,
                 "segments_fetched": 0,
-                "external_requests_made": 0,
+                "ib_requests_made": 0,
                 "execution_time_seconds": execution_time,
                 "error_message": str(e),
             }

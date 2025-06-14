@@ -179,17 +179,17 @@ def mock_fuzzy_service():
 @pytest.mark.performance
 def test_data_load_endpoint_performance(client, mock_data_service):
     """Test the performance of the data loading endpoint."""
-    # Set up mock to return sample data
+    # Set up mock to return operational metrics format (current DataService format)
     mock_data_service.load_data.return_value = {
-        "dates": [f"2023-01-{i:02d}" for i in range(1, 31)],
-        "ohlcv": [[100 + i, 105 + i, 95 + i, 102 + i, 1000000] for i in range(30)],
-        "metadata": {
-            "symbol": "AAPL",
-            "timeframe": "1d",
-            "start": "2023-01-01",
-            "end": "2023-01-30",
-            "points": 30,
-        },
+        "status": "success",
+        "fetched_bars": 30,
+        "cached_before": True,
+        "merged_file": "data/AAPL_1d.csv",
+        "gaps_analyzed": 0,
+        "segments_fetched": 0,
+        "ib_requests_made": 0,
+        "execution_time_seconds": 0.05,
+        "error_message": None,
     }
 
     # Request data
@@ -341,19 +341,17 @@ def test_large_data_load_performance(client, mock_data_service):
     # Create a large dataset (1000 data points)
     num_points = 1000
 
-    # Set up mock to return large sample data
+    # Set up mock to return operational metrics format (current DataService format)
     mock_data_service.load_data.return_value = {
-        "dates": [f"2023-01-{(i % 30) + 1:02d}" for i in range(num_points)],
-        "ohlcv": [
-            [100 + i, 105 + i, 95 + i, 102 + i, 1000000] for i in range(num_points)
-        ],
-        "metadata": {
-            "symbol": "AAPL",
-            "timeframe": "1d",
-            "start": "2023-01-01",
-            "end": "2023-03-01",
-            "points": num_points,
-        },
+        "status": "success",
+        "fetched_bars": num_points,
+        "cached_before": True,
+        "merged_file": "data/AAPL_1d.csv",
+        "gaps_analyzed": 0,
+        "segments_fetched": 0,
+        "ib_requests_made": 0,
+        "execution_time_seconds": 0.25,
+        "error_message": None,
     }
 
     # Request data
@@ -464,17 +462,17 @@ def test_concurrent_request_handling(client, mock_data_service):
     """Test the API's ability to handle concurrent requests."""
     import concurrent.futures
 
-    # Set up mock to return sample data
+    # Set up mock to return operational metrics format (current DataService format)
     mock_data_service.load_data.return_value = {
-        "dates": [f"2023-01-{i:02d}" for i in range(1, 31)],
-        "ohlcv": [[100 + i, 105 + i, 95 + i, 102 + i, 1000000] for i in range(30)],
-        "metadata": {
-            "symbol": "AAPL",
-            "timeframe": "1d",
-            "start": "2023-01-01",
-            "end": "2023-01-30",
-            "points": 30,
-        },
+        "status": "success",
+        "fetched_bars": 30,
+        "cached_before": True,
+        "merged_file": "data/AAPL_1d.csv",
+        "gaps_analyzed": 0,
+        "segments_fetched": 0,
+        "ib_requests_made": 0,
+        "execution_time_seconds": 0.05,
+        "error_message": None,
     }
 
     # Different request data for each concurrent request
