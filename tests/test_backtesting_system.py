@@ -52,8 +52,10 @@ class TestPositionManager:
             symbol="AAPL",
         )
 
-        # Buy doesn't create a trade record (only when position is closed)
-        assert trade is None
+        # Buy creates a partial trade record (improved tracking)
+        assert trade is not None
+        assert trade.side == "BUY_ENTRY"
+        assert trade.symbol == "AAPL"
         assert pm.current_position is not None
         assert pm.current_position_status == PositionStatus.LONG
         assert pm.current_position.entry_price == 100.05  # Price + slippage

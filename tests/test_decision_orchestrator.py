@@ -114,9 +114,18 @@ class TestDecisionOrchestrator:
             ],
             "fuzzy_sets": {
                 "rsi": {
-                    "oversold": [0, 10, 30],
-                    "neutral": [25, 50, 75],
-                    "overbought": [70, 90, 100],
+                    "oversold": {
+                        "type": "triangular",
+                        "parameters": [0, 10, 30]
+                    },
+                    "neutral": {
+                        "type": "triangular", 
+                        "parameters": [25, 50, 75]
+                    },
+                    "overbought": {
+                        "type": "triangular",
+                        "parameters": [70, 90, 100]
+                    }
                 }
             },
             "model": {
