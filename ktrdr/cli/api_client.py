@@ -14,6 +14,11 @@ from rich.console import Console
 
 from ktrdr.logging import get_logger
 from ktrdr.errors import DataError, ValidationError
+from ktrdr.cli.ib_diagnosis import (
+    detect_ib_issue_from_api_response, 
+    format_ib_diagnostic_message,
+    should_show_ib_diagnosis
+)
 
 logger = get_logger(__name__)
 console = Console()
@@ -23,12 +28,12 @@ error_console = Console(stderr=True)
 class KtrdrApiClient:
     """
     Unified API client for KTRDR CLI commands.
-    
+
     Provides a consistent interface for all CLI commands to interact with the
     KTRDR API server, including standardized error handling, timeouts, and
     response processing.
     """
-    
+
     def __init__(
         self,
         base_url: str = "http://localhost:8000",
@@ -38,18 +43,56 @@ class KtrdrApiClient:
     ):
         """
         Initialize the API client.
-        
+
         Args:
             base_url: Base URL of the KTRDR API server
             timeout: Default timeout in seconds for requests
             max_retries: Maximum number of retry attempts for failed requests
             retry_delay: Delay between retry attempts in seconds
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+
+    def _enhance_error_with_ib_diagnosis(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enhance API response with IB diagnosis if applicable.
         
+        Args:
+            response_data: Original API response
+            
+        Returns:
+            Enhanced response with IB diagnostic information
+        """
+        # Check if this is an error response that might be IB-related
+        if not should_show_ib_diagnosis(response_data):
+            return response_data
+        
+        # Detect IB issue and enhance the response
+        problem_type, clear_message, details = detect_ib_issue_from_api_response(response_data)
+        
+        if problem_type and clear_message:
+            # Create enhanced error info
+            error_info = response_data.get("error", {})
+            enhanced_error = {
+                **error_info,
+                "ib_diagnosis": {
+                    "problem_type": problem_type.value,
+                    "clear_message": clear_message,
+                    "details": details
+                },
+                "message": format_ib_diagnostic_message(problem_type, clear_message, details)
+            }
+            
+            # Return enhanced response
+            return {
+                **response_data,
+                "error": enhanced_error
+            }
+        
+        return response_data
+
     async def _make_request(
         self,
         method: str,
@@ -61,7 +104,7 @@ class KtrdrApiClient:
     ) -> Dict[str, Any]:
         """
         Make an HTTP request with error handling and retries.
-        
+
         Args:
             method: HTTP method (GET, POST, DELETE, etc.)
             endpoint: API endpoint path (without base URL)
@@ -69,10 +112,10 @@ class KtrdrApiClient:
             params: Query parameters
             timeout: Custom timeout for this request
             retries: Custom retry count for this request
-            
+
         Returns:
             Parsed JSON response as dictionary
-            
+
         Raises:
             ValidationError: For client errors (4xx)
             DataError: For server errors (5xx) or connection issues
@@ -80,9 +123,9 @@ class KtrdrApiClient:
         url = f"{self.base_url}/api/v1{endpoint}"
         request_timeout = timeout or self.timeout
         max_attempts = (retries or self.max_retries) + 1
-        
+
         logger.debug(f"Making {method} request to {url}")
-        
+
         for attempt in range(max_attempts):
             try:
                 async with httpx.AsyncClient(timeout=request_timeout) as client:
@@ -92,11 +135,13 @@ class KtrdrApiClient:
                         json=json_data,
                         params=params,
                     )
-                    
+
                     if response.status_code >= 200 and response.status_code < 300:
                         # Success
                         try:
-                            return response.json()
+                            response_data = response.json()
+                            # Enhance with IB diagnosis if applicable
+                            return self._enhance_error_with_ib_diagnosis(response_data)
                         except Exception as e:
                             raise DataError(
                                 message="Invalid JSON response from API",
@@ -108,14 +153,14 @@ class KtrdrApiClient:
                                     "error": str(e),
                                 },
                             ) from e
-                    
+
                     elif response.status_code >= 400 and response.status_code < 500:
                         # Client error - don't retry
                         try:
                             error_detail = response.json()
                         except:
                             error_detail = {"message": response.text}
-                        
+
                         raise ValidationError(
                             message=f"API request failed: {error_detail.get('message', 'Unknown error')}",
                             error_code=f"API-{response.status_code}",
@@ -125,7 +170,7 @@ class KtrdrApiClient:
                                 "error_detail": error_detail,
                             },
                         )
-                    
+
                     else:
                         # Server error - might retry
                         error_msg = f"API server error (HTTP {response.status_code})"
@@ -135,7 +180,7 @@ class KtrdrApiClient:
                                 error_detail = response.json()
                             except:
                                 error_detail = {"message": response.text}
-                            
+
                             raise DataError(
                                 message=error_msg,
                                 error_code=f"API-ServerError-{response.status_code}",
@@ -148,10 +193,12 @@ class KtrdrApiClient:
                             )
                         else:
                             # Retry after delay
-                            logger.warning(f"{error_msg}, retrying in {self.retry_delay}s (attempt {attempt + 1}/{max_attempts})")
+                            logger.warning(
+                                f"{error_msg}, retrying in {self.retry_delay}s (attempt {attempt + 1}/{max_attempts})"
+                            )
                             await asyncio.sleep(self.retry_delay)
                             continue
-                            
+
             except httpx.ConnectError as e:
                 if attempt == max_attempts - 1:
                     raise DataError(
@@ -165,10 +212,12 @@ class KtrdrApiClient:
                         },
                     ) from e
                 else:
-                    logger.warning(f"Connection failed, retrying in {self.retry_delay}s (attempt {attempt + 1}/{max_attempts})")
+                    logger.warning(
+                        f"Connection failed, retrying in {self.retry_delay}s (attempt {attempt + 1}/{max_attempts})"
+                    )
                     await asyncio.sleep(self.retry_delay)
                     continue
-                    
+
             except httpx.TimeoutException as e:
                 if attempt == max_attempts - 1:
                     raise DataError(
@@ -181,10 +230,12 @@ class KtrdrApiClient:
                         },
                     ) from e
                 else:
-                    logger.warning(f"Request timed out, retrying in {self.retry_delay}s (attempt {attempt + 1}/{max_attempts})")
+                    logger.warning(
+                        f"Request timed out, retrying in {self.retry_delay}s (attempt {attempt + 1}/{max_attempts})"
+                    )
                     await asyncio.sleep(self.retry_delay)
                     continue
-                    
+
             except Exception as e:
                 raise DataError(
                     message=f"Unexpected error making API request: {str(e)}",
@@ -195,44 +246,48 @@ class KtrdrApiClient:
                         "error_type": type(e).__name__,
                     },
                 ) from e
-    
+
     # =============================================================================
     # Generic HTTP Methods
     # =============================================================================
-    
+
     async def get(
-        self, 
-        endpoint: str, 
+        self,
+        endpoint: str,
         params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Make a GET request to the API."""
         return await self._make_request("GET", endpoint, params=params, timeout=timeout)
-    
+
     async def post(
         self,
         endpoint: str,
         json: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Make a POST request to the API."""
-        return await self._make_request("POST", endpoint, json_data=json, params=params, timeout=timeout)
-    
+        return await self._make_request(
+            "POST", endpoint, json_data=json, params=params, timeout=timeout
+        )
+
     async def delete(
         self,
         endpoint: str,
         json: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Make a DELETE request to the API."""
-        return await self._make_request("DELETE", endpoint, json_data=json, params=params, timeout=timeout)
-    
+        return await self._make_request(
+            "DELETE", endpoint, json_data=json, params=params, timeout=timeout
+        )
+
     # =============================================================================
     # Data Management Endpoints
     # =============================================================================
-    
+
     async def get_symbols(self) -> List[Dict[str, Any]]:
         """Get list of available trading symbols."""
         response = await self._make_request("GET", "/symbols")
@@ -243,7 +298,7 @@ class KtrdrApiClient:
                 details={"response": response},
             )
         return response.get("data", [])
-    
+
     async def get_timeframes(self) -> List[Dict[str, Any]]:
         """Get list of available timeframes."""
         response = await self._make_request("GET", "/timeframes")
@@ -254,7 +309,7 @@ class KtrdrApiClient:
                 details={"response": response},
             )
         return response.get("data", [])
-    
+
     async def get_cached_data(
         self,
         symbol: str,
@@ -274,21 +329,25 @@ class KtrdrApiClient:
             params["trading_hours_only"] = trading_hours_only
         if include_extended:
             params["include_extended"] = include_extended
-            
+
         response = await self._make_request(
             "GET",
             f"/data/{symbol}/{timeframe}",
             params=params,
         )
-        
+
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to get cached data for {symbol} ({timeframe})",
                 error_code="API-GetCachedDataError",
-                details={"response": response, "symbol": symbol, "timeframe": timeframe},
+                details={
+                    "response": response,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                },
             )
         return response.get("data", {})
-    
+
     async def load_data(
         self,
         symbol: str,
@@ -307,26 +366,26 @@ class KtrdrApiClient:
             "timeframe": timeframe,
             "mode": mode,
         }
-        
+
         if start_date:
             payload["start_date"] = start_date
         if end_date:
             payload["end_date"] = end_date
-            
+
         if trading_hours_only or include_extended:
             payload["filters"] = {
                 "trading_hours_only": trading_hours_only,
                 "include_extended": include_extended,
             }
-        
+
         # Add async_mode parameter if specified
         params = {}
         if async_mode:
             params["async_mode"] = "true"
-        
+
         # Use longer timeout for data loading operations (shorter for async mode)
         request_timeout = timeout or (10.0 if async_mode else 300.0)
-        
+
         response = await self._make_request(
             "POST",
             "/data/load",
@@ -334,9 +393,9 @@ class KtrdrApiClient:
             params=params,
             timeout=request_timeout,
         )
-        
+
         return response  # Return full response including success flag and error info
-    
+
     async def get_data_range(
         self,
         symbol: str,
@@ -347,25 +406,29 @@ class KtrdrApiClient:
             "symbol": symbol,
             "timeframe": timeframe,
         }
-        
+
         response = await self._make_request(
             "POST",
             "/data/range",
             json_data=payload,
         )
-        
+
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to get data range for {symbol} ({timeframe})",
                 error_code="API-GetDataRangeError",
-                details={"response": response, "symbol": symbol, "timeframe": timeframe},
+                details={
+                    "response": response,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                },
             )
         return response.get("data", {})
-    
+
     # =============================================================================
     # Training Endpoints
     # =============================================================================
-    
+
     async def start_training(
         self,
         strategy_config: Dict[str, Any],
@@ -392,14 +455,14 @@ class KtrdrApiClient:
             "validation_split": validation_split,
             "dry_run": dry_run,
         }
-        
+
         response = await self._make_request(
             "POST",
             "/training/start",
             json_data=payload,
             timeout=300.0,  # 5 minutes for training startup
         )
-        
+
         if not response.get("success"):
             raise DataError(
                 message="Failed to start training",
@@ -407,13 +470,13 @@ class KtrdrApiClient:
                 details={"response": response},
             )
         return response.get("data", {})
-    
+
     async def get_training_status(self, task_id: str) -> Dict[str, Any]:
         """Get training task status."""
         response = await self._make_request("GET", f"/training/{task_id}")
         # Don't raise error for 404 - task might not exist yet
         return response
-    
+
     async def get_training_performance(self, task_id: str) -> Dict[str, Any]:
         """Get training performance metrics."""
         response = await self._make_request("GET", f"/training/{task_id}/performance")
@@ -424,11 +487,11 @@ class KtrdrApiClient:
                 details={"response": response, "task_id": task_id},
             )
         return response.get("data", {})
-    
+
     # =============================================================================
     # Models Endpoints
     # =============================================================================
-    
+
     async def list_models(self) -> List[Dict[str, Any]]:
         """Get list of available models."""
         response = await self._make_request("GET", "/models")
@@ -439,7 +502,7 @@ class KtrdrApiClient:
                 details={"response": response},
             )
         return response.get("data", [])
-    
+
     async def save_model(
         self,
         task_id: str,
@@ -453,13 +516,13 @@ class KtrdrApiClient:
         }
         if description:
             payload["description"] = description
-            
+
         response = await self._make_request(
             "POST",
             "/models/save",
             json_data=payload,
         )
-        
+
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to save model {model_name}",
@@ -467,7 +530,7 @@ class KtrdrApiClient:
                 details={"response": response, "model_name": model_name},
             )
         return response.get("data", {})
-    
+
     async def load_model(self, model_name: str) -> Dict[str, Any]:
         """Load a model for prediction."""
         response = await self._make_request(
@@ -475,7 +538,7 @@ class KtrdrApiClient:
             f"/models/{model_name}/load",
             timeout=60.0,  # 1 minute for model loading
         )
-        
+
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to load model {model_name}",
@@ -483,7 +546,7 @@ class KtrdrApiClient:
                 details={"response": response, "model_name": model_name},
             )
         return response.get("data", {})
-    
+
     async def predict(
         self,
         symbol: str,
@@ -498,19 +561,19 @@ class KtrdrApiClient:
             "timeframe": timeframe,
             "data_mode": data_mode,
         }
-        
+
         if model_name:
             payload["model_name"] = model_name
         if test_date:
             payload["test_date"] = test_date
-            
+
         response = await self._make_request(
             "POST",
             "/models/predict",
             json_data=payload,
             timeout=60.0,  # 1 minute for predictions
         )
-        
+
         if not response.get("success"):
             raise DataError(
                 message="Failed to make predictions",
@@ -518,11 +581,11 @@ class KtrdrApiClient:
                 details={"response": response},
             )
         return response.get("data", {})
-    
+
     # =============================================================================
     # Operations Management Endpoints
     # =============================================================================
-    
+
     async def list_operations(
         self,
         status: Optional[str] = None,
@@ -541,7 +604,7 @@ class KtrdrApiClient:
             params["status"] = status
         if operation_type:
             params["operation_type"] = operation_type
-            
+
         response = await self._make_request("GET", "/operations", params=params)
         if not response.get("success"):
             raise DataError(
@@ -550,7 +613,7 @@ class KtrdrApiClient:
                 details={"response": response},
             )
         return response
-    
+
     async def get_operation_status(self, operation_id: str) -> Dict[str, Any]:
         """Get detailed status for a specific operation."""
         response = await self._make_request("GET", f"/operations/{operation_id}")
@@ -561,7 +624,7 @@ class KtrdrApiClient:
                 details={"response": response, "operation_id": operation_id},
             )
         return response
-    
+
     async def cancel_operation(
         self,
         operation_id: str,
@@ -574,14 +637,14 @@ class KtrdrApiClient:
             payload["reason"] = reason
         if force:
             payload["force"] = force
-            
+
         response = await self._make_request(
             "DELETE",
             f"/operations/{operation_id}",
             json_data=payload if payload else None,
             timeout=5.0,  # Quick timeout for cancellation
         )
-        
+
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to cancel operation {operation_id}",
@@ -589,7 +652,7 @@ class KtrdrApiClient:
                 details={"response": response, "operation_id": operation_id},
             )
         return response
-    
+
     async def retry_operation(self, operation_id: str) -> Dict[str, Any]:
         """Retry a failed operation."""
         response = await self._make_request("POST", f"/operations/{operation_id}/retry")
@@ -600,11 +663,11 @@ class KtrdrApiClient:
                 details={"response": response, "operation_id": operation_id},
             )
         return response
-    
+
     # =============================================================================
     # Helper Methods
     # =============================================================================
-    
+
     def format_duration(self, seconds: float) -> str:
         """Format duration in human-readable format."""
         if seconds < 60:
@@ -613,7 +676,7 @@ class KtrdrApiClient:
             return f"{seconds/60:.1f}m"
         else:
             return f"{seconds/3600:.1f}h"
-    
+
     async def health_check(self) -> bool:
         """Check if the API server is healthy."""
         try:
@@ -634,11 +697,11 @@ def get_api_client(
 ) -> KtrdrApiClient:
     """
     Get the singleton API client instance.
-    
+
     Args:
         base_url: Base URL of the KTRDR API server
         timeout: Default timeout in seconds
-        
+
     Returns:
         KtrdrApiClient instance
     """
@@ -651,10 +714,10 @@ def get_api_client(
 async def check_api_connection(base_url: str = "http://localhost:8000") -> bool:
     """
     Check if the API server is available.
-    
+
     Args:
         base_url: Base URL to check
-        
+
     Returns:
         True if API is available, False otherwise
     """

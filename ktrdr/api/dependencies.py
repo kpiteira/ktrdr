@@ -12,7 +12,10 @@ from ktrdr.api.config import APIConfig
 from ktrdr.api.services.data_service import DataService
 from ktrdr.api.services.indicator_service import IndicatorService
 from ktrdr.api.services.fuzzy_service import FuzzyService
-from ktrdr.api.services.operations_service import get_operations_service, OperationsService
+from ktrdr.api.services.operations_service import (
+    get_operations_service,
+    OperationsService,
+)
 from ktrdr.data.data_manager import DataManager
 
 
@@ -73,7 +76,7 @@ def get_data_manager() -> DataManager:
     return DataManager()
 
 
-# Operations service dependency  
+# Operations service dependency
 def get_operations_service_dep() -> OperationsService:
     """
     Dependency for providing the operations service.

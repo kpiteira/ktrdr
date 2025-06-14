@@ -8,11 +8,11 @@ from .train_strategy import StrategyTrainer
 
 __all__ = [
     "ZigZagLabeler",
-    "ZigZagConfig", 
+    "ZigZagConfig",
     "FeatureEngineer",
     "ModelTrainer",
     "TrainingMetrics",
     "EarlyStopping",
     "ModelStorage",
-    "StrategyTrainer"
+    "StrategyTrainer",
 ]

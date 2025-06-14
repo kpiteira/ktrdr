@@ -4,7 +4,7 @@ CLI commands for KTRDR application.
 This module defines the main CLI application entry point.
 All specific commands have been migrated to dedicated subcommand modules:
 - data_commands.py - Data management commands
-- operations_commands.py - Operation management commands  
+- operations_commands.py - Operation management commands
 - indicator_commands.py - Technical indicator commands
 - ib_commands.py - Interactive Brokers integration commands
 - model_commands.py - Neural network model management commands

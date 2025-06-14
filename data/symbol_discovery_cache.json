@@ -29,47 +29,6 @@
       "head_timestamp_timeframes": null,
       "head_timestamp_fetched_at": null
     },
-    "AAPL": {
-      "symbol": "AAPL",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "APPLE INC",
-      "validated_at": 1749334385.7740898,
-      "trading_hours": {
-        "timezone": "America/New_York",
-        "regular_hours": {
-          "start": "09:30",
-          "end": "16:00",
-          "name": "Regular"
-        },
-        "extended_hours": [
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          }
-        ],
-        "trading_days": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "holidays": []
-      },
-      "head_timestamp": "1980-12-12T14:30:00+00:00",
-      "head_timestamp_timeframes": {
-        "default": "1980-12-12T14:30:00+00:00"
-      },
-      "head_timestamp_fetched_at": 1749684848.001567
-    },
     "GOOGL": {
       "symbol": "GOOGL",
       "asset_type": "STK",
@@ -116,45 +75,6 @@
       "currency": "USD",
       "description": "ROBLOX CORP -CLASS A",
       "validated_at": 1749334394.7205122,
-      "trading_hours": {
-        "timezone": "America/New_York",
-        "regular_hours": {
-          "start": "09:30",
-          "end": "16:00",
-          "name": "Regular"
-        },
-        "extended_hours": [
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          }
-        ],
-        "trading_days": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "holidays": []
-      },
-      "head_timestamp": null,
-      "head_timestamp_timeframes": null,
-      "head_timestamp_fetched_at": null
-    },
-    "NVDA": {
-      "symbol": "NVDA",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "NVIDIA CORP",
-      "validated_at": 1749334424.6807988,
       "trading_hours": {
         "timezone": "America/New_York",
         "regular_hours": {
@@ -234,75 +154,6 @@
       "description": "JPMORGAN EQUITY PREMIUM INCO",
       "validated_at": 1749334435.2776425,
       "trading_hours": null,
-      "head_timestamp": null,
-      "head_timestamp_timeframes": null,
-      "head_timestamp_fetched_at": null
-    },
-    "MSFT": {
-      "symbol": "MSFT",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "MICROSOFT CORP",
-      "validated_at": 1749359141.0546641,
-      "trading_hours": {
-        "timezone": "America/New_York",
-        "regular_hours": {
-          "start": "09:30",
-          "end": "16:00",
-          "name": "Regular"
-        },
-        "extended_hours": [
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          },
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          },
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          },
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          }
-        ],
-        "trading_days": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "holidays": []
-      },
       "head_timestamp": null,
       "head_timestamp_timeframes": null,
       "head_timestamp_fetched_at": null
@@ -423,22 +274,283 @@
         "default": "2005-03-09T04:30:00+00:00"
       },
       "head_timestamp_fetched_at": 1749691283.981772
+    },
+    "USDJPY": {
+      "symbol": "USDJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "United States dollar",
+      "validated_at": 1749817909.9881704,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "17:15",
+          "end": "17:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1749835034.2023797
+    },
+    "AAPL": {
+      "symbol": "AAPL",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "APPLE INC",
+      "validated_at": 1749845085.0770514,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          }
+        ],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "1980-12-12T14:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "1980-12-12T14:30:00+00:00",
+        "default": "1980-12-12T14:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1749846442.5578349
+    },
+    "MSFT": {
+      "symbol": "MSFT",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "MICROSOFT CORP",
+      "validated_at": 1749845176.9673984,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          }
+        ],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
+    },
+    "NVDA": {
+      "symbol": "NVDA",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "NVIDIA CORP",
+      "validated_at": 1749860336.4736323,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          }
+        ],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "1999-01-22T14:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "1999-01-22T14:30:00+00:00",
+        "default": "1999-01-22T14:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1749860378.3401327
     }
   },
-  "failed_symbols": [],
+  "failed_symbols": [
+    "SHOP",
+    "INVALID_SYMBOL_XYZ123",
+    "UBER",
+    "AAPL_TEST_4",
+    "AAPL_TEST_6",
+    "AAPL_TEST_5",
+    "INVALID_SYMBOL_12345",
+    "AAPL_TEST_3",
+    "AAPL_TEST_9",
+    "LYFT",
+    "AAPL_TEST_1",
+    "AAPL_TEST_7",
+    "AAPL_TEST_0",
+    "AAPL_TEST_2",
+    "AAPL_TEST_8"
+  ],
   "validated_symbols": [
+    "USDCHF",
+    "USDJPY",
+    "AAPL",
     "MSFT",
-    "RBLX",
-    "GBPUSD",
-    "JEPI",
-    "EURUSD",
+    "USDCAD",
     "GOOGL",
     "CHFUSD",
-    "AAPL",
+    "RBLX",
     "TSLA",
-    "USDCAD",
+    "JEPI",
     "NVDA",
-    "USDCHF"
+    "EURUSD",
+    "GBPUSD"
   ],
-  "last_updated": 1749694806.8282003
+  "last_updated": 1749860378.3401368
 }

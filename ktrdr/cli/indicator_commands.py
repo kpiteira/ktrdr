@@ -39,19 +39,29 @@ indicators_app = typer.Typer(
 @indicators_app.command("compute")
 def compute_indicator(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    indicator_type: str = typer.Option(..., "--type", "-t", help="Indicator type (RSI, SMA, EMA, etc.)"),
+    indicator_type: str = typer.Option(
+        ..., "--type", "-t", help="Indicator type (RSI, SMA, EMA, etc.)"
+    ),
     period: int = typer.Option(14, "--period", "-p", help="Period for the indicator"),
-    timeframe: str = typer.Option("1d", "--timeframe", help="Data timeframe (e.g., 1d, 1h)"),
-    output_format: str = typer.Option("table", "--format", "-f", help="Output format (table, json, csv)"),
-    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="Save output to file"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    timeframe: str = typer.Option(
+        "1d", "--timeframe", help="Data timeframe (e.g., 1d, 1h)"
+    ),
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv)"
+    ),
+    output_file: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Save output to file"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose output"
+    ),
 ):
     """
     Compute technical indicators for market data.
-    
+
     This command calculates various technical indicators using the KTRDR API
     and displays the results in the specified format.
-    
+
     Examples:
         ktrdr indicators compute AAPL --type RSI --period 14
         ktrdr indicators compute MSFT --type SMA --period 20 --format json
@@ -66,12 +76,20 @@ def compute_indicator(
             indicator_type, min_length=1, max_length=20
         )
         period = InputValidator.validate_numeric(period, min_value=1, max_value=1000)
-        
+
         # Run async operation
-        asyncio.run(_compute_indicator_async(
-            symbol, indicator_type, period, timeframe, output_format, output_file, verbose
-        ))
-        
+        asyncio.run(
+            _compute_indicator_async(
+                symbol,
+                indicator_type,
+                period,
+                timeframe,
+                output_format,
+                output_file,
+                verbose,
+            )
+        )
+
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         if verbose:
@@ -97,30 +115,36 @@ async def _compute_indicator_async(
     try:
         # Check API connection
         if not await check_api_connection():
-            error_console.print("[bold red]Error:[/bold red] Could not connect to KTRDR API server")
-            error_console.print("Make sure the API server is running at http://localhost:8000")
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
             sys.exit(1)
-        
+
         api_client = get_api_client()
-        
+
         if verbose:
-            console.print(f"🔢 Computing {indicator_type} for {symbol} (period={period})")
-        
+            console.print(
+                f"🔢 Computing {indicator_type} for {symbol} (period={period})"
+            )
+
         # Map user-friendly names to API indicator IDs
         indicator_mapping = {
             "RSI": "RSIIndicator",
-            "SMA": "SimpleMovingAverage", 
+            "SMA": "SimpleMovingAverage",
             "EMA": "ExponentialMovingAverage",
             "MACD": "MACDIndicator",
             "ZIGZAG": "ZigZagIndicator",
         }
-        
+
         # Get the actual indicator ID
         indicator_id = indicator_mapping.get(indicator_type.upper())
         if not indicator_id:
             # Try the original name with "Indicator" suffix
             indicator_id = f"{indicator_type}Indicator"
-        
+
         # Call the indicators API endpoint
         request_data = {
             "symbol": symbol,
@@ -128,31 +152,29 @@ async def _compute_indicator_async(
             "indicators": [
                 {
                     "id": indicator_id,
-                    "parameters": {
-                        "period": period,
-                        "source": "close"
-                    },
-                    "output_name": f"{indicator_type}_{period}"
+                    "parameters": {"period": period, "source": "close"},
+                    "output_name": f"{indicator_type}_{period}",
                 }
-            ]
+            ],
         }
-        
+
         result = await api_client.post("/indicators/calculate", json=request_data)
-        
+
         if verbose:
             console.print(f"[dim]Request: {request_data}[/dim]")
-        
+
         if result.get("success"):
             # API returns indicators directly, not nested in 'data'
             indicator_data = result.get("indicators", {})
             timestamps = result.get("dates", [])
-            
+
             if indicator_data:
                 # Format output
                 if output_format == "json":
                     if output_file:
                         import json
-                        with open(output_file, 'w') as f:
+
+                        with open(output_file, "w") as f:
                             json.dump(result, f, indent=2)
                         console.print(f"💾 Results saved to {output_file}")
                     else:
@@ -160,17 +182,16 @@ async def _compute_indicator_async(
                 elif output_format == "csv":
                     # Convert to CSV format
                     import pandas as pd
-                    
+
                     # Extract the indicator values (API uses lowercase with underscore)
                     indicator_name = f"{indicator_type.lower()}_{period}"
                     if indicator_name in indicator_data:
                         values = indicator_data[indicator_name]
-                        
-                        df = pd.DataFrame({
-                            "timestamp": timestamps,
-                            indicator_name: values
-                        })
-                        
+
+                        df = pd.DataFrame(
+                            {"timestamp": timestamps, indicator_name: values}
+                        )
+
                         if output_file:
                             df.to_csv(output_file, index=False)
                             console.print(f"💾 Results saved to {output_file}")
@@ -181,16 +202,18 @@ async def _compute_indicator_async(
                     indicator_name = f"{indicator_type.lower()}_{period}"
                     if indicator_name in indicator_data:
                         values = indicator_data[indicator_name]
-                        
-                        console.print(f"\n📊 [bold]{indicator_type} Results for {symbol}[/bold]")
+
+                        console.print(
+                            f"\n📊 [bold]{indicator_type} Results for {symbol}[/bold]"
+                        )
                         console.print(f"Period: {period} | Timeframe: {timeframe}")
                         console.print(f"Total points: {len(values)}")
                         console.print()
-                        
+
                         table = Table()
                         table.add_column("Timestamp", style="cyan")
                         table.add_column(indicator_name, style="green", justify="right")
-                        
+
                         # Show last 20 values
                         recent_data = list(zip(timestamps[-20:], values[-20:]))
                         for timestamp, value in recent_data:
@@ -198,19 +221,21 @@ async def _compute_indicator_async(
                                 table.add_row(timestamp[:19], f"{value:.4f}")
                             else:
                                 table.add_row(timestamp[:19], "N/A")
-                        
+
                         console.print(table)
-                        
+
                         if len(values) > 20:
-                            console.print(f"\n[dim]Showing last 20 of {len(values)} values[/dim]")
-                        
+                            console.print(
+                                f"\n[dim]Showing last 20 of {len(values)} values[/dim]"
+                            )
+
                         if output_file:
                             # Also save to file if requested
                             import pandas as pd
-                            df = pd.DataFrame({
-                                "timestamp": timestamps,
-                                indicator_name: values
-                            })
+
+                            df = pd.DataFrame(
+                                {"timestamp": timestamps, indicator_name: values}
+                            )
                             df.to_csv(output_file, index=False)
                             console.print(f"💾 Full results saved to {output_file}")
             else:
@@ -219,7 +244,7 @@ async def _compute_indicator_async(
             error_msg = result.get("message", "Unknown error")
             console.print(f"[red]❌ Error: {error_msg}[/red]")
             sys.exit(1)
-            
+
     except Exception as e:
         raise DataError(
             message=f"Failed to compute indicator {indicator_type} for {symbol}",
@@ -231,19 +256,29 @@ async def _compute_indicator_async(
 @indicators_app.command("plot")
 def plot_chart(
     symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Option("1d", "--timeframe", "-t", help="Data timeframe (e.g., 1d, 1h)"),
-    indicator: Optional[str] = typer.Option(None, "--indicator", "-i", help="Indicator to overlay"),
+    timeframe: str = typer.Option(
+        "1d", "--timeframe", "-t", help="Data timeframe (e.g., 1d, 1h)"
+    ),
+    indicator: Optional[str] = typer.Option(
+        None, "--indicator", "-i", help="Indicator to overlay"
+    ),
     period: int = typer.Option(14, "--period", "-p", help="Period for the indicator"),
-    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="Save chart to file"),
-    show: bool = typer.Option(True, "--show/--no-show", help="Display chart in browser"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    output_file: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Save chart to file"
+    ),
+    show: bool = typer.Option(
+        True, "--show/--no-show", help="Display chart in browser"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose output"
+    ),
 ):
     """
     Generate charts with technical indicators.
-    
+
     This command creates interactive charts using the KTRDR visualization system
     with optional technical indicator overlays.
-    
+
     Examples:
         ktrdr indicators plot AAPL --indicator SMA --period 20
         ktrdr indicators plot MSFT --timeframe 1h --output chart.html
@@ -255,12 +290,14 @@ def plot_chart(
             symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
         period = InputValidator.validate_numeric(period, min_value=1, max_value=1000)
-        
+
         # Run async operation
-        asyncio.run(_plot_chart_async(
-            symbol, timeframe, indicator, period, output_file, show, verbose
-        ))
-        
+        asyncio.run(
+            _plot_chart_async(
+                symbol, timeframe, indicator, period, output_file, show, verbose
+            )
+        )
+
     except ValidationError as e:
         error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
         if verbose:
@@ -286,31 +323,37 @@ async def _plot_chart_async(
     try:
         # Check API connection
         if not await check_api_connection():
-            error_console.print("[bold red]Error:[/bold red] Could not connect to KTRDR API server")
-            error_console.print("Make sure the API server is running at http://localhost:8000")
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
             sys.exit(1)
-        
+
         api_client = get_api_client()
-        
+
         if verbose:
             console.print(f"📈 Generating chart for {symbol} ({timeframe})")
             if indicator:
                 console.print(f"📊 Including indicator: {indicator}({period})")
-        
+
         # This would call the visualization API endpoint
         # For now, show a placeholder message
-        console.print(f"⚠️  [yellow]Chart generation via API not yet implemented[/yellow]")
+        console.print(
+            f"⚠️  [yellow]Chart generation via API not yet implemented[/yellow]"
+        )
         console.print(f"📋 Would generate chart for: {symbol} on {timeframe}")
-        
+
         if indicator:
             console.print(f"📊 With indicator: {indicator}({period})")
-            
+
         if output_file:
             console.print(f"💾 Would save chart to: {output_file}")
-        
+
         if show:
             console.print(f"🌐 Would open chart in browser")
-            
+
     except Exception as e:
         raise DataError(
             message=f"Failed to generate chart for {symbol}",
@@ -321,16 +364,22 @@ async def _plot_chart_async(
 
 @indicators_app.command("list")
 def list_indicators(
-    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter by category"),
-    output_format: str = typer.Option("table", "--format", "-f", help="Output format (table, json)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    category: Optional[str] = typer.Option(
+        None, "--category", "-c", help="Filter by category"
+    ),
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json)"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose output"
+    ),
 ):
     """
     List available technical indicators.
-    
+
     Shows all available indicators that can be used with the compute and plot commands,
     including their parameters and descriptions.
-    
+
     Examples:
         ktrdr indicators list
         ktrdr indicators list --category trend
@@ -339,7 +388,7 @@ def list_indicators(
     try:
         # Run async operation
         asyncio.run(_list_indicators_async(category, output_format, verbose))
-        
+
     except Exception as e:
         error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
         if verbose:
@@ -356,19 +405,22 @@ async def _list_indicators_async(
     try:
         # Check API connection
         if not await check_api_connection():
-            error_console.print("[bold red]Error:[/bold red] Could not connect to KTRDR API server")
-            error_console.print("Make sure the API server is running at http://localhost:8000")
+            error_console.print(
+                "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
+            )
+            error_console.print(
+                "Make sure the API server is running at http://localhost:8000"
+            )
             sys.exit(1)
-        
+
         api_client = get_api_client()
-        
+
         if verbose:
             console.print("📋 Retrieving available indicators")
-        
+
         # Call the indicators API endpoint
         result = await api_client.get("/indicators/")
-        
-        
+
         if result.get("success"):
             data_obj = result.get("data", {})
             if isinstance(data_obj, list):
@@ -377,7 +429,7 @@ async def _list_indicators_async(
             else:
                 # API returns an object with indicators key
                 indicators_data = data_obj.get("indicators", [])
-            
+
             # Transform API response to simpler format for display
             indicators = []
             for ind in indicators_data:
@@ -389,18 +441,30 @@ async def _list_indicators_async(
                         "default": param.get("default", "N/A"),
                         "description": param.get("description", ""),
                     }
-                
-                indicators.append({
-                    "name": ind.get("name", "").replace("Indicator", ""),  # Remove "Indicator" suffix
-                    "category": ind.get("type", "unknown"),  # API uses "type" not "category"
-                    "description": ind.get("description", "").strip(),  # Clean whitespace
-                    "parameters": params_dict,
-                })
-            
+
+                indicators.append(
+                    {
+                        "name": ind.get("name", "").replace(
+                            "Indicator", ""
+                        ),  # Remove "Indicator" suffix
+                        "category": ind.get(
+                            "type", "unknown"
+                        ),  # API uses "type" not "category"
+                        "description": ind.get(
+                            "description", ""
+                        ).strip(),  # Clean whitespace
+                        "parameters": params_dict,
+                    }
+                )
+
             # Filter by category if specified
             if category:
-                indicators = [ind for ind in indicators if ind["category"].lower() == category.lower()]
-            
+                indicators = [
+                    ind
+                    for ind in indicators
+                    if ind["category"].lower() == category.lower()
+                ]
+
             # Format output
             if output_format == "json":
                 result_data = {
@@ -416,14 +480,14 @@ async def _list_indicators_async(
                     console.print(f"Category: {category}")
                 console.print(f"Total: {len(indicators)}")
                 console.print()
-                
+
                 table = Table()
                 table.add_column("Name", style="cyan")
                 table.add_column("Category", style="green")
                 table.add_column("Description", style="white")
                 if verbose:
                     table.add_column("Parameters", style="dim")
-                
+
                 for indicator in indicators:
                     row = [
                         indicator["name"],
@@ -432,20 +496,27 @@ async def _list_indicators_async(
                     ]
                     if verbose:
                         params = indicator.get("parameters", {})
-                        param_str = ", ".join([f"{k}: {v.get('default', 'N/A')}" for k, v in params.items()])
-                        row.append(param_str[:50] + "..." if len(param_str) > 50 else param_str)
-                    
+                        param_str = ", ".join(
+                            [
+                                f"{k}: {v.get('default', 'N/A')}"
+                                for k, v in params.items()
+                            ]
+                        )
+                        row.append(
+                            param_str[:50] + "..." if len(param_str) > 50 else param_str
+                        )
+
                     table.add_row(*row)
-                
+
                 console.print(table)
-                
+
             if verbose:
                 console.print(f"✅ Listed {len(indicators)} indicators")
         else:
             error_msg = result.get("message", "Failed to retrieve indicators")
             console.print(f"[red]❌ Error: {error_msg}[/red]")
             sys.exit(1)
-            
+
     except Exception as e:
         raise DataError(
             message="Failed to list indicators",

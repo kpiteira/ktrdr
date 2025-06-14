@@ -38,6 +38,7 @@ Running Python directly will fail because dependencies are managed by uv, not in
 
 - **Setup**: `./setup_dev.sh` to set up the environment
 - **Python Tests**: `uv run pytest` (all tests), `uv run pytest tests/path/to/test.py` (specific test)
+- **Real E2E Tests**: `./scripts/run_real_e2e_tests.sh` (requires IB Gateway), `uv run pytest tests/e2e_real/ --real-ib`
 - **Python Linting**: `uv run black ktrdr tests` (formatting), `uv run mypy ktrdr` (type checking)
 - **Frontend Dev**: Use Docker containers: `./docker_dev.sh start` (from root), NOT direct `npm run dev`
 - **Frontend Shell**: `./docker_dev.sh shell-frontend` to access frontend container
@@ -178,6 +179,50 @@ This project uses Docker containers for consistent development:
 - **View Logs**: `./docker_dev.sh logs [service]`
 
 The frontend runs in Docker but serves on port 5173, accessible at `http://localhost:5173`. Always use the Docker environment rather than local npm/node installations.
+
+## Real End-to-End Testing Framework
+
+The project includes a comprehensive real E2E testing framework that exercises the complete system with actual IB Gateway connections. These tests catch integration bugs that mocked tests miss.
+
+### Test Categories
+
+- **Real CLI Tests** (`tests/e2e_real/test_real_cli.py`): CLI commands with real IB operations
+- **Real API Tests** (`tests/e2e_real/test_real_api.py`): API endpoints with real IB data flows  
+- **Real Pipeline Tests** (`tests/e2e_real/test_real_pipeline.py`): Complete data pipeline workflows
+- **Real Error Tests** (`tests/e2e_real/test_real_error_scenarios.py`): Error conditions requiring real IB
+
+### Prerequisites for Real E2E Tests
+
+1. **IB Gateway**: Running on localhost:4003 (or configured host/port)
+2. **Valid IB Account**: Paper trading account recommended
+3. **Running Backend**: API server on localhost:8000
+
+### Running Real E2E Tests
+
+```bash
+# All real E2E tests (requires IB Gateway)
+./scripts/run_real_e2e_tests.sh
+
+# Specific categories
+./scripts/run_real_e2e_tests.sh cli
+./scripts/run_real_e2e_tests.sh api  
+./scripts/run_real_e2e_tests.sh pipeline
+
+# Direct pytest with custom settings
+uv run pytest tests/e2e_real/ --real-ib --ib-host=127.0.0.1 --ib-port=4003
+
+# Skip real E2E tests (default)
+uv run pytest tests/e2e_real/  # Will skip all tests
+```
+
+### What Real E2E Tests Catch
+
+- **Runtime integration bugs**: Async/await usage errors, coroutine handling mistakes
+- **Data flow issues**: Symbol validation → data fetching → file writing coordination
+- **Error scenarios**: Real IB pace limiting, connection timeouts, invalid symbol handling
+- **Performance issues**: Memory leaks, connection pool exhaustion, blocking operations
+
+These tests would have caught the critical bug where `acquire_ib_connection()` was not properly awaited (mocked tests passed, but real usage failed with `RuntimeWarning`).
 
 ## MCP Server Architecture
 

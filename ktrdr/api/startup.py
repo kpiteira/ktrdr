@@ -11,11 +11,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ktrdr.logging import get_logger
-from ktrdr.data.ib_connection_manager import (
-    start_connection_manager,
-    stop_connection_manager,
-)
 from ktrdr.data.ib_gap_filler import start_gap_filler, stop_gap_filler
+from ktrdr.data.ib_connection_pool import get_connection_pool
 
 logger = get_logger(__name__)
 
@@ -33,17 +30,21 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting KTRDR API services...")
 
-    # Start persistent IB connection manager
+    # Check IB connection pool availability
     try:
-        if start_connection_manager():
-            logger.info("✅ Persistent IB connection manager started")
+        pool = await get_connection_pool()
+        pool_stats = pool.get_pool_status()
+        if pool_stats.get("available_connections", 0) > 0:
+            logger.info("✅ IB connection pool is available")
         else:
-            logger.warning("⚠️ Failed to start IB connection manager")
+            logger.info(
+                "ℹ️ IB connection pool initialized (connections created on demand)"
+            )
     except Exception as e:
-        logger.error(f"❌ Error starting IB connection manager: {e}")
+        logger.error(f"❌ Error checking IB connection pool: {e}")
 
-    # Give connection manager a moment to attempt initial connection
-    await asyncio.sleep(2)
+    # Give a moment for initialization
+    await asyncio.sleep(1)
 
     # Start gap filling service
     try:
@@ -68,12 +69,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Error stopping gap filling service: {e}")
 
-    # Stop connection manager
+    # Clean up IB connection pool
     try:
-        stop_connection_manager()
-        logger.info("✅ IB connection manager stopped")
+        from ktrdr.data.ib_connection_pool import get_connection_pool
+
+        pool = get_connection_pool()
+        await pool.cleanup_all_connections()
+        logger.info("✅ IB connection pool cleaned up")
     except Exception as e:
-        logger.error(f"❌ Error stopping IB connection manager: {e}")
+        logger.error(f"❌ Error cleaning up IB connection pool: {e}")
 
     logger.info("👋 API shutdown completed")
 
@@ -87,15 +91,31 @@ def init_background_services():
     """
     logger.info("Initializing background services...")
 
-    # Start services
-    connection_started = start_connection_manager()
+    # Check IB connection pool
+    try:
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            pool = loop.run_until_complete(get_connection_pool())
+            pool_stats = pool.get_pool_status()
+            logger.info("✅ IB connection pool available")
+            pool_available = True
+        finally:
+            loop.close()
+    except Exception as e:
+        logger.warning(f"⚠️ IB connection pool not available: {e}")
+        pool_available = False
+
+    # Start gap filler service
     gap_filler_started = start_gap_filler()
 
-    if connection_started and gap_filler_started:
-        logger.info("✅ All background services started successfully")
+    if gap_filler_started:
+        logger.info("✅ Background services started successfully")
         return True
     else:
-        logger.warning("⚠️ Some background services failed to start")
+        logger.warning("⚠️ Gap filler service failed to start")
         return False
 
 
@@ -108,6 +128,9 @@ def stop_background_services():
     logger.info("Stopping background services...")
 
     stop_gap_filler()
-    stop_connection_manager()
 
-    logger.info("✅ All background services stopped")
+    # Note: Connection pool cleanup should be done asynchronously
+    # For sync context, we just log that cleanup is needed
+    logger.info("ℹ️ Note: IB connection pool cleanup should be done asynchronously")
+
+    logger.info("✅ Background services stopped")

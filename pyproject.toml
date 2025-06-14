@@ -42,3 +42,8 @@ dev = [
 
 [project.scripts]
 ktrdr = "ktrdr.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.0.0",
+]

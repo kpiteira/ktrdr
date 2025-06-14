@@ -22,6 +22,7 @@ router = APIRouter(prefix="/backtests")
 # Request/Response models
 class BacktestRequest(BaseModel):
     """Request model for starting a backtest."""
+
     strategy_name: str
     symbol: str
     timeframe: str
@@ -31,18 +32,19 @@ class BacktestRequest(BaseModel):
     commission: float = 0.001
     slippage: float = 0.0005
     data_mode: str = "local"
-    
-    @field_validator('strategy_name', 'symbol', 'timeframe', 'start_date', 'end_date')
+
+    @field_validator("strategy_name", "symbol", "timeframe", "start_date", "end_date")
     @classmethod
     def validate_non_empty_strings(cls, v: str) -> str:
         """Validate that required string fields are not empty."""
         if not v or not v.strip():
-            raise ValueError('Field cannot be empty')
+            raise ValueError("Field cannot be empty")
         return v.strip()
 
 
 class BacktestStartResponse(BaseModel):
     """Response model for backtest start."""
+
     success: bool
     backtest_id: str
     status: str
@@ -51,6 +53,7 @@ class BacktestStartResponse(BaseModel):
 
 class BacktestStatusResponse(BaseModel):
     """Response model for backtest status."""
+
     success: bool
     backtest_id: str
     strategy_name: str
@@ -65,6 +68,7 @@ class BacktestStatusResponse(BaseModel):
 
 class BacktestMetrics(BaseModel):
     """Backtest performance metrics."""
+
     total_return: float
     annualized_return: float
     sharpe_ratio: float
@@ -76,6 +80,7 @@ class BacktestMetrics(BaseModel):
 
 class BacktestSummary(BaseModel):
     """Backtest summary information."""
+
     initial_capital: float
     final_value: float
     total_pnl: float
@@ -85,6 +90,7 @@ class BacktestSummary(BaseModel):
 
 class BacktestResultsResponse(BaseModel):
     """Response model for backtest results."""
+
     success: bool
     backtest_id: str
     strategy_name: str
@@ -98,6 +104,7 @@ class BacktestResultsResponse(BaseModel):
 
 class TradeRecord(BaseModel):
     """Individual trade record."""
+
     trade_id: Optional[str] = None
     entry_time: str
     exit_time: str
@@ -113,6 +120,7 @@ class TradeRecord(BaseModel):
 
 class BacktestTradesResponse(BaseModel):
     """Response model for backtest trades."""
+
     success: bool
     backtest_id: str
     trades: List[TradeRecord]
@@ -120,6 +128,7 @@ class BacktestTradesResponse(BaseModel):
 
 class EquityCurveResponse(BaseModel):
     """Response model for equity curve data."""
+
     success: bool
     backtest_id: str
     timestamps: List[str]
@@ -129,6 +138,7 @@ class EquityCurveResponse(BaseModel):
 
 # Singleton backtesting service instance
 _backtesting_service: Optional[BacktestingService] = None
+
 
 # Dependency for backtesting service
 async def get_backtesting_service() -> BacktestingService:
@@ -143,11 +153,11 @@ async def get_backtesting_service() -> BacktestingService:
 async def start_backtest(
     request: BacktestRequest,
     background_tasks: BackgroundTasks,
-    service: BacktestingService = Depends(get_backtesting_service)
+    service: BacktestingService = Depends(get_backtesting_service),
 ) -> BacktestStartResponse:
     """
     Start a new backtest run.
-    
+
     This endpoint initiates a backtest for a specified strategy and returns
     immediately with a backtest ID. The actual backtest runs asynchronously
     in the background.
@@ -159,16 +169,16 @@ async def start_backtest(
             timeframe=request.timeframe,
             start_date=request.start_date,
             end_date=request.end_date,
-            initial_capital=request.initial_capital
+            initial_capital=request.initial_capital,
         )
-        
+
         return BacktestStartResponse(
             success=True,
             backtest_id=result["backtest_id"],
             status=result["status"],
-            message=result["message"]
+            message=result["message"],
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -178,18 +188,17 @@ async def start_backtest(
 
 @router.get("/{backtest_id}", response_model=BacktestStatusResponse)
 async def get_backtest_status(
-    backtest_id: str,
-    service: BacktestingService = Depends(get_backtesting_service)
+    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
 ) -> BacktestStatusResponse:
     """
     Get the current status of a backtest.
-    
+
     This endpoint returns the current status and progress of a running or
     completed backtest.
     """
     try:
         status = await service.get_backtest_status(backtest_id)
-        
+
         return BacktestStatusResponse(
             success=True,
             backtest_id=status["backtest_id"],
@@ -200,9 +209,9 @@ async def get_backtest_status(
             progress=status["progress"],
             started_at=status["started_at"],
             completed_at=status["completed_at"],
-            error=status["error"]
+            error=status["error"],
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -212,18 +221,17 @@ async def get_backtest_status(
 
 @router.get("/{backtest_id}/results", response_model=BacktestResultsResponse)
 async def get_backtest_results(
-    backtest_id: str,
-    service: BacktestingService = Depends(get_backtesting_service)
+    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
 ) -> BacktestResultsResponse:
     """
     Get the full results of a completed backtest.
-    
+
     This endpoint returns detailed performance metrics and summary statistics
     for a completed backtest.
     """
     try:
         results = await service.get_backtest_results(backtest_id)
-        
+
         return BacktestResultsResponse(
             success=True,
             backtest_id=results["backtest_id"],
@@ -233,9 +241,9 @@ async def get_backtest_results(
             start_date=results["start_date"],
             end_date=results["end_date"],
             metrics=BacktestMetrics(**results["metrics"]),
-            summary=BacktestSummary(**results["summary"])
+            summary=BacktestSummary(**results["summary"]),
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DataError as e:
@@ -247,24 +255,23 @@ async def get_backtest_results(
 
 @router.get("/{backtest_id}/trades", response_model=BacktestTradesResponse)
 async def get_backtest_trades(
-    backtest_id: str,
-    service: BacktestingService = Depends(get_backtesting_service)
+    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
 ) -> BacktestTradesResponse:
     """
     Get the list of trades from a backtest.
-    
+
     This endpoint returns all trades executed during a backtest, including
     entry/exit times, prices, and P&L information.
     """
     try:
         trades = await service.get_backtest_trades(backtest_id)
-        
+
         return BacktestTradesResponse(
             success=True,
             backtest_id=backtest_id,
-            trades=[TradeRecord(**trade) for trade in trades]
+            trades=[TradeRecord(**trade) for trade in trades],
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -274,26 +281,25 @@ async def get_backtest_trades(
 
 @router.get("/{backtest_id}/equity_curve", response_model=EquityCurveResponse)
 async def get_equity_curve(
-    backtest_id: str,
-    service: BacktestingService = Depends(get_backtesting_service)
+    backtest_id: str, service: BacktestingService = Depends(get_backtesting_service)
 ) -> EquityCurveResponse:
     """
     Get the equity curve data from a backtest.
-    
+
     This endpoint returns time series data showing the portfolio value
     and drawdowns over the course of the backtest.
     """
     try:
         equity_data = await service.get_equity_curve(backtest_id)
-        
+
         return EquityCurveResponse(
             success=True,
             backtest_id=backtest_id,
             timestamps=equity_data["timestamps"],
             values=equity_data["values"],
-            drawdowns=equity_data["drawdowns"]
+            drawdowns=equity_data["drawdowns"],
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DataError as e:

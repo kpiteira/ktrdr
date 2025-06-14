@@ -11,7 +11,7 @@ import pandas as pd
 
 class TimeframeConstants:
     """Centralized timeframe constants and utilities."""
-    
+
     # Timeframe to minutes mapping
     TIMEFRAME_MINUTES = {
         "1m": 1,
@@ -23,7 +23,7 @@ class TimeframeConstants:
         "1d": 1440,  # 24 hours
         "1w": 10080,  # 7 days
     }
-    
+
     # Timeframe to pandas Timedelta mapping
     TIMEFRAME_DELTAS = {
         "1m": pd.Timedelta(minutes=1),
@@ -35,7 +35,7 @@ class TimeframeConstants:
         "1d": pd.Timedelta(days=1),
         "1w": pd.Timedelta(weeks=1),
     }
-    
+
     # Timeframe to timedelta mapping
     TIMEFRAME_TIMEDELTAS = {
         "1m": timedelta(minutes=1),
@@ -47,27 +47,27 @@ class TimeframeConstants:
         "1d": timedelta(days=1),
         "1w": timedelta(weeks=1),
     }
-    
+
     @classmethod
     def get_minutes(cls, timeframe: str) -> int:
         """Get minutes for a timeframe."""
         return cls.TIMEFRAME_MINUTES.get(timeframe, 60)
-    
+
     @classmethod
     def get_timedelta(cls, timeframe: str) -> timedelta:
         """Get timedelta for a timeframe."""
         return cls.TIMEFRAME_TIMEDELTAS.get(timeframe, timedelta(hours=1))
-    
+
     @classmethod
     def get_pandas_timedelta(cls, timeframe: str) -> pd.Timedelta:
         """Get pandas Timedelta for a timeframe."""
         return cls.TIMEFRAME_DELTAS.get(timeframe, pd.Timedelta(hours=1))
-    
+
     @classmethod
     def is_intraday(cls, timeframe: str) -> bool:
         """Check if timeframe is intraday (< 1 day)."""
-        return timeframe in ['1m', '5m', '15m', '30m', '1h', '4h']
-    
+        return timeframe in ["1m", "5m", "15m", "30m", "1h", "4h"]
+
     @classmethod
     def get_supported_timeframes(cls) -> list:
         """Get list of supported timeframes."""

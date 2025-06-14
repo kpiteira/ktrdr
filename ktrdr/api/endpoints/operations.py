@@ -3,7 +3,7 @@ Operations management endpoints for the KTRDR API.
 
 This module provides endpoints for managing long-running operations:
 - List operations
-- Get operation status  
+- Get operation status
 - Cancel operations
 - Monitor progress
 """
@@ -17,7 +17,7 @@ from ktrdr import get_logger
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.api.models.operations import (
     OperationListResponse,
-    OperationStatusResponse, 
+    OperationStatusResponse,
     OperationCancelResponse,
     CancelOperationRequest,
     OperationStatus,
@@ -53,45 +53,57 @@ router = APIRouter()
     """,
 )
 async def list_operations(
-    status: Optional[OperationStatus] = Query(None, description="Filter by operation status"),
-    operation_type: Optional[OperationType] = Query(None, description="Filter by operation type"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of operations to return"),
+    status: Optional[OperationStatus] = Query(
+        None, description="Filter by operation status"
+    ),
+    operation_type: Optional[OperationType] = Query(
+        None, description="Filter by operation type"
+    ),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of operations to return"
+    ),
     offset: int = Query(0, ge=0, description="Number of operations to skip"),
-    active_only: bool = Query(False, description="Show only active (running/pending) operations"),
+    active_only: bool = Query(
+        False, description="Show only active (running/pending) operations"
+    ),
     operations_service: OperationsService = Depends(get_operations_service),
 ) -> OperationListResponse:
     """
     List all operations with optional filtering.
-    
+
     Returns a paginated list of operations, with support for filtering by
     status, type, and other criteria. Useful for monitoring and management.
-    
+
     Args:
         status: Filter operations by status
         operation_type: Filter operations by type
         limit: Maximum number of operations to return
         offset: Number of operations to skip (for pagination)
         active_only: If True, only return running/pending operations
-        
+
     Returns:
         OperationListResponse: Paginated list of operations
-        
+
     Example:
         GET /api/v1/operations?status=running&limit=10
         GET /api/v1/operations?active_only=true
     """
     try:
-        logger.info(f"Listing operations: status={status}, type={operation_type}, active_only={active_only}")
-        
-        # Get operations from service
-        operations, total_count, active_count = await operations_service.list_operations(
-            status=status,
-            operation_type=operation_type,
-            limit=limit,
-            offset=offset,
-            active_only=active_only,
+        logger.info(
+            f"Listing operations: status={status}, type={operation_type}, active_only={active_only}"
         )
-        
+
+        # Get operations from service
+        operations, total_count, active_count = (
+            await operations_service.list_operations(
+                status=status,
+                operation_type=operation_type,
+                limit=limit,
+                offset=offset,
+                active_only=active_only,
+            )
+        )
+
         # Convert to summary format
         operation_summaries = [
             OperationSummary(
@@ -106,15 +118,17 @@ async def list_operations(
             )
             for op in operations
         ]
-        
-        logger.info(f"Retrieved {len(operations)} operations (total: {total_count}, active: {active_count})")
+
+        logger.info(
+            f"Retrieved {len(operations)} operations (total: {total_count}, active: {active_count})"
+        )
         return OperationListResponse(
             success=True,
             data=operation_summaries,
             total_count=total_count,
             active_count=active_count,
         )
-        
+
     except Exception as e:
         logger.error(f"Error listing operations: {str(e)}")
         raise DataError(
@@ -127,7 +141,7 @@ async def list_operations(
 @router.get(
     "/operations/{operation_id}",
     response_model=OperationStatusResponse,
-    tags=["Operations"], 
+    tags=["Operations"],
     summary="Get operation status",
     description="""
     Get detailed status and progress information for a specific operation.
@@ -147,41 +161,41 @@ async def get_operation_status(
 ) -> OperationStatusResponse:
     """
     Get detailed status information for a specific operation.
-    
+
     Returns complete information about an operation including current status,
     progress, metadata, and results (if completed).
-    
+
     Args:
         operation_id: Unique identifier for the operation
-        
+
     Returns:
         OperationStatusResponse: Detailed operation information
-        
+
     Raises:
         404: Operation not found
-        
+
     Example:
         GET /api/v1/operations/op_data_load_20241201_123456
     """
     try:
         logger.info(f"Getting status for operation: {operation_id}")
-        
+
         # Get operation from service
         operation = await operations_service.get_operation(operation_id)
-        
+
         if not operation:
             logger.warning(f"Operation not found: {operation_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Operation not found: {operation_id}",
             )
-        
+
         logger.info(f"Retrieved operation {operation_id}: status={operation.status}")
         return OperationStatusResponse(
             success=True,
             data=operation,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -197,7 +211,7 @@ async def get_operation_status(
     "/operations/{operation_id}",
     response_model=OperationCancelResponse,
     tags=["Operations"],
-    summary="Cancel operation", 
+    summary="Cancel operation",
     description="""
     Cancel a running or pending operation.
     
@@ -217,25 +231,25 @@ async def cancel_operation(
 ) -> OperationCancelResponse:
     """
     Cancel a running or pending operation.
-    
+
     Attempts to gracefully cancel an operation. If the operation is in a
     critical section, cancellation may be delayed until safe. Use force=True
     to attempt immediate cancellation.
-    
+
     Args:
         operation_id: Unique identifier for the operation to cancel
         request: Optional cancellation request with reason and force flag
-        
+
     Returns:
         OperationCancelResponse: Cancellation result
-        
+
     Raises:
         404: Operation not found
         400: Operation cannot be cancelled (already completed/failed)
-        
+
     Example:
         DELETE /api/v1/operations/op_data_load_20241201_123456
-        
+
     Example with body:
         DELETE /api/v1/operations/op_data_load_20241201_123456
         {
@@ -247,34 +261,42 @@ async def cancel_operation(
         # Default request if none provided
         if request is None:
             request = CancelOperationRequest()
-            
-        logger.info(f"Cancelling operation {operation_id}: reason='{request.reason}', force={request.force}")
-        
+
+        logger.info(
+            f"Cancelling operation {operation_id}: reason='{request.reason}', force={request.force}"
+        )
+
         # Get operation first to verify it exists
         operation = await operations_service.get_operation(operation_id)
-        
+
         if not operation:
             logger.warning(f"Cannot cancel - operation not found: {operation_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Operation not found: {operation_id}",
             )
-        
+
         # Check if operation can be cancelled
-        if operation.status in [OperationStatus.COMPLETED, OperationStatus.FAILED, OperationStatus.CANCELLED]:
-            logger.warning(f"Cannot cancel - operation already finished: {operation_id} (status: {operation.status})")
+        if operation.status in [
+            OperationStatus.COMPLETED,
+            OperationStatus.FAILED,
+            OperationStatus.CANCELLED,
+        ]:
+            logger.warning(
+                f"Cannot cancel - operation already finished: {operation_id} (status: {operation.status})"
+            )
             raise HTTPException(
                 status_code=400,
                 detail=f"Operation {operation_id} cannot be cancelled (status: {operation.status})",
             )
-        
+
         # Attempt cancellation
         cancellation_result = await operations_service.cancel_operation(
             operation_id=operation_id,
             reason=request.reason,
             force=request.force,
         )
-        
+
         if cancellation_result["success"]:
             logger.info(f"Successfully cancelled operation: {operation_id}")
             return OperationCancelResponse(
@@ -288,7 +310,7 @@ async def cancel_operation(
                 error_code="OPERATIONS-CancelFailed",
                 details=cancellation_result,
             )
-            
+
     except HTTPException:
         raise
     except DataError:
@@ -324,53 +346,57 @@ async def retry_operation(
 ) -> OperationStatusResponse:
     """
     Retry a failed operation.
-    
+
     Creates a new operation with the same parameters as the failed operation.
     The new operation gets a new operation ID for tracking.
-    
+
     Args:
         operation_id: Unique identifier for the failed operation to retry
-        
+
     Returns:
         OperationStatusResponse: New operation information
-        
+
     Raises:
         404: Operation not found
         400: Operation is not in a failed state
-        
+
     Example:
         POST /api/v1/operations/op_data_load_20241201_123456/retry
     """
     try:
         logger.info(f"Retrying operation: {operation_id}")
-        
+
         # Get original operation
         original_operation = await operations_service.get_operation(operation_id)
-        
+
         if not original_operation:
             logger.warning(f"Cannot retry - operation not found: {operation_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Operation not found: {operation_id}",
             )
-        
+
         # Check if operation can be retried
         if original_operation.status != OperationStatus.FAILED:
-            logger.warning(f"Cannot retry - operation not failed: {operation_id} (status: {original_operation.status})")
+            logger.warning(
+                f"Cannot retry - operation not failed: {operation_id} (status: {original_operation.status})"
+            )
             raise HTTPException(
                 status_code=400,
                 detail=f"Operation {operation_id} cannot be retried (status: {original_operation.status})",
             )
-        
+
         # Create new operation with same parameters
         new_operation = await operations_service.retry_operation(operation_id)
-        
-        logger.info(f"Created retry operation: {new_operation.operation_id} (original: {operation_id})")
+
+        logger.info(
+            f"Created retry operation: {new_operation.operation_id} (original: {operation_id})"
+        )
         return OperationStatusResponse(
             success=True,
             data=new_operation,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

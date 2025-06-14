@@ -7,4 +7,4 @@ across the KTRDR system.
 
 from .timezone_utils import TimestampManager
 
-__all__ = ['TimestampManager']
+__all__ = ["TimestampManager"]

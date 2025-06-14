@@ -11,8 +11,10 @@ from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 
 from ktrdr.logging import get_logger
-from ktrdr.data.ib_connection_manager import get_connection_manager
+from ktrdr.data.ib_connection_pool import get_connection_pool
 from ktrdr.data.ib_gap_filler import get_gap_filler
+from ktrdr.api.models.base import ApiResponse
+from ktrdr import metadata
 
 logger = get_logger(__name__)
 
@@ -25,67 +27,31 @@ async def get_ib_status() -> Dict[str, Any]:
     """
     Get Interactive Brokers connection status.
 
-    Returns detailed information about the persistent IB connection
-    including connection state, client ID, retry attempts, etc.
+    Returns detailed information about the connection pool status,
+    active connections, and pool metrics.
     """
     try:
-        connection_manager = get_connection_manager()
-        status = connection_manager.get_status()
-        metrics = connection_manager.get_metrics()
-
-        # Get actual IB connection state
-        connection = connection_manager.get_connection()
-        actual_connected = False
-        ib_connection_details = None
-
-        if connection:
-            try:
-                # Test actual IB connection using ib_insync's isConnected()
-                actual_connected = connection.ib.isConnected()
-
-                if actual_connected:
-                    ib_connection_details = {
-                        "connection_verified": True,
-                        "transport_open": not hasattr(connection.ib.client, "conn")
-                        or (
-                            hasattr(connection.ib.client.conn, "is_closing")
-                            and not connection.ib.client.conn.is_closing()
-                        ),
-                    }
-            except Exception as e:
-                logger.warning(f"Error testing actual IB connection: {e}")
-                actual_connected = False
+        # Get connection pool statistics
+        pool = await get_connection_pool()
+        pool_stats = pool.get_pool_status()
 
         return {
-            "status": "ok",
-            "ib_connection": {
-                "manager_thinks_connected": status.connected,  # Our internal state
-                "actually_connected": actual_connected,  # Real IB state
-                "connection_mismatch": status.connected != actual_connected,
-                "client_id": status.client_id,
-                "host": status.host,
-                "port": status.port,
-                "last_connect_time": (
-                    status.last_connect_time.isoformat()
-                    if status.last_connect_time
-                    else None
-                ),
-                "last_disconnect_time": (
-                    status.last_disconnect_time.isoformat()
-                    if status.last_disconnect_time
-                    else None
-                ),
-                "connection_attempts": status.connection_attempts,
-                "failed_attempts": status.failed_attempts,
-                "current_attempt": status.current_attempt,
-                "next_retry_time": (
-                    status.next_retry_time.isoformat()
-                    if status.next_retry_time
-                    else None
-                ),
-                "ib_details": ib_connection_details,
+            "success": True,
+            "connection_pool": {
+                "available_connections": pool_stats.get("available_connections", 0),
+                "total_connections": pool_stats.get("total_connections", 0),
+                "failed_connections": pool_stats.get("failed_connections", 0),
+                "host": pool_stats.get("host", ""),
+                "port": pool_stats.get("port", 0),
+                "uptime_seconds": pool_stats.get("uptime_seconds", 0),
+                "created_at": pool_stats.get("created_at", ""),
             },
-            "metrics": metrics,
+            "status": (
+                "available"
+                if pool_stats.get("available_connections", 0) > 0
+                else "initializing"
+            ),
+            "timestamp": pool_stats.get("timestamp", ""),
         }
 
     except Exception as e:
@@ -147,9 +113,10 @@ async def get_system_status() -> Dict[str, Any]:
     and their current state.
     """
     try:
-        # Get IB connection status
-        connection_manager = get_connection_manager()
-        ib_connected = connection_manager.is_connected()
+        # Get IB connection status from pool
+        pool = await get_connection_pool()
+        pool_stats = pool.get_pool_status()
+        ib_connected = pool_stats.get("available_connections", 0) > 0
 
         # Get gap filler status
         gap_filler = get_gap_filler()
@@ -188,6 +155,116 @@ async def get_system_status() -> Dict[str, Any]:
         logger.error(f"Error getting system status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system status: {str(e)}"
+        )
+
+
+@router.get("/status")
+async def get_system_status_standardized() -> ApiResponse:
+    """
+    Get overall system status in standardized API format.
+
+    This endpoint provides the same information as /system-status
+    but in the standardized API response format expected by tests.
+    """
+    try:
+        # Get IB connection status from pool
+        pool = await get_connection_pool()
+        pool_stats = pool.get_pool_status()
+        ib_connected = pool_stats.get("available_connections", 0) > 0
+
+        # Get gap filler status
+        gap_filler = get_gap_filler()
+        gap_filler_stats = gap_filler.get_stats()
+        gap_filler_running = gap_filler_stats["running"]
+
+        # Calculate uptime
+        uptime_seconds = pool_stats.get("pool_uptime_seconds", 0)
+
+        return ApiResponse(
+            success=True,
+            data={
+                "version": metadata.VERSION,
+                "environment": "development",  # Could be made configurable
+                "uptime_seconds": uptime_seconds,
+                "health": (
+                    "healthy" if ib_connected and gap_filler_running else "degraded"
+                ),
+                "services": {
+                    "ib_connection": {
+                        "status": "connected" if ib_connected else "disconnected",
+                        "healthy": ib_connected,
+                    },
+                    "gap_filler": {
+                        "status": "running" if gap_filler_running else "stopped",
+                        "healthy": gap_filler_running,
+                    },
+                },
+                "summary": {
+                    "ib_connected": ib_connected,
+                    "gap_filler_running": gap_filler_running,
+                    "gaps_filled_today": gap_filler_stats.get("gaps_filled", 0),
+                    "symbols_processed": len(
+                        gap_filler_stats.get("symbols_processed", [])
+                    ),
+                },
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting system status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error getting system status: {str(e)}"
+        )
+
+
+@router.get("/config")
+async def get_system_config() -> ApiResponse:
+    """
+    Get system configuration information.
+
+    Returns system-wide configuration details including version,
+    environment, and feature settings.
+    """
+    try:
+        # Get configuration details
+        from ktrdr.api.config import APIConfig
+
+        api_config = APIConfig()
+
+        return ApiResponse(
+            success=True,
+            data={
+                "version": metadata.VERSION,
+                "environment": api_config.environment,
+                "api_version": "v1",
+                "api_prefix": api_config.api_prefix,
+                "host": api_config.host,
+                "port": api_config.port,
+                "cors_origins": api_config.cors_origins,
+                "features_enabled": [
+                    "ib_integration",
+                    "gap_filling",
+                    "symbol_validation",
+                    "data_loading",
+                    "strategy_management",
+                    "backtesting",
+                    "neural_networks",
+                    "fuzzy_logic",
+                ],
+                "services_available": [
+                    "connection_pool",
+                    "gap_filler",
+                    "pace_manager",
+                    "symbol_validator",
+                    "data_fetcher",
+                ],
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting system config: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error getting system config: {str(e)}"
         )
 
 

@@ -6,10 +6,10 @@ from .orchestrator import DecisionOrchestrator, DecisionContext, PositionState
 
 __all__ = [
     "Signal",
-    "Position", 
+    "Position",
     "TradingDecision",
     "DecisionEngine",
     "DecisionOrchestrator",
     "DecisionContext",
-    "PositionState"
+    "PositionState",
 ]

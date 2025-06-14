@@ -5,6 +5,7 @@ This module implements the API endpoints for IB status, health monitoring,
 and connection management.
 """
 
+import asyncio
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -67,7 +68,7 @@ async def get_ib_status(
         IbStatusApiResponse with comprehensive status information
     """
     try:
-        status = ib_service.get_status()
+        status = await ib_service.get_status()
         return ApiResponse(success=True, data=status, error=None)
     except Exception as e:
         logger.error(f"Error getting IB status: {e}")
@@ -104,7 +105,7 @@ async def check_ib_health(
         IbHealthApiResponse with health status
     """
     try:
-        health = ib_service.get_health()
+        health = await ib_service.get_health()
 
         # Return appropriate HTTP status based on health
         if not health.healthy:
@@ -140,6 +141,53 @@ async def check_ib_health(
 
 
 @router.get(
+    "/resilience",
+    response_model=ApiResponse[Dict[str, Any]],
+    summary="Get IB Connection Resilience Status",
+    description="Get detailed status of connection resilience features including validation, garbage collection, and Client ID preference",
+)
+async def get_ib_resilience_status(
+    ib_service: IbService = Depends(get_ib_service),
+) -> ApiResponse[Dict[str, Any]]:
+    """
+    Get comprehensive connection resilience status.
+    
+    Tests and reports on all connection resilience phases:
+    - Phase 1: Systematic connection validation before handoff
+    - Phase 2: Garbage collection with 5-minute idle timeout  
+    - Phase 3: Client ID 1 preference with incremental fallback
+    
+    Returns detailed metrics and an overall resilience score (0-100).
+    """
+    logger.info("🔍 PHASE 4: IB resilience status endpoint accessed")
+    
+    try:
+        resilience_status = await ib_service.get_connection_resilience_status()
+        
+        # Return success response
+        return ApiResponse(
+            success=True, 
+            data=resilience_status, 
+            error=None
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting IB resilience status: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=ApiResponse(
+                success=False,
+                data=None,
+                error=ErrorResponse(
+                    code="IB-RESILIENCE-ERROR",
+                    message="Failed to get IB resilience status",
+                    details={"error": str(e)},
+                ),
+            ).model_dump(),
+        )
+
+
+@router.get(
     "/config",
     response_model=IbConfigApiResponse,
     tags=["IB"],
@@ -162,7 +210,7 @@ async def get_ib_config(
         IbConfigApiResponse with configuration information
     """
     try:
-        config = ib_service.get_config()
+        config = await ib_service.get_config()
         return ApiResponse(success=True, data=config, error=None)
     except Exception as e:
         logger.error(f"Error getting IB config: {e}")
@@ -172,6 +220,54 @@ async def get_ib_config(
             error=ErrorResponse(
                 code="IB-CONFIG-ERROR",
                 message="Failed to get IB configuration",
+                details={"error": str(e)},
+            ),
+        )
+
+
+@router.get(
+    "/circuit-breakers",
+    response_model=ApiResponse[Dict[str, Any]],
+    tags=["IB", "Monitoring"],
+    summary="Get circuit breaker status",
+    description="Returns the status of all IB operation circuit breakers for monitoring silent connection issues.",
+)
+async def get_circuit_breaker_status() -> ApiResponse[Dict[str, Any]]:
+    """
+    Get status of all IB circuit breakers.
+    
+    This endpoint provides visibility into circuit breaker states,
+    helping diagnose IB connectivity issues and silent connections.
+    
+    Returns:
+        ApiResponse with circuit breaker status information
+    """
+    try:
+        from ktrdr.api.utils.circuit_breaker import get_all_circuit_breakers
+        
+        breakers = get_all_circuit_breakers()
+        breaker_status = {name: breaker.get_status() for name, breaker in breakers.items()}
+        
+        return ApiResponse(
+            success=True,
+            data={
+                "circuit_breakers": breaker_status,
+                "summary": {
+                    "total_breakers": len(breakers),
+                    "open_breakers": len([b for b in breakers.values() if b.state.value == "open"]),
+                    "half_open_breakers": len([b for b in breakers.values() if b.state.value == "half_open"]),
+                }
+            },
+            error=None
+        )
+    except Exception as e:
+        logger.error(f"Error getting circuit breaker status: {e}")
+        return ApiResponse(
+            success=False,
+            data=None,
+            error=ErrorResponse(
+                code="CIRCUIT-BREAKER-STATUS-ERROR",
+                message="Failed to get circuit breaker status",
                 details={"error": str(e)},
             ),
         )
@@ -339,7 +435,7 @@ async def get_data_ranges(
             )
 
         # Get data ranges
-        ranges_response = ib_service.get_data_ranges(symbol_list, timeframe_list)
+        ranges_response = await ib_service.get_data_ranges(symbol_list, timeframe_list)
 
         return ApiResponse(success=True, data=ranges_response, error=None)
 
@@ -379,61 +475,115 @@ async def discover_symbol(
 ) -> SymbolDiscoveryApiResponse:
     """
     Discover symbol information from Interactive Brokers.
-    
+
     This endpoint validates a symbol against IB's contract database and returns
     detailed information including instrument type, exchange, and description.
     Results are cached to improve performance on subsequent requests.
-    
+
     Args:
         request: Symbol discovery request with symbol and optional force_refresh
-        
+
     Returns:
         SymbolDiscoveryApiResponse with symbol information or null if not found
-        
+
     Raises:
         HTTPException: If discovery operation fails
     """
     import time
-    
+
     start_time = time.time()
-    
+
     try:
         logger.info(f"Discovering symbol: {request.symbol}")
-        
-        # Discover symbol using IB service
-        symbol_info_dict = ib_service.discover_symbol(
-            symbol=request.symbol,
-            force_refresh=request.force_refresh
-        )
-        
+
+        # Discover symbol using IB service with circuit breaker for resilience
+        try:
+            from ktrdr.api.utils.circuit_breaker import with_circuit_breaker, CircuitBreakerOpenError
+            
+            symbol_info_dict = await with_circuit_breaker(
+                "ib_symbol_discovery",
+                ib_service.discover_symbol,
+                symbol=request.symbol, 
+                force_refresh=request.force_refresh
+            )
+        except CircuitBreakerOpenError as e:
+            logger.error(f"Symbol discovery circuit breaker OPEN for {request.symbol}: {e}")
+            
+            # Perform rapid diagnosis to give clear error message
+            from ktrdr.api.utils.ib_diagnosis import IBDiagnosis, get_clear_error_message
+            
+            try:
+                problem_type, diagnosis_msg, details = await IBDiagnosis.diagnose_connection()
+                clear_message = get_clear_error_message(problem_type, diagnosis_msg)
+                
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "IB-GATEWAY-ISSUE", 
+                        "message": clear_message,
+                        "details": {
+                            "symbol": request.symbol,
+                            "problem_type": problem_type.value,
+                            "diagnosis": details,
+                            "circuit_breaker_reason": str(e)
+                        }
+                    }
+                )
+            except Exception as diag_error:
+                # Fallback if diagnosis fails
+                logger.error(f"Diagnosis failed: {diag_error}")
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "IB-CIRCUIT-OPEN", 
+                        "message": str(e),
+                        "details": {
+                            "symbol": request.symbol,
+                            "recovery_action": "Check IB Gateway connectivity and restart if needed"
+                        }
+                    }
+                )
+        except asyncio.TimeoutError:
+            logger.error(f"Symbol discovery TIMEOUT for {request.symbol} - possible silent IB connection!")
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "IB-TIMEOUT", 
+                    "message": f"Symbol discovery timed out for {request.symbol}",
+                    "details": {
+                        "symbol": request.symbol,
+                        "timeout_seconds": 30,
+                        "possible_cause": "IB connection appears connected but operations timeout - check IB Gateway connectivity"
+                    }
+                }
+            )
+
         discovery_time_ms = (time.time() - start_time) * 1000
-        
+
         if symbol_info_dict is None:
             # Symbol not found
             return SymbolDiscoveryApiResponse(
                 success=True,
                 data=SymbolDiscoveryResponse(
-                    symbol_info=None,
-                    cached=False,
-                    discovery_time_ms=discovery_time_ms
-                )
+                    symbol_info=None, cached=False, discovery_time_ms=discovery_time_ms
+                ),
             )
-        
+
         # Convert dict to SymbolInfo model
         symbol_info = SymbolInfo(**symbol_info_dict)
-        
+
         # Determine if result was cached (heuristic based on discovery time)
         cached = discovery_time_ms < 50  # Fast response usually indicates cache hit
-        
+
         return SymbolDiscoveryApiResponse(
             success=True,
             data=SymbolDiscoveryResponse(
                 symbol_info=symbol_info,
                 cached=cached,
-                discovery_time_ms=discovery_time_ms
-            )
+                discovery_time_ms=discovery_time_ms,
+            ),
         )
-        
+
     except Exception as e:
         logger.error(f"Symbol discovery failed for {request.symbol}: {e}")
         return SymbolDiscoveryApiResponse(
@@ -456,54 +606,57 @@ async def discover_symbol(
 )
 async def get_discovered_symbols(
     instrument_type: Optional[str] = Query(
-        None, description="Filter by instrument type (e.g., 'stock', 'forex', 'futures')"
+        None,
+        description="Filter by instrument type (e.g., 'stock', 'forex', 'futures')",
     ),
     ib_service: IbService = Depends(get_ib_service),
 ) -> DiscoveredSymbolsApiResponse:
     """
     Get all discovered symbols from the cache.
-    
+
     This endpoint returns symbols that have been previously discovered and cached
     by the symbol discovery system. Results can be filtered by instrument type.
-    
+
     Args:
         instrument_type: Optional filter by instrument type
-        
+
     Returns:
         DiscoveredSymbolsApiResponse with list of cached symbols and statistics
-        
+
     Raises:
         HTTPException: If operation fails
     """
     try:
         logger.info(f"Getting discovered symbols (filter: {instrument_type})")
-        
+
         # Get discovered symbols from IB service
-        symbols_data = ib_service.get_discovered_symbols(instrument_type=instrument_type)
-        
+        symbols_data = ib_service.get_discovered_symbols(
+            instrument_type=instrument_type
+        )
+
         # Convert to SymbolInfo models
         symbols = [SymbolInfo(**symbol_dict) for symbol_dict in symbols_data]
-        
+
         # Count by instrument type
         instrument_type_counts = {}
         for symbol in symbols:
             instrument_type_counts[symbol.instrument_type] = (
                 instrument_type_counts.get(symbol.instrument_type, 0) + 1
             )
-        
+
         # Get cache statistics
         cache_stats = ib_service.get_symbol_discovery_stats()
-        
+
         return DiscoveredSymbolsApiResponse(
             success=True,
             data=DiscoveredSymbolsResponse(
                 symbols=symbols,
                 total_count=len(symbols),
                 instrument_types=instrument_type_counts,
-                cache_stats=cache_stats
-            )
+                cache_stats=cache_stats,
+            ),
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get discovered symbols: {e}")
         return DiscoveredSymbolsApiResponse(
@@ -515,5 +668,3 @@ async def get_discovered_symbols(
                 details={"instrument_type": instrument_type, "error": str(e)},
             ),
         )
-
-

@@ -11,6 +11,7 @@ from ..decision.base import Signal
 
 class PositionStatus(Enum):
     """Position status enumeration."""
+
     FLAT = "FLAT"
     LONG = "LONG"
     SHORT = "SHORT"
@@ -19,6 +20,7 @@ class PositionStatus(Enum):
 @dataclass
 class Position:
     """Detailed position tracking."""
+
     status: PositionStatus
     entry_price: float
     entry_time: pd.Timestamp
@@ -27,25 +29,25 @@ class Position:
     last_update_time: pd.Timestamp
     unrealized_pnl: float = 0.0
     max_favorable_excursion: float = 0.0  # Best unrealized profit
-    max_adverse_excursion: float = 0.0    # Worst unrealized loss
-    
+    max_adverse_excursion: float = 0.0  # Worst unrealized loss
+
     @property
     def holding_period(self) -> float:
         """Holding period in hours."""
         if self.last_update_time and self.entry_time:
             return (self.last_update_time - self.entry_time).total_seconds() / 3600
         return 0.0
-    
+
     def update(self, current_price: float, timestamp: pd.Timestamp):
         """Update position with current market price.
-        
+
         Args:
             current_price: Current market price
             timestamp: Current timestamp
         """
         self.current_price = current_price
         self.last_update_time = timestamp
-        
+
         # Calculate unrealized P&L
         if self.status == PositionStatus.LONG:
             self.unrealized_pnl = (current_price - self.entry_price) * self.quantity
@@ -53,15 +55,20 @@ class Position:
             self.unrealized_pnl = (self.entry_price - current_price) * self.quantity
         else:
             self.unrealized_pnl = 0.0
-        
+
         # Track excursions
-        self.max_favorable_excursion = max(self.max_favorable_excursion, self.unrealized_pnl)
-        self.max_adverse_excursion = min(self.max_adverse_excursion, self.unrealized_pnl)
+        self.max_favorable_excursion = max(
+            self.max_favorable_excursion, self.unrealized_pnl
+        )
+        self.max_adverse_excursion = min(
+            self.max_adverse_excursion, self.unrealized_pnl
+        )
 
 
 @dataclass
 class Trade:
     """Completed trade record."""
+
     trade_id: int
     symbol: str
     side: str  # BUY or SELL
@@ -78,7 +85,7 @@ class Trade:
     max_favorable_excursion: float
     max_adverse_excursion: float
     decision_metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     @property
     def return_pct(self) -> float:
         """Return percentage."""
@@ -89,10 +96,15 @@ class Trade:
 
 class PositionManager:
     """Manages positions and trade execution with detailed tracking."""
-    
-    def __init__(self, initial_capital: float, commission: float = 0.001, slippage: float = 0.0005):
+
+    def __init__(
+        self,
+        initial_capital: float,
+        commission: float = 0.001,
+        slippage: float = 0.0005,
+    ):
         """Initialize position manager.
-        
+
         Args:
             initial_capital: Starting capital
             commission: Commission rate (as fraction, e.g., 0.001 = 0.1%)
@@ -102,129 +114,145 @@ class PositionManager:
         self.current_capital = initial_capital
         self.commission = commission
         self.slippage = slippage
-        
+
         self.current_position: Optional[Position] = None
         self.trade_history: List[Trade] = []
         self.next_trade_id = 1
-        
+
     @property
     def current_position_status(self) -> PositionStatus:
         """Get current position status."""
-        return self.current_position.status if self.current_position else PositionStatus.FLAT
-    
+        return (
+            self.current_position.status
+            if self.current_position
+            else PositionStatus.FLAT
+        )
+
     @property
     def available_capital(self) -> float:
         """Get available capital for trading."""
         if self.current_position:
             # Capital tied up in position
-            position_value = self.current_position.entry_price * self.current_position.quantity
+            position_value = (
+                self.current_position.entry_price * self.current_position.quantity
+            )
             return self.current_capital - position_value
         return self.current_capital
-    
+
     def get_portfolio_value(self, current_price: float) -> float:
         """Get total portfolio value.
-        
+
         Args:
             current_price: Current market price
-            
+
         Returns:
             Total portfolio value including cash and positions
         """
         if self.current_position:
             # Calculate current position market value
             position_market_value = current_price * self.current_position.quantity
-            
+
             # Update position to track unrealized P&L for reporting
             if current_price != self.current_position.current_price:
                 # Calculate unrealized P&L based on current price
                 if self.current_position.status == PositionStatus.LONG:
-                    unrealized_pnl = (current_price - self.current_position.entry_price) * self.current_position.quantity
+                    unrealized_pnl = (
+                        current_price - self.current_position.entry_price
+                    ) * self.current_position.quantity
                 elif self.current_position.status == PositionStatus.SHORT:
-                    unrealized_pnl = (self.current_position.entry_price - current_price) * self.current_position.quantity
+                    unrealized_pnl = (
+                        self.current_position.entry_price - current_price
+                    ) * self.current_position.quantity
                 else:
                     unrealized_pnl = 0.0
-                    
+
                 # Update position's unrealized P&L for tracking
                 self.current_position.unrealized_pnl = unrealized_pnl
-            
+
             # CORRECT CALCULATION: Total portfolio value = cash + current position market value
             return self.current_capital + position_market_value
         return self.current_capital
-    
-    def can_execute_trade(self, signal: Signal, price: float, quantity: int = None) -> bool:
+
+    def can_execute_trade(
+        self, signal: Signal, price: float, quantity: int = None
+    ) -> bool:
         """Check if a trade can be executed.
-        
+
         Args:
             signal: Trading signal
             price: Execution price
             quantity: Optional specific quantity
-            
+
         Returns:
             True if trade can be executed
         """
         if signal == Signal.HOLD:
             return False
-        
+
         if signal == Signal.BUY:
             # Check if we have capital and aren't already long
             if self.current_position_status == PositionStatus.LONG:
                 return False
-            
+
             required_capital = self._calculate_required_capital(price, quantity)
             return self.available_capital >= required_capital
-        
+
         elif signal == Signal.SELL:
             # Can sell if we have a long position
             return self.current_position_status == PositionStatus.LONG
-        
+
         return False
-    
-    def execute_trade(self, 
-                     signal: Signal, 
-                     price: float, 
-                     timestamp: pd.Timestamp,
-                     symbol: str = "UNKNOWN",
-                     decision_metadata: Dict[str, Any] = None) -> Optional[Trade]:
+
+    def execute_trade(
+        self,
+        signal: Signal,
+        price: float,
+        timestamp: pd.Timestamp,
+        symbol: str = "UNKNOWN",
+        decision_metadata: Dict[str, Any] = None,
+    ) -> Optional[Trade]:
         """Execute a trading signal.
-        
+
         Args:
             signal: Trading signal
             price: Execution price
             timestamp: Execution timestamp
             symbol: Trading symbol
             decision_metadata: Additional decision metadata
-            
+
         Returns:
             Trade object if trade was executed, None otherwise
         """
         if not self.can_execute_trade(signal, price):
             return None
-        
+
         if decision_metadata is None:
             decision_metadata = {}
-        
+
         trade = None
-        
+
         if signal == Signal.BUY:
             trade = self._execute_buy(price, timestamp, symbol, decision_metadata)
         elif signal == Signal.SELL and self.current_position:
             trade = self._execute_sell(price, timestamp, symbol, decision_metadata)
-        
+
         return trade
-    
-    def _execute_buy(self, 
-                    price: float, 
-                    timestamp: pd.Timestamp,
-                    symbol: str,
-                    decision_metadata: Dict[str, Any]) -> Optional[Trade]:
+
+    def _execute_buy(
+        self,
+        price: float,
+        timestamp: pd.Timestamp,
+        symbol: str,
+        decision_metadata: Dict[str, Any],
+    ) -> Optional[Trade]:
         """Execute a buy order.
-        
+
         Args:
             price: Buy price
             timestamp: Execution timestamp
             symbol: Trading symbol
             decision_metadata: Decision metadata
-            
+
         Returns:
             Trade object if successful
         """
@@ -232,15 +260,15 @@ class PositionManager:
         quantity = self._calculate_quantity(price)
         if quantity <= 0:
             return None
-        
+
         # Apply slippage (buy at higher price)
         execution_price = price * (1 + self.slippage)
-        
+
         # Calculate costs
         trade_value = execution_price * quantity
         commission_cost = trade_value * self.commission
         total_cost = trade_value + commission_cost
-        
+
         # Check if we still have enough capital
         if total_cost > self.available_capital:
             # Recalculate with reduced quantity
@@ -248,14 +276,14 @@ class PositionManager:
             quantity = int(max_trade_value / execution_price)
             if quantity <= 0:
                 return None
-            
+
             trade_value = execution_price * quantity
             commission_cost = trade_value * self.commission
             total_cost = trade_value + commission_cost
-        
+
         # Update capital
         self.current_capital -= total_cost
-        
+
         # Create position
         self.current_position = Position(
             status=PositionStatus.LONG,
@@ -263,9 +291,9 @@ class PositionManager:
             entry_time=timestamp,
             quantity=quantity,
             current_price=execution_price,
-            last_update_time=timestamp
+            last_update_time=timestamp,
         )
-        
+
         # Create a partial trade record to indicate successful position opening
         # Full trade record will be created when position is closed
         partial_trade = Trade(
@@ -284,48 +312,50 @@ class PositionManager:
             holding_period_hours=0.0,
             max_favorable_excursion=0.0,
             max_adverse_excursion=0.0,
-            decision_metadata=decision_metadata
+            decision_metadata=decision_metadata,
         )
-        
+
         return partial_trade
-    
-    def _execute_sell(self, 
-                     price: float, 
-                     timestamp: pd.Timestamp,
-                     symbol: str,
-                     decision_metadata: Dict[str, Any]) -> Optional[Trade]:
+
+    def _execute_sell(
+        self,
+        price: float,
+        timestamp: pd.Timestamp,
+        symbol: str,
+        decision_metadata: Dict[str, Any],
+    ) -> Optional[Trade]:
         """Execute a sell order.
-        
+
         Args:
             price: Sell price
             timestamp: Execution timestamp
             symbol: Trading symbol
             decision_metadata: Decision metadata
-            
+
         Returns:
             Trade object for the completed round trip
         """
         if not self.current_position:
             return None
-        
+
         # Apply slippage (sell at lower price)
         execution_price = price * (1 - self.slippage)
-        
+
         # Calculate proceeds
         trade_value = execution_price * self.current_position.quantity
         commission_cost = trade_value * self.commission
         net_proceeds = trade_value - commission_cost
-        
+
         # Calculate P&L
         entry_value = self.current_position.entry_price * self.current_position.quantity
         gross_pnl = trade_value - entry_value
-        
+
         # Entry commission was already deducted, so net P&L is:
         net_pnl = gross_pnl - commission_cost
-        
+
         # Update capital
         self.current_capital += net_proceeds
-        
+
         # Create trade record
         trade = Trade(
             trade_id=self.next_trade_id,
@@ -343,75 +373,77 @@ class PositionManager:
             holding_period_hours=self.current_position.holding_period,
             max_favorable_excursion=self.current_position.max_favorable_excursion,
             max_adverse_excursion=self.current_position.max_adverse_excursion,
-            decision_metadata=decision_metadata
+            decision_metadata=decision_metadata,
         )
-        
+
         # Add to trade history
         self.trade_history.append(trade)
         self.next_trade_id += 1
-        
+
         # Close position
         self.current_position = None
-        
+
         return trade
-    
+
     def _calculate_quantity(self, price: float) -> int:
         """Calculate quantity to buy based on available capital.
-        
+
         Args:
             price: Execution price
-            
+
         Returns:
             Quantity to buy
         """
         # Use a fixed fraction approach (could be made configurable)
-        fraction_to_invest = 0.25  # Use 25% of available capital for moderate position sizing
+        fraction_to_invest = (
+            0.25  # Use 25% of available capital for moderate position sizing
+        )
         available = self.available_capital * fraction_to_invest
-        
+
         # Account for commission in calculation
         max_trade_value = available / (1 + self.commission)
         quantity = int(max_trade_value / price)
-        
+
         return quantity
-    
+
     def _calculate_required_capital(self, price: float, quantity: int = None) -> float:
         """Calculate required capital for a trade.
-        
+
         Args:
             price: Execution price
             quantity: Quantity (if None, use default calculation)
-            
+
         Returns:
             Required capital
         """
         if quantity is None:
             quantity = self._calculate_quantity(price)
-        
+
         trade_value = price * quantity
         commission_cost = trade_value * self.commission
         return trade_value + commission_cost
-    
+
     def update_position(self, current_price: float, timestamp: pd.Timestamp):
         """Update current position with market price.
-        
+
         Args:
             current_price: Current market price
             timestamp: Current timestamp
         """
         if self.current_position:
             self.current_position.update(current_price, timestamp)
-    
+
     def get_trade_history(self) -> List[Trade]:
         """Get complete trade history.
-        
+
         Returns:
             List of completed trades
         """
         return self.trade_history.copy()
-    
+
     def get_position_summary(self) -> Dict[str, Any]:
         """Get current position summary.
-        
+
         Returns:
             Dictionary with position information
         """
@@ -419,9 +451,9 @@ class PositionManager:
             return {
                 "status": "FLAT",
                 "capital": self.current_capital,
-                "available_capital": self.available_capital
+                "available_capital": self.available_capital,
             }
-        
+
         return {
             "status": self.current_position.status.value,
             "entry_price": self.current_position.entry_price,
@@ -430,40 +462,42 @@ class PositionManager:
             "unrealized_pnl": self.current_position.unrealized_pnl,
             "holding_period_hours": self.current_position.holding_period,
             "capital": self.current_capital,
-            "available_capital": self.available_capital
+            "available_capital": self.available_capital,
         }
-    
-    def force_close_position(self, 
-                            price: float, 
-                            timestamp: pd.Timestamp,
-                            symbol: str,
-                            reason: str = "End of backtest") -> Optional[Trade]:
+
+    def force_close_position(
+        self,
+        price: float,
+        timestamp: pd.Timestamp,
+        symbol: str,
+        reason: str = "End of backtest",
+    ) -> Optional[Trade]:
         """Force-close any open position at the end of the backtest.
-        
+
         This ensures that all performance calculations are based on completed trades only,
         preventing unrealized losses from open positions from skewing the results.
-        
+
         Args:
             price: Current market price to close at
             timestamp: Timestamp for the forced close
             symbol: Trading symbol
             reason: Reason for the forced close (for metadata)
-            
+
         Returns:
             Trade object if a position was closed, None if no open position
         """
         if not self.current_position:
             return None
-        
+
         # Force-close the position using the sell logic
         decision_metadata = {
             "signal_type": "FORCE_CLOSE",
             "reason": reason,
-            "forced": True
+            "forced": True,
         }
-        
+
         return self._execute_sell(price, timestamp, symbol, decision_metadata)
-    
+
     def reset(self):
         """Reset position manager to initial state."""
         self.current_capital = self.initial_capital

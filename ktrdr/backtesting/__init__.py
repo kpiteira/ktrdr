@@ -9,11 +9,11 @@ __all__ = [
     "ModelLoader",
     "PositionManager",
     "Position",
-    "Trade", 
+    "Trade",
     "PositionStatus",
     "PerformanceTracker",
     "PerformanceMetrics",
     "BacktestingEngine",
     "BacktestConfig",
-    "BacktestResults"
+    "BacktestResults",
 ]

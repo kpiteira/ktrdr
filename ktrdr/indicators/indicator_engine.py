@@ -50,7 +50,7 @@ class IndicatorEngine:
                 # Create indicators from config dictionaries
                 # Import here to avoid circular dependency
                 from ..config.models import IndicatorConfig, IndicatorsConfig
-                
+
                 # Convert dict configs to IndicatorConfig objects
                 indicator_configs = []
                 for ind_dict in indicators:
@@ -58,7 +58,7 @@ class IndicatorEngine:
                         indicator_configs.append(IndicatorConfig(**ind_dict))
                     else:
                         indicator_configs.append(ind_dict)
-                
+
                 # Create factory with configs and build all indicators
                 factory = IndicatorFactory(indicator_configs)
                 self.indicators = factory.build()

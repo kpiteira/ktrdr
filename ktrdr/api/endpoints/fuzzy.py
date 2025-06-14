@@ -211,7 +211,10 @@ async def get_fuzzy_sets(
 async def get_fuzzy_overlay_data(
     symbol: str = Query(..., description="Trading symbol (e.g., AAPL)"),
     timeframe: str = Query(..., description="Data timeframe (e.g., 1h, 1d)"),
-    indicators: Optional[List[str]] = Query(None, description="List of indicators (if omitted, returns all configured indicators)"),
+    indicators: Optional[List[str]] = Query(
+        None,
+        description="List of indicators (if omitted, returns all configured indicators)",
+    ),
     start_date: Optional[str] = Query(None, description="Start date (ISO format)"),
     end_date: Optional[str] = Query(None, description="End date (ISO format)"),
     fuzzy_service: FuzzyService = Depends(get_fuzzy_service),
@@ -247,7 +250,7 @@ async def get_fuzzy_overlay_data(
                 ]
               },
               {
-                "set": "high", 
+                "set": "high",
                 "membership": [
                   {"timestamp": "2023-01-01T09:00:00", "value": 0.2},
                   {"timestamp": "2023-01-01T10:00:00", "value": 0.4}
@@ -266,7 +269,7 @@ async def get_fuzzy_overlay_data(
     """
     try:
         logger.info(f"Getting fuzzy overlay data for {symbol} {timeframe}")
-        
+
         # Call the service to get fuzzy overlays
         result = await fuzzy_service.get_fuzzy_overlays(
             symbol=symbol,
@@ -275,10 +278,10 @@ async def get_fuzzy_overlay_data(
             start_date=start_date,
             end_date=end_date,
         )
-        
+
         # Convert service response to Pydantic model
         return FuzzyOverlayResponse(**result)
-        
+
     except DataError as e:
         logger.error(f"Data error in get_fuzzy_overlay_data: {str(e)}")
         raise HTTPException(

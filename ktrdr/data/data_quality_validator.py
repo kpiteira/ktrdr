@@ -134,7 +134,7 @@ class DataQualityReport:
 
         Returns:
             True if data passes health checks
-            
+
         Note:
             "info" level issues are not counted as health problems
         """
@@ -159,7 +159,6 @@ class DataQualityValidator:
     Consolidates validation logic from DataManager and IbDataValidator,
     providing comprehensive data quality checking for both IB and local data.
     """
-
 
     def __init__(self, auto_correct: bool = True, max_gap_percentage: float = 10.0):
         """
@@ -380,19 +379,25 @@ class DataQualityValidator:
         # Check for negative volume (IB data indicators)
         if "volume" in df.columns:
             negative_volume = df["volume"] < 0
-            no_data_volume = df["volume"] == -1  # IB's explicit "no data available" indicator
+            no_data_volume = (
+                df["volume"] == -1
+            )  # IB's explicit "no data available" indicator
             other_negative = negative_volume & ~no_data_volume
-            
+
             if negative_volume.any():
                 count = negative_volume.sum()
                 no_data_count = no_data_volume.sum()
                 other_neg_count = other_negative.sum()
-                
+
                 # Log summary of negative volume values found
                 if no_data_count > 0:
-                    logger.debug(f"Found {no_data_count} bars with volume=-1 (IB indicators)")
+                    logger.debug(
+                        f"Found {no_data_count} bars with volume=-1 (IB indicators)"
+                    )
                 if other_neg_count > 0:
-                    logger.debug(f"Found {other_neg_count} bars with invalid negative volumes")
+                    logger.debug(
+                        f"Found {other_neg_count} bars with invalid negative volumes"
+                    )
 
                 # Different treatment for volume=-1 vs other negative volumes
                 if other_neg_count > 0:
@@ -405,15 +410,17 @@ class DataQualityValidator:
                         corrected=self.auto_correct,
                         metadata={
                             "invalid_negative_count": other_neg_count,
-                            "note": "Negative volumes other than -1 indicate data corruption"
+                            "note": "Negative volumes other than -1 indicate data corruption",
                         },
                     )
                     report.add_issue(issue)
-                    
+
                     if self.auto_correct:
                         # Only correct non-(-1) negative volumes
                         df_corrected.loc[other_negative, "volume"] = 0
-                        logger.warning(f"Corrected {other_neg_count} invalid negative volume values to 0")
+                        logger.warning(
+                            f"Corrected {other_neg_count} invalid negative volume values to 0"
+                        )
 
                 if no_data_count > 0:
                     # Volume=-1 is informational, not an error to be "corrected"
@@ -425,12 +432,14 @@ class DataQualityValidator:
                         corrected=False,  # Don't "correct" this - it's valid IB data
                         metadata={
                             "ib_no_data_count": no_data_count,
-                            "note": "Volume=-1 is IB's way of indicating 'volume data not available' but price data is valid"
+                            "note": "Volume=-1 is IB's way of indicating 'volume data not available' but price data is valid",
                         },
                     )
                     report.add_issue(issue)
-                    
-                    logger.info(f"📊 IB Volume Indicator: {no_data_count} bars have volume=-1 (volume data not available, price data valid)")
+
+                    logger.info(
+                        f"📊 IB Volume Indicator: {no_data_count} bars have volume=-1 (volume data not available, price data valid)"
+                    )
                     # DO NOT AUTO-CORRECT volume=-1 - it's valid IB data indicating no volume info available
 
         # Check OHLC relationships (only where all values are valid)
@@ -536,33 +545,33 @@ class DataQualityValidator:
 
         # Use the existing gap classifier for intelligent detection
         from ktrdr.data.gap_classifier import GapClassifier, GapClassification
-        
+
         gap_classifier = GapClassifier()
-        
+
         # Get data range
         start_date = df.index.min()
         end_date = df.index.max()
-        
+
         # Convert to datetime if needed
         if isinstance(start_date, pd.Timestamp):
             start_date = start_date.to_pydatetime()
         if isinstance(end_date, pd.Timestamp):
             end_date = end_date.to_pydatetime()
-        
+
         # Ensure timezone awareness
         if start_date.tzinfo is None:
             start_date = start_date.replace(tzinfo=pd.Timestamp.now().tz)
         if end_date.tzinfo is None:
             end_date = end_date.replace(tzinfo=pd.Timestamp.now().tz)
-        
+
         # For data quality validation, we'll detect gaps using basic logic but filter using intelligent classification
         # This maintains compatibility while using intelligent gap analysis
-        
+
         # Get the pandas frequency string for this timeframe using centralized constants
         timeframe_frequencies = {
             "1m": "1min",
             "5m": "5min",
-            "15m": "15min", 
+            "15m": "15min",
             "30m": "30min",
             "1h": "1h",
             "4h": "4h",
@@ -615,24 +624,41 @@ class DataQualityValidator:
         significant_gaps = []
         for gap_start, gap_end in raw_gaps:
             # Convert to datetime for gap classifier
-            gap_start_dt = gap_start.to_pydatetime() if hasattr(gap_start, 'to_pydatetime') else gap_start
-            gap_end_dt = gap_end.to_pydatetime() if hasattr(gap_end, 'to_pydatetime') else gap_end
-            
+            gap_start_dt = (
+                gap_start.to_pydatetime()
+                if hasattr(gap_start, "to_pydatetime")
+                else gap_start
+            )
+            gap_end_dt = (
+                gap_end.to_pydatetime()
+                if hasattr(gap_end, "to_pydatetime")
+                else gap_end
+            )
+
             # Ensure timezone awareness
             if gap_start_dt.tzinfo is None:
                 gap_start_dt = gap_start_dt.replace(tzinfo=start_date.tzinfo)
             if gap_end_dt.tzinfo is None:
                 gap_end_dt = gap_end_dt.replace(tzinfo=end_date.tzinfo)
-            
+
             # Use the actual symbol for intelligent gap classification, pass context data for volume analysis
-            gap_info = gap_classifier.analyze_gap(gap_start_dt, gap_end_dt, symbol, timeframe, df)
-            
+            gap_info = gap_classifier.analyze_gap(
+                gap_start_dt, gap_end_dt, symbol, timeframe, df
+            )
+
             # Only include unexpected gaps and market closures in data quality issues
-            if gap_info.classification in [GapClassification.UNEXPECTED, GapClassification.MARKET_CLOSURE]:
+            if gap_info.classification in [
+                GapClassification.UNEXPECTED,
+                GapClassification.MARKET_CLOSURE,
+            ]:
                 significant_gaps.append((gap_start, gap_end))
-                logger.debug(f"Significant gap: {gap_start} to {gap_end} ({gap_info.classification.value})")
+                logger.debug(
+                    f"Significant gap: {gap_start} to {gap_end} ({gap_info.classification.value})"
+                )
             else:
-                logger.debug(f"Expected gap filtered out: {gap_start} to {gap_end} ({gap_info.classification.value})")
+                logger.debug(
+                    f"Expected gap filtered out: {gap_start} to {gap_end} ({gap_info.classification.value})"
+                )
 
         # Report only significant gaps
         if significant_gaps:
@@ -663,7 +689,8 @@ class DataQualityValidator:
                     "total_raw_gaps": len(raw_gaps),
                     "filtered_expected_gaps": len(raw_gaps) - len(significant_gaps),
                     "gaps": [
-                        (start.isoformat(), end.isoformat()) for start, end in significant_gaps[:5]
+                        (start.isoformat(), end.isoformat())
+                        for start, end in significant_gaps[:5]
                     ],  # First 5 significant gaps
                 },
             )

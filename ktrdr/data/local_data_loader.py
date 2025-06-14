@@ -293,7 +293,9 @@ class LocalDataLoader:
 
                 if date_col:
                     # Convert date column to datetime and set as index
-                    df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
+                    df[date_col] = pd.to_datetime(
+                        df[date_col], errors="coerce", utc=True
+                    )
                     df.set_index(date_col, inplace=True)
                     logger.info(f"Successfully parsed date column: {date_col}")
                 else:
@@ -309,7 +311,7 @@ class LocalDataLoader:
 
             # Make sure column names are all lowercase for consistency
             df.columns = [col.lower() for col in df.columns]
-            
+
             # Convert to UTC timezone using TimestampManager for consistent handling
             if isinstance(df.index, pd.DatetimeIndex):
                 logger.debug(f"Converting CSV timestamps to UTC for {symbol}")
@@ -418,7 +420,7 @@ class LocalDataLoader:
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Save DataFrame to CSV with ISO 8601 timestamp format
-            df.to_csv(file_path, date_format='%Y-%m-%dT%H:%M:%SZ')
+            df.to_csv(file_path, date_format="%Y-%m-%dT%H:%M:%SZ")
             logger.debug(f"Successfully saved {len(df)} rows of data to {file_path}")
 
             return file_path
@@ -520,7 +522,7 @@ class LocalDataLoader:
             if isinstance(end_date, str):
                 end_date = pd.to_datetime(end_date)
 
-            # Convert end_date to UTC for consistent comparison  
+            # Convert end_date to UTC for consistent comparison
             end_date_utc = TimestampManager.to_utc(end_date)
             if end_date_utc is not None:
                 # Both df.index and end_date are now UTC timezone-aware
@@ -544,7 +546,9 @@ class LocalDataLoader:
                 logger.warning(f"Data directory does not exist: {self.data_dir}")
                 return result
 
-            logger.debug(f"Searching for data files in {self.data_dir} (format: symbol_timeframe.csv)")
+            logger.debug(
+                f"Searching for data files in {self.data_dir} (format: symbol_timeframe.csv)"
+            )
 
             for file_path in self.data_dir.glob(f"*.{self.default_format}"):
                 filename = file_path.name
@@ -555,7 +559,9 @@ class LocalDataLoader:
                     timeframe = parts[1]
                     result.append((symbol, timeframe))
 
-            logger.info(f"Found {len(result)} data files (will be aggregated by symbol for unique symbols)")
+            logger.info(
+                f"Found {len(result)} data files (will be aggregated by symbol for unique symbols)"
+            )
             return result
 
         except PermissionError as e:

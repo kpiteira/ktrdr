@@ -38,8 +38,9 @@ from ktrdr.errors import (
 )
 
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.ib_data_loader import IbDataLoader
-from ktrdr.data.ib_connection_strategy import get_connection_strategy
+from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
+from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
+from ktrdr.data.ib_connection_pool import get_connection_pool
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.gap_classifier import GapClassifier, GapClassification
 from ktrdr.data.timeframe_constants import TimeframeConstants
@@ -60,7 +61,6 @@ class DataManager:
         max_gap_percentage: Maximum allowed percentage of gaps in data
         default_repair_method: Default method for repairing missing values
     """
-
 
     # Mapping of repair methods to their functions
     REPAIR_METHODS = {
@@ -122,18 +122,17 @@ class DataManager:
         # Initialize the LocalDataLoader
         self.data_loader = LocalDataLoader(data_dir=data_dir)
 
-        # Initialize IB data loader for advanced IB operations
+        # Initialize IB unified components for advanced IB operations
         self.enable_ib = enable_ib
         if enable_ib:
-            connection_strategy = get_connection_strategy()
-            self.ib_data_loader = IbDataLoader(
-                connection_strategy=connection_strategy,
-                data_dir=data_dir,
-                validate_data=True
+            self.ib_data_fetcher = IbDataFetcherUnified(component_name="data_manager")
+            self.ib_symbol_validator = IbSymbolValidatorUnified(
+                component_name="data_manager"
             )
-            logger.info("IB integration enabled (using unified data loader)")
+            logger.info("IB integration enabled (using unified components)")
         else:
-            self.ib_data_loader = None
+            self.ib_data_fetcher = None
+            self.ib_symbol_validator = None
             logger.info("IB integration disabled")
 
         # Store parameters
@@ -145,7 +144,7 @@ class DataManager:
             auto_correct=True,  # Enable auto-correction by default
             max_gap_percentage=max_gap_percentage,
         )
-        
+
         # Initialize the intelligent gap classifier
         self.gap_classifier = GapClassifier()
 
@@ -154,38 +153,45 @@ class DataManager:
             f"default_repair_method='{default_repair_method}'"
         )
 
-    def _check_cancellation(self, cancellation_token: Optional[Any], operation_description: str = "operation") -> bool:
+    def _check_cancellation(
+        self,
+        cancellation_token: Optional[Any],
+        operation_description: str = "operation",
+    ) -> bool:
         """
         Check if cancellation has been requested.
-        
+
         Args:
             cancellation_token: Token to check for cancellation
             operation_description: Description of current operation for logging
-            
+
         Returns:
             True if cancellation was requested, False otherwise
-            
+
         Raises:
             asyncio.CancelledError: If cancellation was requested
         """
         if cancellation_token is None:
             return False
-        
+
         # Check if token has cancellation method
         is_cancelled = False
-        if hasattr(cancellation_token, 'is_cancelled_requested'):
+        if hasattr(cancellation_token, "is_cancelled_requested"):
             is_cancelled = cancellation_token.is_cancelled_requested
-        elif hasattr(cancellation_token, 'is_set'):
+        elif hasattr(cancellation_token, "is_set"):
             is_cancelled = cancellation_token.is_set()
-        elif hasattr(cancellation_token, 'cancelled'):
+        elif hasattr(cancellation_token, "cancelled"):
             is_cancelled = cancellation_token.cancelled()
-        
+
         if is_cancelled:
             logger.info(f"🛑 Cancellation requested during {operation_description}")
             # Import here to avoid circular imports
             import asyncio
-            raise asyncio.CancelledError(f"Operation cancelled during {operation_description}")
-        
+
+            raise asyncio.CancelledError(
+                f"Operation cancelled during {operation_description}"
+            )
+
         return False
 
     @log_entry_exit(logger=logger, log_args=True)
@@ -233,13 +239,15 @@ class DataManager:
         """
         # Load data based on mode
         logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
-        
+
         if mode == "local":
             # Local-only mode: use basic loader without IB integration
             df = self.data_loader.load(symbol, timeframe, start_date, end_date)
         else:
             # Enhanced modes: use intelligent gap analysis with IB integration
-            df = self._load_with_fallback(symbol, timeframe, start_date, end_date, mode, cancellation_token)
+            df = self._load_with_fallback(
+                symbol, timeframe, start_date, end_date, mode, cancellation_token
+            )
 
         # Check if df is None (happens when fallback returns None)
         if df is None:
@@ -384,7 +392,7 @@ class DataManager:
     ) -> Optional[pd.Timestamp]:
         """
         Normalize datetime to UTC timezone-aware timestamp.
-        
+
         Note: Using TimestampManager for consistent timezone handling.
 
         Args:
@@ -399,7 +407,7 @@ class DataManager:
     def _normalize_dataframe_timezone(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Normalize DataFrame index to UTC timezone-aware.
-        
+
         Note: Using TimestampManager for consistent timezone handling.
 
         Args:
@@ -412,20 +420,50 @@ class DataManager:
 
     def _ensure_ib_connection(self) -> bool:
         """
-        Check if IB connection is available via data loader.
+        Check if IB connection is available by attempting actual connection.
+        
+        Uses the same resilient approach as symbol validator instead of just
+        checking pool stats which can be misleading.
 
         Returns:
             True if IB connection is available, False otherwise
         """
-        if not self.enable_ib or not self.ib_data_loader:
+        if not self.enable_ib or not self.ib_data_fetcher:
             return False
 
         try:
-            # Try to get a connection to test availability
-            connection_strategy = get_connection_strategy()
-            connection = connection_strategy.get_connection_for_operation("data_manager")
-            return connection is not None and connection.is_connected()
-        except Exception:
+            # Actually attempt to establish and test a connection
+            import asyncio
+            from ktrdr.data.ib_connection_pool import acquire_ib_connection
+            from ktrdr.data.ib_client_id_registry import ClientIdPurpose
+
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # Test connection with timeout - same as symbol validator
+            async def test_connection():
+                try:
+                    async with await acquire_ib_connection(
+                        purpose=ClientIdPurpose.DATA_MANAGER,
+                        requested_by="data_manager_connection_test"
+                    ) as connection:
+                        # Quick test to verify connection works (like symbol validator)
+                        await asyncio.wait_for(
+                            connection.ib.reqCurrentTimeAsync(),
+                            timeout=5.0  # Short timeout to detect silent connections
+                        )
+                        return True
+                except Exception as e:
+                    logger.debug(f"IB connection test failed: {e}")
+                    return False
+
+            return loop.run_until_complete(test_connection())
+            
+        except Exception as e:
+            logger.debug(f"IB connection availability check failed: {e}")
             return False
 
     def _analyze_gaps(
@@ -439,92 +477,109 @@ class DataManager:
     ) -> List[Tuple[datetime, datetime]]:
         """
         Analyze gaps between existing data and requested range using intelligent gap classification.
-        
+
         This method uses the intelligent gap classifier to identify only unexpected gaps
         that need to be fetched from IB, avoiding redundant requests for expected gaps
         (weekends, holidays, non-trading hours).
-        
+
         Args:
             existing_data: DataFrame with existing local data (can be None)
             requested_start: Start of requested date range
             requested_end: End of requested date range
             timeframe: Data timeframe for trading calendar awareness
             symbol: Trading symbol for intelligent classification
-            
+
         Returns:
             List of (start_time, end_time) tuples representing gaps to fill
         """
         gaps_to_fill = []
-        
+
         # If no existing data, entire range is a gap to fill
         if existing_data is None or existing_data.empty:
-            logger.info(f"No existing data found - entire range is a gap: {requested_start} to {requested_end}")
+            logger.info(
+                f"No existing data found - entire range is a gap: {requested_start} to {requested_end}"
+            )
             return [(requested_start, requested_end)]
-        
+
         # Ensure timezone consistency
         if existing_data.index.tz is None:
-            existing_data.index = existing_data.index.tz_localize('UTC')
+            existing_data.index = existing_data.index.tz_localize("UTC")
         elif existing_data.index.tz != requested_start.tzinfo:
             existing_data.index = existing_data.index.tz_convert(requested_start.tzinfo)
-        
+
         data_start = existing_data.index.min()
         data_end = existing_data.index.max()
-        
+
         logger.debug(f"Existing data range: {data_start} to {data_end}")
         logger.debug(f"Requested range: {requested_start} to {requested_end}")
-        
+
         # Use the provided symbol for intelligent gap classification
-        
+
         # Check for all potential gaps and classify them
         all_gaps = []
-        
+
         # Gap before existing data
         if requested_start < data_start:
             gap_end = min(data_start, requested_end)
             all_gaps.append((requested_start, gap_end))
-        
+
         # Gap after existing data
         if requested_end > data_end:
             gap_start = max(data_end, requested_start)
             all_gaps.append((gap_start, requested_end))
-        
+
         # Gaps within existing data (holes in the dataset)
         # For backfill/full mode, skip micro-gap analysis to avoid thousands of tiny segments
         if requested_start < data_end and requested_end > data_start and mode == "tail":
             internal_gaps = self._find_internal_gaps(
-                existing_data, 
+                existing_data,
                 max(requested_start, data_start),
                 min(requested_end, data_end),
-                timeframe
+                timeframe,
             )
             all_gaps.extend(internal_gaps)
             logger.debug(f"Found {len(internal_gaps)} internal gaps (mode: {mode})")
         elif mode in ["backfill", "full"]:
-            logger.info(f"🚀 BACKFILL MODE: Skipping micro-gap analysis to focus on large historical periods")
-        
+            logger.info(
+                f"🚀 BACKFILL MODE: Skipping micro-gap analysis to focus on large historical periods"
+            )
+
         # Use intelligent gap classifier to filter out expected gaps
         for gap_start, gap_end in all_gaps:
             gap_duration = gap_end - gap_start
-            
+
             # For large gaps (> 7 days), always consider them worth filling regardless of classification
             # This handles backfill scenarios where we want historical data
             if gap_duration > timedelta(days=7):
                 gaps_to_fill.append((gap_start, gap_end))
-                logger.info(f"📍 LARGE HISTORICAL GAP TO FILL: {gap_start} → {gap_end} (duration: {gap_duration})")
+                logger.info(
+                    f"📍 LARGE HISTORICAL GAP TO FILL: {gap_start} → {gap_end} (duration: {gap_duration})"
+                )
             else:
                 # For smaller gaps, use intelligent classification
-                gap_info = self.gap_classifier.analyze_gap(gap_start, gap_end, symbol, timeframe)
-                
+                gap_info = self.gap_classifier.analyze_gap(
+                    gap_start, gap_end, symbol, timeframe
+                )
+
                 # Only fill unexpected gaps and market closures
-                if gap_info.classification in [GapClassification.UNEXPECTED, GapClassification.MARKET_CLOSURE]:
+                if gap_info.classification in [
+                    GapClassification.UNEXPECTED,
+                    GapClassification.MARKET_CLOSURE,
+                ]:
                     gaps_to_fill.append((gap_start, gap_end))
-                    logger.debug(f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})")
+                    logger.debug(
+                        f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})"
+                    )
                 else:
-                    logger.debug(f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) - {gap_info.note}")
-        
-        logger.info(f"🔍 INTELLIGENT GAP ANALYSIS COMPLETE: Found {len(gaps_to_fill)} unexpected gaps to fill (filtered out {len(all_gaps) - len(gaps_to_fill)} expected gaps)")
+                    logger.debug(
+                        f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) - {gap_info.note}"
+                    )
+
+        logger.info(
+            f"🔍 INTELLIGENT GAP ANALYSIS COMPLETE: Found {len(gaps_to_fill)} unexpected gaps to fill (filtered out {len(all_gaps) - len(gaps_to_fill)} expected gaps)"
+        )
         return gaps_to_fill
-    
+
     def _find_internal_gaps(
         self,
         data: pd.DataFrame,
@@ -534,116 +589,115 @@ class DataManager:
     ) -> List[Tuple[datetime, datetime]]:
         """
         Find gaps within existing data (missing periods in the middle).
-        
+
         Args:
             data: Existing DataFrame with timezone-aware index
             range_start: Start of range to check within
-            range_end: End of range to check within  
+            range_end: End of range to check within
             timeframe: Data timeframe for gap detection
-            
+
         Returns:
             List of internal gaps found
         """
         gaps = []
-        
+
         # Filter data to the requested range
         mask = (data.index >= range_start) & (data.index <= range_end)
         range_data = data[mask].sort_index()
-        
+
         if len(range_data) < 2:
             return gaps
-        
+
         # Calculate expected frequency using centralized constants
         expected_freq = TimeframeConstants.get_pandas_timedelta(timeframe)
-        
+
         # Look for gaps larger than expected frequency
         for i in range(len(range_data) - 1):
             current_time = range_data.index[i]
             next_time = range_data.index[i + 1]
             gap_size = next_time - current_time
-            
+
             # Consider it a gap if it's larger than expected frequency
             # (intelligent classification will happen later)
-            if gap_size > expected_freq * 1.5:  # Minimal tolerance - classification will filter
+            if (
+                gap_size > expected_freq * 1.5
+            ):  # Minimal tolerance - classification will filter
                 gap_start = current_time + expected_freq
                 gap_end = next_time
                 gaps.append((gap_start, gap_end))
                 logger.debug(f"Found internal gap: {gap_start} to {gap_end}")
-        
+
         return gaps
-    
+
     def _is_meaningful_gap(
-        self, 
-        gap_start: datetime, 
-        gap_end: datetime, 
-        timeframe: str
+        self, gap_start: datetime, gap_end: datetime, timeframe: str
     ) -> bool:
         """
         Determine if a gap is meaningful enough to warrant fetching data.
-        
+
         Filters out weekends, holidays, and very small gaps that aren't worth
         the overhead of an IB request.
-        
+
         Args:
             gap_start: Gap start time
             gap_end: Gap end time
             timeframe: Data timeframe
-            
+
         Returns:
             True if gap is meaningful and should be filled
         """
         gap_duration = gap_end - gap_start
-        
+
         # Minimum gap sizes by timeframe to avoid micro-gaps
         min_gaps = {
-            '1m': pd.Timedelta(minutes=5),     # At least 5 minutes
-            '5m': pd.Timedelta(minutes=15),    # At least 15 minutes  
-            '15m': pd.Timedelta(hours=1),      # At least 1 hour
-            '30m': pd.Timedelta(hours=2),      # At least 2 hours
-            '1h': pd.Timedelta(hours=4),       # At least 4 hours
-            '4h': pd.Timedelta(days=1),        # At least 1 day
-            '1d': pd.Timedelta(days=2),        # At least 2 days
-            '1w': pd.Timedelta(weeks=1),       # At least 1 week
+            "1m": pd.Timedelta(minutes=5),  # At least 5 minutes
+            "5m": pd.Timedelta(minutes=15),  # At least 15 minutes
+            "15m": pd.Timedelta(hours=1),  # At least 1 hour
+            "30m": pd.Timedelta(hours=2),  # At least 2 hours
+            "1h": pd.Timedelta(hours=4),  # At least 4 hours
+            "4h": pd.Timedelta(days=1),  # At least 1 day
+            "1d": pd.Timedelta(days=2),  # At least 2 days
+            "1w": pd.Timedelta(weeks=1),  # At least 1 week
         }
-        
+
         min_gap = min_gaps.get(timeframe, pd.Timedelta(hours=1))
-        
+
         if gap_duration < min_gap:
             return False
-        
+
         # For daily data, check if gap spans weekends only
-        if timeframe == '1d':
+        if timeframe == "1d":
             return self._gap_contains_trading_days(gap_start, gap_end)
-        
+
         # For intraday data, more permissive (markets trade during weekdays)
         return True
-    
+
     def _gap_contains_trading_days(self, start: datetime, end: datetime) -> bool:
         """
         Check if a gap contains any trading days (Mon-Fri, excluding holidays).
-        
+
         This is a simplified implementation. A full implementation would
         integrate with a trading calendar library like pandas_market_calendars.
-        
+
         Args:
             start: Gap start time
             end: Gap end time
-            
+
         Returns:
             True if gap contains trading days
         """
         current = start.date()
         end_date = end.date()
-        
+
         while current <= end_date:
             # Monday = 0, Sunday = 6
             if current.weekday() < 5:  # Monday through Friday
                 # TODO: Add holiday checking with trading calendar
                 return True
             current += timedelta(days=1)
-        
+
         return False
-    
+
     def _split_into_segments(
         self,
         gaps: List[Tuple[datetime, datetime]],
@@ -651,44 +705,52 @@ class DataManager:
     ) -> List[Tuple[datetime, datetime]]:
         """
         Split large gaps into IB-compliant segments.
-        
+
         Takes gaps that might exceed IB duration limits and splits them
         into smaller segments that can be fetched individually.
-        
+
         Args:
             gaps: List of gaps to potentially split
             timeframe: Data timeframe for limit checking
-            
+
         Returns:
             List of segments ready for IB fetching
         """
         from ktrdr.config.ib_limits import IbLimitsRegistry
-        
+
         segments = []
         max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
-        
+
         for gap_start, gap_end in gaps:
             gap_duration = gap_end - gap_start
-            
+
             if gap_duration <= max_duration:
                 # Gap fits in single request
                 segments.append((gap_start, gap_end))
-                logger.debug(f"Gap fits in single segment: {gap_start} to {gap_end} ({gap_duration})")
+                logger.debug(
+                    f"Gap fits in single segment: {gap_start} to {gap_end} ({gap_duration})"
+                )
             else:
                 # Split into multiple segments
-                logger.info(f"Splitting large gap {gap_start} to {gap_end} ({gap_duration}) into segments (max: {max_duration})")
-                
+                logger.info(
+                    f"Splitting large gap {gap_start} to {gap_end} ({gap_duration}) into segments (max: {max_duration})"
+                )
+
                 current_start = gap_start
                 while current_start < gap_end:
                     segment_end = min(current_start + max_duration, gap_end)
                     segments.append((current_start, segment_end))
                     logger.debug(f"Created segment: {current_start} to {segment_end}")
                     current_start = segment_end
-        
-        logger.info(f"⚡ SEGMENTATION: Split {len(gaps)} gaps into {len(segments)} IB-compliant segments")
+
+        logger.info(
+            f"⚡ SEGMENTATION: Split {len(gaps)} gaps into {len(segments)} IB-compliant segments"
+        )
         for i, (seg_start, seg_end) in enumerate(segments):
             duration = seg_end - seg_start
-            logger.debug(f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})")
+            logger.debug(
+                f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})"
+            )
         return segments
 
     def _fetch_segments_with_resilience(
@@ -700,63 +762,182 @@ class DataManager:
     ) -> Tuple[List[pd.DataFrame], int, int]:
         """
         Fetch multiple segments with failure resilience.
-        
+
         Attempts to fetch each segment individually, continuing with other segments
         if some fail. This ensures partial success rather than complete failure.
-        
+
         Args:
             symbol: Trading symbol
             timeframe: Data timeframe
             segments: List of (start, end) segments to fetch
-            
+
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
         successful_data = []
         successful_count = 0
         failed_count = 0
-        
-        if not self.enable_ib or not self.ib_data_loader:
+
+        if not self.enable_ib or not self.ib_data_fetcher:
             logger.warning("IB integration not available for segment fetching")
             return successful_data, successful_count, len(segments)
-        
+
         logger.info(f"Fetching {len(segments)} segments with failure resilience")
-        
+
         for i, (segment_start, segment_end) in enumerate(segments):
             # Check for cancellation before each segment
-            self._check_cancellation(cancellation_token, f"segment {i+1}/{len(segments)}")
-            
+            self._check_cancellation(
+                cancellation_token, f"segment {i+1}/{len(segments)}"
+            )
+
             try:
                 duration = segment_end - segment_start
-                logger.debug(f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end}")
-                logger.debug(f"🚀 IB REQUEST {i+1}: Duration = {duration} (within IB limit)")
-                
-                # Use the "dumb" IbDataLoader to fetch exactly what we ask for
-                segment_data = self.ib_data_loader.load_data_range(
+                logger.debug(
+                    f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end}"
+                )
+                logger.debug(
+                    f"🚀 IB REQUEST {i+1}: Duration = {duration} (within IB limit)"
+                )
+
+                # Use the unified IB data fetcher to fetch exactly what we ask for
+                # Convert to async call - this method should be made async in the future
+                # For now, we'll use a wrapper to handle the async call
+                segment_data = self._fetch_segment_sync(
                     symbol=symbol,
                     timeframe=timeframe,
                     start=segment_start,
                     end=segment_end,
-                    operation_type="data_manager",
-                    cancellation_token=cancellation_token
+                    cancellation_token=cancellation_token,
                 )
-                
+
                 if segment_data is not None and not segment_data.empty:
                     successful_data.append(segment_data)
                     successful_count += 1
-                    logger.info(f"✅ IB SUCCESS {i+1}: Received {len(segment_data)} bars from IB")
+                    logger.info(
+                        f"✅ IB SUCCESS {i+1}: Received {len(segment_data)} bars from IB"
+                    )
                 else:
                     failed_count += 1
                     logger.warning(f"❌ IB FAILURE {i+1}: No data returned from IB")
-                    
+
             except Exception as e:
                 failed_count += 1
                 logger.error(f"❌ IB ERROR {i+1}: Request failed - {e}")
                 # Continue with next segment rather than failing completely
                 continue
-        
-        logger.info(f"Segment fetching complete: {successful_count} successful, {failed_count} failed")
+
+        logger.info(
+            f"Segment fetching complete: {successful_count} successful, {failed_count} failed"
+        )
         return successful_data, successful_count, failed_count
+
+    def _fetch_segment_sync(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        cancellation_token: Optional[Any] = None,
+    ) -> Optional[pd.DataFrame]:
+        """
+        Sync wrapper for async segment fetching using unified components.
+
+        This method provides a synchronous interface to the async data fetcher.
+        In the future, the entire DataManager should be made async.
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            start: Start datetime
+            end: End datetime
+            cancellation_token: Optional cancellation token
+
+        Returns:
+            DataFrame with fetched data or None if failed
+        """
+        import asyncio
+
+        async def fetch_async():
+            """Async fetch function with enhanced timeout protection."""
+            # Apply same timeout protection as symbol validator
+            return await asyncio.wait_for(
+                self.ib_data_fetcher.fetch_historical_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start=start,
+                    end=end,
+                    instrument_type=None,  # Auto-detect
+                    what_to_show="TRADES",
+                    max_retries=3,
+                ),
+                timeout=60.0  # 60 second timeout for data fetching operations
+            )
+
+        try:
+            # Run the async function in the current event loop or create a new one
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We're in an async context, need to run in executor
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, fetch_async())
+                        return future.result(timeout=30)  # 30 second timeout
+                else:
+                    return loop.run_until_complete(fetch_async())
+            except RuntimeError:
+                # No event loop, create a new one
+                return asyncio.run(fetch_async())
+
+        except asyncio.TimeoutError:
+            logger.error(f"⏰ Data fetch timeout for {symbol} {timeframe} (60s limit) - possible IB Gateway issue")
+            return None
+        except Exception as e:
+            logger.error(f"Sync fetch wrapper failed for {symbol} {timeframe}: {e}")
+            return None
+
+    def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
+        """
+        Sync wrapper for async head timestamp fetching.
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+
+        Returns:
+            ISO formatted head timestamp string or None if failed
+        """
+        import asyncio
+
+        async def fetch_head_timestamp_async():
+            """Async head timestamp fetch function."""
+            return await self.ib_symbol_validator.fetch_head_timestamp_async(
+                symbol=symbol, timeframe=timeframe, force_refresh=True
+            )
+
+        try:
+            # Run the async function in the current event loop or create a new one
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We're in an async context, need to run in executor
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            asyncio.run, fetch_head_timestamp_async()
+                        )
+                        return future.result(timeout=30)  # 30 second timeout
+                else:
+                    return loop.run_until_complete(fetch_head_timestamp_async())
+            except RuntimeError:
+                # No event loop, create a new one
+                return asyncio.run(fetch_head_timestamp_async())
+
+        except Exception as e:
+            logger.error(f"Sync head timestamp fetch failed for {symbol}: {e}")
+            return None
 
     @log_entry_exit(logger=logger, log_args=True)
     def _validate_request_against_head_timestamp(
@@ -768,46 +949,50 @@ class DataManager:
     ) -> Tuple[bool, Optional[str], Optional[datetime]]:
         """
         Validate request date range against cached head timestamp data.
-        
+
         This method checks if the requested start date is within the available
         data range for the symbol, helping prevent unnecessary error 162s.
-        
+
         Args:
             symbol: Trading symbol
             timeframe: Data timeframe
             start_date: Requested start date
             end_date: Requested end date
-            
+
         Returns:
             Tuple of (is_valid, error_message, adjusted_start_date)
         """
-        if not self.enable_ib or not self.ib_data_loader:
+        if not self.enable_ib or not self.ib_symbol_validator:
             return True, None, None
-        
+
         try:
-            # Get symbol validator from IB data loader
-            validator = self.ib_data_loader._get_symbol_validator()
-            
+            # Use unified symbol validator
+            validator = self.ib_symbol_validator
+
             # Check if we have head timestamp data for this symbol
             result = validator.validate_date_range_against_head_timestamp(
                 symbol, start_date, timeframe
             )
-            
+
             is_valid, error_message, suggested_start = result
-            
+
             if not is_valid:
                 # Request is definitely outside available range
                 logger.warning(f"📅 HEAD TIMESTAMP VALIDATION FAILED: {error_message}")
                 return False, error_message, suggested_start
             elif suggested_start and suggested_start != start_date:
                 # Request can be adjusted to valid range
-                logger.info(f"📅 HEAD TIMESTAMP VALIDATION ADJUSTED: {start_date} → {suggested_start}")
+                logger.info(
+                    f"📅 HEAD TIMESTAMP VALIDATION ADJUSTED: {start_date} → {suggested_start}"
+                )
                 return True, None, suggested_start
             else:
                 # Request is valid as-is
-                logger.debug(f"📅 HEAD TIMESTAMP VALIDATION PASSED: {symbol} from {start_date}")
+                logger.debug(
+                    f"📅 HEAD TIMESTAMP VALIDATION PASSED: {symbol} from {start_date}"
+                )
                 return True, None, None
-                
+
         except Exception as e:
             logger.warning(f"Head timestamp validation failed for {symbol}: {e}")
             # Don't block requests if validation fails
@@ -816,44 +1001,44 @@ class DataManager:
     def _ensure_symbol_has_head_timestamp(self, symbol: str, timeframe: str) -> bool:
         """
         Ensure symbol has head timestamp data, triggering validation if needed.
-        
+
         Args:
             symbol: Trading symbol
             timeframe: Data timeframe
-            
+
         Returns:
             True if head timestamp is available, False otherwise
         """
-        if not self.enable_ib or not self.ib_data_loader:
+        if not self.enable_ib or not self.ib_symbol_validator:
             return False
-        
+
         try:
-            validator = self.ib_data_loader._get_symbol_validator()
-            
-            # Check if we already have head timestamp
+            validator = self.ib_symbol_validator
+
+            # Check if we already have head timestamp (sync method)
             head_timestamp = validator.get_head_timestamp(symbol, timeframe)
-            
+
             if head_timestamp:
-                logger.debug(f"📅 Head timestamp already available for {symbol}: {head_timestamp}")
+                logger.debug(
+                    f"📅 Head timestamp already available for {symbol}: {head_timestamp}"
+                )
                 return True
-            
-            # No head timestamp available, trigger re-validation
-            logger.info(f"📅 No head timestamp for {symbol}, triggering symbol re-validation")
-            success = validator.trigger_symbol_revalidation(symbol, force_head_timestamp_refresh=True)
-            
-            if success:
-                # Check if we now have head timestamp
-                head_timestamp = validator.get_head_timestamp(symbol, timeframe)
-                if head_timestamp:
-                    logger.info(f"📅 Successfully obtained head timestamp for {symbol}: {head_timestamp}")
-                    return True
-                else:
-                    logger.warning(f"📅 Re-validation succeeded but no head timestamp available for {symbol}")
-                    return False
+
+            # No head timestamp available, fetch it asynchronously
+            logger.info(f"📅 No head timestamp for {symbol}, fetching from IB")
+
+            # Use a sync wrapper for async head timestamp fetching
+            head_timestamp = self._fetch_head_timestamp_sync(symbol, timeframe)
+
+            if head_timestamp:
+                logger.info(
+                    f"📅 Successfully obtained head timestamp for {symbol}: {head_timestamp}"
+                )
+                return True
             else:
-                logger.warning(f"📅 Symbol re-validation failed for {symbol}")
+                logger.warning(f"📅 Failed to fetch head timestamp for {symbol}")
                 return False
-                
+
         except Exception as e:
             logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
             return False
@@ -900,11 +1085,13 @@ class DataManager:
             elif mode == "backfill":
                 # Backfill: go back as far as IB allows for this timeframe
                 from ktrdr.config.ib_limits import IbLimitsRegistry
+
                 max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
                 requested_start = pd.Timestamp.now(tz="UTC") - max_duration
             else:  # mode == "full" or any other mode
                 # Full: use maximum available range if no start specified
                 from ktrdr.config.ib_limits import IbLimitsRegistry
+
                 max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
                 requested_start = pd.Timestamp.now(tz="UTC") - max_duration
         else:
@@ -918,33 +1105,45 @@ class DataManager:
             requested_end = self._normalize_timezone(end_date)
 
         if requested_start >= requested_end:
-            logger.warning(f"Invalid date range: start {requested_start} >= end {requested_end}")
+            logger.warning(
+                f"Invalid date range: start {requested_start} >= end {requested_end}"
+            )
             return None
 
-        logger.info(f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}")
+        logger.info(
+            f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}"
+        )
 
         # Step 0: Ensure symbol has head timestamp data and validate request range
         logger.info(f"📅 STEP 0: Validating request against head timestamp data")
         self._check_cancellation(cancellation_token, "head timestamp validation")
-        
+
         # First ensure we have head timestamp data for this symbol
         has_head_timestamp = self._ensure_symbol_has_head_timestamp(symbol, timeframe)
-        
+
         if has_head_timestamp:
             # Validate the request range against head timestamp
-            is_valid, error_message, adjusted_start = self._validate_request_against_head_timestamp(
-                symbol, timeframe, requested_start, requested_end
+            is_valid, error_message, adjusted_start = (
+                self._validate_request_against_head_timestamp(
+                    symbol, timeframe, requested_start, requested_end
+                )
             )
-            
+
             if not is_valid:
                 logger.error(f"📅 Request validation failed: {error_message}")
-                logger.error(f"📅 Cannot load data for {symbol} from {requested_start} - data not available")
+                logger.error(
+                    f"📅 Cannot load data for {symbol} from {requested_start} - data not available"
+                )
                 return None
             elif adjusted_start:
-                logger.info(f"📅 Request adjusted based on head timestamp: {requested_start} → {adjusted_start}")
+                logger.info(
+                    f"📅 Request adjusted based on head timestamp: {requested_start} → {adjusted_start}"
+                )
                 requested_start = adjusted_start
         else:
-            logger.info(f"📅 No head timestamp available for {symbol}, proceeding with original request")
+            logger.info(
+                f"📅 No head timestamp available for {symbol}, proceeding with original request"
+            )
 
         # Step 1: Load existing local data (ALL modes need this for gap analysis)
         existing_data = None
@@ -954,7 +1153,9 @@ class DataManager:
             existing_data = self.data_loader.load(symbol, timeframe)
             if existing_data is not None and not existing_data.empty:
                 existing_data = self._normalize_dataframe_timezone(existing_data)
-                logger.info(f"✅ Found existing data: {len(existing_data)} bars ({existing_data.index.min()} to {existing_data.index.max()})")
+                logger.info(
+                    f"✅ Found existing data: {len(existing_data)} bars ({existing_data.index.min()} to {existing_data.index.max()})"
+                )
             else:
                 logger.info(f"📭 No existing local data found")
         except Exception as e:
@@ -962,94 +1163,124 @@ class DataManager:
             existing_data = None
 
         # Step 2: Intelligent gap analysis
-        logger.info(f"🔍 GAP ANALYSIS: Starting intelligent gap detection for {symbol} {timeframe}")
+        logger.info(
+            f"🔍 GAP ANALYSIS: Starting intelligent gap detection for {symbol} {timeframe}"
+        )
         self._check_cancellation(cancellation_token, "gap analysis")
-        logger.debug(f"🔍 GAP ANALYSIS: Requested range = {requested_start} to {requested_end}")
+        logger.debug(
+            f"🔍 GAP ANALYSIS: Requested range = {requested_start} to {requested_end}"
+        )
         if existing_data is not None and not existing_data.empty:
-            logger.debug(f"🔍 GAP ANALYSIS: Existing data range = {existing_data.index.min()} to {existing_data.index.max()}")
+            logger.debug(
+                f"🔍 GAP ANALYSIS: Existing data range = {existing_data.index.min()} to {existing_data.index.max()}"
+            )
         else:
             logger.debug(f"🔍 GAP ANALYSIS: No existing data found")
-        gaps = self._analyze_gaps(existing_data, requested_start, requested_end, timeframe, symbol, mode)
-        
+        gaps = self._analyze_gaps(
+            existing_data, requested_start, requested_end, timeframe, symbol, mode
+        )
+
         if not gaps:
             logger.info(f"✅ No gaps found - existing data covers requested range!")
             # Filter existing data to requested range if needed
             if existing_data is not None:
-                mask = (existing_data.index >= requested_start) & (existing_data.index <= requested_end)
+                mask = (existing_data.index >= requested_start) & (
+                    existing_data.index <= requested_end
+                )
                 filtered_data = existing_data[mask] if mask.any() else existing_data
-                logger.info(f"📊 Returning {len(filtered_data)} bars from existing data (filtered to requested range)")
+                logger.info(
+                    f"📊 Returning {len(filtered_data)} bars from existing data (filtered to requested range)"
+                )
                 return filtered_data
             return existing_data
 
         # Step 3: Split gaps into IB-compliant segments
-        logger.info(f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments...")
+        logger.info(
+            f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments..."
+        )
         self._check_cancellation(cancellation_token, "segmentation")
         segments = self._split_into_segments(gaps, timeframe)
-        logger.info(f"⚡ SEGMENTATION COMPLETE: Created {len(segments)} segments for IB fetching")
-        
+        logger.info(
+            f"⚡ SEGMENTATION COMPLETE: Created {len(segments)} segments for IB fetching"
+        )
+
         if not segments:
             logger.info(f"✅ No segments to fetch after filtering")
             return existing_data
 
         # Step 4: Check IB availability and fetch segments
         fetched_data_frames = []
-        
+
         if self._ensure_ib_connection():
-            logger.info(f"🚀 Fetching {len(segments)} segments using resilient strategy...")
+            logger.info(
+                f"🚀 Fetching {len(segments)} segments using resilient strategy..."
+            )
             self._check_cancellation(cancellation_token, "IB connection check")
-            successful_frames, successful_count, failed_count = self._fetch_segments_with_resilience(
-                symbol, timeframe, segments, cancellation_token
+            successful_frames, successful_count, failed_count = (
+                self._fetch_segments_with_resilience(
+                    symbol, timeframe, segments, cancellation_token
+                )
             )
             fetched_data_frames = successful_frames
-            
+
             if successful_count > 0:
-                logger.info(f"✅ Successfully fetched {successful_count}/{len(segments)} segments")
+                logger.info(
+                    f"✅ Successfully fetched {successful_count}/{len(segments)} segments"
+                )
             if failed_count > 0:
-                logger.warning(f"⚠️ {failed_count}/{len(segments)} segments failed - continuing with partial data")
+                logger.warning(
+                    f"⚠️ {failed_count}/{len(segments)} segments failed - continuing with partial data"
+                )
         else:
             logger.warning(f"❌ IB connection not available - using existing data only")
 
         # Step 5: Merge all data sources
         all_data_frames = []
-        
+
         # Add existing data if available
         if existing_data is not None and not existing_data.empty:
             all_data_frames.append(existing_data)
-            
+
         # Add fetched data
         all_data_frames.extend(fetched_data_frames)
-        
+
         if not all_data_frames:
             logger.warning(f"❌ No data available from any source")
             return None
-            
+
         # Combine and sort all data
         logger.info(f"🔄 Merging {len(all_data_frames)} data sources...")
-        
+
         # Log details about each data source for debugging
         for i, df in enumerate(all_data_frames):
             if not df.empty:
-                logger.debug(f"📊 Data source {i+1}: {len(df)} bars from {df.index.min()} to {df.index.max()}")
+                logger.debug(
+                    f"📊 Data source {i+1}: {len(df)} bars from {df.index.min()} to {df.index.max()}"
+                )
             else:
                 logger.debug(f"📊 Data source {i+1}: EMPTY DataFrame")
-        
+
         combined_data = pd.concat(all_data_frames, ignore_index=False)
         logger.info(f"🔗 After concat: {len(combined_data)} total bars")
-        
+
         # Remove duplicates and sort
         duplicates_count = combined_data.index.duplicated().sum()
         if duplicates_count > 0:
             logger.info(f"🗑️ Removing {duplicates_count} duplicate timestamps")
-        combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
+        combined_data = combined_data[~combined_data.index.duplicated(keep="last")]
         combined_data = combined_data.sort_index()
         logger.info(f"✅ After deduplication and sorting: {len(combined_data)} bars")
-        
+
         # Filter to requested range
-        mask = (combined_data.index >= requested_start) & (combined_data.index <= requested_end)
+        mask = (combined_data.index >= requested_start) & (
+            combined_data.index <= requested_end
+        )
         final_data = combined_data[mask] if mask.any() else combined_data
-        
-        logger.info(f"📊 Final dataset: {len(final_data)} bars covering {final_data.index.min() if not final_data.empty else 'N/A'} to {final_data.index.max() if not final_data.empty else 'N/A'}")
-        
+
+        logger.info(
+            f"📊 Final dataset: {len(final_data)} bars covering {final_data.index.min() if not final_data.empty else 'N/A'} to {final_data.index.max() if not final_data.empty else 'N/A'}"
+        )
+
         # Save the enhanced dataset back to CSV for future use
         if len(fetched_data_frames) > 0:  # Only save if we fetched new data
             try:
@@ -1057,7 +1288,7 @@ class DataManager:
                 logger.info(f"💾 Saved enhanced dataset: {len(combined_data)} bars")
             except Exception as e:
                 logger.warning(f"⚠️ Failed to save enhanced dataset: {e}")
-        
+
         logger.info(f"🎉 ENHANCED STRATEGY COMPLETE: Returning {len(final_data)} bars")
         return final_data
 
@@ -1194,7 +1425,7 @@ class DataManager:
     ) -> List[Tuple[datetime, datetime]]:
         """
         Detect significant gaps in time series data using intelligent gap classification.
-        
+
         This method finds gaps that would be considered data quality issues
         (excludes weekends, holidays, and non-trading hours).
 
@@ -1227,7 +1458,9 @@ class DataManager:
                     gap_end = datetime.fromisoformat(gap_end_str.replace("Z", "+00:00"))
                     gaps.append((gap_start, gap_end))
 
-        logger.info(f"Detected {len(gaps)} significant gaps using intelligent classification")
+        logger.info(
+            f"Detected {len(gaps)} significant gaps using intelligent classification"
+        )
         return gaps
 
     @log_entry_exit(logger=logger)
@@ -1533,11 +1766,11 @@ class DataManager:
         # Validate target_timeframe using centralized constants
         timeframe_frequencies = {
             "1m": "1min",
-            "5m": "5min", 
+            "5m": "5min",
             "15m": "15min",
             "30m": "30min",
             "1h": "1H",
-            "4h": "4H", 
+            "4h": "4H",
             "1d": "1D",
             "1w": "1W",
         }

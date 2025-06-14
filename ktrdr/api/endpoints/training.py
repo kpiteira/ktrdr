@@ -22,40 +22,40 @@ router = APIRouter(prefix="/training")
 # Request/Response models
 class TrainingConfig(BaseModel):
     """Training configuration parameters."""
+
     model_type: str = "mlp"
     hidden_layers: List[int] = [64, 32, 16]
     epochs: int = 100
     learning_rate: float = 0.001
     batch_size: int = 32
     validation_split: float = 0.2
-    early_stopping: Dict[str, Any] = {
-        "patience": 10,
-        "monitor": "val_accuracy"
-    }
+    early_stopping: Dict[str, Any] = {"patience": 10, "monitor": "val_accuracy"}
     optimizer: str = "adam"
     dropout_rate: float = 0.2
 
 
 class TrainingRequest(BaseModel):
     """Request model for starting neural network training."""
+
     symbol: str
     timeframe: str
     config: TrainingConfig
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     task_id: Optional[str] = None
-    
-    @field_validator('symbol', 'timeframe')
+
+    @field_validator("symbol", "timeframe")
     @classmethod
     def validate_non_empty_strings(cls, v: str) -> str:
         """Validate that required string fields are not empty."""
         if not v or not v.strip():
-            raise ValueError('Field cannot be empty')
+            raise ValueError("Field cannot be empty")
         return v.strip()
 
 
 class TrainingStartResponse(BaseModel):
     """Response model for training start."""
+
     success: bool
     task_id: str
     status: str
@@ -68,6 +68,7 @@ class TrainingStartResponse(BaseModel):
 
 class CurrentMetrics(BaseModel):
     """Current training metrics."""
+
     train_loss: Optional[float] = None
     val_loss: Optional[float] = None
     train_accuracy: Optional[float] = None
@@ -76,6 +77,7 @@ class CurrentMetrics(BaseModel):
 
 class TrainingStatusResponse(BaseModel):
     """Response model for training status."""
+
     success: bool
     task_id: str
     status: str  # "pending", "training", "completed", "failed"
@@ -92,6 +94,7 @@ class TrainingStatusResponse(BaseModel):
 
 class TrainingMetrics(BaseModel):
     """Final training metrics."""
+
     final_train_loss: Optional[float] = None
     final_val_loss: Optional[float] = None
     final_train_accuracy: Optional[float] = None
@@ -103,6 +106,7 @@ class TrainingMetrics(BaseModel):
 
 class TestMetrics(BaseModel):
     """Test evaluation metrics."""
+
     test_loss: Optional[float] = None
     test_accuracy: Optional[float] = None
     precision: Optional[float] = None
@@ -112,6 +116,7 @@ class TestMetrics(BaseModel):
 
 class ModelInfo(BaseModel):
     """Model information."""
+
     model_size_mb: Optional[float] = None
     parameters_count: Optional[int] = None
     architecture: Optional[str] = None
@@ -119,6 +124,7 @@ class ModelInfo(BaseModel):
 
 class PerformanceResponse(BaseModel):
     """Response model for model performance."""
+
     success: bool
     task_id: str
     status: str
@@ -129,6 +135,7 @@ class PerformanceResponse(BaseModel):
 
 # Singleton training service instance
 _training_service: Optional[TrainingService] = None
+
 
 # Dependency for training service
 async def get_training_service() -> TrainingService:
@@ -141,12 +148,11 @@ async def get_training_service() -> TrainingService:
 
 @router.post("/start", response_model=TrainingStartResponse)
 async def start_training(
-    request: TrainingRequest,
-    service: TrainingService = Depends(get_training_service)
+    request: TrainingRequest, service: TrainingService = Depends(get_training_service)
 ) -> TrainingStartResponse:
     """
     Start neural network model training.
-    
+
     This endpoint starts a background training task and returns immediately
     with a task ID for tracking progress.
     """
@@ -157,9 +163,9 @@ async def start_training(
             config=request.config.model_dump(),
             start_date=request.start_date,
             end_date=request.end_date,
-            task_id=request.task_id
+            task_id=request.task_id,
         )
-        
+
         return TrainingStartResponse(
             success=result["success"],
             task_id=result["task_id"],
@@ -168,9 +174,9 @@ async def start_training(
             symbol=result["symbol"],
             timeframe=result["timeframe"],
             config=TrainingConfig(**result["config"]),
-            estimated_duration_minutes=result.get("estimated_duration_minutes")
+            estimated_duration_minutes=result.get("estimated_duration_minutes"),
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except DataError as e:
@@ -182,19 +188,18 @@ async def start_training(
 
 @router.get("/{task_id}", response_model=TrainingStatusResponse)
 async def get_training_status(
-    task_id: str,
-    service: TrainingService = Depends(get_training_service)
+    task_id: str, service: TrainingService = Depends(get_training_service)
 ) -> TrainingStatusResponse:
     """
     Get the current status and progress of a training task.
     """
     try:
         status = await service.get_training_status(task_id)
-        
+
         current_metrics = None
         if status.get("current_metrics"):
             current_metrics = CurrentMetrics(**status["current_metrics"])
-        
+
         return TrainingStatusResponse(
             success=status["success"],
             task_id=status["task_id"],
@@ -207,9 +212,9 @@ async def get_training_status(
             started_at=status["started_at"],
             estimated_completion=status.get("estimated_completion"),
             current_metrics=current_metrics,
-            error=status.get("error")
+            error=status.get("error"),
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -219,36 +224,35 @@ async def get_training_status(
 
 @router.get("/{task_id}/performance", response_model=PerformanceResponse)
 async def get_model_performance(
-    task_id: str,
-    service: TrainingService = Depends(get_training_service)
+    task_id: str, service: TrainingService = Depends(get_training_service)
 ) -> PerformanceResponse:
     """
     Get detailed performance metrics for a completed training session.
     """
     try:
         performance = await service.get_model_performance(task_id)
-        
+
         training_metrics = None
         if performance.get("training_metrics"):
             training_metrics = TrainingMetrics(**performance["training_metrics"])
-        
+
         test_metrics = None
         if performance.get("test_metrics"):
             test_metrics = TestMetrics(**performance["test_metrics"])
-            
+
         model_info = None
         if performance.get("model_info"):
             model_info = ModelInfo(**performance["model_info"])
-        
+
         return PerformanceResponse(
             success=performance["success"],
             task_id=performance["task_id"],
             status=performance["status"],
             training_metrics=training_metrics,
             test_metrics=test_metrics,
-            model_info=model_info
+            model_info=model_info,
         )
-        
+
     except ValidationError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DataError as e:

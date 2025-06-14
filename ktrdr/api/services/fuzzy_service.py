@@ -638,7 +638,11 @@ class FuzzyService(BaseService):
                             for timestamp, value in membership_series.items():
                                 membership_points.append(
                                     {
-                                        "timestamp": timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                                        "timestamp": (
+                                            timestamp.isoformat()
+                                            if hasattr(timestamp, "isoformat")
+                                            else str(timestamp)
+                                        ),
                                         "value": (
                                             float(value) if pd.notna(value) else None
                                         ),
@@ -835,7 +839,9 @@ class FuzzyService(BaseService):
             sample_fuzzy_sets: List[str] = []
             if available_indicators:
                 sample_indicator = available_indicators[0]
-                sample_fuzzy_sets = list(self.fuzzy_engine.get_fuzzy_sets(sample_indicator))
+                sample_fuzzy_sets = list(
+                    self.fuzzy_engine.get_fuzzy_sets(sample_indicator)
+                )
 
             return {
                 "status": status,
