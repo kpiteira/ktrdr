@@ -50,26 +50,32 @@ Running Python directly will fail because dependencies are managed by uv, not in
 
 The project provides a comprehensive CLI via `uv run ktrdr` with the following commands:
 
-### Core Data Commands
-- **Show Data**: `uv run ktrdr show-data AAPL --timeframe 1h --rows 20`
-- **Compute Indicators**: `uv run ktrdr compute-indicator AAPL --type RSI --period 14`
-- **Plot Charts**: `uv run ktrdr plot AAPL --indicator SMA --period 20 --timeframe 1h`
-- **Fuzzify Data**: `uv run ktrdr fuzzify AAPL --indicator RSI --period 14`
+### Data Management Commands
+- **Show Data**: `uv run ktrdr data show AAPL --timeframe 1h --rows 20`
+- **Load Data**: `uv run ktrdr data load AAPL --timeframe 1d --async`
+- **Data Range**: `uv run ktrdr data range AAPL --timeframe 1h`
+
+### Technical Indicator Commands
+- **Compute Indicators**: `uv run ktrdr indicators compute AAPL --type RSI --period 14`
+- **Plot Charts**: `uv run ktrdr indicators plot AAPL --indicator SMA --period 20 --timeframe 1h`
+- **List Indicators**: `uv run ktrdr indicators list`
 
 ### IB Integration Commands  
-- **Test IB**: `uv run ktrdr test-ib --symbol AAPL --verbose`
-- **Load IB Data**: `uv run ktrdr ib-load AAPL 1d --mode tail`
-- **IB Cleanup**: `uv run ktrdr ib-cleanup`
+- **Test IB**: `uv run ktrdr ib test AAPL --verbose`
+- **IB Status**: `uv run ktrdr ib status`
+- **IB Cleanup**: `uv run ktrdr ib cleanup`
+- **Test Head Timestamp**: `uv run ktrdr ib test-head-timestamp AAPL --timeframe 1d`
 
-### Strategy Management
-- **Validate Strategy**: `uv run ktrdr strategy-validate strategies/my_strategy.yaml`
-- **Upgrade Strategy**: `uv run ktrdr strategy-upgrade strategies/old_strategy.yaml`
-- **List Strategies**: `uv run ktrdr strategy-list --validate`
+### Strategy Management (Planned)
+- **Validate Strategy**: `uv run ktrdr strategies validate strategies/my_strategy.yaml`
+- **List Strategies**: `uv run ktrdr strategies list --validate`
 
-### Training & Backtesting
-- **Train Model**: `uv run ktrdr train strategies/neuro_mean_reversion.yaml AAPL 1h --start-date 2024-01-01 --end-date 2024-06-01`
-- **Test Model**: `uv run ktrdr model-test strategies/neuro_mean_reversion.yaml AAPL 1h`
-- **Backtest Strategy**: `uv run ktrdr backtest strategies/neuro_mean_reversion.yaml AAPL 1h --start-date 2024-07-01 --end-date 2024-12-31`
+### Model & Training Commands (Planned)
+- **Train Model**: `uv run ktrdr models train strategies/neuro_mean_reversion.yaml AAPL 1h`
+- **Test Model**: `uv run ktrdr models test strategies/neuro_mean_reversion.yaml AAPL 1h`
+
+### Fuzzy Logic Commands (Planned)
+- **Fuzzify Data**: `uv run ktrdr fuzzy compute AAPL --indicator RSI --period 14`
 
 All commands support `--help` for detailed usage and common options like `--verbose`, `--output`, `--data-dir`.
 

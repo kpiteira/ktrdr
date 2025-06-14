@@ -36,21 +36,35 @@ def mock_data_service():
 @pytest.mark.api
 def test_get_symbols_endpoint_success(client, mock_data_service):
     """Test successful retrieval of symbols."""
-    # Set up mock to return sample symbols
+    # Set up mock to return sample symbols (with all required fields)
     mock_data_service.get_available_symbols.return_value = [
         {
             "symbol": "AAPL",
             "name": "Apple Inc.",
             "type": "stock",
             "exchange": "NASDAQ",
+            "currency": "USD",
             "available_timeframes": ["1d", "1h"],
+            "trading_hours": {
+                "timezone": "America/New_York",
+                "regular_hours": {"start": "09:30", "end": "16:00"},
+                "extended_hours": [{"start": "04:00", "end": "09:30", "type": "pre"}],
+                "trading_days": [0, 1, 2, 3, 4]
+            }
         },
         {
             "symbol": "MSFT",
             "name": "Microsoft Corp.",
             "type": "stock",
             "exchange": "NASDAQ",
+            "currency": "USD",
             "available_timeframes": ["1d"],
+            "trading_hours": {
+                "timezone": "America/New_York",
+                "regular_hours": {"start": "09:30", "end": "16:00"},
+                "extended_hours": [{"start": "04:00", "end": "09:30", "type": "pre"}],
+                "trading_days": [0, 1, 2, 3, 4]
+            }
         },
     ]
 
@@ -163,15 +177,17 @@ def test_get_timeframes_endpoint_error(client, mock_data_service):
 @pytest.mark.api
 def test_load_data_endpoint_success(client, mock_data_service):
     """Test successful data loading."""
-    # Set up mock to return sample data
+    # Set up mock to return operation response (new format)
     mock_data_service.load_data.return_value = {
-        "dates": ["2023-01-01", "2023-01-02", "2023-01-03"],
-        "ohlcv": [
-            [100.0, 105.0, 95.0, 102.0, 1000],
-            [101.0, 106.0, 96.0, 103.0, 1100],
-            [102.0, 107.0, 97.0, 104.0, 1200],
-        ],
-        "metadata": {"symbol": "AAPL", "timeframe": "1d", "points": 3},
+        "status": "success",
+        "fetched_bars": 3,
+        "cached_before": True,
+        "merged_file": "data/AAPL_1d.csv",
+        "gaps_analyzed": 0,
+        "segments_fetched": 1,
+        "ib_requests_made": 0,
+        "execution_time_seconds": 0.1,
+        "error_message": None
     }
 
     # Make the request
@@ -185,7 +201,7 @@ def test_load_data_endpoint_success(client, mock_data_service):
                 "timeframe": "1d",
                 "start_date": "2023-01-01",
                 "end_date": "2023-01-03",
-                "include_metadata": True,
+                "mode": "full"
             },
         )
 
@@ -195,20 +211,19 @@ def test_load_data_endpoint_success(client, mock_data_service):
     # Parse the response JSON
     data = response.json()
 
-    # Verify the response structure
+    # Verify the response structure (new format)
     assert data["success"] is True
     assert "data" in data
-    assert "dates" in data["data"]
-    assert "ohlcv" in data["data"]
-    assert "metadata" in data["data"]
+    assert "status" in data["data"]
+    assert "fetched_bars" in data["data"]
+    assert "execution_time_seconds" in data["data"]
 
-    # Check data contents
-    assert len(data["data"]["dates"]) == 3
-    assert len(data["data"]["ohlcv"]) == 3
-    assert data["data"]["metadata"]["symbol"] == "AAPL"
+    # Check operation results
+    assert data["data"]["status"] == "success"
+    assert data["data"]["fetched_bars"] == 3
+    assert isinstance(data["data"]["execution_time_seconds"], (int, float))
 
-    # Verify that the mock was called - we don't check the parameters exactly
-    # because the API converts string dates to datetime objects
+    # Verify that the mock was called
     assert mock_data_service.load_data.call_count == 1
     call_args = mock_data_service.load_data.call_args[1]
     assert call_args["symbol"] == "AAPL"
