@@ -1499,13 +1499,29 @@ class DataManager:
             auto_correct=False, max_gap_percentage=self.max_gap_percentage
         )
 
-        _, quality_report = validator.validate_data(
-            df, "OUTLIER_CHECK", "1h", validation_type="local"
-        )
+        try:
+            _, quality_report = validator.validate_data(
+                df, "OUTLIER_CHECK", "1h", validation_type="local"
+            )
 
-        # Count outliers from the quality report
-        outlier_issues = quality_report.get_issues_by_type("price_outliers")
-        total_outliers = sum(issue.metadata.get("count", 0) for issue in outlier_issues)
+            # Check if validation failed (report contains validation errors)
+            validation_errors = quality_report.get_issues_by_type("validation_error")
+            if validation_errors:
+                # Validation failed, use fallback method
+                logger.warning(f"Validation failed with {len(validation_errors)} errors, using fallback method")
+                total_outliers = self._detect_outliers_fallback(
+                    df, std_threshold, columns, context_window, log_outliers
+                )
+            else:
+                # Count outliers from the quality report
+                outlier_issues = quality_report.get_issues_by_type("price_outliers")
+                total_outliers = sum(issue.metadata.get("count", 0) for issue in outlier_issues)
+        except Exception as e:
+            # If validation raises an exception, fall back to simple outlier detection
+            logger.warning(f"Validation-based outlier detection failed ({e}), using fallback method")
+            total_outliers = self._detect_outliers_fallback(
+                df, std_threshold, columns, context_window, log_outliers
+            )
 
         if total_outliers > 0 and log_outliers:
             logger.warning(
@@ -1514,6 +1530,51 @@ class DataManager:
             for issue in outlier_issues:
                 logger.warning(f"  - {issue.description}")
 
+        return total_outliers
+
+    def _detect_outliers_fallback(
+        self,
+        df: pd.DataFrame,
+        std_threshold: float = 2.5,
+        columns: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        log_outliers: bool = True,
+    ) -> int:
+        """
+        Fallback outlier detection using simple statistical methods.
+        
+        Used when the main validation-based detection fails due to timezone or other issues.
+        """
+        if columns is None:
+            columns = ["open", "high", "low", "close"]
+        
+        # Filter to available columns
+        columns = [col for col in columns if col in df.columns]
+        if not columns:
+            return 0
+            
+        total_outliers = 0
+        
+        for column in columns:
+            if context_window:
+                # Rolling z-score detection
+                rolling_mean = df[column].rolling(window=context_window, center=True).mean()
+                rolling_std = df[column].rolling(window=context_window, center=True).std()
+                z_scores = (df[column] - rolling_mean) / rolling_std
+            else:
+                # Global z-score detection
+                mean_val = df[column].mean()
+                std_val = df[column].std()
+                z_scores = (df[column] - mean_val) / std_val
+            
+            # Count outliers
+            outliers = abs(z_scores) > std_threshold
+            column_outlier_count = outliers.sum()
+            total_outliers += column_outlier_count
+            
+            if column_outlier_count > 0 and log_outliers:
+                logger.warning(f"Found {column_outlier_count} outliers in {column} column")
+        
         return total_outliers
 
     @log_entry_exit(logger=logger, log_args=True)
