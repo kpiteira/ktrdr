@@ -1,6 +1,6 @@
 """Tests for MCP server"""
 import pytest
-from src.server import KTRDRMCPServer
+from mcp.src.server import KTRDRMCPServer
 
 @pytest.mark.asyncio
 async def test_hello_tool():

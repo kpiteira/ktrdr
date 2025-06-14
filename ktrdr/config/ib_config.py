@@ -118,15 +118,13 @@ class IbConfig:
 
     def get_connection_config(self) -> Dict[str, Any]:
         """Get connection configuration for IbConnectionManager."""
-        from ktrdr.data.ib_connection import ConnectionConfig
-
-        return ConnectionConfig(
-            host=self.host,
-            port=self.port,
-            client_id=self.client_id,
-            timeout=self.timeout,
-            readonly=self.readonly,
-        )
+        return {
+            "host": self.host,
+            "port": self.port,
+            "client_id": self.client_id,
+            "timeout": self.timeout,
+            "readonly": self.readonly,
+        }
 
     def get_chunk_size(self, bar_size: str) -> int:
         """
