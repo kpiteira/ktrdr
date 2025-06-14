@@ -32,6 +32,8 @@ from ktrdr.config.ib_config import get_ib_config
 
 
 @pytest.mark.integration
+@pytest.mark.real_ib
+@pytest.mark.skipif("not config.getoption('--run-integration', default=False)", reason="Integration tests skipped - use --run-integration to run")
 class TestIbUnifiedIntegration:
     """Integration tests for unified IB components."""
 
@@ -40,6 +42,16 @@ class TestIbUnifiedIntegration:
         """Get IB configuration."""
         try:
             config = get_ib_config()
+            # Test basic connectivity before proceeding
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            try:
+                result = sock.connect_ex((config.host, config.port))
+                if result != 0:
+                    pytest.skip(f"IB Gateway not available at {config.host}:{config.port}")
+            finally:
+                sock.close()
             yield config
         except Exception as e:
             pytest.skip(f"IB configuration not available: {e}")
@@ -520,12 +532,28 @@ class TestIbUnifiedIntegration:
 
 @pytest.mark.integration
 @pytest.mark.stress
+@pytest.mark.skipif("not config.getoption('--run-stress', default=False)", reason="Stress tests skipped - use --run-stress to run")
 class TestIbStressTesting:
     """Stress tests for the unified IB system."""
 
     @pytest.mark.asyncio
     async def test_high_frequency_requests(self):
         """Test system under high frequency requests."""
+        # Check for IB Gateway availability first
+        try:
+            config = get_ib_config()
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            try:
+                result = sock.connect_ex((config.host, config.port))
+                if result != 0:
+                    pytest.skip(f"IB Gateway not available at {config.host}:{config.port}")
+            finally:
+                sock.close()
+        except Exception as e:
+            pytest.skip(f"IB configuration not available: {e}")
+            
         # This test simulates high-frequency data requests
         # to verify pace management and connection pooling
 
