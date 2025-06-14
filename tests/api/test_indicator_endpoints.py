@@ -110,8 +110,8 @@ def test_list_indicators_endpoint(client, mock_indicator_metadata):
         # Verify response
         assert response.status_code == 200
         assert response.json()["success"] is True
-        # Modified to expect 3 indicators instead of 2
-        assert len(response.json()["data"]) == 3
+        # Updated to expect 5 indicators (RSI, SMA, EMA, MACD, ZigZag)
+        assert len(response.json()["data"]) == 5
         assert response.json()["data"][0]["id"] == "RSIIndicator"
 
 

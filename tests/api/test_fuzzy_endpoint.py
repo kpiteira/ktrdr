@@ -85,18 +85,21 @@ class TestFuzzyDataEndpoint:
         assert len(low_set["membership"]) == 2
         assert low_set["membership"][0]["value"] == 0.8
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_with_indicators_filter(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_with_indicators_filter(self):
         """Test fuzzy overlay data with specific indicators."""
+        # Create mock service
         mock_service = Mock()
         mock_service.get_fuzzy_overlays = AsyncMock(
             return_value={
                 "symbol": "AAPL",
-                "timeframe": "1h",
+                "timeframe": "1h", 
                 "data": {"rsi": [{"set": "low", "membership": []}]},
             }
         )
-        mock_get_service.return_value = mock_service
+        
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         # Make request with specific indicators
         response = self.client.get(
@@ -112,14 +115,15 @@ class TestFuzzyDataEndpoint:
         assert call_args.kwargs["timeframe"] == "1h"
         assert call_args.kwargs["indicators"] == ["rsi", "macd"]
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_with_date_range(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_with_date_range(self):
         """Test fuzzy overlay data with date range filtering."""
         mock_service = Mock()
         mock_service.get_fuzzy_overlays = AsyncMock(
             return_value={"symbol": "AAPL", "timeframe": "1h", "data": {}}
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         # Make request with date range
         response = self.client.get(
@@ -135,8 +139,7 @@ class TestFuzzyDataEndpoint:
         assert call_args.kwargs["start_date"] == "2023-01-01T00:00:00"
         assert call_args.kwargs["end_date"] == "2023-01-31T23:59:59"
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_with_warnings(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_with_warnings(self):
         """Test fuzzy overlay data response with warnings."""
         mock_service = Mock()
         mock_service.get_fuzzy_overlays = AsyncMock(
@@ -147,7 +150,9 @@ class TestFuzzyDataEndpoint:
                 "warnings": ["Unknown indicator 'invalid_indicator' - skipping"],
             }
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
 
@@ -174,8 +179,7 @@ class TestFuzzyDataEndpoint:
         data = response.json()
         assert "timeframe" in str(data["detail"]).lower()
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_data_error(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_data_error(self):
         """Test handling of DataError (no data available)."""
         from ktrdr.errors import DataError
 
@@ -187,17 +191,18 @@ class TestFuzzyDataEndpoint:
                 details={"symbol": "INVALID", "timeframe": "1h"},
             )
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=INVALID&timeframe=1h")
 
         assert response.status_code == 404
         data = response.json()
-        assert data["error"]["code"] == "DATA-NoData"
-        assert "No data available" in data["error"]["message"]
+        assert data["detail"]["error"]["code"] == "DATA-NoData"
+        assert "No data available" in data["detail"]["error"]["message"]
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_configuration_error(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_configuration_error(self):
         """Test handling of ConfigurationError."""
         from ktrdr.errors import ConfigurationError
 
@@ -209,17 +214,18 @@ class TestFuzzyDataEndpoint:
                 details={},
             )
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
 
         assert response.status_code == 400
         data = response.json()
-        assert data["error"]["code"] == "CONFIG-FuzzyEngineNotInitialized"
-        assert "not initialized" in data["error"]["message"]
+        assert data["detail"]["error"]["code"] == "CONFIG-FuzzyEngineNotInitialized"
+        assert "not initialized" in data["detail"]["error"]["message"]
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_processing_error(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_processing_error(self):
         """Test handling of ProcessingError."""
         from ktrdr.errors import ProcessingError
 
@@ -231,33 +237,35 @@ class TestFuzzyDataEndpoint:
                 details={"error": "Calculation failed"},
             )
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["code"] == "PROC-FuzzyOverlayError"
-        assert "Failed to process" in data["error"]["message"]
+        assert data["detail"]["error"]["code"] == "PROC-FuzzyOverlayError"
+        assert "Failed to process" in data["detail"]["error"]["message"]
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_unexpected_error(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_unexpected_error(self):
         """Test handling of unexpected errors."""
         mock_service = Mock()
         mock_service.get_fuzzy_overlays = AsyncMock(
             side_effect=Exception("Unexpected error occurred")
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["code"] == "INTERNAL_ERROR"
-        assert "unexpected error" in data["error"]["message"].lower()
+        assert data["detail"]["error"]["code"] == "INTERNAL_ERROR"
+        assert "unexpected error" in data["detail"]["error"]["message"].lower()
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_empty_response(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_empty_response(self):
         """Test response with empty data (no valid indicators)."""
         mock_service = Mock()
         mock_service.get_fuzzy_overlays = AsyncMock(
@@ -268,7 +276,9 @@ class TestFuzzyDataEndpoint:
                 "warnings": ["No valid indicators found"],
             }
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
 
@@ -281,8 +291,7 @@ class TestFuzzyDataEndpoint:
         assert "warnings" in data
         assert "No valid indicators" in data["warnings"][0]
 
-    @patch("ktrdr.api.dependencies.get_fuzzy_service")
-    def test_get_fuzzy_overlay_data_response_format(self, mock_get_service):
+    def test_get_fuzzy_overlay_data_response_format(self):
         """Test that response matches expected Pydantic model format."""
         mock_service = Mock()
         mock_service.get_fuzzy_overlays = AsyncMock(
@@ -301,7 +310,9 @@ class TestFuzzyDataEndpoint:
                 },
             }
         )
-        mock_get_service.return_value = mock_service
+        # Override the dependency
+        from ktrdr.api.dependencies import get_fuzzy_service
+        app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=aapl&timeframe= 1h ")
 
