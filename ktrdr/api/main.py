@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from ktrdr.api.config import APIConfig
 from ktrdr.api.middleware import add_middleware
 from ktrdr.api.startup import lifespan
-from ktrdr.errors import DataError, ConnectionError, ConfigurationError, ProcessingError
+from ktrdr.errors import DataError, DataNotFoundError, ConnectionError, ConfigurationError, ProcessingError
 
 # Setup module-level logger
 logger = logging.getLogger(__name__)
@@ -64,6 +64,22 @@ def create_application() -> FastAPI:
     add_middleware(app)
 
     # Add exception handlers
+    @app.exception_handler(DataNotFoundError)
+    async def data_not_found_error_handler(request: Request, exc: DataNotFoundError) -> JSONResponse:
+        """Handle DataNotFoundError exceptions with 404 response."""
+        logger.error(f"DataNotFoundError: {exc.message}", exc_info=True)
+        return JSONResponse(
+            status_code=404,
+            content={
+                "success": False,
+                "error": {
+                    "code": exc.error_code or "DATA_NOT_FOUND",
+                    "message": exc.message,
+                    "details": exc.details or {},
+                },
+            },
+        )
+
     @app.exception_handler(DataError)
     async def data_error_handler(request: Request, exc: DataError) -> JSONResponse:
         """Handle DataError exceptions with appropriate response."""

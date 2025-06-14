@@ -252,10 +252,13 @@ def test_load_data_endpoint_not_found(client, mock_data_service):
     # Check the response status code for not found
     assert response.status_code == 404
 
-    # Verify the response structure for error - FastAPI's HTTPException format
+    # Verify the response structure for error - our custom error format
     data = response.json()
-    assert "detail" in data
-    assert "not found" in data["detail"].lower()
+    assert "error" in data
+    assert "success" in data
+    assert data["success"] is False
+    assert "message" in data["error"]
+    assert "not found" in data["error"]["message"].lower()
 
     # Verify the mock was called
     mock_data_service.load_data.assert_called_once()
