@@ -85,7 +85,7 @@ class TestFuzzyDataEndpoint:
         assert len(low_set["membership"]) == 2
         assert low_set["membership"][0]["value"] == 0.8
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_with_indicators_filter(self, mock_get_service):
         """Test fuzzy overlay data with specific indicators."""
         mock_service = Mock()
@@ -112,7 +112,7 @@ class TestFuzzyDataEndpoint:
         assert call_args.kwargs["timeframe"] == "1h"
         assert call_args.kwargs["indicators"] == ["rsi", "macd"]
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_with_date_range(self, mock_get_service):
         """Test fuzzy overlay data with date range filtering."""
         mock_service = Mock()
@@ -135,7 +135,7 @@ class TestFuzzyDataEndpoint:
         assert call_args.kwargs["start_date"] == "2023-01-01T00:00:00"
         assert call_args.kwargs["end_date"] == "2023-01-31T23:59:59"
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_with_warnings(self, mock_get_service):
         """Test fuzzy overlay data response with warnings."""
         mock_service = Mock()
@@ -174,7 +174,7 @@ class TestFuzzyDataEndpoint:
         data = response.json()
         assert "timeframe" in str(data["detail"]).lower()
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_data_error(self, mock_get_service):
         """Test handling of DataError (no data available)."""
         from ktrdr.errors import DataError
@@ -196,7 +196,7 @@ class TestFuzzyDataEndpoint:
         assert data["error"]["code"] == "DATA-NoData"
         assert "No data available" in data["error"]["message"]
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_configuration_error(self, mock_get_service):
         """Test handling of ConfigurationError."""
         from ktrdr.errors import ConfigurationError
@@ -218,7 +218,7 @@ class TestFuzzyDataEndpoint:
         assert data["error"]["code"] == "CONFIG-FuzzyEngineNotInitialized"
         assert "not initialized" in data["error"]["message"]
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_processing_error(self, mock_get_service):
         """Test handling of ProcessingError."""
         from ktrdr.errors import ProcessingError
@@ -240,7 +240,7 @@ class TestFuzzyDataEndpoint:
         assert data["error"]["code"] == "PROC-FuzzyOverlayError"
         assert "Failed to process" in data["error"]["message"]
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_unexpected_error(self, mock_get_service):
         """Test handling of unexpected errors."""
         mock_service = Mock()
@@ -256,7 +256,7 @@ class TestFuzzyDataEndpoint:
         assert data["error"]["code"] == "INTERNAL_ERROR"
         assert "unexpected error" in data["error"]["message"].lower()
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_empty_response(self, mock_get_service):
         """Test response with empty data (no valid indicators)."""
         mock_service = Mock()
@@ -281,7 +281,7 @@ class TestFuzzyDataEndpoint:
         assert "warnings" in data
         assert "No valid indicators" in data["warnings"][0]
 
-    @patch("ktrdr.api.endpoints.fuzzy.get_fuzzy_service")
+    @patch("ktrdr.api.dependencies.get_fuzzy_service")
     def test_get_fuzzy_overlay_data_response_format(self, mock_get_service):
         """Test that response matches expected Pydantic model format."""
         mock_service = Mock()

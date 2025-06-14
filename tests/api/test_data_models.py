@@ -33,7 +33,7 @@ class TestDataLoadRequest:
         assert request.timeframe == "1d"
         assert request.start_date == datetime(2023, 1, 1)
         assert request.end_date == datetime(2023, 1, 31)
-        assert request.include_metadata is True  # Default value
+        assert request.mode == "local"  # Default value
 
     def test_request_without_dates(self):
         """Test that a request can be created without dates."""
@@ -184,12 +184,14 @@ class TestSymbolAndTimeframeInfo:
             name="Apple Inc.",
             type="stock",
             exchange="NASDAQ",
+            currency="USD",  # Required field in current model
             available_timeframes=["1d", "1h", "15m"],
         )
         assert symbol_info.symbol == "AAPL"
         assert symbol_info.name == "Apple Inc."
         assert symbol_info.type == "stock"
         assert symbol_info.exchange == "NASDAQ"
+        assert symbol_info.currency == "USD"
         assert len(symbol_info.available_timeframes) == 3
         assert "1d" in symbol_info.available_timeframes
 
