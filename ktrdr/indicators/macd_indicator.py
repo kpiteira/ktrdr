@@ -12,6 +12,7 @@ from typing import Dict, Tuple
 from ktrdr import get_logger
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.errors import ConfigurationError, DataError
+from ktrdr.indicators.schemas import MACD_SCHEMA
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -71,105 +72,18 @@ class MACDIndicator(BaseIndicator):
 
     def _validate_params(self, params):
         """
-        Validate parameters for MACD indicator.
+        Validate parameters for MACD indicator using schema-based validation.
 
         Args:
             params (dict): Parameters to validate
 
         Returns:
-            dict: Validated parameters
+            dict: Validated parameters with defaults applied
 
         Raises:
             DataError: If parameters are invalid
         """
-        # Validate fast_period
-        if "fast_period" in params:
-            fast_period = params["fast_period"]
-            if not isinstance(fast_period, int):
-                raise DataError(
-                    message="MACD fast_period must be an integer",
-                    error_code="DATA-InvalidType",
-                    details={
-                        "parameter": "fast_period",
-                        "expected": "int",
-                        "received": type(fast_period).__name__,
-                    },
-                )
-            if fast_period <= 0:
-                raise DataError(
-                    message="MACD fast_period must be positive",
-                    error_code="DATA-InvalidValue",
-                    details={"parameter": "fast_period", "minimum": 1, "received": fast_period},
-                )
-
-        # Validate slow_period  
-        if "slow_period" in params:
-            slow_period = params["slow_period"]
-            if not isinstance(slow_period, int):
-                raise DataError(
-                    message="MACD slow_period must be an integer",
-                    error_code="DATA-InvalidType",
-                    details={
-                        "parameter": "slow_period",
-                        "expected": "int",
-                        "received": type(slow_period).__name__,
-                    },
-                )
-            if slow_period <= 0:
-                raise DataError(
-                    message="MACD slow_period must be positive",
-                    error_code="DATA-InvalidValue",
-                    details={"parameter": "slow_period", "minimum": 1, "received": slow_period},
-                )
-
-        # Validate signal_period
-        if "signal_period" in params:
-            signal_period = params["signal_period"]
-            if not isinstance(signal_period, int):
-                raise DataError(
-                    message="MACD signal_period must be an integer",
-                    error_code="DATA-InvalidType",
-                    details={
-                        "parameter": "signal_period",
-                        "expected": "int",
-                        "received": type(signal_period).__name__,
-                    },
-                )
-            if signal_period <= 0:
-                raise DataError(
-                    message="MACD signal_period must be positive",
-                    error_code="DATA-InvalidValue",
-                    details={"parameter": "signal_period", "minimum": 1, "received": signal_period},
-                )
-
-        # Validate source
-        if "source" in params and not isinstance(params["source"], str):
-            raise DataError(
-                message="MACD source must be a string",
-                error_code="DATA-InvalidType",
-                details={
-                    "parameter": "source",
-                    "expected": "str",
-                    "received": type(params["source"]).__name__,
-                },
-            )
-
-        # Validate constraint: fast_period < slow_period
-        if "fast_period" in params and "slow_period" in params:
-            fast_period = params["fast_period"]
-            slow_period = params["slow_period"]
-            if fast_period >= slow_period:
-                raise DataError(
-                    message="MACD fast_period must be less than slow_period",
-                    error_code="DATA-InvalidConstraint",
-                    details={
-                        "constraint": "fast_period < slow_period",
-                        "fast_period": fast_period,
-                        "slow_period": slow_period,
-                    },
-                )
-
-        return params
+        return MACD_SCHEMA.validate(params)
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """
