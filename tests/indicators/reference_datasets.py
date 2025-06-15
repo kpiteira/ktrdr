@@ -244,6 +244,20 @@ WILLIAMS_R_REFERENCE_DATASET_1 = {
     },
 }
 
+# ATR reference values for dataset 1
+ATR_REFERENCE_DATASET_1 = {
+    # ATR(14) on reference dataset 1
+    "ATR_14": {
+        20: 2.191429,
+        25: 2.178571,
+        30: 2.121429,
+        35: 2.051429,
+        40: 2.008571,
+        45: 2.021429,
+        49: 2.064286,
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -264,6 +278,9 @@ REFERENCE_VALUES = {
     "WilliamsR": {
         "dataset_1": WILLIAMS_R_REFERENCE_DATASET_1,
     },
+    "ATR": {
+        "dataset_1": ATR_REFERENCE_DATASET_1,
+    },
 }
 
 # Tolerances for different indicators
@@ -275,6 +292,7 @@ TOLERANCES = {
     "MACD": 0.01,  # 0.01% tolerance for MACD (precise calculation)
     "Stochastic": 0.1,  # 0.1% tolerance for Stochastic (precise calculation)
     "WilliamsR": 0.1,  # 0.1% tolerance for Williams %R (precise calculation)
+    "ATR": 0.1,  # 0.1% tolerance for ATR (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -285,4 +303,5 @@ INDICATOR_DATASETS = {
     "MACD": [create_reference_dataset_1],
     "Stochastic": [create_reference_dataset_1],
     "WilliamsR": [create_reference_dataset_1],
+    "ATR": [create_reference_dataset_1],
 }
