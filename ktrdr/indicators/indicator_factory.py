@@ -19,6 +19,10 @@ from ktrdr.indicators import (
     MACDIndicator,
 )
 from ktrdr.indicators.zigzag_indicator import ZigZagIndicator
+from ktrdr.indicators.stochastic_indicator import StochasticIndicator
+from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
+from ktrdr.indicators.atr_indicator import ATRIndicator
+from ktrdr.indicators.obv_indicator import OBVIndicator
 
 logger = get_logger(__name__)
 
@@ -34,6 +38,14 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "MACDIndicator": MACDIndicator,
     "ZigZag": ZigZagIndicator,
     "ZigZagIndicator": ZigZagIndicator,
+    "Stochastic": StochasticIndicator,
+    "StochasticIndicator": StochasticIndicator,
+    "WilliamsR": WilliamsRIndicator,
+    "WilliamsRIndicator": WilliamsRIndicator,
+    "ATR": ATRIndicator,
+    "ATRIndicator": ATRIndicator,
+    "OBV": OBVIndicator,
+    "OBVIndicator": OBVIndicator,
 }
 
 
