@@ -17,7 +17,7 @@ This directory contains the CI/CD workflows for the KTRDR project.
 - **Purpose**: Fast validation of core functionality
 - **Tests**: ~960 unit tests (excludes integration/e2e/container tests)
 - **Runtime**: ~5-10 minutes
-- **Command**: `pytest tests/ -m "not (integration or real_ib or container_api or container_cli or e2e)"`
+- **Command**: `pytest tests/ -m "not (integration or real_ib or container_api or container_cli or e2e or container_e2e)"`
 
 #### 2. Code Quality (Always runs)
 - **Purpose**: Enforce code standards
@@ -63,7 +63,7 @@ This directory contains the CI/CD workflows for the KTRDR project.
 
 ```bash
 # Run the same tests as CI
-uv run pytest tests/ -m "not (integration or real_ib or container_api or container_cli or e2e)"
+uv run pytest tests/ -m "not (integration or real_ib or container_api or container_cli or e2e or container_e2e)"
 
 # Run with container tests (requires Docker)
 ./docker_dev.sh start
@@ -79,7 +79,7 @@ uv run pytest tests/e2e/ --run-container-e2e --run-container-cli
 
 1. **Unit Test Failures**
    - Check test output in GitHub Actions logs
-   - Run locally: `uv run pytest tests/ -m "not (integration or real_ib or container_api or container_cli or e2e)" -v`
+   - Run locally: `uv run pytest tests/ -m "not (integration or real_ib or container_api or container_cli or e2e or container_e2e)" -v`
 
 2. **Container Tests Timing Out**
    - Container startup can take 30-60 seconds

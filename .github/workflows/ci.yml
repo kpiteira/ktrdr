@@ -31,7 +31,7 @@ jobs:
     - name: Run unit tests
       run: |
         uv run pytest tests/ \
-          -m "not (integration or real_ib or container_api or container_cli or e2e)" \
+          -m "not (integration or real_ib or container_api or container_cli or e2e or container_e2e)" \
           --tb=short \
           --maxfail=10 \
           -v \
