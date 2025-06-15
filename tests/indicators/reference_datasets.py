@@ -369,6 +369,22 @@ CCI_REFERENCE_DATASET_1 = {
     },
 }
 
+# Momentum reference values for dataset 1
+MOMENTUM_REFERENCE_DATASET_1 = {
+    # Momentum(10) on reference dataset 1
+    "Momentum_10_close": {
+        10: 10.0,   # 110.0 - 100.0 = 10.0
+        15: 5.0,    # 110.0 - 105.0 = 5.0
+        20: 0.0,    # 110.0 - 110.0 = 0.0
+        25: -5.0,   # 105.0 - 110.0 = -5.0
+        30: -10.0,  # 100.0 - 110.0 = -10.0
+        35: -5.0,   # 100.0 - 105.0 = -5.0
+        40: 0.0,    # 100.0 - 100.0 = 0.0
+        45: 5.0,    # 105.0 - 100.0 = 5.0
+        49: 9.0,    # 109.0 - 100.0 = 9.0
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -401,6 +417,9 @@ REFERENCE_VALUES = {
     "CCI": {
         "dataset_1": CCI_REFERENCE_DATASET_1,
     },
+    "Momentum": {
+        "dataset_1": MOMENTUM_REFERENCE_DATASET_1,
+    },
 }
 
 # Tolerances for different indicators
@@ -416,6 +435,7 @@ TOLERANCES = {
     "OBV": 0.01,  # 0.01% tolerance for OBV (precise calculation)
     "BollingerBands": 0.1,  # 0.1% tolerance for Bollinger Bands (precise calculation)
     "CCI": 0.1,  # 0.1% tolerance for CCI (precise calculation)
+    "Momentum": 0.01,  # 0.01% tolerance for Momentum (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -430,4 +450,5 @@ INDICATOR_DATASETS = {
     "OBV": [create_reference_dataset_obv],
     "BollingerBands": [create_reference_dataset_1],
     "CCI": [create_reference_dataset_1],
+    "Momentum": [create_reference_dataset_1],
 }

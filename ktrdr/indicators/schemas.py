@@ -268,6 +268,30 @@ CCI_SCHEMA = ParameterSchema(
 )
 
 
+# Momentum Parameter Schema (for Phase 2)
+MOMENTUM_SCHEMA = ParameterSchema(
+    name="Momentum",
+    description="Momentum oscillator",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Lookback period for momentum calculation",
+            default=10,
+            min_value=1,
+            max_value=100,
+        ),
+        ParameterDefinition(
+            name="source",
+            param_type=ParameterType.STRING,
+            description="Price column to use for calculation",
+            default="close",
+            options=["open", "high", "low", "close"],
+        ),
+    ],
+)
+
+
 # Registry of all parameter schemas
 PARAMETER_SCHEMAS = {
     "RSI": RSI_SCHEMA,
@@ -280,6 +304,7 @@ PARAMETER_SCHEMAS = {
     "OBV": OBV_SCHEMA,
     "BollingerBands": BOLLINGER_BANDS_SCHEMA,
     "CCI": CCI_SCHEMA,
+    "Momentum": MOMENTUM_SCHEMA,
 }
 
 

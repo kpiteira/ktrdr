@@ -95,6 +95,7 @@ def register_builtin_indicators():
     from ktrdr.indicators.obv_indicator import OBVIndicator
     from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
     from ktrdr.indicators.cci_indicator import CCIIndicator
+    from ktrdr.indicators.momentum_indicator import MomentumIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -195,6 +196,15 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_1"],
         reference_values=REFERENCE_VALUES.get("CCI", {}),
         tolerance=TOLERANCES.get("CCI", 0.1),
+    )
+
+    # Register Momentum
+    register_indicator(
+        indicator_class=MomentumIndicator,
+        default_params={"period": 10, "source": "close"},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("Momentum", {}),
+        tolerance=TOLERANCES.get("Momentum", 0.01),
     )
 
     # Additional indicators would be registered here as they're added to the system
