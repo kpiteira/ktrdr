@@ -438,6 +438,23 @@ RVI_SCHEMA = ParameterSchema(
 )
 
 
+# MFI Parameter Schema
+MFI_SCHEMA = ParameterSchema(
+    name="MFI",
+    description="Money Flow Index volume-weighted momentum oscillator",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Period for MFI calculation",
+            default=14,
+            min_value=1,
+            max_value=100,
+        ),
+    ],
+)
+
+
 # Registry of all parameter schemas
 PARAMETER_SCHEMAS = {
     "RSI": RSI_SCHEMA,
@@ -456,6 +473,7 @@ PARAMETER_SCHEMAS = {
     "ParabolicSAR": PARABOLIC_SAR_SCHEMA,
     "Ichimoku": ICHIMOKU_SCHEMA,
     "RVI": RVI_SCHEMA,
+    "MFI": MFI_SCHEMA,
 }
 
 

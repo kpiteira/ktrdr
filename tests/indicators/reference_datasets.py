@@ -553,6 +553,69 @@ def create_rvi_reference_dataset():
     return df
 
 
+def create_mfi_reference_dataset():
+    """
+    Create reference dataset specifically for MFI testing.
+    
+    MFI requires OHLCV data with meaningful price and volume relationships
+    to test the money flow calculation properly.
+    
+    Returns:
+        DataFrame with OHLCV data optimized for MFI testing
+    """
+    import numpy as np
+    
+    # Create 30 data points with realistic OHLCV patterns
+    np.random.seed(42)  # For reproducible results
+    
+    data = []
+    base_price = 100.0
+    base_volume = 100000
+    
+    for i in range(30):
+        # Create trending behavior with volume patterns
+        if i < 10:
+            # Initial uptrend with increasing volume (buying pressure)
+            trend = 0.8
+            volume_multiplier = 1.0 + (i * 0.1)  # Increasing volume
+        elif i < 20:
+            # Consolidation with decreasing volume
+            trend = 0.0
+            volume_multiplier = 1.5 - (i - 10) * 0.05  # Decreasing volume
+        else:
+            # Downtrend with increasing volume (selling pressure)
+            trend = -0.6
+            volume_multiplier = 1.0 + ((i - 20) * 0.15)  # Increasing volume
+        
+        # Generate price movement
+        price_change = np.random.normal(trend, 0.5)
+        base_price += price_change
+        
+        # Generate realistic OHLC
+        daily_range = abs(np.random.normal(0, 1.0))
+        
+        open_price = base_price + np.random.normal(0, 0.2)
+        close_price = open_price + trend + np.random.normal(0, 0.3)
+        high_price = max(open_price, close_price) + daily_range * 0.7
+        low_price = min(open_price, close_price) - daily_range * 0.3
+        
+        # Generate volume with trend influence
+        volume = int(base_volume * volume_multiplier * (0.8 + np.random.random() * 0.4))
+        
+        data.append({
+            'open': round(open_price, 2),
+            'high': round(high_price, 2),
+            'low': round(low_price, 2),
+            'close': round(close_price, 2),
+            'volume': volume
+        })
+    
+    df = pd.DataFrame(data)
+    df.index = pd.date_range(start='2023-01-01', periods=len(df), freq='D')
+    
+    return df
+
+
 # Ichimoku reference values for Ichimoku dataset
 ICHIMOKU_REFERENCE_DATASET_ICHIMOKU = {
     # Ichimoku(9, 26, 52, 26) on Ichimoku reference dataset
@@ -618,6 +681,19 @@ RVI_REFERENCE_DATASET_RVI = {
     },
 }
 
+# MFI reference values for MFI dataset
+MFI_REFERENCE_DATASET_MFI = {
+    # MFI(14) on MFI reference dataset
+    "MFI_14": {
+        15: 59.959279,  # MFI during uptrend with strong buying pressure
+        18: 53.958380,  # MFI transitioning to consolidation
+        21: 38.239049,  # MFI during consolidation with weakening momentum
+        24: 29.155155,  # MFI during early downtrend
+        27: 28.032865,  # MFI during strong downtrend with selling pressure
+        29: 36.788228,  # MFI showing slight recovery at dataset end
+    },
+}
+
 
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
@@ -669,6 +745,9 @@ REFERENCE_VALUES = {
     "RVI": {
         "dataset_rvi": RVI_REFERENCE_DATASET_RVI,
     },
+    "MFI": {
+        "dataset_mfi": MFI_REFERENCE_DATASET_MFI,
+    },
 }
 
 # Tolerances for different indicators
@@ -690,6 +769,7 @@ TOLERANCES = {
     "ParabolicSAR": 0.01,  # 0.01% tolerance for Parabolic SAR (precise calculation)
     "Ichimoku": 0.01,  # 0.01% tolerance for Ichimoku (precise calculation)
     "RVI": 0.01,  # 0.01% tolerance for RVI (precise calculation)
+    "MFI": 0.01,  # 0.01% tolerance for MFI (precise calculation)
 }
 
 # Reference datasets to use with each indicator

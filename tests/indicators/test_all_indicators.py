@@ -28,6 +28,7 @@ from tests.indicators.reference_datasets import (
     create_reference_dataset_obv,
     create_ichimoku_reference_dataset,
     create_rvi_reference_dataset,
+    create_mfi_reference_dataset,
 )
 
 # Setup logger
@@ -42,6 +43,7 @@ DATASET_CREATORS = {
     "reference_dataset_obv": create_reference_dataset_obv,
     "reference_dataset_ichimoku": create_ichimoku_reference_dataset,
     "reference_dataset_rvi": create_rvi_reference_dataset,
+    "reference_dataset_mfi": create_mfi_reference_dataset,
 }
 
 
@@ -194,6 +196,8 @@ class TestAutomatedIndicatorValidation:
                 data = create_ichimoku_reference_dataset()
             elif dataset_name == "reference_dataset_rvi":
                 data = create_rvi_reference_dataset()
+            elif dataset_name == "reference_dataset_mfi":
+                data = create_mfi_reference_dataset()
             else:
                 # Fallback to dataset 1 for unknown datasets
                 data = create_reference_dataset_1()
