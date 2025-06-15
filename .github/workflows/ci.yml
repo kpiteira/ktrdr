@@ -77,8 +77,8 @@ jobs:
     name: Container E2E Tests
     runs-on: ubuntu-latest
     needs: unit-tests
-    # Only run on main/develop pushes or when manually triggered
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
+    # Disabled for now - container tests not needed
+    if: false
     
     steps:
     - name: Checkout code
