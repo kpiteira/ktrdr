@@ -92,6 +92,7 @@ def register_builtin_indicators():
     from ktrdr.indicators.stochastic_indicator import StochasticIndicator
     from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
     from ktrdr.indicators.atr_indicator import ATRIndicator
+    from ktrdr.indicators.obv_indicator import OBVIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -160,6 +161,15 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_1"],
         reference_values=REFERENCE_VALUES.get("ATR", {}),
         tolerance=TOLERANCES.get("ATR", 0.1),
+    )
+
+    # Register OBV
+    register_indicator(
+        indicator_class=OBVIndicator,
+        default_params={},  # OBV has no parameters
+        reference_datasets=["reference_dataset_obv"],
+        reference_values=REFERENCE_VALUES.get("OBV", {}),
+        tolerance=TOLERANCES.get("OBV", 0.01),
     )
 
     # Additional indicators would be registered here as they're added to the system

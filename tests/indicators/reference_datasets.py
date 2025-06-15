@@ -111,6 +111,50 @@ def create_reference_dataset_4() -> pd.DataFrame:
     return create_standard_test_data(patterns)
 
 
+def create_reference_dataset_obv() -> pd.DataFrame:
+    """
+    Create a specific dataset for OBV testing with volume data.
+
+    This dataset includes realistic price and volume patterns for OBV validation:
+    - Correlated volume: Higher volume on larger price moves
+    - Various price directions: Up, down, and sideways movements
+    - Realistic volume patterns: Based on typical trading behavior
+
+    Returns:
+        DataFrame with close and volume data for OBV
+    """
+    import numpy as np
+    
+    # Use fixed seed for reproducible reference values
+    np.random.seed(42)
+    
+    # Create 51 data points (0-50) with realistic price and volume patterns
+    base_price = 100
+    base_volume = 1000
+    
+    # Generate price movements
+    price_changes = np.random.randn(50) * 0.5  # Small daily moves
+    prices = [base_price]
+    for change in price_changes:
+        prices.append(prices[-1] + change)
+    
+    # Generate volume that tends to be higher on larger price moves
+    volumes = []
+    for i, change in enumerate([0] + list(price_changes)):
+        # Higher volume on larger price moves
+        volume_multiplier = 1 + abs(change) * 2
+        daily_volume = base_volume * volume_multiplier * (0.8 + np.random.random() * 0.4)
+        volumes.append(int(daily_volume))
+    
+    # Create dataset with date index
+    dates = pd.date_range(start='2023-01-01', periods=len(prices), freq='D')
+    
+    return pd.DataFrame({
+        'close': prices,
+        'volume': volumes,
+    }, index=dates)
+
+
 # ====================== REFERENCE VALUES ======================
 
 # SMA reference values for dataset 1
@@ -258,6 +302,22 @@ ATR_REFERENCE_DATASET_1 = {
     },
 }
 
+# OBV reference values for OBV dataset
+OBV_REFERENCE_DATASET_OBV = {
+    # OBV() on reference dataset OBV (with volume data)
+    "OBV": {
+        10: 8345.0,
+        15: 605.0,
+        20: -5705.0,
+        25: -7195.0,
+        30: -9547.0,
+        35: -9397.0,
+        40: -14622.0,
+        45: -15921.0,
+        49: -15867.0,
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -281,6 +341,9 @@ REFERENCE_VALUES = {
     "ATR": {
         "dataset_1": ATR_REFERENCE_DATASET_1,
     },
+    "OBV": {
+        "dataset_obv": OBV_REFERENCE_DATASET_OBV,
+    },
 }
 
 # Tolerances for different indicators
@@ -293,6 +356,7 @@ TOLERANCES = {
     "Stochastic": 0.1,  # 0.1% tolerance for Stochastic (precise calculation)
     "WilliamsR": 0.1,  # 0.1% tolerance for Williams %R (precise calculation)
     "ATR": 0.1,  # 0.1% tolerance for ATR (precise calculation)
+    "OBV": 0.01,  # 0.01% tolerance for OBV (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -304,4 +368,5 @@ INDICATOR_DATASETS = {
     "Stochastic": [create_reference_dataset_1],
     "WilliamsR": [create_reference_dataset_1],
     "ATR": [create_reference_dataset_1],
+    "OBV": [create_reference_dataset_obv],
 }
