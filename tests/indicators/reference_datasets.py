@@ -124,35 +124,40 @@ def create_reference_dataset_obv() -> pd.DataFrame:
         DataFrame with close and volume data for OBV
     """
     import numpy as np
-    
+
     # Use fixed seed for reproducible reference values
     np.random.seed(42)
-    
+
     # Create 51 data points (0-50) with realistic price and volume patterns
     base_price = 100
     base_volume = 1000
-    
+
     # Generate price movements
     price_changes = np.random.randn(50) * 0.5  # Small daily moves
     prices = [base_price]
     for change in price_changes:
         prices.append(prices[-1] + change)
-    
+
     # Generate volume that tends to be higher on larger price moves
     volumes = []
     for i, change in enumerate([0] + list(price_changes)):
         # Higher volume on larger price moves
         volume_multiplier = 1 + abs(change) * 2
-        daily_volume = base_volume * volume_multiplier * (0.8 + np.random.random() * 0.4)
+        daily_volume = (
+            base_volume * volume_multiplier * (0.8 + np.random.random() * 0.4)
+        )
         volumes.append(int(daily_volume))
-    
+
     # Create dataset with date index
-    dates = pd.date_range(start='2023-01-01', periods=len(prices), freq='D')
-    
-    return pd.DataFrame({
-        'close': prices,
-        'volume': volumes,
-    }, index=dates)
+    dates = pd.date_range(start="2023-01-01", periods=len(prices), freq="D")
+
+    return pd.DataFrame(
+        {
+            "close": prices,
+            "volume": volumes,
+        },
+        index=dates,
+    )
 
 
 # ====================== REFERENCE VALUES ======================
@@ -350,6 +355,20 @@ BOLLINGER_BANDS_REFERENCE_DATASET_1 = {
     },
 }
 
+# CCI reference values for dataset 1
+CCI_REFERENCE_DATASET_1 = {
+    # CCI(20) on reference dataset 1
+    "CCI_20": {
+        20: 57.142857,
+        25: -175.438596,
+        30: -161.111111,
+        35: -84.444444,
+        40: -57.142857,
+        45: 175.438596,
+        49: 171.428571,
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -379,6 +398,9 @@ REFERENCE_VALUES = {
     "BollingerBands": {
         "dataset_1": BOLLINGER_BANDS_REFERENCE_DATASET_1,
     },
+    "CCI": {
+        "dataset_1": CCI_REFERENCE_DATASET_1,
+    },
 }
 
 # Tolerances for different indicators
@@ -393,6 +415,7 @@ TOLERANCES = {
     "ATR": 0.1,  # 0.1% tolerance for ATR (precise calculation)
     "OBV": 0.01,  # 0.01% tolerance for OBV (precise calculation)
     "BollingerBands": 0.1,  # 0.1% tolerance for Bollinger Bands (precise calculation)
+    "CCI": 0.1,  # 0.1% tolerance for CCI (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -406,4 +429,5 @@ INDICATOR_DATASETS = {
     "ATR": [create_reference_dataset_1],
     "OBV": [create_reference_dataset_obv],
     "BollingerBands": [create_reference_dataset_1],
+    "CCI": [create_reference_dataset_1],
 }

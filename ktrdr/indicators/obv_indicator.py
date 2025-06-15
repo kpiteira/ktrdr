@@ -24,12 +24,12 @@ class OBVIndicator(BaseIndicator):
 
     OBV is calculated using the following logic:
     - If closing price is higher than previous close: OBV = Previous OBV + Current Volume
-    - If closing price is lower than previous close: OBV = Previous OBV - Current Volume  
+    - If closing price is lower than previous close: OBV = Previous OBV - Current Volume
     - If closing price equals previous close: OBV = Previous OBV (no change)
-    
+
     OBV is a cumulative indicator that starts from 0 and can be positive or negative.
     Rising OBV indicates buying pressure, while falling OBV indicates selling pressure.
-    
+
     Unlike other indicators, OBV doesn't have configurable parameters - it uses all available data.
     However, it requires both price (close) and volume data.
 
@@ -40,7 +40,7 @@ class OBVIndicator(BaseIndicator):
     def __init__(self):
         """
         Initialize the OBV indicator.
-        
+
         OBV doesn't have configurable parameters, but we maintain consistency with the base class.
         """
         # Call parent constructor with display_as_overlay=False (separate panel)
@@ -89,7 +89,7 @@ class OBVIndicator(BaseIndicator):
                 details={
                     "missing_columns": missing_columns,
                     "required_columns": required_columns,
-                    "available_columns": list(data.columns)
+                    "available_columns": list(data.columns),
                 },
             )
 
@@ -107,20 +107,20 @@ class OBVIndicator(BaseIndicator):
         # Get close prices and volume
         close = data["close"]
         volume = data["volume"]
-        
+
         # Calculate price direction compared to previous close
         price_change = close.diff()
-        
+
         # Initialize OBV series starting with 0
         obv = pd.Series(index=data.index, dtype=float)
         obv.iloc[0] = 0.0  # OBV starts at 0
-        
+
         # Calculate OBV for each period
         for i in range(1, len(data)):
-            prev_obv = obv.iloc[i-1]
+            prev_obv = obv.iloc[i - 1]
             current_volume = volume.iloc[i]
             price_diff = price_change.iloc[i]
-            
+
             if price_diff > 0:
                 # Price increased: add volume
                 obv.iloc[i] = prev_obv + current_volume

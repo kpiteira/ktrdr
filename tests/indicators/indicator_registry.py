@@ -94,6 +94,7 @@ def register_builtin_indicators():
     from ktrdr.indicators.atr_indicator import ATRIndicator
     from ktrdr.indicators.obv_indicator import OBVIndicator
     from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
+    from ktrdr.indicators.cci_indicator import CCIIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -127,14 +128,19 @@ def register_builtin_indicators():
     # Register MACD Indicator
     register_indicator(
         indicator_class=MACDIndicator,
-        default_params={"fast_period": 12, "slow_period": 26, "signal_period": 9, "source": "close"},
+        default_params={
+            "fast_period": 12,
+            "slow_period": 26,
+            "signal_period": 9,
+            "source": "close",
+        },
         reference_datasets=["reference_dataset_1"],
         reference_values=REFERENCE_VALUES.get("MACD", {}),
         tolerance=TOLERANCES.get("MACD", 0.01),
         known_edge_cases=[
             # These edge cases test parameter validation during initialization
             # Note: These test __init__ parameter validation, not compute() method
-        ]
+        ],
     )
 
     # Register Stochastic Oscillator
@@ -180,6 +186,15 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_1"],
         reference_values=REFERENCE_VALUES.get("BollingerBands", {}),
         tolerance=TOLERANCES.get("BollingerBands", 0.1),
+    )
+
+    # Register CCI
+    register_indicator(
+        indicator_class=CCIIndicator,
+        default_params={"period": 20},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("CCI", {}),
+        tolerance=TOLERANCES.get("CCI", 0.1),
     )
 
     # Additional indicators would be registered here as they're added to the system

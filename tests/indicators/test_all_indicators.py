@@ -192,9 +192,9 @@ class TestAutomatedIndicatorValidation:
                     # Get the position of this index
                     pos = data.index.get_loc(first_valid_idx)
                     # Check that all values after this position are non-NaN
-                    assert not pd.isna(result[col].iloc[pos:]).any(), (
-                        f"{indicator_name} column {col} has NaN values after warmup period"
-                    )
+                    assert not pd.isna(
+                        result[col].iloc[pos:]
+                    ).any(), f"{indicator_name} column {col} has NaN values after warmup period"
         else:
             # For Series results (single-output indicators)
             # Check that NaN values only appear at the beginning (warmup period)
@@ -205,7 +205,9 @@ class TestAutomatedIndicatorValidation:
                 # Check that all values after this position are non-NaN
                 assert not pd.isna(
                     result.iloc[pos:]
-                ).any(), f"{indicator_name} should not have NaN values after warmup period"
+                ).any(), (
+                    f"{indicator_name} should not have NaN values after warmup period"
+                )
 
         # Generate a report for reference
         report = generate_indicator_report(indicator, data)

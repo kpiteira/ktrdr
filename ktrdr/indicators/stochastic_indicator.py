@@ -25,11 +25,11 @@ class StochasticIndicator(BaseIndicator):
     The Stochastic Oscillator consists of two lines:
     - %K line: ((Close - Lowest Low) / (Highest High - Lowest Low)) × 100
     - %D line: Moving average of %K line
-    
+
     The indicator oscillates between 0 and 100:
     - Values above 80 indicate overbought conditions
     - Values below 20 indicate oversold conditions
-    
+
     Default parameters:
         - k_period: 14 (lookback period for %K calculation)
         - d_period: 3 (smoothing period for %D calculation)
@@ -37,7 +37,7 @@ class StochasticIndicator(BaseIndicator):
 
     Attributes:
         k_period (int): Lookback period for %K calculation
-        d_period (int): Smoothing period for %D calculation  
+        d_period (int): Smoothing period for %D calculation
         smooth_k (int): Smoothing period for %K line
     """
 
@@ -112,7 +112,7 @@ class StochasticIndicator(BaseIndicator):
                 details={
                     "missing_columns": missing_columns,
                     "required_columns": required_columns,
-                    "available_columns": list(data.columns)
+                    "available_columns": list(data.columns),
                 },
             )
 

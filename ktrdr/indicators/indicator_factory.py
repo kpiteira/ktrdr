@@ -24,6 +24,7 @@ from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
 from ktrdr.indicators.atr_indicator import ATRIndicator
 from ktrdr.indicators.obv_indicator import OBVIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
+from ktrdr.indicators.cci_indicator import CCIIndicator
 
 logger = get_logger(__name__)
 
@@ -49,6 +50,8 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "OBVIndicator": OBVIndicator,
     "BollingerBands": BollingerBandsIndicator,
     "BollingerBandsIndicator": BollingerBandsIndicator,
+    "CCI": CCIIndicator,
+    "CCIIndicator": CCIIndicator,
 }
 
 

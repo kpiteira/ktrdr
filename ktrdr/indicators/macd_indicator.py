@@ -55,7 +55,7 @@ class MACDIndicator(BaseIndicator):
             source: Column name to use for calculations
         """
         # Call parent constructor with display_as_overlay=False
-        # Parent constructor will call _validate_params() 
+        # Parent constructor will call _validate_params()
         super().__init__(
             name="MACD",  # Use simple name, will be enhanced later with parameters
             display_as_overlay=False,

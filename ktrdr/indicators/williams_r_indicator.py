@@ -24,12 +24,12 @@ class WilliamsRIndicator(BaseIndicator):
 
     Williams %R is calculated as:
     %R = ((Highest High - Close) / (Highest High - Lowest Low)) × -100
-    
+
     The indicator oscillates between -100 and 0:
     - Values above -20 indicate overbought conditions
     - Values below -80 indicate oversold conditions
     - The negative scale differentiates it from Stochastic (which uses 0-100)
-    
+
     Default parameters:
         - period: 14 (lookback period for calculation)
 
@@ -94,7 +94,7 @@ class WilliamsRIndicator(BaseIndicator):
                 details={
                     "missing_columns": missing_columns,
                     "required_columns": required_columns,
-                    "available_columns": list(data.columns)
+                    "available_columns": list(data.columns),
                 },
             )
 
@@ -116,7 +116,9 @@ class WilliamsRIndicator(BaseIndicator):
 
         # Calculate Williams %R
         # %R = ((Highest High - Close) / (Highest High - Lowest Low)) × -100
-        williams_r = ((highest_high - data["close"]) / (highest_high - lowest_low)) * -100
+        williams_r = (
+            (highest_high - data["close"]) / (highest_high - lowest_low)
+        ) * -100
 
         # Handle division by zero (when high == low)
         # In this case, price is at the midpoint, so use -50.0 (neutral)

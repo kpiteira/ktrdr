@@ -26,12 +26,12 @@ class ATRIndicator(BaseIndicator):
     1. Current High - Current Low
     2. Absolute value of (Current High - Previous Close)
     3. Absolute value of (Current Low - Previous Close)
-    
+
     ATR is the moving average of True Range values over the specified period.
-    
+
     Higher ATR values indicate higher volatility, while lower values indicate lower volatility.
     ATR is always positive and expressed in the same units as the price.
-    
+
     Default parameters:
         - period: 14 (lookback period for ATR calculation)
 
@@ -96,7 +96,7 @@ class ATRIndicator(BaseIndicator):
                 details={
                     "missing_columns": missing_columns,
                     "required_columns": required_columns,
-                    "available_columns": list(data.columns)
+                    "available_columns": list(data.columns),
                 },
             )
 
@@ -117,10 +117,10 @@ class ATRIndicator(BaseIndicator):
         high = data["high"]
         low = data["low"]
         close = data["close"]
-        
+
         # Previous close (shifted by 1)
         prev_close = close.shift(1)
-        
+
         # True Range is the maximum of:
         # 1. High - Low
         # 2. |High - Previous Close|
@@ -128,14 +128,14 @@ class ATRIndicator(BaseIndicator):
         tr1 = high - low
         tr2 = (high - prev_close).abs()
         tr3 = (low - prev_close).abs()
-        
+
         # True Range is the maximum of the three
         true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        
+
         # For the first data point, we don't have a previous close,
         # so True Range is just High - Low
         true_range.iloc[0] = tr1.iloc[0]
-        
+
         # Calculate ATR as the simple moving average of True Range
         atr = true_range.rolling(window=period, min_periods=period).mean()
 

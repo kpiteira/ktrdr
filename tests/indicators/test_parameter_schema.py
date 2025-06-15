@@ -32,23 +32,23 @@ class TestParameterDefinition:
             description="Test period",
             default=14,
             min_value=1,
-            max_value=100
+            max_value=100,
         )
-        
+
         # Valid values
         assert param.validate_value(10) == 10
         assert param.validate_value(None) == 14  # default
-        
+
         # Type conversion
         assert param.validate_value("20") == 20
-        
+
         # Range validation
         with pytest.raises(DataError, match="must be >= 1"):
             param.validate_value(0)
-        
+
         with pytest.raises(DataError, match="must be <= 100"):
             param.validate_value(101)
-        
+
         # Type validation
         with pytest.raises(DataError, match="must be an integer"):
             param.validate_value("abc")
@@ -61,14 +61,14 @@ class TestParameterDefinition:
             description="Test multiplier",
             default=2.0,
             min_value=0.1,
-            max_value=5.0
+            max_value=5.0,
         )
-        
+
         # Valid values
         assert param.validate_value(1.5) == 1.5
         assert param.validate_value(2) == 2.0  # int to float
         assert param.validate_value("2.5") == 2.5  # string to float
-        
+
         # Range validation
         with pytest.raises(DataError, match="must be >= 0.1"):
             param.validate_value(0.05)
@@ -80,17 +80,17 @@ class TestParameterDefinition:
             param_type=ParameterType.STRING,
             description="Price source",
             default="close",
-            options=["open", "high", "low", "close"]
+            options=["open", "high", "low", "close"],
         )
-        
+
         # Valid values
         assert param.validate_value("high") == "high"
         assert param.validate_value(None) == "close"  # default
-        
+
         # Options validation
         with pytest.raises(DataError, match="must be one of"):
             param.validate_value("invalid")
-        
+
         # Type validation
         with pytest.raises(DataError, match="must be a string"):
             param.validate_value(123)
@@ -101,19 +101,19 @@ class TestParameterDefinition:
             name="adjust",
             param_type=ParameterType.BOOL,
             description="Use adjustment",
-            default=True
+            default=True,
         )
-        
+
         # Valid values
         assert param.validate_value(True) is True
         assert param.validate_value(False) is False
-        
+
         # String conversion
         assert param.validate_value("true") is True
         assert param.validate_value("false") is False
         assert param.validate_value("1") is True
         assert param.validate_value("0") is False
-        
+
         # Invalid values
         with pytest.raises(DataError, match="must be a boolean"):
             param.validate_value("maybe")
@@ -124,12 +124,12 @@ class TestParameterDefinition:
             name="symbol",
             param_type=ParameterType.STRING,
             description="Trading symbol",
-            required=True
+            required=True,
         )
-        
+
         # Valid value
         assert param.validate_value("AAPL") == "AAPL"
-        
+
         # Missing value
         with pytest.raises(DataError, match="is required"):
             param.validate_value(None)
@@ -144,12 +144,12 @@ class TestParameterConstraint:
             name="test_constraint",
             description="Fast must be less than slow",
             validator=less_than("fast", "slow"),
-            error_message="Fast must be less than slow"
+            error_message="Fast must be less than slow",
         )
-        
+
         # Valid case
         constraint.validate({"fast": 5, "slow": 10})  # Should not raise
-        
+
         # Invalid case
         with pytest.raises(DataError, match="Fast must be less than slow"):
             constraint.validate({"fast": 10, "slow": 5})
@@ -160,12 +160,12 @@ class TestParameterConstraint:
             name="test_constraint",
             description="Period must be greater than window",
             validator=greater_than("period", "window"),
-            error_message="Period must be greater than window"
+            error_message="Period must be greater than window",
         )
-        
+
         # Valid case
         constraint.validate({"period": 10, "window": 5})  # Should not raise
-        
+
         # Invalid case
         with pytest.raises(DataError, match="Period must be greater than window"):
             constraint.validate({"period": 5, "window": 10})
@@ -176,9 +176,9 @@ class TestParameterConstraint:
             name="test_constraint",
             description="Test constraint",
             validator=less_than("param1", "param2"),
-            error_message="Test error"
+            error_message="Test error",
         )
-        
+
         with pytest.raises(DataError, match="requires parameter"):
             constraint.validate({"param1": 5})  # Missing param2
 
@@ -188,30 +188,32 @@ class TestParameterSchema:
 
     def test_schema_validation_success(self):
         """Test successful schema validation."""
-        result = MACD_SCHEMA.validate({
-            "fast_period": 12,
-            "slow_period": 26,
-            "signal_period": 9,
-            "source": "close"
-        })
-        
+        result = MACD_SCHEMA.validate(
+            {
+                "fast_period": 12,
+                "slow_period": 26,
+                "signal_period": 9,
+                "source": "close",
+            }
+        )
+
         expected = {
             "fast_period": 12,
             "slow_period": 26,
             "signal_period": 9,
-            "source": "close"
+            "source": "close",
         }
         assert result == expected
 
     def test_schema_with_defaults(self):
         """Test schema validation with default values."""
         result = MACD_SCHEMA.validate({})
-        
+
         expected = {
             "fast_period": 12,
             "slow_period": 26,
             "signal_period": 9,
-            "source": "close"
+            "source": "close",
         }
         assert result == expected
 
@@ -219,9 +221,11 @@ class TestParameterSchema:
         """Test schema constraint validation."""
         # Valid constraint
         MACD_SCHEMA.validate({"fast_period": 5, "slow_period": 10})
-        
+
         # Invalid constraint
-        with pytest.raises(DataError, match="Fast period must be less than slow period"):
+        with pytest.raises(
+            DataError, match="Fast period must be less than slow period"
+        ):
             MACD_SCHEMA.validate({"fast_period": 26, "slow_period": 12})
 
     def test_unknown_parameters(self):
@@ -232,12 +236,14 @@ class TestParameterSchema:
     def test_schema_to_dict(self):
         """Test schema serialization to dictionary."""
         schema_dict = RSI_SCHEMA.to_dict()
-        
+
         assert schema_dict["name"] == "RSI"
-        assert schema_dict["description"] == "Relative Strength Index momentum oscillator"
+        assert (
+            schema_dict["description"] == "Relative Strength Index momentum oscillator"
+        )
         assert "period" in schema_dict["parameters"]
         assert "source" in schema_dict["parameters"]
-        
+
         period_param = schema_dict["parameters"]["period"]
         assert period_param["type"] == "int"
         assert period_param["default"] == 14
@@ -247,12 +253,12 @@ class TestParameterSchema:
     def test_schema_get_defaults(self):
         """Test getting default values from schema."""
         defaults = MACD_SCHEMA.get_defaults()
-        
+
         expected = {
             "fast_period": 12,
             "slow_period": 26,
             "signal_period": 9,
-            "source": "close"
+            "source": "close",
         }
         assert defaults == expected
 
@@ -266,12 +272,12 @@ class TestBuiltInSchemas:
         result = RSI_SCHEMA.validate({"period": 14, "source": "close"})
         assert result["period"] == 14
         assert result["source"] == "close"
-        
+
         # Test defaults
         result = RSI_SCHEMA.validate({})
         assert result["period"] == 14
         assert result["source"] == "close"
-        
+
         # Test validation
         with pytest.raises(DataError):
             RSI_SCHEMA.validate({"period": 1})  # Below minimum
@@ -282,7 +288,7 @@ class TestBuiltInSchemas:
         result = SMA_SCHEMA.validate({"period": 20, "source": "high"})
         assert result["period"] == 20
         assert result["source"] == "high"
-        
+
         # Test invalid source
         with pytest.raises(DataError):
             SMA_SCHEMA.validate({"source": "invalid"})
@@ -290,20 +296,19 @@ class TestBuiltInSchemas:
     def test_macd_schema_comprehensive(self):
         """Test MACD schema comprehensively."""
         # Test all parameter types
-        result = MACD_SCHEMA.validate({
-            "fast_period": 5,
-            "slow_period": 15,
-            "signal_period": 7,
-            "source": "high"
-        })
-        
+        result = MACD_SCHEMA.validate(
+            {"fast_period": 5, "slow_period": 15, "signal_period": 7, "source": "high"}
+        )
+
         assert result["fast_period"] == 5
         assert result["slow_period"] == 15
         assert result["signal_period"] == 7
         assert result["source"] == "high"
-        
+
         # Test constraint
-        with pytest.raises(DataError, match="Fast period must be less than slow period"):
+        with pytest.raises(
+            DataError, match="Fast period must be less than slow period"
+        ):
             MACD_SCHEMA.validate({"fast_period": 20, "slow_period": 10})
 
 
