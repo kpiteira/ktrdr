@@ -19,12 +19,24 @@ API_BASE_URL = "http://localhost:8000"
 API_TIMEOUT = 30.0
 
 
+def check_api_available():
+    """Check if API is available."""
+    try:
+        response = httpx.get(f"{API_BASE_URL}/health", timeout=5.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
 @pytest.fixture(scope="session")
 def api_client():
     """Create HTTP client for API testing."""
+    if not check_api_available():
+        pytest.skip("API server not available - requires Docker containers")
     return httpx.Client(base_url=API_BASE_URL, timeout=API_TIMEOUT)
 
 
+@pytest.mark.container_e2e
 class TestContainerAPIHealth:
     """Test basic API health and availability."""
 
@@ -54,6 +66,7 @@ class TestContainerAPIHealth:
         assert spec["info"]["title"] == "KTRDR API"
 
 
+@pytest.mark.container_e2e
 class TestContainerIBEndpoints:
     """Test IB-related API endpoints in container environment."""
 
@@ -176,6 +189,7 @@ class TestContainerIBEndpoints:
         assert isinstance(symbols_data["total_count"], int)
 
 
+@pytest.mark.container_e2e
 class TestContainerDataEndpoints:
     """Test data-related API endpoints."""
 
@@ -232,6 +246,7 @@ class TestContainerDataEndpoints:
         assert isinstance(ohlcv_data["ohlcv"], list)
 
 
+@pytest.mark.container_e2e
 class TestContainerSystemEndpoints:
     """Test system-level API endpoints."""
 
@@ -262,6 +277,7 @@ class TestContainerSystemEndpoints:
 
 
 @pytest.mark.asyncio
+@pytest.mark.container_e2e
 class TestContainerAsyncEndpoints:
     """Test endpoints that require async operations."""
 
@@ -308,6 +324,7 @@ class TestContainerAsyncEndpoints:
                 assert data["success"] is True
 
 
+@pytest.mark.container_e2e
 class TestContainerAPIPerformance:
     """Test API performance characteristics."""
 
