@@ -93,6 +93,7 @@ def register_builtin_indicators():
     from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
     from ktrdr.indicators.atr_indicator import ATRIndicator
     from ktrdr.indicators.obv_indicator import OBVIndicator
+    from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -170,6 +171,15 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_obv"],
         reference_values=REFERENCE_VALUES.get("OBV", {}),
         tolerance=TOLERANCES.get("OBV", 0.01),
+    )
+
+    # Register Bollinger Bands
+    register_indicator(
+        indicator_class=BollingerBandsIndicator,
+        default_params={"period": 20, "multiplier": 2.0, "source": "close"},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("BollingerBands", {}),
+        tolerance=TOLERANCES.get("BollingerBands", 0.1),
     )
 
     # Additional indicators would be registered here as they're added to the system

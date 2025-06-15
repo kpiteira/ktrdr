@@ -11,7 +11,8 @@ from ktrdr.indicators.parameter_schema import (
     ParameterDefinition,
     ParameterConstraint,
     ParameterType,
-    less_than
+    less_than,
+    greater_than
 )
 
 
@@ -232,7 +233,7 @@ BOLLINGER_BANDS_SCHEMA = ParameterSchema(
             max_value=100
         ),
         ParameterDefinition(
-            name="std_dev",
+            name="multiplier",
             param_type=ParameterType.FLOAT,
             description="Number of standard deviations for bands",
             default=2.0,

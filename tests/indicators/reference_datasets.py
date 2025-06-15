@@ -318,6 +318,38 @@ OBV_REFERENCE_DATASET_OBV = {
     },
 }
 
+# Bollinger Bands reference values for dataset 1
+BOLLINGER_BANDS_REFERENCE_DATASET_1 = {
+    # BollingerBands(20, 2.0) on reference dataset 1
+    "BollingerBands_upper_20_2.0": {
+        20: 113.969663,
+        25: 112.113895,
+        30: 114.265021,
+        35: 113.132312,
+        40: 108.469663,
+        45: 104.613895,
+        49: 108.469663,
+    },
+    "BollingerBands_middle_20_2.0": {
+        20: 107.750000,
+        25: 108.750000,
+        30: 107.250000,
+        35: 104.750000,
+        40: 102.250000,
+        45: 101.250000,
+        49: 102.250000,
+    },
+    "BollingerBands_lower_20_2.0": {
+        20: 101.530337,
+        25: 105.386105,
+        30: 100.234979,
+        35: 96.367688,
+        40: 96.030337,
+        45: 97.886105,
+        49: 96.030337,
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -344,6 +376,9 @@ REFERENCE_VALUES = {
     "OBV": {
         "dataset_obv": OBV_REFERENCE_DATASET_OBV,
     },
+    "BollingerBands": {
+        "dataset_1": BOLLINGER_BANDS_REFERENCE_DATASET_1,
+    },
 }
 
 # Tolerances for different indicators
@@ -357,6 +392,7 @@ TOLERANCES = {
     "WilliamsR": 0.1,  # 0.1% tolerance for Williams %R (precise calculation)
     "ATR": 0.1,  # 0.1% tolerance for ATR (precise calculation)
     "OBV": 0.01,  # 0.01% tolerance for OBV (precise calculation)
+    "BollingerBands": 0.1,  # 0.1% tolerance for Bollinger Bands (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -369,4 +405,5 @@ INDICATOR_DATASETS = {
     "WilliamsR": [create_reference_dataset_1],
     "ATR": [create_reference_dataset_1],
     "OBV": [create_reference_dataset_obv],
+    "BollingerBands": [create_reference_dataset_1],
 }
