@@ -84,8 +84,8 @@ logs/
 output/
 examples/*.html
 
-# Trained models (large binary files)
-models/
+# Trained models (large binary files) - root level only
+/models/
 
 # Security-related files
 *.key
