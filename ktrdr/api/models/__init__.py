@@ -101,6 +101,21 @@ from ktrdr.api.models.ib import (
     IbConfigApiResponse,
 )
 
+# Operations models
+from ktrdr.api.models.operations import (
+    OperationStatus,
+    OperationType,
+    OperationProgress,
+    OperationMetadata,
+    OperationInfo,
+    OperationSummary,
+    CancelOperationRequest,
+    OperationListResponse,
+    OperationStatusResponse,
+    OperationCancelResponse,
+    OperationStartResponse,
+)
+
 __all__ = [
     # Base models
     "ApiResponse",
@@ -177,4 +192,16 @@ __all__ = [
     "IbStatusApiResponse",
     "IbHealthApiResponse",
     "IbConfigApiResponse",
+    # Operations models
+    "OperationStatus",
+    "OperationType",
+    "OperationProgress",
+    "OperationMetadata",
+    "OperationInfo",
+    "OperationSummary", 
+    "CancelOperationRequest",
+    "OperationListResponse",
+    "OperationStatusResponse",
+    "OperationCancelResponse",
+    "OperationStartResponse",
 ]
