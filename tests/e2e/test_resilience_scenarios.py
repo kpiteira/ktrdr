@@ -13,6 +13,16 @@ from typing import Dict, Any
 from unittest.mock import patch, AsyncMock
 
 
+def check_api_available():
+    """Check if API is available."""
+    try:
+        response = httpx.get("http://localhost:8000/health", timeout=5.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.mark.container_e2e
 class TestResilienceScenarios:
     """Test resilience under various realistic scenarios."""
     
@@ -200,4 +210,6 @@ class TestResilienceScenarios:
 @pytest.fixture
 def api_client():
     """HTTP client for API testing."""
+    if not check_api_available():
+        pytest.skip("API server not available - requires Docker containers")
     return httpx.Client(base_url="http://localhost:8000", timeout=30.0)

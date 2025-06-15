@@ -16,12 +16,24 @@ API_BASE_URL = "http://localhost:8000"
 API_TIMEOUT = 30.0
 
 
+def check_api_available():
+    """Check if API is available."""
+    try:
+        response = httpx.get(f"{API_BASE_URL}/health", timeout=5.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
 @pytest.fixture(scope="session")
 def api_client():
     """Create HTTP client for API testing."""
+    if not check_api_available():
+        pytest.skip("API server not available - requires Docker containers")
     return httpx.Client(base_url=API_BASE_URL, timeout=API_TIMEOUT)
 
 
+@pytest.mark.container_e2e
 class TestContainerIbRefactorValidation:
     """Test IB refactoring integration in container environment."""
 

@@ -13,6 +13,16 @@ import time
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
+
+def check_api_available():
+    """Check if API is available."""
+    try:
+        import httpx
+        response = httpx.get("http://localhost:8000/health", timeout=5.0)
+        return response.status_code == 200
+    except Exception:
+        return False
+
 class MockIBGateway:
     """Mock IB Gateway server for testing connection resilience."""
     
@@ -126,6 +136,7 @@ def mock_ib_client_conflicts():
     gateway.stop()
 
 
+@pytest.mark.container_e2e
 class TestResilienceWithMockIB:
     """Test connection resilience with realistic IB Gateway simulation."""
     
@@ -200,5 +211,7 @@ class TestResilienceWithMockIB:
 @pytest.fixture
 def api_client():
     """HTTP client for API testing."""
+    if not check_api_available():
+        pytest.skip("API server not available - requires Docker containers")
     import httpx
     return httpx.Client(base_url="http://localhost:8000", timeout=30.0)
