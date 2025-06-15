@@ -181,6 +181,32 @@ RSI_REFERENCE_DATASET_3 = {
     },
 }
 
+# MACD reference values for dataset 1
+MACD_REFERENCE_DATASET_1 = {
+    # MACD(12, 26, 9) on reference dataset 1
+    "MACD_12_26": {
+        30: -0.963307,
+        35: -1.718724,
+        40: -1.630868,
+        45: -0.431587,
+        49: 0.928795,
+    },
+    "MACD_signal_12_26_9": {
+        30: 0.291484,
+        35: -0.964457,
+        40: -1.450930,
+        45: -1.068918,
+        49: -0.137564,
+    },
+    "MACD_hist_12_26_9": {
+        30: -1.254791,
+        35: -0.754267,
+        40: -0.179939,
+        45: 0.637331,
+        49: 1.066359,
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -192,6 +218,9 @@ REFERENCE_VALUES = {
     "RSI": {
         "dataset_3": RSI_REFERENCE_DATASET_3,
     },
+    "MACD": {
+        "dataset_1": MACD_REFERENCE_DATASET_1,
+    },
 }
 
 # Tolerances for different indicators
@@ -200,6 +229,7 @@ TOLERANCES = {
     "SMA": 0.5,  # 0.5% tolerance for SMA
     "EMA": 5.0,  # 5% tolerance for EMA (implementations vary)
     "RSI": 5.0,  # 5% tolerance for RSI
+    "MACD": 0.01,  # 0.01% tolerance for MACD (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -207,4 +237,5 @@ INDICATOR_DATASETS = {
     "SMA": [create_reference_dataset_1, create_reference_dataset_2],
     "EMA": [create_reference_dataset_1, create_reference_dataset_2],
     "RSI": [create_reference_dataset_3],
+    "MACD": [create_reference_dataset_1],
 }

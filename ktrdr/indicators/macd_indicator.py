@@ -11,7 +11,7 @@ from typing import Dict, Tuple
 
 from ktrdr import get_logger
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.errors import ConfigurationError
+from ktrdr.errors import ConfigurationError, DataError
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -52,33 +52,11 @@ class MACDIndicator(BaseIndicator):
             slow_period: Period for the longer EMA
             signal_period: Period for the signal line EMA
             source: Column name to use for calculations
-
-        Raises:
-            ConfigurationError: If the parameters are invalid
         """
-        # Validate parameters
-        if fast_period <= 0 or slow_period <= 0 or signal_period <= 0:
-            raise ConfigurationError(
-                "MACD periods must be positive integers",
-                "CONFIG-InvalidParameter",
-                {
-                    "fast_period": fast_period,
-                    "slow_period": slow_period,
-                    "signal_period": signal_period,
-                },
-            )
-
-        if fast_period >= slow_period:
-            raise ConfigurationError(
-                "MACD fast_period must be less than slow_period",
-                "CONFIG-InvalidParameter",
-                {"fast_period": fast_period, "slow_period": slow_period},
-            )
-
         # Call parent constructor with display_as_overlay=False
-        name = f"MACD_{fast_period}_{slow_period}_{signal_period}"
+        # Parent constructor will call _validate_params() 
         super().__init__(
-            name=name,
+            name="MACD",  # Use simple name, will be enhanced later with parameters
             display_as_overlay=False,
             fast_period=fast_period,
             slow_period=slow_period,
@@ -86,16 +64,112 @@ class MACDIndicator(BaseIndicator):
             source=source,
         )
 
-        # Store these for easy reference
-        self.fast_period = fast_period
-        self.slow_period = slow_period
-        self.signal_period = signal_period
-        self.source = source
-
         logger.debug(
             f"Initialized MACD indicator with fast_period={fast_period}, "
             f"slow_period={slow_period}, signal_period={signal_period}, source={source}"
         )
+
+    def _validate_params(self, params):
+        """
+        Validate parameters for MACD indicator.
+
+        Args:
+            params (dict): Parameters to validate
+
+        Returns:
+            dict: Validated parameters
+
+        Raises:
+            DataError: If parameters are invalid
+        """
+        # Validate fast_period
+        if "fast_period" in params:
+            fast_period = params["fast_period"]
+            if not isinstance(fast_period, int):
+                raise DataError(
+                    message="MACD fast_period must be an integer",
+                    error_code="DATA-InvalidType",
+                    details={
+                        "parameter": "fast_period",
+                        "expected": "int",
+                        "received": type(fast_period).__name__,
+                    },
+                )
+            if fast_period <= 0:
+                raise DataError(
+                    message="MACD fast_period must be positive",
+                    error_code="DATA-InvalidValue",
+                    details={"parameter": "fast_period", "minimum": 1, "received": fast_period},
+                )
+
+        # Validate slow_period  
+        if "slow_period" in params:
+            slow_period = params["slow_period"]
+            if not isinstance(slow_period, int):
+                raise DataError(
+                    message="MACD slow_period must be an integer",
+                    error_code="DATA-InvalidType",
+                    details={
+                        "parameter": "slow_period",
+                        "expected": "int",
+                        "received": type(slow_period).__name__,
+                    },
+                )
+            if slow_period <= 0:
+                raise DataError(
+                    message="MACD slow_period must be positive",
+                    error_code="DATA-InvalidValue",
+                    details={"parameter": "slow_period", "minimum": 1, "received": slow_period},
+                )
+
+        # Validate signal_period
+        if "signal_period" in params:
+            signal_period = params["signal_period"]
+            if not isinstance(signal_period, int):
+                raise DataError(
+                    message="MACD signal_period must be an integer",
+                    error_code="DATA-InvalidType",
+                    details={
+                        "parameter": "signal_period",
+                        "expected": "int",
+                        "received": type(signal_period).__name__,
+                    },
+                )
+            if signal_period <= 0:
+                raise DataError(
+                    message="MACD signal_period must be positive",
+                    error_code="DATA-InvalidValue",
+                    details={"parameter": "signal_period", "minimum": 1, "received": signal_period},
+                )
+
+        # Validate source
+        if "source" in params and not isinstance(params["source"], str):
+            raise DataError(
+                message="MACD source must be a string",
+                error_code="DATA-InvalidType",
+                details={
+                    "parameter": "source",
+                    "expected": "str",
+                    "received": type(params["source"]).__name__,
+                },
+            )
+
+        # Validate constraint: fast_period < slow_period
+        if "fast_period" in params and "slow_period" in params:
+            fast_period = params["fast_period"]
+            slow_period = params["slow_period"]
+            if fast_period >= slow_period:
+                raise DataError(
+                    message="MACD fast_period must be less than slow_period",
+                    error_code="DATA-InvalidConstraint",
+                    details={
+                        "constraint": "fast_period < slow_period",
+                        "fast_period": fast_period,
+                        "slow_period": slow_period,
+                    },
+                )
+
+        return params
 
     def compute(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -108,40 +182,57 @@ class MACDIndicator(BaseIndicator):
             DataFrame with MACD line, signal line, and histogram.
 
         Raises:
-            ConfigurationError: If the source column is not in the data
+            DataError: If the source column is not in the data
         """
+        # Get parameters from self.params (validated by BaseIndicator)
+        fast_period = self.params.get("fast_period", 12)
+        slow_period = self.params.get("slow_period", 26)
+        signal_period = self.params.get("signal_period", 9)
+        source = self.params.get("source", "close")
+
         # Check if source column exists
-        if self.source not in data.columns:
-            raise ConfigurationError(
-                f"Source column '{self.source}' not found in data",
-                "CONFIG-MissingColumn",
-                {"column": self.source, "available_columns": list(data.columns)},
+        if source not in data.columns:
+            raise DataError(
+                message=f"Source column '{source}' not found in data",
+                error_code="DATA-MissingColumn",
+                details={"column": source, "available_columns": list(data.columns)},
+            )
+
+        # Check for sufficient data
+        min_required = max(slow_period, fast_period) + signal_period
+        if len(data) < min_required:
+            raise DataError(
+                message=f"MACD requires at least {min_required} data points for accurate calculation",
+                error_code="DATA-InsufficientData",
+                details={
+                    "required": min_required,
+                    "provided": len(data),
+                    "fast_period": fast_period,
+                    "slow_period": slow_period,
+                    "signal_period": signal_period,
+                },
             )
 
         # Get the source data
-        source_data = data[self.source]
+        source_data = data[source]
 
         # Calculate fast and slow EMAs
-        fast_ema = source_data.ewm(span=self.fast_period, adjust=False).mean()
-        slow_ema = source_data.ewm(span=self.slow_period, adjust=False).mean()
+        fast_ema = source_data.ewm(span=fast_period, adjust=False).mean()
+        slow_ema = source_data.ewm(span=slow_period, adjust=False).mean()
 
         # Calculate MACD line
         macd_line = fast_ema - slow_ema
 
         # Calculate signal line (EMA of MACD line)
-        signal_line = macd_line.ewm(span=self.signal_period, adjust=False).mean()
+        signal_line = macd_line.ewm(span=signal_period, adjust=False).mean()
 
         # Calculate histogram (MACD line - signal line)
         histogram = macd_line - signal_line
 
         # Create result DataFrame with column names that include the parameters
-        macd_col = f"MACD_{self.fast_period}_{self.slow_period}"
-        signal_col = (
-            f"MACD_signal_{self.fast_period}_{self.slow_period}_{self.signal_period}"
-        )
-        hist_col = (
-            f"MACD_hist_{self.fast_period}_{self.slow_period}_{self.signal_period}"
-        )
+        macd_col = f"MACD_{fast_period}_{slow_period}"
+        signal_col = f"MACD_signal_{fast_period}_{slow_period}_{signal_period}"
+        hist_col = f"MACD_hist_{fast_period}_{slow_period}_{signal_period}"
 
         result_df = pd.DataFrame(
             {macd_col: macd_line, signal_col: signal_line, hist_col: histogram},
@@ -149,8 +240,8 @@ class MACDIndicator(BaseIndicator):
         )
 
         logger.debug(
-            f"Computed MACD with parameters: fast={self.fast_period}, "
-            f"slow={self.slow_period}, signal={self.signal_period}"
+            f"Computed MACD with parameters: fast={fast_period}, "
+            f"slow={slow_period}, signal={signal_period}"
         )
 
         return result_df

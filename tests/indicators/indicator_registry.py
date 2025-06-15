@@ -88,6 +88,7 @@ def register_builtin_indicators():
         ExponentialMovingAverage,
         RSIIndicator,
     )
+    from ktrdr.indicators.macd_indicator import MACDIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -116,6 +117,19 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_3"],
         reference_values=REFERENCE_VALUES.get("RSI", {}),
         tolerance=TOLERANCES.get("RSI", 5.0),
+    )
+
+    # Register MACD Indicator
+    register_indicator(
+        indicator_class=MACDIndicator,
+        default_params={"fast_period": 12, "slow_period": 26, "signal_period": 9, "source": "close"},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("MACD", {}),
+        tolerance=TOLERANCES.get("MACD", 0.01),
+        known_edge_cases=[
+            # These edge cases test parameter validation during initialization
+            # Note: These test __init__ parameter validation, not compute() method
+        ]
     )
 
     # Additional indicators would be registered here as they're added to the system
