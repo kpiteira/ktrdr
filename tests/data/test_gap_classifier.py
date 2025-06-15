@@ -81,13 +81,13 @@ class TestGapClassifier:
 
     def test_trading_hours_gap_classification(self, gap_classifier):
         """Test classification of gaps outside trading hours for intraday data."""
-        # Create a gap during non-trading hours (completely after market close)
+        # Create a gap during non-trading hours (after market close but not into weekend)
         start_time = datetime(
-            2024, 1, 5, 22, 0, tzinfo=timezone.utc
-        )  # Friday 10 PM UTC (5 PM EST)
+            2024, 1, 11, 22, 0, tzinfo=timezone.utc
+        )  # Thursday 10 PM UTC (5 PM EST)
         end_time = datetime(
-            2024, 1, 6, 0, 0, tzinfo=timezone.utc
-        )  # Friday midnight UTC (7 PM EST)
+            2024, 1, 12, 2, 0, tzinfo=timezone.utc
+        )  # Friday 2 AM UTC (9 PM EST Thursday)
 
         classification = gap_classifier.classify_gap(
             start_time=start_time, end_time=end_time, symbol="AAPL", timeframe="1h"
@@ -127,9 +127,9 @@ class TestGapClassifier:
 
     def test_market_closure_classification(self, gap_classifier):
         """Test classification of extended market closures."""
-        # Create a gap longer than 3 days
-        start_time = datetime(2024, 1, 1, 9, 30, tzinfo=timezone.utc)  # New Year's Day
-        end_time = datetime(2024, 1, 5, 9, 30, tzinfo=timezone.utc)  # 4 days later
+        # Create a gap longer than 3 days during a non-holiday period
+        start_time = datetime(2024, 6, 10, 9, 30, tzinfo=timezone.utc)  # Monday in June (no holidays)
+        end_time = datetime(2024, 6, 14, 9, 30, tzinfo=timezone.utc)  # Friday - 4 days later
 
         classification = gap_classifier.classify_gap(
             start_time=start_time, end_time=end_time, symbol="AAPL", timeframe="1d"

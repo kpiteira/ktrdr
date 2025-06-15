@@ -491,6 +491,24 @@ class TestIbDataFetcherUnified:
 class TestConvenienceFunctions:
     """Test convenience functions."""
 
+    @pytest.fixture
+    def mock_ib_bars(self):
+        """Mock IB historical bars data."""
+        bars = []
+        base_time = datetime(2024, 1, 1, 9, 30)
+
+        for i in range(10):
+            bar = Mock()
+            bar.date = base_time + timedelta(hours=i)
+            bar.open = 100.0 + i
+            bar.high = 105.0 + i
+            bar.low = 95.0 + i
+            bar.close = 102.0 + i
+            bar.volume = 1000 + i * 100
+            bars.append(bar)
+
+        return bars
+
     @pytest.mark.asyncio
     async def test_fetch_symbol_data_unified(self, mock_ib_bars):
         """Test convenience function for simple data fetching."""
@@ -520,6 +538,44 @@ class TestConvenienceFunctions:
 
 class TestBackwardCompatibility:
     """Test backward compatibility features."""
+
+    @pytest.fixture
+    def mock_connection_pool(self):
+        """Mock connection pool."""
+        pool_connection = Mock()
+        pool_connection.client_id = 123
+        pool_connection.ib = Mock()
+        pool_connection.state = Mock()
+        pool_connection.state.name = "CONNECTED"
+
+        mock_pool = Mock()
+        mock_pool.acquire_connection = AsyncMock()
+        mock_pool.acquire_connection.return_value.__aenter__ = AsyncMock(
+            return_value=pool_connection
+        )
+        mock_pool.acquire_connection.return_value.__aexit__ = AsyncMock(
+            return_value=None
+        )
+
+        return mock_pool, pool_connection
+
+    @pytest.fixture
+    def mock_ib_bars(self):
+        """Mock IB historical bars data."""
+        bars = []
+        base_time = datetime(2024, 1, 1, 9, 30)
+
+        for i in range(10):
+            bar = Mock()
+            bar.date = base_time + timedelta(hours=i)
+            bar.open = 100.0 + i
+            bar.high = 105.0 + i
+            bar.low = 95.0 + i
+            bar.close = 102.0 + i
+            bar.volume = 1000 + i * 100
+            bars.append(bar)
+
+        return bars
 
     def test_backward_compatibility_alias(self):
         """Test that IbDataFetcher is aliased to unified version."""

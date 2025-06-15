@@ -878,6 +878,25 @@ class TestIbSymbolValidatorUnified:
 class TestConvenienceFunctions:
     """Test convenience functions."""
 
+    @pytest.fixture
+    def mock_contract_details(self):
+        """Mock IB contract details response."""
+        contract = Mock()
+        contract.symbol = "AAPL"
+        contract.secType = "STK"
+        contract.exchange = "NASDAQ"
+        contract.primaryExchange = "NASDAQ"
+        contract.currency = "USD"
+
+        contract_details = Mock()
+        contract_details.contract = contract
+        contract_details.marketName = "NASDAQ"
+        contract_details.minTick = 0.01
+        contract_details.orderTypes = ["LMT", "MKT"]
+        contract_details.validExchanges = "NASDAQ,SMART"
+
+        return contract_details
+
     @pytest.mark.asyncio
     async def test_validate_symbol_unified(self, mock_contract_details):
         """Test convenience function for symbol validation."""
@@ -957,6 +976,62 @@ class TestBackwardCompatibility:
 
 class TestConcurrencyAndStress:
     """Test concurrency and stress scenarios."""
+
+    @pytest.fixture
+    def mock_connection_pool(self):
+        """Mock connection pool."""
+        pool_connection = Mock()
+        pool_connection.client_id = 123
+        pool_connection.ib = Mock()
+        pool_connection.state = Mock()
+        pool_connection.state.name = "CONNECTED"
+
+        mock_pool = Mock()
+        mock_pool.acquire_connection = AsyncMock()
+        mock_pool.acquire_connection.return_value.__aenter__ = AsyncMock(
+            return_value=pool_connection
+        )
+        mock_pool.acquire_connection.return_value.__aexit__ = AsyncMock(
+            return_value=None
+        )
+
+        return mock_pool, pool_connection
+
+    @pytest.fixture
+    def mock_pace_manager(self):
+        """Mock pace manager."""
+        pace_manager = Mock()
+        pace_manager.check_pace_limits_async = AsyncMock()
+        pace_manager.handle_ib_error_async = AsyncMock(
+            return_value=(False, 0.0)
+        )  # No retry by default
+        pace_manager.get_pace_statistics = Mock(
+            return_value={"component_statistics": {}}
+        )
+        return pace_manager
+
+    @pytest.fixture
+    def mock_contract_details(self):
+        """Mock IB contract details response."""
+        contract = Mock()
+        contract.symbol = "AAPL"
+        contract.secType = "STK"
+        contract.exchange = "NASDAQ"
+        contract.primaryExchange = "NASDAQ"
+        contract.currency = "USD"
+
+        detail = Mock()
+        detail.contract = contract
+        detail.longName = "Apple Inc"
+        detail.contractMonth = ""
+
+        return [detail]
+
+    @pytest.fixture
+    def temp_cache_dir(self):
+        """Create temporary directory for cache testing."""
+        with TemporaryDirectory() as temp_dir:
+            yield Path(temp_dir)
 
     @pytest.mark.asyncio
     async def test_concurrent_validation_operations(
