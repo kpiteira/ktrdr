@@ -96,6 +96,11 @@ def register_builtin_indicators():
     from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
     from ktrdr.indicators.cci_indicator import CCIIndicator
     from ktrdr.indicators.momentum_indicator import MomentumIndicator
+    from ktrdr.indicators.roc_indicator import ROCIndicator
+    from ktrdr.indicators.vwap_indicator import VWAPIndicator
+    from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
+    from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
+    from ktrdr.indicators.rvi_indicator import RVIIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -205,6 +210,51 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_1"],
         reference_values=REFERENCE_VALUES.get("Momentum", {}),
         tolerance=TOLERANCES.get("Momentum", 0.01),
+    )
+
+    # Register ROC (Rate of Change)
+    register_indicator(
+        indicator_class=ROCIndicator,
+        default_params={"period": 10, "source": "close"},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("ROC", {}),
+        tolerance=TOLERANCES.get("ROC", 0.01),
+    )
+
+    # Register VWAP (Volume Weighted Average Price)
+    register_indicator(
+        indicator_class=VWAPIndicator,
+        default_params={"period": 20, "use_typical_price": True},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("VWAP", {}),
+        tolerance=TOLERANCES.get("VWAP", 0.01),
+    )
+
+    # Register Parabolic SAR (Stop and Reverse)
+    register_indicator(
+        indicator_class=ParabolicSARIndicator,
+        default_params={"initial_af": 0.02, "step_af": 0.02, "max_af": 0.20},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("ParabolicSAR", {}),
+        tolerance=TOLERANCES.get("ParabolicSAR", 0.01),
+    )
+
+    # Register Ichimoku Cloud
+    register_indicator(
+        indicator_class=IchimokuIndicator,
+        default_params={"tenkan_period": 9, "kijun_period": 26, "senkou_b_period": 52, "displacement": 26},
+        reference_datasets=["reference_dataset_ichimoku"],
+        reference_values=REFERENCE_VALUES.get("Ichimoku", {}),
+        tolerance=TOLERANCES.get("Ichimoku", 0.01),
+    )
+
+    # Register RVI (Relative Vigor Index)
+    register_indicator(
+        indicator_class=RVIIndicator,
+        default_params={"period": 10, "signal_period": 4},
+        reference_datasets=["reference_dataset_rvi"],
+        reference_values=REFERENCE_VALUES.get("RVI", {}),
+        tolerance=TOLERANCES.get("RVI", 0.01),
     )
 
     # Additional indicators would be registered here as they're added to the system

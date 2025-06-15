@@ -25,6 +25,9 @@ from tests.indicators.reference_datasets import (
     create_reference_dataset_2,
     create_reference_dataset_3,
     create_reference_dataset_4,
+    create_reference_dataset_obv,
+    create_ichimoku_reference_dataset,
+    create_rvi_reference_dataset,
 )
 
 # Setup logger
@@ -36,6 +39,9 @@ DATASET_CREATORS = {
     "reference_dataset_2": create_reference_dataset_2,
     "reference_dataset_3": create_reference_dataset_3,
     "reference_dataset_4": create_reference_dataset_4,
+    "reference_dataset_obv": create_reference_dataset_obv,
+    "reference_dataset_ichimoku": create_ichimoku_reference_dataset,
+    "reference_dataset_rvi": create_rvi_reference_dataset,
 }
 
 
@@ -169,8 +175,31 @@ class TestAutomatedIndicatorValidation:
         default_params = registry_data["default_params"]
         indicator = indicator_class(**default_params)
 
-        # Use a standard dataset for all indicators
-        data = create_reference_dataset_1()
+        # Use appropriate dataset for the indicator
+        reference_datasets = registry_data["reference_datasets"]
+        if reference_datasets and len(reference_datasets) > 0:
+            # Use the first registered dataset for this indicator
+            dataset_name = reference_datasets[0]
+            if dataset_name == "reference_dataset_1":
+                data = create_reference_dataset_1()
+            elif dataset_name == "reference_dataset_2":
+                data = create_reference_dataset_2()
+            elif dataset_name == "reference_dataset_3":
+                data = create_reference_dataset_3()
+            elif dataset_name == "reference_dataset_4":
+                data = create_reference_dataset_4()
+            elif dataset_name == "reference_dataset_obv":
+                data = create_reference_dataset_obv()
+            elif dataset_name == "reference_dataset_ichimoku":
+                data = create_ichimoku_reference_dataset()
+            elif dataset_name == "reference_dataset_rvi":
+                data = create_rvi_reference_dataset()
+            else:
+                # Fallback to dataset 1 for unknown datasets
+                data = create_reference_dataset_1()
+        else:
+            # Fallback to dataset 1 if no datasets specified
+            data = create_reference_dataset_1()
 
         # Compute the indicator
         result = indicator.compute(data)

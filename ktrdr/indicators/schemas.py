@@ -292,6 +292,152 @@ MOMENTUM_SCHEMA = ParameterSchema(
 )
 
 
+# Rate of Change Parameter Schema (for Phase 2)
+ROC_SCHEMA = ParameterSchema(
+    name="ROC",
+    description="Rate of Change momentum oscillator",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Lookback period for ROC calculation",
+            default=10,
+            min_value=1,
+            max_value=100,
+        ),
+        ParameterDefinition(
+            name="source",
+            param_type=ParameterType.STRING,
+            description="Price column to use for calculation",
+            default="close",
+            options=["open", "high", "low", "close"],
+        ),
+    ],
+)
+
+
+# Volume Weighted Average Price Parameter Schema (for Phase 2)
+VWAP_SCHEMA = ParameterSchema(
+    name="VWAP",
+    description="Volume Weighted Average Price indicator",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Period for rolling VWAP (0 for cumulative)",
+            default=20,
+            min_value=0,
+            max_value=200,
+        ),
+        ParameterDefinition(
+            name="use_typical_price",
+            param_type=ParameterType.BOOL,
+            description="Use typical price (H+L+C)/3 vs close price",
+            default=True,
+        ),
+    ],
+)
+
+
+# Parabolic SAR Parameter Schema (for Phase 3)
+PARABOLIC_SAR_SCHEMA = ParameterSchema(
+    name="ParabolicSAR",
+    description="Parabolic Stop and Reverse trend-following indicator",
+    parameters=[
+        ParameterDefinition(
+            name="initial_af",
+            param_type=ParameterType.FLOAT,
+            description="Initial acceleration factor",
+            default=0.02,
+            min_value=0.001,
+            max_value=0.1,
+        ),
+        ParameterDefinition(
+            name="step_af",
+            param_type=ParameterType.FLOAT,
+            description="Acceleration factor increment",
+            default=0.02,
+            min_value=0.001,
+            max_value=0.1,
+        ),
+        ParameterDefinition(
+            name="max_af",
+            param_type=ParameterType.FLOAT,
+            description="Maximum acceleration factor",
+            default=0.20,
+            min_value=0.01,
+            max_value=1.0,
+        ),
+    ],
+)
+
+
+# Ichimoku Cloud Parameter Schema (for Phase 3)
+ICHIMOKU_SCHEMA = ParameterSchema(
+    name="Ichimoku",
+    description="Ichimoku Cloud comprehensive trend analysis system",
+    parameters=[
+        ParameterDefinition(
+            name="tenkan_period",
+            param_type=ParameterType.INT,
+            description="Period for Tenkan-sen (Conversion Line)",
+            default=9,
+            min_value=1,
+            max_value=50,
+        ),
+        ParameterDefinition(
+            name="kijun_period",
+            param_type=ParameterType.INT,
+            description="Period for Kijun-sen (Base Line)",
+            default=26,
+            min_value=1,
+            max_value=100,
+        ),
+        ParameterDefinition(
+            name="senkou_b_period",
+            param_type=ParameterType.INT,
+            description="Period for Senkou Span B (Leading Span B)",
+            default=52,
+            min_value=1,
+            max_value=200,
+        ),
+        ParameterDefinition(
+            name="displacement",
+            param_type=ParameterType.INT,
+            description="Displacement for Senkou spans and Chikou span",
+            default=26,
+            min_value=1,
+            max_value=100,
+        ),
+    ],
+)
+
+
+# RVI Parameter Schema
+RVI_SCHEMA = ParameterSchema(
+    name="RVI",
+    description="Relative Vigor Index momentum oscillator",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Period for RVI calculation",
+            default=10,
+            min_value=4,
+            max_value=100,
+        ),
+        ParameterDefinition(
+            name="signal_period",
+            param_type=ParameterType.INT,
+            description="Period for signal line calculation",
+            default=4,
+            min_value=1,
+            max_value=50,
+        ),
+    ],
+)
+
+
 # Registry of all parameter schemas
 PARAMETER_SCHEMAS = {
     "RSI": RSI_SCHEMA,
@@ -305,6 +451,11 @@ PARAMETER_SCHEMAS = {
     "BollingerBands": BOLLINGER_BANDS_SCHEMA,
     "CCI": CCI_SCHEMA,
     "Momentum": MOMENTUM_SCHEMA,
+    "ROC": ROC_SCHEMA,
+    "VWAP": VWAP_SCHEMA,
+    "ParabolicSAR": PARABOLIC_SAR_SCHEMA,
+    "Ichimoku": ICHIMOKU_SCHEMA,
+    "RVI": RVI_SCHEMA,
 }
 
 

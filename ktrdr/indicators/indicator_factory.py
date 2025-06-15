@@ -26,6 +26,11 @@ from ktrdr.indicators.obv_indicator import OBVIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 from ktrdr.indicators.cci_indicator import CCIIndicator
 from ktrdr.indicators.momentum_indicator import MomentumIndicator
+from ktrdr.indicators.roc_indicator import ROCIndicator
+from ktrdr.indicators.vwap_indicator import VWAPIndicator
+from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
+from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
+from ktrdr.indicators.rvi_indicator import RVIIndicator
 
 logger = get_logger(__name__)
 
@@ -55,6 +60,16 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "CCIIndicator": CCIIndicator,
     "Momentum": MomentumIndicator,
     "MomentumIndicator": MomentumIndicator,
+    "ROC": ROCIndicator,
+    "ROCIndicator": ROCIndicator,
+    "VWAP": VWAPIndicator,
+    "VWAPIndicator": VWAPIndicator,
+    "ParabolicSAR": ParabolicSARIndicator,
+    "ParabolicSARIndicator": ParabolicSARIndicator,
+    "Ichimoku": IchimokuIndicator,
+    "IchimokuIndicator": IchimokuIndicator,
+    "RVI": RVIIndicator,
+    "RVIIndicator": RVIIndicator,
 }
 
 
