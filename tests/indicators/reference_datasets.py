@@ -207,6 +207,29 @@ MACD_REFERENCE_DATASET_1 = {
     },
 }
 
+# Stochastic reference values for dataset 1
+STOCHASTIC_REFERENCE_DATASET_1 = {
+    # Stochastic(14, 3, 3) on reference dataset 1
+    "Stochastic_K_14_3": {
+        20: 81.827215,
+        25: 17.529811,
+        30: 9.144808,
+        35: 9.067410,
+        40: 16.873801,
+        45: 82.470234,
+        49: 89.219969,
+    },
+    "Stochastic_D_14_3_3": {
+        20: 84.197784,
+        25: 23.625031,
+        30: 10.224759,
+        35: 8.615742,
+        40: 14.598416,
+        45: 76.471429,
+        49: 88.017223,
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -221,6 +244,9 @@ REFERENCE_VALUES = {
     "MACD": {
         "dataset_1": MACD_REFERENCE_DATASET_1,
     },
+    "Stochastic": {
+        "dataset_1": STOCHASTIC_REFERENCE_DATASET_1,
+    },
 }
 
 # Tolerances for different indicators
@@ -230,6 +256,7 @@ TOLERANCES = {
     "EMA": 5.0,  # 5% tolerance for EMA (implementations vary)
     "RSI": 5.0,  # 5% tolerance for RSI
     "MACD": 0.01,  # 0.01% tolerance for MACD (precise calculation)
+    "Stochastic": 0.1,  # 0.1% tolerance for Stochastic (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -238,4 +265,5 @@ INDICATOR_DATASETS = {
     "EMA": [create_reference_dataset_1, create_reference_dataset_2],
     "RSI": [create_reference_dataset_3],
     "MACD": [create_reference_dataset_1],
+    "Stochastic": [create_reference_dataset_1],
 }

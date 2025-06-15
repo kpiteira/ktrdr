@@ -89,6 +89,7 @@ def register_builtin_indicators():
         RSIIndicator,
     )
     from ktrdr.indicators.macd_indicator import MACDIndicator
+    from ktrdr.indicators.stochastic_indicator import StochasticIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -130,6 +131,15 @@ def register_builtin_indicators():
             # These edge cases test parameter validation during initialization
             # Note: These test __init__ parameter validation, not compute() method
         ]
+    )
+
+    # Register Stochastic Oscillator
+    register_indicator(
+        indicator_class=StochasticIndicator,
+        default_params={"k_period": 14, "d_period": 3, "smooth_k": 3},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("Stochastic", {}),
+        tolerance=TOLERANCES.get("Stochastic", 0.1),
     )
 
     # Additional indicators would be registered here as they're added to the system
