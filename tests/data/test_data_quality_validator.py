@@ -333,7 +333,7 @@ class TestDataQualityValidator:
         # Check if gaps were detected or if there are validation errors
         gap_issues = report.get_issues_by_type("timestamp_gaps")
         validation_errors = report.get_issues_by_type("validation_error")
-        
+
         # Either gaps should be detected or validation errors explain why they weren't
         if len(gap_issues) > 0:
             gap_issue = gap_issues[0]
@@ -342,7 +342,9 @@ class TestDataQualityValidator:
             assert "gap_percentage" in gap_issue.metadata
         else:
             # If no gaps detected, should be due to validation errors
-            assert len(validation_errors) > 0 or "timestamp comparison" in str(report.get_all_issues())
+            assert len(validation_errors) > 0 or "timestamp comparison" in str(
+                report.get_all_issues()
+            )
 
     def test_price_outlier_detection(self, validator):
         """Test price outlier detection using Z-score method."""

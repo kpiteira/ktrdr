@@ -358,11 +358,11 @@ class IbSymbolValidatorUnified:
                     logger.info(
                         f"🔗 Making IB contract lookup (client_id: {connection.client_id})..."
                     )
-                    
+
                     # Make IB API call with enhanced timeout protection
                     details = await asyncio.wait_for(
                         ib.reqContractDetailsAsync(contract),
-                        timeout=15.0  # 15 second timeout for contract lookup
+                        timeout=15.0,  # 15 second timeout for contract lookup
                     )
 
                     logger.debug(
@@ -435,9 +435,13 @@ class IbSymbolValidatorUnified:
 
             except asyncio.TimeoutError:
                 retry_count += 1
-                last_error = asyncio.TimeoutError(f"Contract lookup timeout for {getattr(contract, 'symbol', 'unknown')}")
-                logger.warning(f"⏰ Contract lookup timeout for {getattr(contract, 'symbol', 'unknown')} (attempt {retry_count}/{max_retries})")
-                
+                last_error = asyncio.TimeoutError(
+                    f"Contract lookup timeout for {getattr(contract, 'symbol', 'unknown')}"
+                )
+                logger.warning(
+                    f"⏰ Contract lookup timeout for {getattr(contract, 'symbol', 'unknown')} (attempt {retry_count}/{max_retries})"
+                )
+
                 # Wait before retry
                 if retry_count < max_retries:
                     await asyncio.sleep(2.0)
@@ -791,7 +795,7 @@ class IbSymbolValidatorUnified:
                             logger.info(
                                 f"🔍 Trying head timestamp with whatToShow={whatToShow}"
                             )
-                            
+
                             # Make IB API call with enhanced timeout protection
                             head_timestamp = await asyncio.wait_for(
                                 ib.reqHeadTimeStampAsync(
@@ -800,7 +804,7 @@ class IbSymbolValidatorUnified:
                                     useRTH=False,  # Include all trading hours
                                     formatDate=1,  # Return as datetime
                                 ),
-                                timeout=30.0  # 30 second timeout for head timestamp
+                                timeout=30.0,  # 30 second timeout for head timestamp
                             )
 
                             if head_timestamp:
@@ -813,7 +817,9 @@ class IbSymbolValidatorUnified:
                                     f"🔍 No head timestamp with {whatToShow}"
                                 )
                         except asyncio.TimeoutError:
-                            logger.warning(f"⏰ Head timestamp timeout with {whatToShow} (30s timeout)")
+                            logger.warning(
+                                f"⏰ Head timestamp timeout with {whatToShow} (30s timeout)"
+                            )
                             continue
                         except Exception as e:
                             logger.warning(f"🔍 Error with {whatToShow}: {e}")

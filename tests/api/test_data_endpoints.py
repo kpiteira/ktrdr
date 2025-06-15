@@ -49,8 +49,8 @@ def test_get_symbols_endpoint_success(client, mock_data_service):
                 "timezone": "America/New_York",
                 "regular_hours": {"start": "09:30", "end": "16:00"},
                 "extended_hours": [{"start": "04:00", "end": "09:30", "type": "pre"}],
-                "trading_days": [0, 1, 2, 3, 4]
-            }
+                "trading_days": [0, 1, 2, 3, 4],
+            },
         },
         {
             "symbol": "MSFT",
@@ -63,8 +63,8 @@ def test_get_symbols_endpoint_success(client, mock_data_service):
                 "timezone": "America/New_York",
                 "regular_hours": {"start": "09:30", "end": "16:00"},
                 "extended_hours": [{"start": "04:00", "end": "09:30", "type": "pre"}],
-                "trading_days": [0, 1, 2, 3, 4]
-            }
+                "trading_days": [0, 1, 2, 3, 4],
+            },
         },
     ]
 
@@ -187,7 +187,7 @@ def test_load_data_endpoint_success(client, mock_data_service):
         "segments_fetched": 1,
         "ib_requests_made": 0,
         "execution_time_seconds": 0.1,
-        "error_message": None
+        "error_message": None,
     }
 
     # Make the request
@@ -201,7 +201,7 @@ def test_load_data_endpoint_success(client, mock_data_service):
                 "timeframe": "1d",
                 "start_date": "2023-01-01",
                 "end_date": "2023-01-03",
-                "mode": "full"
+                "mode": "full",
             },
         )
 

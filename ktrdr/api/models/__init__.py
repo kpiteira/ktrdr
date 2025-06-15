@@ -198,7 +198,7 @@ __all__ = [
     "OperationProgress",
     "OperationMetadata",
     "OperationInfo",
-    "OperationSummary", 
+    "OperationSummary",
     "CancelOperationRequest",
     "OperationListResponse",
     "OperationStatusResponse",

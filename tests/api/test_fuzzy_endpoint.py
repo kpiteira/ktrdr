@@ -92,13 +92,14 @@ class TestFuzzyDataEndpoint:
         mock_service.get_fuzzy_overlays = AsyncMock(
             return_value={
                 "symbol": "AAPL",
-                "timeframe": "1h", 
+                "timeframe": "1h",
                 "data": {"rsi": [{"set": "low", "membership": []}]},
             }
         )
-        
+
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         # Make request with specific indicators
@@ -123,6 +124,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         # Make request with date range
@@ -152,6 +154,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
@@ -193,6 +196,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=INVALID&timeframe=1h")
@@ -216,6 +220,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
@@ -239,6 +244,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
@@ -256,6 +262,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
@@ -278,6 +285,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=AAPL&timeframe=1h")
@@ -312,6 +320,7 @@ class TestFuzzyDataEndpoint:
         )
         # Override the dependency
         from ktrdr.api.dependencies import get_fuzzy_service
+
         app.dependency_overrides[get_fuzzy_service] = lambda: mock_service
 
         response = self.client.get("/api/v1/fuzzy/data?symbol=aapl&timeframe= 1h ")

@@ -52,7 +52,7 @@ async def test_load_data_success(mock_data_manager):
         },
         index=pd.date_range(start="2023-01-01", periods=3, freq="D"),
     )
-    
+
     # Set up mock to return DataFrame (DataService will convert to operation result)
     mock_data_manager.load_data.return_value = df
 
@@ -98,7 +98,9 @@ async def test_load_data_without_metadata(mock_data_manager):
 
     # Create service and call method
     service = DataService()
-    result = await service.load_data(symbol="AAPL", timeframe="1d", include_metadata=False)
+    result = await service.load_data(
+        symbol="AAPL", timeframe="1d", include_metadata=False
+    )
 
     # Verify result structure (operational metrics format)
     assert isinstance(result, dict)
@@ -123,7 +125,9 @@ async def test_load_data_empty_result(mock_data_manager):
 
     # Create service and call method
     service = DataService()
-    result = await service.load_data(symbol="AAPL", timeframe="1d", include_metadata=True)
+    result = await service.load_data(
+        symbol="AAPL", timeframe="1d", include_metadata=True
+    )
 
     # Verify result structure (operational metrics format)
     assert isinstance(result, dict)
@@ -296,7 +300,9 @@ async def test_get_data_range(mock_data_manager):
     assert result["point_count"] == 2  # 2 days between Jan 1 and Jan 3
 
     # Verify the mock was called
-    mock_data_manager.data_loader.get_data_date_range.assert_called_once_with("AAPL", "1d")
+    mock_data_manager.data_loader.get_data_date_range.assert_called_once_with(
+        "AAPL", "1d"
+    )
 
 
 @pytest.mark.api

@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from ktrdr.api.models.base import ApiResponse
 
 
-
 class OHLCVPoint(BaseModel):
     """
     Single OHLCV data point.
@@ -118,17 +117,22 @@ class DataLoadResponse(ApiResponse[OHLCVData]):
 class TradingHoursInfo(BaseModel):
     """
     Trading hours information for a symbol.
-    
+
     Attributes:
         timezone (str): Exchange timezone (e.g., 'America/New_York')
         regular_hours (Dict): Regular trading session info
         extended_hours (List[Dict]): Extended trading sessions
         trading_days (List[int]): Days of week when trading occurs
     """
+
     timezone: str = Field(..., description="Exchange timezone")
     regular_hours: Dict[str, Any] = Field(..., description="Regular trading session")
-    extended_hours: List[Dict[str, Any]] = Field(..., description="Extended trading sessions")
-    trading_days: List[int] = Field(..., description="Days of week when trading occurs (0=Monday)")
+    extended_hours: List[Dict[str, Any]] = Field(
+        ..., description="Extended trading sessions"
+    )
+    trading_days: List[int] = Field(
+        ..., description="Days of week when trading occurs (0=Monday)"
+    )
 
 
 class SymbolInfo(BaseModel):
@@ -226,22 +230,27 @@ class DataRangeResponse(ApiResponse[DataRangeInfo]):
 class DataFilters(BaseModel):
     """
     Data filtering options.
-    
+
     Attributes:
         trading_hours_only (bool): Only include data during trading hours
         include_extended (bool): Include extended hours if trading_hours_only is True
     """
-    trading_hours_only: bool = Field(False, description="Only include data during trading hours")
-    include_extended: bool = Field(False, description="Include extended hours (pre-market, after-hours)")
+
+    trading_hours_only: bool = Field(
+        False, description="Only include data during trading hours"
+    )
+    include_extended: bool = Field(
+        False, description="Include extended hours (pre-market, after-hours)"
+    )
 
 
 class DataLoadRequest(BaseModel):
     """
     Request model for loading data via DataManager.
-    
+
     This model supports intelligent gap analysis, mode-based loading,
     and leverages the enhanced DataManager capabilities.
-    
+
     Attributes:
         symbol (str): Trading symbol
         timeframe (str): Data timeframe (e.g., '1d', '1h')
@@ -249,47 +258,54 @@ class DataLoadRequest(BaseModel):
         start_date (Optional[datetime]): Optional start date override
         end_date (Optional[datetime]): Optional end date override
     """
-    
+
     symbol: str = Field(..., description="Trading symbol")
     timeframe: str = Field(..., description="Data timeframe (e.g., '1d', '1h')")
     mode: Literal["local", "tail", "backfill", "full"] = Field(
-        default="local", 
-        description="Loading mode: 'local' for cached data only, 'tail' for recent gaps, 'backfill' for historical, 'full' for backfill + tail"
+        default="local",
+        description="Loading mode: 'local' for cached data only, 'tail' for recent gaps, 'backfill' for historical, 'full' for backfill + tail",
     )
-    start_date: Optional[datetime] = Field(None, description="Optional start date override")
+    start_date: Optional[datetime] = Field(
+        None, description="Optional start date override"
+    )
     end_date: Optional[datetime] = Field(None, description="Optional end date override")
     filters: Optional[DataFilters] = Field(None, description="Data filtering options")
-    
+
     model_config = {
         "json_schema_extra": {
             "examples": [
-                {
-                    "symbol": "AAPL",
-                    "timeframe": "1h", 
-                    "mode": "tail"
-                },
+                {"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
                 {
                     "symbol": "MSFT",
                     "timeframe": "1d",
                     "mode": "backfill",
                     "start_date": "2023-01-01T00:00:00Z",
-                    "end_date": "2023-06-01T00:00:00Z"
-                }
+                    "end_date": "2023-06-01T00:00:00Z",
+                },
             ]
         }
     }
-    
+
     @field_validator("timeframe")
     @classmethod
     def validate_timeframe(cls, v: str) -> str:
         """Validate that the timeframe is in the correct format."""
         valid_timeframes = [
-            "1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d", "1w", "1M"
+            "1m",
+            "5m",
+            "15m",
+            "30m",
+            "1h",
+            "2h",
+            "4h",
+            "1d",
+            "1w",
+            "1M",
         ]
         if v not in valid_timeframes:
             raise ValueError(f"Timeframe must be one of {valid_timeframes}")
         return v
-    
+
     @model_validator(mode="after")
     def validate_dates(self) -> "DataLoadRequest":
         """Validate that start_date is before end_date if both are provided."""
@@ -301,10 +317,10 @@ class DataLoadRequest(BaseModel):
 class DataLoadOperationResponse(BaseModel):
     """
     Response model for data loading operations with enhanced metrics.
-    
+
     Provides detailed information about the loading operation including
     gap analysis results and data source metrics.
-    
+
     Attributes:
         status (str): Operation status - 'success', 'partial', 'failed', or 'started'
         operation_id (Optional[str]): Operation ID for async operations
@@ -317,20 +333,32 @@ class DataLoadOperationResponse(BaseModel):
         execution_time_seconds (float): Total execution time
         error_message (Optional[str]): Error message if operation failed
     """
-    
-    status: Literal["success", "partial", "failed", "started"] = Field(..., description="Operation status")
-    operation_id: Optional[str] = Field(None, description="Operation ID for async operations")
+
+    status: Literal["success", "partial", "failed", "started"] = Field(
+        ..., description="Operation status"
+    )
+    operation_id: Optional[str] = Field(
+        None, description="Operation ID for async operations"
+    )
     fetched_bars: int = Field(..., description="Number of bars fetched")
-    cached_before: bool = Field(..., description="Whether data existed before operation")
+    cached_before: bool = Field(
+        ..., description="Whether data existed before operation"
+    )
     merged_file: str = Field(..., description="Path to the merged CSV file")
-    gaps_analyzed: int = Field(..., description="Number of gaps identified by DataManager")
-    segments_fetched: int = Field(..., description="Number of segments successfully fetched")
+    gaps_analyzed: int = Field(
+        ..., description="Number of gaps identified by DataManager"
+    )
+    segments_fetched: int = Field(
+        ..., description="Number of segments successfully fetched"
+    )
     ib_requests_made: int = Field(..., description="Number of IB API calls made")
     execution_time_seconds: float = Field(..., description="Total execution time")
-    error_message: Optional[str] = Field(None, description="Error message if operation failed")
+    error_message: Optional[str] = Field(
+        None, description="Error message if operation failed"
+    )
 
 
 class DataLoadApiResponse(ApiResponse[DataLoadOperationResponse]):
     """API response wrapper for data loading operations."""
-    
+
     pass

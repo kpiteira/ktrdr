@@ -128,8 +128,12 @@ class TestGapClassifier:
     def test_market_closure_classification(self, gap_classifier):
         """Test classification of extended market closures."""
         # Create a gap longer than 3 days during a non-holiday period
-        start_time = datetime(2024, 6, 10, 9, 30, tzinfo=timezone.utc)  # Monday in June (no holidays)
-        end_time = datetime(2024, 6, 14, 9, 30, tzinfo=timezone.utc)  # Friday - 4 days later
+        start_time = datetime(
+            2024, 6, 10, 9, 30, tzinfo=timezone.utc
+        )  # Monday in June (no holidays)
+        end_time = datetime(
+            2024, 6, 14, 9, 30, tzinfo=timezone.utc
+        )  # Friday - 4 days later
 
         classification = gap_classifier.classify_gap(
             start_time=start_time, end_time=end_time, symbol="AAPL", timeframe="1d"

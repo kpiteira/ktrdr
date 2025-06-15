@@ -148,7 +148,9 @@ class TestDataManager:
         )
         # Due to known validation issues, check that repair at least reduced the number of problems
         # Filter out validation errors from known datetime comparison bug
-        non_validation_issues = [issue for issue in clean_issues if not issue.startswith("validation_error")]
+        non_validation_issues = [
+            issue for issue in clean_issues if not issue.startswith("validation_error")
+        ]
         # Repair should significantly reduce issues, though may not eliminate all due to validation bugs
         assert len(non_validation_issues) <= len(issues)
 
@@ -174,9 +176,9 @@ class TestDataManager:
     def test_detect_gaps(self, data_manager, corrupt_data):
         """Test gap detection in time series data."""
         gaps = data_manager.detect_gaps(corrupt_data, "1d")
-        
+
         # Note: Gap detection might be affected by validation errors
-        # We expect 1 gap (5 days removed from indices 50-54), but validation issues 
+        # We expect 1 gap (5 days removed from indices 50-54), but validation issues
         # might prevent proper detection
         if len(gaps) > 0:
             # If gaps are detected, verify the gap size
@@ -208,7 +210,9 @@ class TestDataManager:
     def test_merge_data(self, data_manager_with_data, sample_data):
         """Test merging new data with existing data."""
         # Skip this test due to timezone handling issues in merge logic
-        pytest.skip("Skipping due to timezone-aware vs timezone-naive timestamp comparison issues")
+        pytest.skip(
+            "Skipping due to timezone-aware vs timezone-naive timestamp comparison issues"
+        )
 
     def test_resample_data(self, data_manager, sample_data):
         """Test resampling data to different timeframes."""
@@ -416,8 +420,9 @@ class TestDataManager:
         except (KeyError, TypeError):
             # Try with timezone-aware lookup if original fails
             import pandas as pd
+
             if outlier_idx.tzinfo is None:
-                outlier_idx_tz = pd.Timestamp(outlier_idx, tz='UTC')
+                outlier_idx_tz = pd.Timestamp(outlier_idx, tz="UTC")
             else:
                 outlier_idx_tz = outlier_idx
             try:

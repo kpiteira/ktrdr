@@ -327,16 +327,24 @@ class IbConnectionPool:
                 # Connection failed validation - remove and try to create new one
                 await self._remove_connection(connection.client_id, "validation_failed")
                 record_counter("connection_pool", "connection_validation_failed")
-                
+
                 # Try to create a new connection
-                connection = await self._create_new_connection(purpose, requested_by, preferred_client_id)
+                connection = await self._create_new_connection(
+                    purpose, requested_by, preferred_client_id
+                )
                 if connection is None:
-                    raise ConnectionError(f"Could not create replacement connection after validation failure for {purpose.value}")
-                
+                    raise ConnectionError(
+                        f"Could not create replacement connection after validation failure for {purpose.value}"
+                    )
+
                 # Validate the new connection too
                 if not await self._validate_connection_before_handoff(connection):
-                    await self._remove_connection(connection.client_id, "replacement_validation_failed")
-                    raise ConnectionError(f"Replacement connection also failed validation for {purpose.value}")
+                    await self._remove_connection(
+                        connection.client_id, "replacement_validation_failed"
+                    )
+                    raise ConnectionError(
+                        f"Replacement connection also failed validation for {purpose.value}"
+                    )
 
             connection.in_use = True
             connection.mark_used()
@@ -461,7 +469,7 @@ class IbConnectionPool:
             connection = await self._create_connection_with_client_id_preference(
                 purpose, requested_by, preferred_client_id, operation_id
             )
-            
+
             if connection is None:
                 record_operation_end(
                     operation_id,
@@ -492,7 +500,9 @@ class IbConnectionPool:
                 ),
             )
 
-            logger.info(f"✅ Created new IB connection (client_id={connection.client_id})")
+            logger.info(
+                f"✅ Created new IB connection (client_id={connection.client_id})"
+            )
             record_operation_end(
                 operation_id,
                 "connection_pool",
@@ -514,7 +524,7 @@ class IbConnectionPool:
                 str(e),
             )
             return None
-    
+
     async def _create_connection_with_client_id_preference(
         self,
         purpose: ClientIdPurpose,
@@ -524,54 +534,62 @@ class IbConnectionPool:
     ) -> Optional[PooledConnection]:
         """
         Implement Client ID 1 preference with incremental fallback strategy.
-        
+
         Strategy:
-        1. Always attempt Client ID 1 first (recycle if available)  
+        1. Always attempt Client ID 1 first (recycle if available)
         2. If Client ID 1 is in use, increment: 2, 3, 4...
         3. Parse IB error codes to detect conflicts (error 326)
         4. Continue until successful connection or all IDs exhausted
         """
-        logger.info(f"🎯 Implementing Client ID 1 preference strategy for {purpose.value}")
-        
+        logger.info(
+            f"🎯 Implementing Client ID 1 preference strategy for {purpose.value}"
+        )
+
         # Determine client IDs to try in order (1, 2, 3...)
         client_ids_to_try = []
-        
+
         if preferred_client_id is not None:
             # Honor specific preference first
             client_ids_to_try.append(preferred_client_id)
             logger.info(f"🎯 Honoring specific preference: {preferred_client_id}")
-        
+
         # Always try Client ID 1 first (core principle), then increment
         base_sequence = list(range(1, 21))  # Try IDs 1-20 for robust fallback
         for client_id in base_sequence:
             if client_id not in client_ids_to_try:
                 client_ids_to_try.append(client_id)
-        
-        logger.info(f"🎯 Client ID sequence: {client_ids_to_try[:10]}{'...' if len(client_ids_to_try) > 10 else ''}")
-        
+
+        logger.info(
+            f"🎯 Client ID sequence: {client_ids_to_try[:10]}{'...' if len(client_ids_to_try) > 10 else ''}"
+        )
+
         for attempt, client_id in enumerate(client_ids_to_try):
             try:
                 logger.info(f"🎯 ATTEMPT {attempt + 1}: Trying Client ID {client_id}")
-                
+
                 # Check if this client ID is already in our pool
                 if client_id in self._connections:
                     logger.debug(f"🎯 Client ID {client_id} already in pool, skipping")
                     continue
-                
-                # Try to allocate from registry 
+
+                # Try to allocate from registry
                 allocated_id = allocate_client_id(purpose, requested_by, client_id)
                 if allocated_id != client_id:
                     if allocated_id is None:
-                        logger.debug(f"🎯 Client ID {client_id} allocation failed, trying next")
+                        logger.debug(
+                            f"🎯 Client ID {client_id} allocation failed, trying next"
+                        )
                         continue
                     else:
-                        logger.info(f"🎯 Registry allocated {allocated_id} instead of requested {client_id}")
+                        logger.info(
+                            f"🎯 Registry allocated {allocated_id} instead of requested {client_id}"
+                        )
                         client_id = allocated_id
-                
+
                 # Create IB instance and attempt connection
                 ib = IB()
                 self._setup_connection_callbacks(ib, client_id)
-                
+
                 connection = PooledConnection(
                     client_id=client_id,
                     purpose=purpose,
@@ -579,20 +597,28 @@ class IbConnectionPool:
                     created_by=requested_by,
                     state=ConnectionState.CONNECTING,
                 )
-                
+
                 # Attempt connection with error code detection
-                success, error_code = await self._connect_ib_with_error_detection(connection)
-                
+                success, error_code = await self._connect_ib_with_error_detection(
+                    connection
+                )
+
                 if success:
-                    logger.info(f"✅ SUCCESS: Client ID {client_id} connected successfully!")
+                    logger.info(
+                        f"✅ SUCCESS: Client ID {client_id} connected successfully!"
+                    )
                     return connection
                 else:
                     # Parse error and handle accordingly
                     if error_code == 326:
-                        logger.warning(f"🎯 Client ID {client_id} in use (IB error 326), trying next...")
+                        logger.warning(
+                            f"🎯 Client ID {client_id} in use (IB error 326), trying next..."
+                        )
                     else:
-                        logger.warning(f"🎯 Client ID {client_id} failed (error {error_code}), trying next...")
-                    
+                        logger.warning(
+                            f"🎯 Client ID {client_id} failed (error {error_code}), trying next..."
+                        )
+
                     # Clean up failed connection
                     deallocate_client_id(client_id, "client_id_conflict_cleanup")
                     try:
@@ -600,18 +626,18 @@ class IbConnectionPool:
                             connection.ib.disconnect()
                     except:
                         pass
-                    
+
                     continue
-                    
+
             except Exception as e:
                 logger.error(f"🎯 Unexpected error with Client ID {client_id}: {e}")
                 # Clean up and continue
                 try:
-                    deallocate_client_id(client_id, "unexpected_error_cleanup") 
+                    deallocate_client_id(client_id, "unexpected_error_cleanup")
                 except:
                     pass
                 continue
-        
+
         logger.error("🎯 FAILED: All client IDs exhausted, no successful connection")
         return None
 
@@ -638,26 +664,28 @@ class IbConnectionPool:
         ib.disconnectedEvent += on_disconnected
         ib.errorEvent += on_error
 
-    async def _connect_ib_with_error_detection(self, connection: PooledConnection) -> Tuple[bool, Optional[int]]:
+    async def _connect_ib_with_error_detection(
+        self, connection: PooledConnection
+    ) -> Tuple[bool, Optional[int]]:
         """
         Connect an IB instance with enhanced error code detection.
-        
+
         Returns:
             Tuple of (success: bool, error_code: Optional[int])
         """
         error_code = None
         last_error = None
-        
+
         # Set up error capture
         def capture_error(reqId, errorCode, errorString, contract):
             nonlocal error_code, last_error
             error_code = errorCode
             last_error = errorString
             logger.debug(f"🎯 IB Error captured: {errorCode} - {errorString}")
-        
+
         # Temporarily capture errors
         connection.ib.errorEvent += capture_error
-        
+
         try:
             # Connect with timeout
             await asyncio.wait_for(
@@ -677,14 +705,18 @@ class IbConnectionPool:
                     # Quick validation test with very short timeout
                     await asyncio.wait_for(
                         connection.ib.reqCurrentTimeAsync(),
-                        timeout=5.0  # Very short timeout to detect hangs
+                        timeout=5.0,  # Very short timeout to detect hangs
                     )
                     connection.state = ConnectionState.CONNECTED
                     connection.metrics.connected_at = time.time()
-                    logger.info(f"✅ Created new IB connection with validation (client_id={connection.client_id})")
+                    logger.info(
+                        f"✅ Created new IB connection with validation (client_id={connection.client_id})"
+                    )
                     return True, None
                 except asyncio.TimeoutError:
-                    logger.error(f"🚨 SILENT CONNECTION detected for client {connection.client_id} - connection established but operations hang!")
+                    logger.error(
+                        f"🚨 SILENT CONNECTION detected for client {connection.client_id} - connection established but operations hang!"
+                    )
                     connection.state = ConnectionState.FAILED
                     # Disconnect the silent connection
                     try:
@@ -693,7 +725,9 @@ class IbConnectionPool:
                         pass
                     return False, error_code
                 except Exception as e:
-                    logger.error(f"🚨 Connection validation failed for client {connection.client_id}: {e}")
+                    logger.error(
+                        f"🚨 Connection validation failed for client {connection.client_id}: {e}"
+                    )
                     connection.state = ConnectionState.FAILED
                     return False, error_code
             else:
@@ -717,71 +751,89 @@ class IbConnectionPool:
                 connection.ib.errorEvent -= capture_error
             except:
                 pass
-    
+
     async def _connect_ib(self, connection: PooledConnection) -> bool:
         """Connect an IB instance with enhanced validation. (Legacy method for compatibility)"""
         success, _ = await self._connect_ib_with_error_detection(connection)
         return success
 
-    async def _validate_connection_before_handoff(self, connection: PooledConnection) -> bool:
+    async def _validate_connection_before_handoff(
+        self, connection: PooledConnection
+    ) -> bool:
         """
         Systematic validation before every connection handoff.
-        
+
         Implements the core principle: test isConnected() and reqCurrentTime()
         systematically before handing off any connection to ensure it's working.
-        
+
         Args:
             connection: The connection to validate
-            
+
         Returns:
             True if connection is valid and responsive, False otherwise
         """
         try:
             # 1. Basic connectivity check
             if not connection.ib.isConnected():
-                logger.debug(f"🔍 Connection {connection.client_id} failed isConnected() check")
+                logger.debug(
+                    f"🔍 Connection {connection.client_id} failed isConnected() check"
+                )
                 return False
-            
+
             # 2. API responsiveness test - this detects silent connections
-            logger.debug(f"🔍 Testing API responsiveness for connection {connection.client_id}")
+            logger.debug(
+                f"🔍 Testing API responsiveness for connection {connection.client_id}"
+            )
             await asyncio.wait_for(
                 connection.ib.reqCurrentTimeAsync(),
-                timeout=3.0  # Fast failure for quick responsiveness check
+                timeout=3.0,  # Fast failure for quick responsiveness check
             )
-            
+
             # 3. Mark as validated and update metrics
             connection.last_validated = time.time()
             logger.debug(f"✅ Connection {connection.client_id} validated successfully")
             return True
-            
+
         except asyncio.TimeoutError:
-            logger.warning(f"⏰ Connection {connection.client_id} failed reqCurrentTime timeout (3s) - possible silent connection")
+            logger.warning(
+                f"⏰ Connection {connection.client_id} failed reqCurrentTime timeout (3s) - possible silent connection"
+            )
             return False
         except Exception as e:
-            logger.warning(f"❌ Connection {connection.client_id} validation failed: {e}")
+            logger.warning(
+                f"❌ Connection {connection.client_id} validation failed: {e}"
+            )
             return False
 
-    async def test_connection_on_circuit_breaker_failure(self, connection: PooledConnection) -> bool:
+    async def test_connection_on_circuit_breaker_failure(
+        self, connection: PooledConnection
+    ) -> bool:
         """
         Test connection when circuit breaker detects API failures.
-        
+
         This integrates with the circuit breaker pattern to test connections
         when API operations start failing, allowing for proactive detection
         of connection issues.
-        
+
         Args:
             connection: The connection to test
-            
+
         Returns:
             True if connection is healthy, False if should be removed
         """
-        logger.info(f"🔄 Circuit breaker triggered - testing connection {connection.client_id}")
-        
+        logger.info(
+            f"🔄 Circuit breaker triggered - testing connection {connection.client_id}"
+        )
+
         if not await self._validate_connection_before_handoff(connection):
-            logger.warning(f"⚠️ Connection {connection.client_id} failed circuit breaker test - removing")
-            await self._remove_connection(connection.client_id, "circuit_breaker_failure")
+            logger.warning(
+                f"⚠️ Connection {connection.client_id} failed circuit breaker test - removing"
+            )
+            await self._remove_connection(
+                connection.client_id, "circuit_breaker_failure"
+            )
             return False
-        
+
         logger.info(f"✅ Connection {connection.client_id} passed circuit breaker test")
         return True
 

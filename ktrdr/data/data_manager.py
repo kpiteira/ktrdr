@@ -421,7 +421,7 @@ class DataManager:
     def _ensure_ib_connection(self) -> bool:
         """
         Check if IB connection is available by attempting actual connection.
-        
+
         Uses the same resilient approach as symbol validator instead of just
         checking pool stats which can be misleading.
 
@@ -448,12 +448,12 @@ class DataManager:
                 try:
                     async with await acquire_ib_connection(
                         purpose=ClientIdPurpose.DATA_MANAGER,
-                        requested_by="data_manager_connection_test"
+                        requested_by="data_manager_connection_test",
                     ) as connection:
                         # Quick test to verify connection works (like symbol validator)
                         await asyncio.wait_for(
                             connection.ib.reqCurrentTimeAsync(),
-                            timeout=5.0  # Short timeout to detect silent connections
+                            timeout=5.0,  # Short timeout to detect silent connections
                         )
                         return True
                 except Exception as e:
@@ -461,7 +461,7 @@ class DataManager:
                     return False
 
             return loop.run_until_complete(test_connection())
-            
+
         except Exception as e:
             logger.debug(f"IB connection availability check failed: {e}")
             return False
@@ -870,7 +870,7 @@ class DataManager:
                     what_to_show="TRADES",
                     max_retries=3,
                 ),
-                timeout=60.0  # 60 second timeout for data fetching operations
+                timeout=60.0,  # 60 second timeout for data fetching operations
             )
 
         try:
@@ -891,7 +891,9 @@ class DataManager:
                 return asyncio.run(fetch_async())
 
         except asyncio.TimeoutError:
-            logger.error(f"⏰ Data fetch timeout for {symbol} {timeframe} (60s limit) - possible IB Gateway issue")
+            logger.error(
+                f"⏰ Data fetch timeout for {symbol} {timeframe} (60s limit) - possible IB Gateway issue"
+            )
             return None
         except Exception as e:
             logger.error(f"Sync fetch wrapper failed for {symbol} {timeframe}: {e}")
@@ -1508,17 +1510,23 @@ class DataManager:
             validation_errors = quality_report.get_issues_by_type("validation_error")
             if validation_errors:
                 # Validation failed, use fallback method
-                logger.warning(f"Validation failed with {len(validation_errors)} errors, using fallback method")
+                logger.warning(
+                    f"Validation failed with {len(validation_errors)} errors, using fallback method"
+                )
                 total_outliers = self._detect_outliers_fallback(
                     df, std_threshold, columns, context_window, log_outliers
                 )
             else:
                 # Count outliers from the quality report
                 outlier_issues = quality_report.get_issues_by_type("price_outliers")
-                total_outliers = sum(issue.metadata.get("count", 0) for issue in outlier_issues)
+                total_outliers = sum(
+                    issue.metadata.get("count", 0) for issue in outlier_issues
+                )
         except Exception as e:
             # If validation raises an exception, fall back to simple outlier detection
-            logger.warning(f"Validation-based outlier detection failed ({e}), using fallback method")
+            logger.warning(
+                f"Validation-based outlier detection failed ({e}), using fallback method"
+            )
             total_outliers = self._detect_outliers_fallback(
                 df, std_threshold, columns, context_window, log_outliers
             )
@@ -1542,39 +1550,45 @@ class DataManager:
     ) -> int:
         """
         Fallback outlier detection using simple statistical methods.
-        
+
         Used when the main validation-based detection fails due to timezone or other issues.
         """
         if columns is None:
             columns = ["open", "high", "low", "close"]
-        
+
         # Filter to available columns
         columns = [col for col in columns if col in df.columns]
         if not columns:
             return 0
-            
+
         total_outliers = 0
-        
+
         for column in columns:
             if context_window:
                 # Rolling z-score detection
-                rolling_mean = df[column].rolling(window=context_window, center=True).mean()
-                rolling_std = df[column].rolling(window=context_window, center=True).std()
+                rolling_mean = (
+                    df[column].rolling(window=context_window, center=True).mean()
+                )
+                rolling_std = (
+                    df[column].rolling(window=context_window, center=True).std()
+                )
                 z_scores = (df[column] - rolling_mean) / rolling_std
             else:
                 # Global z-score detection
                 mean_val = df[column].mean()
                 std_val = df[column].std()
                 z_scores = (df[column] - mean_val) / std_val
-            
+
             # Count outliers
             outliers = abs(z_scores) > std_threshold
             column_outlier_count = outliers.sum()
             total_outliers += column_outlier_count
-            
+
             if column_outlier_count > 0 and log_outliers:
-                logger.warning(f"Found {column_outlier_count} outliers in {column} column")
-        
+                logger.warning(
+                    f"Found {column_outlier_count} outliers in {column} column"
+                )
+
         return total_outliers
 
     @log_entry_exit(logger=logger, log_args=True)

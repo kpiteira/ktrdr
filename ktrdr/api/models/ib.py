@@ -549,7 +549,7 @@ class IbLoadResponse(BaseModel):
 class SymbolInfo(BaseModel):
     """
     Information about a discovered symbol.
-    
+
     Attributes:
         symbol: The normalized symbol
         instrument_type: Type of instrument (stock, forex, futures, etc.)
@@ -561,7 +561,7 @@ class SymbolInfo(BaseModel):
         validation_count: Number of times this symbol has been validated
         is_active: Whether this symbol is currently tradeable
     """
-    
+
     symbol: str = Field(..., description="The normalized symbol")
     instrument_type: str = Field(..., description="Type of instrument")
     exchange: str = Field(..., description="Primary exchange")
@@ -571,7 +571,7 @@ class SymbolInfo(BaseModel):
     last_validated: float = Field(..., description="Timestamp of last validation")
     validation_count: int = Field(default=1, description="Number of validations")
     is_active: bool = Field(default=True, description="Whether symbol is tradeable")
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -583,7 +583,7 @@ class SymbolInfo(BaseModel):
                 "discovered_at": 1735689600.0,
                 "last_validated": 1735689600.0,
                 "validation_count": 1,
-                "is_active": True
+                "is_active": True,
             }
         }
     )
@@ -592,39 +592,36 @@ class SymbolInfo(BaseModel):
 class SymbolDiscoveryRequest(BaseModel):
     """
     Request to discover symbol information.
-    
+
     Attributes:
         symbol: Symbol to discover (e.g., 'AAPL', 'EURUSD')
         force_refresh: Force re-validation even if cached
     """
-    
+
     symbol: str = Field(..., description="Symbol to discover")
     force_refresh: bool = Field(default=False, description="Force re-validation")
-    
+
     model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "symbol": "EURUSD",
-                "force_refresh": False
-            }
-        }
+        json_schema_extra={"example": {"symbol": "EURUSD", "force_refresh": False}}
     )
 
 
 class SymbolDiscoveryResponse(BaseModel):
     """
     Response from symbol discovery operation.
-    
+
     Attributes:
         symbol_info: Discovered symbol information (null if not found)
         cached: Whether result came from cache
         discovery_time_ms: Time taken to discover symbol
     """
-    
-    symbol_info: Optional[SymbolInfo] = Field(None, description="Discovered symbol info")
+
+    symbol_info: Optional[SymbolInfo] = Field(
+        None, description="Discovered symbol info"
+    )
     cached: bool = Field(..., description="Whether result came from cache")
     discovery_time_ms: float = Field(..., description="Discovery time in milliseconds")
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -637,10 +634,10 @@ class SymbolDiscoveryResponse(BaseModel):
                     "discovered_at": 1735689600.0,
                     "last_validated": 1735689600.0,
                     "validation_count": 1,
-                    "is_active": True
+                    "is_active": True,
                 },
                 "cached": False,
-                "discovery_time_ms": 125.5
+                "discovery_time_ms": 125.5,
             }
         }
     )
@@ -649,19 +646,21 @@ class SymbolDiscoveryResponse(BaseModel):
 class DiscoveredSymbolsResponse(BaseModel):
     """
     Response containing list of discovered symbols.
-    
+
     Attributes:
         symbols: List of discovered symbols
         total_count: Total number of discovered symbols
         instrument_types: Count by instrument type
         cache_stats: Symbol discovery cache statistics
     """
-    
+
     symbols: List[SymbolInfo] = Field(..., description="List of discovered symbols")
     total_count: int = Field(..., description="Total number of symbols")
-    instrument_types: Dict[str, int] = Field(..., description="Count by instrument type")
+    instrument_types: Dict[str, int] = Field(
+        ..., description="Count by instrument type"
+    )
     cache_stats: Dict[str, Any] = Field(..., description="Cache statistics")
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -675,19 +674,12 @@ class DiscoveredSymbolsResponse(BaseModel):
                         "discovered_at": 1735689600.0,
                         "last_validated": 1735689600.0,
                         "validation_count": 5,
-                        "is_active": True
+                        "is_active": True,
                     }
                 ],
                 "total_count": 15,
-                "instrument_types": {
-                    "stock": 10,
-                    "forex": 4,
-                    "futures": 1
-                },
-                "cache_stats": {
-                    "symbol_discoveries": 15,
-                    "symbol_cache_hits": 45
-                }
+                "instrument_types": {"stock": 10, "forex": 4, "futures": 1},
+                "cache_stats": {"symbol_discoveries": 15, "symbol_cache_hits": 45},
             }
         }
     )

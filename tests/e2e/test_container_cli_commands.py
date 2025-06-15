@@ -149,48 +149,68 @@ class TestContainerCLIResilience:
     def test_ib_cleanup_with_resilience(self, cli_runner):
         """Test IB cleanup command works with resilience features."""
         result = cli_runner.run_command(["ib-cleanup", "--verbose"])
-        
+
         # Should succeed or fail gracefully (2 = command line error is acceptable)
-        assert result.returncode in [0, 1, 2], f"Unexpected return code: {result.returncode}"
-        
+        assert result.returncode in [
+            0,
+            1,
+            2,
+        ], f"Unexpected return code: {result.returncode}"
+
         # Should have meaningful output
         assert len(result.stdout) > 0 or len(result.stderr) > 0
-        
+
         # Should not crash or hang
-        assert result.elapsed_time < 30.0, f"IB cleanup too slow: {result.elapsed_time:.2f}s"
-        
+        assert (
+            result.elapsed_time < 30.0
+        ), f"IB cleanup too slow: {result.elapsed_time:.2f}s"
+
         if result.success:
             # Success output should mention cleanup activities
             output = result.stdout.lower()
-            assert any(keyword in output for keyword in 
-                      ["cleanup", "connection", "pool", "client"]), \
-                   f"Expected cleanup keywords in output: {result.stdout}"
+            assert any(
+                keyword in output
+                for keyword in ["cleanup", "connection", "pool", "client"]
+            ), f"Expected cleanup keywords in output: {result.stdout}"
 
     def test_test_ib_with_resilience_features(self, cli_runner):
         """Test that test-ib command works with new resilience implementation."""
         result = cli_runner.run_command(["test-ib", "--symbol", "AAPL", "--verbose"])
-        
+
         # Should handle gracefully even if IB not available (2 = command line error is acceptable)
-        assert result.returncode in [0, 1, 2], f"Unexpected return code: {result.returncode}"
-        
+        assert result.returncode in [
+            0,
+            1,
+            2,
+        ], f"Unexpected return code: {result.returncode}"
+
         # Should complete within reasonable time
-        assert result.elapsed_time < 45.0, f"IB test too slow: {result.elapsed_time:.2f}s"
-        
+        assert (
+            result.elapsed_time < 45.0
+        ), f"IB test too slow: {result.elapsed_time:.2f}s"
+
         # Output should be meaningful
         output = result.stdout + result.stderr
         assert len(output) > 100, "Expected substantial output from IB test"
-        
+
         # Should show resilience features in action
         if result.success:
             output_lower = output.lower()
             # Look for signs of our resilience implementation
             resilience_indicators = [
-                "connection pool", "client id", "validation", 
-                "systematic", "preference", "pool"
+                "connection pool",
+                "client id",
+                "validation",
+                "systematic",
+                "preference",
+                "pool",
             ]
-            found_indicators = [ind for ind in resilience_indicators if ind in output_lower]
-            assert len(found_indicators) > 0, \
-                   f"Expected resilience indicators in output. Found: {found_indicators}"
+            found_indicators = [
+                ind for ind in resilience_indicators if ind in output_lower
+            ]
+            assert (
+                len(found_indicators) > 0
+            ), f"Expected resilience indicators in output. Found: {found_indicators}"
 
 
 class TestContainerCLIBasics:
@@ -328,7 +348,7 @@ class TestContainerStrategyCLICommands:
         """Test strategy list command."""
         if not cli_runner.check_cli_available("strategy-list"):
             pytest.skip("strategy-list command not available in container")
-            
+
         result = cli_runner.run_command(["strategy-list"])
 
         # Should succeed even if no strategies found
@@ -341,7 +361,7 @@ class TestContainerStrategyCLICommands:
         """Test strategy list with validation."""
         if not cli_runner.check_cli_available("strategy-list"):
             pytest.skip("strategy-list command not available in container")
-            
+
         result = cli_runner.run_command(["strategy-list", "--validate"])
 
         # Should succeed
@@ -355,7 +375,7 @@ class TestContainerIndicatorCLICommands:
         """Test compute-indicator command help."""
         if not cli_runner.check_cli_available("compute-indicator"):
             pytest.skip("compute-indicator command not available in container")
-            
+
         result = cli_runner.run_command(["compute-indicator", "--help"])
 
         assert result.success, f"compute-indicator help failed: {result.stderr}"
@@ -366,7 +386,7 @@ class TestContainerIndicatorCLICommands:
         """Test compute-indicator with invalid parameters."""
         if not cli_runner.check_cli_available("compute-indicator"):
             pytest.skip("compute-indicator command not available in container")
-            
+
         result = cli_runner.run_command(
             [
                 "compute-indicator",
@@ -432,7 +452,7 @@ class TestContainerCLIIntegration:
         """Test that CLI can access data directory."""
         if not cli_runner.check_cli_available("show-data"):
             pytest.skip("show-data command not available in container")
-            
+
         result = cli_runner.run_command(
             ["show-data", "AAPL", "--mode", "local", "--rows", "1"]
         )

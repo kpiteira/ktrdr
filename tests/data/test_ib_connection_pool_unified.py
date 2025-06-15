@@ -153,14 +153,16 @@ class TestIbConnectionPool:
     ):
         """Test connection acquisition failure."""
         # Mock client ID allocation failure BEFORE starting pool
-        mock_client_id_registry["allocate"].side_effect = [None]  # Override side_effect with None
-        
+        mock_client_id_registry["allocate"].side_effect = [
+            None
+        ]  # Override side_effect with None
+
         await connection_pool.start()
 
         with (
             patch("ktrdr.data.ib_connection_pool.IB", return_value=mock_ib_instance),
             patch.object(connection_pool, "_connect_ib", return_value=True),
-            pytest.raises(ConnectionError, match="Could not acquire connection")
+            pytest.raises(ConnectionError, match="Could not acquire connection"),
         ):
             async with connection_pool.acquire_connection(
                 purpose=ClientIdPurpose.DATA_MANAGER, requested_by="test_component"

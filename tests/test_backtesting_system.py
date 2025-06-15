@@ -149,7 +149,9 @@ class TestPositionManager:
         # Check that portfolio value increases with higher prices (directional test)
         if pm.current_position:
             # Portfolio should be profitable at higher price than entry
-            assert portfolio_value_higher > 100000  # Should show gains above initial capital
+            assert (
+                portfolio_value_higher > 100000
+            )  # Should show gains above initial capital
 
 
 class TestPerformanceTracker:
@@ -242,7 +244,9 @@ class TestPerformanceTracker:
         assert metrics.total_trades == 3
         assert metrics.winning_trades == 2
         assert metrics.losing_trades == 1
-        assert metrics.win_rate == pytest.approx(0.6667, rel=1e-2)  # Decimal ratio, not percentage
+        assert metrics.win_rate == pytest.approx(
+            0.6667, rel=1e-2
+        )  # Decimal ratio, not percentage
         assert metrics.total_return == 6000  # Final - initial
 
 
@@ -265,18 +269,9 @@ class TestBacktestingEngine:
             ],
             "fuzzy_sets": {
                 "rsi": {
-                    "oversold": {
-                        "type": "triangular",
-                        "parameters": [0, 10, 30]
-                    },
-                    "neutral": {
-                        "type": "triangular",
-                        "parameters": [25, 50, 75]
-                    },
-                    "overbought": {
-                        "type": "triangular",
-                        "parameters": [70, 90, 100]
-                    }
+                    "oversold": {"type": "triangular", "parameters": [0, 10, 30]},
+                    "neutral": {"type": "triangular", "parameters": [25, 50, 75]},
+                    "overbought": {"type": "triangular", "parameters": [70, 90, 100]},
                 }
             },
             "model": {

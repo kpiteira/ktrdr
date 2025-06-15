@@ -35,12 +35,12 @@ from ktrdr.cli.ib_diagnosis import (
     detect_ib_issue_from_api_response,
     format_ib_diagnostic_message,
     get_ib_recovery_suggestions,
-    should_show_ib_diagnosis
+    should_show_ib_diagnosis,
 )
 from ktrdr.cli.error_handler import (
     handle_cli_error,
     handle_api_response_error,
-    display_ib_connection_required_message
+    display_ib_connection_required_message,
 )
 
 # Setup logging and console
@@ -607,7 +607,7 @@ async def _process_data_load_response(
     success = response.get("success", False)
     data = response.get("data", {})
     error_info = response.get("error")
-    
+
     # Check for IB diagnosis in the response
     ib_diagnosis = None
     if error_info and "ib_diagnosis" in error_info:
@@ -632,10 +632,16 @@ async def _process_data_load_response(
                     # Show IB diagnostic message for partial loads
                     console.print(f"\n{ib_diagnosis['clear_message']}")
                     if verbose:
-                        from ktrdr.cli.ib_diagnosis import IBProblemType, get_ib_recovery_suggestions
+                        from ktrdr.cli.ib_diagnosis import (
+                            IBProblemType,
+                            get_ib_recovery_suggestions,
+                        )
+
                         try:
-                            problem_type = IBProblemType(ib_diagnosis['problem_type'])
-                            console.print(f"\n{get_ib_recovery_suggestions(problem_type)}")
+                            problem_type = IBProblemType(ib_diagnosis["problem_type"])
+                            console.print(
+                                f"\n{get_ib_recovery_suggestions(problem_type)}"
+                            )
                         except ValueError:
                             pass
                 elif error_info:
@@ -682,14 +688,18 @@ async def _process_data_load_response(
 
         if not quiet:
             console.print(f"❌ [bold red]Data loading failed![/bold red]")
-            
+
             if ib_diagnosis:
                 # Show IB diagnostic message for failures
                 console.print(f"\n{ib_diagnosis['clear_message']}")
                 if verbose:
-                    from ktrdr.cli.ib_diagnosis import IBProblemType, get_ib_recovery_suggestions
+                    from ktrdr.cli.ib_diagnosis import (
+                        IBProblemType,
+                        get_ib_recovery_suggestions,
+                    )
+
                     try:
-                        problem_type = IBProblemType(ib_diagnosis['problem_type'])
+                        problem_type = IBProblemType(ib_diagnosis["problem_type"])
                         console.print(f"\n{get_ib_recovery_suggestions(problem_type)}")
                     except ValueError:
                         pass

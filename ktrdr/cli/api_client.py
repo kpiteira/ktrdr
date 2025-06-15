@@ -15,9 +15,9 @@ from rich.console import Console
 from ktrdr.logging import get_logger
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.cli.ib_diagnosis import (
-    detect_ib_issue_from_api_response, 
+    detect_ib_issue_from_api_response,
     format_ib_diagnostic_message,
-    should_show_ib_diagnosis
+    should_show_ib_diagnosis,
 )
 
 logger = get_logger(__name__)
@@ -55,23 +55,27 @@ class KtrdrApiClient:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-    def _enhance_error_with_ib_diagnosis(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _enhance_error_with_ib_diagnosis(
+        self, response_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Enhance API response with IB diagnosis if applicable.
-        
+
         Args:
             response_data: Original API response
-            
+
         Returns:
             Enhanced response with IB diagnostic information
         """
         # Check if this is an error response that might be IB-related
         if not should_show_ib_diagnosis(response_data):
             return response_data
-        
+
         # Detect IB issue and enhance the response
-        problem_type, clear_message, details = detect_ib_issue_from_api_response(response_data)
-        
+        problem_type, clear_message, details = detect_ib_issue_from_api_response(
+            response_data
+        )
+
         if problem_type and clear_message:
             # Create enhanced error info
             error_info = response_data.get("error", {})
@@ -80,17 +84,16 @@ class KtrdrApiClient:
                 "ib_diagnosis": {
                     "problem_type": problem_type.value,
                     "clear_message": clear_message,
-                    "details": details
+                    "details": details,
                 },
-                "message": format_ib_diagnostic_message(problem_type, clear_message, details)
+                "message": format_ib_diagnostic_message(
+                    problem_type, clear_message, details
+                ),
             }
-            
+
             # Return enhanced response
-            return {
-                **response_data,
-                "error": enhanced_error
-            }
-        
+            return {**response_data, "error": enhanced_error}
+
         return response_data
 
     async def _make_request(

@@ -95,10 +95,12 @@ class IbService:
             pool = await get_connection_pool()
             pool_stats = pool.get_pool_status()
             ib_available = pool_stats["available_connections"] > 0
-            
+
             # PHASE 4: Add connection resilience information
-            logger.info("🔍 Enhanced IB status - including connection resilience metrics")
-            
+            logger.info(
+                "🔍 Enhanced IB status - including connection resilience metrics"
+            )
+
         except Exception:
             ib_available = False
             pool_stats = {}
@@ -211,40 +213,49 @@ class IbService:
 
                 # Test actual API calls with timeouts to detect silent connections
                 ib = connection.ib
-                
+
                 # Level 1: Basic API test (fast)
                 accounts = await asyncio.wait_for(
                     ib.reqManagedAcctsAsync(), timeout=10.0
                 )
                 if not accounts:
-                    logger.warning(f"❌ Level 1 failed: No managed accounts (client_id: {connection.client_id})")
+                    logger.warning(
+                        f"❌ Level 1 failed: No managed accounts (client_id: {connection.client_id})"
+                    )
                     raise Exception("No managed accounts returned")
-                
+
                 # Level 2: Contract details test (tests actual market data access)
                 from ib_insync import Stock
+
                 test_contract = Stock("AAPL", "SMART", "USD")
                 contract_details = await asyncio.wait_for(
                     ib.reqContractDetailsAsync(test_contract), timeout=15.0
                 )
                 if not contract_details:
-                    logger.warning(f"❌ Level 2 failed: Contract details failed (client_id: {connection.client_id})")
+                    logger.warning(
+                        f"❌ Level 2 failed: Contract details failed (client_id: {connection.client_id})"
+                    )
                     raise Exception("Contract details request failed")
-                
+
                 # Level 3: Current time test (validates server communication)
                 server_time = await asyncio.wait_for(
                     ib.reqCurrentTimeAsync(), timeout=5.0
                 )
                 if not server_time:
-                    logger.warning(f"❌ Level 3 failed: Server time failed (client_id: {connection.client_id})")
+                    logger.warning(
+                        f"❌ Level 3 failed: Server time failed (client_id: {connection.client_id})"
+                    )
                     raise Exception("Server time request failed")
-                
+
                 api_test_ok = True
                 logger.debug(
                     f"✅ Enhanced IB health check passed: {len(accounts)} accounts, contract details OK, server time OK (client_id: {connection.client_id})"
                 )
-                
+
         except asyncio.TimeoutError as e:
-            logger.error(f"❌ IB health check TIMEOUT: {e} - This indicates a silent connection issue!")
+            logger.error(
+                f"❌ IB health check TIMEOUT: {e} - This indicates a silent connection issue!"
+            )
             api_test_ok = False
             connection_ok = False
         except Exception as e:
@@ -292,26 +303,28 @@ class IbService:
     async def get_connection_resilience_status(self) -> Dict[str, Any]:
         """
         Get detailed connection resilience status from Phases 1-3 implementation.
-        
+
         Returns:
             Dictionary with detailed resilience metrics and validation results
         """
         logger.info("🔍 PHASE 4: Testing connection resilience features")
-        
+
         try:
             pool = await get_connection_pool()
             pool_stats = pool.get_pool_status()
             connection_details = pool.get_connection_details()
-            
+
             # Test systematic validation (Phase 1)
             validation_results = await self._test_systematic_validation(pool)
-            
-            # Test garbage collection status (Phase 2) 
-            gc_status = self._analyze_garbage_collection_status(pool_stats, connection_details)
-            
+
+            # Test garbage collection status (Phase 2)
+            gc_status = self._analyze_garbage_collection_status(
+                pool_stats, connection_details
+            )
+
             # Test Client ID 1 preference (Phase 3)
             client_id_status = self._analyze_client_id_preference(connection_details)
-            
+
             resilience_status = {
                 "phase_1_systematic_validation": validation_results,
                 "phase_2_garbage_collection": gc_status,
@@ -327,10 +340,10 @@ class IbService:
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-            
+
             logger.info("✅ Connection resilience status completed successfully")
             return resilience_status
-            
+
         except Exception as e:
             logger.error(f"❌ Connection resilience status failed: {e}")
             return {
@@ -341,94 +354,110 @@ class IbService:
                 "overall_resilience_score": 0,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
-    
+
     async def _test_systematic_validation(self, pool) -> Dict[str, Any]:
         """Test Phase 1: Systematic connection validation before handoff."""
         try:
             # Test if the validation logic is configured correctly by checking pool status
             pool_stats = pool.get_pool_status()
-            
+
             # Check if validation method exists on the pool
-            has_validation_method = hasattr(pool, '_validate_connection_before_handoff')
-            
+            has_validation_method = hasattr(pool, "_validate_connection_before_handoff")
+
             if has_validation_method:
                 return {
                     "status": "working",
                     "validation_enabled": True,
                     "validation_method_exists": True,
                     "pool_running": pool_stats.get("running", False),
-                    "description": "Systematic validation before handoff is configured and ready"
+                    "description": "Systematic validation before handoff is configured and ready",
                 }
             else:
                 return {
                     "status": "failed",
                     "validation_enabled": False,
                     "validation_method_exists": False,
-                    "description": "Systematic validation method not found"
+                    "description": "Systematic validation method not found",
                 }
         except Exception as e:
             return {
                 "status": "failed",
                 "validation_enabled": False,
                 "error": str(e),
-                "description": "Systematic validation test failed"
+                "description": "Systematic validation test failed",
             }
-    
-    def _analyze_garbage_collection_status(self, pool_stats: Dict, connection_details: List) -> Dict[str, Any]:
+
+    def _analyze_garbage_collection_status(
+        self, pool_stats: Dict, connection_details: List
+    ) -> Dict[str, Any]:
         """Analyze Phase 2: Garbage collection with 5min idle timeout."""
         try:
             current_time = time.time()
-            max_idle_time = pool_stats.get("configuration", {}).get("max_idle_time", 300)  # 5 minutes
-            
+            max_idle_time = pool_stats.get("configuration", {}).get(
+                "max_idle_time", 300
+            )  # 5 minutes
+
             # Analyze connection ages and idle times
             idle_connections = []
             active_connections = []
-            
+
             for conn in connection_details:
                 last_used = conn.get("last_used", current_time)
                 idle_time = current_time - last_used
-                
+
                 if conn.get("in_use", False):
-                    active_connections.append({
-                        "client_id": conn.get("client_id"),
-                        "idle_time": idle_time,
-                        "state": "active"
-                    })
+                    active_connections.append(
+                        {
+                            "client_id": conn.get("client_id"),
+                            "idle_time": idle_time,
+                            "state": "active",
+                        }
+                    )
                 else:
-                    idle_connections.append({
-                        "client_id": conn.get("client_id"),
-                        "idle_time": idle_time,
-                        "state": "idle",
-                        "will_be_cleaned": idle_time > max_idle_time
-                    })
-            
+                    idle_connections.append(
+                        {
+                            "client_id": conn.get("client_id"),
+                            "idle_time": idle_time,
+                            "state": "idle",
+                            "will_be_cleaned": idle_time > max_idle_time,
+                        }
+                    )
+
             return {
                 "status": "working",
                 "max_idle_time_seconds": max_idle_time,
                 "idle_connections_count": len(idle_connections),
                 "active_connections_count": len(active_connections),
-                "connections_ready_for_cleanup": len([c for c in idle_connections if c["will_be_cleaned"]]),
-                "health_check_interval": pool_stats.get("configuration", {}).get("health_check_interval", 60),
-                "description": f"Garbage collection configured for {max_idle_time}s idle timeout"
+                "connections_ready_for_cleanup": len(
+                    [c for c in idle_connections if c["will_be_cleaned"]]
+                ),
+                "health_check_interval": pool_stats.get("configuration", {}).get(
+                    "health_check_interval", 60
+                ),
+                "description": f"Garbage collection configured for {max_idle_time}s idle timeout",
             }
         except Exception as e:
             return {
                 "status": "error",
                 "error": str(e),
-                "description": "Failed to analyze garbage collection status"
+                "description": "Failed to analyze garbage collection status",
             }
-    
+
     def _analyze_client_id_preference(self, connection_details: List) -> Dict[str, Any]:
         """Analyze Phase 3: Client ID 1 preference with incremental fallback."""
         try:
-            client_ids_used = [conn.get("client_id") for conn in connection_details if conn.get("client_id") is not None]
+            client_ids_used = [
+                conn.get("client_id")
+                for conn in connection_details
+                if conn.get("client_id") is not None
+            ]
             client_ids_used.sort()
-            
+
             # Check if lower-numbered client IDs are being preferred
             has_client_id_1 = 1 in client_ids_used
             lowest_id = min(client_ids_used) if client_ids_used else None
             sequential_preference = self._check_sequential_preference(client_ids_used)
-            
+
             return {
                 "status": "working",
                 "client_ids_in_use": client_ids_used,
@@ -436,52 +465,56 @@ class IbService:
                 "lowest_client_id_used": lowest_id,
                 "sequential_preference_detected": sequential_preference,
                 "total_active_connections": len(client_ids_used),
-                "description": f"Client ID preference working - lowest ID in use: {lowest_id}"
+                "description": f"Client ID preference working - lowest ID in use: {lowest_id}",
             }
         except Exception as e:
             return {
-                "status": "error", 
+                "status": "error",
                 "error": str(e),
-                "description": "Failed to analyze client ID preference"
+                "description": "Failed to analyze client ID preference",
             }
-    
+
     def _check_sequential_preference(self, client_ids: List[int]) -> bool:
         """Check if client IDs show sequential preference (1, 2, 3...)."""
         if not client_ids:
             return False
-        
+
         # Check if we're using consecutive IDs starting from a low number
         client_ids_sorted = sorted(client_ids)
         if len(client_ids_sorted) < 2:
             return client_ids_sorted[0] <= 10  # Single connection using low ID
-        
+
         # Check for consecutive sequences
         for i in range(len(client_ids_sorted) - 1):
             if client_ids_sorted[i + 1] - client_ids_sorted[i] != 1:
                 return False
-        
+
         return client_ids_sorted[0] <= 10  # Sequential and starting from low number
-    
-    def _calculate_resilience_score(self, validation: Dict, gc: Dict, client_id: Dict) -> float:
+
+    def _calculate_resilience_score(
+        self, validation: Dict, gc: Dict, client_id: Dict
+    ) -> float:
         """Calculate overall resilience score (0-100)."""
         score = 0.0
-        
+
         # Phase 1: Systematic validation (35 points)
         if validation.get("status") == "working":
             score += 35.0
-        
+
         # Phase 2: Garbage collection (30 points)
         if gc.get("status") == "working":
             score += 30.0
-        
+
         # Phase 3: Client ID preference (35 points)
         if client_id.get("status") == "working":
             score += 35.0
             # Bonus for actually using low client IDs
             lowest_id = client_id.get("lowest_client_id_used")
-            if client_id.get("using_client_id_1") or (lowest_id is not None and lowest_id <= 10):
+            if client_id.get("using_client_id_1") or (
+                lowest_id is not None and lowest_id <= 10
+            ):
                 score += 5.0  # Bonus up to 40 points for this phase
-        
+
         return min(100.0, score)
 
     async def get_config(self) -> IbConfigInfo:

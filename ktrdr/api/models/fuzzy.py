@@ -351,18 +351,21 @@ class FuzzyConfigsResponse(ApiResponse[List[FuzzyConfig]]):
 
 # Models for the new fuzzy overlay API (slice 4)
 
+
 class FuzzyMembershipPoint(BaseModel):
     """
     A single point in a fuzzy membership time series.
-    
+
     Attributes:
         timestamp (str): ISO format timestamp
         value (Optional[float]): Membership value (0.0-1.0) or None for missing data
     """
-    
+
     timestamp: str = Field(..., description="ISO format timestamp")
-    value: Optional[float] = Field(None, description="Membership value (0.0-1.0) or None for missing data")
-    
+    value: Optional[float] = Field(
+        None, description="Membership value (0.0-1.0) or None for missing data"
+    )
+
     @field_validator("value")
     @classmethod
     def validate_membership_value(cls, v: Optional[float]) -> Optional[float]:
@@ -375,15 +378,17 @@ class FuzzyMembershipPoint(BaseModel):
 class FuzzySetMembership(BaseModel):
     """
     Membership data for a single fuzzy set over time.
-    
+
     Attributes:
         set (str): Name of the fuzzy set (e.g., "low", "neutral", "high")
         membership (List[FuzzyMembershipPoint]): Time series of membership values
     """
-    
+
     set: str = Field(..., description="Name of the fuzzy set")
-    membership: List[FuzzyMembershipPoint] = Field(..., description="Time series of membership values")
-    
+    membership: List[FuzzyMembershipPoint] = Field(
+        ..., description="Time series of membership values"
+    )
+
     @field_validator("set")
     @classmethod
     def validate_set_name(cls, v: str) -> str:
@@ -400,19 +405,23 @@ class FuzzySetMembership(BaseModel):
 class FuzzyOverlayResponse(BaseModel):
     """
     Response model for the GET /fuzzy/data endpoint.
-    
+
     Attributes:
         symbol (str): Trading symbol
         timeframe (str): Data timeframe
         data (Dict[str, List[FuzzySetMembership]]): Fuzzy overlay data by indicator
         warnings (Optional[List[str]]): Warning messages for invalid indicators
     """
-    
+
     symbol: str = Field(..., description="Trading symbol")
     timeframe: str = Field(..., description="Data timeframe")
-    data: Dict[str, List[FuzzySetMembership]] = Field(..., description="Fuzzy overlay data by indicator")
-    warnings: Optional[List[str]] = Field(None, description="Warning messages for invalid indicators")
-    
+    data: Dict[str, List[FuzzySetMembership]] = Field(
+        ..., description="Fuzzy overlay data by indicator"
+    )
+    warnings: Optional[List[str]] = Field(
+        None, description="Warning messages for invalid indicators"
+    )
+
     @field_validator("symbol")
     @classmethod
     def validate_symbol(cls, v: str) -> str:
@@ -420,7 +429,7 @@ class FuzzyOverlayResponse(BaseModel):
         if not v.strip():
             raise ValueError("Symbol cannot be empty")
         return v.strip().upper()
-    
+
     @field_validator("timeframe")
     @classmethod
     def validate_timeframe(cls, v: str) -> str:
@@ -428,22 +437,26 @@ class FuzzyOverlayResponse(BaseModel):
         if not v.strip():
             raise ValueError("Timeframe cannot be empty")
         return v.strip()
-    
+
     @model_validator(mode="after")
     def validate_data_consistency(self) -> "FuzzyOverlayResponse":
         """Validate that data is consistent."""
         if not self.data:
             # Empty data is allowed (e.g., no valid indicators)
             return self
-        
+
         # Check that all indicators have at least one fuzzy set
         for indicator_name, fuzzy_sets in self.data.items():
             if not fuzzy_sets:
-                raise ValueError(f"Indicator '{indicator_name}' must have at least one fuzzy set")
-            
+                raise ValueError(
+                    f"Indicator '{indicator_name}' must have at least one fuzzy set"
+                )
+
             # Check that fuzzy set names are unique within each indicator
             set_names = [fs.set for fs in fuzzy_sets]
             if len(set_names) != len(set(set_names)):
-                raise ValueError(f"Fuzzy set names must be unique for indicator '{indicator_name}'")
-        
+                raise ValueError(
+                    f"Fuzzy set names must be unique for indicator '{indicator_name}'"
+                )
+
         return self

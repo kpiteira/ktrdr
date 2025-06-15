@@ -27,7 +27,7 @@ from ktrdr.cli.ib_diagnosis import (
     format_ib_diagnostic_message,
     get_ib_recovery_suggestions,
     should_show_ib_diagnosis,
-    IBProblemType
+    IBProblemType,
 )
 from ktrdr.cli.error_handler import display_ib_connection_required_message
 
@@ -47,28 +47,32 @@ ib_app = typer.Typer(
 def handle_ib_error(e: Exception, verbose: bool = False):
     """
     Enhanced error handling for IB commands that detects IB Gateway issues.
-    
+
     Args:
         e: Exception that occurred
         verbose: Whether to show verbose error information
     """
     # Check if this is a DataError with API response details
-    if isinstance(e, DataError) and hasattr(e, 'details'):
+    if isinstance(e, DataError) and hasattr(e, "details"):
         details = e.details
-        
+
         # Check if there's an API response in the details
-        if 'error_detail' in details:
-            api_response = details['error_detail']
-            
+        if "error_detail" in details:
+            api_response = details["error_detail"]
+
             # Try to detect IB issues from the API response
-            problem_type, clear_message, diag_details = detect_ib_issue_from_api_response(api_response)
-            
+            problem_type, clear_message, diag_details = (
+                detect_ib_issue_from_api_response(api_response)
+            )
+
             if problem_type and clear_message:
                 error_console.print(f"\n{clear_message}")
                 if verbose:
-                    error_console.print(f"\n{get_ib_recovery_suggestions(problem_type)}")
+                    error_console.print(
+                        f"\n{get_ib_recovery_suggestions(problem_type)}"
+                    )
                 return
-    
+
     # Fallback to standard error handling
     error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
     if verbose:
@@ -153,8 +157,6 @@ async def _test_connection_async(
             error_code="CLI-IBTestError",
             details={"symbol": symbol, "timeout": timeout, "error": str(e)},
         ) from e
-
-
 
 
 @ib_app.command("cleanup")

@@ -360,7 +360,7 @@ class TestIbDataFetcherUnified:
         assert call_count == 2
         assert fetcher.metrics["retries_performed"] == 1
         # Note: pace_violations_handled metric might be tracked differently
-        
+
         # Verify pace manager error handling was called
         fetcher.pace_manager.handle_ib_error_async.assert_called_once()
 

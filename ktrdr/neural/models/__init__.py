@@ -3,7 +3,4 @@
 from .base_model import BaseNeuralModel
 from .mlp import MLPTradingModel
 
-__all__ = [
-    "BaseNeuralModel",
-    "MLPTradingModel"
-]
+__all__ = ["BaseNeuralModel", "MLPTradingModel"]

@@ -151,26 +151,22 @@ async def get_ib_resilience_status(
 ) -> ApiResponse[Dict[str, Any]]:
     """
     Get comprehensive connection resilience status.
-    
+
     Tests and reports on all connection resilience phases:
     - Phase 1: Systematic connection validation before handoff
-    - Phase 2: Garbage collection with 5-minute idle timeout  
+    - Phase 2: Garbage collection with 5-minute idle timeout
     - Phase 3: Client ID 1 preference with incremental fallback
-    
+
     Returns detailed metrics and an overall resilience score (0-100).
     """
     logger.info("🔍 PHASE 4: IB resilience status endpoint accessed")
-    
+
     try:
         resilience_status = await ib_service.get_connection_resilience_status()
-        
+
         # Return success response
-        return ApiResponse(
-            success=True, 
-            data=resilience_status, 
-            error=None
-        )
-        
+        return ApiResponse(success=True, data=resilience_status, error=None)
+
     except Exception as e:
         logger.error(f"Error getting IB resilience status: {e}")
         return JSONResponse(
@@ -235,30 +231,36 @@ async def get_ib_config(
 async def get_circuit_breaker_status() -> ApiResponse[Dict[str, Any]]:
     """
     Get status of all IB circuit breakers.
-    
+
     This endpoint provides visibility into circuit breaker states,
     helping diagnose IB connectivity issues and silent connections.
-    
+
     Returns:
         ApiResponse with circuit breaker status information
     """
     try:
         from ktrdr.api.utils.circuit_breaker import get_all_circuit_breakers
-        
+
         breakers = get_all_circuit_breakers()
-        breaker_status = {name: breaker.get_status() for name, breaker in breakers.items()}
-        
+        breaker_status = {
+            name: breaker.get_status() for name, breaker in breakers.items()
+        }
+
         return ApiResponse(
             success=True,
             data={
                 "circuit_breakers": breaker_status,
                 "summary": {
                     "total_breakers": len(breakers),
-                    "open_breakers": len([b for b in breakers.values() if b.state.value == "open"]),
-                    "half_open_breakers": len([b for b in breakers.values() if b.state.value == "half_open"]),
-                }
+                    "open_breakers": len(
+                        [b for b in breakers.values() if b.state.value == "open"]
+                    ),
+                    "half_open_breakers": len(
+                        [b for b in breakers.values() if b.state.value == "half_open"]
+                    ),
+                },
             },
-            error=None
+            error=None,
         )
     except Exception as e:
         logger.error(f"Error getting circuit breaker status: {e}")
@@ -498,36 +500,46 @@ async def discover_symbol(
 
         # Discover symbol using IB service with circuit breaker for resilience
         try:
-            from ktrdr.api.utils.circuit_breaker import with_circuit_breaker, CircuitBreakerOpenError
-            
+            from ktrdr.api.utils.circuit_breaker import (
+                with_circuit_breaker,
+                CircuitBreakerOpenError,
+            )
+
             symbol_info_dict = await with_circuit_breaker(
                 "ib_symbol_discovery",
                 ib_service.discover_symbol,
-                symbol=request.symbol, 
-                force_refresh=request.force_refresh
+                symbol=request.symbol,
+                force_refresh=request.force_refresh,
             )
         except CircuitBreakerOpenError as e:
-            logger.error(f"Symbol discovery circuit breaker OPEN for {request.symbol}: {e}")
-            
+            logger.error(
+                f"Symbol discovery circuit breaker OPEN for {request.symbol}: {e}"
+            )
+
             # Perform rapid diagnosis to give clear error message
-            from ktrdr.api.utils.ib_diagnosis import IBDiagnosis, get_clear_error_message
-            
+            from ktrdr.api.utils.ib_diagnosis import (
+                IBDiagnosis,
+                get_clear_error_message,
+            )
+
             try:
-                problem_type, diagnosis_msg, details = await IBDiagnosis.diagnose_connection()
+                problem_type, diagnosis_msg, details = (
+                    await IBDiagnosis.diagnose_connection()
+                )
                 clear_message = get_clear_error_message(problem_type, diagnosis_msg)
-                
+
                 raise HTTPException(
                     status_code=503,
                     detail={
-                        "code": "IB-GATEWAY-ISSUE", 
+                        "code": "IB-GATEWAY-ISSUE",
                         "message": clear_message,
                         "details": {
                             "symbol": request.symbol,
                             "problem_type": problem_type.value,
                             "diagnosis": details,
-                            "circuit_breaker_reason": str(e)
-                        }
-                    }
+                            "circuit_breaker_reason": str(e),
+                        },
+                    },
                 )
             except Exception as diag_error:
                 # Fallback if diagnosis fails
@@ -535,27 +547,29 @@ async def discover_symbol(
                 raise HTTPException(
                     status_code=503,
                     detail={
-                        "code": "IB-CIRCUIT-OPEN", 
+                        "code": "IB-CIRCUIT-OPEN",
                         "message": str(e),
                         "details": {
                             "symbol": request.symbol,
-                            "recovery_action": "Check IB Gateway connectivity and restart if needed"
-                        }
-                    }
+                            "recovery_action": "Check IB Gateway connectivity and restart if needed",
+                        },
+                    },
                 )
         except asyncio.TimeoutError:
-            logger.error(f"Symbol discovery TIMEOUT for {request.symbol} - possible silent IB connection!")
+            logger.error(
+                f"Symbol discovery TIMEOUT for {request.symbol} - possible silent IB connection!"
+            )
             raise HTTPException(
                 status_code=503,
                 detail={
-                    "code": "IB-TIMEOUT", 
+                    "code": "IB-TIMEOUT",
                     "message": f"Symbol discovery timed out for {request.symbol}",
                     "details": {
                         "symbol": request.symbol,
                         "timeout_seconds": 30,
-                        "possible_cause": "IB connection appears connected but operations timeout - check IB Gateway connectivity"
-                    }
-                }
+                        "possible_cause": "IB connection appears connected but operations timeout - check IB Gateway connectivity",
+                    },
+                },
             )
 
         discovery_time_ms = (time.time() - start_time) * 1000

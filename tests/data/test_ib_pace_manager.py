@@ -161,9 +161,11 @@ class TestIbPaceManager:
         IbPaceManager._instance = None
 
         # Mock sleep calls to make tests fast
-        with patch('asyncio.sleep', return_value=None) as mock_async_sleep, \
-             patch('time.sleep', return_value=None) as mock_time_sleep:
-            
+        with (
+            patch("asyncio.sleep", return_value=None) as mock_async_sleep,
+            patch("time.sleep", return_value=None) as mock_time_sleep,
+        ):
+
             manager = IbPaceManager()
 
             # Reset state for clean testing
@@ -306,7 +308,7 @@ class TestIbPaceManager:
         elapsed = time.time() - start_time
         assert elapsed < 1.0  # Should be very fast
 
-        # Verify request was recorded in history  
+        # Verify request was recorded in history
         assert len(pace_manager._request_history) == 1
         # Component metrics are only created when there are pace violations or context manager usage
         # For a simple first request, no component metrics are created yet
@@ -532,8 +534,10 @@ class TestConvenienceFunctions:
         # Clear singleton
         ktrdr.data.ib_pace_manager._pace_manager = None
         # Mock sleep calls for fast tests
-        with patch('asyncio.sleep', return_value=None), \
-             patch('time.sleep', return_value=None):
+        with (
+            patch("asyncio.sleep", return_value=None),
+            patch("time.sleep", return_value=None),
+        ):
             yield
         # Clear singleton after test
         ktrdr.data.ib_pace_manager._pace_manager = None
@@ -551,7 +555,7 @@ class TestConvenienceFunctions:
         # Ensure clean state
         manager = get_pace_manager()
         manager.reset_statistics()
-        
+
         await check_pace_async(
             symbol="AAPL", timeframe="1h", component="test_component"
         )
@@ -564,7 +568,7 @@ class TestConvenienceFunctions:
         # Ensure clean state
         manager = get_pace_manager()
         manager.reset_statistics()
-        
+
         check_pace_sync(symbol="MSFT", timeframe="1d", component="test_component")
 
         # Should have recorded the request
@@ -618,8 +622,10 @@ class TestErrorHandlerIntegration:
         """Create pace manager with real error handler."""
         IbPaceManager._instance = None
         # Mock sleep calls to make tests fast
-        with patch('asyncio.sleep', return_value=None), \
-             patch('time.sleep', return_value=None):
+        with (
+            patch("asyncio.sleep", return_value=None),
+            patch("time.sleep", return_value=None),
+        ):
             manager = IbPaceManager()
             manager.reset_statistics()
             yield manager
@@ -687,8 +693,10 @@ class TestPerformanceAndStress:
         """Create pace manager for stress testing."""
         IbPaceManager._instance = None
         # Mock sleep calls to make tests fast
-        with patch('asyncio.sleep', return_value=None), \
-             patch('time.sleep', return_value=None):
+        with (
+            patch("asyncio.sleep", return_value=None),
+            patch("time.sleep", return_value=None),
+        ):
             manager = IbPaceManager()
             manager.reset_statistics()
             yield manager

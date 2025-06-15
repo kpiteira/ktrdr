@@ -8,19 +8,22 @@ from datetime import datetime
 
 class GapAnalysisError(Exception):
     """Gap analysis specific error."""
+
     pass
 
 
 class GapAnalysisMode(str, Enum):
     """Gap analysis mode."""
+
     QUICK = "quick"
-    NORMAL = "normal"  
+    NORMAL = "normal"
     DETAILED = "detailed"
     COMPREHENSIVE = "comprehensive"
 
 
 class GapInfoModel(BaseModel):
     """Gap information model."""
+
     start_time: str
     end_time: str
     duration_hours: float
@@ -34,6 +37,7 @@ class GapInfoModel(BaseModel):
 
 class GapAnalysisSummary(BaseModel):
     """Gap analysis summary."""
+
     total_gaps: int
     critical_gaps: int
     major_gaps: int
@@ -45,23 +49,25 @@ class GapAnalysisSummary(BaseModel):
 
 class GapAnalysisRequest(BaseModel):
     """Request for gap analysis."""
+
     symbol: str
     timeframe: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     mode: GapAnalysisMode = GapAnalysisMode.QUICK
     include_market_hours_only: bool = True
-    
-    @field_validator('symbol', 'timeframe')
+
+    @field_validator("symbol", "timeframe")
     @classmethod
     def validate_non_empty_strings(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError('Field cannot be empty')
+            raise ValueError("Field cannot be empty")
         return v.strip()
 
 
 class GapAnalysisResponse(BaseModel):
     """Response for gap analysis."""
+
     success: bool = True
     symbol: str
     timeframe: str
@@ -75,22 +81,24 @@ class GapAnalysisResponse(BaseModel):
 
 class BatchGapAnalysisRequest(BaseModel):
     """Request for batch gap analysis."""
+
     symbols: List[str]
     timeframe: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     mode: GapAnalysisMode = GapAnalysisMode.QUICK
-    
-    @field_validator('symbols')
+
+    @field_validator("symbols")
     @classmethod
     def validate_symbols_list(cls, v: List[str]) -> List[str]:
         if not v:
-            raise ValueError('Symbols list cannot be empty')
+            raise ValueError("Symbols list cannot be empty")
         return [s.strip() for s in v if s.strip()]
 
 
 class BatchGapAnalysisResponse(BaseModel):
     """Response for batch gap analysis."""
+
     success: bool = True
     timeframe: str
     start_date: str
