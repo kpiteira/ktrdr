@@ -90,6 +90,7 @@ def register_builtin_indicators():
     )
     from ktrdr.indicators.macd_indicator import MACDIndicator
     from ktrdr.indicators.stochastic_indicator import StochasticIndicator
+    from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -140,6 +141,15 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_1"],
         reference_values=REFERENCE_VALUES.get("Stochastic", {}),
         tolerance=TOLERANCES.get("Stochastic", 0.1),
+    )
+
+    # Register Williams %R
+    register_indicator(
+        indicator_class=WilliamsRIndicator,
+        default_params={"period": 14},
+        reference_datasets=["reference_dataset_1"],
+        reference_values=REFERENCE_VALUES.get("WilliamsR", {}),
+        tolerance=TOLERANCES.get("WilliamsR", 0.1),
     )
 
     # Additional indicators would be registered here as they're added to the system

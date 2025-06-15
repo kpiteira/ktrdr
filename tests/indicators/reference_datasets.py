@@ -230,6 +230,20 @@ STOCHASTIC_REFERENCE_DATASET_1 = {
     },
 }
 
+# Williams %R reference values for dataset 1
+WILLIAMS_R_REFERENCE_DATASET_1 = {
+    # WilliamsR(14) on reference dataset 1
+    "WilliamsR_14": {
+        20: -21.276596,
+        25: -85.314685,
+        30: -91.735537,
+        35: -90.079365,
+        40: -80.119284,
+        45: -14.893617,
+        49: -9.828674,
+    },
+}
+
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
     "SMA": {
@@ -247,6 +261,9 @@ REFERENCE_VALUES = {
     "Stochastic": {
         "dataset_1": STOCHASTIC_REFERENCE_DATASET_1,
     },
+    "WilliamsR": {
+        "dataset_1": WILLIAMS_R_REFERENCE_DATASET_1,
+    },
 }
 
 # Tolerances for different indicators
@@ -257,6 +274,7 @@ TOLERANCES = {
     "RSI": 5.0,  # 5% tolerance for RSI
     "MACD": 0.01,  # 0.01% tolerance for MACD (precise calculation)
     "Stochastic": 0.1,  # 0.1% tolerance for Stochastic (precise calculation)
+    "WilliamsR": 0.1,  # 0.1% tolerance for Williams %R (precise calculation)
 }
 
 # Reference datasets to use with each indicator
@@ -266,4 +284,5 @@ INDICATOR_DATASETS = {
     "RSI": [create_reference_dataset_3],
     "MACD": [create_reference_dataset_1],
     "Stochastic": [create_reference_dataset_1],
+    "WilliamsR": [create_reference_dataset_1],
 }
