@@ -5,7 +5,7 @@ This module provides access to configuration settings with environment-specific
 overrides and environment variable support.
 """
 
-from pydantic import BaseSettings, Field
+from pydantic import BaseSettings, Field, ConfigDict
 from functools import lru_cache
 from .. import metadata
 from .ib_config import IbConfig, get_ib_config
@@ -24,8 +24,7 @@ class APISettings(BaseSettings):
     api_prefix: str = Field(default=metadata.API_PREFIX)
     cors_origins: list = Field(default=metadata.get("api.cors_origins", ["*"]))
 
-    class Config:
-        env_prefix = "KTRDR_API_"
+    model_config = ConfigDict(env_prefix="KTRDR_API_")
 
 
 class LoggingSettings(BaseSettings):
@@ -38,8 +37,7 @@ class LoggingSettings(BaseSettings):
         )
     )
 
-    class Config:
-        env_prefix = "KTRDR_LOGGING_"
+    model_config = ConfigDict(env_prefix="KTRDR_LOGGING_")
 
 
 # Cache settings to avoid repeated disk/env access

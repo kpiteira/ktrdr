@@ -46,7 +46,7 @@ def batch_calculator(fuzzy_engine):
 def sample_timestamps():
     """Create sample timestamps for testing."""
     start_time = datetime(2023, 1, 1, 9, 0)
-    return pd.date_range(start=start_time, periods=10, freq="1H")
+    return pd.date_range(start=start_time, periods=10, freq="1h")
 
 
 @pytest.fixture
@@ -240,7 +240,7 @@ class TestBatchFuzzyCalculator:
     def test_performance_with_large_dataset(self, batch_calculator):
         """Test performance with a larger dataset."""
         # Create a large time series (1000 points)
-        large_timestamps = pd.date_range(start="2023-01-01", periods=1000, freq="1H")
+        large_timestamps = pd.date_range(start="2023-01-01", periods=1000, freq="1h")
         large_values = np.random.uniform(0, 100, 1000)
         large_series = pd.Series(large_values, index=large_timestamps)
 
@@ -254,7 +254,7 @@ class TestBatchFuzzyCalculator:
     def test_membership_value_correctness(self, batch_calculator):
         """Test that membership values are calculated correctly."""
         # Create specific test values where we know expected membership
-        timestamps = pd.date_range(start="2023-01-01", periods=3, freq="1H")
+        timestamps = pd.date_range(start="2023-01-01", periods=3, freq="1h")
 
         # Test extreme values for RSI
         # RSI = 0 should have high membership in "low" set

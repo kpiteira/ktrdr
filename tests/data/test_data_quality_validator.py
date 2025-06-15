@@ -122,7 +122,7 @@ class TestDataQualityValidator:
     @pytest.fixture
     def good_ohlcv_data(self):
         """Create valid OHLCV data."""
-        dates = pd.date_range("2023-01-01", periods=10, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=10, freq="1h")
         data = {
             "open": [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
             "high": [105, 106, 107, 108, 109, 110, 111, 112, 113, 114],
@@ -165,7 +165,7 @@ class TestDataQualityValidator:
     def test_basic_structure_validation(self, validator):
         """Test basic structure validation."""
         # Missing required columns
-        dates = pd.date_range("2023-01-01", periods=5, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=5, freq="1h")
         incomplete_data = pd.DataFrame(
             {
                 "open": [100, 101, 102, 103, 104],
@@ -242,7 +242,7 @@ class TestDataQualityValidator:
 
     def test_ohlc_relationship_validation_and_fixing(self, validator):
         """Test OHLC relationship validation and fixing."""
-        dates = pd.date_range("2023-01-01", periods=5, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=5, freq="1h")
         data = {
             "open": [100, 101, 102, 103, 104],
             "high": [99, 106, 107, 108, 109],  # First high is too low
@@ -271,7 +271,7 @@ class TestDataQualityValidator:
 
     def test_missing_value_interpolation(self, validator):
         """Test missing value detection and interpolation."""
-        dates = pd.date_range("2023-01-01", periods=12, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=12, freq="1h")
         data = {
             "open": [100, np.nan, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
             "high": [105, 106, np.nan, 108, 109, 110, 111, 112, 113, 114, 115, 116],
@@ -314,8 +314,8 @@ class TestDataQualityValidator:
     def test_timestamp_gap_detection(self, validator):
         """Test timestamp gap detection with DataManager logic."""
         # Create data with a significant gap
-        dates1 = pd.date_range("2023-01-01 09:00", periods=3, freq="1H")
-        dates2 = pd.date_range("2023-01-01 15:00", periods=3, freq="1H")  # 3-hour gap
+        dates1 = pd.date_range("2023-01-01 09:00", periods=3, freq="1h")
+        dates2 = pd.date_range("2023-01-01 15:00", periods=3, freq="1h")  # 3-hour gap
         all_dates = dates1.tolist() + dates2.tolist()
 
         data = {
@@ -346,7 +346,7 @@ class TestDataQualityValidator:
 
     def test_price_outlier_detection(self, validator):
         """Test price outlier detection using Z-score method."""
-        dates = pd.date_range("2023-01-01", periods=10, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=10, freq="1h")
         data = {
             "open": [
                 100,
@@ -382,7 +382,7 @@ class TestDataQualityValidator:
 
     def test_volume_pattern_validation(self, validator):
         """Test volume pattern validation."""
-        dates = pd.date_range("2023-01-01", periods=5, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=5, freq="1h")
         data = {
             "open": [100, 101, 102, 103, 104],
             "high": [105, 106, 107, 108, 109],
@@ -407,7 +407,7 @@ class TestDataQualityValidator:
 
     def test_extreme_price_movement_detection(self, validator):
         """Test extreme price movement detection."""
-        dates = pd.date_range("2023-01-01", periods=5, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=5, freq="1h")
         data = {
             "open": [100, 101, 102, 103, 104],
             "high": [105, 106, 107, 108, 109],
@@ -438,7 +438,7 @@ class TestDataQualityValidator:
 
     def test_auto_correct_disabled(self, validator_no_correct):
         """Test behavior when auto-correct is disabled."""
-        dates = pd.date_range("2023-01-01", periods=3, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=3, freq="1h")
         data = {
             "open": [100, 0, 102],  # Zero price
             "high": [99, 106, 107],  # High too low
@@ -464,7 +464,7 @@ class TestDataQualityValidator:
 
     def test_validation_type_tracking(self, validator):
         """Test validation type tracking."""
-        dates = pd.date_range("2023-01-01", periods=5, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=5, freq="1h")
         data = {
             "open": [100, 101, 102, 103, 104],
             "high": [105, 106, 107, 108, 109],
@@ -485,7 +485,7 @@ class TestDataQualityValidator:
 
     def test_validation_statistics(self, validator):
         """Test validation statistics tracking."""
-        dates = pd.date_range("2023-01-01", periods=5, freq="1H")
+        dates = pd.date_range("2023-01-01", periods=5, freq="1h")
         data = {
             "open": [100, 101, 102, 103, 104],
             "high": [105, 106, 107, 108, 109],

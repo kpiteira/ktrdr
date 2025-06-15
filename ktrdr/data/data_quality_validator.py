@@ -850,7 +850,7 @@ class DataQualityValidator:
             return
 
         # Calculate price change percentages
-        price_changes = df["close"].pct_change()
+        price_changes = df["close"].pct_change(fill_method=None)
 
         # Define thresholds
         extreme_threshold = 0.20  # 20% change
