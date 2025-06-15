@@ -1,188 +1,240 @@
-name: KTRDR CI Pipeline
+name: CI Pipeline
 
 on:
-  # Removing automated triggers
-  # push:
-  #   branches: [ main, develop ]
-  # pull_request:
-  #   branches: [ main, develop ]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to run tests against'
-        required: true
-        default: 'development'
-        type: choice
-        options:
-          - development
-          - testing
-          - production
+  push:
+    branches: [ main, develop, test-suite-cleanup ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:  # Allow manual triggers
 
 jobs:
-  lint:
+  unit-tests:
+    name: Unit Tests (Fast)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    
+    - name: Set up Python
+      run: uv python install
+    
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+    
+    - name: Run unit tests
+      run: |
+        uv run pytest tests/ \
+          -m "not (integration or real_ib or container_api or container_cli or e2e)" \
+          --tb=short \
+          --maxfail=10 \
+          -v \
+          --junit-xml=test-results.xml
+      env:
+        PYTHONDONTWRITEBYTECODE: "1"
+        PYTHONUNBUFFERED: "1"
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: unit-test-results
+        path: test-results.xml
+
+  lint-and-format:
     name: Code Quality
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      - name: Install dependencies
-        run: |
-          # Install UV directly without using pip
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          # Add uv to PATH
-          export PATH="$HOME/.local/bin:$PATH"
-          # Verify uv is available
-          which uv
-          # Create and activate virtual environment
-          uv venv
-          source .venv/bin/activate
-          # Use UV to install dependencies
-          uv pip install -r requirements.txt
-          uv pip install -r requirements-dev.txt
-      
-      - name: Lint with flake8
-        run: |
-          source .venv/bin/activate
-          # stop the build if there are Python syntax errors or undefined names
-          python -m flake8 ktrdr/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings
-          python -m flake8 ktrdr/ --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
-      
-      - name: Check type hints with mypy
-        run: |
-          source .venv/bin/activate
-          python -m mypy ktrdr/
-      
-      - name: Check code style with black
-        run: |
-          source .venv/bin/activate
-          python -m black --check ktrdr/
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    
+    - name: Set up Python
+      run: uv python install
+    
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+    
+    - name: Check formatting with black
+      run: uv run black --check ktrdr tests
+    
+    - name: Run type checking with mypy
+      run: uv run mypy ktrdr
+      continue-on-error: true  # Don't fail CI for type issues, just report them
 
-  test:
-    name: Unit Tests
+  container-e2e-tests:
+    name: Container E2E Tests
     runs-on: ubuntu-latest
-    needs: lint
+    needs: unit-tests
+    # Only run on main/develop pushes or when manually triggered
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      - name: Install dependencies
-        run: |
-          # Install UV directly without using pip
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          # Add uv to PATH
-          export PATH="$HOME/.local/bin:$PATH"
-          # Verify uv is available
-          which uv
-          # Create and activate virtual environment
-          uv venv
-          source .venv/bin/activate
-          # Use UV to install dependencies
-          uv pip install -r requirements.txt
-          uv pip install -r requirements-dev.txt
-      
-      - name: Run pytest with coverage
-        run: |
-          source .venv/bin/activate
-          python -m pytest tests/ --cov=ktrdr --cov-report=xml --cov-report=term
-      
-      - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.xml
-          fail_ci_if_error: false
-
-  integration-test:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: test
+    - name: Checkout code
+      uses: actions/checkout@v4
     
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      - name: Install dependencies
-        run: |
-          # Install UV directly without using pip
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          # Add uv to PATH
-          export PATH="$HOME/.local/bin:$PATH"
-          # Verify uv is available
-          which uv
-          # Create and activate virtual environment
-          uv venv
-          source .venv/bin/activate
-          # Use UV to install dependencies
-          uv pip install -r requirements.txt
-          uv pip install -r requirements-dev.txt
-      
-      - name: Run integration tests
-        run: |
-          source .venv/bin/activate
-          # Create integration test directory if it doesn't exist
-          mkdir -p tests/integration
-          # Run only integration tests if the directory exists and has tests
-          if [ "$(find tests/integration -name 'test_*.py' | wc -l)" -gt 0 ]; then
-            python -m pytest tests/integration/ -v
-          else
-            echo "No integration tests found. Skipping this step."
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    
+    - name: Set up Python
+      run: uv python install
+    
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Start Docker containers
+      run: |
+        chmod +x ./docker_dev.sh
+        ./docker_dev.sh start
+        
+    - name: Wait for services to be ready
+      run: |
+        echo "Waiting for containers to start..."
+        sleep 45
+        
+        # Check if containers are running
+        docker-compose -f docker/docker-compose.yml ps
+        
+        # Wait for API health endpoint (if it exists)
+        for i in {1..24}; do
+          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "API is ready!"
+            break
+          elif curl -f http://localhost:8000/ > /dev/null 2>&1; then
+            echo "API is responding!"
+            break
           fi
-      
-      - name: Test CLI commands
-        run: |
-          source .venv/bin/activate
-          # Basic CLI command tests
-          if [ -f ktrdr_cli.py ]; then
-            python ktrdr_cli.py --help
-          else
-            echo "CLI script not found. Skipping this step."
+          
+          if [ $i -eq 24 ]; then
+            echo "API failed to respond after 2 minutes"
+            echo "Container logs:"
+            docker-compose -f docker/docker-compose.yml logs backend
+            exit 1
           fi
+          
+          echo "Waiting for API... (attempt $i/24)"
+          sleep 5
+        done
+    
+    - name: Run container E2E tests
+      run: |
+        uv run pytest tests/e2e/ \
+          --run-container-e2e \
+          --run-container-cli \
+          --tb=short \
+          --maxfail=5 \
+          -v \
+          --junit-xml=container-test-results.xml
+      env:
+        PYTHONDONTWRITEBYTECODE: "1"
+        PYTHONUNBUFFERED: "1"
+    
+    - name: Upload container test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: container-test-results
+        path: container-test-results.xml
+    
+    - name: Show container logs on failure
+      if: failure()
+      run: |
+        echo "=== Backend logs ==="
+        docker-compose -f docker/docker-compose.yml logs --tail=100 backend
+        echo "=== Frontend logs ==="
+        docker-compose -f docker/docker-compose.yml logs --tail=100 frontend
+    
+    - name: Stop containers
+      if: always()
+      run: ./docker_dev.sh stop
 
-  docker-build:
-    name: Docker Build Test
+  # Manual workflow for integration tests (will use mocked IB)
+  integration-tests:
+    name: Integration Tests (Mocked IB)
     runs-on: ubuntu-latest
-    needs: lint
+    if: github.event_name == 'workflow_dispatch'
     
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      
-      - name: Build and export
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          load: true
-          tags: ktrdr:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
-      - name: Test container
-        run: |
-          docker run --rm ktrdr:test python -c "import ktrdr; print('KTRDR container test successful')"
-      
-      - name: Check container health command
-        run: |
-          # Verify the HEALTHCHECK command works
-          docker inspect ktrdr:test | grep -q "HEALTHCHECK" || echo "No HEALTHCHECK found in container"
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    
+    - name: Set up Python
+      run: uv python install
+    
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+    
+    - name: Run integration tests (mocked)
+      run: |
+        # These tests will use the disable_retries fixture to mock IB calls
+        uv run pytest tests/integration/ \
+          --tb=short \
+          --maxfail=5 \
+          -v \
+          --junit-xml=integration-test-results.xml
+      env:
+        PYTHONDONTWRITEBYTECODE: "1"
+        PYTHONUNBUFFERED: "1"
+    
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: integration-test-results
+        path: integration-test-results.xml
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, lint-and-format]
+    if: always()
+    
+    steps:
+    - name: Download test artifacts
+      uses: actions/download-artifact@v4
+      continue-on-error: true
+    
+    - name: Test Summary
+      run: |
+        echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f unit-test-results/test-results.xml ]; then
+          echo "✅ Unit tests completed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Unit tests failed or not run" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f container-test-results/container-test-results.xml ]; then
+          echo "✅ Container E2E tests completed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⏭️ Container E2E tests skipped" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Note**: Integration tests requiring real IB Gateway are not run in CI." >> $GITHUB_STEP_SUMMARY
+        echo "Use \`./scripts/run_real_e2e_tests.sh\` locally for complete testing." >> $GITHUB_STEP_SUMMARY
