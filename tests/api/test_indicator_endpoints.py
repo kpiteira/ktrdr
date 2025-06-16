@@ -258,3 +258,40 @@ def test_calculate_indicators_with_data_error(client):
         # Accept either DATA-NoData (from the mock) or DATA-LoadFailed (from the actual implementation)
         # as both error codes indicate a data loading issue
         assert detail["error"]["code"] in ["DATA-NoData", "DATA-LoadFailed"]
+
+
+def test_get_indicators_by_categories_endpoint(client):
+    """Test the get indicators by categories endpoint."""
+    # Make the request
+    response = client.get("/api/v1/indicators/categories")
+
+    # Verify response
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert data["success"] is True
+    assert "categories" in data
+    assert "total_categories" in data
+    assert "total_indicators" in data
+    
+    # Verify we have the expected categories
+    categories = data["categories"]
+    expected_categories = ["trend", "momentum", "volatility", "volume", "support_resistance", "multi_purpose"]
+    
+    for cat in expected_categories:
+        assert cat in categories
+        assert "info" in categories[cat]
+        assert "indicators" in categories[cat]
+        assert "count" in categories[cat]
+        
+        # Verify category info structure
+        info = categories[cat]["info"]
+        assert "name" in info
+        assert "description" in info
+        assert "purpose" in info
+        assert "typical_usage" in info
+        assert "common_timeframes" in info
+    
+    # Verify total counts are reasonable
+    assert data["total_categories"] == 6
+    assert data["total_indicators"] > 0

@@ -11,6 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from ktrdr import get_logger
 from ktrdr.errors import DataError, ConfigurationError, ProcessingError
 from ktrdr.api.services.indicator_service import IndicatorService
+from ktrdr.indicators.categories import (
+    get_category_summary,
+    get_indicators_by_category,
+    get_all_categories,
+    get_category_info,
+    IndicatorCategory
+)
 from ktrdr.api.models.indicators import (
     IndicatorMetadata,
     IndicatorCalculateRequest,
@@ -325,6 +332,233 @@ async def calculate_indicators(
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "An unexpected error occurred during indicator calculation",
+                    "details": {"error": str(e)},
+                },
+            },
+        )
+
+
+@router.get(
+    "/categories",
+    summary="Get indicators organized by categories",
+    description="""
+    Returns all available technical indicators organized by their categories.
+    Each category includes metadata about its purpose, typical usage patterns,
+    and a list of indicators that belong to it.
+    """,
+)
+async def get_indicators_by_categories() -> Dict[str, Any]:
+    """
+    Get indicators organized by categories.
+
+    This endpoint returns a comprehensive overview of all available indicators
+    organized by their functional categories (Trend, Momentum, Volatility, etc.).
+
+    Returns:
+        Dict containing category information and indicator mappings.
+
+    Example response:
+        ```json
+        {
+          "success": true,
+          "categories": {
+            "trend": {
+              "info": {
+                "name": "Trend Indicators",
+                "description": "Indicators that identify direction and strength of price trends",
+                "purpose": "Determine if market is trending up, down, or sideways",
+                "typical_usage": "Entry/exit signals, trend confirmation",
+                "common_timeframes": ["1h", "4h", "1d", "1w"]
+              },
+              "indicators": ["SimpleMovingAverage", "ExponentialMovingAverage"],
+              "count": 2
+            }
+          },
+          "total_categories": 6,
+          "total_indicators": 19
+        }
+        ```
+    """
+    try:
+        # Get category summary from the categorization system
+        category_summary = get_category_summary()
+        
+        # Calculate totals
+        total_categories = len(category_summary)
+        total_indicators = sum(cat_data["count"] for cat_data in category_summary.values())
+        
+        return {
+            "success": True,
+            "categories": category_summary,
+            "total_categories": total_categories,
+            "total_indicators": total_indicators
+        }
+    
+    except Exception as e:
+        logger.error(f"Error retrieving category information: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Failed to retrieve category information",
+                    "details": {"error": str(e)},
+                },
+            },
+        )
+
+
+@router.get(
+    "/categories/{category}",
+    summary="Get indicators by specific category",
+    description="""
+    Returns all indicators that belong to a specific category with detailed information
+    about the category's purpose and usage patterns.
+    """,
+)
+async def get_indicators_by_category_endpoint(
+    category: str,
+    indicator_service: IndicatorService = Depends(get_indicator_service),
+) -> Dict[str, Any]:
+    """
+    Get all indicators in a specific category.
+
+    Args:
+        category: The category name (trend, momentum, volatility, volume, support_resistance, multi_purpose)
+
+    Returns:
+        Dict containing category information and its indicators.
+
+    Example response:
+        ```json
+        {
+          "success": true,
+          "category": {
+            "name": "trend",
+            "info": {
+              "name": "Trend Indicators",
+              "description": "Indicators that identify direction and strength of price trends",
+              "purpose": "Determine if market is trending up, down, or sideways",
+              "typical_usage": "Entry/exit signals, trend confirmation",
+              "common_timeframes": ["1h", "4h", "1d", "1w"]
+            },
+            "indicators": ["SimpleMovingAverage", "ExponentialMovingAverage", "ADX"],
+            "count": 3
+          }
+        }
+        ```
+
+    Errors:
+        - 404: Category not found
+        - 500: Server error
+    """
+    try:
+        # Validate category
+        try:
+            category_enum = IndicatorCategory(category.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "CATEGORY_NOT_FOUND",
+                        "message": f"Category '{category}' not found",
+                        "details": {
+                            "available_categories": [cat.value for cat in get_all_categories()]
+                        },
+                    },
+                },
+            )
+
+        # Get category information
+        category_info = get_category_info(category_enum)
+        indicators = get_indicators_by_category(category_enum)
+
+        return {
+            "success": True,
+            "category": {
+                "name": category_enum.value,
+                "info": {
+                    "name": category_info.name,
+                    "description": category_info.description,
+                    "purpose": category_info.purpose,
+                    "typical_usage": category_info.typical_usage,
+                    "common_timeframes": category_info.common_timeframes,
+                },
+                "indicators": indicators,
+                "count": len(indicators),
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving category '{category}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to retrieve category '{category}'",
+                    "details": {"error": str(e)},
+                },
+            },
+        )
+
+
+@router.get(
+    "/category-names",
+    summary="Get list of available category names",
+    description="""
+    Returns a simple list of all available indicator category names.
+    Useful for frontend dropdowns and category selection interfaces.
+    """,
+)
+async def get_category_names() -> Dict[str, Any]:
+    """
+    Get list of available category names.
+
+    Returns:
+        Dict containing list of category names.
+
+    Example response:
+        ```json
+        {
+          "success": true,
+          "categories": [
+            "trend",
+            "momentum", 
+            "volatility",
+            "volume",
+            "support_resistance",
+            "multi_purpose"
+          ],
+          "count": 6
+        }
+        ```
+    """
+    try:
+        categories = get_all_categories()
+        category_names = [cat.value for cat in categories]
+        
+        return {
+            "success": True,
+            "categories": category_names,
+            "count": len(category_names)
+        }
+
+    except Exception as e:
+        logger.error(f"Error retrieving category names: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Failed to retrieve category names",
                     "details": {"error": str(e)},
                 },
             },

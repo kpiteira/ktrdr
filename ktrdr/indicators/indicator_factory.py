@@ -33,6 +33,13 @@ from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
 from ktrdr.indicators.rvi_indicator import RVIIndicator
 from ktrdr.indicators.mfi_indicator import MFIIndicator
 from ktrdr.indicators.aroon_indicator import AroonIndicator
+from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
+from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+from ktrdr.indicators.ad_line import ADLineIndicator
+from ktrdr.indicators.cmf_indicator import CMFIndicator
+from ktrdr.indicators.adx_indicator import ADXIndicator
+from ktrdr.indicators.supertrend_indicator import SuperTrendIndicator
+from ktrdr.indicators.fisher_transform import FisherTransformIndicator
 
 logger = get_logger(__name__)
 
@@ -76,6 +83,23 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "MFIIndicator": MFIIndicator,
     "Aroon": AroonIndicator,
     "AroonIndicator": AroonIndicator,
+    "DonchianChannels": DonchianChannelsIndicator,
+    "DonchianChannelsIndicator": DonchianChannelsIndicator,
+    "KeltnerChannels": KeltnerChannelsIndicator,
+    "KeltnerChannelsIndicator": KeltnerChannelsIndicator,
+    "ADLine": ADLineIndicator,
+    "ADLineIndicator": ADLineIndicator,
+    "AccumulationDistribution": ADLineIndicator,
+    "CMF": CMFIndicator,
+    "CMFIndicator": CMFIndicator,
+    "ChaikinMoneyFlow": CMFIndicator,
+    "ADX": ADXIndicator,
+    "ADXIndicator": ADXIndicator,
+    "AverageDirectionalIndex": ADXIndicator,
+    "SuperTrend": SuperTrendIndicator,
+    "SuperTrendIndicator": SuperTrendIndicator,
+    "FisherTransform": FisherTransformIndicator,
+    "FisherTransformIndicator": FisherTransformIndicator,
 }
 
 

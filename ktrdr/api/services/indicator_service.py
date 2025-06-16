@@ -16,6 +16,7 @@ from ktrdr.errors import DataError, ConfigurationError, ProcessingError
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.indicators.base_indicator import BaseIndicator
+from ktrdr.indicators.categories import get_indicator_category, CATEGORY_DESCRIPTIONS
 from ktrdr.api.models.indicators import (
     IndicatorMetadata,
     IndicatorParameter,
@@ -70,15 +71,13 @@ class IndicatorService(BaseService):
                 try:
                     temp_instance = indicator_class()
 
-                    # Get indicator type
-                    indicator_type = IndicatorType.TREND  # Default
-                    if hasattr(temp_instance, "type"):
-                        type_value = getattr(temp_instance, "type", "trend")
-                        # Try to convert to enum value
-                        try:
-                            indicator_type = IndicatorType(type_value.lower())
-                        except ValueError:
-                            indicator_type = IndicatorType.CUSTOM
+                    # Get indicator type from categorization system
+                    try:
+                        category = get_indicator_category(indicator_class.__name__)
+                        indicator_type = IndicatorType(category.value)
+                    except (KeyError, ValueError):
+                        # Default to multi-purpose for unknown indicators
+                        indicator_type = IndicatorType.MULTI_PURPOSE
 
                     # Extract parameters from the indicator's __init__ method
                     params = []

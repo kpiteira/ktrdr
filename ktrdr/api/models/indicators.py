@@ -19,7 +19,8 @@ class IndicatorType(str, Enum):
     MOMENTUM = "momentum"
     VOLATILITY = "volatility"
     VOLUME = "volume"
-    CUSTOM = "custom"
+    SUPPORT_RESISTANCE = "support_resistance"
+    MULTI_PURPOSE = "multi_purpose"
 
 
 class IndicatorParameter(BaseModel):
