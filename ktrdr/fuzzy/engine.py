@@ -13,7 +13,13 @@ import numpy as np
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.fuzzy.config import FuzzyConfig, FuzzySetConfig, MembershipFunctionConfig
-from ktrdr.fuzzy.membership import MembershipFunction, TriangularMF
+from ktrdr.fuzzy.membership import (
+    MembershipFunction, 
+    TriangularMF, 
+    TrapezoidalMF, 
+    GaussianMF,
+    MembershipFunctionFactory
+)
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -107,24 +113,10 @@ class FuzzyEngine:
 
             for set_name, mf_config in fuzzy_sets.root.items():
                 try:
-                    if mf_config.type == "triangular":
-                        self._membership_functions[indicator][set_name] = TriangularMF(
-                            mf_config.parameters
-                        )
-                    else:
-                        # This should never happen due to the Literal constraint in MembershipFunctionConfig
-                        logger.error(
-                            f"Unknown membership function type: {mf_config.type}"
-                        )
-                        raise ConfigurationError(
-                            message=f"Unknown membership function type: {mf_config.type}",
-                            error_code="ENGINE-UnknownMFType",
-                            details={
-                                "indicator": indicator,
-                                "set_name": set_name,
-                                "type": mf_config.type,
-                            },
-                        )
+                    # Use the membership function factory for all types
+                    self._membership_functions[indicator][set_name] = MembershipFunctionFactory.create(
+                        mf_config.type, mf_config.parameters
+                    )
                 except Exception as e:
                     logger.error(
                         f"Failed to initialize membership function for {indicator}.{set_name}: {e}"

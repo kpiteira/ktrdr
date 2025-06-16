@@ -1,0 +1,160 @@
+# Multi-Timeframe Indicator Configuration Example
+# This file demonstrates the new Phase 5 multi-timeframe indicator configuration
+
+indicators:
+  # Legacy single-timeframe indicators (still supported)
+  indicators: []
+  
+  # New multi-timeframe indicator configuration
+  multi_timeframe:
+    # Column naming standardization
+    column_standardization: true
+    
+    # Timeframe-specific indicator configurations
+    timeframes:
+      # Short-term: 1-hour timeframe for entry timing
+      - timeframe: "1h"
+        enabled: true
+        weight: 1.0
+        indicators:
+          - type: "RSI"
+            name: "rsi_14"
+            params:
+              period: 14
+              source: "close"
+              
+          - type: "SimpleMovingAverage"
+            name: "sma_fast"
+            params:
+              period: 10
+              source: "close"
+              
+          - type: "SimpleMovingAverage"
+            name: "sma_slow"
+            params:
+              period: 20
+              source: "close"
+              
+          - type: "MACD"
+            name: "macd_standard"
+            params:
+              fast_period: 12
+              slow_period: 26
+              signal_period: 9
+              source: "close"
+              
+          - type: "BollingerBands"
+            name: "bb_standard"
+            params:
+              period: 20
+              std_dev: 2
+              source: "close"
+      
+      # Medium-term: 4-hour timeframe for trend direction
+      - timeframe: "4h"
+        enabled: true
+        weight: 1.5  # Higher weight for trend direction
+        indicators:
+          - type: "RSI"
+            name: "rsi_14"
+            params:
+              period: 14
+              source: "close"
+              
+          - type: "SimpleMovingAverage"
+            name: "sma_trend"
+            params:
+              period: 50
+              source: "close"
+              
+          - type: "ExponentialMovingAverage"
+            name: "ema_trend"
+            params:
+              period: 21
+              source: "close"
+              
+          - type: "ADX"
+            name: "adx_trend_strength"
+            params:
+              period: 14
+              
+          - type: "ATR"
+            name: "atr_volatility"
+            params:
+              period: 14
+      
+      # Long-term: Daily timeframe for market context
+      - timeframe: "1d"
+        enabled: true
+        weight: 2.0  # Highest weight for market context
+        indicators:
+          - type: "RSI"
+            name: "rsi_weekly"
+            params:
+              period: 14
+              source: "close"
+              
+          - type: "SimpleMovingAverage"
+            name: "sma_200"
+            params:
+              period: 200
+              source: "close"
+              
+          - type: "SimpleMovingAverage"
+            name: "sma_50"
+            params:
+              period: 50
+              source: "close"
+              
+          - type: "MACD"
+            name: "macd_weekly"
+            params:
+              fast_period: 12
+              slow_period: 26
+              signal_period: 9
+              source: "close"
+              
+          - type: "StochasticOscillator"
+            name: "stoch_weekly"
+            params:
+              k_period: 14
+              d_period: 3
+              smooth_k: 3
+
+    # Cross-timeframe features (experimental)
+    cross_timeframe_features:
+      # RSI divergence between timeframes
+      rsi_divergence_1h_4h:
+        primary_timeframe: "1h"
+        secondary_timeframe: "4h"
+        primary_column: "rsi_14_1h"
+        secondary_column: "rsi_14_4h"
+        operation: "difference"
+        
+      # Trend alignment between 4h and daily
+      trend_alignment_4h_1d:
+        primary_timeframe: "4h"
+        secondary_timeframe: "1d"
+        primary_column: "sma_trend_4h"
+        secondary_column: "sma_50_1d"
+        operation: "correlation"
+        window: 20
+        
+      # Volatility ratio
+      volatility_ratio_1h_4h:
+        primary_timeframe: "1h"
+        secondary_timeframe: "4h"
+        primary_column: "atr_volatility_1h"
+        secondary_column: "atr_volatility_4h"
+        operation: "ratio"
+
+# Additional configuration sections for reference
+data:
+  directory: "./data"
+  default_format: "csv"
+
+logging:
+  level: "INFO"
+  console_output: true
+  
+debug: false

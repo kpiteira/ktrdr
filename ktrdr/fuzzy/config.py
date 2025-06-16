@@ -7,10 +7,10 @@ particularly focusing on triangular membership functions in Phase 1.
 
 import os
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Union, Any, Type
+from typing import Dict, List, Literal, Optional, Union, Any, Type, Annotated
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator, RootModel
+from pydantic import BaseModel, Field, field_validator, model_validator, RootModel, Discriminator
 
 from ktrdr.errors import (
     ConfigurationError,
@@ -82,9 +82,125 @@ class TriangularMFConfig(BaseModel):
         return parameters
 
 
-# In Phase 1, we only implement triangular membership functions
-# This type alias will make it easier to extend with more types in the future
-MembershipFunctionConfig = TriangularMFConfig
+class TrapezoidalMFConfig(BaseModel):
+    """
+    Configuration for a trapezoidal membership function.
+
+    A trapezoidal membership function is defined by four parameters [a, b, c, d]:
+    - a: start point (membership value = 0)
+    - b: start of plateau (membership value = 1)
+    - c: end of plateau (membership value = 1)
+    - d: end point (membership value = 0)
+
+    The parameters must satisfy: a ≤ b ≤ c ≤ d
+    """
+
+    type: Literal["trapezoidal"] = "trapezoidal"
+    parameters: List[float] = Field(
+        ...,
+        min_length=4,
+        max_length=4,
+        description="Four parameters [a, b, c, d] defining the trapezoidal membership function",
+    )
+
+    @field_validator("parameters")
+    @classmethod
+    def validate_parameters(cls, parameters: List[float]) -> List[float]:
+        """
+        Validate trapezoidal membership function parameters.
+
+        Parameters must satisfy: a ≤ b ≤ c ≤ d
+
+        Args:
+            parameters: List of four parameters [a, b, c, d]
+
+        Returns:
+            Validated parameters list
+
+        Raises:
+            ConfigurationError: If parameters are invalid
+        """
+        if len(parameters) != 4:
+            raise ConfigurationError(
+                message="Trapezoidal membership function requires exactly 4 parameters [a, b, c, d]",
+                error_code="CONFIG-InvalidParameterCount",
+                details={"expected": 4, "actual": len(parameters)},
+            )
+
+        a, b, c, d = parameters
+
+        # Check parameter ordering
+        if not (a <= b <= c <= d):
+            raise ConfigurationError(
+                message="Trapezoidal membership function parameters must satisfy: a ≤ b ≤ c ≤ d",
+                error_code="CONFIG-InvalidParameterOrder",
+                details={"parameters": {"a": a, "b": b, "c": c, "d": d}},
+            )
+
+        # Log successful validation
+        logger.debug(f"Validated trapezoidal MF parameters: {parameters}")
+        return parameters
+
+
+class GaussianMFConfig(BaseModel):
+    """
+    Configuration for a Gaussian membership function.
+
+    A Gaussian membership function is defined by two parameters [μ, σ]:
+    - μ: center/mean of the Gaussian curve (peak point)
+    - σ: standard deviation (controls the width of the curve, must be > 0)
+    """
+
+    type: Literal["gaussian"] = "gaussian"
+    parameters: List[float] = Field(
+        ...,
+        min_length=2,
+        max_length=2,
+        description="Two parameters [μ, σ] defining the Gaussian membership function",
+    )
+
+    @field_validator("parameters")
+    @classmethod
+    def validate_parameters(cls, parameters: List[float]) -> List[float]:
+        """
+        Validate Gaussian membership function parameters.
+
+        Args:
+            parameters: List of two parameters [μ, σ]
+
+        Returns:
+            Validated parameters list
+
+        Raises:
+            ConfigurationError: If parameters are invalid
+        """
+        if len(parameters) != 2:
+            raise ConfigurationError(
+                message="Gaussian membership function requires exactly 2 parameters [μ, σ]",
+                error_code="CONFIG-InvalidParameterCount",
+                details={"expected": 2, "actual": len(parameters)},
+            )
+
+        mu, sigma = parameters
+
+        # Check sigma > 0
+        if sigma <= 0:
+            raise ConfigurationError(
+                message="Gaussian membership function sigma must be greater than 0",
+                error_code="CONFIG-InvalidSigma",
+                details={"sigma": sigma},
+            )
+
+        # Log successful validation
+        logger.debug(f"Validated Gaussian MF parameters: {parameters}")
+        return parameters
+
+
+# Union type for all membership function configurations with discriminator
+MembershipFunctionConfig = Annotated[
+    Union[TriangularMFConfig, TrapezoidalMFConfig, GaussianMFConfig],
+    Field(discriminator='type')
+]
 
 
 class FuzzySetConfigModel(RootModel[Dict[str, MembershipFunctionConfig]]):

@@ -112,6 +112,7 @@ class ExhaustiveTestRunner:
         required_files = [
             "test_exhaustive_resilience.py",
             "test_exhaustive_api_cli_resilience.py",
+            "test_real_multi_timeframe.py",
             "conftest.py",
         ]
 

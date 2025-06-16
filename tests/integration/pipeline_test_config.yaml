@@ -1,0 +1,205 @@
+# Configuration for complete neuro-fuzzy pipeline integration testing
+
+test_scenarios:
+  basic_integration:
+    description: "Basic pipeline component integration"
+    timeframes: ["1h", "4h", "1d"]
+    indicators: ["RSI", "SMA_cross"]
+    neural_epochs: 10
+    sample_size: 100
+    
+  performance_tracking:
+    description: "Performance tracking and adaptation"
+    min_trades: 20
+    adaptation_threshold: 0.6
+    confidence_threshold: 0.7
+    
+  market_regime_detection:
+    description: "Market regime detection accuracy"
+    regime_confidence_threshold: 0.6
+    volatility_threshold: 0.02
+    trend_threshold: 0.015
+
+# Neural network test configurations
+neural_configs:
+  minimal:
+    timeframe_configs:
+      "1h":
+        expected_features: ["RSI_oversold", "RSI_neutral", "RSI_overbought", 
+                          "SMA_cross_bullish", "SMA_cross_neutral", "SMA_cross_bearish"]
+        weight: 1.0
+        enabled: true
+      "4h":
+        expected_features: ["RSI_oversold", "RSI_neutral", "RSI_overbought", 
+                          "SMA_cross_bullish", "SMA_cross_neutral", "SMA_cross_bearish"]
+        weight: 1.0
+        enabled: true
+    architecture:
+      hidden_layers: [16, 8]
+      dropout: 0.2
+      activation: "relu"
+      batch_norm: false
+      output_activation: "softmax"
+    training:
+      learning_rate: 0.01
+      batch_size: 8
+      epochs: 5
+      early_stopping_patience: 3
+      optimizer: "adam"
+    feature_processing:
+      scale_features: true
+      scaler_type: "standard"
+      
+  comprehensive:
+    timeframe_configs:
+      "1h":
+        expected_features: ["RSI_oversold", "RSI_neutral", "RSI_overbought", 
+                          "SMA_cross_bullish", "SMA_cross_neutral", "SMA_cross_bearish"]
+        weight: 1.0
+        enabled: true
+      "4h":
+        expected_features: ["RSI_oversold", "RSI_neutral", "RSI_overbought", 
+                          "SMA_cross_bullish", "SMA_cross_neutral", "SMA_cross_bearish"]
+        weight: 1.0
+        enabled: true
+      "1d":
+        expected_features: ["RSI_oversold", "RSI_neutral", "RSI_overbought", 
+                          "SMA_cross_bullish", "SMA_cross_neutral", "SMA_cross_bearish"]
+        weight: 1.0
+        enabled: true
+    architecture:
+      hidden_layers: [32, 16, 8]
+      dropout: 0.3
+      activation: "relu"
+      batch_norm: false
+      output_activation: "softmax"
+    training:
+      learning_rate: 0.001
+      batch_size: 16
+      epochs: 20
+      early_stopping_patience: 5
+      optimizer: "adam"
+    feature_processing:
+      scale_features: true
+      scaler_type: "standard"
+
+# Fuzzy system test configurations
+fuzzy_configs:
+  basic:
+    RSI:
+      oversold:
+        type: "triangular"
+        parameters: [0, 20, 35]
+      neutral:
+        type: "triangular"
+        parameters: [25, 50, 75]
+      overbought:
+        type: "triangular"
+        parameters: [65, 80, 100]
+    SMA_cross:
+      bullish:
+        type: "trapezoidal"
+        parameters: [0.01, 0.02, 0.05, 0.1]
+      neutral:
+        type: "triangular"
+        parameters: [-0.01, 0, 0.01]
+      bearish:
+        type: "trapezoidal"
+        parameters: [-0.1, -0.05, -0.02, -0.01]
+        
+  advanced:
+    RSI:
+      oversold:
+        type: "gaussian"
+        parameters: [15, 8]
+      neutral:
+        type: "triangular"
+        parameters: [30, 50, 70]
+      overbought:
+        type: "gaussian"
+        parameters: [85, 8]
+    SMA_cross:
+      strong_bullish:
+        type: "trapezoidal"
+        parameters: [0.03, 0.05, 0.1, 0.15]
+      bullish:
+        type: "triangular"
+        parameters: [0.005, 0.02, 0.04]
+      neutral:
+        type: "triangular"
+        parameters: [-0.005, 0, 0.005]
+      bearish:
+        type: "triangular"
+        parameters: [-0.04, -0.02, -0.005]
+      strong_bearish:
+        type: "trapezoidal"
+        parameters: [-0.15, -0.1, -0.05, -0.03]
+
+# Performance tracking configurations
+performance_configs:
+  basic:
+    max_trade_history: 500
+    recent_trades_window: 25
+    performance_update_interval: 5
+    
+  comprehensive:
+    max_trade_history: 1000
+    recent_trades_window: 50
+    performance_update_interval: 10
+
+# Note: Market regime detection and adaptive parameters removed
+# These features belong in future phases, not Phase 5
+
+# Test data generation parameters
+test_data:
+  price_simulation:
+    base_price: 100.0
+    volatility: 0.02
+    trend_strength: 0.001
+    noise_level: 0.005
+    samples_per_timeframe:
+      "1h": 744  # 31 days
+      "4h": 186  # 31 days / 4
+      "1d": 31   # 31 days
+      
+  indicator_parameters:
+    RSI:
+      period: 14
+      overbought: 70
+      oversold: 30
+    SMA:
+      fast_period: 10
+      slow_period: 20
+    bollinger_bands:
+      period: 20
+      std_dev: 2
+      
+  signal_generation:
+    signal_probability:
+      BUY: 0.3
+      SELL: 0.3
+      HOLD: 0.4
+    confidence_range: [0.5, 0.95]
+    win_rate_target: 0.55
+    
+# Expected test results and thresholds
+test_expectations:
+  pipeline_integration:
+    max_initialization_time: 5.0  # seconds
+    max_processing_time_per_sample: 0.1  # seconds
+    memory_usage_threshold: 500  # MB
+    
+  neural_network:
+    min_training_accuracy: 0.4
+    max_training_time: 30.0  # seconds
+    convergence_tolerance: 0.01
+    
+  fuzzy_system:
+    membership_value_range: [0.0, 1.0]
+    consistency_tolerance: 0.001
+    
+  performance_tracking:
+    metric_calculation_time: 1.0  # seconds
+    history_retention_accuracy: 0.99
+    
+  # Note: Regime detection and adaptation removed for Phase 5
