@@ -167,12 +167,32 @@ THEN BUY (confidence=0.90)
 
 ## 🔧 **Technical Implementation Details**
 
+### **Core Architecture Principles**
+
+1. **🧠 Smart DataManager, Dumb IB Fetcher**: 
+   - DataManager orchestrates multi-timeframe requests and handles failures
+   - IB Fetcher remains unchanged - only fetches what it's asked for
+   - Preserves existing clean separation of concerns
+
+2. **🛡️ Graceful Degradation**: 
+   - Primary timeframe is critical - system fails if unavailable
+   - Auxiliary timeframes are optional - system works with partial data
+   - Synthetic data generation as fallback strategy
+
+3. **🔗 Data Availability Reality**: 
+   - Different symbols have different timeframe availability 
+   - Higher timeframes may have limited history
+   - System must handle partial data scenarios transparently
+
 ### **1. Multi-Timeframe Data Infrastructure**
 
-#### **Enhanced DataManager**
+#### **Enhanced DataManager with Graceful Failure Handling**
+
+**Key Principle**: IB Fetcher stays "dumb" - only fetches what it's asked. DataManager becomes "smart" and handles multi-timeframe orchestration and failures.
+
 ```python
 class MultiTimeframeDataManager(DataManager):
-    """Extended data manager with multi-timeframe support."""
+    """Extended data manager with multi-timeframe support and graceful failure handling."""
     
     def load_multi_timeframe_data(
         self, 
@@ -182,17 +202,100 @@ class MultiTimeframeDataManager(DataManager):
         periods: int = 200
     ) -> Dict[str, pd.DataFrame]:
         """
-        Load synchronized data across multiple timeframes.
+        Load synchronized data across multiple timeframes with graceful failure handling.
         
-        Args:
-            symbol: Trading symbol
-            primary_timeframe: Main timeframe for decision making
-            auxiliary_timeframes: Additional timeframes for context
-            periods: Number of periods in primary timeframe
-            
-        Returns:
-            Dictionary mapping timeframes to DataFrames
+        Architecture:
+        - DataManager orchestrates multiple IB fetcher calls
+        - IB Fetcher remains "dumb" - just fetches requested segments
+        - Graceful degradation when some timeframes unavailable
+        - Synthetic data generation as fallback strategy
         """
+        timeframe_data = {}
+        failed_timeframes = []
+        
+        # Always prioritize primary timeframe
+        try:
+            timeframe_data[primary_timeframe] = self.ib_fetcher.fetch_data(
+                symbol=symbol,
+                timeframe=primary_timeframe,
+                periods=periods
+            )
+            logger.info(f"Successfully loaded primary timeframe {primary_timeframe}")
+        except IbDataError as e:
+            # Primary timeframe failure is critical
+            raise DataError(f"Cannot load primary timeframe {primary_timeframe}: {e}")
+        
+        # Auxiliary timeframes are optional - handle failures gracefully
+        for aux_tf in auxiliary_timeframes:
+            try:
+                tf_periods = self._calculate_periods_for_timeframe(
+                    primary_timeframe, aux_tf, periods
+                )
+                timeframe_data[aux_tf] = self.ib_fetcher.fetch_data(
+                    symbol=symbol,
+                    timeframe=aux_tf, 
+                    periods=tf_periods
+                )
+                logger.info(f"Successfully loaded auxiliary timeframe {aux_tf}")
+                
+            except IbDataError as e:
+                failed_timeframes.append(aux_tf)
+                logger.warning(
+                    f"Failed to load {aux_tf} data for {symbol}: {e}. "
+                    f"Will attempt fallback strategies."
+                )
+        
+        # Apply fallback strategies for missing timeframes
+        timeframe_data = self._apply_fallback_strategies(
+            timeframe_data, failed_timeframes, primary_timeframe
+        )
+        
+        return self._synchronize_available_timeframes(timeframe_data)
+    
+    def _apply_fallback_strategies(
+        self,
+        available_data: Dict[str, pd.DataFrame],
+        failed_timeframes: List[str],
+        primary_timeframe: str
+    ) -> Dict[str, pd.DataFrame]:
+        """Apply fallback strategies for missing timeframes."""
+        
+        # Strategy 1: Synthetic higher timeframe generation
+        if "1d" in failed_timeframes and "4h" in available_data:
+            logger.info("Generating synthetic daily data from 4h data")
+            available_data["1d"] = self._synthesize_daily_from_4h(
+                available_data["4h"]
+            )
+            failed_timeframes.remove("1d")
+        
+        # Strategy 2: Single-timeframe degradation warning
+        if len(available_data) == 1:
+            logger.warning(
+                "Multi-timeframe analysis degraded to single-timeframe. "
+                "Model will use primary timeframe only."
+            )
+        
+        # Log final status
+        if failed_timeframes:
+            logger.info(
+                f"Multi-timeframe analysis using: {list(available_data.keys())}. "
+                f"Unavailable: {failed_timeframes}"
+            )
+        
+        return available_data
+    
+    def _synthesize_daily_from_4h(self, data_4h: pd.DataFrame) -> pd.DataFrame:
+        """Create synthetic daily bars from 4h data."""
+        daily_data = data_4h.resample('1D').agg({
+            'open': 'first',
+            'high': 'max', 
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum'
+        }).dropna()
+        
+        logger.debug(f"Synthesized {len(daily_data)} daily bars from 4h data")
+        return daily_data
         
     def align_timeframes(
         self, 
@@ -1137,32 +1240,34 @@ class PerformanceComparisonTool:
 - `ktrdr/data/timeframe_sync.py`
 - `tests/data/test_multi_timeframe.py`
 
-#### **Day 2: Data Integration and Validation**
+#### **Day 2: Graceful Multi-Timeframe Data Handling**
 **Tasks:**
-1. **IB Integration Enhancement** (3 hours)
-   - Extend IB data fetcher for multi-timeframe requests
-   - Add batch timeframe data loading
-   - Implement efficient data synchronization
+1. **Multi-Timeframe Data Manager Enhancement** (3 hours)
+   - Add graceful failure handling for unavailable timeframes
+   - Implement fallback strategies (synthetic data, single-timeframe degradation)
+   - Add comprehensive logging for data availability issues
+   - **Note**: IB Fetcher stays "dumb" - only fetches what it's asked
 
-2. **Data Quality Validation** (2 hours)
-   - Cross-timeframe consistency checks
-   - Gap detection across timeframes
-   - Data quality metrics for multi-timeframe datasets
+2. **IB Data Availability Testing** (2 hours)
+   - Test with different symbols and timeframe combinations
+   - Identify common data availability patterns
+   - Create test cases for partial data scenarios
+   - Document timeframe availability constraints
 
-3. **Performance Optimization** (2 hours)
-   - Memory-efficient data storage
-   - Lazy loading implementation
-   - Caching strategy for frequently accessed data
+3. **Synthetic Data Generation** (2 hours)
+   - Implement higher timeframe synthesis from lower timeframes
+   - Add data quality validation for synthetic data
+   - Performance testing for synthetic data generation
 
-4. **Integration Testing** (1 hour)
-   - End-to-end data loading tests
-   - Performance benchmarking
-   - Memory usage validation
+4. **Error Handling and Monitoring** (1 hour)
+   - Comprehensive error messages for data unavailability
+   - User-friendly warnings about degraded analysis
+   - Monitoring and alerting for data availability issues
 
 **Deliverables:**
-- Enhanced `ktrdr/data/ib_data_fetcher_unified.py`
-- `ktrdr/data/multi_timeframe_validator.py`
-- Performance benchmarking results
+- Enhanced `ktrdr/data/multi_timeframe_manager.py` with graceful failure handling
+- `ktrdr/data/synthetic_data_generator.py`
+- Data availability testing report and constraints documentation
 
 ### **Day 3-4: Enhanced Indicator Engine**
 
