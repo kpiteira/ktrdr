@@ -102,6 +102,7 @@ def register_builtin_indicators():
     from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
     from ktrdr.indicators.rvi_indicator import RVIIndicator
     from ktrdr.indicators.mfi_indicator import MFIIndicator
+    from ktrdr.indicators.aroon_indicator import AroonIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 
@@ -265,6 +266,15 @@ def register_builtin_indicators():
         reference_datasets=["reference_dataset_mfi"],
         reference_values=REFERENCE_VALUES.get("MFI", {}),
         tolerance=TOLERANCES.get("MFI", 0.01),
+    )
+
+    # Register Aroon Indicator
+    register_indicator(
+        indicator_class=AroonIndicator,
+        default_params={"period": 14, "include_oscillator": False},
+        reference_datasets=["reference_dataset_aroon"],
+        reference_values=REFERENCE_VALUES.get("Aroon", {}),
+        tolerance=TOLERANCES.get("Aroon", 0.01),
     )
 
     # Additional indicators would be registered here as they're added to the system

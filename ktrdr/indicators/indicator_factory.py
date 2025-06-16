@@ -32,6 +32,7 @@ from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
 from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
 from ktrdr.indicators.rvi_indicator import RVIIndicator
 from ktrdr.indicators.mfi_indicator import MFIIndicator
+from ktrdr.indicators.aroon_indicator import AroonIndicator
 
 logger = get_logger(__name__)
 
@@ -73,6 +74,8 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "RVIIndicator": RVIIndicator,
     "MFI": MFIIndicator,
     "MFIIndicator": MFIIndicator,
+    "Aroon": AroonIndicator,
+    "AroonIndicator": AroonIndicator,
 }
 
 

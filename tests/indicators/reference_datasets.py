@@ -616,6 +616,73 @@ def create_mfi_reference_dataset():
     return df
 
 
+def create_aroon_reference_dataset():
+    """
+    Create reference dataset specifically for Aroon testing.
+    
+    Aroon requires high and low data with clear trend patterns
+    to test the time-based trend detection properly.
+    
+    Returns:
+        DataFrame with OHLC data optimized for Aroon testing
+    """
+    import numpy as np
+    
+    # Create 25 data points with distinct trend patterns
+    np.random.seed(42)  # For reproducible results
+    
+    data = []
+    base_price = 100.0
+    
+    for i in range(25):
+        # Create distinct trending phases for Aroon testing
+        if i < 8:
+            # Initial uptrend - new highs frequently
+            trend = 1.2
+            volatility = 0.5
+        elif i < 15:
+            # Sideways/consolidation - no clear new highs/lows
+            trend = 0.0
+            volatility = 0.8
+        else:
+            # Downtrend - new lows frequently
+            trend = -1.0
+            volatility = 0.6
+        
+        # Generate price movement
+        price_change = np.random.normal(trend, volatility)
+        base_price += price_change
+        
+        # Generate realistic OHLC with clear high/low patterns
+        daily_range = abs(np.random.normal(0, 1.5))
+        
+        open_price = base_price + np.random.normal(0, 0.3)
+        close_price = open_price + trend * 0.7 + np.random.normal(0, 0.4)
+        
+        # Make sure we get clear highs and lows for Aroon testing
+        if trend > 0:  # Uptrend - emphasize higher highs
+            high_price = max(open_price, close_price) + daily_range * 0.8
+            low_price = min(open_price, close_price) - daily_range * 0.3
+        elif trend < 0:  # Downtrend - emphasize lower lows
+            high_price = max(open_price, close_price) + daily_range * 0.3
+            low_price = min(open_price, close_price) - daily_range * 0.8
+        else:  # Sideways - balanced range
+            high_price = max(open_price, close_price) + daily_range * 0.5
+            low_price = min(open_price, close_price) - daily_range * 0.5
+        
+        data.append({
+            'open': round(open_price, 2),
+            'high': round(high_price, 2),
+            'low': round(low_price, 2),
+            'close': round(close_price, 2)
+        })
+    
+    df = pd.DataFrame(data)
+    df.index = pd.date_range(start='2023-01-01', periods=len(df), freq='D')
+    
+    return df
+
+
 # Ichimoku reference values for Ichimoku dataset
 ICHIMOKU_REFERENCE_DATASET_ICHIMOKU = {
     # Ichimoku(9, 26, 52, 26) on Ichimoku reference dataset
@@ -694,6 +761,25 @@ MFI_REFERENCE_DATASET_MFI = {
     },
 }
 
+# Aroon reference values for Aroon dataset
+AROON_REFERENCE_DATASET_AROON = {
+    # Aroon(14) on Aroon reference dataset
+    "Aroon_14_Up": {
+        15: 42.857143,   # Aroon Up during uptrend transition
+        18: 21.428571,   # Aroon Up during consolidation phase
+        20: 7.142857,    # Aroon Up during early downtrend
+        22: 7.142857,    # Aroon Up during strong downtrend
+        24: 14.285714,   # Aroon Up during continued downtrend
+    },
+    "Aroon_14_Down": {
+        15: 7.142857,    # Aroon Down during uptrend transition  
+        18: 100.000000,  # Aroon Down during consolidation with recent low
+        20: 85.714286,   # Aroon Down during early downtrend
+        22: 100.000000,  # Aroon Down during strong downtrend with recent low
+        24: 100.000000,  # Aroon Down during continued downtrend with recent low
+    },
+}
+
 
 # Consolidated reference values for all indicators and datasets
 REFERENCE_VALUES = {
@@ -748,6 +834,9 @@ REFERENCE_VALUES = {
     "MFI": {
         "dataset_mfi": MFI_REFERENCE_DATASET_MFI,
     },
+    "Aroon": {
+        "dataset_aroon": AROON_REFERENCE_DATASET_AROON,
+    },
 }
 
 # Tolerances for different indicators
@@ -770,6 +859,7 @@ TOLERANCES = {
     "Ichimoku": 0.01,  # 0.01% tolerance for Ichimoku (precise calculation)
     "RVI": 0.01,  # 0.01% tolerance for RVI (precise calculation)
     "MFI": 0.01,  # 0.01% tolerance for MFI (precise calculation)
+    "Aroon": 0.01,  # 0.01% tolerance for Aroon (precise calculation)
 }
 
 # Reference datasets to use with each indicator

@@ -455,6 +455,29 @@ MFI_SCHEMA = ParameterSchema(
 )
 
 
+# Aroon Parameter Schema
+AROON_SCHEMA = ParameterSchema(
+    name="Aroon",
+    description="Aroon trend-following indicator measuring time between highs and lows",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Period for Aroon calculation",
+            default=14,
+            min_value=1,
+            max_value=200,
+        ),
+        ParameterDefinition(
+            name="include_oscillator",
+            param_type=ParameterType.BOOL,
+            description="Whether to include Aroon Oscillator line",
+            default=False,
+        ),
+    ],
+)
+
+
 # Registry of all parameter schemas
 PARAMETER_SCHEMAS = {
     "RSI": RSI_SCHEMA,
@@ -474,6 +497,7 @@ PARAMETER_SCHEMAS = {
     "Ichimoku": ICHIMOKU_SCHEMA,
     "RVI": RVI_SCHEMA,
     "MFI": MFI_SCHEMA,
+    "Aroon": AROON_SCHEMA,
 }
 
 
