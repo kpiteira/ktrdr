@@ -58,6 +58,15 @@ class MultiTimeframeIndicatorEngine:
         
         logger.info(f"Initialized MultiTimeframeIndicatorEngine with {len(self.engines)} timeframes")
     
+    def get_supported_timeframes(self) -> List[str]:
+        """
+        Get list of supported timeframes.
+        
+        Returns:
+            List of timeframe strings that are configured and enabled
+        """
+        return list(self.engines.keys())
+    
     def apply_multi_timeframe(
         self, 
         multi_timeframe_data: Dict[str, pd.DataFrame]
