@@ -13,6 +13,7 @@ from ktrdr.cli.ib_commands import ib_app
 from ktrdr.cli.model_commands import models_app
 from ktrdr.cli.strategy_commands import strategies_app
 from ktrdr.cli.fuzzy_commands import fuzzy_app
+from ktrdr.cli.multi_timeframe_commands import multi_timeframe_app
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(data_app, name="data", help="Data management commands")
@@ -30,6 +31,9 @@ cli_app.add_typer(
     strategies_app, name="strategies", help="Trading strategy management commands"
 )
 cli_app.add_typer(fuzzy_app, name="fuzzy", help="Fuzzy logic operations commands")
+cli_app.add_typer(
+    multi_timeframe_app, name="multi-timeframe", help="Multi-timeframe trading decision commands"
+)
 
 # Export the app for the CLI entry point
 app = cli_app

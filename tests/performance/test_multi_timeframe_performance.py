@@ -1,658 +1,425 @@
-"""Performance tests for multi-timeframe indicator pipeline.
+"""
+Performance and scalability tests for multi-timeframe system.
 
-This module tests performance characteristics and optimizations for large datasets.
+This module tests the performance characteristics and scalability limits
+of the multi-timeframe decision system.
 """
 
 import pytest
-import pandas as pd
-import numpy as np
+import asyncio
 import time
+import tempfile
+import yaml
+import pandas as pd
 import psutil
-import os
-from typing import Dict, List
-from dataclasses import dataclass
+import threading
+from pathlib import Path
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ktrdr.indicators.multi_timeframe_indicator_engine import (
-    MultiTimeframeIndicatorEngine,
-    TimeframeIndicatorConfig
+from ktrdr.decision.multi_timeframe_orchestrator import (
+    MultiTimeframeDecisionOrchestrator,
+    create_multi_timeframe_decision_orchestrator
 )
-from ktrdr.indicators.column_standardization import ColumnStandardizer
-
-
-@dataclass
-class PerformanceMetrics:
-    """Performance metrics for testing."""
-    processing_time: float
-    memory_usage_mb: float
-    cpu_percent: float
-    data_points_processed: int
-    throughput_points_per_second: float
-
-
-class PerformanceProfiler:
-    """Helper class for profiling performance."""
-    
-    def __init__(self):
-        self.process = psutil.Process()
-        self.start_time = None
-        self.start_memory = None
-        self.start_cpu = None
-    
-    def start_profiling(self):
-        """Start performance profiling."""
-        self.start_time = time.time()
-        self.start_memory = self.process.memory_info().rss / 1024 / 1024  # MB
-        self.start_cpu = self.process.cpu_percent()
-    
-    def get_metrics(self, data_points: int) -> PerformanceMetrics:
-        """Get performance metrics."""
-        end_time = time.time()
-        end_memory = self.process.memory_info().rss / 1024 / 1024  # MB
-        end_cpu = self.process.cpu_percent()
-        
-        processing_time = end_time - self.start_time
-        memory_usage = end_memory - self.start_memory
-        cpu_percent = end_cpu
-        throughput = data_points / processing_time if processing_time > 0 else 0
-        
-        return PerformanceMetrics(
-            processing_time=processing_time,
-            memory_usage_mb=memory_usage,
-            cpu_percent=cpu_percent,
-            data_points_processed=data_points,
-            throughput_points_per_second=throughput
-        )
+from ktrdr.decision.base import Signal, Position, TradingDecision
 
 
 class TestMultiTimeframePerformance:
-    """Performance tests for multi-timeframe indicator processing."""
-
-    def create_large_dataset(self, hours: int = 24*30*6) -> Dict[str, pd.DataFrame]:
-        """Create large dataset (6 months of hourly data by default)."""
-        # Generate realistic time series data
-        dates_1h = pd.date_range('2024-01-01', periods=hours, freq='1h')
-        np.random.seed(42)
+    """Performance and scalability tests for multi-timeframe system."""
+    
+    @pytest.fixture
+    def large_dataset(self):
+        """Create large dataset for performance testing."""
+        # Create 1 year of hourly data
+        dates = pd.date_range(
+            start=datetime.now() - timedelta(days=365),
+            end=datetime.now(),
+            freq='1h'
+        )
         
-        # Use realistic price simulation
-        n_points = len(dates_1h)
+        base_price = 150
+        data = {}
         
-        # Generate correlated returns with volatility clustering
-        returns = []
-        volatility = 0.02
-        for i in range(n_points):
-            # Volatility clustering (GARCH-like)
-            if i > 0:
-                volatility = 0.95 * volatility + 0.05 * abs(returns[-1])
+        # Generate realistic price movements
+        for tf, freq_hours in [('1h', 1), ('4h', 4), ('1d', 24)]:
+            tf_dates = dates[::freq_hours]
+            n_points = len(tf_dates)
             
-            # Generate return with current volatility
-            ret = np.random.normal(0, volatility)
-            returns.append(ret)
+            # Generate random walk with trend
+            price_changes = pd.Series(range(n_points)).apply(
+                lambda x: 0.1 * (0.5 - hash(x) % 100 / 100) + 0.001 * x
+            )
+            prices = base_price + price_changes.cumsum()
+            
+            data[tf] = pd.DataFrame({
+                'timestamp': tf_dates,
+                'open': prices,
+                'high': prices * 1.02,
+                'low': prices * 0.98,
+                'close': prices * 1.001,
+                'volume': 1000000 * (1 + freq_hours)
+            }).set_index('timestamp')
         
-        # Convert to prices
-        prices = 100 * np.exp(np.cumsum(returns))
-        
-        # Create realistic OHLC data
-        noise = 0.001
-        data_1h = pd.DataFrame({
-            'timestamp': dates_1h,
-            'open': prices * (1 + np.random.normal(0, noise, n_points)),
-            'high': prices * (1 + np.abs(np.random.normal(0, noise*2, n_points))),
-            'low': prices * (1 - np.abs(np.random.normal(0, noise*2, n_points))),
-            'close': prices,
-            'volume': np.random.lognormal(9, 0.5, n_points).astype(int)
-        })
-        
-        # Ensure OHLC constraints
-        data_1h['high'] = np.maximum(data_1h['high'], 
-                                   np.maximum(data_1h['open'], data_1h['close']))
-        data_1h['low'] = np.minimum(data_1h['low'], 
-                                  np.minimum(data_1h['open'], data_1h['close']))
-        
-        # Create 4h and daily data by resampling
-        data_4h = data_1h.set_index('timestamp').resample('4h').agg({
-            'open': 'first',
-            'high': 'max', 
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum'
-        }).reset_index()
-        
-        data_1d = data_1h.set_index('timestamp').resample('1d').agg({
-            'open': 'first',
-            'high': 'max',
-            'low': 'min', 
-            'close': 'last',
-            'volume': 'sum'
-        }).reset_index()
-        
+        return data
+    
+    @pytest.fixture
+    def performance_strategy_config(self):
+        """Strategy config optimized for performance testing."""
         return {
-            '1h': data_1h,
-            '4h': data_4h,
-            '1d': data_1d
-        }
-
-    def test_baseline_performance_small_dataset(self):
-        """Establish baseline performance with small dataset."""
-        
-        # Small dataset (1 week of hourly data)
-        data = self.create_large_dataset(hours=24*7)
-        
-        # Simple configuration
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}}
-                ]
-            ),
-            TimeframeIndicatorConfig(
-                timeframe='4h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}}
-                ]
-            )
-        ]
-        
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        engine = MultiTimeframeIndicatorEngine(timeframe_configs)
-        results = engine.apply_multi_timeframe(data)
-        
-        total_points = sum(len(df) for df in data.values())
-        metrics = profiler.get_metrics(total_points)
-        
-        # Baseline expectations (should be very fast)
-        assert metrics.processing_time < 2.0  # Under 2 seconds
-        assert metrics.memory_usage_mb < 100  # Under 100MB
-        assert metrics.throughput_points_per_second > 100  # > 100 points/sec
-        
-        print(f"Baseline Performance - Points: {total_points}, "
-              f"Time: {metrics.processing_time:.2f}s, "
-              f"Memory: {metrics.memory_usage_mb:.1f}MB, "
-              f"Throughput: {metrics.throughput_points_per_second:.0f} pts/sec")
-
-    def test_medium_dataset_performance(self):
-        """Test performance with medium dataset (1 month)."""
-        
-        # Medium dataset (1 month of hourly data)
-        data = self.create_large_dataset(hours=24*30)
-        
-        # Moderate complexity configuration
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 10}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}},
-                    {'type': 'ExponentialMovingAverage', 'params': {'period': 12}}
-                ]
-            ),
-            TimeframeIndicatorConfig(
-                timeframe='4h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 30}}
-                ]
-            ),
-            TimeframeIndicatorConfig(
-                timeframe='1d',
-                indicators=[
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}}
-                ]
-            )
-        ]
-        
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        engine = MultiTimeframeIndicatorEngine(timeframe_configs)
-        results = engine.apply_multi_timeframe(data)
-        
-        total_points = sum(len(df) for df in data.values())
-        metrics = profiler.get_metrics(total_points)
-        
-        # Medium dataset expectations 
-        assert metrics.processing_time < 10.0  # Under 10 seconds
-        assert metrics.memory_usage_mb < 500   # Under 500MB
-        assert metrics.throughput_points_per_second > 50  # > 50 points/sec
-        
-        print(f"Medium Performance - Points: {total_points}, "
-              f"Time: {metrics.processing_time:.2f}s, "
-              f"Memory: {metrics.memory_usage_mb:.1f}MB, "
-              f"Throughput: {metrics.throughput_points_per_second:.0f} pts/sec")
-
-    def test_large_dataset_performance(self):
-        """Test performance with large dataset (6 months)."""
-        
-        # Large dataset (6 months of hourly data)
-        data = self.create_large_dataset(hours=24*30*6)
-        
-        # Complex configuration
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 10}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}},
-                    {'type': 'ExponentialMovingAverage', 'params': {'period': 12}},
-                    {'type': 'ExponentialMovingAverage', 'params': {'period': 26}}
-                ]
-            ),
-            TimeframeIndicatorConfig(
-                timeframe='4h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 30}},
-                    {'type': 'ExponentialMovingAverage', 'params': {'period': 21}}
-                ]
-            ),
-            TimeframeIndicatorConfig(
-                timeframe='1d',
-                indicators=[
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 50}}
-                ]
-            )
-        ]
-        
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        engine = MultiTimeframeIndicatorEngine(timeframe_configs)
-        results = engine.apply_multi_timeframe(data)
-        
-        total_points = sum(len(df) for df in data.values())
-        metrics = profiler.get_metrics(total_points)
-        
-        # Large dataset expectations (more lenient)
-        assert metrics.processing_time < 30.0  # Under 30 seconds
-        assert metrics.memory_usage_mb < 1000  # Under 1GB
-        assert metrics.throughput_points_per_second > 20  # > 20 points/sec
-        
-        print(f"Large Performance - Points: {total_points}, "
-              f"Time: {metrics.processing_time:.2f}s, "
-              f"Memory: {metrics.memory_usage_mb:.1f}MB, "
-              f"Throughput: {metrics.throughput_points_per_second:.0f} pts/sec")
-
-    def test_memory_efficiency_with_chunked_processing(self):
-        """Test memory efficiency with chunked data processing."""
-        
-        # Very large dataset that might cause memory issues
-        data = self.create_large_dataset(hours=24*30*12)  # 1 year
-        
-        # Test chunked processing
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}}
-                ]
-            )
-        ]
-        
-        engine = MultiTimeframeIndicatorEngine(timeframe_configs)
-        
-        # Process in chunks to manage memory
-        chunk_size = 1000  # Process 1000 rows at a time
-        chunked_results = {}
-        
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        for timeframe, df in data.items():
-            timeframe_results = []
-            
-            # Process in chunks
-            for i in range(0, len(df), chunk_size):
-                chunk = df.iloc[i:i+chunk_size].copy()
-                
-                # For non-first chunks, include some overlap for indicator continuity
-                if i > 0:
-                    overlap = min(50, i)  # 50 row overlap
-                    chunk = pd.concat([df.iloc[i-overlap:i], chunk], ignore_index=True)
-                
-                # Process chunk
-                chunk_data = {timeframe: chunk}
-                chunk_result = engine.apply_multi_timeframe(chunk_data)
-                
-                # Remove overlap from result (except first chunk)
-                if i > 0 and len(chunk_result[timeframe]) > 50:
-                    chunk_result[timeframe] = chunk_result[timeframe].iloc[50:]
-                
-                timeframe_results.append(chunk_result[timeframe])
-            
-            # Combine chunks
-            if timeframe_results:
-                chunked_results[timeframe] = pd.concat(timeframe_results, ignore_index=True)
-        
-        total_points = sum(len(df) for df in data.values())
-        metrics = profiler.get_metrics(total_points)
-        
-        # Memory should be much more reasonable with chunking
-        assert metrics.memory_usage_mb < 2000  # Under 2GB even for 1 year
-        
-        print(f"Chunked Performance - Points: {total_points}, "
-              f"Time: {metrics.processing_time:.2f}s, "
-              f"Memory: {metrics.memory_usage_mb:.1f}MB")
-
-    def test_parallel_timeframe_processing(self):
-        """Test parallel processing of different timeframes."""
-        
-        import concurrent.futures
-        from functools import partial
-        
-        data = self.create_large_dataset(hours=24*30*3)  # 3 months
-        
-        # Create separate engines for each timeframe
-        timeframe_configs = {
-            '1h': [TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}}
-                ]
-            )],
-            '4h': [TimeframeIndicatorConfig(
-                timeframe='4h', 
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'ExponentialMovingAverage', 'params': {'period': 21}}
-                ]
-            )],
-            '1d': [TimeframeIndicatorConfig(
-                timeframe='1d',
-                indicators=[
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}}
-                ]
-            )]
-        }
-        
-        def process_timeframe(timeframe, configs, data_dict):
-            """Process a single timeframe."""
-            engine = MultiTimeframeIndicatorEngine(configs)
-            timeframe_data = {timeframe: data_dict[timeframe]}
-            return timeframe, engine.apply_multi_timeframe(timeframe_data)
-        
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        # Process timeframes in parallel
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = []
-            for tf, configs in timeframe_configs.items():
-                future = executor.submit(process_timeframe, tf, configs, data)
-                futures.append(future)
-            
-            # Collect results
-            parallel_results = {}
-            for future in concurrent.futures.as_completed(futures):
-                timeframe, result = future.result()
-                parallel_results.update(result)
-        
-        total_points = sum(len(df) for df in data.values())
-        metrics = profiler.get_metrics(total_points)
-        
-        # Parallel processing should be faster than sequential
-        # (This is more of a demonstration than a strict test)
-        assert len(parallel_results) == 3
-        
-        print(f"Parallel Performance - Points: {total_points}, "
-              f"Time: {metrics.processing_time:.2f}s, "
-              f"Memory: {metrics.memory_usage_mb:.1f}MB")
-
-    def test_column_standardization_performance(self):
-        """Test performance of column standardization with many columns."""
-        
-        # Create data with many indicators
-        data = self.create_large_dataset(hours=24*30)  # 1 month
-        
-        # Many indicators configuration
-        indicators = []
-        for period in [10, 14, 20, 30, 50]:
-            indicators.extend([
-                {'type': 'RSI', 'params': {'period': period}},
-                {'type': 'SimpleMovingAverage', 'params': {'period': period}},
-                {'type': 'ExponentialMovingAverage', 'params': {'period': period}}
-            ])
-        
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=indicators[:10]  # Limit to prevent too much data
-            ),
-            TimeframeIndicatorConfig(
-                timeframe='4h',
-                indicators=indicators[5:15]
-            ),
-            TimeframeIndicatorConfig(
-                timeframe='1d',
-                indicators=indicators[10:15]
-            )
-        ]
-        
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        engine = MultiTimeframeIndicatorEngine(timeframe_configs)
-        results = engine.apply_multi_timeframe(data)
-        
-        # Test column standardization performance
-        standardizer = ColumnStandardizer()
-        
-        for timeframe, df in results.items():
-            columns = df.columns.tolist()
-            mapping = standardizer.standardize_dataframe_columns(columns, timeframe)
-            
-            # Verify standardization worked
-            indicator_cols = [col for col in columns 
-                           if col not in ['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-            for col in indicator_cols:
-                assert col.endswith(f'_{timeframe}')
-        
-        total_points = sum(len(df) for df in data.values())
-        metrics = profiler.get_metrics(total_points)
-        
-        # Should handle many columns efficiently
-        assert metrics.processing_time < 20.0  # Under 20 seconds
-        
-        print(f"Column Standardization Performance - Points: {total_points}, "
-              f"Columns: {sum(len(df.columns) for df in results.values())}, "
-              f"Time: {metrics.processing_time:.2f}s")
-
-    def test_incremental_processing_performance(self):
-        """Test performance of incremental data processing."""
-        
-        # Simulate real-time incremental updates
-        base_data = self.create_large_dataset(hours=24*30)  # 1 month base
-        
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}}
-                ]
-            )
-        ]
-        
-        engine = MultiTimeframeIndicatorEngine(timeframe_configs)
-        
-        # Process base data
-        base_results = engine.apply_multi_timeframe(base_data)
-        
-        # Simulate incremental updates (new hourly data)
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        incremental_times = []
-        
-        for hour in range(24):  # 24 new hours
-            # Create new data point
-            last_timestamp = base_data['1h']['timestamp'].iloc[-1]
-            new_timestamp = last_timestamp + pd.Timedelta(hours=1)
-            
-            # Simulate new price data
-            last_price = base_data['1h']['close'].iloc[-1]
-            new_price = last_price * (1 + np.random.normal(0, 0.01))
-            
-            new_row = pd.DataFrame({
-                'timestamp': [new_timestamp],
-                'open': [new_price * 0.999],
-                'high': [new_price * 1.001],
-                'low': [new_price * 0.998],
-                'close': [new_price],
-                'volume': [np.random.randint(1000, 10000)]
-            })
-            
-            # Add to existing data
-            updated_data = {
-                '1h': pd.concat([base_data['1h'], new_row], ignore_index=True)
+            "name": "performance_test_strategy",
+            "version": "2.0",
+            "timeframe_configs": {
+                "1h": {"weight": 0.5, "primary": False, "lookback_periods": 20},
+                "4h": {"weight": 0.3, "primary": True, "lookback_periods": 15},
+                "1d": {"weight": 0.2, "primary": False, "lookback_periods": 10}
+            },
+            "indicators": [
+                {"name": "rsi", "period": 14, "timeframes": ["1h", "4h", "1d"]},
+                {"name": "sma", "period": 20, "timeframes": ["1h", "4h"]}
+            ],
+            "fuzzy_sets": {
+                "rsi": {
+                    "oversold": {
+                        "type": "triangular",
+                        "parameters": [0, 30, 50]
+                    },
+                    "neutral": {
+                        "type": "triangular", 
+                        "parameters": [30, 50, 70]
+                    },
+                    "overbought": {
+                        "type": "triangular",
+                        "parameters": [50, 70, 100]
+                    }
+                }
+            },
+            "fuzzy_rules": [
+                {
+                    "name": "buy_rule",
+                    "conditions": [
+                        {"indicator": "rsi", "set": "oversold", "timeframe": "4h"}
+                    ],
+                    "action": {"signal": "BUY", "confidence": 0.8}
+                }
+            ],
+            "model": {
+                "type": "mlp",
+                "input_features": ["rsi"],
+                "hidden_layers": [32, 16],
+                "activation": "tanh",
+                "learning_rate": 0.001,
+                "epochs": 50
+            },
+            "multi_timeframe": {
+                "consensus_method": "weighted_majority",
+                "min_agreement_score": 0.6
             }
-            
-            # Process incremental update (should be fast)
-            start_time = time.time()
-            
-            # For efficiency, only process recent data needed for indicators
-            recent_data = {
-                '1h': updated_data['1h'].tail(100)  # Only last 100 rows needed
-            }
-            
-            incremental_result = engine.apply_multi_timeframe(recent_data)
-            
-            incremental_time = time.time() - start_time
-            incremental_times.append(incremental_time)
-            
-            # Update base data for next iteration
-            base_data = updated_data
-        
-        total_incremental_time = sum(incremental_times)
-        avg_incremental_time = total_incremental_time / len(incremental_times)
-        
-        # Incremental updates should be very fast
-        assert avg_incremental_time < 0.1  # Under 100ms per update
-        assert max(incremental_times) < 0.5  # No single update over 500ms
-        
-        print(f"Incremental Processing - {len(incremental_times)} updates, "
-              f"Avg: {avg_incremental_time*1000:.1f}ms, "
-              f"Max: {max(incremental_times)*1000:.1f}ms, "
-              f"Total: {total_incremental_time:.2f}s")
-
-
-class TestPerformanceOptimizations:
-    """Test specific performance optimizations."""
-
-    def test_indicator_computation_caching(self):
-        """Test caching of indicator computations."""
-        
-        data = self.create_large_dataset(hours=24*7)  # 1 week
-        
-        # Same indicator with same parameters should be cached
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'RSI', 'params': {'period': 14}},  # Duplicate
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}}  # Duplicate
-                ]
-            )
-        ]
-        
-        # First run
-        engine1 = MultiTimeframeIndicatorEngine(timeframe_configs)
-        
-        start_time = time.time()
-        results1 = engine1.apply_multi_timeframe(data)
-        first_run_time = time.time() - start_time
-        
-        # Second run with same configuration (should benefit from any caching)
-        engine2 = MultiTimeframeIndicatorEngine(timeframe_configs)
-        
-        start_time = time.time()
-        results2 = engine2.apply_multi_timeframe(data)
-        second_run_time = time.time() - start_time
-        
-        # Results should be identical
-        for timeframe in results1:
-            pd.testing.assert_frame_equal(
-                results1[timeframe].sort_index(axis=1), 
-                results2[timeframe].sort_index(axis=1)
-            )
-        
-        print(f"Caching Test - First: {first_run_time:.3f}s, "
-              f"Second: {second_run_time:.3f}s")
-
-    def test_vectorized_operations_performance(self):
-        """Test that indicators use vectorized operations efficiently."""
-        
-        data = self.create_large_dataset(hours=24*30)  # 1 month
-        
-        # Compare vectorized vs non-vectorized approach
-        timeframe_configs = [
-            TimeframeIndicatorConfig(
-                timeframe='1h',
-                indicators=[
-                    {'type': 'RSI', 'params': {'period': 14}},
-                    {'type': 'SimpleMovingAverage', 'params': {'period': 20}},
-                    {'type': 'ExponentialMovingAverage', 'params': {'period': 12}}
-                ]
-            )
-        ]
-        
-        engine = MultiTimeframeIndicatorEngine(timeframe_configs)
-        
-        # Measure vectorized performance
-        profiler = PerformanceProfiler()
-        profiler.start_profiling()
-        
-        results = engine.apply_multi_timeframe(data)
-        
-        total_points = len(data['1h'])
-        metrics = profiler.get_metrics(total_points)
-        
-        # Vectorized operations should be very efficient
-        assert metrics.throughput_points_per_second > 1000  # > 1000 points/sec
-        
-        print(f"Vectorized Performance - Throughput: {metrics.throughput_points_per_second:.0f} pts/sec")
-
-
-if __name__ == "__main__":
-    # Run performance tests manually
-    import sys
+        }
     
-    test_class = TestMultiTimeframePerformance()
+    @pytest.fixture
+    def temp_perf_strategy_file(self, performance_strategy_config):
+        """Create temporary performance strategy file."""
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='w', suffix='.yaml', delete=False
+        )
+        yaml.dump(performance_strategy_config, temp_file)
+        temp_file.close()
+        yield temp_file.name
+        Path(temp_file.name).unlink()
     
-    print("Running Multi-Timeframe Performance Tests...")
-    print("=" * 60)
+    def test_single_decision_latency(self, large_dataset, temp_perf_strategy_file):
+        """Test latency of single decision generation."""
+        
+        with patch('ktrdr.decision.multi_timeframe_orchestrator.DataManager') as mock_dm:
+            mock_dm_instance = Mock()
+            mock_dm_instance.get_data.return_value = large_dataset['1h']
+            mock_dm.return_value = mock_dm_instance
+            
+            orchestrator = create_multi_timeframe_decision_orchestrator(
+                strategy_config_path=temp_perf_strategy_file,
+                timeframes=['1h', '4h', '1d'],
+                mode='backtest'
+            )
+            
+            portfolio_state = {'total_value': 100000.0, 'available_capital': 50000.0}
+            
+            # Warm up
+            orchestrator.make_multi_timeframe_decision(
+                symbol='AAPL',
+                timeframe_data=large_dataset,
+                portfolio_state=portfolio_state
+            )
+            
+            # Measure decision latency
+            start_time = time.perf_counter()
+            decision = orchestrator.make_multi_timeframe_decision(
+                symbol='AAPL',
+                timeframe_data=large_dataset,
+                portfolio_state=portfolio_state
+            )
+            end_time = time.perf_counter()
+            
+            latency = end_time - start_time
+            
+            assert isinstance(decision, TradingDecision)
+            assert latency < 1.0  # Should complete within 1 second
+            print(f"Single decision latency: {latency:.3f} seconds")
     
-    try:
-        print("\n1. Baseline Performance Test")
-        test_class.test_baseline_performance_small_dataset()
+    def test_throughput_multiple_symbols(self, large_dataset, temp_perf_strategy_file):
+        """Test throughput with multiple symbols."""
         
-        print("\n2. Medium Dataset Performance Test")
-        test_class.test_medium_dataset_performance()
+        with patch('ktrdr.decision.multi_timeframe_orchestrator.DataManager') as mock_dm:
+            mock_dm_instance = Mock()
+            mock_dm_instance.get_data.return_value = large_dataset['1h']
+            mock_dm.return_value = mock_dm_instance
+            
+            orchestrator = create_multi_timeframe_decision_orchestrator(
+                strategy_config_path=temp_perf_strategy_file,
+                timeframes=['1h', '4h', '1d'],
+                mode='backtest'
+            )
+            
+            portfolio_state = {'total_value': 100000.0, 'available_capital': 50000.0}
+            symbols = [f'SYM{i:03d}' for i in range(50)]  # 50 symbols
+            
+            # Measure throughput
+            start_time = time.perf_counter()
+            decisions = []
+            
+            for symbol in symbols:
+                decision = orchestrator.make_multi_timeframe_decision(
+                    symbol=symbol,
+                    timeframe_data=large_dataset,
+                    portfolio_state=portfolio_state
+                )
+                decisions.append(decision)
+            
+            end_time = time.perf_counter()
+            total_time = end_time - start_time
+            throughput = len(symbols) / total_time
+            
+            assert len(decisions) == 50
+            assert all(isinstance(d, TradingDecision) for d in decisions)
+            assert throughput > 10  # Should process at least 10 symbols per second
+            print(f"Throughput: {throughput:.2f} decisions/second")
+    
+    def test_concurrent_decision_performance(self, large_dataset, temp_perf_strategy_file):
+        """Test performance with concurrent decision generation."""
         
-        print("\n3. Large Dataset Performance Test")
-        test_class.test_large_dataset_performance()
+        with patch('ktrdr.decision.multi_timeframe_orchestrator.DataManager') as mock_dm:
+            mock_dm_instance = Mock()
+            mock_dm_instance.get_data.return_value = large_dataset['1h']
+            mock_dm.return_value = mock_dm_instance
+            
+            orchestrator = create_multi_timeframe_decision_orchestrator(
+                strategy_config_path=temp_perf_strategy_file,
+                timeframes=['1h', '4h', '1d'],
+                mode='backtest'
+            )
+            
+            portfolio_state = {'total_value': 100000.0, 'available_capital': 50000.0}
+            symbols = [f'SYM{i:03d}' for i in range(20)]
+            
+            def make_decision(symbol):
+                return orchestrator.make_multi_timeframe_decision(
+                    symbol=symbol,
+                    timeframe_data=large_dataset,
+                    portfolio_state=portfolio_state
+                )
+            
+            # Test concurrent execution
+            start_time = time.perf_counter()
+            
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(make_decision, symbol) for symbol in symbols]
+                decisions = [future.result() for future in as_completed(futures)]
+            
+            end_time = time.perf_counter()
+            total_time = end_time - start_time
+            throughput = len(symbols) / total_time
+            
+            assert len(decisions) == 20
+            assert all(isinstance(d, TradingDecision) for d in decisions)
+            print(f"Concurrent throughput: {throughput:.2f} decisions/second")
+    
+    def test_memory_usage_scaling(self, large_dataset, temp_perf_strategy_file):
+        """Test memory usage as dataset size increases."""
         
-        print("\n4. Memory Efficiency Test")
-        test_class.test_memory_efficiency_with_chunked_processing()
+        with patch('ktrdr.decision.multi_timeframe_orchestrator.DataManager') as mock_dm:
+            mock_dm_instance = Mock()
+            mock_dm_instance.get_data.return_value = large_dataset['1h']
+            mock_dm.return_value = mock_dm_instance
+            
+            orchestrator = create_multi_timeframe_decision_orchestrator(
+                strategy_config_path=temp_perf_strategy_file,
+                timeframes=['1h', '4h', '1d'],
+                mode='backtest'
+            )
+            
+            portfolio_state = {'total_value': 100000.0, 'available_capital': 50000.0}
+            
+            # Measure memory usage before
+            process = psutil.Process()
+            initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+            
+            # Generate many decisions to test memory scaling
+            for i in range(100):
+                decision = orchestrator.make_multi_timeframe_decision(
+                    symbol=f'SYM{i:03d}',
+                    timeframe_data=large_dataset,
+                    portfolio_state=portfolio_state
+                )
+                assert isinstance(decision, TradingDecision)
+            
+            # Measure memory usage after
+            final_memory = process.memory_info().rss / 1024 / 1024  # MB
+            memory_increase = final_memory - initial_memory
+            
+            # Memory increase should be reasonable (less than 100MB for 100 decisions)
+            assert memory_increase < 100
+            print(f"Memory increase: {memory_increase:.2f} MB for 100 decisions")
+    
+    def test_timeframe_scaling_performance(self, large_dataset, temp_perf_strategy_file):
+        """Test performance scaling with different numbers of timeframes."""
         
-        print("\n5. Column Standardization Performance Test")
-        test_class.test_column_standardization_performance()
+        with patch('ktrdr.decision.multi_timeframe_orchestrator.DataManager') as mock_dm:
+            mock_dm_instance = Mock()
+            mock_dm_instance.get_data.return_value = large_dataset['1h']
+            mock_dm.return_value = mock_dm_instance
+            
+            portfolio_state = {'total_value': 100000.0, 'available_capital': 50000.0}
+            timeframe_sets = [
+                ['1h'],
+                ['1h', '4h'],
+                ['1h', '4h', '1d']
+            ]
+            
+            results = {}
+            
+            for timeframes in timeframe_sets:
+                orchestrator = create_multi_timeframe_decision_orchestrator(
+                    strategy_config_path=temp_perf_strategy_file,
+                    timeframes=timeframes,
+                    mode='backtest'
+                )
+                
+                # Warm up
+                orchestrator.make_multi_timeframe_decision(
+                    symbol='AAPL',
+                    timeframe_data=large_dataset,
+                    portfolio_state=portfolio_state
+                )
+                
+                # Measure performance
+                start_time = time.perf_counter()
+                for i in range(10):
+                    decision = orchestrator.make_multi_timeframe_decision(
+                        symbol=f'SYM{i}',
+                        timeframe_data=large_dataset,
+                        portfolio_state=portfolio_state
+                    )
+                    assert isinstance(decision, TradingDecision)
+                
+                end_time = time.perf_counter()
+                avg_time = (end_time - start_time) / 10
+                results[len(timeframes)] = avg_time
+            
+            # Performance should scale reasonably with timeframes
+            assert results[1] < results[3]  # More timeframes should take more time
+            assert results[3] < results[1] * 5  # But not exponentially more
+            
+            for tf_count, avg_time in results.items():
+                print(f"{tf_count} timeframes: {avg_time:.3f}s average")
+    
+    def test_large_data_volume_performance(self, temp_perf_strategy_file):
+        """Test performance with very large data volumes."""
         
-        print("\n6. Incremental Processing Test")
-        test_class.test_incremental_processing_performance()
+        # Create extra large dataset (2 years of minute data for 1h timeframe)
+        dates = pd.date_range(
+            start=datetime.now() - timedelta(days=730),
+            end=datetime.now(),
+            freq='1min'
+        )
         
-        print("\n" + "=" * 60)
-        print("All performance tests completed successfully!")
+        large_data = {
+            '1h': pd.DataFrame({
+                'timestamp': dates[::60],  # Every hour
+                'open': 150 + pd.Series(range(len(dates[::60]))) * 0.001,
+                'high': 152 + pd.Series(range(len(dates[::60]))) * 0.001,
+                'low': 148 + pd.Series(range(len(dates[::60]))) * 0.001,
+                'close': 151 + pd.Series(range(len(dates[::60]))) * 0.001,
+                'volume': 1000000
+            }).set_index('timestamp')
+        }
         
-    except Exception as e:
-        print(f"Performance test failed: {e}")
-        sys.exit(1)
+        with patch('ktrdr.decision.multi_timeframe_orchestrator.DataManager') as mock_dm:
+            mock_dm_instance = Mock()
+            mock_dm_instance.get_data.return_value = large_data['1h']
+            mock_dm.return_value = mock_dm_instance
+            
+            orchestrator = create_multi_timeframe_decision_orchestrator(
+                strategy_config_path=temp_perf_strategy_file,
+                timeframes=['1h'],
+                mode='backtest'
+            )
+            
+            portfolio_state = {'total_value': 100000.0, 'available_capital': 50000.0}
+            
+            # Test with large data volume
+            start_time = time.perf_counter()
+            decision = orchestrator.make_multi_timeframe_decision(
+                symbol='AAPL',
+                timeframe_data=large_data,
+                portfolio_state=portfolio_state
+            )
+            end_time = time.perf_counter()
+            
+            processing_time = end_time - start_time
+            data_points = len(large_data['1h'])
+            
+            assert isinstance(decision, TradingDecision)
+            assert processing_time < 5.0  # Should handle large data within 5 seconds
+            print(f"Large data processing: {data_points} points in {processing_time:.3f}s")
+    
+    @pytest.mark.asyncio
+    async def test_async_performance_characteristics(self, large_dataset, temp_perf_strategy_file):
+        """Test performance characteristics in async environments."""
+        
+        with patch('ktrdr.decision.multi_timeframe_orchestrator.DataManager') as mock_dm:
+            mock_dm_instance = Mock()
+            mock_dm_instance.get_data.return_value = large_dataset['1h']
+            mock_dm.return_value = mock_dm_instance
+            
+            orchestrator = create_multi_timeframe_decision_orchestrator(
+                strategy_config_path=temp_perf_strategy_file,
+                timeframes=['1h', '4h', '1d'],
+                mode='backtest'
+            )
+            
+            portfolio_state = {'total_value': 100000.0, 'available_capital': 50000.0}
+            
+            async def async_decision(symbol):
+                # Simulate async decision making
+                return await asyncio.to_thread(
+                    orchestrator.make_multi_timeframe_decision,
+                    symbol=symbol,
+                    timeframe_data=large_dataset,
+                    portfolio_state=portfolio_state
+                )
+            
+            # Test async throughput
+            start_time = time.perf_counter()
+            symbols = [f'SYM{i:03d}' for i in range(10)]
+            
+            tasks = [async_decision(symbol) for symbol in symbols]
+            decisions = await asyncio.gather(*tasks)
+            
+            end_time = time.perf_counter()
+            total_time = end_time - start_time
+            
+            assert len(decisions) == 10
+            assert all(isinstance(d, TradingDecision) for d in decisions)
+            
+            throughput = len(symbols) / total_time
+            print(f"Async throughput: {throughput:.2f} decisions/second")
