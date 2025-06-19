@@ -96,6 +96,68 @@ All commands support `--help` for detailed usage and common options like `--verb
   - Integration tests: `uv run pytest tests/integration/`
   - Real E2E tests: `./scripts/run_real_e2e_tests.sh`
 
+### Pytest Markers Quick Reference
+
+**💡 TIP**: Use `uv run pytest --markers` to see all available markers
+
+#### **🏃 Speed-Based Test Selection**
+```bash
+# Fast development runs (skip slow tests)
+uv run pytest -m "not integration_slow"
+
+# Skip all real IB tests (no IB Gateway needed)  
+uv run pytest -m "not (real_ib or real_cli or real_api or real_pipeline)"
+
+# Run only unit tests (fastest)
+uv run pytest tests/ -m "not (integration or api or performance)"
+```
+
+#### **🎯 Test Categories by Purpose**
+- **`@pytest.mark.integration`** - Component integration tests (needs IB setup)
+- **`@pytest.mark.integration_slow`** - Slow integration tests (>60s)
+- **`@pytest.mark.api`** - API layer tests
+- **`@pytest.mark.performance`** - Performance/timing tests
+- **`@pytest.mark.stress`** - Stress/load tests
+
+#### **🔌 Real IB Gateway Tests** 
+- **`@pytest.mark.real_ib`** - Requires live IB Gateway connection
+- **`@pytest.mark.real_cli`** - Real CLI execution with IB
+- **`@pytest.mark.real_api`** - Real API calls with IB
+- **`@pytest.mark.real_pipeline`** - Complete data pipeline with IB
+- **`@pytest.mark.real_error_scenarios`** - Real IB error conditions
+
+#### **🐳 Container/E2E Tests**
+- **`@pytest.mark.container_e2e`** - Docker container E2E tests
+- **`@pytest.mark.container_api`** - Container API tests
+- **`@pytest.mark.container_cli`** - Container CLI tests
+
+#### **🔧 Exhaustive Resilience Tests**
+- **`@pytest.mark.exhaustive_resilience`** - Exhaustive resilience tests
+- **`@pytest.mark.exhaustive_api_resilience`** - API resilience tests
+- **`@pytest.mark.exhaustive_cli_resilience`** - CLI resilience tests
+- **`@pytest.mark.exhaustive_integration_resilience`** - Integration resilience tests
+
+#### **⚡ Common Test Commands**
+```bash
+# All tests (comprehensive, slow)
+uv run pytest
+
+# Fast development feedback  
+uv run pytest -m "not integration_slow"
+
+# Only API tests
+uv run pytest -m "api"
+
+# Only performance tests
+uv run pytest -m "performance" 
+
+# Skip real IB tests (no Gateway needed)
+uv run pytest -m "not real_ib"
+
+# Run specific test categories
+uv run pytest -m "integration and not integration_slow"
+```
+
 ### Pre-Commit Checklist
 1. `uv run pytest` - All unit tests pass
 2. `uv run black ktrdr tests` - Code formatting
