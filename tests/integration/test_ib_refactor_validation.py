@@ -17,12 +17,34 @@ from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.api.services.ib_service import IbService
 
 
+@pytest.fixture(scope="class")
+def shared_data_manager():
+    """Shared DataManager instance to avoid repeated initialization."""
+    return DataManager(enable_ib=True)
+
+
+@pytest.fixture(scope="class") 
+def shared_data_service():
+    """Shared DataService instance to avoid repeated initialization."""
+    return DataService()
+
+
+@pytest.fixture(scope="class")
+def shared_ib_service():
+    """Shared IbService instance to avoid repeated initialization."""
+    return IbService()
+
+
+# Mark slow integration tests so they can be optionally skipped
+pytestmark = pytest.mark.integration_slow
+
+
 class TestIbRefactorValidation:
     """Test the refactored IB system integration."""
 
-    def test_data_manager_initialization(self):
+    def test_data_manager_initialization(self, shared_data_manager):
         """Test DataManager initializes with new IB adapter."""
-        dm = DataManager(enable_ib=True)
+        dm = shared_data_manager
 
         # Verify external provider is initialized
         assert dm.enable_ib is True
@@ -32,9 +54,9 @@ class TestIbRefactorValidation:
         # Verify adapter type
         assert "IbDataAdapter" in str(type(dm.external_provider))
 
-    def test_data_manager_local_mode(self):
+    def test_data_manager_local_mode(self, shared_data_manager):
         """Test DataManager works in local mode (no IB required)."""
-        dm = DataManager(enable_ib=True)
+        dm = shared_data_manager
 
         # This should work even if IB is not connected
         try:
@@ -45,9 +67,9 @@ class TestIbRefactorValidation:
             # DataNotFoundError is expected for non-existent symbols
             assert "Data not found" in str(e) or "DataNotFoundError" in str(type(e))
 
-    def test_data_service_initialization(self):
+    def test_data_service_initialization(self, shared_data_service):
         """Test DataService initializes correctly."""
-        ds = DataService()
+        ds = shared_data_service
 
         # Verify DataService has DataManager
         assert ds.data_manager is not None
@@ -58,9 +80,9 @@ class TestIbRefactorValidation:
         assert ds.data_manager.external_provider is not None
 
     @pytest.mark.asyncio
-    async def test_ib_service_initialization(self):
+    async def test_ib_service_initialization(self, shared_ib_service):
         """Test IbService initializes correctly."""
-        ib_service = IbService()
+        ib_service = shared_ib_service
 
         # Test status method (should work even without IB connection)
         status = await ib_service.get_status()
@@ -70,9 +92,9 @@ class TestIbRefactorValidation:
         assert hasattr(status, "data_metrics")
 
     @pytest.mark.asyncio
-    async def test_ib_service_health_check(self):
+    async def test_ib_service_health_check(self, shared_ib_service):
         """Test IbService health check."""
-        ib_service = IbService()
+        ib_service = shared_ib_service
 
         # Health check should work even without IB connection
         health = await ib_service.get_health()
@@ -80,9 +102,9 @@ class TestIbRefactorValidation:
         assert isinstance(health.healthy, bool)
 
     @pytest.mark.asyncio
-    async def test_ib_service_config(self):
+    async def test_ib_service_config(self, shared_ib_service):
         """Test IbService configuration."""
-        ib_service = IbService()
+        ib_service = shared_ib_service
 
         # Config should work without IB connection
         config = await ib_service.get_config()
@@ -101,9 +123,9 @@ class TestIbRefactorValidation:
         assert pool1 is pool2
 
     @pytest.mark.asyncio
-    async def test_api_data_service_integration(self):
+    async def test_api_data_service_integration(self, shared_data_service):
         """Test API DataService integration with local data."""
-        ds = DataService()
+        ds = shared_data_service
 
         # Test with a symbol that might have local data
         try:
@@ -131,16 +153,16 @@ class TestIbRefactorValidation:
             # If no local data, should fail gracefully
             assert "Data not found" in str(e) or "DataNotFoundError" in str(type(e))
 
-    def test_component_integration_structure(self):
+    def test_component_integration_structure(self, shared_data_manager, shared_data_service):
         """Test that all components are properly integrated."""
         # Test DataManager -> IB components
-        dm = DataManager(enable_ib=True)
+        dm = shared_data_manager
         assert dm.external_provider is not None
         assert hasattr(dm.external_provider, 'symbol_validator')
         assert hasattr(dm.external_provider, 'data_fetcher')
 
         # Test DataService -> DataManager
-        ds = DataService()
+        ds = shared_data_service
         assert ds.data_manager is not None
         assert ds.data_manager.external_provider is not None
 
@@ -158,7 +180,7 @@ class TestIbRefactorValidation:
 
     def test_error_handling_graceful_degradation(self):
         """Test that the system degrades gracefully when IB is unavailable."""
-        # Test with IB disabled
+        # Test with IB disabled - this is lightweight and doesn't need IB setup
         dm_no_ib = DataManager(enable_ib=False)
         assert dm_no_ib.external_provider is None
 
@@ -172,9 +194,9 @@ class TestIbRefactorValidation:
             assert "Data not found" in str(e) or "DataNotFoundError" in str(type(e))
 
     @pytest.mark.asyncio
-    async def test_metrics_and_monitoring(self):
+    async def test_metrics_and_monitoring(self, shared_ib_service):
         """Test that metrics collection works."""
-        ib_service = IbService()
+        ib_service = shared_ib_service
 
         # Get status with metrics
         status = await ib_service.get_status()
@@ -199,10 +221,10 @@ class TestIbRefactorValidation:
 class TestIbRefactorRegressionPrevention:
     """Tests to prevent regressions in the refactored system."""
 
-    def test_api_response_format_consistency(self):
+    def test_api_response_format_consistency(self, shared_data_service):
         """Test that API response formats are consistent."""
         # This test ensures the DataService returns the expected format
-        ds = DataService()
+        ds = shared_data_service
 
         # Mock the DataManager to return a successful result
         with patch.object(ds.data_manager, "load_data") as mock_load:
@@ -251,9 +273,9 @@ class TestIbRefactorRegressionPrevention:
             assert result["fetched_bars"] == 2
 
     @pytest.mark.asyncio
-    async def test_ib_service_api_compatibility(self):
+    async def test_ib_service_api_compatibility(self, shared_ib_service):
         """Test that IbService API is compatible with endpoints."""
-        ib_service = IbService()
+        ib_service = shared_ib_service
 
         # Test all the methods used by API endpoints
         status = await ib_service.get_status()
@@ -283,10 +305,10 @@ class TestIbRefactorRegressionPrevention:
         except ImportError as e:
             pytest.fail(f"Backward compatibility broken: {e}")
 
-    def test_configuration_loading(self):
+    def test_configuration_loading(self, shared_data_manager):
         """Test that configuration loading works correctly."""
         # Test that components can load configuration
-        dm = DataManager(enable_ib=True)
+        dm = shared_data_manager
 
         # Should not raise configuration errors
         assert dm.data_loader is not None
