@@ -248,26 +248,48 @@ class TestMultiTimeframeDecisionsAPI:
         assert response.status_code == 404
 
     def test_make_multi_timeframe_decision_invalid_mode(
-        self, client, temp_strategy_file
+        self,
+        client,
+        temp_strategy_file,
+        mock_decision_orchestrator,
+        sample_timeframe_data,
     ):
         """Test multi-timeframe decision with invalid mode (graceful handling)."""
 
-        request_data = {
-            "symbol": "AAPL",
-            "strategy_config_path": temp_strategy_file,
-            "timeframes": ["1h", "4h"],
-            "mode": "invalid_mode",
-        }
+        with (
+            patch(
+                "ktrdr.api.endpoints.multi_timeframe_decisions.create_multi_timeframe_decision_orchestrator"
+            ) as mock_create,
+            patch(
+                "ktrdr.api.endpoints.multi_timeframe_decisions.DataManager"
+            ) as mock_dm,
+        ):
 
-        response = client.post(
-            "/api/v1/multi-timeframe-decisions/decide", json=request_data
-        )
+            mock_create.return_value = mock_decision_orchestrator
 
-        # System gracefully handles invalid mode and proceeds with available data
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        assert data["symbol"] == "AAPL"
+            # Mock data manager to provide test data
+            mock_dm_instance = Mock()
+            mock_dm_instance.load_data.side_effect = (
+                lambda symbol, timeframe, mode: sample_timeframe_data.get(timeframe)
+            )
+            mock_dm.return_value = mock_dm_instance
+
+            request_data = {
+                "symbol": "AAPL",
+                "strategy_config_path": temp_strategy_file,
+                "timeframes": ["1h", "4h"],
+                "mode": "invalid_mode",
+            }
+
+            response = client.post(
+                "/api/v1/multi-timeframe-decisions/decide", json=request_data
+            )
+
+            # System gracefully handles invalid mode and proceeds with available data
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["symbol"] == "AAPL"
 
     def test_make_multi_timeframe_decision_missing_config(self, client):
         """Test multi-timeframe decision with missing configuration file."""
