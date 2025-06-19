@@ -10,8 +10,43 @@ import subprocess
 import json
 import time
 import re
+import os
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+
+# Check Docker availability at module level to avoid expensive fixture setup
+def _is_docker_available():
+    """Check if Docker is available and running."""
+    try:
+        result = subprocess.run(
+            ["docker", "info"], 
+            capture_output=True, 
+            text=True, 
+            timeout=3
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+def _container_exists(container_name="ktrdr-backend"):
+    """Check if the specified container exists and is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=3
+        )
+        return container_name in result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+# Skip entire module if Docker not available 
+# This prevents expensive fixture setup when tests will be skipped anyway
+pytestmark = pytest.mark.skipif(
+    not _is_docker_available(),
+    reason="Docker not available - skipping container CLI tests"
+)
 
 
 class CLITestResult:
@@ -103,23 +138,7 @@ class ContainerCLIRunner:
 
     def check_container_running(self) -> bool:
         """Check if the container is running."""
-        try:
-            result = subprocess.run(
-                [
-                    "docker",
-                    "ps",
-                    "--filter",
-                    f"name={self.container_name}",
-                    "--format",
-                    "{{.Names}}",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=5.0,
-            )
-            return self.container_name in result.stdout
-        except:
-            return False
+        return _container_exists(self.container_name)
 
     def check_cli_available(self, command: str) -> bool:
         """Check if a CLI command is available in the container."""
@@ -133,11 +152,13 @@ class ContainerCLIRunner:
 
 @pytest.fixture(scope="session")
 def cli_runner():
-    """Create CLI runner and verify container is available."""
+    """Create CLI runner for container tests."""
+    # At this point Docker is available (checked by pytestmark)
+    # but we still need to check if the specific container is running
     runner = ContainerCLIRunner()
-
-    if not runner.check_container_running():
-        pytest.skip(f"Container {runner.container_name} is not running")
+    
+    if not _container_exists(runner.container_name):
+        pytest.skip(f"Container {runner.container_name} is not running - use --run-container-cli to run these tests")
 
     return runner
 
@@ -213,6 +234,7 @@ class TestContainerCLIResilience:
             ), f"Expected resilience indicators in output. Found: {found_indicators}"
 
 
+@pytest.mark.container_cli  
 class TestContainerCLIBasics:
     """Test basic CLI functionality in container."""
 
@@ -341,6 +363,7 @@ class TestContainerDataCLICommands:
         assert len(result.stderr) > 0 or "error" in result.stdout.lower()
 
 
+@pytest.mark.container_cli
 class TestContainerStrategyCLICommands:
     """Test strategy-related CLI commands."""
 
@@ -368,6 +391,7 @@ class TestContainerStrategyCLICommands:
         assert result.success, f"strategy-list --validate failed: {result.stderr}"
 
 
+@pytest.mark.container_cli
 class TestContainerIndicatorCLICommands:
     """Test indicator-related CLI commands."""
 
@@ -403,6 +427,7 @@ class TestContainerIndicatorCLICommands:
         assert "invalid" in result.stderr.lower() or "error" in result.stdout.lower()
 
 
+@pytest.mark.container_cli
 class TestContainerCLIPerformance:
     """Test CLI performance characteristics."""
 
@@ -434,6 +459,7 @@ class TestContainerCLIPerformance:
             assert result.returncode != -2, f"Command {cmd_args} crashed unexpectedly"
 
 
+@pytest.mark.container_cli
 class TestContainerCLIIntegration:
     """Test CLI integration with container services."""
 
