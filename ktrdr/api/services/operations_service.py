@@ -140,6 +140,8 @@ class OperationsService:
         self,
         operation_id: str,
         progress: OperationProgress,
+        warnings: Optional[List[str]] = None,
+        errors: Optional[List[str]] = None,
     ) -> None:
         """
         Update operation progress.
@@ -147,6 +149,8 @@ class OperationsService:
         Args:
             operation_id: Operation identifier
             progress: Updated progress information
+            warnings: Optional list of warning messages
+            errors: Optional list of error messages
         """
         async with self._lock:
             if operation_id not in self._operations:
@@ -157,6 +161,12 @@ class OperationsService:
 
             operation = self._operations[operation_id]
             operation.progress = progress
+
+            # Update warnings and errors if provided
+            if warnings:
+                operation.warnings.extend(warnings)
+            if errors:
+                operation.errors.extend(errors)
 
             # Log progress at intervals
             if progress.percentage % 10 == 0:  # Log every 10%

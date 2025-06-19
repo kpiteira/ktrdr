@@ -109,6 +109,8 @@ class OperationInfo(BaseModel):
         default_factory=OperationMetadata, description="Operation metadata"
     )
     error_message: Optional[str] = Field(None, description="Error message if failed")
+    warnings: List[str] = Field(default_factory=list, description="Non-fatal warnings")
+    errors: List[str] = Field(default_factory=list, description="Error messages")
     result_summary: Optional[Dict[str, Any]] = Field(
         None, description="Summary of results"
     )
@@ -143,6 +145,8 @@ class OperationInfo(BaseModel):
                 },
                 "metadata": {"symbol": "AAPL", "timeframe": "1d", "mode": "tail"},
                 "error_message": None,
+                "warnings": ["Some non-critical warning"],
+                "errors": [],
                 "result_summary": None,
             }
         }

@@ -98,6 +98,7 @@ class DataService(BaseService):
                 mode=mode,  # Pass through the mode - DataManager decides whether to use IB
                 validate=True,
                 repair=False,
+                # Note: No progress callback for sync operations
             )
 
             # Apply trading hours filtering if requested
@@ -228,58 +229,10 @@ class DataService(BaseService):
         """
         try:
             logger.info(f"Starting data loading operation: {operation_id}")
-
-            # Update progress - starting
-            await self.operations_service.update_progress(
-                operation_id,
-                OperationProgress(
-                    percentage=0.0,
-                    current_step="Initializing data loading",
-                    steps_completed=0,
-                    steps_total=10,  # Estimated steps
-                ),
-            )
-
-            # Check for cancellation before starting heavy work
-            operation = await self.operations_service.get_operation(operation_id)
-            if operation and operation.is_cancelled_requested:
-                logger.info(f"Operation {operation_id} was cancelled before starting")
-                return
-
-            # Update progress - analyzing requirements
-            await self.operations_service.update_progress(
-                operation_id,
-                OperationProgress(
-                    percentage=10.0,
-                    current_step="Analyzing data requirements",
-                    steps_completed=1,
-                    steps_total=10,
-                ),
-            )
-
-            # Simulate some work (this would be the actual DataManager call)
             start_time = time.time()
 
-            # Update progress - loading data
-            await self.operations_service.update_progress(
-                operation_id,
-                OperationProgress(
-                    percentage=30.0,
-                    current_step=f"Loading {symbol} data ({mode} mode)",
-                    steps_completed=3,
-                    steps_total=10,
-                ),
-            )
-
-            # Check for cancellation during operation
-            operation = await self.operations_service.get_operation(operation_id)
-            if operation and operation.is_cancelled_requested:
-                logger.info(f"Operation {operation_id} was cancelled during execution")
-                return
-
-            # Call the actual data loading method with cancellation support
+            # Call the actual data loading method with real progress tracking
             try:
-                # Run data loading in executor with periodic cancellation checks
                 result = await self._cancellable_data_load(
                     operation_id=operation_id,
                     symbol=symbol,
@@ -290,28 +243,7 @@ class DataService(BaseService):
                     filters=filters,
                 )
 
-                # Update progress - processing results
-                await self.operations_service.update_progress(
-                    operation_id,
-                    OperationProgress(
-                        percentage=80.0,
-                        current_step="Processing loaded data",
-                        steps_completed=8,
-                        steps_total=10,
-                        items_processed=result.get("fetched_bars", 0),
-                        items_total=result.get("fetched_bars", 0),
-                    ),
-                )
-
-                # Check for cancellation before completing
-                operation = await self.operations_service.get_operation(operation_id)
-                if operation and operation.is_cancelled_requested:
-                    logger.info(
-                        f"Operation {operation_id} was cancelled before completion"
-                    )
-                    return
-
-                # Complete the operation
+                # Complete the operation with real results
                 execution_time = time.time() - start_time
                 result_summary = {
                     "status": result.get("status", "success"),
@@ -320,6 +252,11 @@ class DataService(BaseService):
                     "mode": mode,
                     "symbol": symbol,
                     "timeframe": timeframe,
+                    "cached_before": result.get("cached_before", False),
+                    "merged_file": result.get("merged_file", ""),
+                    "gaps_analyzed": result.get("gaps_analyzed", 0),
+                    "segments_fetched": result.get("segments_fetched", 0),
+                    "ib_requests_made": result.get("ib_requests_made", 0),
                 }
 
                 await self.operations_service.complete_operation(
@@ -362,24 +299,63 @@ class DataService(BaseService):
         filters: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
-        Run data loading with cancellation support and progress updates.
+        Run data loading with cancellation support and real progress updates.
 
-        This method runs the synchronous data loading in an executor
-        and periodically checks for cancellation requests while providing
-        simulated progress updates.
+        This method creates a progress callback that updates the operations service
+        with real progress from the DataManager and runs the data loading in an executor.
         """
         import concurrent.futures
         import threading
         import time
+        from ktrdr.data.data_manager import DataLoadingProgress, ProgressCallback
 
-        # Create a flag to signal cancellation to the worker thread
+        # Create cancellation event for worker thread
         cancel_event = threading.Event()
-        progress_counter = [0]  # Mutable container for thread communication
+        last_progress = [None]  # Mutable container for thread communication
+
+        def progress_callback_fn(progress: DataLoadingProgress):
+            """Callback function to update operation progress in real-time."""
+            try:
+                # Convert DataLoadingProgress to OperationProgress
+                from ktrdr.api.models.operations import OperationProgress
+
+                operation_progress = OperationProgress(
+                    percentage=progress.percentage,
+                    current_step=progress.current_step,
+                    steps_completed=progress.steps_completed,
+                    steps_total=progress.steps_total,
+                    items_processed=progress.items_processed,
+                    items_total=progress.items_total,
+                    current_item=progress.current_segment or progress.current_item,
+                )
+
+                # Store for async update with warnings/errors
+                last_progress[0] = (
+                    operation_progress,
+                    progress.warnings or [],
+                    progress.errors or [],
+                )
+
+            except Exception as e:
+                logger.warning(f"Progress callback error: {e}")
+
+        async def update_progress_periodically():
+            """Periodically update the operations service with the latest progress."""
+            while not cancel_event.is_set():
+                if last_progress[0] is not None:
+                    try:
+                        progress_data, warnings, errors = last_progress[0]
+                        await self.operations_service.update_progress(
+                            operation_id, progress_data, warnings, errors
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to update progress: {e}")
+                await asyncio.sleep(0.5)  # Update every 500ms for responsive UI
 
         def run_data_load():
-            """Run the actual data loading in a separate thread."""
+            """Run the actual data loading with real progress tracking."""
             try:
-                # Check cancellation flag periodically during execution
+                # Check cancellation before starting
                 if cancel_event.is_set():
                     return {"status": "cancelled", "error": "Operation was cancelled"}
 
@@ -391,9 +367,11 @@ class DataService(BaseService):
                     mode=mode,
                     validate=True,
                     repair=False,
+                    cancellation_token=cancel_event,  # Pass cancellation event
+                    progress_callback=progress_callback_fn,  # Real progress updates
                 )
 
-                # Convert to API format
+                # Convert result to API format
                 if result is None or result.empty:
                     return {
                         "status": "success",
@@ -406,74 +384,64 @@ class DataService(BaseService):
                         "execution_time_seconds": 0.0,
                     }
 
-                # For now, return basic metrics
-                # In a full implementation, DataManager would return these metrics
                 return {
                     "status": "success",
                     "fetched_bars": len(result),
-                    "cached_before": True,  # Assume some data existed
+                    "cached_before": True,  # TODO: DataManager should provide this info
                     "merged_file": f"{symbol}_{timeframe}.csv",
-                    "gaps_analyzed": 1,  # Simplified
-                    "segments_fetched": 1,  # Simplified
-                    "ib_requests_made": 1 if mode != "local" else 0,
+                    "gaps_analyzed": 1,  # TODO: DataManager should provide this info
+                    "segments_fetched": 1,  # TODO: DataManager should provide this info
+                    "ib_requests_made": (
+                        1 if mode != "local" else 0
+                    ),  # TODO: DataManager should provide this info
                     "execution_time_seconds": 0.0,  # Will be calculated by caller
                 }
 
             except Exception as e:
-                # Convert exception to dict for async handling
+                logger.error(f"Data loading failed: {e}")
                 return {
                     "error": str(e),
                     "status": "failed",
                 }
 
-        # Run in executor with periodic cancellation checks and progress simulation
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            # Submit the task
-            future = executor.submit(run_data_load)
+        # Start periodic progress updates
+        progress_task = asyncio.create_task(update_progress_periodically())
 
-            # Track progress simulation
-            start_time = time.time()
-            last_progress_update = 30.0  # Start where we left off
+        try:
+            # Run data loading in executor with real-time progress updates
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_data_load)
 
-            # Poll for completion or cancellation with progress updates
-            while not future.done():
-                # Check if operation was cancelled
-                operation = await self.operations_service.get_operation(operation_id)
-                if operation and operation.is_cancelled_requested:
-                    logger.info(f"Cancelling data loading operation: {operation_id}")
-
-                    # Set cancellation flag for worker thread
-                    cancel_event.set()
-
-                    # Cancel the future immediately
-                    future.cancel()
-
-                    # Don't wait - just raise cancellation
-                    logger.info(f"Data loading operation cancelled: {operation_id}")
-                    raise asyncio.CancelledError("Operation was cancelled")
-
-                # Simulate progress updates based on elapsed time
-                elapsed_time = time.time() - start_time
-                # Increase progress more gradually: 30% + (elapsed_seconds * 5%)
-                simulated_progress = min(30.0 + (elapsed_time * 5.0), 95.0)
-
-                if simulated_progress > last_progress_update + 5.0:  # Update every 5%
-                    await self.operations_service.update_progress(
-                        operation_id,
-                        OperationProgress(
-                            percentage=simulated_progress,
-                            current_step=f"Loading {symbol} data segment {int(elapsed_time/5)+1}",
-                            steps_completed=int(simulated_progress / 10),
-                            steps_total=10,
-                            items_processed=int(
-                                elapsed_time * 100
-                            ),  # Simulate items processed
-                        ),
+                # Poll for completion or cancellation
+                while not future.done():
+                    # Check if operation was cancelled
+                    operation = await self.operations_service.get_operation(
+                        operation_id
                     )
-                    last_progress_update = simulated_progress
+                    if operation and operation.is_cancelled_requested:
+                        logger.info(
+                            f"Cancelling data loading operation: {operation_id}"
+                        )
 
-                # Sleep briefly before checking again
-                await asyncio.sleep(1.0)  # Check every second
+                        # Set cancellation flag for worker thread
+                        cancel_event.set()
+
+                        # Cancel the future immediately
+                        future.cancel()
+
+                        # Don't wait - just raise cancellation
+                        logger.info(f"Data loading operation cancelled: {operation_id}")
+                        raise asyncio.CancelledError("Operation was cancelled")
+
+                    # Sleep briefly before checking again
+                    await asyncio.sleep(0.5)  # Check every 500ms for responsive updates
+        finally:
+            # Stop progress updates
+            cancel_event.set()
+            try:
+                await asyncio.wait_for(progress_task, timeout=1.0)
+            except asyncio.TimeoutError:
+                progress_task.cancel()
 
             # Get the result
             try:

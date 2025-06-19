@@ -465,15 +465,41 @@ async def _load_data_async(
                                 "current_step", "Loading..."
                             )
 
-                            # Update progress display
+                            # Display warnings if any
+                            warnings = operation_data.get("warnings", [])
+                            if warnings:
+                                for warning in warnings[-2:]:  # Show last 2 warnings
+                                    console.print(f"[yellow]⚠️  {warning}[/yellow]")
+
+                            # Display errors if any
+                            errors = operation_data.get("errors", [])
+                            if errors:
+                                for error in errors[-2:]:  # Show last 2 errors
+                                    console.print(f"[red]❌ {error}[/red]")
+
+                            # Build enhanced description with segment info
+                            description = (
+                                current_step[:70] + "..."
+                                if len(current_step) > 70
+                                else current_step
+                            )
+
+                            # Add items processed info if available
+                            items_processed = progress_info.get("items_processed", 0)
+                            items_total = progress_info.get("items_total")
+                            if items_processed > 0:
+                                if items_total:
+                                    description += (
+                                        f" ({items_processed:,}/{items_total:,} items)"
+                                    )
+                                else:
+                                    description += f" ({items_processed:,} items)"
+
+                            # Update progress display with real data
                             progress.update(
                                 task,
                                 completed=progress_percentage,
-                                description=(
-                                    current_step[:50] + "..."
-                                    if len(current_step) > 50
-                                    else current_step
-                                ),
+                                description=description,
                             )
 
                             # Check if operation completed
@@ -536,15 +562,17 @@ async def _load_data_async(
             # Get final operation status
             try:
                 final_response = await api_client.get_operation_status(operation_id)
-                
+
                 # Handle None response
                 if final_response is None:
                     if not quiet:
-                        console.print("[red]❌ No response from API when getting operation status[/red]")
+                        console.print(
+                            "[red]❌ No response from API when getting operation status[/red]"
+                        )
                     return
-                
+
                 operation_data = final_response.get("data", {})
-                
+
                 # Handle missing data
                 if not operation_data:
                     if not quiet:
@@ -554,7 +582,7 @@ async def _load_data_async(
                 # Convert operation data to load response format
                 result_summary = operation_data.get("result_summary") or {}
                 operation_status = operation_data.get("status")
-                
+
                 response = {
                     "success": operation_status == "completed",
                     "data": {

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union, Any, Set, Callable
 from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
+from dataclasses import dataclass
 
 # Import logging system
 from ktrdr import (
@@ -46,6 +47,55 @@ from ktrdr.data.timeframe_constants import TimeframeConstants
 
 # Get module logger
 logger = get_logger(__name__)
+
+
+@dataclass
+class DataLoadingProgress:
+    """Progress information for data loading operations."""
+
+    # Overall progress
+    percentage: float = 0.0
+    current_step: str = "Initializing"
+
+    # Step tracking
+    steps_completed: int = 0
+    steps_total: int = 0
+
+    # Segment tracking
+    segments_completed: int = 0
+    segments_total: int = 0
+    current_segment: Optional[str] = None
+
+    # Item tracking
+    items_processed: int = 0
+    items_total: Optional[int] = None
+    current_item: Optional[str] = None
+
+    # Status tracking
+    is_cancelled: bool = False
+    error_message: Optional[str] = None
+    warnings: List[str] = None
+    errors: List[str] = None
+
+    def __post_init__(self):
+        """Initialize lists if None."""
+        if self.warnings is None:
+            self.warnings = []
+        if self.errors is None:
+            self.errors = []
+
+
+class ProgressCallback:
+    """Interface for progress callbacks in data loading operations."""
+
+    def __call__(self, progress: DataLoadingProgress) -> None:
+        """
+        Called with progress updates during data loading.
+
+        Args:
+            progress: Current progress information
+        """
+        pass
 
 
 class DataManager:
@@ -203,6 +253,7 @@ class DataManager:
         repair_outliers: bool = True,
         strict: bool = False,
         cancellation_token: Optional[Any] = None,
+        progress_callback: Optional[ProgressCallback] = None,
     ) -> pd.DataFrame:
         """
         Load data with optional validation and repair using unified validator.
@@ -218,6 +269,7 @@ class DataManager:
             repair_outliers: Whether to repair detected outliers when repair=True (default: True)
             strict: If True, raises an exception for integrity issues instead of warning (default: False)
             cancellation_token: Optional cancellation token to check for early termination
+            progress_callback: Optional callback for progress updates during loading
 
         Returns:
             DataFrame containing validated (and optionally repaired) OHLCV data
@@ -232,16 +284,39 @@ class DataManager:
             When mode is 'tail', 'backfill', or 'full', it uses intelligent gap analysis
             and IB fetching for missing data segments.
         """
+        # Initialize progress tracking with revised step allocation
+        progress = DataLoadingProgress(
+            current_step="Starting data loading",
+            steps_total=5 if mode == "local" else 10,  # More steps for IB-enabled modes
+            percentage=0.0,
+        )
+
+        if progress_callback:
+            progress_callback(progress)
+
         # Load data based on mode
         logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
 
         if mode == "local":
             # Local-only mode: use basic loader without IB integration
+            progress.current_step = "Loading local data"
+            progress.steps_completed = 1
+            progress.percentage = 20.0
+            if progress_callback:
+                progress_callback(progress)
+
             df = self.data_loader.load(symbol, timeframe, start_date, end_date)
         else:
             # Enhanced modes: use intelligent gap analysis with IB integration
             df = self._load_with_fallback(
-                symbol, timeframe, start_date, end_date, mode, cancellation_token
+                symbol,
+                timeframe,
+                start_date,
+                end_date,
+                mode,
+                cancellation_token,
+                progress_callback,
+                progress,
             )
 
         # Check if df is None (happens when fallback returns None)
@@ -253,6 +328,13 @@ class DataManager:
             )
 
         if validate:
+            # Update progress for validation step (Step 10: 98%)
+            progress.current_step = "Validating data quality"
+            progress.steps_completed = progress.steps_completed + 1
+            progress.percentage = 98.0  # Step 10 of 10 in the revised allocation
+            if progress_callback:
+                progress_callback(progress)
+
             # Use the unified data quality validator
             validation_type = "local"  # Default to local validation type
 
@@ -327,6 +409,14 @@ class DataManager:
                         logger.info(
                             f"Minor data corrections applied: {quality_report.corrections_made} corrections made"
                         )
+
+        # Final progress update
+        progress.current_step = "Data loading completed"
+        progress.steps_completed = progress.steps_total
+        progress.percentage = 100.0
+        progress.items_processed = len(df) if df is not None else 0
+        if progress_callback:
+            progress_callback(progress)
 
         logger.debug(
             f"Successfully loaded and processed {len(df)} rows of data for {symbol} ({timeframe})"
@@ -709,6 +799,8 @@ class DataManager:
         timeframe: str,
         segments: List[Tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
+        progress_callback: Optional[ProgressCallback] = None,
+        progress: Optional[DataLoadingProgress] = None,
     ) -> Tuple[List[pd.DataFrame], int, int]:
         """
         Fetch multiple segments with failure resilience.
@@ -740,6 +832,19 @@ class DataManager:
                 cancellation_token, f"segment {i+1}/{len(segments)}"
             )
 
+            # Update progress for current segment (within 86% allocation: 10% to 96%)
+            if progress and progress_callback:
+                progress.current_segment = f"Segment {i+1}/{len(segments)}: {segment_start.strftime('%Y-%m-%d %H:%M')} to {segment_end.strftime('%Y-%m-%d %H:%M')}"
+                progress.current_step = (
+                    f"Fetching segment {i+1}/{len(segments)} from IB"
+                )
+                # Calculate progress within segment fetching phase (86% total allocation)
+                segment_progress = (
+                    i / len(segments)
+                ) * 86.0  # 86% allocated to segment fetching
+                progress.percentage = 10.0 + segment_progress  # Start at 10%, go to 96%
+                progress_callback(progress)
+
             try:
                 duration = segment_end - segment_start
                 logger.debug(
@@ -766,6 +871,15 @@ class DataManager:
                     logger.info(
                         f"✅ IB SUCCESS {i+1}: Received {len(segment_data)} bars from IB"
                     )
+
+                    # Update progress with successful segment completion
+                    if progress and progress_callback:
+                        progress.segments_completed = successful_count
+                        progress.items_processed += len(segment_data)
+                        # Update to reflect completed segment
+                        completed_segment_progress = ((i + 1) / len(segments)) * 86.0
+                        progress.percentage = 10.0 + completed_segment_progress
+                        progress_callback(progress)
                 else:
                     failed_count += 1
                     logger.warning(f"❌ IB FAILURE {i+1}: No data returned from IB")
@@ -905,14 +1019,17 @@ class DataManager:
         try:
             # Get head timestamp from external provider
             import asyncio
-            
+
             async def get_head_async():
-                return await self.external_provider.get_head_timestamp(symbol, timeframe)
-            
+                return await self.external_provider.get_head_timestamp(
+                    symbol, timeframe
+                )
+
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         future = executor.submit(asyncio.run, get_head_async())
                         head_timestamp = future.result(timeout=30)
@@ -920,10 +1037,10 @@ class DataManager:
                     head_timestamp = loop.run_until_complete(get_head_async())
             except RuntimeError:
                 head_timestamp = asyncio.run(get_head_async())
-            
+
             if head_timestamp is None:
                 return True, None, None  # No head timestamp available, assume valid
-            
+
             # Check if start_date is before head timestamp
             if start_date < head_timestamp:
                 error_message = f"Requested start date {start_date} is before earliest available data {head_timestamp}"
@@ -958,15 +1075,18 @@ class DataManager:
         try:
             # Check if we can get head timestamp from external provider
             import asyncio
-            
+
             async def check_head_async():
-                head_timestamp = await self.external_provider.get_head_timestamp(symbol, timeframe)
+                head_timestamp = await self.external_provider.get_head_timestamp(
+                    symbol, timeframe
+                )
                 return head_timestamp is not None
-            
+
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         future = executor.submit(asyncio.run, check_head_async())
                         return future.result(timeout=10)
@@ -999,6 +1119,8 @@ class DataManager:
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
         cancellation_token: Optional[Any] = None,
+        progress_callback: Optional[ProgressCallback] = None,
+        progress: Optional[DataLoadingProgress] = None,
     ) -> Optional[pd.DataFrame]:
         """
         Load data with intelligent gap analysis and resilient segment fetching.
@@ -1062,48 +1184,72 @@ class DataManager:
             f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}"
         )
 
-        # Step 0A: FAIL FAST - Validate symbol and get metadata  
+        # Initialize progress if not provided
+        if progress is None:
+            progress = DataLoadingProgress(steps_total=10)
+
+        # Step 1: FAIL FAST - Validate symbol and get metadata (2%)
+        progress.current_step = "Validating symbol with IB"
+        progress.steps_completed = 1
+        progress.percentage = 2.0
+        if progress_callback:
+            progress_callback(progress)
+
         logger.info(f"📋 STEP 0A: Symbol validation and metadata lookup")
         self._check_cancellation(cancellation_token, "symbol validation")
-        
+
         validation_result = None
         cached_head_timestamp = None
-        
+
         if self.enable_ib and self.external_provider:
             try:
                 # Use sync wrapper for async validation call
                 import asyncio
-                
+
                 async def validate_async():
-                    return await self.external_provider.validate_and_get_metadata(symbol, [timeframe])
-                
+                    return await self.external_provider.validate_and_get_metadata(
+                        symbol, [timeframe]
+                    )
+
                 try:
                     validation_result = asyncio.run(validate_async())
                 except RuntimeError:
                     # We're in an async context, need to run in executor
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         future = executor.submit(asyncio.run, validate_async())
                         validation_result = future.result(timeout=30)
-                
+
                 logger.info(f"✅ Symbol {symbol} validated successfully")
-                
+
                 # Cache head timestamp for later use
-                if validation_result.head_timestamps and timeframe in validation_result.head_timestamps:
+                if (
+                    validation_result.head_timestamps
+                    and timeframe in validation_result.head_timestamps
+                ):
                     cached_head_timestamp = validation_result.head_timestamps[timeframe]
-                    logger.info(f"📅 Cached head timestamp for {symbol} ({timeframe}): {cached_head_timestamp}")
-                    
+                    logger.info(
+                        f"📅 Cached head timestamp for {symbol} ({timeframe}): {cached_head_timestamp}"
+                    )
+
             except Exception as e:
                 logger.error(f"❌ Symbol validation failed for {symbol}: {e}")
                 raise DataError(
                     message=f"Symbol validation failed: {e}",
                     error_code="DATA-SymbolValidationFailed",
-                    details={"symbol": symbol, "timeframe": timeframe, "error": str(e)}
+                    details={"symbol": symbol, "timeframe": timeframe, "error": str(e)},
                 )
         else:
             logger.warning("External data provider not available for symbol validation")
 
-        # Step 0B: Validate request range against cached head timestamp
+        # Step 2: Validate request range against cached head timestamp (4%)
+        progress.current_step = "Validating request against head timestamp"
+        progress.steps_completed = 2
+        progress.percentage = 4.0
+        if progress_callback:
+            progress_callback(progress)
+
         logger.info(f"📅 STEP 0B: Validating request against head timestamp data")
         self._check_cancellation(cancellation_token, "head timestamp validation")
 
@@ -1111,29 +1257,37 @@ class DataManager:
         if cached_head_timestamp:
             try:
                 # Convert ISO timestamp to datetime for range validation
-                head_dt = datetime.fromisoformat(cached_head_timestamp.replace('Z', '+00:00'))
+                head_dt = datetime.fromisoformat(
+                    cached_head_timestamp.replace("Z", "+00:00")
+                )
                 if head_dt.tzinfo is None:
                     head_dt = head_dt.replace(tzinfo=timezone.utc)
-                
+
                 # Check if requested start is before available data
                 if requested_start < head_dt:
                     logger.warning(
                         f"📅 Requested start {requested_start} is before available data {head_dt}"
                     )
-                    logger.info(f"📅 Adjusting start time to earliest available: {head_dt}")
+                    logger.info(
+                        f"📅 Adjusting start time to earliest available: {head_dt}"
+                    )
                     requested_start = head_dt
-                
+
                 logger.info(f"📅 Request range validated against head timestamp")
-                
+
             except Exception as e:
-                logger.warning(f"📅 Failed to parse cached head timestamp {cached_head_timestamp}: {e}")
+                logger.warning(
+                    f"📅 Failed to parse cached head timestamp {cached_head_timestamp}: {e}"
+                )
                 # Continue without validation if parsing fails
         else:
             # Fallback to old method if no cached head timestamp
             logger.info(f"📅 No cached head timestamp, trying fallback method")
             try:
-                has_head_timestamp = self._ensure_symbol_has_head_timestamp(symbol, timeframe)
-                
+                has_head_timestamp = self._ensure_symbol_has_head_timestamp(
+                    symbol, timeframe
+                )
+
                 if has_head_timestamp:
                     # Validate the request range against head timestamp
                     is_valid, error_message, adjusted_start = (
@@ -1161,7 +1315,13 @@ class DataManager:
                 logger.warning(f"📅 Fallback head timestamp validation failed: {e}")
                 logger.info(f"📅 Proceeding with original request range")
 
-        # Step 1: Load existing local data (ALL modes need this for gap analysis)
+        # Step 3: Load existing local data (ALL modes need this for gap analysis) (6%)
+        progress.current_step = "Loading existing local data"
+        progress.steps_completed = 3
+        progress.percentage = 6.0
+        if progress_callback:
+            progress_callback(progress)
+
         existing_data = None
         try:
             logger.info(f"📁 Loading existing local data for {symbol}")
@@ -1178,7 +1338,13 @@ class DataManager:
             logger.info(f"📭 No existing local data: {e}")
             existing_data = None
 
-        # Step 2: Intelligent gap analysis
+        # Step 4: Intelligent gap analysis (8%)
+        progress.current_step = "Analyzing data gaps with trading calendar"
+        progress.steps_completed = 4
+        progress.percentage = 8.0
+        if progress_callback:
+            progress_callback(progress)
+
         logger.info(
             f"🔍 GAP ANALYSIS: Starting intelligent gap detection for {symbol} {timeframe}"
         )
@@ -1210,7 +1376,13 @@ class DataManager:
                 return filtered_data
             return existing_data
 
-        # Step 3: Split gaps into IB-compliant segments
+        # Step 5: Split gaps into IB-compliant segments (10%)
+        progress.current_step = f"Creating {len(gaps)} IB-compliant segments"
+        progress.steps_completed = 5
+        progress.percentage = 10.0
+        if progress_callback:
+            progress_callback(progress)
+
         logger.info(
             f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments..."
         )
@@ -1228,13 +1400,27 @@ class DataManager:
         fetched_data_frames = []
 
         if self.enable_ib and self.external_provider:
+            # Steps 6-8: Update progress with segment details (10% -> 96%, 86% total)
+            progress.current_step = f"Fetching {len(segments)} segments from IB"
+            progress.steps_completed = 6
+            progress.percentage = 10.0  # Start of segment fetching phase
+            progress.segments_total = len(segments)
+            progress.segments_completed = 0
+            if progress_callback:
+                progress_callback(progress)
+
             logger.info(
                 f"🚀 Fetching {len(segments)} segments using resilient strategy..."
             )
             self._check_cancellation(cancellation_token, "IB fetch preparation")
             successful_frames, successful_count, failed_count = (
                 self._fetch_segments_with_resilience(
-                    symbol, timeframe, segments, cancellation_token
+                    symbol,
+                    timeframe,
+                    segments,
+                    cancellation_token,
+                    progress_callback,
+                    progress,
                 )
             )
             fetched_data_frames = successful_frames
@@ -1247,7 +1433,7 @@ class DataManager:
                 logger.warning(
                     f"⚠️ {failed_count}/{len(segments)} segments failed - continuing with partial data"
                 )
-                
+
                 # Check if complete IB failure should fail the operation for certain modes
                 if successful_count == 0 and mode in ["full", "tail", "backfill"]:
                     # All IB segments failed and mode requires fresh data
@@ -1257,9 +1443,9 @@ class DataManager:
                         error_msg = f"Complete IB failure in 'tail' mode - all {failed_count} segments failed. Cannot provide recent data."
                     elif mode == "backfill":
                         error_msg = f"Complete IB failure in 'backfill' mode - all {failed_count} segments failed. Cannot provide historical data."
-                    
+
                     logger.error(f"❌ {error_msg}")
-                    
+
                     # For modes that require IB data, complete failure should fail the operation
                     # instead of returning stale cached data
                     raise DataError(
@@ -1277,6 +1463,12 @@ class DataManager:
             logger.info(f"ℹ️ IB fetching disabled - using existing data only")
 
         # Step 5: Merge all data sources
+        progress.current_step = "Merging data sources"
+        progress.steps_completed = 8
+        progress.percentage = 80.0
+        if progress_callback:
+            progress_callback(progress)
+
         all_data_frames = []
 
         # Add existing data if available
@@ -1323,13 +1515,27 @@ class DataManager:
             f"📊 Final dataset: {len(final_data)} bars covering {final_data.index.min() if not final_data.empty else 'N/A'} to {final_data.index.max() if not final_data.empty else 'N/A'}"
         )
 
-        # Save the enhanced dataset back to CSV for future use
+        # Step 9: Save the enhanced dataset back to CSV for future use (98%)
+        progress.current_step = "Saving enhanced dataset"
+        progress.steps_completed = 9
+        progress.percentage = 98.0
+        if progress_callback:
+            progress_callback(progress)
+
         if len(fetched_data_frames) > 0:  # Only save if we fetched new data
             try:
                 self.data_loader.save(combined_data, symbol, timeframe)
                 logger.info(f"💾 Saved enhanced dataset: {len(combined_data)} bars")
             except Exception as e:
                 logger.warning(f"⚠️ Failed to save enhanced dataset: {e}")
+
+        # Step 10: Final completion (100%)
+        progress.current_step = "Data loading completed"
+        progress.steps_completed = 10
+        progress.percentage = 100.0
+        progress.items_processed = len(final_data)
+        if progress_callback:
+            progress_callback(progress)
 
         logger.info(f"🎉 ENHANCED STRATEGY COMPLETE: Returning {len(final_data)} bars")
         return final_data
