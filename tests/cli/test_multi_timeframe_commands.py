@@ -68,9 +68,9 @@ class TestMultiTimeframeCLICommands:
             in result.stdout
         )
         # Check for timeframes option (could be --timeframes or -t)
-        assert ("--timeframes" in result.stdout or "-t" in result.stdout)
-        # Check for mode option (could be --mode or -m)  
-        assert ("--mode" in result.stdout or "-m" in result.stdout)
+        assert "--timeframes" in result.stdout or "-t" in result.stdout
+        # Check for mode option (could be --mode or -m)
+        assert "--mode" in result.stdout or "-m" in result.stdout
 
     def test_decide_command_invalid_symbol(self, runner, temp_strategy_file):
         """Test decide command with invalid symbol."""
