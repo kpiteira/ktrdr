@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-Debug script to test IB Gateway connection outside of Docker.
+IB Gateway Connection Debug Diagnostic Script
 
-This script tests basic IB Gateway connectivity to help isolate
-whether the issue is with Docker networking or IB configuration.
+This diagnostic script tests basic IB Gateway connectivity to help isolate
+whether connection issues are with Docker networking or IB configuration.
+This is NOT part of the automated test suite - it's a manual debugging tool.
+
+Usage: python ib_connection_debug.py
 """
 
 import asyncio
 import sys
 from ib_insync import IB
 
-async def test_ib_connection():
+async def debug_ib_connection():
     """Test basic IB Gateway connection"""
     ib = IB()
     
@@ -78,7 +81,7 @@ if __name__ == "__main__":
     print("=" * 40)
     
     try:
-        asyncio.run(test_ib_connection())
+        asyncio.run(debug_ib_connection())
     except KeyboardInterrupt:
         print("\n⚠️  Interrupted by user")
     except Exception as e:

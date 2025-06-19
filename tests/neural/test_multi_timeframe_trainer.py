@@ -65,7 +65,7 @@ class TestMultiTimeframeTrainer:
                 "dimensionality_reduction": {"method": "none"},
             },
             validation_config=CrossTimeframeValidationConfig(
-                method="temporal_split", test_size=0.2
+                method="simple_split", test_size=0.2, shuffle=True
             ),
             early_stopping_config=EarlyStoppingConfig(patience=10, monitor="val_loss"),
             training_params={"epochs": 50},
@@ -99,11 +99,11 @@ class TestMultiTimeframeTrainer:
         mock_fe_instance = Mock()
         mock_feature_engineer.return_value = mock_fe_instance
 
-        # Mock feature engineering result
+        # Mock feature engineering result - match the full sample size
         feature_result = Mock()
         feature_result.transformed_features = np.random.randn(
-            80, 15
-        )  # 80% for training
+            100, 15
+        )  # Full dataset for feature engineering
         feature_result.feature_importance = {"feature_0": 0.5, "feature_1": 0.3}
         mock_fe_instance.fit_transform.return_value = feature_result
         mock_fe_instance.transform.return_value = np.random.randn(

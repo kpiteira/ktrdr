@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-Basic IB Gateway Connection Test
+Basic IB Gateway Connection Diagnostic Script
 
-Simple script to test the most fundamental IB Gateway connection
-without any KTRDR architecture complexity.
+Simple diagnostic script to test the most fundamental IB Gateway connection
+without any KTRDR architecture complexity. This is NOT part of the automated
+test suite - it's a manual debugging tool for IB connection issues.
+
+Usage: python scripts/basic_ib_connection_check.py
 """
 
 import sys
@@ -21,7 +24,7 @@ except ImportError as e:
     print(f"❌ Failed to import ib_insync: {e}")
     sys.exit(1)
 
-def test_sync_connection():
+def check_sync_connection():
     """Test synchronous connection (the most basic approach)"""
     print("\n🧪 Test 1: Synchronous Connection")
     print("-" * 40)
@@ -52,7 +55,7 @@ def test_sync_connection():
         print(f"   Error type: {type(e).__name__}")
         return False
 
-async def test_async_connection():
+async def check_async_connection():
     """Test asynchronous connection"""
     print("\n🧪 Test 2: Asynchronous Connection")
     print("-" * 40)
@@ -82,7 +85,7 @@ async def test_async_connection():
         print(f"   Error type: {type(e).__name__}")
         return False
 
-def test_different_client_ids():
+def check_different_client_ids():
     """Test with different client IDs to rule out conflicts"""
     print("\n🧪 Test 3: Different Client IDs")
     print("-" * 40)
@@ -109,7 +112,7 @@ def test_different_client_ids():
     print(f"\nSuccessful client IDs: {successful_ids}")
     return len(successful_ids) > 0
 
-def test_port_variations():
+def check_port_variations():
     """Test different ports in case there's confusion"""
     print("\n🧪 Test 4: Port Variations")
     print("-" * 40)
@@ -157,20 +160,20 @@ def main():
     results = []
     
     # Test 1: Sync connection
-    results.append(("Synchronous", test_sync_connection()))
+    results.append(("Synchronous", check_sync_connection()))
     
     # Test 2: Async connection
     try:
-        results.append(("Asynchronous", asyncio.run(test_async_connection())))
+        results.append(("Asynchronous", asyncio.run(check_async_connection())))
     except Exception as e:
         print(f"❌ Async test crashed: {e}")
         results.append(("Asynchronous", False))
     
     # Test 3: Different client IDs
-    results.append(("Client ID variations", test_different_client_ids()))
+    results.append(("Client ID variations", check_different_client_ids()))
     
     # Test 4: Different ports
-    results.append(("Port variations", test_port_variations()))
+    results.append(("Port variations", check_port_variations()))
     
     # Summary
     print("\n" + "=" * 50)
