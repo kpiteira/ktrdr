@@ -276,7 +276,9 @@ class TestIbConnectionPool:
             await pool.acquire_connection()
 
         # Should raise ConnectionError (could be timeout or pool exhausted)
-        assert "Timeout" in str(exc_info.value) or "pool exhausted" in str(exc_info.value)
+        assert "Timeout" in str(exc_info.value) or "pool exhausted" in str(
+            exc_info.value
+        )
 
     @pytest.mark.asyncio
     async def test_context_manager(self):

@@ -255,19 +255,23 @@ class TestMultiTimeframeEndToEnd:
         # Create partial data (missing 1d timeframe) - with sufficient data for indicators
         base_time = pd.Timestamp.now(tz="UTC")
         # Extend to 7 days of hourly data to ensure 4h timeframe has enough points for SMA(20)
-        timestamps = pd.date_range(start=base_time - pd.Timedelta(days=7), end=base_time, freq="1h")
-        
+        timestamps = pd.date_range(
+            start=base_time - pd.Timedelta(days=7), end=base_time, freq="1h"
+        )
+
         # Generate sufficient data for RSI (needs 15+ points)
         np.random.seed(42)
         price_data = 150 + np.cumsum(np.random.normal(0, 0.5, len(timestamps)))
-        
+
         partial_data = {
             "1h": pd.DataFrame(
                 {
                     "timestamp": timestamps,
                     "open": price_data + np.random.normal(0, 0.1, len(timestamps)),
-                    "high": price_data + np.abs(np.random.normal(0, 0.5, len(timestamps))),
-                    "low": price_data - np.abs(np.random.normal(0, 0.5, len(timestamps))),
+                    "high": price_data
+                    + np.abs(np.random.normal(0, 0.5, len(timestamps))),
+                    "low": price_data
+                    - np.abs(np.random.normal(0, 0.5, len(timestamps))),
                     "close": price_data,
                     "volume": np.random.randint(500000, 2000000, len(timestamps)),
                 }
@@ -275,9 +279,12 @@ class TestMultiTimeframeEndToEnd:
             "4h": pd.DataFrame(
                 {
                     "timestamp": timestamps[::4],  # Every 4th hour
-                    "open": price_data[::4] + np.random.normal(0, 0.1, len(timestamps[::4])),
-                    "high": price_data[::4] + np.abs(np.random.normal(0, 0.5, len(timestamps[::4]))),
-                    "low": price_data[::4] - np.abs(np.random.normal(0, 0.5, len(timestamps[::4]))),
+                    "open": price_data[::4]
+                    + np.random.normal(0, 0.1, len(timestamps[::4])),
+                    "high": price_data[::4]
+                    + np.abs(np.random.normal(0, 0.5, len(timestamps[::4]))),
+                    "low": price_data[::4]
+                    - np.abs(np.random.normal(0, 0.5, len(timestamps[::4]))),
                     "close": price_data[::4],
                     "volume": np.random.randint(2000000, 8000000, len(timestamps[::4])),
                 }
@@ -316,11 +323,14 @@ class TestMultiTimeframeEndToEnd:
             # Accept either 'data_quality_issues' or general reasoning about missing data
             reasoning_keys = set(decision.reasoning.keys())
             has_data_quality_info = (
-                "data_quality_issues" in reasoning_keys or
-                "consensus" in reasoning_keys or  # Consensus info indicates missing data handling
-                any("missing" in str(v).lower() for v in decision.reasoning.values())
+                "data_quality_issues" in reasoning_keys
+                or "consensus"
+                in reasoning_keys  # Consensus info indicates missing data handling
+                or any("missing" in str(v).lower() for v in decision.reasoning.values())
             )
-            assert has_data_quality_info, f"Expected data quality information in reasoning, got: {reasoning_keys}"
+            assert (
+                has_data_quality_info
+            ), f"Expected data quality information in reasoning, got: {reasoning_keys}"
 
     @pytest.mark.asyncio
     async def test_consensus_building_with_conflicting_signals(
@@ -366,9 +376,15 @@ class TestMultiTimeframeEndToEnd:
             )
 
             # Mock each timeframe orchestrator's make_decision method
-            orchestrator.timeframe_orchestrators["1h"].make_decision = Mock(return_value=mock_decision_1h)
-            orchestrator.timeframe_orchestrators["4h"].make_decision = Mock(return_value=mock_decision_4h)
-            orchestrator.timeframe_orchestrators["1d"].make_decision = Mock(return_value=mock_decision_1d)
+            orchestrator.timeframe_orchestrators["1h"].make_decision = Mock(
+                return_value=mock_decision_1h
+            )
+            orchestrator.timeframe_orchestrators["4h"].make_decision = Mock(
+                return_value=mock_decision_4h
+            )
+            orchestrator.timeframe_orchestrators["1d"].make_decision = Mock(
+                return_value=mock_decision_1d
+            )
 
             portfolio_state = {
                 "total_value": 100000.0,
@@ -385,12 +401,14 @@ class TestMultiTimeframeEndToEnd:
             assert isinstance(decision, TradingDecision)
             # Accept various forms of consensus information
             has_consensus_info = (
-                "consensus_method" in decision.reasoning or
-                "multi_timeframe" in decision.reasoning or
-                "conflicting_timeframes" in decision.reasoning or
-                any("consensus" in str(k).lower() for k in decision.reasoning.keys())
+                "consensus_method" in decision.reasoning
+                or "multi_timeframe" in decision.reasoning
+                or "conflicting_timeframes" in decision.reasoning
+                or any("consensus" in str(k).lower() for k in decision.reasoning.keys())
             )
-            assert has_consensus_info, f"Expected consensus information in reasoning, got: {decision.reasoning}"
+            assert (
+                has_consensus_info
+            ), f"Expected consensus information in reasoning, got: {decision.reasoning}"
 
     @pytest.mark.asyncio
     async def test_model_integration_pipeline(self, sample_data, temp_strategy_file):
@@ -469,12 +487,18 @@ class TestMultiTimeframeEndToEnd:
             # System should handle errors gracefully, either with explicit error recovery info
             # or by continuing with available data (which would result in low confidence or warnings)
             has_error_handling = (
-                "error_recovery" in decision.reasoning or
-                "failed_timeframes" in decision.reasoning or
-                decision.confidence == 0.0 or  # Very low confidence due to missing data
-                any("no timeframe decisions" in str(v).lower() for v in decision.reasoning.values() if isinstance(v, str))
+                "error_recovery" in decision.reasoning
+                or "failed_timeframes" in decision.reasoning
+                or decision.confidence == 0.0  # Very low confidence due to missing data
+                or any(
+                    "no timeframe decisions" in str(v).lower()
+                    for v in decision.reasoning.values()
+                    if isinstance(v, str)
+                )
             )
-            assert has_error_handling, f"Expected error handling indication in reasoning, got: {decision.reasoning}"
+            assert (
+                has_error_handling
+            ), f"Expected error handling indication in reasoning, got: {decision.reasoning}"
 
     @pytest.mark.asyncio
     async def test_performance_metrics_collection(
@@ -510,13 +534,13 @@ class TestMultiTimeframeEndToEnd:
             # Check that decision history is being tracked (alternative to performance metrics)
             history = orchestrator.get_decision_history(symbol="AAPL", limit=10)
             assert len(history) == 3  # Should have 3 decisions recorded
-            
+
             # Verify that decisions are properly recorded
             for decision_obj in history:
                 # If it's a TradingDecision object directly
-                if hasattr(decision_obj, 'signal'):
+                if hasattr(decision_obj, "signal"):
                     assert decision_obj.signal in [Signal.BUY, Signal.SELL, Signal.HOLD]
-                    assert hasattr(decision_obj, 'timestamp')
+                    assert hasattr(decision_obj, "timestamp")
                 # If it's a dictionary with a decision object
                 elif isinstance(decision_obj, dict) and "decision" in decision_obj:
                     assert "timestamp" in decision_obj
@@ -555,7 +579,7 @@ class TestMultiTimeframeEndToEnd:
             history = orchestrator.get_decision_history(symbol="AAPL", limit=10)
             assert len(history) == 1
             # Handle both TradingDecision objects and dictionaries
-            if hasattr(history[0], 'signal'):
+            if hasattr(history[0], "signal"):
                 assert history[0].signal == decision1.signal
             elif isinstance(history[0], dict) and "decision" in history[0]:
                 assert history[0]["decision"]["signal"] == decision1.signal.value
@@ -598,7 +622,9 @@ class TestMultiTimeframeEndToEnd:
             timeframes=["invalid_tf"],
             mode="backtest",
         )
-        assert isinstance(orchestrator_with_invalid_tf, MultiTimeframeDecisionOrchestrator)
+        assert isinstance(
+            orchestrator_with_invalid_tf, MultiTimeframeDecisionOrchestrator
+        )
         assert orchestrator_with_invalid_tf.timeframes == ["invalid_tf"]
 
     @pytest.mark.asyncio

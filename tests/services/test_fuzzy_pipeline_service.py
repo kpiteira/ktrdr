@@ -548,5 +548,7 @@ class TestFuzzyPipelineService:
             )
         # Error message could be wrapped in a higher-level message
         error_msg = str(exc_info.value)
-        assert ("No market data available" in error_msg or 
-                "Fuzzy analysis failed" in error_msg)
+        assert (
+            "No market data available" in error_msg
+            or "Fuzzy analysis failed" in error_msg
+        )

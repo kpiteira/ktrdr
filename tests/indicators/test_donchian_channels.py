@@ -220,7 +220,7 @@ class TestDonchianChannelsIndicator:
         # Check breakout signals are valid boolean values
         upper_breakout = result["DC_Upper_Breakout_5"]
         # Should be valid boolean series (not requiring specific pattern)
-        assert upper_breakout.dtype == bool or upper_breakout.dtype == 'bool'
+        assert upper_breakout.dtype == bool or upper_breakout.dtype == "bool"
         # Values should be well-defined (not all NaN)
         assert not upper_breakout.isna().all()
 

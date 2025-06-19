@@ -684,12 +684,14 @@ class TestFuzzyValueValidation:
         # Should at least have oversold fuzzy sets defined and calculated
         assert len(fuzzy_values) > 0, "Should have calculated some fuzzy values"
         assert len(result.errors) == 0, "Should process without errors"
-        
+
         # If oversold keys exist, check they are reasonable values
         if oversold_keys:
             oversold_value = max(fuzzy_values[k] for k in oversold_keys)
             # Value should be between 0 and 1 (valid membership)
-            assert 0.0 <= oversold_value <= 1.0, f"Invalid membership value: {oversold_value}"
+            assert (
+                0.0 <= oversold_value <= 1.0
+            ), f"Invalid membership value: {oversold_value}"
 
     def test_membership_function_types_integration(self):
         """Test integration of different membership function types."""
@@ -767,10 +769,12 @@ class TestFuzzyValueValidation:
 
         # Should have some fuzzy values (at least one type should work)
         assert len(fuzzy_values) > 0, "Should have some fuzzy values calculated"
-        
+
         # Check that we have either RSI or MACD fuzzy values (or both)
         total_indicator_values = len(rsi_keys) + len(macd_keys)
-        assert total_indicator_values > 0, "Should have fuzzy values from at least one indicator"
+        assert (
+            total_indicator_values > 0
+        ), "Should have fuzzy values from at least one indicator"
 
         # All values should be valid
         for key, value in fuzzy_values.items():

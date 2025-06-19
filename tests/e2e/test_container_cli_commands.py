@@ -14,38 +14,45 @@ import os
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
+
 # Check Docker availability at module level to avoid expensive fixture setup
 def _is_docker_available():
     """Check if Docker is available and running."""
     try:
         result = subprocess.run(
-            ["docker", "info"], 
-            capture_output=True, 
-            text=True, 
-            timeout=3
+            ["docker", "info"], capture_output=True, text=True, timeout=3
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return False
 
+
 def _container_exists(container_name="ktrdr-backend"):
     """Check if the specified container exists and is running."""
     try:
         result = subprocess.run(
-            ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"name={container_name}",
+                "--format",
+                "{{.Names}}",
+            ],
             capture_output=True,
             text=True,
-            timeout=3
+            timeout=3,
         )
         return container_name in result.stdout
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return False
 
-# Skip entire module if Docker not available 
+
+# Skip entire module if Docker not available
 # This prevents expensive fixture setup when tests will be skipped anyway
 pytestmark = pytest.mark.skipif(
     not _is_docker_available(),
-    reason="Docker not available - skipping container CLI tests"
+    reason="Docker not available - skipping container CLI tests",
 )
 
 
@@ -156,9 +163,11 @@ def cli_runner():
     # At this point Docker is available (checked by pytestmark)
     # but we still need to check if the specific container is running
     runner = ContainerCLIRunner()
-    
+
     if not _container_exists(runner.container_name):
-        pytest.skip(f"Container {runner.container_name} is not running - use --run-container-cli to run these tests")
+        pytest.skip(
+            f"Container {runner.container_name} is not running - use --run-container-cli to run these tests"
+        )
 
     return runner
 
@@ -234,7 +243,7 @@ class TestContainerCLIResilience:
             ), f"Expected resilience indicators in output. Found: {found_indicators}"
 
 
-@pytest.mark.container_cli  
+@pytest.mark.container_cli
 class TestContainerCLIBasics:
     """Test basic CLI functionality in container."""
 

@@ -476,10 +476,22 @@ class TestMultiTimeframeIndicatorPipelineIntegration:
         results = engine.apply_multi_timeframe(comprehensive_ohlcv_data)
 
         # Verify RSI columns exist with proper naming
-        rsi_1h_cols = [col for col in results["1h"].columns if col.startswith("rsi_") and col.endswith("_1h")]
-        rsi_4h_cols = [col for col in results["4h"].columns if col.startswith("rsi_") and col.endswith("_4h")]
-        assert len(rsi_1h_cols) > 0, f"Expected RSI column for 1h, got columns: {list(results['1h'].columns)}"
-        assert len(rsi_4h_cols) > 0, f"Expected RSI column for 4h, got columns: {list(results['4h'].columns)}"
+        rsi_1h_cols = [
+            col
+            for col in results["1h"].columns
+            if col.startswith("rsi_") and col.endswith("_1h")
+        ]
+        rsi_4h_cols = [
+            col
+            for col in results["4h"].columns
+            if col.startswith("rsi_") and col.endswith("_4h")
+        ]
+        assert (
+            len(rsi_1h_cols) > 0
+        ), f"Expected RSI column for 1h, got columns: {list(results['1h'].columns)}"
+        assert (
+            len(rsi_4h_cols) > 0
+        ), f"Expected RSI column for 4h, got columns: {list(results['4h'].columns)}"
 
         # Test cross-timeframe features
         feature_specs = {
@@ -608,7 +620,7 @@ class TestMultiTimeframeIndicatorPipelineIntegration:
             elif timeframe == "4h":
                 assert len(df) > 1000  # 4h data should have good amount
             elif timeframe == "1d":
-                assert len(df) > 100   # Daily data for 6 months should have ~183 days
+                assert len(df) > 100  # Daily data for 6 months should have ~183 days
 
         # Performance should be reasonable (under 10 seconds for this dataset)
         assert (
@@ -684,13 +696,14 @@ class TestMultiTimeframeIndicatorPipelineIntegration:
 
         # Mock the load_data method to return our test data
         from unittest.mock import Mock
+
         original_load_data = data_manager.load_data
-        
+
         def mock_load_data(symbol, timeframe, mode="local"):
             if symbol == "AAPL" and timeframe in comprehensive_ohlcv_data:
                 return comprehensive_ohlcv_data[timeframe]
             return original_load_data(symbol, timeframe, mode)
-        
+
         data_manager.load_data = Mock(side_effect=mock_load_data)
 
         # Test that data manager can load our test data
@@ -739,7 +752,9 @@ class TestMultiTimeframeIndicatorConfigurationErrors:
         """Test handling of invalid timeframe configurations."""
 
         from pydantic import ValidationError
-        from ktrdr.config.models import TimeframeIndicatorConfig as PydanticTimeframeConfig
+        from ktrdr.config.models import (
+            TimeframeIndicatorConfig as PydanticTimeframeConfig,
+        )
 
         # Test invalid timeframe name
         with pytest.raises(ValidationError):
@@ -765,7 +780,10 @@ class TestMultiTimeframeIndicatorConfigurationErrors:
             {"type": "RSI", "params": {"period": i}} for i in range(10, 30)
         ]
 
-        from ktrdr.config.models import IndicatorConfig, TimeframeIndicatorConfig as PydanticTimeframeConfig
+        from ktrdr.config.models import (
+            IndicatorConfig,
+            TimeframeIndicatorConfig as PydanticTimeframeConfig,
+        )
 
         # Convert to proper IndicatorConfig objects
         indicator_configs = [IndicatorConfig(**ind) for ind in many_indicators]

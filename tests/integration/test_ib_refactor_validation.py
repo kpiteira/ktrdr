@@ -23,7 +23,7 @@ def shared_data_manager():
     return DataManager(enable_ib=True)
 
 
-@pytest.fixture(scope="class") 
+@pytest.fixture(scope="class")
 def shared_data_service():
     """Shared DataService instance to avoid repeated initialization."""
     return DataService()
@@ -116,6 +116,7 @@ class TestIbRefactorValidation:
     async def test_connection_pool_singleton(self):
         """Test connection pool singleton pattern."""
         from ktrdr.ib.pool_manager import get_shared_ib_pool
+
         pool1 = get_shared_ib_pool()
         pool2 = get_shared_ib_pool()
 
@@ -153,13 +154,15 @@ class TestIbRefactorValidation:
             # If no local data, should fail gracefully
             assert "Data not found" in str(e) or "DataNotFoundError" in str(type(e))
 
-    def test_component_integration_structure(self, shared_data_manager, shared_data_service):
+    def test_component_integration_structure(
+        self, shared_data_manager, shared_data_service
+    ):
         """Test that all components are properly integrated."""
         # Test DataManager -> IB components
         dm = shared_data_manager
         assert dm.external_provider is not None
-        assert hasattr(dm.external_provider, 'symbol_validator')
-        assert hasattr(dm.external_provider, 'data_fetcher')
+        assert hasattr(dm.external_provider, "symbol_validator")
+        assert hasattr(dm.external_provider, "data_fetcher")
 
         # Test DataService -> DataManager
         ds = shared_data_service
@@ -168,12 +171,12 @@ class TestIbRefactorValidation:
 
         # Test that components have the expected interfaces
         adapter = dm.external_provider
-        
+
         # Check adapter interface (implements ExternalDataProvider)
         assert hasattr(adapter, "fetch_historical_data")
         assert hasattr(adapter, "validate_and_get_metadata")
         assert hasattr(adapter, "health_check")
-        
+
         # Check internal components
         assert hasattr(adapter, "symbol_validator")
         assert hasattr(adapter, "data_fetcher")
