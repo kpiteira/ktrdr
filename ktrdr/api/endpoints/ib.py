@@ -517,44 +517,17 @@ async def discover_symbol(
             )
 
             # Perform rapid diagnosis to give clear error message
-            from ktrdr.api.utils.ib_diagnosis import (
-                IBDiagnosis,
-                get_clear_error_message,
+            # Old diagnosis utility removed - using basic error handling
+
+            # Use simplified error handling without old diagnosis utility
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "IB-CIRCUIT-BREAKER",
+                    "message": f"Symbol discovery circuit breaker OPEN for {request.symbol}",
+                    "details": {"symbol": request.symbol, "reason": str(e)},
+                },
             )
-
-            try:
-                problem_type, diagnosis_msg, details = (
-                    await IBDiagnosis.diagnose_connection()
-                )
-                clear_message = get_clear_error_message(problem_type, diagnosis_msg)
-
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "code": "IB-GATEWAY-ISSUE",
-                        "message": clear_message,
-                        "details": {
-                            "symbol": request.symbol,
-                            "problem_type": problem_type.value,
-                            "diagnosis": details,
-                            "circuit_breaker_reason": str(e),
-                        },
-                    },
-                )
-            except Exception as diag_error:
-                # Fallback if diagnosis fails
-                logger.error(f"Diagnosis failed: {diag_error}")
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "code": "IB-CIRCUIT-OPEN",
-                        "message": str(e),
-                        "details": {
-                            "symbol": request.symbol,
-                            "recovery_action": "Check IB Gateway connectivity and restart if needed",
-                        },
-                    },
-                )
         except asyncio.TimeoutError:
             logger.error(
                 f"Symbol discovery TIMEOUT for {request.symbol} - possible silent IB connection!"

@@ -10,8 +10,7 @@ import httpx
 from pathlib import Path
 from typing import Generator
 
-from ktrdr.data.ib_connection_pool import get_connection_pool
-from ktrdr.data.ib_client_id_registry import ClientIdPurpose
+from ktrdr.ib import IbConnectionPool
 from ktrdr.config.ib_config import get_ib_config
 
 
@@ -49,8 +48,8 @@ def pytest_addoption(parser):
     parser.addoption(
         "--ib-port",
         action="store",
-        default="4003",
-        help="IB Gateway port (default: 4003)",
+        default="4002",
+        help="IB Gateway port (default: 4002)",
     )
     try:
         parser.addoption(
@@ -90,14 +89,15 @@ def ib_config(pytestconfig):
 @pytest_asyncio.fixture(scope="session")
 async def real_ib_connection_test(ib_config):
     """Test that we can actually connect to IB Gateway."""
-    pool = await get_connection_pool()
+    pool = IbConnectionPool(host=ib_config.host, port=ib_config.port)
 
     try:
-        async with pool.acquire_connection(
-            purpose=ClientIdPurpose.API_POOL, requested_by="e2e_test_connection_check"
-        ) as connection:
+        async with pool.get_connection() as connection:
             # Simple test to verify connection works
-            accounts = await connection.ib.reqManagedAcctsAsync()
+            async def get_accounts(ib):
+                return await ib.reqManagedAcctsAsync()
+            
+            accounts = await connection.execute_request(get_accounts)
             assert accounts, "No managed accounts returned from IB"
             return True
     except Exception as e:

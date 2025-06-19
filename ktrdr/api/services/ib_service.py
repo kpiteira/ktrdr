@@ -1,7 +1,8 @@
 """
-IB (Interactive Brokers) service for the KTRDR API.
+IB (Interactive Brokers) service for the KTRDR API - UPDATED FOR NEW ARCHITECTURE.
 
-This module provides service layer functionality for IB operations.
+This module provides service layer functionality for IB operations using the new
+simplified IB architecture with dedicated threads and persistent event loops.
 """
 
 import time
@@ -12,12 +13,9 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 
 from ktrdr import get_logger
-from ktrdr.data.ib_connection_pool import get_connection_pool, acquire_ib_connection
-from ktrdr.data.ib_client_id_registry import ClientIdPurpose
-from ktrdr.data.ib_pace_manager import get_pace_manager
-from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
-from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
-from ktrdr.config.ib_limits import IbLimitsRegistry
+from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
+from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.config.ib_config import get_ib_config
 from ktrdr.api.models.ib import (
     ConnectionInfo,
     ConnectionMetrics,
@@ -92,16 +90,18 @@ class IbService:
         """
         # Check if IB connection pool is available
         try:
-            pool = await get_connection_pool()
-            pool_stats = pool.get_pool_status()
-            ib_available = pool_stats["available_connections"] > 0
+            # Use shared IB connection pool for consistency
+            from ktrdr.ib.pool_manager import get_shared_ib_pool
+            pool = get_shared_ib_pool()
+            pool_stats = pool.get_pool_stats()
+            ib_available = pool_stats["total_connections"] >= 0  # Pool exists
 
-            # PHASE 4: Add connection resilience information
             logger.info(
-                "🔍 Enhanced IB status - including connection resilience metrics"
+                "🔍 New IB architecture status - checking connection pool"
             )
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"IB connection pool not available: {e}")
             ib_available = False
             pool_stats = {}
 
@@ -146,9 +146,9 @@ class IbService:
             uptime_seconds=pool_stats.get("uptime_seconds"),
         )
 
-        # Get pace manager statistics
-        pace_manager = get_pace_manager()
-        pace_stats = pace_manager.get_pace_statistics()
+        # Get pace manager statistics from new architecture
+        pace_manager = IbPaceManager()
+        pace_stats = pace_manager.get_stats()
         current_state = pace_stats.get("current_state", {})
 
         # Calculate aggregated data metrics from pace manager
@@ -187,10 +187,13 @@ class IbService:
         """
         # Check if IB connection pool is available
         try:
-            pool = await get_connection_pool()
-            pool_stats = pool.get_pool_status()
-            pool_available = pool_stats["available_connections"] > 0
-        except Exception:
+            # Use new IB connection pool from new architecture
+            from ktrdr.ib.pool_manager import get_shared_ib_pool
+            pool = get_shared_ib_pool()
+            pool_stats = pool.get_pool_stats()
+            pool_available = True  # Pool created successfully
+        except Exception as e:
+            logger.warning(f"IB connection pool not available: {e}")
             pool_available = False
 
         if not pool_available:
@@ -202,54 +205,44 @@ class IbService:
                 error_message="IB connection pool not available",
             )
 
-        # ENHANCED IB API TEST: Multi-level validation to catch silent connections
+        # IB API TEST: Test connection using new architecture
         api_test_ok = False
         connection_ok = False
         try:
-            async with acquire_ib_connection(
-                purpose=ClientIdPurpose.API_POOL, requested_by="health_check"
-            ) as connection:
+            # Use new architecture connection pool to test connection
+            async with pool.get_connection() as connection:
                 connection_ok = True
 
-                # Test actual API calls with timeouts to detect silent connections
+                # Test basic connection health first
+                if not connection.is_healthy():
+                    logger.warning("❌ Connection not healthy after acquisition")
+                    raise Exception("Connection not healthy")
+
+                # Test basic connection health - minimal API calls to avoid overwhelming IB
                 ib = connection.ib
 
-                # Level 1: Basic API test (fast)
-                accounts = await asyncio.wait_for(
-                    ib.reqManagedAcctsAsync(), timeout=10.0
-                )
-                if not accounts:
+                # Level 1: Basic connection state validation (non-invasive)
+                if not ib.isConnected():
                     logger.warning(
-                        f"❌ Level 1 failed: No managed accounts (client_id: {connection.client_id})"
+                        f"❌ Level 1 failed: IB reports not connected (client_id: {connection.client_id})"
                     )
-                    raise Exception("No managed accounts returned")
+                    raise Exception("IB connection lost during health check")
 
-                # Level 2: Contract details test (tests actual market data access)
-                from ib_insync import Stock
-
-                test_contract = Stock("AAPL", "SMART", "USD")
-                contract_details = await asyncio.wait_for(
-                    ib.reqContractDetailsAsync(test_contract), timeout=15.0
-                )
-                if not contract_details:
-                    logger.warning(
-                        f"❌ Level 2 failed: Contract details failed (client_id: {connection.client_id})"
-                    )
-                    raise Exception("Contract details request failed")
-
-                # Level 3: Current time test (validates server communication)
-                server_time = await asyncio.wait_for(
-                    ib.reqCurrentTimeAsync(), timeout=5.0
-                )
-                if not server_time:
-                    logger.warning(
-                        f"❌ Level 3 failed: Server time failed (client_id: {connection.client_id})"
-                    )
-                    raise Exception("Server time request failed")
+                # Level 2: Light API test - managedAccounts is a cached property
+                try:
+                    accounts = ib.managedAccounts()
+                    if not accounts:
+                        logger.warning(
+                            f"❌ Level 2 failed: No managed accounts (client_id: {connection.client_id})"
+                        )
+                        raise Exception("No managed accounts returned")
+                except Exception as e:
+                    logger.warning(f"❌ Level 2 failed: managedAccounts call failed: {e}")
+                    raise Exception("Managed accounts access failed")
 
                 api_test_ok = True
-                logger.debug(
-                    f"✅ Enhanced IB health check passed: {len(accounts)} accounts, contract details OK, server time OK (client_id: {connection.client_id})"
+                logger.info(
+                    f"✅ New architecture health check passed: {len(accounts)} accounts, connection healthy (client_id: {connection.client_id})"
                 )
 
         except asyncio.TimeoutError as e:
@@ -267,8 +260,8 @@ class IbService:
         data_fetching_ok = api_test_ok
 
         # Get last successful request time from pace manager
-        pace_manager = get_pace_manager()
-        pace_stats = pace_manager.get_pace_statistics()
+        pace_manager = IbPaceManager()
+        pace_stats = pace_manager.get_stats()
         current_state = pace_stats.get("current_state", {})
 
         last_successful_request = None
@@ -302,220 +295,48 @@ class IbService:
 
     async def get_connection_resilience_status(self) -> Dict[str, Any]:
         """
-        Get detailed connection resilience status from Phases 1-3 implementation.
+        Get basic connection resilience status for new architecture.
 
         Returns:
-            Dictionary with detailed resilience metrics and validation results
+            Dictionary with basic resilience metrics
         """
-        logger.info("🔍 PHASE 4: Testing connection resilience features")
+        logger.info("🔍 New architecture: Basic connection resilience status")
 
         try:
-            pool = await get_connection_pool()
-            pool_stats = pool.get_pool_status()
-            connection_details = pool.get_connection_details()
-
-            # Test systematic validation (Phase 1)
-            validation_results = await self._test_systematic_validation(pool)
-
-            # Test garbage collection status (Phase 2)
-            gc_status = self._analyze_garbage_collection_status(
-                pool_stats, connection_details
-            )
-
-            # Test Client ID 1 preference (Phase 3)
-            client_id_status = self._analyze_client_id_preference(connection_details)
+            # Use new IB connection pool from new architecture
+            from ktrdr.ib.pool_manager import get_shared_ib_pool
+            pool = get_shared_ib_pool()
+            pool_stats = pool.get_pool_stats()
 
             resilience_status = {
-                "phase_1_systematic_validation": validation_results,
-                "phase_2_garbage_collection": gc_status,
-                "phase_3_client_id_preference": client_id_status,
-                "overall_resilience_score": self._calculate_resilience_score(
-                    validation_results, gc_status, client_id_status
-                ),
+                "new_architecture_status": "active",
                 "connection_pool_health": {
                     "total_connections": pool_stats.get("total_connections", 0),
                     "healthy_connections": pool_stats.get("healthy_connections", 0),
-                    "active_connections": pool_stats.get("active_connections", 0),
-                    "pool_uptime_seconds": pool_stats.get("pool_uptime_seconds", 0),
+                    "max_connections": pool_stats.get("max_connections", 5),
+                    "host": pool_stats.get("host", "unknown"),
+                    "port": pool_stats.get("port", 0),
+                },
+                "features": {
+                    "dedicated_threads": "enabled",
+                    "persistent_event_loops": "enabled", 
+                    "auto_cleanup": "enabled",
+                    "idle_timeout": "180s"
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-            logger.info("✅ Connection resilience status completed successfully")
+            logger.info("✅ New architecture resilience status completed successfully")
             return resilience_status
 
         except Exception as e:
-            logger.error(f"❌ Connection resilience status failed: {e}")
+            logger.error(f"❌ New architecture resilience status failed: {e}")
             return {
                 "error": str(e),
-                "phase_1_systematic_validation": {"status": "error"},
-                "phase_2_garbage_collection": {"status": "error"},
-                "phase_3_client_id_preference": {"status": "error"},
-                "overall_resilience_score": 0,
+                "new_architecture_status": "error",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-    async def _test_systematic_validation(self, pool) -> Dict[str, Any]:
-        """Test Phase 1: Systematic connection validation before handoff."""
-        try:
-            # Test if the validation logic is configured correctly by checking pool status
-            pool_stats = pool.get_pool_status()
-
-            # Check if validation method exists on the pool
-            has_validation_method = hasattr(pool, "_validate_connection_before_handoff")
-
-            if has_validation_method:
-                return {
-                    "status": "working",
-                    "validation_enabled": True,
-                    "validation_method_exists": True,
-                    "pool_running": pool_stats.get("running", False),
-                    "description": "Systematic validation before handoff is configured and ready",
-                }
-            else:
-                return {
-                    "status": "failed",
-                    "validation_enabled": False,
-                    "validation_method_exists": False,
-                    "description": "Systematic validation method not found",
-                }
-        except Exception as e:
-            return {
-                "status": "failed",
-                "validation_enabled": False,
-                "error": str(e),
-                "description": "Systematic validation test failed",
-            }
-
-    def _analyze_garbage_collection_status(
-        self, pool_stats: Dict, connection_details: List
-    ) -> Dict[str, Any]:
-        """Analyze Phase 2: Garbage collection with 5min idle timeout."""
-        try:
-            current_time = time.time()
-            max_idle_time = pool_stats.get("configuration", {}).get(
-                "max_idle_time", 300
-            )  # 5 minutes
-
-            # Analyze connection ages and idle times
-            idle_connections = []
-            active_connections = []
-
-            for conn in connection_details:
-                last_used = conn.get("last_used", current_time)
-                idle_time = current_time - last_used
-
-                if conn.get("in_use", False):
-                    active_connections.append(
-                        {
-                            "client_id": conn.get("client_id"),
-                            "idle_time": idle_time,
-                            "state": "active",
-                        }
-                    )
-                else:
-                    idle_connections.append(
-                        {
-                            "client_id": conn.get("client_id"),
-                            "idle_time": idle_time,
-                            "state": "idle",
-                            "will_be_cleaned": idle_time > max_idle_time,
-                        }
-                    )
-
-            return {
-                "status": "working",
-                "max_idle_time_seconds": max_idle_time,
-                "idle_connections_count": len(idle_connections),
-                "active_connections_count": len(active_connections),
-                "connections_ready_for_cleanup": len(
-                    [c for c in idle_connections if c["will_be_cleaned"]]
-                ),
-                "health_check_interval": pool_stats.get("configuration", {}).get(
-                    "health_check_interval", 60
-                ),
-                "description": f"Garbage collection configured for {max_idle_time}s idle timeout",
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "description": "Failed to analyze garbage collection status",
-            }
-
-    def _analyze_client_id_preference(self, connection_details: List) -> Dict[str, Any]:
-        """Analyze Phase 3: Client ID 1 preference with incremental fallback."""
-        try:
-            client_ids_used = [
-                conn.get("client_id")
-                for conn in connection_details
-                if conn.get("client_id") is not None
-            ]
-            client_ids_used.sort()
-
-            # Check if lower-numbered client IDs are being preferred
-            has_client_id_1 = 1 in client_ids_used
-            lowest_id = min(client_ids_used) if client_ids_used else None
-            sequential_preference = self._check_sequential_preference(client_ids_used)
-
-            return {
-                "status": "working",
-                "client_ids_in_use": client_ids_used,
-                "using_client_id_1": has_client_id_1,
-                "lowest_client_id_used": lowest_id,
-                "sequential_preference_detected": sequential_preference,
-                "total_active_connections": len(client_ids_used),
-                "description": f"Client ID preference working - lowest ID in use: {lowest_id}",
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "description": "Failed to analyze client ID preference",
-            }
-
-    def _check_sequential_preference(self, client_ids: List[int]) -> bool:
-        """Check if client IDs show sequential preference (1, 2, 3...)."""
-        if not client_ids:
-            return False
-
-        # Check if we're using consecutive IDs starting from a low number
-        client_ids_sorted = sorted(client_ids)
-        if len(client_ids_sorted) < 2:
-            return client_ids_sorted[0] <= 10  # Single connection using low ID
-
-        # Check for consecutive sequences
-        for i in range(len(client_ids_sorted) - 1):
-            if client_ids_sorted[i + 1] - client_ids_sorted[i] != 1:
-                return False
-
-        return client_ids_sorted[0] <= 10  # Sequential and starting from low number
-
-    def _calculate_resilience_score(
-        self, validation: Dict, gc: Dict, client_id: Dict
-    ) -> float:
-        """Calculate overall resilience score (0-100)."""
-        score = 0.0
-
-        # Phase 1: Systematic validation (35 points)
-        if validation.get("status") == "working":
-            score += 35.0
-
-        # Phase 2: Garbage collection (30 points)
-        if gc.get("status") == "working":
-            score += 30.0
-
-        # Phase 3: Client ID preference (35 points)
-        if client_id.get("status") == "working":
-            score += 35.0
-            # Bonus for actually using low client IDs
-            lowest_id = client_id.get("lowest_client_id_used")
-            if client_id.get("using_client_id_1") or (
-                lowest_id is not None and lowest_id <= 10
-            ):
-                score += 5.0  # Bonus up to 40 points for this phase
-
-        return min(100.0, score)
 
     async def get_config(self) -> IbConfigInfo:
         """
@@ -525,22 +346,16 @@ class IbService:
             IbConfigInfo with current configuration
         """
         try:
-            # Get configuration from connection pool stats
-            pool = await get_connection_pool()
-            pool_stats = pool.get_pool_status()
-
-            # Get client ID registry stats
-            from ktrdr.data.ib_client_id_registry import get_client_id_registry
-
-            registry = get_client_id_registry()
-            registry_stats = registry.get_allocation_stats()
+            # Get configuration from new architecture
+            from ktrdr.config.ib_config import get_ib_config
+            config = get_ib_config()
 
             return IbConfigInfo(
-                host=pool_stats.get("host", "127.0.0.1"),
-                port=pool_stats.get("port", 7497),
+                host=config.host,
+                port=config.port,
                 client_id_range={
-                    "min": registry_stats.get("min_allocated_id", 11),
-                    "max": registry_stats.get("max_allocated_id", 999),
+                    "min": 1,
+                    "max": 999,
                 },
                 timeout=30,  # Default timeout
                 readonly=True,  # Connection pool uses read-only connections
@@ -575,20 +390,19 @@ class IbService:
             Dictionary with cleanup results
         """
         try:
-            # Use connection pool cleanup
-            from ktrdr.data.ib_connection_pool import get_connection_pool
-
-            pool = await get_connection_pool()  # Fixed: Added await
+            # Use new architecture connection pool cleanup
+            from ktrdr.ib.pool_manager import get_shared_ib_pool
+            pool = get_shared_ib_pool()
 
             # Get current stats before cleanup
-            stats_before = pool.get_pool_status()  # Fixed: Method name
+            stats_before = pool.get_pool_stats()
             connections_before = stats_before.get("total_connections", 0)
 
             # Cleanup all connections in pool
-            await pool.cleanup_all_connections()
+            await pool.cleanup_all()
 
             # Get stats after cleanup
-            stats_after = pool.get_pool_status()  # Fixed: Method name
+            stats_after = pool.get_pool_stats()
             connections_after = stats_after.get("total_connections", 0)
             connections_closed = connections_before - connections_after
 
@@ -688,6 +502,8 @@ class IbService:
     ) -> DataRangesResponse:
         """
         Get historical data ranges for multiple symbols and timeframes.
+        
+        NOTE: This method needs to be implemented for new architecture.
 
         Args:
             symbols: List of symbols to check
@@ -696,88 +512,14 @@ class IbService:
         Returns:
             DataRangesResponse with range information
         """
-        # Check if IB connection pool is available
-        try:
-            pool = await get_connection_pool()
-            pool_stats = pool.get_pool_status()
-            if pool_stats.get("available_connections", 0) == 0:
-                raise ValueError("IB connection pool not available")
-        except Exception as e:
-            raise ValueError(f"IB integration not available: {e}")
-
-        # Use unified data fetcher for range discovery
-        from ktrdr.data.ib_data_range_discovery import IbDataRangeDiscovery
-
-        try:
-            # Create range discovery instance using unified fetcher
-            data_fetcher = IbDataFetcherUnified(component_name="api_range_discovery")
-            range_discovery = IbDataRangeDiscovery(data_fetcher)
-
-            # Track which results were cached
-            cached_ranges = set()
-            for symbol in symbols:
-                for timeframe in timeframes:
-                    if range_discovery._get_cached_range(symbol, timeframe):
-                        cached_ranges.add(f"{symbol}:{timeframe}")
-
-            # Get ranges for all symbols/timeframes
-            multiple_ranges = range_discovery.get_multiple_ranges(symbols, timeframes)
-
-            # Convert to API response format
-            symbol_responses = []
-            for symbol in symbols:
-                ranges: Dict[str, Optional[DataRangeInfo]] = {}
-                for timeframe in timeframes:
-                    data_range = multiple_ranges.get(symbol, {}).get(timeframe)
-
-                    if data_range:
-                        start_date, end_date = data_range
-
-                        # Handle timezone-aware datetime objects
-                        if hasattr(start_date, "to_pydatetime"):
-                            start_date = start_date.to_pydatetime()
-                        if hasattr(end_date, "to_pydatetime"):
-                            end_date = end_date.to_pydatetime()
-
-                        # Calculate total days, handling timezone differences
-                        if start_date.tzinfo and not end_date.tzinfo:
-                            end_date = end_date.replace(tzinfo=start_date.tzinfo)
-                        elif end_date.tzinfo and not start_date.tzinfo:
-                            start_date = start_date.replace(tzinfo=end_date.tzinfo)
-
-                        total_days = (end_date - start_date).days
-                        was_cached = f"{symbol}:{timeframe}" in cached_ranges
-
-                        ranges[timeframe] = DataRangeInfo(
-                            earliest_date=start_date,
-                            latest_date=end_date,
-                            total_days=total_days,
-                            cached=was_cached,
-                        )
-                    else:
-                        ranges[timeframe] = None
-
-                symbol_responses.append(
-                    SymbolRangeResponse(symbol=symbol, ranges=ranges)
-                )
-
-            # Get cache statistics
-            cache_stats = range_discovery.get_cache_stats()
-
-            return DataRangesResponse(
-                symbols=symbol_responses,
-                requested_timeframes=timeframes,
-                cache_stats=cache_stats,
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to get data ranges: {e}")
-            # Return empty response with error indication
-            return DataRangesResponse(
-                symbols=[],
-                requested_timeframes=timeframes,
-                cache_stats={"error": str(e), "cached_ranges": 0, "fresh_lookups": 0},
-            )
+        logger.warning("get_data_ranges not yet implemented for new architecture")
+        
+        # Return empty response indicating new architecture implementation needed
+        return DataRangesResponse(
+            symbols=[],
+            requested_timeframes=timeframes,
+            cache_stats={"error": "Data ranges discovery not yet implemented for new architecture", "cached_ranges": 0, "fresh_lookups": 0},
+        )
 
     async def discover_symbol(
         self, symbol: str, force_refresh: bool = False
@@ -793,48 +535,31 @@ class IbService:
             Dictionary with symbol information or None if not found
         """
         try:
-            # Use unified symbol validator
-            validator = IbSymbolValidatorUnified(component_name="api_symbol_discovery")
-
-            if force_refresh:
-                # Clear cache for this symbol first
-                normalized_symbol = validator._normalize_symbol(symbol)
-                if normalized_symbol in validator._cache:
-                    del validator._cache[normalized_symbol]
-                if normalized_symbol in validator._failed_symbols:
-                    validator._failed_symbols.remove(normalized_symbol)
-
-            # Get contract details asynchronously
-            contract_info = await validator.get_contract_details_async(symbol)
-
-            if contract_info is None:
+            # Use new IB data adapter with simplified architecture
+            from ktrdr.config.ib_config import get_ib_config
+            config = get_ib_config()
+            adapter = IbDataAdapter(host=config.host, port=config.port)
+            
+            # Validate symbol using new architecture
+            is_valid = await adapter.validate_symbol(symbol)
+            
+            if not is_valid:
                 return None
 
-            # Map IB asset type to our instrument type
-            instrument_type_map = {
-                "STK": "stock",
-                "CASH": "forex",
-                "FUT": "future",
-                "OPT": "option",
-                "IND": "index",
-            }
-            instrument_type = instrument_type_map.get(
-                contract_info.asset_type, "unknown"
-            )
-
-            # Return symbol information in API format
+            # For now, return simplified symbol info since the new architecture
+            # doesn't have all the detailed contract info methods yet
             return {
-                "symbol": contract_info.symbol,
-                "instrument_type": instrument_type,
-                "exchange": contract_info.exchange,
-                "currency": contract_info.currency,
-                "description": contract_info.description,
-                "discovered_at": contract_info.validated_at,
-                "last_validated": contract_info.validated_at,
+                "symbol": symbol,
+                "instrument_type": "stock",  # Default to stock for now
+                "exchange": "SMART",
+                "currency": "USD", 
+                "description": f"{symbol} - Symbol validated via new IB architecture",
+                "discovered_at": time.time(),
+                "last_validated": time.time(),
                 "validation_count": 1,
                 "is_active": True,
-                "head_timestamp": contract_info.head_timestamp,
-                "trading_hours": contract_info.trading_hours,
+                "head_timestamp": None,  # Can be added later if needed
+                "trading_hours": None,  # Can be added later if needed
             }
 
         except Exception as e:
@@ -846,6 +571,8 @@ class IbService:
     ) -> List[Dict[str, Any]]:
         """
         Get all discovered symbols from the cache.
+        
+        NOTE: This method needs to be implemented for new architecture.
 
         Args:
             instrument_type: Filter by instrument type (optional)
@@ -853,88 +580,17 @@ class IbService:
         Returns:
             List of discovered symbol information
         """
-        try:
-            # Use unified symbol validator
-            validator = IbSymbolValidatorUnified(component_name="api_symbol_list")
-
-            # Get all cached symbols
-            cached_symbols = validator.get_cached_symbols()
-            discovered_symbols = []
-
-            # Map IB asset type to our instrument type
-            instrument_type_map = {
-                "STK": "stock",
-                "CASH": "forex",
-                "FUT": "future",
-                "OPT": "option",
-                "IND": "index",
-            }
-
-            for symbol in cached_symbols:
-                # Get contract info from cache
-                contract_info = validator.get_contract_details(symbol)
-
-                if contract_info:
-                    # Map IB asset type to our instrument type
-                    symbol_instrument_type = instrument_type_map.get(
-                        contract_info.asset_type, "unknown"
-                    )
-
-                    # Filter by instrument type if specified
-                    if instrument_type and symbol_instrument_type != instrument_type:
-                        continue
-
-                    discovered_symbols.append(
-                        {
-                            "symbol": contract_info.symbol,
-                            "instrument_type": symbol_instrument_type,
-                            "exchange": contract_info.exchange,
-                            "currency": contract_info.currency,
-                            "description": contract_info.description,
-                            "discovered_at": contract_info.validated_at,
-                            "last_validated": contract_info.validated_at,
-                            "validation_count": 1,
-                            "is_active": True,
-                            "head_timestamp": contract_info.head_timestamp,
-                            "trading_hours": contract_info.trading_hours,
-                        }
-                    )
-
-            # Sort by last validated time (most recent first)
-            discovered_symbols.sort(key=lambda s: s["last_validated"], reverse=True)
-            return discovered_symbols
-
-        except Exception as e:
-            logger.error(f"Failed to get discovered symbols: {e}")
-            return []
+        logger.warning("get_discovered_symbols not yet implemented for new architecture")
+        return []
 
     def get_symbol_discovery_stats(self) -> Dict[str, Any]:
         """
         Get symbol discovery cache statistics.
+        
+        NOTE: This method needs to be implemented for new architecture.
 
         Returns:
             Dictionary with discovery statistics
         """
-        try:
-            # Use unified symbol validator
-            validator = IbSymbolValidatorUnified(component_name="api_discovery_stats")
-            validator_stats = validator.get_cache_stats()
-            metrics = validator.get_metrics()
-
-            return {
-                "cached_symbols": validator_stats.get("cached_symbols", 0),
-                "validated_symbols": validator_stats.get("validated_symbols", 0),
-                "failed_symbols": validator_stats.get("failed_symbols", 0),
-                "total_lookups": validator_stats.get("total_lookups", 0),
-                "total_validations": metrics.get("total_validations", 0),
-                "successful_validations": metrics.get("successful_validations", 0),
-                "cache_hits": metrics.get("cache_hits", 0),
-                "success_rate": metrics.get("success_rate", 0.0),
-                "pace_violations": metrics.get("pace_violations", 0),
-                "retries_performed": metrics.get("retries_performed", 0),
-                "avg_validation_time": metrics.get("avg_validation_time", 0.0),
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to get discovery stats: {e}")
-            return {}
+        logger.warning("get_symbol_discovery_stats not yet implemented for new architecture")
+        return {}

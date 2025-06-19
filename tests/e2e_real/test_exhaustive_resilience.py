@@ -1,12 +1,20 @@
 """
-Exhaustive Real IB Connection Resilience Tests
+Exhaustive Real IB Connection Resilience Tests - DISABLED
 
-This module contains comprehensive tests that validate all 6 phases of connection
-resilience with real IB Gateway connections. These tests are designed to catch
-the exact types of bugs we fixed and ensure complete system resilience.
+DISABLED: These tests create competing IB connections with the backend.
 
-IMPORTANT: These tests require IB Gateway to be running on localhost:4003
-(or configured host/port) with a valid paper trading account.
+This test file was designed for the old IB architecture with complex connection
+pool logic and 6-phase resilience scoring. The new simplified architecture
+makes these tests obsolete.
+
+The new architecture (ktrdr/ib/) with dedicated threads and persistent event loops
+is tested by:
+- tests/integration/test_ib_new_architecture_integration.py
+- tests/e2e_real/test_real_api.py 
+- tests/e2e_real/test_real_cli.py
+
+All tests in this file are disabled to prevent competing IB connections
+that could interfere with the backend's connection pool.
 """
 
 import pytest
@@ -26,6 +34,7 @@ from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
 
 @pytest.mark.real_ib
 @pytest.mark.exhaustive_resilience
+@pytest.mark.skip(reason="DISABLED: Creates competing IB connections with backend")
 class TestPhase1SystematicValidationExhaustive:
     """Exhaustive tests for Phase 1: Systematic validation before handoff."""
 
@@ -175,6 +184,7 @@ class TestPhase1SystematicValidationExhaustive:
 
 @pytest.mark.real_ib
 @pytest.mark.exhaustive_resilience
+@pytest.mark.skip(reason="DISABLED: Creates competing IB connections with backend")
 class TestPhase2GarbageCollectionExhaustive:
     """Exhaustive tests for Phase 2: Garbage collection with 5-minute idle timeout."""
 
@@ -292,6 +302,7 @@ class TestPhase2GarbageCollectionExhaustive:
 
 @pytest.mark.real_ib
 @pytest.mark.exhaustive_resilience
+@pytest.mark.skip(reason="DISABLED: Creates competing IB connections with backend")
 class TestPhase3ClientIdPreferenceExhaustive:
     """Exhaustive tests for Phase 3: Client ID 1 preference with incremental fallback."""
 
@@ -440,6 +451,7 @@ class TestPhase3ClientIdPreferenceExhaustive:
 
 @pytest.mark.real_ib
 @pytest.mark.exhaustive_resilience
+@pytest.mark.skip(reason="DISABLED: Creates competing IB connections with backend")
 class TestConnectionPoolStressExhaustive:
     """Exhaustive stress tests for connection pool under load."""
 
@@ -596,6 +608,7 @@ class TestConnectionPoolStressExhaustive:
 
 @pytest.mark.real_ib
 @pytest.mark.exhaustive_resilience
+@pytest.mark.skip(reason="DISABLED: Creates competing IB connections with backend")
 class TestSilentConnectionDetectionExhaustive:
     """Exhaustive tests for silent connection detection (the original bug)."""
 
@@ -695,6 +708,7 @@ class TestSilentConnectionDetectionExhaustive:
 
 @pytest.mark.real_ib
 @pytest.mark.exhaustive_resilience
+@pytest.mark.skip(reason="DISABLED: Creates competing IB connections with backend")
 class TestResilienceScoreValidationExhaustive:
     """Exhaustive validation of resilience scoring with real IB data."""
 

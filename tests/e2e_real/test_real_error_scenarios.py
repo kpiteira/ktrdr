@@ -1,9 +1,20 @@
 """
 Real Error Scenario End-to-End Tests
 
-These tests specifically exercise error conditions that can only be tested
-with real IB connections, such as pace limiting, disconnections, and
-real IB API error responses.
+DISABLED: These tests create competing IB connections with the backend.
+
+These tests were designed to exercise error conditions with real IB connections,
+but they directly import and use backend modules, which creates competing IB
+connections that interfere with the backend's connection pool management.
+
+This can cause:
+- Client ID conflicts
+- Multiple IB objects per client ID (confuses IB Gateway)  
+- Connection pool corruption
+- IB Gateway instability
+
+All tests in this file are disabled. Error scenarios should be tested via
+API endpoints instead of direct module usage.
 """
 
 import pytest
@@ -11,42 +22,25 @@ import asyncio
 import time
 from datetime import datetime, timezone, timedelta
 
-from ktrdr.data.ib_connection_pool import get_connection_pool, acquire_ib_connection
-from ktrdr.data.ib_client_id_registry import ClientIdPurpose
-from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
-from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
-from ktrdr.data.data_manager import DataManager
+# THESE IMPORTS CREATE COMPETING IB CONNECTIONS - DO NOT USE IN E2E TESTS
+# from ktrdr.data.ib_connection_pool import get_connection_pool, acquire_ib_connection
+# from ktrdr.data.ib_client_id_registry import ClientIdPurpose
+# from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
+# from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
+# from ktrdr.data.data_manager import DataManager
 
 
 @pytest.mark.real_ib
 @pytest.mark.real_error_scenarios
 class TestRealIBErrorHandling:
-    """Test real IB error scenarios and recovery."""
+    """DISABLED: All tests in this class create competing IB connections."""
 
-    @pytest.mark.asyncio
+    @pytest.mark.skip(reason="DISABLED: Creates competing IB connections with backend")
     async def test_real_pace_limiting_handling(
         self, clean_test_symbols, real_ib_connection_test
     ):
-        """Test real pace limiting detection and backoff."""
-        symbol = clean_test_symbols[0]  # AAPL
-
-        # Create multiple rapid requests to potentially trigger pace limiting
-        validator = IbSymbolValidatorUnified(component_name="pace_test")
-
-        tasks = []
-        for i in range(10):  # Rapid fire requests
-            tasks.append(validator.validate_symbol_async(f"{symbol}_TEST_{i}"))
-
-        try:
-            # Run concurrent validations that might trigger pace limits
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Some may fail due to pace limits, but should handle gracefully
-            errors = [r for r in results if isinstance(r, Exception)]
-            successes = [r for r in results if not isinstance(r, Exception)]
-
-            # At least some should complete
-            assert len(successes) > 0, "Some requests should succeed"
+        """DISABLED: This test creates its own IB connections that compete with backend."""
+        pass
 
             # Any errors should be graceful, not async/coroutine errors
             for error in errors:

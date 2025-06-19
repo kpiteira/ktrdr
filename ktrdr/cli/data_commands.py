@@ -536,16 +536,29 @@ async def _load_data_async(
             # Get final operation status
             try:
                 final_response = await api_client.get_operation_status(operation_id)
+                
+                # Handle None response
+                if final_response is None:
+                    if not quiet:
+                        console.print("[red]❌ No response from API when getting operation status[/red]")
+                    return
+                
                 operation_data = final_response.get("data", {})
+                
+                # Handle missing data
+                if not operation_data:
+                    if not quiet:
+                        console.print("[red]❌ Empty operation data from API[/red]")
+                    return
 
                 # Convert operation data to load response format
-                result_summary = operation_data.get("result_summary", {})
+                result_summary = operation_data.get("result_summary") or {}
+                operation_status = operation_data.get("status")
+                
                 response = {
-                    "success": operation_data.get("status") == "completed",
+                    "success": operation_status == "completed",
                     "data": {
-                        "status": result_summary.get(
-                            "status", operation_data.get("status")
-                        ),
+                        "status": result_summary.get("status", operation_status),
                         "fetched_bars": result_summary.get("fetched_bars", 0),
                         "execution_time_seconds": result_summary.get(
                             "execution_time_seconds", 0

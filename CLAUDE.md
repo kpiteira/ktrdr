@@ -255,6 +255,20 @@ uv run pytest tests/e2e_real/  # Will skip all tests
 
 These tests would have caught the critical bug where `acquire_ib_connection()` was not properly awaited (mocked tests passed, but real usage failed with `RuntimeWarning`).
 
+## ⚠️ CRITICAL: IB Gateway Connection Requirements
+
+**MUST READ**: `docs/ib-connection-lessons-learned.md` for critical IB Gateway connectivity requirements.
+
+**Key Points:**
+- **Wait for "Synchronization complete"** before making API calls (minimum 2 seconds)
+- **Limit retry attempts** to 3 client IDs maximum to avoid overwhelming IB Gateway
+- **Add delays** between failed connection attempts (1-2 seconds)
+- **Use conservative health checks** - avoid heavy API calls in connection validation
+
+**⚠️ WARNING**: Ignoring these requirements will corrupt IB Gateway's socket state, requiring computer reboot to fix.
+
+**Architecture**: The new `ktrdr/ib/` module implements these protections correctly.
+
 ## MCP Server Architecture
 
 This codebase includes specifications for a Model Context Protocol (MCP) server that enables Claude to conduct autonomous trading strategy research:

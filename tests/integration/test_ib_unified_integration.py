@@ -1,14 +1,16 @@
 """
-Comprehensive integration tests for unified IB components.
+DISABLED: Old IB integration tests for unified architecture.
 
-These tests require a running IB Gateway/TWS instance and test the complete
-workflow of the refactored IB system including:
-- Connection pool management
-- Data fetching with unified components
-- Symbol validation
-- Pace management
-- Metrics collection
-- Health monitoring
+This test file was designed for the old complex IB architecture with
+unified components, client ID registry, and purpose enums. The new
+simplified architecture makes these tests obsolete.
+
+The new architecture is tested by:
+- tests/integration/test_ib_new_architecture_integration.py (covers new IB architecture)
+- tests/e2e_real/test_real_api.py (API integration tests)
+- tests/e2e_real/test_real_cli.py (CLI integration tests)
+
+All tests in this file are disabled to prevent conflicts.
 """
 
 import pytest
@@ -17,28 +19,21 @@ import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
-from ktrdr.data.ib_connection_pool import (
-    get_connection_pool,
-    acquire_ib_connection,
-    IbConnectionPool,
-)
-from ktrdr.data.ib_client_id_registry import ClientIdPurpose, get_client_id_registry
-from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
-from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
-from ktrdr.data.ib_pace_manager import get_pace_manager
-from ktrdr.data.ib_metrics_collector import get_metrics_collector
-from ktrdr.data.ib_health_monitor import get_health_monitor, start_health_monitoring
+from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
+from ktrdr.data.ib_data_adapter import IbDataAdapter  
+from ktrdr.data.data_manager import DataManager
 from ktrdr.config.ib_config import get_ib_config
 
 
 @pytest.mark.integration
 @pytest.mark.real_ib
+@pytest.mark.skip(reason="DISABLED: Old unified architecture tests - use test_ib_new_architecture_integration.py instead")
 @pytest.mark.skipif(
     "not config.getoption('--run-integration', default=False)",
     reason="Integration tests skipped - use --run-integration to run",
 )
-class TestIbUnifiedIntegration:
-    """Integration tests for unified IB components."""
+class TestIbNewArchitectureIntegration:
+    """Integration tests for new IB architecture with dedicated threads."""
 
     @pytest.fixture(scope="class")
     async def ib_config(self):
@@ -538,6 +533,7 @@ class TestIbUnifiedIntegration:
 
 @pytest.mark.integration
 @pytest.mark.stress
+@pytest.mark.skip(reason="DISABLED: Old unified architecture stress tests")
 @pytest.mark.skipif(
     "not config.getoption('--run-stress', default=False)",
     reason="Stress tests skipped - use --run-stress to run",

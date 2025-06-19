@@ -478,9 +478,11 @@ class DataService(BaseService):
             # Get the result
             try:
                 result = future.result()
-                if "error" in result:
+                # Check both error key and failed status
+                if "error" in result or result.get("status") == "failed":
+                    error_msg = result.get("error", "Unknown error")
                     raise DataError(
-                        message=f"Data loading failed: {result['error']}",
+                        message=f"Data loading failed: {error_msg}",
                         error_code="DATA-LoadError",
                         details={"operation_id": operation_id, "symbol": symbol},
                     )

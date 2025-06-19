@@ -142,9 +142,12 @@
         ],
         "holidays": []
       },
-      "head_timestamp": null,
-      "head_timestamp_timeframes": null,
-      "head_timestamp_fetched_at": null
+      "head_timestamp": "2010-06-29T11:00:00+00:00",
+      "head_timestamp_timeframes": {
+        "15m": "2010-06-29T11:00:00+00:00",
+        "default": "2010-06-29T11:00:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750199504.8388731
     },
     "JEPI": {
       "symbol": "JEPI",
@@ -306,78 +309,6 @@
       },
       "head_timestamp_fetched_at": 1749835034.2023797
     },
-    "AAPL": {
-      "symbol": "AAPL",
-      "asset_type": "STK",
-      "exchange": "NASDAQ",
-      "currency": "USD",
-      "description": "APPLE INC",
-      "validated_at": 1749845085.0770514,
-      "trading_hours": {
-        "timezone": "America/New_York",
-        "regular_hours": {
-          "start": "09:30",
-          "end": "16:00",
-          "name": "Regular"
-        },
-        "extended_hours": [
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          },
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          },
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          },
-          {
-            "start": "04:00",
-            "end": "09:30",
-            "name": "Pre-Market"
-          },
-          {
-            "start": "16:00",
-            "end": "20:00",
-            "name": "After-Hours"
-          }
-        ],
-        "trading_days": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "holidays": []
-      },
-      "head_timestamp": "1980-12-12T14:30:00+00:00",
-      "head_timestamp_timeframes": {
-        "1h": "1980-12-12T14:30:00+00:00",
-        "default": "1980-12-12T14:30:00+00:00"
-      },
-      "head_timestamp_fetched_at": 1749846442.5578349
-    },
     "MSFT": {
       "symbol": "MSFT",
       "asset_type": "STK",
@@ -443,9 +374,12 @@
         ],
         "holidays": []
       },
-      "head_timestamp": null,
-      "head_timestamp_timeframes": null,
-      "head_timestamp_fetched_at": null
+      "head_timestamp": "1986-03-13T14:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "1986-03-13T14:30:00+00:00",
+        "default": "1986-03-13T14:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750196069.9315088
     },
     "NVDA": {
       "symbol": "NVDA",
@@ -518,39 +452,237 @@
         "default": "1999-01-22T14:30:00+00:00"
       },
       "head_timestamp_fetched_at": 1749860378.3401327
+    },
+    "AAPL": {
+      "symbol": "AAPL",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "APPLE INC",
+      "validated_at": 1750184178.7610614,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          }
+        ],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "1980-12-12T14:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "1980-12-12T14:30:00+00:00",
+        "default": "1980-12-12T14:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750186662.9591153
+    },
+    "GOOG": {
+      "symbol": "GOOG",
+      "asset_type": "STK",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "description": "ALPHABET INC-CL C",
+      "validated_at": 1750190214.530725,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          },
+          {
+            "start": "04:00",
+            "end": "09:30",
+            "name": "Pre-Market"
+          },
+          {
+            "start": "16:00",
+            "end": "20:00",
+            "name": "After-Hours"
+          }
+        ],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2014-01-13T09:00:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2014-01-13T09:00:00+00:00",
+        "default": "2014-01-13T09:00:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750190218.9439383
+    },
+    "EURJPY": {
+      "symbol": "EURJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "European Monetary Union Euro",
+      "validated_at": 1750209368.6586003,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "17:15",
+          "end": "17:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1d": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750209375.026099
+    },
+    "CHFJPY": {
+      "symbol": "CHFJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "Swiss franc",
+      "validated_at": 1750209418.332102,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "17:15",
+          "end": "17:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750209424.4594798
     }
   },
   "failed_symbols": [
-    "SHOP",
-    "INVALID_SYMBOL_XYZ123",
-    "UBER",
-    "AAPL_TEST_4",
-    "AAPL_TEST_6",
-    "AAPL_TEST_5",
-    "INVALID_SYMBOL_12345",
-    "AAPL_TEST_3",
-    "AAPL_TEST_9",
     "LYFT",
+    "BADSTOCK3",
+    "INVALID",
+    "AAPL_TEST_4",
+    "BADSTOCK2",
+    "AAPL_TEST_5",
+    "BADSTOCK99",
+    "AAPL_TEST_9",
     "AAPL_TEST_1",
-    "AAPL_TEST_7",
-    "AAPL_TEST_0",
+    "AAPL_TEST_3",
+    "INVALID_SYMBOL_12345",
+    "AAPL_TEST_6",
+    "USD.JPY",
     "AAPL_TEST_2",
-    "AAPL_TEST_8"
+    "AAPL_TEST_0",
+    "BADSTOCK4",
+    "INVALID_SYMBOL_XYZ123",
+    "BADSTOCK",
+    "AAPL_TEST_8",
+    "TESTSTOCK",
+    "UBER",
+    "AAPL_TEST_7",
+    "SHOP",
+    "BADSTOCK5"
   ],
   "validated_symbols": [
-    "USDCHF",
-    "USDJPY",
-    "AAPL",
-    "MSFT",
-    "USDCAD",
-    "GOOGL",
-    "CHFUSD",
-    "RBLX",
-    "TSLA",
     "JEPI",
     "NVDA",
     "EURUSD",
-    "GBPUSD"
+    "CHFJPY",
+    "RBLX",
+    "USDCAD",
+    "AAPL",
+    "CHFUSD",
+    "USDJPY",
+    "GBPUSD",
+    "GOOG",
+    "GOOGL",
+    "EURJPY",
+    "USDCHF",
+    "MSFT",
+    "TSLA"
   ],
-  "last_updated": 1749860378.3401368
+  "last_updated": 1750302510.9151015
 }

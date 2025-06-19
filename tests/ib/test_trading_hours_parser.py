@@ -6,7 +6,7 @@ import unittest
 from datetime import time
 from unittest.mock import Mock
 
-from ktrdr.data.ib_trading_hours_parser import IBTradingHoursParser, IBTradingHoursInfo
+from ktrdr.ib.trading_hours_parser import IBTradingHoursParser, IBTradingHoursInfo
 
 
 class TestIBTradingHoursParser(unittest.TestCase):

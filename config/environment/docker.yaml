@@ -1,0 +1,20 @@
+# Docker environment configuration
+# For when running KTRDR in Docker containers
+
+api:
+  host: "0.0.0.0"  # Listen on all interfaces in container
+  port: 8000
+  reload: false
+  log_level: "INFO"
+
+logging:
+  level: "INFO"
+
+# IB Configuration for Docker environment
+# When running in Docker, IB Gateway runs on the host
+ib:
+  host: "host.docker.internal"  # Docker Desktop host access
+  port: 4002  # IB Gateway paper trading port
+  client_id: 1
+  timeout: 30
+  readonly: false

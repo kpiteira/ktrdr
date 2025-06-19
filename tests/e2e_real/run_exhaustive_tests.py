@@ -11,7 +11,7 @@ Usage:
 
 Options:
     --ib-host HOST      IB Gateway host (default: 127.0.0.1)
-    --ib-port PORT      IB Gateway port (default: 4003)
+    --ib-port PORT      IB Gateway port (default: 4002)
     --test-level LEVEL  Test level: basic, standard, exhaustive (default: standard)
     --verbose           Verbose output
     --report            Generate detailed test report
@@ -34,7 +34,7 @@ class ExhaustiveTestRunner:
     def __init__(
         self,
         ib_host: str = "127.0.0.1",
-        ib_port: int = 4003,
+        ib_port: int = 4002,
         api_base_url: str = "http://localhost:8000",
         verbose: bool = False,
     ):
@@ -435,7 +435,7 @@ Review the following areas:
 def main():
     parser = argparse.ArgumentParser(description="Run exhaustive IB resilience tests")
     parser.add_argument("--ib-host", default="127.0.0.1", help="IB Gateway host")
-    parser.add_argument("--ib-port", type=int, default=4003, help="IB Gateway port")
+    parser.add_argument("--ib-port", type=int, default=4002, help="IB Gateway port")
     parser.add_argument(
         "--api-base-url", default="http://localhost:8000", help="API base URL"
     )

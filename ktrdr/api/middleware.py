@@ -41,8 +41,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         request_id = request.headers.get("X-Request-ID", "")
 
-        # Log the request
-        logger.info(
+        # Log the request (DEBUG for operations polling, INFO for others)
+        log_level = logging.DEBUG if request.url.path.startswith("/api/v1/operations/") else logging.INFO
+        logger.log(
+            log_level,
             f"Request started: method={request.method} path={request.url.path} "
             f"client={request.client.host if request.client else 'unknown'} "
             f"request_id={request_id}"
@@ -55,8 +57,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             # Calculate request processing time
             process_time = (time.time() - start_time) * 1000
 
-            # Log the response
-            logger.info(
+            # Log the response (DEBUG for operations polling, INFO for others)
+            log_level = logging.DEBUG if request.url.path.startswith("/api/v1/operations/") else logging.INFO
+            logger.log(
+                log_level,
                 f"Request completed: method={request.method} path={request.url.path} "
                 f"status_code={response.status_code} "
                 f"duration={process_time:.2f}ms request_id={request_id}"

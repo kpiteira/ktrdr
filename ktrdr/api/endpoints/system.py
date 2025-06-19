@@ -11,7 +11,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 
 from ktrdr.logging import get_logger
-from ktrdr.data.ib_connection_pool import get_connection_pool
+# Old architecture removed - using new ktrdr.ib module
 from ktrdr.data.ib_gap_filler import get_gap_filler
 from ktrdr.api.models.base import ApiResponse
 from ktrdr import metadata
@@ -32,8 +32,8 @@ async def get_ib_status() -> Dict[str, Any]:
     """
     try:
         # Get connection pool statistics
-        pool = await get_connection_pool()
-        pool_stats = pool.get_pool_status()
+        # TODO: Implement with new IB architecture
+        pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
 
         return {
             "success": True,
@@ -114,8 +114,8 @@ async def get_system_status() -> Dict[str, Any]:
     """
     try:
         # Get IB connection status from pool
-        pool = await get_connection_pool()
-        pool_stats = pool.get_pool_status()
+        # TODO: Implement with new IB architecture
+        pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
         ib_connected = pool_stats.get("available_connections", 0) > 0
 
         # Get gap filler status
@@ -168,8 +168,8 @@ async def get_system_status_standardized() -> ApiResponse:
     """
     try:
         # Get IB connection status from pool
-        pool = await get_connection_pool()
-        pool_stats = pool.get_pool_status()
+        # TODO: Implement with new IB architecture
+        pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
         ib_connected = pool_stats.get("available_connections", 0) > 0
 
         # Get gap filler status

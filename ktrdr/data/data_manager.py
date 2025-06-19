@@ -9,7 +9,7 @@ and handling gaps or missing values in time series data.
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any, Set, Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 
@@ -38,9 +38,8 @@ from ktrdr.errors import (
 )
 
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
-from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
-from ktrdr.data.ib_connection_pool import get_connection_pool
+from ktrdr.data.external_data_interface import ExternalDataProvider
+from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.gap_classifier import GapClassifier, GapClassification
 from ktrdr.data.timeframe_constants import TimeframeConstants
@@ -122,17 +121,13 @@ class DataManager:
         # Initialize the LocalDataLoader
         self.data_loader = LocalDataLoader(data_dir=data_dir)
 
-        # Initialize IB unified components for advanced IB operations
+        # Initialize external data provider (using adapter pattern)
         self.enable_ib = enable_ib
         if enable_ib:
-            self.ib_data_fetcher = IbDataFetcherUnified(component_name="data_manager")
-            self.ib_symbol_validator = IbSymbolValidatorUnified(
-                component_name="data_manager"
-            )
-            logger.info("IB integration enabled (using unified components)")
+            self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter()
+            logger.info("IB integration enabled (using new adapter pattern)")
         else:
-            self.ib_data_fetcher = None
-            self.ib_symbol_validator = None
+            self.external_provider = None
             logger.info("IB integration disabled")
 
         # Store parameters
@@ -418,53 +413,8 @@ class DataManager:
         """
         return TimestampManager.convert_dataframe_index(df)
 
-    def _ensure_ib_connection(self) -> bool:
-        """
-        Check if IB connection is available by attempting actual connection.
-
-        Uses the same resilient approach as symbol validator instead of just
-        checking pool stats which can be misleading.
-
-        Returns:
-            True if IB connection is available, False otherwise
-        """
-        if not self.enable_ib or not self.ib_data_fetcher:
-            return False
-
-        try:
-            # Actually attempt to establish and test a connection
-            import asyncio
-            from ktrdr.data.ib_connection_pool import acquire_ib_connection
-            from ktrdr.data.ib_client_id_registry import ClientIdPurpose
-
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            # Test connection with timeout - same as symbol validator
-            async def test_connection():
-                try:
-                    async with await acquire_ib_connection(
-                        purpose=ClientIdPurpose.DATA_MANAGER,
-                        requested_by="data_manager_connection_test",
-                    ) as connection:
-                        # Quick test to verify connection works (like symbol validator)
-                        await asyncio.wait_for(
-                            connection.ib.reqCurrentTimeAsync(),
-                            timeout=5.0,  # Short timeout to detect silent connections
-                        )
-                        return True
-                except Exception as e:
-                    logger.debug(f"IB connection test failed: {e}")
-                    return False
-
-            return loop.run_until_complete(test_connection())
-
-        except Exception as e:
-            logger.debug(f"IB connection availability check failed: {e}")
-            return False
+    # Removed _ensure_ib_connection() - architectural violation
+    # Data manager should delegate to IB fetcher, not directly test connections
 
     def _analyze_gaps(
         self,
@@ -778,8 +728,8 @@ class DataManager:
         successful_count = 0
         failed_count = 0
 
-        if not self.enable_ib or not self.ib_data_fetcher:
-            logger.warning("IB integration not available for segment fetching")
+        if not self.enable_ib or not self.external_provider:
+            logger.warning("External data provider not available for segment fetching")
             return successful_data, successful_count, len(segments)
 
         logger.info(f"Fetching {len(segments)} segments with failure resilience")
@@ -861,34 +811,19 @@ class DataManager:
             """Async fetch function with enhanced timeout protection."""
             # Apply same timeout protection as symbol validator
             return await asyncio.wait_for(
-                self.ib_data_fetcher.fetch_historical_data(
+                self.external_provider.fetch_historical_data(
                     symbol=symbol,
                     timeframe=timeframe,
                     start=start,
                     end=end,
                     instrument_type=None,  # Auto-detect
-                    what_to_show="TRADES",
-                    max_retries=3,
                 ),
                 timeout=60.0,  # 60 second timeout for data fetching operations
             )
 
         try:
-            # Run the async function in the current event loop or create a new one
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # We're in an async context, need to run in executor
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, fetch_async())
-                        return future.result(timeout=30)  # 30 second timeout
-                else:
-                    return loop.run_until_complete(fetch_async())
-            except RuntimeError:
-                # No event loop, create a new one
-                return asyncio.run(fetch_async())
+            # Simplified: just use asyncio.run to avoid event loop conflicts
+            return asyncio.run(fetch_async())
 
         except asyncio.TimeoutError:
             logger.error(
@@ -914,8 +849,8 @@ class DataManager:
 
         async def fetch_head_timestamp_async():
             """Async head timestamp fetch function."""
-            return await self.ib_symbol_validator.fetch_head_timestamp_async(
-                symbol=symbol, timeframe=timeframe, force_refresh=True
+            return await self.external_provider.get_head_timestamp(
+                symbol=symbol, timeframe=timeframe
             )
 
         try:
@@ -964,30 +899,36 @@ class DataManager:
         Returns:
             Tuple of (is_valid, error_message, adjusted_start_date)
         """
-        if not self.enable_ib or not self.ib_symbol_validator:
+        if not self.enable_ib or not self.external_provider:
             return True, None, None
 
         try:
-            # Use unified symbol validator
-            validator = self.ib_symbol_validator
-
-            # Check if we have head timestamp data for this symbol
-            result = validator.validate_date_range_against_head_timestamp(
-                symbol, start_date, timeframe
-            )
-
-            is_valid, error_message, suggested_start = result
-
-            if not is_valid:
-                # Request is definitely outside available range
+            # Get head timestamp from external provider
+            import asyncio
+            
+            async def get_head_async():
+                return await self.external_provider.get_head_timestamp(symbol, timeframe)
+            
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, get_head_async())
+                        head_timestamp = future.result(timeout=30)
+                else:
+                    head_timestamp = loop.run_until_complete(get_head_async())
+            except RuntimeError:
+                head_timestamp = asyncio.run(get_head_async())
+            
+            if head_timestamp is None:
+                return True, None, None  # No head timestamp available, assume valid
+            
+            # Check if start_date is before head timestamp
+            if start_date < head_timestamp:
+                error_message = f"Requested start date {start_date} is before earliest available data {head_timestamp}"
                 logger.warning(f"📅 HEAD TIMESTAMP VALIDATION FAILED: {error_message}")
-                return False, error_message, suggested_start
-            elif suggested_start and suggested_start != start_date:
-                # Request can be adjusted to valid range
-                logger.info(
-                    f"📅 HEAD TIMESTAMP VALIDATION ADJUSTED: {start_date} → {suggested_start}"
-                )
-                return True, None, suggested_start
+                return False, error_message, head_timestamp
             else:
                 # Request is valid as-is
                 logger.debug(
@@ -1011,23 +952,28 @@ class DataManager:
         Returns:
             True if head timestamp is available, False otherwise
         """
-        if not self.enable_ib or not self.ib_symbol_validator:
+        if not self.enable_ib or not self.external_provider:
             return False
 
         try:
-            validator = self.ib_symbol_validator
-
-            # Check if we already have head timestamp (sync method)
-            head_timestamp = validator.get_head_timestamp(symbol, timeframe)
-
-            if head_timestamp:
-                logger.debug(
-                    f"📅 Head timestamp already available for {symbol}: {head_timestamp}"
-                )
-                return True
-
-            # No head timestamp available, fetch it asynchronously
-            logger.info(f"📅 No head timestamp for {symbol}, fetching from IB")
+            # Check if we can get head timestamp from external provider
+            import asyncio
+            
+            async def check_head_async():
+                head_timestamp = await self.external_provider.get_head_timestamp(symbol, timeframe)
+                return head_timestamp is not None
+            
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, check_head_async())
+                        return future.result(timeout=10)
+                else:
+                    return loop.run_until_complete(check_head_async())
+            except RuntimeError:
+                return asyncio.run(check_head_async())
 
             # Use a sync wrapper for async head timestamp fetching
             head_timestamp = self._fetch_head_timestamp_sync(symbol, timeframe)
@@ -1116,36 +1062,104 @@ class DataManager:
             f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}"
         )
 
-        # Step 0: Ensure symbol has head timestamp data and validate request range
-        logger.info(f"📅 STEP 0: Validating request against head timestamp data")
+        # Step 0A: FAIL FAST - Validate symbol and get metadata  
+        logger.info(f"📋 STEP 0A: Symbol validation and metadata lookup")
+        self._check_cancellation(cancellation_token, "symbol validation")
+        
+        validation_result = None
+        cached_head_timestamp = None
+        
+        if self.enable_ib and self.external_provider:
+            try:
+                # Use sync wrapper for async validation call
+                import asyncio
+                
+                async def validate_async():
+                    return await self.external_provider.validate_and_get_metadata(symbol, [timeframe])
+                
+                try:
+                    validation_result = asyncio.run(validate_async())
+                except RuntimeError:
+                    # We're in an async context, need to run in executor
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, validate_async())
+                        validation_result = future.result(timeout=30)
+                
+                logger.info(f"✅ Symbol {symbol} validated successfully")
+                
+                # Cache head timestamp for later use
+                if validation_result.head_timestamps and timeframe in validation_result.head_timestamps:
+                    cached_head_timestamp = validation_result.head_timestamps[timeframe]
+                    logger.info(f"📅 Cached head timestamp for {symbol} ({timeframe}): {cached_head_timestamp}")
+                    
+            except Exception as e:
+                logger.error(f"❌ Symbol validation failed for {symbol}: {e}")
+                raise DataError(
+                    message=f"Symbol validation failed: {e}",
+                    error_code="DATA-SymbolValidationFailed",
+                    details={"symbol": symbol, "timeframe": timeframe, "error": str(e)}
+                )
+        else:
+            logger.warning("External data provider not available for symbol validation")
+
+        # Step 0B: Validate request range against cached head timestamp
+        logger.info(f"📅 STEP 0B: Validating request against head timestamp data")
         self._check_cancellation(cancellation_token, "head timestamp validation")
 
-        # First ensure we have head timestamp data for this symbol
-        has_head_timestamp = self._ensure_symbol_has_head_timestamp(symbol, timeframe)
-
-        if has_head_timestamp:
-            # Validate the request range against head timestamp
-            is_valid, error_message, adjusted_start = (
-                self._validate_request_against_head_timestamp(
-                    symbol, timeframe, requested_start, requested_end
-                )
-            )
-
-            if not is_valid:
-                logger.error(f"📅 Request validation failed: {error_message}")
-                logger.error(
-                    f"📅 Cannot load data for {symbol} from {requested_start} - data not available"
-                )
-                return None
-            elif adjusted_start:
-                logger.info(
-                    f"📅 Request adjusted based on head timestamp: {requested_start} → {adjusted_start}"
-                )
-                requested_start = adjusted_start
+        # Use cached head timestamp from validation step if available
+        if cached_head_timestamp:
+            try:
+                # Convert ISO timestamp to datetime for range validation
+                head_dt = datetime.fromisoformat(cached_head_timestamp.replace('Z', '+00:00'))
+                if head_dt.tzinfo is None:
+                    head_dt = head_dt.replace(tzinfo=timezone.utc)
+                
+                # Check if requested start is before available data
+                if requested_start < head_dt:
+                    logger.warning(
+                        f"📅 Requested start {requested_start} is before available data {head_dt}"
+                    )
+                    logger.info(f"📅 Adjusting start time to earliest available: {head_dt}")
+                    requested_start = head_dt
+                
+                logger.info(f"📅 Request range validated against head timestamp")
+                
+            except Exception as e:
+                logger.warning(f"📅 Failed to parse cached head timestamp {cached_head_timestamp}: {e}")
+                # Continue without validation if parsing fails
         else:
-            logger.info(
-                f"📅 No head timestamp available for {symbol}, proceeding with original request"
-            )
+            # Fallback to old method if no cached head timestamp
+            logger.info(f"📅 No cached head timestamp, trying fallback method")
+            try:
+                has_head_timestamp = self._ensure_symbol_has_head_timestamp(symbol, timeframe)
+                
+                if has_head_timestamp:
+                    # Validate the request range against head timestamp
+                    is_valid, error_message, adjusted_start = (
+                        self._validate_request_against_head_timestamp(
+                            symbol, timeframe, requested_start, requested_end
+                        )
+                    )
+
+                    if not is_valid:
+                        logger.error(f"📅 Request validation failed: {error_message}")
+                        logger.error(
+                            f"📅 Cannot load data for {symbol} from {requested_start} - data not available"
+                        )
+                        return None
+                    elif adjusted_start:
+                        logger.info(
+                            f"📅 Request adjusted based on head timestamp: {requested_start} → {adjusted_start}"
+                        )
+                        requested_start = adjusted_start
+                else:
+                    logger.info(
+                        f"📅 No head timestamp available for {symbol}, proceeding with original request"
+                    )
+            except Exception as e:
+                logger.warning(f"📅 Fallback head timestamp validation failed: {e}")
+                logger.info(f"📅 Proceeding with original request range")
 
         # Step 1: Load existing local data (ALL modes need this for gap analysis)
         existing_data = None
@@ -1210,14 +1224,14 @@ class DataManager:
             logger.info(f"✅ No segments to fetch after filtering")
             return existing_data
 
-        # Step 4: Check IB availability and fetch segments
+        # Step 4: Fetch segments via IB fetcher (handles connection issues internally)
         fetched_data_frames = []
 
-        if self._ensure_ib_connection():
+        if self.enable_ib and self.external_provider:
             logger.info(
                 f"🚀 Fetching {len(segments)} segments using resilient strategy..."
             )
-            self._check_cancellation(cancellation_token, "IB connection check")
+            self._check_cancellation(cancellation_token, "IB fetch preparation")
             successful_frames, successful_count, failed_count = (
                 self._fetch_segments_with_resilience(
                     symbol, timeframe, segments, cancellation_token
@@ -1233,8 +1247,34 @@ class DataManager:
                 logger.warning(
                     f"⚠️ {failed_count}/{len(segments)} segments failed - continuing with partial data"
                 )
+                
+                # Check if complete IB failure should fail the operation for certain modes
+                if successful_count == 0 and mode in ["full", "tail", "backfill"]:
+                    # All IB segments failed and mode requires fresh data
+                    if mode == "full":
+                        error_msg = f"Complete IB failure in 'full' mode - all {failed_count} segments failed. Cannot provide fresh data."
+                    elif mode == "tail":
+                        error_msg = f"Complete IB failure in 'tail' mode - all {failed_count} segments failed. Cannot provide recent data."
+                    elif mode == "backfill":
+                        error_msg = f"Complete IB failure in 'backfill' mode - all {failed_count} segments failed. Cannot provide historical data."
+                    
+                    logger.error(f"❌ {error_msg}")
+                    
+                    # For modes that require IB data, complete failure should fail the operation
+                    # instead of returning stale cached data
+                    raise DataError(
+                        message=error_msg,
+                        error_code="DATA-IBCompleteFail",
+                        details={
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "mode": mode,
+                            "failed_segments": failed_count,
+                            "successful_segments": successful_count,
+                        },
+                    )
         else:
-            logger.warning(f"❌ IB connection not available - using existing data only")
+            logger.info(f"ℹ️ IB fetching disabled - using existing data only")
 
         # Step 5: Merge all data sources
         all_data_frames = []

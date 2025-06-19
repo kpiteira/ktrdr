@@ -13,25 +13,23 @@ from datetime import datetime, timezone
 
 from ktrdr.data.data_manager import DataManager
 from ktrdr.api.services.data_service import DataService
-from ktrdr.api.services.ib_service import IbService
-from ktrdr.data.ib_connection_pool import get_connection_pool
+from ktrdr.data.ib_data_adapter import IbDataAdapter
 
 
 class TestIbRefactorValidation:
     """Test the refactored IB system integration."""
 
     def test_data_manager_initialization(self):
-        """Test DataManager initializes with unified IB components."""
+        """Test DataManager initializes with new IB adapter."""
         dm = DataManager(enable_ib=True)
 
-        # Verify IB components are initialized
+        # Verify external provider is initialized
         assert dm.enable_ib is True
-        assert dm.ib_data_fetcher is not None
-        assert dm.ib_symbol_validator is not None
+        assert dm.external_provider is not None
+        assert isinstance(dm.external_provider, IbDataAdapter)
 
-        # Verify component types
-        assert "IbDataFetcherUnified" in str(type(dm.ib_data_fetcher))
-        assert "IbSymbolValidatorUnified" in str(type(dm.ib_symbol_validator))
+        # Verify adapter type
+        assert "IbDataAdapter" in str(type(dm.external_provider))
 
     def test_data_manager_local_mode(self):
         """Test DataManager works in local mode (no IB required)."""

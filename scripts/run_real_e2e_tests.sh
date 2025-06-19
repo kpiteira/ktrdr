@@ -9,7 +9,7 @@ set -e  # Exit on any error
 
 # Configuration
 IB_HOST=${IB_HOST:-"127.0.0.1"}
-IB_PORT=${IB_PORT:-"4003"}
+IB_PORT=${IB_PORT:-"4002"}
 API_BASE_URL=${API_BASE_URL:-"http://localhost:8000"}
 BACKEND_CONTAINER=${BACKEND_CONTAINER:-"ktrdr-backend"}
 
@@ -58,7 +58,7 @@ check_ib_gateway() {
         echo "  4. Ensure paper trading account is active"
         echo
         echo "Alternative: Use demo IB Gateway container:"
-        echo "  docker run -d -p 4003:4003 --name ib-gateway ib-gateway:demo"
+        echo "  docker run -d -p 4002:4002 --name ib-gateway ib-gateway:demo"
         echo
         return 1
     fi
@@ -173,7 +173,7 @@ show_help() {
     echo
     echo "Options:"
     echo "  --ib-host HOST        IB Gateway host (default: 127.0.0.1)"
-    echo "  --ib-port PORT        IB Gateway port (default: 4003)"
+    echo "  --ib-port PORT        IB Gateway port (default: 4002)"
     echo "  --api-url URL         Backend API URL (default: http://localhost:8000)"
     echo "  --skip-checks         Skip pre-flight checks"
     echo "  --help               Show this help message"
