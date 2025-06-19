@@ -31,7 +31,7 @@ jobs:
     - name: Run unit tests
       run: |
         uv run pytest tests/ \
-          -m "not (integration or real_ib or container_api or container_cli or e2e or container_e2e)" \
+          -m "not (integration or integration_slow or real_ib or real_cli or real_api or real_pipeline or real_error_scenarios or container_api or container_cli or container_e2e or e2e or exhaustive_resilience or exhaustive_api_resilience or exhaustive_cli_resilience or exhaustive_integration_resilience)" \
           --tb=short \
           -v \
           --junit-xml=test-results.xml
@@ -189,8 +189,9 @@ jobs:
     
     - name: Run integration tests (mocked)
       run: |
-        # These tests will use the disable_retries fixture to mock IB calls
+        # These tests will use mocked IB calls (exclude tests requiring real IB)
         uv run pytest tests/integration/ \
+          -m "not (real_ib or real_cli or real_api or real_pipeline or real_error_scenarios or integration_slow)" \
           --tb=short \
           --maxfail=5 \
           -v \
