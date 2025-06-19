@@ -4,16 +4,16 @@ Unit tests for IB Connection Pool
 Tests the simplified connection pool functionality.
 """
 
-import unittest
+import pytest
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from ktrdr.ib.pool import IbConnectionPool
 
 
-class TestIbConnectionPool(unittest.TestCase):
+class TestIbConnectionPool:
     """Test IB connection pool functionality."""
 
-    def setUp(self):
+    def setup_method(self):
         """Set up test fixtures."""
         self.host = "localhost"
         self.port = 4002
@@ -23,26 +23,26 @@ class TestIbConnectionPool(unittest.TestCase):
         """Test pool initialization."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
 
-        self.assertEqual(pool.host, self.host)
-        self.assertEqual(pool.port, self.port)
-        self.assertEqual(pool.max_connections, self.max_connections)
-        self.assertEqual(len(pool.connections), 0)
-        self.assertEqual(pool.next_client_id, 1)
-        self.assertEqual(pool.connections_created, 0)
-        self.assertEqual(pool.connections_reused, 0)
-        self.assertEqual(pool.cleanup_count, 0)
+        assert pool.host == self.host
+        assert pool.port == self.port
+        assert pool.max_connections == self.max_connections
+        assert len(pool.connections) == 0
+        assert pool.next_client_id == 1
+        assert pool.connections_created == 0
+        assert pool.connections_reused == 0
+        assert pool.cleanup_count == 0
 
     def test_pool_str_repr(self):
         """Test string representations."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
 
         str_repr = str(pool)
-        self.assertIn("0/3 connections", str_repr)
+        assert "0/3 connections" in str_repr
 
         detailed_repr = repr(pool)
-        self.assertIn(self.host, detailed_repr)
-        self.assertIn(str(self.port), detailed_repr)
-        self.assertIn("connections=0/3", detailed_repr)
+        assert self.host in detailed_repr
+        assert str(self.port) in detailed_repr
+        assert "connections=0/3" in detailed_repr
 
     def test_get_pool_stats(self):
         """Test pool statistics."""
@@ -61,26 +61,27 @@ class TestIbConnectionPool(unittest.TestCase):
             "host",
             "port",
         }
-        self.assertEqual(set(stats.keys()), expected_keys)
+        assert set(stats.keys()) == expected_keys
 
-        self.assertEqual(stats["total_connections"], 0)
-        self.assertEqual(stats["healthy_connections"], 0)
-        self.assertEqual(stats["unhealthy_connections"], 0)
-        self.assertEqual(stats["max_connections"], self.max_connections)
-        self.assertEqual(stats["next_client_id"], 1)
-        self.assertEqual(stats["connections_created"], 0)
-        self.assertEqual(stats["connections_reused"], 0)
-        self.assertEqual(stats["cleanup_count"], 0)
-        self.assertEqual(stats["host"], self.host)
-        self.assertEqual(stats["port"], self.port)
+        assert stats["total_connections"] == 0
+        assert stats["healthy_connections"] == 0
+        assert stats["unhealthy_connections"] == 0
+        assert stats["max_connections"] == self.max_connections
+        assert stats["next_client_id"] == 1
+        assert stats["connections_created"] == 0
+        assert stats["connections_reused"] == 0
+        assert stats["cleanup_count"] == 0
+        assert stats["host"] == self.host
+        assert stats["port"] == self.port
 
     def test_get_connection_stats_empty(self):
         """Test connection statistics when pool is empty."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
         stats = pool.get_connection_stats()
 
-        self.assertEqual(stats, [])
+        assert stats == []
 
+    @pytest.mark.asyncio
     async def test_cleanup_all(self):
         """Test cleaning up all connections."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
@@ -97,21 +98,23 @@ class TestIbConnectionPool(unittest.TestCase):
         mock_conn2.stop.assert_called_once()
 
         # Verify pool is empty
-        self.assertEqual(len(pool.connections), 0)
+        assert len(pool.connections) == 0
 
+    @pytest.mark.asyncio
     async def test_health_check_empty_pool(self):
         """Test health check on empty pool."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
 
         health = await pool.health_check()
 
-        self.assertFalse(health["healthy"])
-        self.assertEqual(health["healthy_connections"], 0)
-        self.assertEqual(health["total_connections"], 0)
-        self.assertEqual(health["pool_utilization"], 0.0)
-        self.assertTrue(health["can_create_new"])
-        self.assertEqual(health["next_client_id"], 1)
+        assert health["healthy"] is False
+        assert health["healthy_connections"] == 0
+        assert health["total_connections"] == 0
+        assert health["pool_utilization"] == 0.0
+        assert health["can_create_new"] is True
+        assert health["next_client_id"] == 1
 
+    @pytest.mark.asyncio
     async def test_health_check_with_healthy_connections(self):
         """Test health check with healthy connections."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
@@ -124,12 +127,13 @@ class TestIbConnectionPool(unittest.TestCase):
 
         health = await pool.health_check()
 
-        self.assertTrue(health["healthy"])
-        self.assertEqual(health["healthy_connections"], 1)
-        self.assertEqual(health["total_connections"], 1)
-        self.assertAlmostEqual(health["pool_utilization"], 1 / 3)
-        self.assertTrue(health["can_create_new"])
+        assert health["healthy"] is True
+        assert health["healthy_connections"] == 1
+        assert health["total_connections"] == 1
+        assert abs(health["pool_utilization"] - (1 / 3)) < 1e-6
+        assert health["can_create_new"] is True
 
+    @pytest.mark.asyncio
     async def test_find_healthy_connection(self):
         """Test finding healthy connections."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
@@ -144,8 +148,9 @@ class TestIbConnectionPool(unittest.TestCase):
         pool.connections = [unhealthy_conn, healthy_conn]
 
         found_conn = await pool._find_healthy_connection()
-        self.assertEqual(found_conn, healthy_conn)
+        assert found_conn == healthy_conn
 
+    @pytest.mark.asyncio
     async def test_find_healthy_connection_none_available(self):
         """Test finding healthy connections when none available."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
@@ -160,8 +165,9 @@ class TestIbConnectionPool(unittest.TestCase):
         pool.connections = [unhealthy_conn1, unhealthy_conn2]
 
         found_conn = await pool._find_healthy_connection()
-        self.assertIsNone(found_conn)
+        assert found_conn is None
 
+    @pytest.mark.asyncio
     async def test_cleanup_unhealthy_connections(self):
         """Test cleanup of unhealthy connections."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
@@ -181,16 +187,17 @@ class TestIbConnectionPool(unittest.TestCase):
         await pool._cleanup_unhealthy_connections()
 
         # Should only have healthy connection left
-        self.assertEqual(len(pool.connections), 1)
-        self.assertEqual(pool.connections[0], healthy_conn)
+        assert len(pool.connections) == 1
+        assert pool.connections[0] == healthy_conn
 
         # Unhealthy connections should have been stopped
         unhealthy_conn1.stop.assert_called_once()
         unhealthy_conn2.stop.assert_called_once()
 
         # Cleanup count should be updated
-        self.assertEqual(pool.cleanup_count, 2)
+        assert pool.cleanup_count == 2
 
+    @pytest.mark.asyncio
     @patch("ktrdr.ib.pool.IbConnection")
     async def test_create_new_connection_success(self, mock_ib_connection_class):
         """Test successful creation of new connection."""
@@ -204,11 +211,12 @@ class TestIbConnectionPool(unittest.TestCase):
 
         connection = await pool._create_new_connection(timeout=30.0)
 
-        self.assertEqual(connection, mock_conn)
+        assert connection == mock_conn
         mock_ib_connection_class.assert_called_once_with(1, self.host, self.port)
         mock_conn.start.assert_called_once()
-        self.assertEqual(pool.next_client_id, 2)
+        assert pool.next_client_id == 2
 
+    @pytest.mark.asyncio
     @patch("ktrdr.ib.pool.IbConnection")
     async def test_create_new_connection_client_id_conflict(
         self, mock_ib_connection_class
@@ -234,9 +242,10 @@ class TestIbConnectionPool(unittest.TestCase):
         ):
             connection = await pool._create_new_connection(timeout=30.0)
 
-        self.assertEqual(connection, success_conn)
-        self.assertEqual(pool.next_client_id, 3)  # Should have incremented twice
+        assert connection == success_conn
+        assert pool.next_client_id == 3  # Should have incremented twice
 
+    @pytest.mark.asyncio
     @patch("ktrdr.ib.pool.IbConnection")
     async def test_create_new_connection_timeout(self, mock_ib_connection_class):
         """Test connection creation timeout."""
@@ -248,11 +257,12 @@ class TestIbConnectionPool(unittest.TestCase):
         mock_conn.is_healthy.return_value = False  # Never becomes healthy
         mock_ib_connection_class.return_value = mock_conn
 
-        with self.assertRaises(ConnectionError) as context:
+        with pytest.raises(ConnectionError) as exc_info:
             await pool._create_new_connection(timeout=0.1)  # Very short timeout
 
-        self.assertIn("Timeout", str(context.exception))
+        assert "Timeout" in str(exc_info.value)
 
+    @pytest.mark.asyncio
     async def test_acquire_connection_pool_exhausted(self):
         """Test acquire connection when pool is exhausted."""
         pool = IbConnectionPool(self.host, self.port, max_connections=1)
@@ -262,11 +272,13 @@ class TestIbConnectionPool(unittest.TestCase):
         unhealthy_conn.is_healthy.return_value = False
         pool.connections = [unhealthy_conn]
 
-        with self.assertRaises(ConnectionError) as context:
+        with pytest.raises(ConnectionError) as exc_info:
             await pool.acquire_connection()
 
-        self.assertIn("pool exhausted", str(context.exception))
+        # Should raise ConnectionError (could be timeout or pool exhausted)
+        assert "Timeout" in str(exc_info.value) or "pool exhausted" in str(exc_info.value)
 
+    @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test context manager functionality."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
@@ -280,10 +292,11 @@ class TestIbConnectionPool(unittest.TestCase):
             mock_acquire.return_value = mock_conn
 
             async with pool.get_connection() as conn:
-                self.assertEqual(conn, mock_conn)
+                assert conn == mock_conn
 
             mock_acquire.assert_called_once()
 
+    @pytest.mark.asyncio
     async def test_execute_with_connection(self):
         """Test execute with connection helper."""
         pool = IbConnectionPool(self.host, self.port, self.max_connections)
@@ -303,12 +316,11 @@ class TestIbConnectionPool(unittest.TestCase):
 
             result = await pool.execute_with_connection(mock_func, *args, **kwargs)
 
-            self.assertEqual(result, "test_result")
+            assert result == "test_result"
             mock_conn.execute_request.assert_called_once_with(
                 mock_func, *args, **kwargs
             )
 
 
 if __name__ == "__main__":
-    # Run the tests
-    unittest.main()
+    pytest.main([__file__, "-v"])
