@@ -59,14 +59,18 @@ class TestRequestLoggingMiddleware:
             assert mock_logger_log.call_count == 2
 
             # Verify the content of the first log message (request started)
-            first_call_args = mock_logger_log.call_args_list[0][0][1]  # Second arg is the message
+            first_call_args = mock_logger_log.call_args_list[0][0][
+                1
+            ]  # Second arg is the message
             assert "Request started" in first_call_args
             assert "method=GET" in first_call_args
             assert "path=/api/v1/health" in first_call_args
             assert "request_id=test-id" in first_call_args
 
             # Verify the content of the second log message (request completed)
-            second_call_args = mock_logger_log.call_args_list[1][0][1]  # Second arg is the message
+            second_call_args = mock_logger_log.call_args_list[1][0][
+                1
+            ]  # Second arg is the message
             assert "Request completed" in second_call_args
             assert "status_code=200" in second_call_args
             assert "duration=" in second_call_args
