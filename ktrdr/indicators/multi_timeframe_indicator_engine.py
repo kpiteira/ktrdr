@@ -298,8 +298,8 @@ class MultiTimeframeIndicatorEngine:
                     continue
 
                 # Align the data by timestamp (use latest available values)
-                primary_values = primary_data[primary_col].fillna(method="ffill")
-                secondary_values = secondary_data[secondary_col].fillna(method="ffill")
+                primary_values = primary_data[primary_col].ffill()
+                secondary_values = secondary_data[secondary_col].ffill()
 
                 # Perform the specified operation
                 if operation == "ratio":

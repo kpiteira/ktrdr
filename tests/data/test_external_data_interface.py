@@ -4,7 +4,7 @@ Unit tests for External Data Provider Interface
 Tests the abstract interface for external data providers.
 """
 
-import unittest
+import pytest
 from abc import ABC
 from datetime import datetime, timezone
 import pandas as pd
@@ -81,17 +81,18 @@ class MockExternalDataProvider(ExternalDataProvider):
         }
 
 
-class TestExternalDataInterface(unittest.TestCase):
+class TestExternalDataInterface:
     """Test external data provider interface."""
 
     def test_interface_is_abstract(self):
         """Test that ExternalDataProvider is abstract."""
-        self.assertTrue(issubclass(ExternalDataProvider, ABC))
+        assert issubclass(ExternalDataProvider, ABC)
 
         # Should not be able to instantiate directly
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             ExternalDataProvider()
 
+    @pytest.mark.asyncio
     async def test_mock_implementation(self):
         """Test mock implementation works correctly."""
         provider = MockExternalDataProvider()
@@ -102,92 +103,100 @@ class TestExternalDataInterface(unittest.TestCase):
 
         data = await provider.fetch_historical_data("AAPL", "1h", start, end, "STK")
 
-        self.assertIsInstance(data, pd.DataFrame)
-        self.assertIn("open", data.columns)
-        self.assertIn("high", data.columns)
-        self.assertIn("low", data.columns)
-        self.assertIn("close", data.columns)
-        self.assertIn("volume", data.columns)
-        self.assertEqual(len(provider.fetch_calls), 1)
-        self.assertEqual(provider.fetch_calls[0], ("AAPL", "1h", start, end, "STK"))
+        assert isinstance(data, pd.DataFrame)
+        assert "open" in data.columns
+        assert "high" in data.columns
+        assert "low" in data.columns
+        assert "close" in data.columns
+        assert "volume" in data.columns
+        assert len(provider.fetch_calls) == 1
+        assert provider.fetch_calls[0] == ("AAPL", "1h", start, end, "STK")
 
+    @pytest.mark.asyncio
     async def test_symbol_validation(self):
         """Test symbol validation."""
         provider = MockExternalDataProvider()
 
         # Valid symbol
         is_valid = await provider.validate_symbol("AAPL", "STK")
-        self.assertTrue(is_valid)
+        assert is_valid is True
 
         # Invalid symbol
         is_valid = await provider.validate_symbol("INVALID", "STK")
-        self.assertFalse(is_valid)
+        assert is_valid is False
 
-        self.assertEqual(len(provider.validate_calls), 2)
+        assert len(provider.validate_calls) == 2
 
+    @pytest.mark.asyncio
     async def test_head_timestamp(self):
         """Test head timestamp retrieval."""
         provider = MockExternalDataProvider()
 
         timestamp = await provider.get_head_timestamp("AAPL", "1h", "STK")
 
-        self.assertIsInstance(timestamp, datetime)
-        self.assertEqual(timestamp.tzinfo, timezone.utc)
-        self.assertEqual(len(provider.head_timestamp_calls), 1)
+        assert isinstance(timestamp, datetime)
+        assert timestamp.tzinfo == timezone.utc
+        assert len(provider.head_timestamp_calls) == 1
 
+    @pytest.mark.asyncio
     async def test_latest_timestamp(self):
         """Test latest timestamp retrieval."""
         provider = MockExternalDataProvider()
 
         timestamp = await provider.get_latest_timestamp("AAPL", "1h", "STK")
 
-        self.assertIsInstance(timestamp, datetime)
-        self.assertEqual(timestamp.tzinfo, timezone.utc)
+        assert isinstance(timestamp, datetime)
+        assert timestamp.tzinfo == timezone.utc
 
+    @pytest.mark.asyncio
     async def test_supported_timeframes(self):
         """Test supported timeframes."""
         provider = MockExternalDataProvider()
 
         timeframes = await provider.get_supported_timeframes()
 
-        self.assertIsInstance(timeframes, list)
-        self.assertIn("1h", timeframes)
-        self.assertIn("1d", timeframes)
+        assert isinstance(timeframes, list)
+        assert "1h" in timeframes
+        assert "1d" in timeframes
 
+    @pytest.mark.asyncio
     async def test_supported_instruments(self):
         """Test supported instruments."""
         provider = MockExternalDataProvider()
 
         instruments = await provider.get_supported_instruments()
 
-        self.assertIsInstance(instruments, list)
-        self.assertIn("STK", instruments)
-        self.assertIn("FOREX", instruments)
+        assert isinstance(instruments, list)
+        assert "STK" in instruments
+        assert "FOREX" in instruments
 
+    @pytest.mark.asyncio
     async def test_health_check(self):
         """Test health check."""
         provider = MockExternalDataProvider()
 
         health = await provider.health_check()
 
-        self.assertIsInstance(health, dict)
-        self.assertIn("healthy", health)
-        self.assertIn("connected", health)
-        self.assertTrue(health["healthy"])
-        self.assertTrue(health["connected"])
+        assert isinstance(health, dict)
+        assert "healthy" in health
+        assert "connected" in health
+        assert health["healthy"] is True
+        assert health["connected"] is True
 
+    @pytest.mark.asyncio
     async def test_provider_info(self):
         """Test provider info."""
         provider = MockExternalDataProvider()
 
         info = await provider.get_provider_info()
 
-        self.assertIsInstance(info, dict)
-        self.assertIn("name", info)
-        self.assertIn("version", info)
-        self.assertIn("capabilities", info)
-        self.assertEqual(info["name"], "Mock Provider")
+        assert isinstance(info, dict)
+        assert "name" in info
+        assert "version" in info
+        assert "capabilities" in info
+        assert info["name"] == "Mock Provider"
 
+    @pytest.mark.asyncio
     async def test_optional_methods_default_behavior(self):
         """Test optional methods have default implementations."""
         provider = MockExternalDataProvider()
@@ -196,25 +205,25 @@ class TestExternalDataInterface(unittest.TestCase):
         market_hours = await provider.get_market_hours(
             "AAPL", datetime.now(timezone.utc)
         )
-        self.assertIsNone(market_hours)
+        assert market_hours is None
 
         contract_details = await provider.get_contract_details("AAPL")
-        self.assertIsNone(contract_details)
+        assert contract_details is None
 
         search_results = await provider.search_symbols("AAPL")
-        self.assertEqual(search_results, [])
+        assert search_results == []
 
 
-class TestDataProviderExceptions(unittest.TestCase):
+class TestDataProviderExceptions:
     """Test data provider exception classes."""
 
     def test_base_exception(self):
         """Test base DataProviderError."""
         error = DataProviderError("Test message", "TestProvider", "ERR001")
 
-        self.assertEqual(str(error), "Test message")
-        self.assertEqual(error.provider, "TestProvider")
-        self.assertEqual(error.error_code, "ERR001")
+        assert str(error) == "Test message"
+        assert error.provider == "TestProvider"
+        assert error.error_code == "ERR001"
 
     def test_connection_error(self):
         """Test DataProviderConnectionError."""
@@ -222,9 +231,9 @@ class TestDataProviderExceptions(unittest.TestCase):
             "Connection failed", "TestProvider", "CONN001"
         )
 
-        self.assertIsInstance(error, DataProviderError)
-        self.assertEqual(error.provider, "TestProvider")
-        self.assertEqual(error.error_code, "CONN001")
+        assert isinstance(error, DataProviderError)
+        assert error.provider == "TestProvider"
+        assert error.error_code == "CONN001"
 
     def test_rate_limit_error(self):
         """Test DataProviderRateLimitError."""
@@ -232,17 +241,17 @@ class TestDataProviderExceptions(unittest.TestCase):
             "Rate limit exceeded", "TestProvider", retry_after=60.0
         )
 
-        self.assertIsInstance(error, DataProviderError)
-        self.assertEqual(error.provider, "TestProvider")
-        self.assertEqual(error.retry_after, 60.0)
+        assert isinstance(error, DataProviderError)
+        assert error.provider == "TestProvider"
+        assert error.retry_after == 60.0
 
     def test_data_error(self):
         """Test DataProviderDataError."""
         error = DataProviderDataError("Data not available", "TestProvider", "DATA001")
 
-        self.assertIsInstance(error, DataProviderError)
-        self.assertEqual(error.provider, "TestProvider")
-        self.assertEqual(error.error_code, "DATA001")
+        assert isinstance(error, DataProviderError)
+        assert error.provider == "TestProvider"
+        assert error.error_code == "DATA001"
 
     def test_config_error(self):
         """Test DataProviderConfigError."""
@@ -250,45 +259,10 @@ class TestDataProviderExceptions(unittest.TestCase):
             "Invalid configuration", "TestProvider", "CONFIG001"
         )
 
-        self.assertIsInstance(error, DataProviderError)
-        self.assertEqual(error.provider, "TestProvider")
-        self.assertEqual(error.error_code, "CONFIG001")
+        assert isinstance(error, DataProviderError)
+        assert error.provider == "TestProvider"
+        assert error.error_code == "CONFIG001"
 
 
 if __name__ == "__main__":
-    # For async tests, we need to run them properly
-    import asyncio
-
-    class AsyncTestRunner:
-        """Helper to run async tests."""
-
-        def __init__(self, test_class):
-            self.test_class = test_class
-
-        async def run_async_tests(self):
-            """Run all async test methods."""
-            test_instance = self.test_class()
-
-            # Find all async test methods
-            async_methods = [
-                method
-                for method in dir(test_instance)
-                if method.startswith("test_")
-                and asyncio.iscoroutinefunction(getattr(test_instance, method))
-            ]
-
-            for method_name in async_methods:
-                method = getattr(test_instance, method_name)
-                try:
-                    await method()
-                    print(f"✓ {method_name}")
-                except Exception as e:
-                    print(f"✗ {method_name}: {e}")
-
-    # Run sync tests
-    unittest.main(exit=False, verbosity=2)
-
-    # Run async tests
-    print("\nRunning async tests...")
-    runner = AsyncTestRunner(TestExternalDataInterface)
-    asyncio.run(runner.run_async_tests())
+    pytest.main([__file__, "-v"])
