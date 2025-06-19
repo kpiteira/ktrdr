@@ -298,7 +298,7 @@ class ComplexConfigurationHandler:
 
         elif indicator_type == "ATR":
             period = params.get("period", 14)
-            return period
+            return period + 1  # ATR needs period + 1 for previous close calculation
 
         else:
             # Default assumption
@@ -443,7 +443,8 @@ class ComplexConfigurationHandler:
 
         elif indicator_type == "ATR":
             original_period = params.get("period", 14)
-            max_period = max(1, available_points - 1)
+            # ATR needs period + 1 data points (for previous close calculation)
+            max_period = max(1, available_points - 2)
             new_period = min(original_period, max_period)
             params["period"] = new_period
 

@@ -296,8 +296,8 @@ class TestComplexConfigurationHandler:
             }
         )
 
-        # 1d: Limited data (2 weeks)
-        dates_1d = pd.date_range("2024-01-01", periods=14, freq="1d")
+        # 1d: Limited data (2 months - enough for some indicators)
+        dates_1d = pd.date_range("2024-01-01", periods=60, freq="1d")
         prices_1d = 100 + np.cumsum(np.random.normal(0, 1, len(dates_1d)))
         data_1d = pd.DataFrame(
             {

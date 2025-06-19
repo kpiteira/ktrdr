@@ -52,6 +52,21 @@ class MultiTimeframeDecisionRequest(BaseModel):
         description="Current portfolio state",
     )
 
+
+class LegacyMultiTimeframeDecisionRequest(BaseModel):
+    """Legacy request model for multi-timeframe trading decision."""
+
+    symbol: str = Field(..., description="Trading symbol (e.g., 'AAPL')")
+    strategy_config_path: str = Field(
+        ..., description="Path to strategy configuration file"
+    )
+    timeframes: str = Field(
+        default="1h,4h,1d", description="Comma-separated timeframes"
+    )
+    mode: str = Field(
+        default="backtest", description="Operating mode: backtest, paper, or live"
+    )
+
     @field_validator("timeframes")
     @classmethod
     def validate_timeframes(cls, v):
@@ -67,7 +82,9 @@ class MultiTimeframeDecisionRequest(BaseModel):
             "1w",
             "1M",
         ]
-        for tf in v:
+        # Split comma-separated string and validate each timeframe
+        timeframes_list = [tf.strip() for tf in v.split(",")]
+        for tf in timeframes_list:
             if tf not in valid_timeframes:
                 raise ValueError(
                     f"Invalid timeframe: {tf}. Must be one of {valid_timeframes}"
@@ -197,6 +214,9 @@ def create_orchestrator(
 
         return orchestrator
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 for missing config)
+        raise
     except Exception as e:
         logger.error(f"Failed to create multi-timeframe orchestrator: {e}")
         raise HTTPException(
@@ -216,8 +236,8 @@ def prepare_timeframe_data(
         for timeframe in timeframes:
             try:
                 # Get data for this timeframe
-                data = data_manager.get_data(
-                    symbol=symbol, timeframe=timeframe, rows=lookback_periods
+                data = data_manager.load_data(
+                    symbol=symbol, timeframe=timeframe, mode="local"
                 )
 
                 if data is not None and not data.empty:
@@ -437,8 +457,8 @@ async def check_multi_timeframe_data_status(
         for timeframe in timeframes:
             try:
                 # Get data for this timeframe
-                data = data_manager.get_data(
-                    symbol=symbol, timeframe=timeframe, rows=lookback_periods
+                data = data_manager.load_data(
+                    symbol=symbol, timeframe=timeframe, mode="local"
                 )
 
                 if data is not None and not data.empty:
@@ -631,12 +651,7 @@ async def make_batch_multi_timeframe_decisions(
 
 # Backwards compatibility endpoints
 @router.post("/legacy/decide", response_model=MultiTimeframeDecisionResponse)
-async def legacy_multi_timeframe_decision(
-    symbol: str,
-    strategy_config_path: str,
-    timeframes: str = "1h,4h,1d",  # Comma-separated string for legacy support
-    mode: str = "backtest",
-):
+async def legacy_multi_timeframe_decision(request: LegacyMultiTimeframeDecisionRequest):
     """
     Legacy endpoint for multi-timeframe decisions (backwards compatibility).
 
@@ -644,15 +659,15 @@ async def legacy_multi_timeframe_decision(
     a simplified parameter interface for backwards compatibility.
     """
     # Convert comma-separated timeframes to list
-    timeframes_list = [tf.strip() for tf in timeframes.split(",")]
+    timeframes_list = [tf.strip() for tf in request.timeframes.split(",")]
 
-    # Create request object
-    request = MultiTimeframeDecisionRequest(
-        symbol=symbol,
-        strategy_config_path=strategy_config_path,
+    # Create standard request object
+    standard_request = MultiTimeframeDecisionRequest(
+        symbol=request.symbol,
+        strategy_config_path=request.strategy_config_path,
         timeframes=timeframes_list,
-        mode=mode,
+        mode=request.mode,
     )
 
     # Use main decision endpoint
-    return await make_multi_timeframe_decision(request)
+    return await make_multi_timeframe_decision(standard_request)

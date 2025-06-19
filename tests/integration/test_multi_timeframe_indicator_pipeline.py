@@ -17,7 +17,6 @@ from typing import Dict, List
 
 from ktrdr.indicators.multi_timeframe_indicator_engine import (
     MultiTimeframeIndicatorEngine,
-    TimeframeIndicatorConfig,
     create_multi_timeframe_engine_from_config,
 )
 from ktrdr.indicators.column_standardization import (
@@ -25,7 +24,7 @@ from ktrdr.indicators.column_standardization import (
     create_standardized_column_mapping,
 )
 from ktrdr.config.loader import ConfigLoader
-from ktrdr.config.models import MultiTimeframeIndicatorConfig
+from ktrdr.config.models import MultiTimeframeIndicatorConfig, TimeframeIndicatorConfig
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.fuzzy.config import FuzzyConfigLoader
 from ktrdr.data.multi_timeframe_manager import MultiTimeframeDataManager

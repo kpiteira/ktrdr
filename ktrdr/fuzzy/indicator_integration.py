@@ -329,6 +329,10 @@ class MultiTimeframeFuzzyIndicatorPipeline:
                 f"Pipeline processing failed after {total_processing_time:.3f}s: {e}"
             )
 
+            # Re-raise ProcessingError exceptions when fail_fast=True
+            if fail_fast and isinstance(e, ProcessingError):
+                raise
+
             processing_metadata["total_processing_time"] = total_processing_time
             processing_metadata["success"] = False
             processing_metadata["final_error"] = str(e)

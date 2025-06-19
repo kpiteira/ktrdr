@@ -128,6 +128,7 @@ class TestIbConnection(unittest.TestCase):
             func=mock_func,
             args=args,
             kwargs=kwargs,
+            request_id="test-request-1",
             result_future=mock_future,
             timestamp=timestamp,
         )
@@ -219,7 +220,7 @@ class TestConnectionIntegration(unittest.TestCase):
         mock_ib.connectAsync = mock_connect_async
 
         # Start connection (with mocked event loop)
-        with patch.object(conn, "_run_event_loop"):
+        with patch.object(conn, "_run_sync_loop"):
             result = conn.start()
             self.assertTrue(result)
 
@@ -246,6 +247,7 @@ class TestConnectionIntegration(unittest.TestCase):
             func=mock_func,
             args=(),
             kwargs={},
+            request_id="test-request-2",
             result_future=mock_future,
             timestamp=time.time(),
         )

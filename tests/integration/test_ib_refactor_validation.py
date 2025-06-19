@@ -55,7 +55,7 @@ class TestIbRefactorValidation:
 
         # Verify DataManager has IB components
         assert ds.data_manager.enable_ib is True
-        assert ds.data_manager.ib_data_fetcher is not None
+        assert ds.data_manager.external_provider is not None
 
     @pytest.mark.asyncio
     async def test_ib_service_initialization(self):
@@ -93,8 +93,9 @@ class TestIbRefactorValidation:
     @pytest.mark.asyncio
     async def test_connection_pool_singleton(self):
         """Test connection pool singleton pattern."""
-        pool1 = await get_connection_pool()
-        pool2 = await get_connection_pool()
+        from ktrdr.ib.pool_manager import get_shared_ib_pool
+        pool1 = get_shared_ib_pool()
+        pool2 = get_shared_ib_pool()
 
         # Should be the same instance
         assert pool1 is pool2
@@ -134,34 +135,32 @@ class TestIbRefactorValidation:
         """Test that all components are properly integrated."""
         # Test DataManager -> IB components
         dm = DataManager(enable_ib=True)
-        assert dm.ib_data_fetcher is not None
-        assert dm.ib_symbol_validator is not None
+        assert dm.external_provider is not None
+        assert hasattr(dm.external_provider, 'symbol_validator')
+        assert hasattr(dm.external_provider, 'data_fetcher')
 
         # Test DataService -> DataManager
         ds = DataService()
         assert ds.data_manager is not None
-        assert ds.data_manager.ib_data_fetcher is not None
+        assert ds.data_manager.external_provider is not None
 
         # Test that components have the expected interfaces
-        fetcher = dm.ib_data_fetcher
-        validator = dm.ib_symbol_validator
-
-        # Check fetcher interface
-        assert hasattr(fetcher, "fetch_historical_data")
-        assert hasattr(fetcher, "get_metrics")
-        assert hasattr(fetcher, "reset_metrics")
-
-        # Check validator interface
-        assert hasattr(validator, "validate_symbol_async")
-        assert hasattr(validator, "get_metrics")
-        assert hasattr(validator, "get_cache_stats")
+        adapter = dm.external_provider
+        
+        # Check adapter interface (implements ExternalDataProvider)
+        assert hasattr(adapter, "fetch_historical_data")
+        assert hasattr(adapter, "validate_and_get_metadata")
+        assert hasattr(adapter, "health_check")
+        
+        # Check internal components
+        assert hasattr(adapter, "symbol_validator")
+        assert hasattr(adapter, "data_fetcher")
 
     def test_error_handling_graceful_degradation(self):
         """Test that the system degrades gracefully when IB is unavailable."""
         # Test with IB disabled
         dm_no_ib = DataManager(enable_ib=False)
-        assert dm_no_ib.ib_data_fetcher is None
-        assert dm_no_ib.ib_symbol_validator is None
+        assert dm_no_ib.external_provider is None
 
         # Should still work for local operations
         try:
@@ -273,12 +272,12 @@ class TestIbRefactorRegressionPrevention:
         # Test key imports that should continue working
         try:
             from ktrdr.data import DataManager
-            from ktrdr.ib.connection_pool import get_connection_pool
+            from ktrdr.ib.pool_manager import get_shared_ib_pool
             from ktrdr.data.ib_data_adapter import IbDataAdapter
 
             # Should not raise ImportError
             assert DataManager is not None
-            assert get_connection_pool is not None
+            assert get_shared_ib_pool is not None
             assert IbDataAdapter is not None
 
         except ImportError as e:
@@ -293,10 +292,10 @@ class TestIbRefactorRegressionPrevention:
         assert dm.data_loader is not None
 
         # Test that IB components initialize with config
-        if dm.ib_data_fetcher:
-            # Should have default configuration
-            assert hasattr(dm.ib_data_fetcher, "component_name")
-            assert dm.ib_data_fetcher.component_name == "data_manager"
+        if dm.external_provider:
+            # Should have initialized adapter
+            assert hasattr(dm.external_provider, "host")
+            assert hasattr(dm.external_provider, "port")
 
 
 if __name__ == "__main__":
