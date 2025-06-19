@@ -373,15 +373,15 @@ CCI_REFERENCE_DATASET_1 = {
 MOMENTUM_REFERENCE_DATASET_1 = {
     # Momentum(10) on reference dataset 1
     "Momentum_10_close": {
-        10: 10.0,   # 110.0 - 100.0 = 10.0
-        15: 5.0,    # 110.0 - 105.0 = 5.0
-        20: 0.0,    # 110.0 - 110.0 = 0.0
-        25: -5.0,   # 105.0 - 110.0 = -5.0
+        10: 10.0,  # 110.0 - 100.0 = 10.0
+        15: 5.0,  # 110.0 - 105.0 = 5.0
+        20: 0.0,  # 110.0 - 110.0 = 0.0
+        25: -5.0,  # 105.0 - 110.0 = -5.0
         30: -10.0,  # 100.0 - 110.0 = -10.0
-        35: -5.0,   # 100.0 - 105.0 = -5.0
-        40: 0.0,    # 100.0 - 100.0 = 0.0
-        45: 5.0,    # 105.0 - 100.0 = 5.0
-        49: 9.0,    # 109.0 - 100.0 = 9.0
+        35: -5.0,  # 100.0 - 105.0 = -5.0
+        40: 0.0,  # 100.0 - 100.0 = 0.0
+        45: 5.0,  # 105.0 - 100.0 = 5.0
+        49: 9.0,  # 109.0 - 100.0 = 9.0
     },
 }
 
@@ -389,15 +389,15 @@ MOMENTUM_REFERENCE_DATASET_1 = {
 ROC_REFERENCE_DATASET_1 = {
     # ROC(10) on reference dataset 1
     "ROC_10_close": {
-        10: 10.0,        # ((110 - 100) / 100) * 100 = 10.0
-        15: 4.761905,    # ((110 - 105) / 105) * 100 = 4.761905
-        20: 0.0,         # ((110 - 110) / 110) * 100 = 0.0
-        25: -4.545455,   # ((105 - 110) / 110) * 100 = -4.545455
-        30: -9.090909,   # ((100 - 110) / 110) * 100 = -9.090909
-        35: -4.761905,   # ((100 - 105) / 105) * 100 = -4.761905
-        40: 0.0,         # ((100 - 100) / 100) * 100 = 0.0
-        45: 5.0,         # ((105 - 100) / 100) * 100 = 5.0
-        49: 9.0,         # ((109 - 100) / 100) * 100 = 9.0
+        10: 10.0,  # ((110 - 100) / 100) * 100 = 10.0
+        15: 4.761905,  # ((110 - 105) / 105) * 100 = 4.761905
+        20: 0.0,  # ((110 - 110) / 110) * 100 = 0.0
+        25: -4.545455,  # ((105 - 110) / 110) * 100 = -4.545455
+        30: -9.090909,  # ((100 - 110) / 110) * 100 = -9.090909
+        35: -4.761905,  # ((100 - 105) / 105) * 100 = -4.761905
+        40: 0.0,  # ((100 - 100) / 100) * 100 = 0.0
+        45: 5.0,  # ((105 - 100) / 100) * 100 = 5.0
+        49: 9.0,  # ((109 - 100) / 100) * 100 = 9.0
     },
 }
 
@@ -423,32 +423,33 @@ PARABOLIC_SAR_REFERENCE_DATASET_1 = {
         25: 110.177221,  # SAR during plateau-to-decline transition
         30: 105.507762,  # SAR during decline phase
         35: 101.132464,  # SAR during decline-to-plateau transition
-        40: 99.000000,   # SAR during plateau phase
+        40: 99.000000,  # SAR during plateau phase
         45: 100.165874,  # SAR during plateau-to-rise transition
         49: 103.890520,  # SAR during final rise phase
     },
 }
 
+
 # Create Ichimoku reference dataset (larger dataset needed for 52-period calculation)
 def create_ichimoku_reference_dataset() -> pd.DataFrame:
     """
     Create a larger reference dataset specifically for Ichimoku Cloud testing.
-    
+
     Ichimoku requires more data points due to the 52-period Senkou Span B calculation.
     This dataset provides 80 data points with realistic trending patterns.
     """
     import numpy as np
-    
+
     # Use fixed seed for reproducible reference values
     np.random.seed(42)
-    
+
     base_price = 100
-    dates = pd.date_range(start='2023-01-01', periods=80, freq='D')
-    
+    dates = pd.date_range(start="2023-01-01", periods=80, freq="D")
+
     # Generate trending price data with realistic patterns
     prices = []
     current_price = base_price
-    
+
     for i in range(80):
         # Create realistic trending behavior in phases
         if i < 20:
@@ -459,50 +460,52 @@ def create_ichimoku_reference_dataset() -> pd.DataFrame:
             trend = -0.3  # Correction/downtrend
         else:
             trend = 0.4  # Recovery/new uptrend
-        
+
         # Add random variation around the trend
         change = np.random.normal(trend, 1.0)
         current_price += change
-        
+
         # Create realistic OHLC data
         daily_range = abs(np.random.normal(0, 0.8))
         high = current_price + daily_range * 0.6
         low = current_price - daily_range * 0.4
         close = current_price + np.random.normal(0, 0.3)
-        
+
         # Ensure proper OHLC relationships
         high = max(high, close, current_price)
         low = min(low, close, current_price)
-        
-        prices.append({
-            'open': current_price,
-            'high': high,
-            'low': low,
-            'close': close,
-            'volume': int(1000000 * (0.8 + np.random.random() * 0.4))
-        })
-    
+
+        prices.append(
+            {
+                "open": current_price,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": int(1000000 * (0.8 + np.random.random() * 0.4)),
+            }
+        )
+
     return pd.DataFrame(prices, index=dates)
 
 
 def create_rvi_reference_dataset():
     """
     Create reference dataset specifically for RVI testing.
-    
+
     RVI requires OHLC data with meaningful open-close relationships
     to test the momentum calculation properly.
-    
+
     Returns:
         DataFrame with OHLC data optimized for RVI testing
     """
     import numpy as np
-    
+
     # Create 50 data points with realistic OHLC patterns
     np.random.seed(42)  # For reproducible results
-    
+
     data = []
     base_price = 100.0
-    
+
     for i in range(50):
         # Create trending behavior with varying momentum
         if i < 15:
@@ -521,57 +524,59 @@ def create_rvi_reference_dataset():
             # Recovery with positive momentum
             trend = 0.7
             momentum_bias = 0.7  # Strong close > open
-        
+
         # Generate price movement
         price_change = np.random.normal(trend, 0.8)
         base_price += price_change
-        
+
         # Generate realistic OHLC with momentum bias
         daily_range = abs(np.random.normal(0, 1.2))
-        
+
         # Create open price
         open_price = base_price + np.random.normal(0, 0.3)
-        
+
         # Create close price with momentum bias
         close_bias = momentum_bias * daily_range * 0.4
         close_price = open_price + close_bias + np.random.normal(0, 0.2)
-        
+
         # Create high and low around the open-close range
         high_price = max(open_price, close_price) + daily_range * 0.6
         low_price = min(open_price, close_price) - daily_range * 0.4
-        
-        data.append({
-            'open': round(open_price, 2),
-            'high': round(high_price, 2),
-            'low': round(low_price, 2),
-            'close': round(close_price, 2)
-        })
-    
+
+        data.append(
+            {
+                "open": round(open_price, 2),
+                "high": round(high_price, 2),
+                "low": round(low_price, 2),
+                "close": round(close_price, 2),
+            }
+        )
+
     df = pd.DataFrame(data)
-    df.index = pd.date_range(start='2023-01-01', periods=len(df), freq='D')
-    
+    df.index = pd.date_range(start="2023-01-01", periods=len(df), freq="D")
+
     return df
 
 
 def create_mfi_reference_dataset():
     """
     Create reference dataset specifically for MFI testing.
-    
+
     MFI requires OHLCV data with meaningful price and volume relationships
     to test the money flow calculation properly.
-    
+
     Returns:
         DataFrame with OHLCV data optimized for MFI testing
     """
     import numpy as np
-    
+
     # Create 30 data points with realistic OHLCV patterns
     np.random.seed(42)  # For reproducible results
-    
+
     data = []
     base_price = 100.0
     base_volume = 100000
-    
+
     for i in range(30):
         # Create trending behavior with volume patterns
         if i < 10:
@@ -586,54 +591,56 @@ def create_mfi_reference_dataset():
             # Downtrend with increasing volume (selling pressure)
             trend = -0.6
             volume_multiplier = 1.0 + ((i - 20) * 0.15)  # Increasing volume
-        
+
         # Generate price movement
         price_change = np.random.normal(trend, 0.5)
         base_price += price_change
-        
+
         # Generate realistic OHLC
         daily_range = abs(np.random.normal(0, 1.0))
-        
+
         open_price = base_price + np.random.normal(0, 0.2)
         close_price = open_price + trend + np.random.normal(0, 0.3)
         high_price = max(open_price, close_price) + daily_range * 0.7
         low_price = min(open_price, close_price) - daily_range * 0.3
-        
+
         # Generate volume with trend influence
         volume = int(base_volume * volume_multiplier * (0.8 + np.random.random() * 0.4))
-        
-        data.append({
-            'open': round(open_price, 2),
-            'high': round(high_price, 2),
-            'low': round(low_price, 2),
-            'close': round(close_price, 2),
-            'volume': volume
-        })
-    
+
+        data.append(
+            {
+                "open": round(open_price, 2),
+                "high": round(high_price, 2),
+                "low": round(low_price, 2),
+                "close": round(close_price, 2),
+                "volume": volume,
+            }
+        )
+
     df = pd.DataFrame(data)
-    df.index = pd.date_range(start='2023-01-01', periods=len(df), freq='D')
-    
+    df.index = pd.date_range(start="2023-01-01", periods=len(df), freq="D")
+
     return df
 
 
 def create_aroon_reference_dataset():
     """
     Create reference dataset specifically for Aroon testing.
-    
+
     Aroon requires high and low data with clear trend patterns
     to test the time-based trend detection properly.
-    
+
     Returns:
         DataFrame with OHLC data optimized for Aroon testing
     """
     import numpy as np
-    
+
     # Create 25 data points with distinct trend patterns
     np.random.seed(42)  # For reproducible results
-    
+
     data = []
     base_price = 100.0
-    
+
     for i in range(25):
         # Create distinct trending phases for Aroon testing
         if i < 8:
@@ -648,17 +655,17 @@ def create_aroon_reference_dataset():
             # Downtrend - new lows frequently
             trend = -1.0
             volatility = 0.6
-        
+
         # Generate price movement
         price_change = np.random.normal(trend, volatility)
         base_price += price_change
-        
+
         # Generate realistic OHLC with clear high/low patterns
         daily_range = abs(np.random.normal(0, 1.5))
-        
+
         open_price = base_price + np.random.normal(0, 0.3)
         close_price = open_price + trend * 0.7 + np.random.normal(0, 0.4)
-        
+
         # Make sure we get clear highs and lows for Aroon testing
         if trend > 0:  # Uptrend - emphasize higher highs
             high_price = max(open_price, close_price) + daily_range * 0.8
@@ -669,17 +676,19 @@ def create_aroon_reference_dataset():
         else:  # Sideways - balanced range
             high_price = max(open_price, close_price) + daily_range * 0.5
             low_price = min(open_price, close_price) - daily_range * 0.5
-        
-        data.append({
-            'open': round(open_price, 2),
-            'high': round(high_price, 2),
-            'low': round(low_price, 2),
-            'close': round(close_price, 2)
-        })
-    
+
+        data.append(
+            {
+                "open": round(open_price, 2),
+                "high": round(high_price, 2),
+                "low": round(low_price, 2),
+                "close": round(close_price, 2),
+            }
+        )
+
     df = pd.DataFrame(data)
-    df.index = pd.date_range(start='2023-01-01', periods=len(df), freq='D')
-    
+    df.index = pd.date_range(start="2023-01-01", periods=len(df), freq="D")
+
     return df
 
 
@@ -716,7 +725,7 @@ ICHIMOKU_REFERENCE_DATASET_ICHIMOKU = {
     },
     "Ichimoku_9_26_52_26_Chikou_Span": {
         55: 102.213454,  # Chikou Span during trend transition
-        60: 98.197669,   # Chikou Span during consolidation
+        60: 98.197669,  # Chikou Span during consolidation
         70: 105.377020,  # Chikou Span during recovery start
         75: 109.826741,  # Chikou Span during strong recovery
         79: 113.238152,  # Chikou Span at dataset end
@@ -727,24 +736,24 @@ ICHIMOKU_REFERENCE_DATASET_ICHIMOKU = {
 RVI_REFERENCE_DATASET_RVI = {
     # RVI(10, 4) on RVI reference dataset
     "RVI_10_4_RVI": {
-        15: 0.191319,   # RVI during uptrend with positive momentum
-        20: 0.152920,   # RVI transitioning to consolidation
-        25: 0.012636,   # RVI during neutral consolidation
+        15: 0.191319,  # RVI during uptrend with positive momentum
+        20: 0.152920,  # RVI transitioning to consolidation
+        25: 0.012636,  # RVI during neutral consolidation
         30: -0.141726,  # RVI during downtrend with negative momentum
         35: -0.163769,  # RVI at maximum negative momentum
         40: -0.057227,  # RVI starting recovery
-        45: 0.214215,   # RVI during strong recovery phase
-        49: 0.278102,   # RVI at strong positive momentum
+        45: 0.214215,  # RVI during strong recovery phase
+        49: 0.278102,  # RVI at strong positive momentum
     },
     "RVI_10_4_Signal": {
-        15: 0.168854,   # Signal line during uptrend
-        20: 0.179294,   # Signal line lagging RVI transition
-        25: 0.062451,   # Signal line during consolidation
+        15: 0.168854,  # Signal line during uptrend
+        20: 0.179294,  # Signal line lagging RVI transition
+        25: 0.062451,  # Signal line during consolidation
         30: -0.096774,  # Signal line during downtrend
         35: -0.171322,  # Signal line at maximum negative
         40: -0.088454,  # Signal line starting recovery
-        45: 0.142067,   # Signal line during recovery
-        49: 0.268719,   # Signal line at strong positive momentum
+        45: 0.142067,  # Signal line during recovery
+        49: 0.268719,  # Signal line at strong positive momentum
     },
 }
 
@@ -765,16 +774,16 @@ MFI_REFERENCE_DATASET_MFI = {
 AROON_REFERENCE_DATASET_AROON = {
     # Aroon(14) on Aroon reference dataset
     "Aroon_14_Up": {
-        15: 42.857143,   # Aroon Up during uptrend transition
-        18: 21.428571,   # Aroon Up during consolidation phase
-        20: 7.142857,    # Aroon Up during early downtrend
-        22: 7.142857,    # Aroon Up during strong downtrend
-        24: 14.285714,   # Aroon Up during continued downtrend
+        15: 42.857143,  # Aroon Up during uptrend transition
+        18: 21.428571,  # Aroon Up during consolidation phase
+        20: 7.142857,  # Aroon Up during early downtrend
+        22: 7.142857,  # Aroon Up during strong downtrend
+        24: 14.285714,  # Aroon Up during continued downtrend
     },
     "Aroon_14_Down": {
-        15: 7.142857,    # Aroon Down during uptrend transition  
+        15: 7.142857,  # Aroon Down during uptrend transition
         18: 100.000000,  # Aroon Down during consolidation with recent low
-        20: 85.714286,   # Aroon Down during early downtrend
+        20: 85.714286,  # Aroon Down during early downtrend
         22: 100.000000,  # Aroon Down during strong downtrend with recent low
         24: 100.000000,  # Aroon Down during continued downtrend with recent low
     },

@@ -83,14 +83,19 @@ class IndicatorConfig(BaseModel):
 
 class TimeframeIndicatorConfig(BaseModel):
     """Configuration for indicators on a specific timeframe."""
-    
-    timeframe: str = Field(..., description="Timeframe identifier (e.g., '1h', '4h', '1d')")
+
+    timeframe: str = Field(
+        ..., description="Timeframe identifier (e.g., '1h', '4h', '1d')"
+    )
     indicators: List[IndicatorConfig] = Field(
-        default_factory=list, description="List of indicator configurations for this timeframe"
+        default_factory=list,
+        description="List of indicator configurations for this timeframe",
     )
     enabled: bool = Field(True, description="Whether this timeframe is enabled")
-    weight: float = Field(1.0, description="Weight for this timeframe in decision making")
-    
+    weight: float = Field(
+        1.0, description="Weight for this timeframe in decision making"
+    )
+
     @field_validator("timeframe")
     @classmethod
     def validate_timeframe(cls, v: str) -> str:
@@ -98,22 +103,39 @@ class TimeframeIndicatorConfig(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("Timeframe cannot be empty")
-        
+
         # Common timeframe patterns
         valid_patterns = [
-            r'^\d+[smhDwM]$',  # 1m, 5m, 1h, 4h, 1D, 1w, 1M
-            r'^\d+(min|hour|day|week|month)s?$',  # 1min, 5mins, 1hour, etc.
+            r"^\d+[smhDwM]$",  # 1m, 5m, 1h, 4h, 1D, 1w, 1M
+            r"^\d+(min|hour|day|week|month)s?$",  # 1min, 5mins, 1hour, etc.
         ]
-        
+
         import re
+
         if not any(re.match(pattern, v, re.IGNORECASE) for pattern in valid_patterns):
             # Allow common abbreviations
-            common_timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w', '1M']
+            common_timeframes = [
+                "1m",
+                "5m",
+                "15m",
+                "30m",
+                "1h",
+                "2h",
+                "4h",
+                "6h",
+                "8h",
+                "12h",
+                "1d",
+                "1w",
+                "1M",
+            ]
             if v not in common_timeframes:
-                raise ValueError(f"Invalid timeframe format: {v}. Use formats like '1h', '4h', '1d'")
-        
+                raise ValueError(
+                    f"Invalid timeframe format: {v}. Use formats like '1h', '4h', '1d'"
+                )
+
         return v
-    
+
     @field_validator("weight")
     @classmethod
     def validate_weight(cls, v: float) -> float:
@@ -125,9 +147,10 @@ class TimeframeIndicatorConfig(BaseModel):
 
 class MultiTimeframeIndicatorConfig(BaseModel):
     """Configuration for multi-timeframe indicators."""
-    
+
     timeframes: List[TimeframeIndicatorConfig] = Field(
-        default_factory=list, description="List of timeframe-specific indicator configurations"
+        default_factory=list,
+        description="List of timeframe-specific indicator configurations",
     )
     cross_timeframe_features: Dict[str, Dict[str, Any]] = Field(
         default_factory=dict, description="Cross-timeframe feature specifications"
@@ -135,10 +158,12 @@ class MultiTimeframeIndicatorConfig(BaseModel):
     column_standardization: bool = Field(
         True, description="Whether to apply column name standardization"
     )
-    
+
     @field_validator("timeframes")
     @classmethod
-    def validate_unique_timeframes(cls, v: List[TimeframeIndicatorConfig]) -> List[TimeframeIndicatorConfig]:
+    def validate_unique_timeframes(
+        cls, v: List[TimeframeIndicatorConfig]
+    ) -> List[TimeframeIndicatorConfig]:
         """Validate that timeframes are unique."""
         timeframes = [tf.timeframe for tf in v]
         if len(timeframes) != len(set(timeframes)):

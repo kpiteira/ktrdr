@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from ktrdr.data.data_manager import DataManager
 from ktrdr.api.services.data_service import DataService
 from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.api.services.ib_service import IbService
 
 
 class TestIbRefactorValidation:
@@ -272,15 +273,13 @@ class TestIbRefactorRegressionPrevention:
         # Test key imports that should continue working
         try:
             from ktrdr.data import DataManager
-            from ktrdr.data.ib_connection_pool import get_connection_pool
-            from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
-            from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
+            from ktrdr.ib.connection_pool import get_connection_pool
+            from ktrdr.data.ib_data_adapter import IbDataAdapter
 
             # Should not raise ImportError
             assert DataManager is not None
             assert get_connection_pool is not None
-            assert IbDataFetcherUnified is not None
-            assert IbSymbolValidatorUnified is not None
+            assert IbDataAdapter is not None
 
         except ImportError as e:
             pytest.fail(f"Backward compatibility broken: {e}")

@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 
 from ktrdr.fuzzy.membership import (
-    MembershipFunction, 
-    TriangularMF, 
-    TrapezoidalMF, 
+    MembershipFunction,
+    TriangularMF,
+    TrapezoidalMF,
     GaussianMF,
-    MembershipFunctionFactory
+    MembershipFunctionFactory,
 )
 from ktrdr.errors import ConfigurationError
 
@@ -216,12 +216,12 @@ class TestTrapezoidalMF:
 
         # Test key points
         assert mf.evaluate(-10) == 0.0  # Before start
-        assert mf.evaluate(0) == 0.0    # At start
-        assert mf.evaluate(12.5) == 0.5 # Rising edge midpoint
-        assert mf.evaluate(25) == 1.0   # Plateau start
-        assert mf.evaluate(50) == 1.0   # Plateau middle
-        assert mf.evaluate(75) == 1.0   # Plateau end
-        assert mf.evaluate(87.5) == 0.5 # Falling edge midpoint
+        assert mf.evaluate(0) == 0.0  # At start
+        assert mf.evaluate(12.5) == 0.5  # Rising edge midpoint
+        assert mf.evaluate(25) == 1.0  # Plateau start
+        assert mf.evaluate(50) == 1.0  # Plateau middle
+        assert mf.evaluate(75) == 1.0  # Plateau end
+        assert mf.evaluate(87.5) == 0.5  # Falling edge midpoint
         assert mf.evaluate(100) == 0.0  # At end
         assert mf.evaluate(110) == 0.0  # After end
 
@@ -340,11 +340,11 @@ class TestGaussianMF:
 
         # Test key points
         assert mf.evaluate(50) == 1.0  # At center
-        result_40 = mf.evaluate(40)   # -1 sigma
-        result_60 = mf.evaluate(60)   # +1 sigma
+        result_40 = mf.evaluate(40)  # -1 sigma
+        result_60 = mf.evaluate(60)  # +1 sigma
         assert abs(result_40 - 0.6065) < 0.001  # exp(-0.5)
         assert abs(result_60 - 0.6065) < 0.001  # exp(-0.5)
-        
+
         # Symmetry test
         assert abs(mf.evaluate(40) - mf.evaluate(60)) < 1e-10
 
@@ -359,15 +359,15 @@ class TestGaussianMF:
     def test_gaussian_properties(self):
         """Test mathematical properties of Gaussian function."""
         mf = GaussianMF([0, 1])  # Standard normal
-        
+
         # Peak at center
         assert mf.evaluate(0) == 1.0
-        
+
         # Specific values for standard normal
         # At ±1 sigma: exp(-0.5) ≈ 0.6065
         assert abs(mf.evaluate(1) - 0.6065) < 0.001
         assert abs(mf.evaluate(-1) - 0.6065) < 0.001
-        
+
         # At ±2 sigma: exp(-2) ≈ 0.1353
         assert abs(mf.evaluate(2) - 0.1353) < 0.001
         assert abs(mf.evaluate(-2) - 0.1353) < 0.001
@@ -408,8 +408,8 @@ class TestGaussianMF:
 
     def test_different_widths(self):
         """Test Gaussian functions with different sigma values."""
-        narrow = GaussianMF([50, 5])   # Narrow Gaussian
-        wide = GaussianMF([50, 20])    # Wide Gaussian
+        narrow = GaussianMF([50, 5])  # Narrow Gaussian
+        wide = GaussianMF([50, 20])  # Wide Gaussian
 
         # Both should have same peak
         assert narrow.evaluate(50) == wide.evaluate(50) == 1.0
@@ -462,7 +462,7 @@ class TestMembershipFunctionFactory:
         mf1 = MembershipFunctionFactory.create("TRIANGULAR", [0, 50, 100])
         mf2 = MembershipFunctionFactory.create("Triangular", [0, 50, 100])
         mf3 = MembershipFunctionFactory.create("triangular", [0, 50, 100])
-        
+
         assert all(isinstance(mf, TriangularMF) for mf in [mf1, mf2, mf3])
 
     def test_unknown_type(self):

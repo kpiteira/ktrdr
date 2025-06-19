@@ -244,7 +244,12 @@ def register_builtin_indicators():
     # Register Ichimoku Cloud
     register_indicator(
         indicator_class=IchimokuIndicator,
-        default_params={"tenkan_period": 9, "kijun_period": 26, "senkou_b_period": 52, "displacement": 26},
+        default_params={
+            "tenkan_period": 9,
+            "kijun_period": 26,
+            "senkou_b_period": 52,
+            "displacement": 26,
+        },
         reference_datasets=["reference_dataset_ichimoku"],
         reference_values=REFERENCE_VALUES.get("Ichimoku", {}),
         tolerance=TOLERANCES.get("Ichimoku", 0.01),

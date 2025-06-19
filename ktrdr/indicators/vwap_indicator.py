@@ -27,7 +27,7 @@ class VWAPIndicator(BaseIndicator):
 
     **Formula:**
     VWAP = Sum(Typical Price × Volume) / Sum(Volume)
-    
+
     Where Typical Price = (High + Low + Close) / 3
 
     **Calculation Methods:**
@@ -147,24 +147,26 @@ class VWAPIndicator(BaseIndicator):
             # Cumulative VWAP (from start of data)
             cumulative_pv = price_volume.cumsum()
             cumulative_volume = volume.cumsum()
-            
+
             # Avoid division by zero
-            vwap = cumulative_pv / cumulative_volume.replace(0, float('nan'))
+            vwap = cumulative_pv / cumulative_volume.replace(0, float("nan"))
         else:
             # Rolling VWAP over specified period
             rolling_pv = price_volume.rolling(window=period, min_periods=1).sum()
             rolling_volume = volume.rolling(window=period, min_periods=1).sum()
-            
+
             # Avoid division by zero
-            vwap = rolling_pv / rolling_volume.replace(0, float('nan'))
+            vwap = rolling_pv / rolling_volume.replace(0, float("nan"))
 
         # Replace infinite values with NaN
-        vwap = vwap.replace([float('inf'), float('-inf')], float('nan'))
+        vwap = vwap.replace([float("inf"), float("-inf")], float("nan"))
 
         # Create result series with proper index
         result_series = pd.Series(vwap, index=data.index, name=self.get_name())
 
-        logger.debug(f"Computed VWAP with period={period}, use_typical_price={use_typical_price}")
+        logger.debug(
+            f"Computed VWAP with period={period}, use_typical_price={use_typical_price}"
+        )
 
         return result_series
 

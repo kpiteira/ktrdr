@@ -96,7 +96,7 @@ async def real_ib_connection_test(ib_config):
             # Simple test to verify connection works
             async def get_accounts(ib):
                 return await ib.reqManagedAcctsAsync()
-            
+
             accounts = await connection.execute_request(get_accounts)
             assert accounts, "No managed accounts returned from IB"
             return True

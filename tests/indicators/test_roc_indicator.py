@@ -63,53 +63,57 @@ class TestROCIndicator:
     def test_basic_calculation(self):
         """Test basic ROC calculation."""
         # Create simple test data with linear progression
-        data = pd.DataFrame({
-            "open": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155],
-            "high": [102, 107, 112, 117, 122, 127, 132, 137, 142, 147, 152, 157],
-            "low": [98, 103, 108, 113, 118, 123, 128, 133, 138, 143, 148, 153],
-            "close": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155],
-            "volume": [1000] * 12
-        })
-        
+        data = pd.DataFrame(
+            {
+                "open": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155],
+                "high": [102, 107, 112, 117, 122, 127, 132, 137, 142, 147, 152, 157],
+                "low": [98, 103, 108, 113, 118, 123, 128, 133, 138, 143, 148, 153],
+                "close": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155],
+                "volume": [1000] * 12,
+            }
+        )
+
         roc = ROCIndicator(period=3)
         result = roc.compute(data)
-        
+
         # Check result structure
         assert isinstance(result, pd.Series)
         assert len(result) == len(data)
-        
+
         # Check that first (period) values are NaN
         assert pd.isna(result.iloc[0])
         assert pd.isna(result.iloc[1])
         assert pd.isna(result.iloc[2])
-        
+
         # Check that period+1-th value is not NaN
         assert not pd.isna(result.iloc[3])
-        
+
         # Check specific calculation: ((115 - 100) / 100) * 100 = 15.0%
         assert abs(result.iloc[3] - 15.0) < 0.001
 
     def test_mathematical_properties(self):
         """Test mathematical properties of ROC."""
         # Create test data with known ROC patterns
-        data = pd.DataFrame({
-            "close": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155],
-            "open": [99, 104, 109, 114, 119, 124, 129, 134, 139, 144, 149, 154],
-            "high": [101, 106, 111, 116, 121, 126, 131, 136, 141, 146, 151, 156],
-            "low": [98, 103, 108, 113, 118, 123, 128, 133, 138, 143, 148, 153],
-            "volume": [1000] * 12
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155],
+                "open": [99, 104, 109, 114, 119, 124, 129, 134, 139, 144, 149, 154],
+                "high": [101, 106, 111, 116, 121, 126, 131, 136, 141, 146, 151, 156],
+                "low": [98, 103, 108, 113, 118, 123, 128, 133, 138, 143, 148, 153],
+                "volume": [1000] * 12,
+            }
+        )
+
         roc = ROCIndicator(period=5)
         result = roc.compute(data)
-        
+
         # Remove NaN values for testing
         valid_result = result.dropna()
-        
+
         # With steady +5 price increases, ROC should show consistent percentage growth
         assert len(valid_result) > 0
         assert all(val > 0 for val in valid_result)  # All should be positive
-        
+
         # Expected values: each ROC should be 25% (25/100 * 100)
         # e.g., at position 5: ((125 - 100) / 100) * 100 = 25.0%
         expected_roc = 25.0
@@ -119,17 +123,19 @@ class TestROCIndicator:
         """Test ROC with constant prices (zero ROC)."""
         # Create data with constant prices
         constant_price = 100
-        data = pd.DataFrame({
-            "close": [constant_price] * 15,
-            "open": [constant_price] * 15,
-            "high": [constant_price + 1] * 15,
-            "low": [constant_price - 1] * 15,
-            "volume": [1000] * 15
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [constant_price] * 15,
+                "open": [constant_price] * 15,
+                "high": [constant_price + 1] * 15,
+                "low": [constant_price - 1] * 15,
+                "volume": [1000] * 15,
+            }
+        )
+
         roc = ROCIndicator(period=5)
         result = roc.compute(data)
-        
+
         # All ROC values should be zero (constant price)
         valid_result = result.dropna()
         assert len(valid_result) > 0
@@ -138,17 +144,19 @@ class TestROCIndicator:
     def test_negative_roc(self):
         """Test ROC with declining prices."""
         # Create data with declining prices
-        data = pd.DataFrame({
-            "close": [150, 145, 140, 135, 130, 125, 120, 115, 110, 105, 100, 95],
-            "open": [149, 144, 139, 134, 129, 124, 119, 114, 109, 104, 99, 94],
-            "high": [151, 146, 141, 136, 131, 126, 121, 116, 111, 106, 101, 96],
-            "low": [148, 143, 138, 133, 128, 123, 118, 113, 108, 103, 98, 93],
-            "volume": [1000] * 12
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [150, 145, 140, 135, 130, 125, 120, 115, 110, 105, 100, 95],
+                "open": [149, 144, 139, 134, 129, 124, 119, 114, 109, 104, 99, 94],
+                "high": [151, 146, 141, 136, 131, 126, 121, 116, 111, 106, 101, 96],
+                "low": [148, 143, 138, 133, 128, 123, 118, 113, 108, 103, 98, 93],
+                "volume": [1000] * 12,
+            }
+        )
+
         roc = ROCIndicator(period=5)
         result = roc.compute(data)
-        
+
         # All ROC values should be negative (declining price)
         valid_result = result.dropna()
         assert len(valid_result) > 0
@@ -156,28 +164,32 @@ class TestROCIndicator:
 
     def test_missing_source_column(self):
         """Test error handling when source column is missing."""
-        data = pd.DataFrame({
-            "open": [100, 101, 102],
-            "high": [101, 102, 103],
-            "low": [99, 100, 101],
-            # Missing 'close' column
-            "volume": [1000, 1000, 1000]
-        })
-        
+        data = pd.DataFrame(
+            {
+                "open": [100, 101, 102],
+                "high": [101, 102, 103],
+                "low": [99, 100, 101],
+                # Missing 'close' column
+                "volume": [1000, 1000, 1000],
+            }
+        )
+
         roc = ROCIndicator(period=2, source="close")
         with pytest.raises(DataError, match="Source column 'close' not found"):
             roc.compute(data)
 
     def test_insufficient_data(self):
         """Test error handling with insufficient data."""
-        data = pd.DataFrame({
-            "close": [100, 101],
-            "open": [99, 100],
-            "high": [101, 102],
-            "low": [98, 99],
-            "volume": [1000, 1000]
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [100, 101],
+                "open": [99, 100],
+                "high": [101, 102],
+                "low": [98, 99],
+                "volume": [1000, 1000],
+            }
+        )
+
         roc = ROCIndicator(period=5)  # Need 6 points (5+1), but only have 2
         with pytest.raises(DataError, match="Insufficient data"):
             roc.compute(data)
@@ -185,42 +197,46 @@ class TestROCIndicator:
     def test_division_by_zero_handling(self):
         """Test ROC handling when previous price is zero."""
         # Create data with zero price (edge case)
-        data = pd.DataFrame({
-            "close": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-            "open": [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            "high": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-            "low": [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            "volume": [1000] * 12
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                "open": [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                "high": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                "low": [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                "volume": [1000] * 12,
+            }
+        )
+
         roc = ROCIndicator(period=3)
         result = roc.compute(data)
-        
+
         # First valid ROC calculation involves division by zero (price[0] = 0)
         # Should result in NaN for that calculation
         assert pd.isna(result.iloc[3])  # Division by zero should result in NaN
 
     def test_different_sources(self):
         """Test ROC with different source columns."""
-        data = pd.DataFrame({
-            "open": [100, 105, 110, 115, 120, 125],
-            "high": [102, 107, 112, 117, 122, 127],
-            "low": [98, 103, 108, 113, 118, 123],
-            "close": [100, 105, 110, 115, 120, 125],
-            "volume": [1000] * 6
-        })
-        
+        data = pd.DataFrame(
+            {
+                "open": [100, 105, 110, 115, 120, 125],
+                "high": [102, 107, 112, 117, 122, 127],
+                "low": [98, 103, 108, 113, 118, 123],
+                "close": [100, 105, 110, 115, 120, 125],
+                "volume": [1000] * 6,
+            }
+        )
+
         # Test with different sources
         roc_close = ROCIndicator(period=3, source="close")
         roc_high = ROCIndicator(period=3, source="high")
-        
+
         result_close = roc_close.compute(data)
         result_high = roc_high.compute(data)
-        
+
         # Both should have valid results
         assert not pd.isna(result_close.iloc[3])
         assert not pd.isna(result_high.iloc[3])
-        
+
         # Values should be similar since both sources follow same pattern
         # close[3] = 115, close[0] = 100, ROC = 15%
         # high[3] = 117, high[0] = 102, ROC = 14.7%
@@ -229,26 +245,28 @@ class TestROCIndicator:
 
     def test_different_periods(self):
         """Test ROC with different period values."""
-        data = pd.DataFrame({
-            "close": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150],
-            "open": [99, 104, 109, 114, 119, 124, 129, 134, 139, 144, 149],
-            "high": [101, 106, 111, 116, 121, 126, 131, 136, 141, 146, 151],
-            "low": [98, 103, 108, 113, 118, 123, 128, 133, 138, 143, 148],
-            "volume": [1000] * 11
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150],
+                "open": [99, 104, 109, 114, 119, 124, 129, 134, 139, 144, 149],
+                "high": [101, 106, 111, 116, 121, 126, 131, 136, 141, 146, 151],
+                "low": [98, 103, 108, 113, 118, 123, 128, 133, 138, 143, 148],
+                "volume": [1000] * 11,
+            }
+        )
+
         roc_short = ROCIndicator(period=3)
         roc_long = ROCIndicator(period=6)
-        
+
         result_short = roc_short.compute(data)
         result_long = roc_long.compute(data)
-        
+
         # Short period should have more data points
         valid_short = result_short.dropna()
         valid_long = result_long.dropna()
-        
+
         assert len(valid_short) > len(valid_long)
-        
+
         # With consistent +5 increases, longer period should show larger ROC percentage
         assert valid_long.iloc[0] > valid_short.iloc[0]
 
@@ -262,20 +280,16 @@ class TestROCIndicator:
         """Test handling of empty DataFrame."""
         data = pd.DataFrame()
         roc = ROCIndicator(period=10)
-        
+
         with pytest.raises(DataError, match="Source column"):
             roc.compute(data)
 
     def test_single_row_dataframe(self):
         """Test handling of single-row DataFrame."""
-        data = pd.DataFrame({
-            "close": [100],
-            "open": [99],
-            "high": [101],
-            "low": [98],
-            "volume": [1000]
-        })
-        
+        data = pd.DataFrame(
+            {"close": [100], "open": [99], "high": [101], "low": [98], "volume": [1000]}
+        )
+
         roc = ROCIndicator(period=5)
         with pytest.raises(DataError, match="Insufficient data"):
             roc.compute(data)
@@ -285,7 +299,7 @@ class TestROCIndicator:
         # Test that the schema is properly defined
         assert ROC_SCHEMA.name == "ROC"
         assert len(ROC_SCHEMA.parameters) == 2
-        
+
         # Test parameter names (parameters is a dict)
         param_names = list(ROC_SCHEMA.parameters.keys())
         assert "period" in param_names
@@ -294,34 +308,38 @@ class TestROCIndicator:
     def test_roc_percentage_calculation(self):
         """Test ROC percentage calculation accuracy."""
         # Create data with known percentage changes
-        data = pd.DataFrame({
-            "close": [100, 100, 100, 100, 100, 110],  # 10% increase at end
-            "open": [99, 99, 99, 99, 99, 109],
-            "high": [101, 101, 101, 101, 101, 111],
-            "low": [98, 98, 98, 98, 98, 108],
-            "volume": [1000] * 6
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [100, 100, 100, 100, 100, 110],  # 10% increase at end
+                "open": [99, 99, 99, 99, 99, 109],
+                "high": [101, 101, 101, 101, 101, 111],
+                "low": [98, 98, 98, 98, 98, 108],
+                "volume": [1000] * 6,
+            }
+        )
+
         roc = ROCIndicator(period=5)
         result = roc.compute(data)
-        
+
         # At position 5: ((110 - 100) / 100) * 100 = 10.0%
         assert abs(result.iloc[5] - 10.0) < 0.001
 
     def test_roc_vs_momentum_relationship(self):
         """Test ROC vs Momentum relationship (ROC is percentage, Momentum is absolute)."""
         # Create data where we can compare ROC and Momentum
-        data = pd.DataFrame({
-            "close": [100, 100, 100, 100, 100, 120],  # 20 point increase
-            "open": [99, 99, 99, 99, 99, 119],
-            "high": [101, 101, 101, 101, 101, 121],
-            "low": [98, 98, 98, 98, 98, 118],
-            "volume": [1000] * 6
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [100, 100, 100, 100, 100, 120],  # 20 point increase
+                "open": [99, 99, 99, 99, 99, 119],
+                "high": [101, 101, 101, 101, 101, 121],
+                "low": [98, 98, 98, 98, 98, 118],
+                "volume": [1000] * 6,
+            }
+        )
+
         roc = ROCIndicator(period=5)
         result = roc.compute(data)
-        
+
         # At position 5: ROC = ((120 - 100) / 100) * 100 = 20.0%
         # Momentum would be: 120 - 100 = 20 points
         # So ROC = (Momentum / Old Price) * 100
@@ -333,7 +351,7 @@ class TestROCIndicator:
         np.random.seed(42)
         base_price = 100
         n_days = 30
-        
+
         # Create price pattern with different momentum phases
         prices = [base_price]
         for i in range(n_days - 1):
@@ -346,82 +364,90 @@ class TestROCIndicator:
             else:
                 # Mixed movements (varying ROC)
                 change = np.random.normal(0.1, 0.6)
-            
+
             new_price = max(prices[-1] + change, 10)  # Prevent negative prices
             prices.append(new_price)
-        
-        data = pd.DataFrame({
-            "close": prices,
-            "open": [p * (0.995 + np.random.random() * 0.01) for p in prices],
-            "high": [p * (1.005 + np.random.random() * 0.01) for p in prices],
-            "low": [p * (0.985 + np.random.random() * 0.01) for p in prices],
-            "volume": np.random.randint(100000, 1000000, len(prices))
-        })
-        
+
+        data = pd.DataFrame(
+            {
+                "close": prices,
+                "open": [p * (0.995 + np.random.random() * 0.01) for p in prices],
+                "high": [p * (1.005 + np.random.random() * 0.01) for p in prices],
+                "low": [p * (0.985 + np.random.random() * 0.01) for p in prices],
+                "volume": np.random.randint(100000, 1000000, len(prices)),
+            }
+        )
+
         roc = ROCIndicator(period=10)
         result = roc.compute(data)
-        
+
         # Check that we get reasonable results
         valid_result = result.dropna()
         assert len(valid_result) > 15  # Should have plenty of valid data
-        
+
         # ROC should show both positive and negative values
         has_positive = any(val > 0 for val in valid_result)
         has_negative = any(val < 0 for val in valid_result)
-        
+
         assert has_positive or has_negative  # Should have meaningful ROC values
 
     def test_roc_reference_validation(self):
         """Test ROC against known reference values."""
         # Create data matching reference dataset pattern
         # Linear progression: 100, 101, 102, ..., 109, 110 (first 11 points)
-        data = pd.DataFrame({
-            "close": list(range(100, 120)),  # 100, 101, 102, ..., 119
-            "open": list(range(99, 119)),
-            "high": list(range(101, 121)),
-            "low": list(range(98, 118)),
-            "volume": [1000] * 20
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": list(range(100, 120)),  # 100, 101, 102, ..., 119
+                "open": list(range(99, 119)),
+                "high": list(range(101, 121)),
+                "low": list(range(98, 118)),
+                "volume": [1000] * 20,
+            }
+        )
+
         roc = ROCIndicator(period=10)
         result = roc.compute(data)
-        
+
         # At position 10: ((110 - 100) / 100) * 100 = 10.0%
         assert abs(result.iloc[10] - 10.0) < 0.001
-        
+
         # At position 15: ((115 - 105) / 105) * 100 = 9.524%
         assert abs(result.iloc[15] - 9.523810) < 0.001
 
     def test_roc_extreme_values(self):
         """Test ROC with extreme price movements."""
         # Create data with extreme movements
-        data = pd.DataFrame({
-            "close": [100, 100, 100, 100, 100, 200],  # 100% increase
-            "open": [99, 99, 99, 99, 99, 199],
-            "high": [101, 101, 101, 101, 101, 201],
-            "low": [98, 98, 98, 98, 98, 198],
-            "volume": [1000] * 6
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [100, 100, 100, 100, 100, 200],  # 100% increase
+                "open": [99, 99, 99, 99, 99, 199],
+                "high": [101, 101, 101, 101, 101, 201],
+                "low": [98, 98, 98, 98, 98, 198],
+                "volume": [1000] * 6,
+            }
+        )
+
         roc = ROCIndicator(period=5)
         result = roc.compute(data)
-        
+
         # At position 5: ((200 - 100) / 100) * 100 = 100.0%
         assert abs(result.iloc[5] - 100.0) < 0.001
 
     def test_roc_small_changes(self):
         """Test ROC with very small price changes."""
         # Create data with small price changes
-        data = pd.DataFrame({
-            "close": [100.00, 100.01, 100.02, 100.03, 100.04, 100.05],
-            "open": [99.99, 100.00, 100.01, 100.02, 100.03, 100.04],
-            "high": [100.01, 100.02, 100.03, 100.04, 100.05, 100.06],
-            "low": [99.98, 99.99, 100.00, 100.01, 100.02, 100.03],
-            "volume": [1000] * 6
-        })
-        
+        data = pd.DataFrame(
+            {
+                "close": [100.00, 100.01, 100.02, 100.03, 100.04, 100.05],
+                "open": [99.99, 100.00, 100.01, 100.02, 100.03, 100.04],
+                "high": [100.01, 100.02, 100.03, 100.04, 100.05, 100.06],
+                "low": [99.98, 99.99, 100.00, 100.01, 100.02, 100.03],
+                "volume": [1000] * 6,
+            }
+        )
+
         roc = ROCIndicator(period=5)
         result = roc.compute(data)
-        
+
         # At position 5: ((100.05 - 100.00) / 100.00) * 100 = 0.05%
         assert abs(result.iloc[5] - 0.05) < 0.001

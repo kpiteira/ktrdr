@@ -110,8 +110,8 @@ def test_list_indicators_endpoint(client, mock_indicator_metadata):
         # Verify response
         assert response.status_code == 200
         assert response.json()["success"] is True
-        # Updated to expect 19 indicators (RSI, SMA, EMA, MACD, ZigZag, Stochastic, WilliamsR, ATR, OBV, BollingerBands, CCI, Momentum, ROC, VWAP, ParabolicSAR, Ichimoku, RVI, MFI, Aroon)
-        assert len(response.json()["data"]) == 19
+        # Updated to expect 26 indicators (expanded set including newer indicators like DonchianChannels, KeltnerChannels, ADLine, CMF, ADX, SuperTrend, FisherTransform, etc.)
+        assert len(response.json()["data"]) == 26
         assert response.json()["data"][0]["id"] == "RSIIndicator"
 
 
@@ -268,22 +268,29 @@ def test_get_indicators_by_categories_endpoint(client):
     # Verify response
     assert response.status_code == 200
     data = response.json()
-    
+
     assert data["success"] is True
     assert "categories" in data
     assert "total_categories" in data
     assert "total_indicators" in data
-    
+
     # Verify we have the expected categories
     categories = data["categories"]
-    expected_categories = ["trend", "momentum", "volatility", "volume", "support_resistance", "multi_purpose"]
-    
+    expected_categories = [
+        "trend",
+        "momentum",
+        "volatility",
+        "volume",
+        "support_resistance",
+        "multi_purpose",
+    ]
+
     for cat in expected_categories:
         assert cat in categories
         assert "info" in categories[cat]
         assert "indicators" in categories[cat]
         assert "count" in categories[cat]
-        
+
         # Verify category info structure
         info = categories[cat]["info"]
         assert "name" in info
@@ -291,7 +298,7 @@ def test_get_indicators_by_categories_endpoint(client):
         assert "purpose" in info
         assert "typical_usage" in info
         assert "common_timeframes" in info
-    
+
     # Verify total counts are reasonable
     assert data["total_categories"] == 6
     assert data["total_indicators"] > 0

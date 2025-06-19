@@ -14,11 +14,11 @@ from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.fuzzy.config import FuzzyConfig, FuzzySetConfig, MembershipFunctionConfig
 from ktrdr.fuzzy.membership import (
-    MembershipFunction, 
-    TriangularMF, 
-    TrapezoidalMF, 
+    MembershipFunction,
+    TriangularMF,
+    TrapezoidalMF,
     GaussianMF,
-    MembershipFunctionFactory
+    MembershipFunctionFactory,
 )
 
 # Set up module-level logger
@@ -114,8 +114,10 @@ class FuzzyEngine:
             for set_name, mf_config in fuzzy_sets.root.items():
                 try:
                     # Use the membership function factory for all types
-                    self._membership_functions[indicator][set_name] = MembershipFunctionFactory.create(
-                        mf_config.type, mf_config.parameters
+                    self._membership_functions[indicator][set_name] = (
+                        MembershipFunctionFactory.create(
+                            mf_config.type, mf_config.parameters
+                        )
                     )
                 except Exception as e:
                     logger.error(

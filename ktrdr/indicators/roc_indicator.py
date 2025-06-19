@@ -110,16 +110,16 @@ class ROCIndicator(BaseIndicator):
 
         # Get the price series
         price_series = data[source]
-        
+
         # Get the price from N periods ago
         price_n_periods_ago = price_series.shift(period)
-        
+
         # Calculate ROC: ((Current Price - Price N periods ago) / Price N periods ago) * 100
         # Handle division by zero by replacing with NaN
         roc = ((price_series - price_n_periods_ago) / price_n_periods_ago) * 100
-        
+
         # Replace infinite values with NaN (in case of division by zero)
-        roc = roc.replace([float('inf'), float('-inf')], float('nan'))
+        roc = roc.replace([float("inf"), float("-inf")], float("nan"))
 
         # Create result series with proper index
         result_series = pd.Series(roc, index=data.index, name=self.get_name())

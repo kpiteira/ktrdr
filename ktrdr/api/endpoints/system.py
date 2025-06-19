@@ -11,6 +11,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 
 from ktrdr.logging import get_logger
+
 # Old architecture removed - using new ktrdr.ib module
 from ktrdr.data.ib_gap_filler import get_gap_filler
 from ktrdr.api.models.base import ApiResponse

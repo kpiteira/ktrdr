@@ -16,7 +16,7 @@ from ktrdr.indicators.categories import (
     get_indicators_by_category,
     get_all_categories,
     get_category_info,
-    IndicatorCategory
+    IndicatorCategory,
 )
 from ktrdr.api.models.indicators import (
     IndicatorMetadata,
@@ -382,18 +382,20 @@ async def get_indicators_by_categories() -> Dict[str, Any]:
     try:
         # Get category summary from the categorization system
         category_summary = get_category_summary()
-        
+
         # Calculate totals
         total_categories = len(category_summary)
-        total_indicators = sum(cat_data["count"] for cat_data in category_summary.values())
-        
+        total_indicators = sum(
+            cat_data["count"] for cat_data in category_summary.values()
+        )
+
         return {
             "success": True,
             "categories": category_summary,
             "total_categories": total_categories,
-            "total_indicators": total_indicators
+            "total_indicators": total_indicators,
         }
-    
+
     except Exception as e:
         logger.error(f"Error retrieving category information: {str(e)}")
         raise HTTPException(
@@ -466,7 +468,9 @@ async def get_indicators_by_category_endpoint(
                         "code": "CATEGORY_NOT_FOUND",
                         "message": f"Category '{category}' not found",
                         "details": {
-                            "available_categories": [cat.value for cat in get_all_categories()]
+                            "available_categories": [
+                                cat.value for cat in get_all_categories()
+                            ]
                         },
                     },
                 },
@@ -489,7 +493,7 @@ async def get_indicators_by_category_endpoint(
                 },
                 "indicators": indicators,
                 "count": len(indicators),
-            }
+            },
         }
 
     except HTTPException:
@@ -530,7 +534,7 @@ async def get_category_names() -> Dict[str, Any]:
           "success": true,
           "categories": [
             "trend",
-            "momentum", 
+            "momentum",
             "volatility",
             "volume",
             "support_resistance",
@@ -543,11 +547,11 @@ async def get_category_names() -> Dict[str, Any]:
     try:
         categories = get_all_categories()
         category_names = [cat.value for cat in categories]
-        
+
         return {
             "success": True,
             "categories": category_names,
-            "count": len(category_names)
+            "count": len(category_names),
         }
 
     except Exception as e:

@@ -19,7 +19,7 @@ from ktrdr.fuzzy.config import (
     FuzzyConfig,
     FuzzyConfigLoader,
     FuzzySetConfig,
-    MembershipFunctionConfig,
+    TriangularMFConfig,
 )
 from ktrdr.data import DataManager
 from ktrdr.indicators import IndicatorEngine
@@ -106,7 +106,7 @@ class FuzzyService(BaseService):
                             {
                                 "rsi": FuzzySetConfig(
                                     {
-                                        "default": MembershipFunctionConfig(
+                                        "default": TriangularMFConfig(
                                             type="triangular", parameters=[0, 50, 100]
                                         )
                                     }
@@ -127,7 +127,7 @@ class FuzzyService(BaseService):
                 {
                     "rsi": FuzzySetConfig(
                         {
-                            "default": MembershipFunctionConfig(
+                            "default": TriangularMFConfig(
                                 type="triangular", parameters=[0, 50, 100]
                             )
                         }

@@ -9,7 +9,7 @@ from .multi_timeframe_orchestrator import (
     TimeframeDecisionContext,
     TimeframeDecision,
     MultiTimeframeConsensus,
-    create_multi_timeframe_decision_orchestrator
+    create_multi_timeframe_decision_orchestrator,
 )
 
 __all__ = [

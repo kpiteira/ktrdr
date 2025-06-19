@@ -12,11 +12,11 @@ from .multi_timeframe_label_generator import (
     LabelClass,
     LabelValidationResult,
     MultiTimeframeLabelResult,
-    create_multi_timeframe_label_generator
+    create_multi_timeframe_label_generator,
 )
 from .multi_timeframe_model_storage import (
     MultiTimeframeModelStorage,
-    create_multi_timeframe_model_storage
+    create_multi_timeframe_model_storage,
 )
 
 __all__ = [

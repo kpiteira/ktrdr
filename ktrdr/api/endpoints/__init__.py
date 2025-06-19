@@ -29,6 +29,7 @@ from ktrdr.api.endpoints.data import router as data_router
 from ktrdr.api.endpoints.indicators import router as indicators_router
 from ktrdr.api.endpoints.fuzzy import router as fuzzy_router
 from ktrdr.api.endpoints.ib import router as ib_router
+
 # Temporarily disabled: System endpoints need updating for new architecture
 # from ktrdr.api.endpoints.system import router as system_router
 from ktrdr.api.endpoints.backtesting import router as backtesting_router
@@ -37,7 +38,9 @@ from ktrdr.api.endpoints.gap_analysis import router as gap_analysis_router
 from ktrdr.api.endpoints.training import router as training_router
 from ktrdr.api.endpoints.models import router as models_router
 from ktrdr.api.endpoints.operations import router as operations_router
-from ktrdr.api.endpoints.multi_timeframe_decisions import router as multi_timeframe_decisions_router
+from ktrdr.api.endpoints.multi_timeframe_decisions import (
+    router as multi_timeframe_decisions_router,
+)
 
 # Include routers with appropriate prefixes
 # Removed the "/v1" prefix since the data router endpoints already include this prefix
@@ -54,4 +57,6 @@ api_router.include_router(gap_analysis_router, tags=["Gap Analysis"])
 api_router.include_router(training_router, tags=["Training"])
 api_router.include_router(models_router, tags=["Models"])
 api_router.include_router(operations_router, tags=["Operations"])
-api_router.include_router(multi_timeframe_decisions_router, tags=["Multi-Timeframe Decisions"])
+api_router.include_router(
+    multi_timeframe_decisions_router, tags=["Multi-Timeframe Decisions"]
+)

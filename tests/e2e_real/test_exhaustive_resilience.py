@@ -10,7 +10,7 @@ makes these tests obsolete.
 The new architecture (ktrdr/ib/) with dedicated threads and persistent event loops
 is tested by:
 - tests/integration/test_ib_new_architecture_integration.py
-- tests/e2e_real/test_real_api.py 
+- tests/e2e_real/test_real_api.py
 - tests/e2e_real/test_real_cli.py
 
 All tests in this file are disabled to prevent competing IB connections
@@ -26,10 +26,11 @@ import concurrent.futures
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any
 
-from ktrdr.data.ib_connection_pool import get_connection_pool, acquire_ib_connection
-from ktrdr.data.ib_client_id_registry import ClientIdPurpose
-from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
-from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
+# DISABLED: Old IB architecture imports - tests are disabled
+# from ktrdr.data.ib_connection_pool import get_connection_pool, acquire_ib_connection
+# from ktrdr.data.ib_client_id_registry import ClientIdPurpose
+# from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
+# from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
 
 
 @pytest.mark.real_ib

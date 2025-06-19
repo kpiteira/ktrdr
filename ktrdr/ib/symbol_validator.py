@@ -80,12 +80,15 @@ class ContractInfo:
 @dataclass
 class ValidationResult:
     """Result of symbol validation with metadata."""
+
     is_valid: bool
     symbol: str
     error_message: Optional[str] = None
     contract_info: Optional[ContractInfo] = None
     head_timestamps: Optional[Dict[str, str]] = None  # timeframe -> ISO timestamp
-    suggested_symbol: Optional[str] = None  # For format corrections like USDJPY -> USD.JPY
+    suggested_symbol: Optional[str] = (
+        None  # For format corrections like USDJPY -> USD.JPY
+    )
 
 
 class IbSymbolValidator:
@@ -150,9 +153,7 @@ class IbSymbolValidator:
         # Load existing cache from file
         self._load_cache_from_file()
 
-        logger.info(
-            f"IbSymbolValidator initialized (component: {component_name})"
-        )
+        logger.info(f"IbSymbolValidator initialized (component: {component_name})")
         logger.info(f"Cache file: {self._cache_file}")
         logger.info(
             f"Loaded {len(self._cache)} cached symbols, {len(self._validated_symbols)} validated"
@@ -272,25 +273,35 @@ class IbSymbolValidator:
     def _suggest_forex_format(self, symbol: str) -> Optional[str]:
         """
         Suggest proper forex format for a symbol.
-        
+
         Args:
             symbol: Original symbol like USDJPY
-            
+
         Returns:
             Suggested format like USD.JPY or None if not forex
         """
         normalized = symbol.upper().replace("/", "").replace(".", "")
-        
+
         if len(normalized) == 6 and normalized.isalpha():
             # Check if it looks like a forex pair
             major_currencies = {
-                "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "SEK", "NOK", "DKK"
+                "USD",
+                "EUR",
+                "GBP",
+                "JPY",
+                "CHF",
+                "AUD",
+                "CAD",
+                "NZD",
+                "SEK",
+                "NOK",
+                "DKK",
             }
             base = normalized[:3]
             quote = normalized[3:]
             if base in major_currencies and quote in major_currencies:
                 return f"{base}.{quote}"
-        
+
         return None
 
     def _create_forex_contract(self, symbol: str) -> Optional[Contract]:
@@ -368,17 +379,16 @@ class IbSymbolValidator:
                 # Check pace limits before making request
                 await self.pace_manager.wait_if_needed(
                     is_historical=False,
-                    contract_key=f"{getattr(contract, 'symbol', 'unknown')}_contract_lookup"
+                    contract_key=f"{getattr(contract, 'symbol', 'unknown')}_contract_lookup",
                 )
 
                 # Use synchronous connection pool execution to match our architecture
                 details = await connection_pool.execute_with_connection_sync(
-                    self._lookup_contract_impl,
-                    contract
+                    self._lookup_contract_impl, contract
                 )
 
                 self.metrics["total_validations"] += 1
-                
+
                 logger.debug(
                     f"📋 IB returned {len(details) if details else 0} contract details"
                 )
@@ -402,9 +412,7 @@ class IbSymbolValidator:
                 logger.debug(f"   Currency: {contract_details.currency}")
 
                 # Get trading hours metadata from IB contract details
-                exchange = (
-                    contract_details.primaryExchange or contract_details.exchange
-                )
+                exchange = contract_details.primaryExchange or contract_details.exchange
                 trading_hours_dict = None
 
                 # Try to parse real IB trading hours first
@@ -416,10 +424,14 @@ class IbSymbolValidator:
                         # Convert trading hours to dict (implementation depends on trading hours structure)
                         trading_hours_dict = {
                             "timezone": getattr(trading_hours, "timezone", "UTC"),
-                            "regular_hours": getattr(trading_hours, "regular_hours", {}),
-                            "extended_hours": getattr(trading_hours, "extended_hours", []),
+                            "regular_hours": getattr(
+                                trading_hours, "regular_hours", {}
+                            ),
+                            "extended_hours": getattr(
+                                trading_hours, "extended_hours", []
+                            ),
                             "trading_days": getattr(trading_hours, "trading_days", []),
-                            "holidays": getattr(trading_hours, "holidays", [])
+                            "holidays": getattr(trading_hours, "holidays", []),
                         }
                         logger.debug(
                             f"Added IB trading hours for {contract_details.symbol} on {exchange}"
@@ -429,10 +441,14 @@ class IbSymbolValidator:
                     # Fall back to basic structure
                     trading_hours_dict = {
                         "timezone": "UTC",
-                        "regular_hours": {"start": "09:30", "end": "16:00", "name": "Regular"},
+                        "regular_hours": {
+                            "start": "09:30",
+                            "end": "16:00",
+                            "name": "Regular",
+                        },
                         "extended_hours": [],
                         "trading_days": [0, 1, 2, 3, 4],  # Monday to Friday
-                        "holidays": []
+                        "holidays": [],
                     }
 
                 contract_info = ContractInfo(
@@ -491,11 +507,11 @@ class IbSymbolValidator:
     def _lookup_contract_impl(self, ib, contract: Contract):
         """
         Synchronous implementation of contract lookup for use with connection pool.
-        
+
         Args:
             ib: IB connection instance
             contract: Contract to look up
-            
+
         Returns:
             List of contract details
         """
@@ -507,19 +523,21 @@ class IbSymbolValidator:
 
         # Make synchronous IB API call
         details = ib.reqContractDetails(contract)
-        
-        logger.debug(f"📋 IB returned {len(details) if details else 0} contract details")
+
+        logger.debug(
+            f"📋 IB returned {len(details) if details else 0} contract details"
+        )
         return details
 
     def _fetch_head_timestamp_impl(self, ib, contract, asset_type: str):
         """
         Synchronous implementation of head timestamp fetching for use with connection pool.
-        
+
         Args:
             ib: IB connection instance
             contract: Contract to get head timestamp for
             asset_type: Asset type to determine whatToShow options
-            
+
         Returns:
             Head timestamp if found, None otherwise
         """
@@ -527,9 +545,7 @@ class IbSymbolValidator:
 
         # For forex pairs, try different whatToShow options
         whatToShow_options = (
-            ["TRADES", "BID", "ASK", "MIDPOINT"]
-            if asset_type == "CASH"
-            else ["TRADES"]
+            ["TRADES", "BID", "ASK", "MIDPOINT"] if asset_type == "CASH" else ["TRADES"]
         )
 
         head_timestamp = None
@@ -575,23 +591,24 @@ class IbSymbolValidator:
         if self._is_cache_valid(normalized):
             self.metrics["cache_hits"] += 1
             contract_info = self._cache[normalized]
-            
+
             # Get head timestamps for requested timeframes
             head_timestamps = {}
             for tf in timeframes:
-                if (contract_info.head_timestamp_timeframes and 
-                    tf in contract_info.head_timestamp_timeframes):
+                if (
+                    contract_info.head_timestamp_timeframes
+                    and tf in contract_info.head_timestamp_timeframes
+                ):
                     head_timestamps[tf] = contract_info.head_timestamp_timeframes[tf]
                 elif contract_info.head_timestamp:
                     head_timestamps[tf] = contract_info.head_timestamp
-            
+
             return ValidationResult(
                 is_valid=True,
                 symbol=normalized,
                 contract_info=contract_info,
-                head_timestamps=head_timestamps
+                head_timestamps=head_timestamps,
             )
-
 
         # Try to get contract details
         contract_info = await self.get_contract_details_async(normalized)
@@ -601,12 +618,12 @@ class IbSymbolValidator:
             error_msg = f"Symbol {symbol} not found"
             if suggested and suggested != normalized:
                 error_msg += f". Did you mean {suggested}?"
-            
+
             return ValidationResult(
                 is_valid=False,
                 symbol=normalized,
                 error_message=error_msg,
-                suggested_symbol=suggested
+                suggested_symbol=suggested,
             )
 
         # Get head timestamps for requested timeframes
@@ -620,7 +637,7 @@ class IbSymbolValidator:
             is_valid=True,
             symbol=normalized,
             contract_info=contract_info,
-            head_timestamps=head_timestamps
+            head_timestamps=head_timestamps,
         )
 
     async def validate_symbol_async(self, symbol: str) -> bool:
@@ -819,15 +836,14 @@ class IbSymbolValidator:
             try:
                 # Check pace limits before making request
                 await self.pace_manager.wait_if_needed(
-                    is_historical=True,
-                    contract_key=f"{symbol}_head_timestamp"
+                    is_historical=True, contract_key=f"{symbol}_head_timestamp"
                 )
 
                 # Use synchronous connection pool execution to match our architecture
                 head_timestamp = await connection_pool.execute_with_connection_sync(
                     self._fetch_head_timestamp_impl,
                     contract_info.contract,
-                    contract_info.asset_type
+                    contract_info.asset_type,
                 )
 
                 if head_timestamp:
@@ -865,9 +881,7 @@ class IbSymbolValidator:
                     self._cache[normalized] = contract_info
                     self._save_cache_to_file()
 
-                    logger.info(
-                        f"📅 HEAD TIMESTAMP for {symbol}: {head_timestamp_iso}"
-                    )
+                    logger.info(f"📅 HEAD TIMESTAMP for {symbol}: {head_timestamp_iso}")
                     return head_timestamp_iso
                 else:
                     logger.warning(f"📅 No head timestamp available for {symbol}")
@@ -934,7 +948,6 @@ class IbSymbolValidator:
                             ),
                         )
                         self._cache[symbol] = contract_info
-
 
                 # Load validated symbols (new field)
                 self._validated_symbols = set(cache_data.get("validated_symbols", []))

@@ -27,7 +27,7 @@ class IchimokuIndicator(BaseIndicator):
 
     **Components:**
     1. **Tenkan-sen (Conversion Line)**: (9-period high + 9-period low) / 2
-    2. **Kijun-sen (Base Line)**: (26-period high + 26-period low) / 2  
+    2. **Kijun-sen (Base Line)**: (26-period high + 26-period low) / 2
     3. **Senkou Span A (Leading Span A)**: (Tenkan-sen + Kijun-sen) / 2, plotted 26 periods ahead
     4. **Senkou Span B (Leading Span B)**: (52-period high + 52-period low) / 2, plotted 26 periods ahead
     5. **Chikou Span (Lagging Span)**: Close price plotted 26 periods behind
@@ -80,7 +80,7 @@ class IchimokuIndicator(BaseIndicator):
         kijun_period: int = 26,
         senkou_b_period: int = 52,
         displacement: int = 26,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize Ichimoku Cloud indicator.
@@ -98,7 +98,7 @@ class IchimokuIndicator(BaseIndicator):
             kijun_period=kijun_period,
             senkou_b_period=senkou_b_period,
             displacement=displacement,
-            **kwargs
+            **kwargs,
         )
 
     def _validate_params(self, params: dict) -> dict:
@@ -166,7 +166,9 @@ class IchimokuIndicator(BaseIndicator):
 
         # Calculate Tenkan-sen (Conversion Line)
         # (9-period high + 9-period low) / 2
-        tenkan_high = high.rolling(window=tenkan_period, min_periods=tenkan_period).max()
+        tenkan_high = high.rolling(
+            window=tenkan_period, min_periods=tenkan_period
+        ).max()
         tenkan_low = low.rolling(window=tenkan_period, min_periods=tenkan_period).min()
         tenkan_sen = (tenkan_high + tenkan_low) / 2
 
@@ -182,8 +184,12 @@ class IchimokuIndicator(BaseIndicator):
 
         # Calculate Senkou Span B (Leading Span B)
         # (52-period high + 52-period low) / 2, shifted forward by displacement
-        senkou_b_high = high.rolling(window=senkou_b_period, min_periods=senkou_b_period).max()
-        senkou_b_low = low.rolling(window=senkou_b_period, min_periods=senkou_b_period).min()
+        senkou_b_high = high.rolling(
+            window=senkou_b_period, min_periods=senkou_b_period
+        ).max()
+        senkou_b_low = low.rolling(
+            window=senkou_b_period, min_periods=senkou_b_period
+        ).min()
         senkou_span_b = (senkou_b_high + senkou_b_low) / 2
 
         # Calculate Chikou Span (Lagging Span)
@@ -191,19 +197,24 @@ class IchimokuIndicator(BaseIndicator):
         chikou_span = close.copy()
 
         # Create result DataFrame with all components
-        result = pd.DataFrame({
-            "Tenkan_sen": tenkan_sen,
-            "Kijun_sen": kijun_sen,
-            "Senkou_Span_A": senkou_span_a,
-            "Senkou_Span_B": senkou_span_b,
-            "Chikou_Span": chikou_span,
-        }, index=data.index)
+        result = pd.DataFrame(
+            {
+                "Tenkan_sen": tenkan_sen,
+                "Kijun_sen": kijun_sen,
+                "Senkou_Span_A": senkou_span_a,
+                "Senkou_Span_B": senkou_span_b,
+                "Chikou_Span": chikou_span,
+            },
+            index=data.index,
+        )
 
         # Apply proper naming with parameters
         name_base = self.get_name()
         result.columns = [f"{name_base}_{col}" for col in result.columns]
 
-        logger.debug(f"Computed Ichimoku with tenkan={tenkan_period}, kijun={kijun_period}, senkou_b={senkou_b_period}, displacement={displacement}")
+        logger.debug(
+            f"Computed Ichimoku with tenkan={tenkan_period}, kijun={kijun_period}, senkou_b={senkou_b_period}, displacement={displacement}"
+        )
 
         return result
 
@@ -218,4 +229,6 @@ class IchimokuIndicator(BaseIndicator):
         kijun_period = self.params.get("kijun_period", 26)
         senkou_b_period = self.params.get("senkou_b_period", 52)
         displacement = self.params.get("displacement", 26)
-        return f"Ichimoku_{tenkan_period}_{kijun_period}_{senkou_b_period}_{displacement}"
+        return (
+            f"Ichimoku_{tenkan_period}_{kijun_period}_{senkou_b_period}_{displacement}"
+        )

@@ -92,13 +92,12 @@ class IbService:
         try:
             # Use shared IB connection pool for consistency
             from ktrdr.ib.pool_manager import get_shared_ib_pool
+
             pool = get_shared_ib_pool()
             pool_stats = pool.get_pool_stats()
             ib_available = pool_stats["total_connections"] >= 0  # Pool exists
 
-            logger.info(
-                "🔍 New IB architecture status - checking connection pool"
-            )
+            logger.info("🔍 New IB architecture status - checking connection pool")
 
         except Exception as e:
             logger.warning(f"IB connection pool not available: {e}")
@@ -189,6 +188,7 @@ class IbService:
         try:
             # Use new IB connection pool from new architecture
             from ktrdr.ib.pool_manager import get_shared_ib_pool
+
             pool = get_shared_ib_pool()
             pool_stats = pool.get_pool_stats()
             pool_available = True  # Pool created successfully
@@ -237,7 +237,9 @@ class IbService:
                         )
                         raise Exception("No managed accounts returned")
                 except Exception as e:
-                    logger.warning(f"❌ Level 2 failed: managedAccounts call failed: {e}")
+                    logger.warning(
+                        f"❌ Level 2 failed: managedAccounts call failed: {e}"
+                    )
                     raise Exception("Managed accounts access failed")
 
                 api_test_ok = True
@@ -305,6 +307,7 @@ class IbService:
         try:
             # Use new IB connection pool from new architecture
             from ktrdr.ib.pool_manager import get_shared_ib_pool
+
             pool = get_shared_ib_pool()
             pool_stats = pool.get_pool_stats()
 
@@ -319,9 +322,9 @@ class IbService:
                 },
                 "features": {
                     "dedicated_threads": "enabled",
-                    "persistent_event_loops": "enabled", 
+                    "persistent_event_loops": "enabled",
                     "auto_cleanup": "enabled",
-                    "idle_timeout": "180s"
+                    "idle_timeout": "180s",
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -337,7 +340,6 @@ class IbService:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-
     async def get_config(self) -> IbConfigInfo:
         """
         Get IB configuration information.
@@ -348,6 +350,7 @@ class IbService:
         try:
             # Get configuration from new architecture
             from ktrdr.config.ib_config import get_ib_config
+
             config = get_ib_config()
 
             return IbConfigInfo(
@@ -392,6 +395,7 @@ class IbService:
         try:
             # Use new architecture connection pool cleanup
             from ktrdr.ib.pool_manager import get_shared_ib_pool
+
             pool = get_shared_ib_pool()
 
             # Get current stats before cleanup
@@ -502,7 +506,7 @@ class IbService:
     ) -> DataRangesResponse:
         """
         Get historical data ranges for multiple symbols and timeframes.
-        
+
         NOTE: This method needs to be implemented for new architecture.
 
         Args:
@@ -513,12 +517,16 @@ class IbService:
             DataRangesResponse with range information
         """
         logger.warning("get_data_ranges not yet implemented for new architecture")
-        
+
         # Return empty response indicating new architecture implementation needed
         return DataRangesResponse(
             symbols=[],
             requested_timeframes=timeframes,
-            cache_stats={"error": "Data ranges discovery not yet implemented for new architecture", "cached_ranges": 0, "fresh_lookups": 0},
+            cache_stats={
+                "error": "Data ranges discovery not yet implemented for new architecture",
+                "cached_ranges": 0,
+                "fresh_lookups": 0,
+            },
         )
 
     async def discover_symbol(
@@ -537,12 +545,13 @@ class IbService:
         try:
             # Use new IB data adapter with simplified architecture
             from ktrdr.config.ib_config import get_ib_config
+
             config = get_ib_config()
             adapter = IbDataAdapter(host=config.host, port=config.port)
-            
+
             # Validate symbol using new architecture
             is_valid = await adapter.validate_symbol(symbol)
-            
+
             if not is_valid:
                 return None
 
@@ -552,7 +561,7 @@ class IbService:
                 "symbol": symbol,
                 "instrument_type": "stock",  # Default to stock for now
                 "exchange": "SMART",
-                "currency": "USD", 
+                "currency": "USD",
                 "description": f"{symbol} - Symbol validated via new IB architecture",
                 "discovered_at": time.time(),
                 "last_validated": time.time(),
@@ -571,7 +580,7 @@ class IbService:
     ) -> List[Dict[str, Any]]:
         """
         Get all discovered symbols from the cache.
-        
+
         NOTE: This method needs to be implemented for new architecture.
 
         Args:
@@ -580,17 +589,21 @@ class IbService:
         Returns:
             List of discovered symbol information
         """
-        logger.warning("get_discovered_symbols not yet implemented for new architecture")
+        logger.warning(
+            "get_discovered_symbols not yet implemented for new architecture"
+        )
         return []
 
     def get_symbol_discovery_stats(self) -> Dict[str, Any]:
         """
         Get symbol discovery cache statistics.
-        
+
         NOTE: This method needs to be implemented for new architecture.
 
         Returns:
             Dictionary with discovery statistics
         """
-        logger.warning("get_symbol_discovery_stats not yet implemented for new architecture")
+        logger.warning(
+            "get_symbol_discovery_stats not yet implemented for new architecture"
+        )
         return {}

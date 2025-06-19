@@ -135,7 +135,9 @@ class TestRealCLICommands:
                 for word in ["loaded", "bars", "completed"]
             )
 
-    @pytest.mark.skip(reason="CLI async issue - an asyncio.future, a coroutine or an awaitable is required")
+    @pytest.mark.skip(
+        reason="CLI async issue - an asyncio.future, a coroutine or an awaitable is required"
+    )
     def test_real_ib_head_timestamp_command(self, clean_test_symbols, test_date_ranges):
         """Test 'ktrdr ib test-head-timestamp' command with real IB connection."""
         symbol = clean_test_symbols[2]  # EURUSD
@@ -145,7 +147,7 @@ class TestRealCLICommands:
                 "uv",
                 "run",
                 "ktrdr",
-                "ib", 
+                "ib",
                 "test-head-timestamp",
                 symbol,
                 "--timeframe",

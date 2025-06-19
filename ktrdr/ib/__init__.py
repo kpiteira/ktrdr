@@ -5,7 +5,7 @@ This module contains all Interactive Brokers specific functionality isolated fro
 the main data layer. It provides:
 
 - Connection management with dedicated threads and persistent event loops
-- Error classification based on official IB documentation  
+- Error classification based on official IB documentation
 - Rate limiting and pacing enforcement
 - Data fetching and symbol validation
 - Clean interface for use by other modules
@@ -42,12 +42,12 @@ from .data_fetcher import IbDataFetcher
 
 __all__ = [
     "IbConnection",
-    "IbConnectionPool", 
+    "IbConnectionPool",
     "IbErrorClassifier",
     "IbErrorType",
     "IbPaceManager",
     "IbSymbolValidator",
-    "ValidationResult", 
+    "ValidationResult",
     "ContractInfo",
-    "IbDataFetcher"
+    "IbDataFetcher",
 ]

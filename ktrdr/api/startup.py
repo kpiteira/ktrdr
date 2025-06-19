@@ -55,7 +55,7 @@ def init_background_services():
     The new architecture creates IB connections on-demand via:
     - DataManager with IbDataAdapter when enable_ib=True
     - IbConnectionPool for dedicated thread connections
-    
+
     No persistent background services required.
     """
     logger.info("New IB architecture: no background services needed")
@@ -66,7 +66,7 @@ def init_background_services():
 def stop_background_services():
     """
     DEPRECATED: Background services not used in new IB architecture.
-    
+
     Connections are cleaned up automatically via context managers.
     """
     logger.info("New IB architecture: no background services to stop")

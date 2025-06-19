@@ -20,14 +20,16 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
 from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
-from ktrdr.data.ib_data_adapter import IbDataAdapter  
+from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.data_manager import DataManager
 from ktrdr.config.ib_config import get_ib_config
 
 
 @pytest.mark.integration
 @pytest.mark.real_ib
-@pytest.mark.skip(reason="DISABLED: Old unified architecture tests - use test_ib_new_architecture_integration.py instead")
+@pytest.mark.skip(
+    reason="DISABLED: Old unified architecture tests - use test_ib_new_architecture_integration.py instead"
+)
 @pytest.mark.skipif(
     "not config.getoption('--run-integration', default=False)",
     reason="Integration tests skipped - use --run-integration to run",

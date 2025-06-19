@@ -43,7 +43,7 @@ class TestRequestLoggingMiddleware:
     @pytest.mark.asyncio
     async def test_successful_request_logging(self):
         """Test that successful requests are properly logged."""
-        with patch("ktrdr.api.middleware.logger.info") as mock_logger_info:
+        with patch("ktrdr.api.middleware.logger.log") as mock_logger_log:
             response = await self.middleware.dispatch(self.request, self.call_next)
 
             # Verify call_next was called with the request
@@ -56,17 +56,17 @@ class TestRequestLoggingMiddleware:
             assert "X-Process-Time" in response.headers
 
             # Verify that the logger was called twice (request start and completion)
-            assert mock_logger_info.call_count == 2
+            assert mock_logger_log.call_count == 2
 
             # Verify the content of the first log message (request started)
-            first_call_args = mock_logger_info.call_args_list[0][0][0]
+            first_call_args = mock_logger_log.call_args_list[0][0][1]  # Second arg is the message
             assert "Request started" in first_call_args
             assert "method=GET" in first_call_args
             assert "path=/api/v1/health" in first_call_args
             assert "request_id=test-id" in first_call_args
 
             # Verify the content of the second log message (request completed)
-            second_call_args = mock_logger_info.call_args_list[1][0][0]
+            second_call_args = mock_logger_log.call_args_list[1][0][1]  # Second arg is the message
             assert "Request completed" in second_call_args
             assert "status_code=200" in second_call_args
             assert "duration=" in second_call_args
@@ -78,7 +78,7 @@ class TestRequestLoggingMiddleware:
         error_call_next = AsyncMock(side_effect=ValueError("Test error"))
 
         with (
-            patch("ktrdr.api.middleware.logger.info") as mock_logger_info,
+            patch("ktrdr.api.middleware.logger.log") as mock_logger_log,
             patch("ktrdr.api.middleware.logger.error") as mock_logger_error,
             pytest.raises(ValueError),
         ):
@@ -88,8 +88,8 @@ class TestRequestLoggingMiddleware:
             # Verify error_call_next was called with the request
             error_call_next.assert_called_once_with(self.request)
 
-            # Verify that the info logger was called once (request start)
-            assert mock_logger_info.call_count == 1
+            # Verify that the log method was called once (request start)
+            assert mock_logger_log.call_count == 1
 
             # Verify that the error logger was called once (request failed)
             assert mock_logger_error.call_count == 1

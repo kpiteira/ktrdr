@@ -1,7 +1,7 @@
 """
 Parabolic SAR (Stop and Reverse) technical indicator implementation.
 
-This module implements the Parabolic SAR indicator, which is a trend-following 
+This module implements the Parabolic SAR indicator, which is a trend-following
 indicator that provides potential stop-and-reverse points for trending markets.
 """
 
@@ -27,7 +27,7 @@ class ParabolicSARIndicator(BaseIndicator):
 
     **Formula:**
     SAR(tomorrow) = SAR(today) + AF × (EP - SAR(today))
-    
+
     Where:
     - SAR = Stop and Reverse value
     - AF = Acceleration Factor (starts at initial_af, increases by step_af each period)
@@ -75,7 +75,7 @@ class ParabolicSARIndicator(BaseIndicator):
         initial_af: float = 0.02,
         step_af: float = 0.02,
         max_af: float = 0.20,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize Parabolic SAR indicator.
@@ -91,7 +91,7 @@ class ParabolicSARIndicator(BaseIndicator):
             initial_af=initial_af,
             step_af=step_af,
             max_af=max_af,
-            **kwargs
+            **kwargs,
         )
 
     def _validate_params(self, params: dict) -> dict:
@@ -155,16 +155,16 @@ class ParabolicSARIndicator(BaseIndicator):
         high = data["high"].values
         low = data["low"].values
         close = data["close"].values
-        
+
         # Initialize SAR array
         length = len(data)
         sar = np.full(length, np.nan)
-        
+
         # Initialize variables for SAR calculation
         af = initial_af
         ep = 0.0  # Extreme point
         trend = 0  # 1 for uptrend, -1 for downtrend, 0 for initial
-        
+
         # Initialize trend direction based on first two periods
         if length >= 2:
             if close[1] > close[0]:
@@ -175,15 +175,15 @@ class ParabolicSARIndicator(BaseIndicator):
                 trend = -1  # Downtrend
                 ep = low[1]  # Extreme point is lowest low
                 sar[1] = high[0]  # SAR starts at previous high
-            
+
             # Set first SAR value (no previous period to calculate from)
             sar[0] = np.nan  # No SAR for first period
-        
+
         # Calculate SAR for remaining periods
         for i in range(2, length):
             # Calculate new SAR value
-            sar[i] = sar[i-1] + af * (ep - sar[i-1])
-            
+            sar[i] = sar[i - 1] + af * (ep - sar[i - 1])
+
             # Check for trend reversal
             if trend == 1:  # Currently in uptrend
                 # Check if price breaks below SAR (reversal to downtrend)
@@ -196,13 +196,15 @@ class ParabolicSARIndicator(BaseIndicator):
                 else:
                     # Continue uptrend
                     # SAR should not exceed previous two lows
-                    sar[i] = min(sar[i], low[i-1], low[i-2] if i >= 2 else low[i-1])
-                    
+                    sar[i] = min(
+                        sar[i], low[i - 1], low[i - 2] if i >= 2 else low[i - 1]
+                    )
+
                     # Update extreme point if new high
                     if high[i] > ep:
                         ep = high[i]
                         af = min(af + step_af, max_af)  # Increase AF, cap at max
-            
+
             else:  # Currently in downtrend (trend == -1)
                 # Check if price breaks above SAR (reversal to uptrend)
                 if high[i] >= sar[i]:
@@ -214,8 +216,10 @@ class ParabolicSARIndicator(BaseIndicator):
                 else:
                     # Continue downtrend
                     # SAR should not fall below previous two highs
-                    sar[i] = max(sar[i], high[i-1], high[i-2] if i >= 2 else high[i-1])
-                    
+                    sar[i] = max(
+                        sar[i], high[i - 1], high[i - 2] if i >= 2 else high[i - 1]
+                    )
+
                     # Update extreme point if new low
                     if low[i] < ep:
                         ep = low[i]
@@ -224,7 +228,9 @@ class ParabolicSARIndicator(BaseIndicator):
         # Create result series with proper index
         result_series = pd.Series(sar, index=data.index, name=self.get_name())
 
-        logger.debug(f"Computed Parabolic SAR with initial_af={initial_af}, step_af={step_af}, max_af={max_af}")
+        logger.debug(
+            f"Computed Parabolic SAR with initial_af={initial_af}, step_af={step_af}, max_af={max_af}"
+        )
 
         return result_series
 

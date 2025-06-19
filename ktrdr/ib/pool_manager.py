@@ -19,39 +19,37 @@ _shared_pool: Optional[IbConnectionPool] = None
 def get_shared_ib_pool() -> IbConnectionPool:
     """
     Get the shared IB connection pool instance.
-    
+
     Creates the pool on first access using centralized configuration.
     All IB operations should use this shared pool to ensure consistency.
-    
+
     Returns:
         The shared IbConnectionPool instance
     """
     global _shared_pool
-    
+
     if _shared_pool is None:
         logger.info("Creating shared IB connection pool")
         config = get_ib_config()
-        
+
         # Use consistent settings for all IB operations
         _shared_pool = IbConnectionPool(
-            host=config.host,
-            port=config.port,
-            max_connections=5  # Conservative limit
+            host=config.host, port=config.port, max_connections=5  # Conservative limit
         )
-        
+
         logger.info(f"Shared IB pool created for {config.host}:{config.port}")
-    
+
     return _shared_pool
 
 
 def shutdown_shared_pool():
     """
     Shutdown the shared connection pool.
-    
+
     Should be called during application shutdown to clean up connections.
     """
     global _shared_pool
-    
+
     if _shared_pool is not None:
         logger.info("Shutting down shared IB connection pool")
         # The pool will clean up connections when it's destroyed
@@ -62,7 +60,7 @@ def shutdown_shared_pool():
 def get_pool_stats() -> dict:
     """
     Get statistics from the shared pool.
-    
+
     Returns:
         Dictionary with pool statistics, or empty dict if no pool exists
     """

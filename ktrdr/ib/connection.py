@@ -35,16 +35,18 @@ logger = get_logger(__name__)
 @dataclass
 class ConnectionRequest:
     """Request to be executed by IB connection thread"""
+
     func: Callable
     args: tuple
     kwargs: dict
     request_id: str
     result_future: Optional[Future] = None
     timestamp: Optional[float] = None
-    
+
     def __post_init__(self):
         if self.result_future is None:
             import concurrent.futures
+
             self.result_future = concurrent.futures.Future()
         if self.timestamp is None:
             self.timestamp = time.time()
@@ -53,11 +55,11 @@ class ConnectionRequest:
 class IbConnection:
     """
     IB connection with dedicated thread and persistent event loop.
-    
+
     This class maintains a persistent connection to IB Gateway/TWS by running
     the connection in its own dedicated thread with a persistent event loop.
     This prevents the connection from being destroyed when async API contexts end.
-    
+
     Features:
     - Dedicated thread prevents event loop destruction
     - 3-minute idle timeout with automatic cleanup
@@ -65,11 +67,11 @@ class IbConnection:
     - Proper error handling and retry logic
     - Connection health monitoring
     """
-    
+
     def __init__(self, client_id: int, host: str = "localhost", port: int = 4002):
         """
         Initialize IB connection.
-        
+
         Args:
             client_id: Unique client ID for IB connection
             host: IB Gateway/TWS host
@@ -78,124 +80,147 @@ class IbConnection:
         self.client_id = client_id
         self.host = host
         self.port = port
-        
+
         # IB connection instance
         self.ib = IB()
-        
+
         # Threading components
         self.thread: Optional[threading.Thread] = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.stop_event = threading.Event()
-        
+
         # Request queue for thread-safe communication
         self.request_queue: queue.Queue[ConnectionRequest] = queue.Queue()
-        
+
         # Connection state
         self.connected = False
         self.last_activity = time.time()
         self.idle_timeout = 180.0  # 3 minutes
         self.connection_timeout = 15.0  # IB connection timeout
-        
+
         # Statistics
         self.requests_processed = 0
         self.errors_encountered = 0
-        
+
         logger.info(f"IbConnection {self.client_id} initialized for {host}:{port}")
-    
+
     def start(self) -> bool:
         """
         Start connection thread with persistent event loop.
-        
+
         Returns:
             True if thread started successfully, False otherwise
         """
         if self.thread and self.thread.is_alive():
             logger.warning(f"Connection {self.client_id} already running")
             return True
-            
+
         try:
             self.stop_event.clear()
             self.thread = threading.Thread(
                 target=self._run_sync_loop,
                 name=f"IbConnection-{self.client_id}",
-                daemon=True
+                daemon=True,
             )
             self.thread.start()
-            
+
             # Wait briefly for thread to start
             time.sleep(0.1)
-            
+
             logger.info(f"IbConnection {self.client_id} thread started")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to start IbConnection {self.client_id}: {e}")
             return False
-    
+
     def _run_sync_loop(self):
         """
         Run synchronous connection loop in dedicated thread.
-        
+
         This method runs a purely synchronous loop without asyncio,
         allowing ib_insync to create its own event loop for connections.
         """
-        logger.info(f"🔍 SYNC DIAGNOSIS: _run_sync_loop starting for connection {self.client_id}")
-        
+        logger.info(
+            f"🔍 SYNC DIAGNOSIS: _run_sync_loop starting for connection {self.client_id}"
+        )
+
         # No event loop! Let ib_insync handle its own event loop
         self.loop = None
-        
+
         try:
-            logger.info(f"🔍 SYNC DIAGNOSIS: Starting synchronous connection loop for {self.client_id}")
+            logger.info(
+                f"🔍 SYNC DIAGNOSIS: Starting synchronous connection loop for {self.client_id}"
+            )
             self._sync_connection_loop()
-            logger.info(f"🔍 SYNC DIAGNOSIS: Synchronous connection loop completed for {self.client_id}")
-            
+            logger.info(
+                f"🔍 SYNC DIAGNOSIS: Synchronous connection loop completed for {self.client_id}"
+            )
+
         except Exception as e:
-            logger.error(f"🚨 SYNC DIAGNOSIS: Connection {self.client_id} sync loop failed: {e}")
+            logger.error(
+                f"🚨 SYNC DIAGNOSIS: Connection {self.client_id} sync loop failed: {e}"
+            )
             logger.error(f"🚨 SYNC DIAGNOSIS: Exception type: {type(e)}")
             self.errors_encountered += 1
-            
+
         finally:
             logger.info(f"🔍 SYNC DIAGNOSIS: Sync loop ending for {self.client_id}")
             self.loop = None
-    
+
     def _sync_connection_loop(self):
         """
         Main synchronous connection loop - connect to IB and process requests.
-        
+
         This is the core loop that maintains the IB connection and processes
         incoming requests from other threads in a thread-safe manner.
         No event loops - purely synchronous operation.
         """
-        logger.info(f"🔍 SYNC LOOP DIAGNOSIS: _sync_connection_loop starting for {self.client_id}")
-        
+        logger.info(
+            f"🔍 SYNC LOOP DIAGNOSIS: _sync_connection_loop starting for {self.client_id}"
+        )
+
         try:
             # Establish IB connection
-            logger.info(f"🔍 SYNC LOOP DIAGNOSIS: Connecting to IB for {self.client_id}")
+            logger.info(
+                f"🔍 SYNC LOOP DIAGNOSIS: Connecting to IB for {self.client_id}"
+            )
             self._connect_to_ib_sync()
-            logger.info(f"🔍 SYNC LOOP DIAGNOSIS: IB connection established for {self.client_id}")
-            
+            logger.info(
+                f"🔍 SYNC LOOP DIAGNOSIS: IB connection established for {self.client_id}"
+            )
+
             # Process requests until stop is requested
-            logger.info(f"🔍 SYNC LOOP DIAGNOSIS: Starting request processing for {self.client_id}")
+            logger.info(
+                f"🔍 SYNC LOOP DIAGNOSIS: Starting request processing for {self.client_id}"
+            )
             self._process_requests_sync()
-            logger.info(f"🔍 SYNC LOOP DIAGNOSIS: Request processing ended for {self.client_id}")
-            
+            logger.info(
+                f"🔍 SYNC LOOP DIAGNOSIS: Request processing ended for {self.client_id}"
+            )
+
         except Exception as e:
-            logger.error(f"🚨 SYNC LOOP DIAGNOSIS: Connection {self.client_id} loop failed: {e}")
+            logger.error(
+                f"🚨 SYNC LOOP DIAGNOSIS: Connection {self.client_id} loop failed: {e}"
+            )
             logger.error(f"🚨 SYNC LOOP DIAGNOSIS: Exception type: {type(e)}")
             self.errors_encountered += 1
-            
+
         finally:
             # Always disconnect cleanly
-            logger.info(f"🔍 SYNC LOOP DIAGNOSIS: Disconnecting from IB for {self.client_id}")
+            logger.info(
+                f"🔍 SYNC LOOP DIAGNOSIS: Disconnecting from IB for {self.client_id}"
+            )
             self._disconnect_from_ib_sync()
-    
+
     def _connect_to_ib_sync(self):
         """Connect to IB Gateway/TWS synchronously with dedicated event loop"""
         logger.info(f"🔍 SYNC CONNECT: Connecting to IB (client_id={self.client_id})")
-        
+
         try:
             # Create fresh event loop for this thread - ib_insync needs one
             import asyncio
+
             try:
                 # Try to get existing loop (should be None in sync thread)
                 loop = asyncio.get_event_loop()
@@ -205,77 +230,100 @@ class IbConnection:
                 logger.info(f"🔍 SYNC CONNECT: No event loop found, creating new one")
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-            
+
             # Use synchronous connect - ib_insync will use the event loop we just created
             self.ib.connect(
                 host=self.host,
-                port=self.port, 
+                port=self.port,
                 clientId=self.client_id,
                 timeout=10.0,
-                readonly=False
+                readonly=False,
             )
-            
+
             # Wait for connection to stabilize
             time.sleep(2.0)
-            
+
             if self.ib.isConnected():
                 self.connected = True
                 self.last_activity = time.time()
-                logger.info(f"🔍 SYNC CONNECT: IB connection {self.client_id} established successfully")
+                logger.info(
+                    f"🔍 SYNC CONNECT: IB connection {self.client_id} established successfully"
+                )
             else:
-                raise ConnectionError(f"Failed to establish IB connection {self.client_id}")
-                
+                raise ConnectionError(
+                    f"Failed to establish IB connection {self.client_id}"
+                )
+
         except Exception as e:
-            logger.error(f"🚨 SYNC CONNECT: Failed to connect to IB (client_id={self.client_id}): {e}")
+            logger.error(
+                f"🚨 SYNC CONNECT: Failed to connect to IB (client_id={self.client_id}): {e}"
+            )
             raise
-    
+
     def _disconnect_from_ib_sync(self):
         """Disconnect from IB Gateway/TWS synchronously"""
         try:
             if self.ib and self.ib.isConnected():
-                logger.info(f"🔍 SYNC DISCONNECT: Disconnecting from IB (client_id={self.client_id})")
+                logger.info(
+                    f"🔍 SYNC DISCONNECT: Disconnecting from IB (client_id={self.client_id})"
+                )
                 self.ib.disconnect()
-                logger.info(f"🔍 SYNC DISCONNECT: Disconnected from IB (client_id={self.client_id})")
+                logger.info(
+                    f"🔍 SYNC DISCONNECT: Disconnected from IB (client_id={self.client_id})"
+                )
         except Exception as e:
             logger.error(f"🚨 SYNC DISCONNECT: Error disconnecting from IB: {e}")
         finally:
             self.connected = False
-    
+
     def _process_requests_sync(self):
         """Process incoming requests synchronously"""
-        logger.info(f"🔍 SYNC PROCESS: Connection {self.client_id} entering synchronous request processing loop")
-        
+        logger.info(
+            f"🔍 SYNC PROCESS: Connection {self.client_id} entering synchronous request processing loop"
+        )
+
         while not self.stop_event.is_set():
             try:
                 # Check for idle timeout
                 if time.time() - self.last_activity > self.idle_timeout:
-                    logger.info(f"🔍 SYNC PROCESS: Connection {self.client_id} idle timeout ({self.idle_timeout}s)")
+                    logger.info(
+                        f"🔍 SYNC PROCESS: Connection {self.client_id} idle timeout ({self.idle_timeout}s)"
+                    )
                     break
-                
+
                 # Check for pending requests (blocking with timeout)
                 try:
                     request = self.request_queue.get(timeout=1.0)
-                    logger.info(f"🔍 SYNC PROCESS: Connection {self.client_id} got request: {request.request_id}")
+                    logger.info(
+                        f"🔍 SYNC PROCESS: Connection {self.client_id} got request: {request.request_id}"
+                    )
                     self.last_activity = time.time()
                     self._execute_request_sync(request)
-                    
+
                 except queue.Empty:
                     continue  # Normal timeout, check idle and loop again
-                    
+
             except Exception as e:
-                logger.error(f"🚨 SYNC PROCESS: Request processing error in connection {self.client_id}: {e}")
+                logger.error(
+                    f"🚨 SYNC PROCESS: Request processing error in connection {self.client_id}: {e}"
+                )
                 self.errors_encountered += 1
                 time.sleep(1.0)  # Brief pause on error
-        
-        logger.info(f"🔍 SYNC PROCESS: Connection {self.client_id} exiting synchronous request processing loop")
-    
+
+        logger.info(
+            f"🔍 SYNC PROCESS: Connection {self.client_id} exiting synchronous request processing loop"
+        )
+
     def _execute_request_sync(self, request: ConnectionRequest):
         """Execute a single request synchronously"""
-        logger.info(f"🔍 SYNC EXEC: Executing request {request.request_id} for connection {self.client_id}: {request.func.__name__}")
-        
+        logger.info(
+            f"🔍 SYNC EXEC: Executing request {request.request_id} for connection {self.client_id}: {request.func.__name__}"
+        )
+
         try:
             # Ensure event loop is available for ib_insync calls
             import asyncio
+
             try:
                 loop = asyncio.get_event_loop()
                 logger.debug(f"🔍 SYNC EXEC: Using existing event loop: {loop}")
@@ -283,59 +331,71 @@ class IbConnection:
                 logger.info(f"🔍 SYNC EXEC: Creating event loop for request execution")
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-            
+
             # Execute the function with provided arguments - purely synchronous
             logger.info(f"🔍 SYNC EXEC: Calling sync function {request.func.__name__}")
             result = request.func(*request.args, **request.kwargs)
-            
-            logger.info(f"🔍 SYNC EXEC: Function {request.func.__name__} completed successfully")
-            
+
+            logger.info(
+                f"🔍 SYNC EXEC: Function {request.func.__name__} completed successfully"
+            )
+
             # Return successful result
             request.result_future.set_result(result)
             self.requests_processed += 1
-            
-            logger.info(f"🔍 SYNC EXEC: Request {request.request_id} completed successfully")
-            
+
+            logger.info(
+                f"🔍 SYNC EXEC: Request {request.request_id} completed successfully"
+            )
+
         except Exception as e:
             # Return error to caller
-            logger.error(f"🚨 SYNC EXEC: Request {request.request_id} execution failed: {e}")
+            logger.error(
+                f"🚨 SYNC EXEC: Request {request.request_id} execution failed: {e}"
+            )
             logger.error(f"🚨 SYNC EXEC: Exception type: {type(e)}")
             request.result_future.set_exception(e)
             self.errors_encountered += 1
-    
+
     async def _connect_to_ib(self):
         """Connect to IB Gateway/TWS with proper error handling"""
         max_retries = 1  # Reduced from 3 - fail fast
-        
+
         for attempt in range(max_retries):
             try:
-                logger.info(f"Connecting to IB (client_id={self.client_id}, attempt={attempt + 1})")
-                
+                logger.info(
+                    f"Connecting to IB (client_id={self.client_id}, attempt={attempt + 1})"
+                )
+
                 await self.ib.connectAsync(
                     host=self.host,
                     port=self.port,
                     clientId=self.client_id,
-                    timeout=self.connection_timeout
+                    timeout=self.connection_timeout,
                 )
-                
+
                 # Wait for IB synchronization to complete before marking as ready
-                logger.debug(f"IB connection {self.client_id} connected, waiting for sync...")
-                
+                logger.debug(
+                    f"IB connection {self.client_id} connected, waiting for sync..."
+                )
+
                 # Give IB time to fully synchronize (API ready + market data farms)
                 await asyncio.sleep(2.0)  # Conservative wait for synchronization
-                
+
                 self.connected = True
                 self.last_activity = time.time()
-                
+
                 logger.info(f"IB connection {self.client_id} established successfully")
                 return
-                
+
             except Exception as e:
                 self.errors_encountered += 1
                 error_type, wait_time = IbErrorClassifier.classify(0, str(e))
-                
-                logger.warning(f"IB connection {self.client_id} attempt {attempt + 1} failed: {e}")
-                
+
+                logger.warning(
+                    f"IB connection {self.client_id} attempt {attempt + 1} failed: {e}"
+                )
+
                 if attempt < max_retries - 1:
                     if wait_time > 0:
                         logger.info(f"Waiting {wait_time}s before retry...")
@@ -343,81 +403,105 @@ class IbConnection:
                 else:
                     logger.error(f"Failed to connect after {max_retries} attempts")
                     raise
-    
+
     async def _process_requests(self):
         """
         Process incoming requests and handle idle timeout.
-        
+
         This method runs the main request processing loop, handling both
         incoming requests and idle timeout monitoring.
         """
-        logger.info(f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} entering request processing loop")
-        
+        logger.info(
+            f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} entering request processing loop"
+        )
+
         loop_iteration = 0
         while not self.stop_event.is_set():
             loop_iteration += 1
-            
+
             # Log every 10 iterations to show the loop is running
             if loop_iteration % 10 == 0:
-                logger.info(f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} processing loop iteration {loop_iteration}")
-            
+                logger.info(
+                    f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} processing loop iteration {loop_iteration}"
+                )
+
             try:
                 # Check for idle timeout
                 if time.time() - self.last_activity > self.idle_timeout:
-                    logger.info(f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} idle timeout ({self.idle_timeout}s)")
+                    logger.info(
+                        f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} idle timeout ({self.idle_timeout}s)"
+                    )
                     break
-                
+
                 # Check for pending requests (non-blocking with timeout)
-                logger.debug(f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} checking request queue...")
+                logger.debug(
+                    f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} checking request queue..."
+                )
                 try:
                     request = self.request_queue.get(timeout=1.0)
-                    logger.info(f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} got request from queue: {request}")
+                    logger.info(
+                        f"🔍 PROCESS DIAGNOSIS: Connection {self.client_id} got request from queue: {request}"
+                    )
                     self.last_activity = time.time()
                     await self._execute_request(request)
-                    
+
                 except queue.Empty:
                     continue  # Normal timeout, check idle and loop again
-                    
+
             except Exception as e:
-                logger.error(f"Request processing error in connection {self.client_id}: {e}")
+                logger.error(
+                    f"Request processing error in connection {self.client_id}: {e}"
+                )
                 self.errors_encountered += 1
                 await asyncio.sleep(1.0)  # Brief pause on error
-        
+
         logger.debug(f"Connection {self.client_id} exiting request processing loop")
-    
+
     async def _execute_request(self, request: ConnectionRequest):
         """
         Execute a single request and return result to caller.
-        
+
         Args:
             request: Request object containing function and parameters
         """
-        logger.info(f"🔍 EXEC DIAGNOSIS: Executing request {request.request_id} for connection {self.client_id}: {request.func.__name__}")
-        
+        logger.info(
+            f"🔍 EXEC DIAGNOSIS: Executing request {request.request_id} for connection {self.client_id}: {request.func.__name__}"
+        )
+
         try:
             # Execute the function with provided arguments
             if asyncio.iscoroutinefunction(request.func):
-                logger.info(f"🔍 EXEC DIAGNOSIS: Calling async function {request.func.__name__}")
+                logger.info(
+                    f"🔍 EXEC DIAGNOSIS: Calling async function {request.func.__name__}"
+                )
                 result = await request.func(*request.args, **request.kwargs)
             else:
-                logger.info(f"🔍 EXEC DIAGNOSIS: Calling sync function {request.func.__name__}")
+                logger.info(
+                    f"🔍 EXEC DIAGNOSIS: Calling sync function {request.func.__name__}"
+                )
                 result = request.func(*request.args, **request.kwargs)
-            
-            logger.info(f"🔍 EXEC DIAGNOSIS: Function {request.func.__name__} completed successfully")
-            
+
+            logger.info(
+                f"🔍 EXEC DIAGNOSIS: Function {request.func.__name__} completed successfully"
+            )
+
             # Return successful result
             request.result_future.set_result(result)
             self.requests_processed += 1
-            
-            logger.info(f"🔍 EXEC DIAGNOSIS: Request {request.request_id} completed successfully")
-            
+
+            logger.info(
+                f"🔍 EXEC DIAGNOSIS: Request {request.request_id} completed successfully"
+            )
+
         except Exception as e:
             # Return error to caller
-            logger.error(f"🚨 EXEC DIAGNOSIS: Request {request.request_id} execution failed: {e}")
+            logger.error(
+                f"🚨 EXEC DIAGNOSIS: Request {request.request_id} execution failed: {e}"
+            )
             logger.error(f"🚨 EXEC DIAGNOSIS: Exception type: {type(e)}")
             request.result_future.set_exception(e)
             self.errors_encountered += 1
-    
+
     async def _disconnect_from_ib(self):
         """Disconnect from IB Gateway/TWS cleanly"""
         try:
@@ -425,167 +509,193 @@ class IbConnection:
                 logger.info(f"Disconnecting IB connection {self.client_id}")
                 self.ib.disconnect()
                 await asyncio.sleep(0.5)  # Allow clean disconnect
-                
+
         except Exception as e:
-            logger.warning(f"Error during IB disconnect for connection {self.client_id}: {e}")
-            
+            logger.warning(
+                f"Error during IB disconnect for connection {self.client_id}: {e}"
+            )
+
         finally:
             self.connected = False
             logger.info(f"IB connection {self.client_id} disconnected")
-    
+
     def execute_sync_request(self, func: Callable, *args, **kwargs) -> Any:
         """
         Execute synchronous IB request in the connection's dedicated thread.
-        
+
         Uses the queue-based system to submit requests to the connection thread
         for proper thread isolation and synchronous execution.
-        
+
         Args:
             func: Function to execute with IB connection
             *args: Positional arguments for function
             **kwargs: Keyword arguments for function
-            
+
         Returns:
             Result of function execution
         """
-        logger.info(f"🔍 QUEUE DIAGNOSIS: Starting execute_sync_request for {func.__name__} on connection {self.client_id}")
-        
+        logger.info(
+            f"🔍 QUEUE DIAGNOSIS: Starting execute_sync_request for {func.__name__} on connection {self.client_id}"
+        )
+
         # Health check (simplified for sync approach)
         if not self.thread or not self.thread.is_alive():
-            logger.error(f"🚨 QUEUE DIAGNOSIS: Connection {self.client_id} thread not alive")
+            logger.error(
+                f"🚨 QUEUE DIAGNOSIS: Connection {self.client_id} thread not alive"
+            )
             raise ConnectionError("Connection thread not alive")
-        
+
         if not self.ib or not self.ib.isConnected():
-            logger.error(f"🚨 QUEUE DIAGNOSIS: Connection {self.client_id} not connected to IB")
+            logger.error(
+                f"🚨 QUEUE DIAGNOSIS: Connection {self.client_id} not connected to IB"
+            )
             raise ConnectionError("Connection not connected to IB")
-        
-        logger.info(f"🔍 QUEUE DIAGNOSIS: Connection {self.client_id} health check passed")
-        
+
+        logger.info(
+            f"🔍 QUEUE DIAGNOSIS: Connection {self.client_id} health check passed"
+        )
+
         # Create a ConnectionRequest and submit to queue
         request = ConnectionRequest(
             func=func,
             args=(self.ib,) + args,  # Prepend self.ib to args
             kwargs=kwargs,
-            request_id=f"{func.__name__}_{int(time.time() * 1000)}"
+            request_id=f"{func.__name__}_{int(time.time() * 1000)}",
         )
-        
-        logger.info(f"🔍 QUEUE DIAGNOSIS: Created request {request.request_id}, submitting to queue")
-        
+
+        logger.info(
+            f"🔍 QUEUE DIAGNOSIS: Created request {request.request_id}, submitting to queue"
+        )
+
         try:
             # Submit request to the connection thread's queue
             self.request_queue.put(request, timeout=5.0)
-            logger.info(f"🔍 QUEUE DIAGNOSIS: Request {request.request_id} submitted to queue successfully")
-            
+            logger.info(
+                f"🔍 QUEUE DIAGNOSIS: Request {request.request_id} submitted to queue successfully"
+            )
+
             # Wait for result from the connection thread
-            logger.info(f"🔍 QUEUE DIAGNOSIS: Waiting for result from request {request.request_id}")
+            logger.info(
+                f"🔍 QUEUE DIAGNOSIS: Waiting for result from request {request.request_id}"
+            )
             result = request.result_future.result(timeout=30.0)
-            logger.info(f"🔍 QUEUE DIAGNOSIS: Got result from request {request.request_id} successfully")
+            logger.info(
+                f"🔍 QUEUE DIAGNOSIS: Got result from request {request.request_id} successfully"
+            )
             return result
-            
+
         except queue.Full:
-            logger.error(f"🚨 QUEUE DIAGNOSIS: Request queue full for connection {self.client_id}")
+            logger.error(
+                f"🚨 QUEUE DIAGNOSIS: Request queue full for connection {self.client_id}"
+            )
             raise ConnectionError(f"Request queue full for connection {self.client_id}")
         except concurrent.futures.TimeoutError:
-            logger.error(f"🚨 QUEUE DIAGNOSIS: Timeout waiting for result from request {request.request_id}")
+            logger.error(
+                f"🚨 QUEUE DIAGNOSIS: Timeout waiting for result from request {request.request_id}"
+            )
             raise ConnectionError(f"Request timeout for connection {self.client_id}")
         except Exception as e:
-            logger.error(f"🚨 QUEUE DIAGNOSIS: Request {request.request_id} failed: {e}")
+            logger.error(
+                f"🚨 QUEUE DIAGNOSIS: Request {request.request_id} failed: {e}"
+            )
             raise
 
     async def execute_request(self, func: Callable, *args, **kwargs) -> Any:
         """
         Execute IB request in connection thread (thread-safe).
-        
+
         This method allows other threads to safely execute IB API calls
         by submitting them to the connection's dedicated thread.
-        
+
         Args:
             func: Function to execute with IB connection
             *args: Positional arguments for function
             **kwargs: Keyword arguments for function
-            
+
         Returns:
             Result of function execution
-            
+
         Raises:
             ConnectionError: If connection is not healthy
             Exception: Any exception raised by the executed function
         """
         if not self.is_healthy():
             raise ConnectionError(f"IB connection {self.client_id} is not healthy")
-        
+
         # Create future for result
         result_future = Future()
-        
+
         # Create request object
         request = ConnectionRequest(
             func=func,
             args=args,
             kwargs=kwargs,
             result_future=result_future,
-            timestamp=time.time()
+            timestamp=time.time(),
         )
-        
+
         # Submit to connection thread
         try:
             self.request_queue.put(request, timeout=5.0)
             logger.debug(f"Request queued for connection {self.client_id}")
-            
+
         except queue.Full:
             raise ConnectionError(f"Request queue full for connection {self.client_id}")
-        
+
         # Wait for result with timeout
         try:
             result = result_future.result(timeout=30.0)  # 30 second timeout
             return result
-            
+
         except TimeoutError:
             raise ConnectionError(f"Request timeout for connection {self.client_id}")
-    
+
     def is_healthy(self) -> bool:
         """
         Check if connection is healthy and operational.
-        
+
         Returns:
             True if connection is healthy, False otherwise
         """
         return (
-            self.thread is not None and
-            self.thread.is_alive() and
-            not self.stop_event.is_set() and
-            self.connected and
-            self.ib is not None and
-            self.ib.isConnected() and
-            time.time() - self.last_activity < self.idle_timeout
+            self.thread is not None
+            and self.thread.is_alive()
+            and not self.stop_event.is_set()
+            and self.connected
+            and self.ib is not None
+            and self.ib.isConnected()
+            and time.time() - self.last_activity < self.idle_timeout
         )
-    
+
     def stop(self, timeout: float = 5.0):
         """
         Stop connection gracefully.
-        
+
         Args:
             timeout: Maximum time to wait for clean shutdown
         """
         logger.info(f"Stopping IB connection {self.client_id}")
-        
+
         # Signal stop
         self.stop_event.set()
-        
+
         # Wait for thread to finish
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=timeout)
-            
+
             if self.thread.is_alive():
-                logger.warning(f"Connection {self.client_id} thread did not stop gracefully")
+                logger.warning(
+                    f"Connection {self.client_id} thread did not stop gracefully"
+                )
             else:
                 logger.info(f"Connection {self.client_id} stopped cleanly")
-        
+
         self.thread = None
-    
+
     def get_stats(self) -> dict:
         """
         Get connection statistics.
-        
+
         Returns:
             Dictionary with connection statistics
         """
@@ -600,13 +710,13 @@ class IbConnection:
             "idle_timeout": self.idle_timeout,
             "thread_alive": self.thread.is_alive() if self.thread else False,
             "ib_connected": self.ib.isConnected() if self.ib else False,
-            "queue_size": self.request_queue.qsize()
+            "queue_size": self.request_queue.qsize(),
         }
-    
+
     def __str__(self) -> str:
         """String representation of connection"""
         return f"IbConnection(client_id={self.client_id}, healthy={self.is_healthy()})"
-    
+
     def __repr__(self) -> str:
         """Detailed string representation"""
         return (

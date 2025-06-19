@@ -32,7 +32,9 @@ cli_app.add_typer(
 )
 cli_app.add_typer(fuzzy_app, name="fuzzy", help="Fuzzy logic operations commands")
 cli_app.add_typer(
-    multi_timeframe_app, name="multi-timeframe", help="Multi-timeframe trading decision commands"
+    multi_timeframe_app,
+    name="multi-timeframe",
+    help="Multi-timeframe trading decision commands",
 )
 
 # Export the app for the CLI entry point

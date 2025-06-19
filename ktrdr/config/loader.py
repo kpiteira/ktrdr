@@ -15,7 +15,11 @@ from pydantic import BaseModel, ValidationError
 # Import the new logging system
 from ktrdr import get_logger, log_entry_exit, log_error
 
-from ktrdr.config.models import KtrdrConfig, MultiTimeframeIndicatorConfig, TimeframeIndicatorConfig
+from ktrdr.config.models import (
+    KtrdrConfig,
+    MultiTimeframeIndicatorConfig,
+    TimeframeIndicatorConfig,
+)
 from ktrdr.config.validation import InputValidator, sanitize_parameter
 from ktrdr.errors import (
     ConfigurationError,
@@ -249,29 +253,30 @@ class ConfigLoader:
     ) -> MultiTimeframeIndicatorConfig:
         """
         Load multi-timeframe indicator configuration from a YAML file.
-        
+
         Args:
             config_path: Path to the multi-timeframe indicator configuration file
-            
+
         Returns:
             Validated MultiTimeframeIndicatorConfig object
-            
+
         Raises:
             ConfigurationError: If loading or validation fails
         """
         try:
             # Load the full configuration first
             full_config = self.load(config_path, model_type=KtrdrConfig)
-            
+
             # Extract multi-timeframe indicators section
-            if (full_config.indicators and 
-                full_config.indicators.multi_timeframe):
-                logger.info("Successfully loaded multi-timeframe indicator configuration")
+            if full_config.indicators and full_config.indicators.multi_timeframe:
+                logger.info(
+                    "Successfully loaded multi-timeframe indicator configuration"
+                )
                 return full_config.indicators.multi_timeframe
             else:
                 logger.warning("No multi-timeframe indicator configuration found")
                 return MultiTimeframeIndicatorConfig()
-                
+
         except ConfigurationError:
             # Re-raise configuration errors
             raise
@@ -288,10 +293,10 @@ class ConfigLoader:
     ) -> Dict[str, Any]:
         """
         Validate a multi-timeframe indicator configuration.
-        
+
         Args:
             config: MultiTimeframeIndicatorConfig to validate
-            
+
         Returns:
             Dictionary with validation results
         """
@@ -300,97 +305,122 @@ class ConfigLoader:
             "warnings": [],
             "errors": [],
             "recommendations": [],
-            "timeframe_summary": {}
+            "timeframe_summary": {},
         }
-        
+
         try:
             # Check timeframe coverage
             timeframes = [tf.timeframe for tf in config.timeframes]
             validation_results["timeframe_summary"]["count"] = len(timeframes)
             validation_results["timeframe_summary"]["timeframes"] = timeframes
-            
+
             if len(timeframes) == 0:
                 validation_results["errors"].append("No timeframes configured")
                 validation_results["valid"] = False
                 return validation_results
-            
+
             # Validate timeframe hierarchy
-            common_hierarchy = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w', '1M']
+            common_hierarchy = [
+                "1m",
+                "5m",
+                "15m",
+                "30m",
+                "1h",
+                "2h",
+                "4h",
+                "6h",
+                "8h",
+                "12h",
+                "1d",
+                "1w",
+                "1M",
+            ]
             hierarchy_issues = []
-            
+
             for tf in timeframes:
                 if tf not in common_hierarchy:
                     hierarchy_issues.append(f"Non-standard timeframe: {tf}")
-            
+
             if hierarchy_issues:
                 validation_results["warnings"].extend(hierarchy_issues)
-            
+
             # Check for balanced indicator distribution
             indicator_counts = {}
             total_indicators = 0
-            
+
             for tf_config in config.timeframes:
                 count = len(tf_config.indicators)
                 indicator_counts[tf_config.timeframe] = count
                 total_indicators += count
-            
-            validation_results["timeframe_summary"]["indicator_counts"] = indicator_counts
-            validation_results["timeframe_summary"]["total_indicators"] = total_indicators
-            
+
+            validation_results["timeframe_summary"][
+                "indicator_counts"
+            ] = indicator_counts
+            validation_results["timeframe_summary"][
+                "total_indicators"
+            ] = total_indicators
+
             # Performance warnings
             if total_indicators > 50:
                 validation_results["warnings"].append(
                     f"High total indicator count ({total_indicators}) may impact performance"
                 )
-            
+
             # Check for common indicators across timeframes
             indicator_types_by_tf = {}
             for tf_config in config.timeframes:
                 types = [ind.type for ind in tf_config.indicators]
                 indicator_types_by_tf[tf_config.timeframe] = set(types)
-            
+
             if len(indicator_types_by_tf) > 1:
                 common_types = set.intersection(*indicator_types_by_tf.values())
-                validation_results["timeframe_summary"]["common_indicator_types"] = list(common_types)
-                
+                validation_results["timeframe_summary"]["common_indicator_types"] = (
+                    list(common_types)
+                )
+
                 if len(common_types) == 0:
                     validation_results["warnings"].append(
                         "No common indicator types across timeframes"
                     )
-            
+
             # Validate cross-timeframe features
             if config.cross_timeframe_features:
-                for feature_name, feature_config in config.cross_timeframe_features.items():
+                for (
+                    feature_name,
+                    feature_config,
+                ) in config.cross_timeframe_features.items():
                     # Check that referenced timeframes exist
                     primary_tf = feature_config.get("primary_timeframe")
                     secondary_tf = feature_config.get("secondary_timeframe")
-                    
+
                     if primary_tf and primary_tf not in timeframes:
                         validation_results["errors"].append(
                             f"Cross-feature '{feature_name}' references unknown primary timeframe: {primary_tf}"
                         )
                         validation_results["valid"] = False
-                    
+
                     if secondary_tf and secondary_tf not in timeframes:
                         validation_results["errors"].append(
                             f"Cross-feature '{feature_name}' references unknown secondary timeframe: {secondary_tf}"
                         )
                         validation_results["valid"] = False
-            
+
             # Recommendations
             if len(timeframes) < 2:
                 validation_results["recommendations"].append(
                     "Consider adding more timeframes for better multi-timeframe analysis"
                 )
-            
+
             if total_indicators < 5:
                 validation_results["recommendations"].append(
                     "Consider adding more indicators for comprehensive analysis"
                 )
-            
-            logger.info(f"Multi-timeframe configuration validation completed: {validation_results['valid']}")
+
+            logger.info(
+                f"Multi-timeframe configuration validation completed: {validation_results['valid']}"
+            )
             return validation_results
-            
+
         except Exception as e:
             validation_results["valid"] = False
             validation_results["errors"].append(f"Validation error: {str(e)}")
@@ -403,7 +433,7 @@ class ConfigLoader:
     ) -> None:
         """
         Create a sample multi-timeframe indicator configuration file.
-        
+
         Args:
             output_path: Path where to save the sample configuration
         """
@@ -420,14 +450,14 @@ class ConfigLoader:
                                 {
                                     "type": "RSI",
                                     "name": "rsi_short",
-                                    "params": {"period": 14}
+                                    "params": {"period": 14},
                                 },
                                 {
                                     "type": "SimpleMovingAverage",
                                     "name": "sma_fast",
-                                    "params": {"period": 10}
-                                }
-                            ]
+                                    "params": {"period": 10},
+                                },
+                            ],
                         },
                         {
                             "timeframe": "4h",
@@ -437,14 +467,14 @@ class ConfigLoader:
                                 {
                                     "type": "RSI",
                                     "name": "rsi_medium",
-                                    "params": {"period": 14}
+                                    "params": {"period": 14},
                                 },
                                 {
                                     "type": "SimpleMovingAverage",
                                     "name": "sma_trend",
-                                    "params": {"period": 50}
-                                }
-                            ]
+                                    "params": {"period": 50},
+                                },
+                            ],
                         },
                         {
                             "timeframe": "1d",
@@ -454,10 +484,10 @@ class ConfigLoader:
                                 {
                                     "type": "SimpleMovingAverage",
                                     "name": "sma_long",
-                                    "params": {"period": 200}
+                                    "params": {"period": 200},
                                 }
-                            ]
-                        }
+                            ],
+                        },
                     ],
                     "cross_timeframe_features": {
                         "rsi_divergence": {
@@ -465,23 +495,19 @@ class ConfigLoader:
                             "secondary_timeframe": "4h",
                             "primary_column": "rsi_short_1h",
                             "secondary_column": "rsi_medium_4h",
-                            "operation": "difference"
+                            "operation": "difference",
                         }
-                    }
+                    },
                 }
             },
-            "data": {
-                "directory": "./data"
-            },
-            "logging": {
-                "level": "INFO"
-            }
+            "data": {"directory": "./data"},
+            "logging": {"level": "INFO"},
         }
-        
+
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
+
+        with open(output_path, "w") as f:
             yaml.dump(sample_config, f, default_flow_style=False, indent=2)
-        
+
         logger.info(f"Sample multi-timeframe configuration saved to {output_path}")

@@ -30,16 +30,17 @@ logger = get_logger(__name__)
 
 class TimeframeRelation(Enum):
     """Relationship between two timeframes."""
-    HIGHER = "higher"      # tf1 is higher than tf2 (e.g., 1d vs 1h)
-    LOWER = "lower"        # tf1 is lower than tf2 (e.g., 1h vs 1d)
-    EQUAL = "equal"        # tf1 equals tf2
+
+    HIGHER = "higher"  # tf1 is higher than tf2 (e.g., 1d vs 1h)
+    LOWER = "lower"  # tf1 is lower than tf2 (e.g., 1h vs 1d)
+    EQUAL = "equal"  # tf1 equals tf2
     INCOMPARABLE = "incomparable"  # Cannot compare (e.g., different types)
 
 
 @dataclass
 class AlignmentResult:
     """Result of timeframe alignment operation."""
-    
+
     aligned_data: pd.DataFrame
     reference_timeframe: str
     source_timeframe: str
@@ -50,10 +51,10 @@ class AlignmentResult:
     quality_score: float
 
 
-@dataclass 
+@dataclass
 class SynchronizationStats:
     """Statistics for multi-timeframe synchronization."""
-    
+
     total_timeframes: int
     successfully_aligned: int
     failed_alignments: int
@@ -61,159 +62,169 @@ class SynchronizationStats:
     reference_periods: int
     average_quality_score: float
     processing_time: float
-    
+
 
 class TimeframeSynchronizer:
     """
     Handles data alignment and synchronization across timeframes.
-    
+
     This class provides methods for aligning data from different timeframes
     to a common timeline, handling missing data, and ensuring temporal
     consistency across multi-timeframe datasets.
     """
-    
+
     # Timeframe hierarchy and multipliers (in minutes)
-    TIMEFRAME_HIERARCHY = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M']
+    TIMEFRAME_HIERARCHY = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"]
     TIMEFRAME_MULTIPLIERS = {
-        '1m': 1, '5m': 5, '15m': 15, '30m': 30,
-        '1h': 60, '4h': 240, '1d': 1440, '1w': 10080, '1M': 43200
+        "1m": 1,
+        "5m": 5,
+        "15m": 15,
+        "30m": 30,
+        "1h": 60,
+        "4h": 240,
+        "1d": 1440,
+        "1w": 10080,
+        "1M": 43200,
     }
-    
+
     # Resampling rules for pandas
     RESAMPLE_RULES = {
-        '1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min',
-        '1h': '1h', '4h': '4h', '1d': '1D', '1w': '1W', '1M': '1M'
+        "1m": "1min",
+        "5m": "5min",
+        "15m": "15min",
+        "30m": "30min",
+        "1h": "1h",
+        "4h": "4h",
+        "1d": "1D",
+        "1w": "1W",
+        "1M": "1M",
     }
-    
+
     def __init__(self):
         """Initialize the TimeframeSynchronizer."""
         self.timestamp_manager = TimestampManager()
         logger.info("TimeframeSynchronizer initialized")
-    
+
     @staticmethod
     def calculate_periods_needed(
-        primary_timeframe: str,
-        auxiliary_timeframe: str,
-        primary_periods: int
+        primary_timeframe: str, auxiliary_timeframe: str, primary_periods: int
     ) -> int:
         """
         Calculate how many periods are needed in auxiliary timeframe.
-        
+
         This method calculates the equivalent number of periods needed in an
         auxiliary timeframe to cover the same time span as the primary timeframe.
-        
+
         Args:
             primary_timeframe: Primary timeframe (e.g., '1h')
             auxiliary_timeframe: Auxiliary timeframe (e.g., '4h')
             primary_periods: Number of periods in primary timeframe
-            
+
         Returns:
             Number of periods needed in auxiliary timeframe
-            
+
         Raises:
             ValueError: If timeframes are not supported
-            
+
         Example:
             >>> TimeframeSynchronizer.calculate_periods_needed('1h', '4h', 200)
             50  # 200 hours = 50 4-hour periods
         """
         if auxiliary_timeframe not in TimeframeSynchronizer.TIMEFRAME_MULTIPLIERS:
             raise ValueError(f"Unsupported auxiliary timeframe: {auxiliary_timeframe}")
-        
+
         if primary_timeframe not in TimeframeSynchronizer.TIMEFRAME_MULTIPLIERS:
             raise ValueError(f"Unsupported primary timeframe: {primary_timeframe}")
-        
+
         primary_minutes = TimeframeSynchronizer.TIMEFRAME_MULTIPLIERS[primary_timeframe]
         aux_minutes = TimeframeSynchronizer.TIMEFRAME_MULTIPLIERS[auxiliary_timeframe]
-        
+
         # Calculate ratio and ensure minimum periods
         ratio = aux_minutes / primary_minutes
         calculated_periods = max(10, int(primary_periods / ratio))
-        
+
         logger.debug(
             f"Calculated {calculated_periods} periods for {auxiliary_timeframe} "
             f"(ratio: {ratio:.2f}, primary: {primary_periods} {primary_timeframe})"
         )
-        
+
         return calculated_periods
-    
+
     @staticmethod
     def get_timeframe_relation(timeframe1: str, timeframe2: str) -> TimeframeRelation:
         """
         Determine the relationship between two timeframes.
-        
+
         Args:
             timeframe1: First timeframe
             timeframe2: Second timeframe
-            
+
         Returns:
             TimeframeRelation indicating the relationship
         """
         try:
             pos1 = TimeframeSynchronizer.TIMEFRAME_HIERARCHY.index(timeframe1)
             pos2 = TimeframeSynchronizer.TIMEFRAME_HIERARCHY.index(timeframe2)
-            
+
             if pos1 > pos2:
                 return TimeframeRelation.HIGHER
             elif pos1 < pos2:
                 return TimeframeRelation.LOWER
             else:
                 return TimeframeRelation.EQUAL
-                
+
         except ValueError:
             return TimeframeRelation.INCOMPARABLE
-    
+
     def forward_fill_alignment(
         self,
         source_data: pd.DataFrame,
         reference_data: pd.DataFrame,
         source_timeframe: str,
-        reference_timeframe: str
+        reference_timeframe: str,
     ) -> AlignmentResult:
         """
         Align source data to reference timeline using forward-fill strategy.
-        
+
         This method aligns data from one timeframe to the timeline of another
         timeframe using forward-fill to handle missing values.
-        
+
         Args:
             source_data: Data to be aligned
             reference_data: Reference data providing the target timeline
             source_timeframe: Timeframe of source data
             reference_timeframe: Timeframe of reference data
-            
+
         Returns:
             AlignmentResult with aligned data and metadata
-            
+
         Raises:
             DataValidationError: If data validation fails
         """
         # Validate inputs
-        self._validate_alignment_inputs(source_data, reference_data, 
-                                      source_timeframe, reference_timeframe)
-        
+        self._validate_alignment_inputs(
+            source_data, reference_data, source_timeframe, reference_timeframe
+        )
+
         rows_before = len(source_data)
-        
+
         # Ensure timezone consistency (UTC)
         source_data = self._ensure_utc_timezone(source_data, source_timeframe)
         reference_data = self._ensure_utc_timezone(reference_data, reference_timeframe)
-        
+
         # Perform alignment using forward-fill
-        aligned_data = source_data.reindex(
-            reference_data.index, 
-            method='ffill'
-        )
-        
+        aligned_data = source_data.reindex(reference_data.index, method="ffill")
+
         rows_after = len(aligned_data)
         missing_count = aligned_data.isnull().sum().sum()
         total_values = aligned_data.size
         missing_ratio = missing_count / total_values if total_values > 0 else 0
-        
+
         # Calculate quality score
         quality_score = self._calculate_alignment_quality(
             aligned_data, source_data, missing_ratio
         )
-        
+
         result = AlignmentResult(
             aligned_data=aligned_data,
             reference_timeframe=reference_timeframe,
@@ -222,58 +233,57 @@ class TimeframeSynchronizer:
             rows_before=rows_before,
             rows_after=rows_after,
             missing_ratio=missing_ratio,
-            quality_score=quality_score
+            quality_score=quality_score,
         )
-        
+
         logger.info(
             f"Aligned {source_timeframe} to {reference_timeframe}: "
             f"{rows_before} → {rows_after} rows, "
             f"missing ratio: {missing_ratio:.3f}, "
             f"quality: {quality_score:.3f}"
         )
-        
+
         return result
-    
+
     def synchronize_multiple_timeframes(
-        self,
-        data_dict: Dict[str, pd.DataFrame],
-        reference_timeframe: str
+        self, data_dict: Dict[str, pd.DataFrame], reference_timeframe: str
     ) -> Tuple[Dict[str, pd.DataFrame], SynchronizationStats]:
         """
         Synchronize multiple timeframes to a reference timeline.
-        
+
         Args:
             data_dict: Dictionary mapping timeframes to DataFrames
             reference_timeframe: Timeframe to use as reference
-            
+
         Returns:
             Tuple of (synchronized_data, synchronization_stats)
-            
+
         Raises:
             DataValidationError: If reference timeframe not in data_dict
         """
         import time
+
         start_time = time.time()
-        
+
         if reference_timeframe not in data_dict:
             raise DataValidationError(
                 f"Reference timeframe {reference_timeframe} not found in data"
             )
-        
+
         reference_data = data_dict[reference_timeframe]
         synchronized_data = {reference_timeframe: reference_data}
-        
+
         # Track statistics
         successful_alignments = 0
         failed_alignments = 0
         quality_scores = []
-        
+
         # Align each timeframe to reference
         for timeframe, data in data_dict.items():
             if timeframe == reference_timeframe:
                 quality_scores.append(1.0)  # Reference is perfect quality
                 continue
-            
+
             try:
                 alignment_result = self.forward_fill_alignment(
                     data, reference_data, timeframe, reference_timeframe
@@ -281,14 +291,16 @@ class TimeframeSynchronizer:
                 synchronized_data[timeframe] = alignment_result.aligned_data
                 quality_scores.append(alignment_result.quality_score)
                 successful_alignments += 1
-                
+
             except Exception as e:
-                logger.warning(f"Failed to align {timeframe} to {reference_timeframe}: {e}")
+                logger.warning(
+                    f"Failed to align {timeframe} to {reference_timeframe}: {e}"
+                )
                 # Include original data if alignment fails
                 synchronized_data[timeframe] = data
                 quality_scores.append(0.5)  # Penalty for failed alignment
                 failed_alignments += 1
-        
+
         # Create statistics
         processing_time = time.time() - start_time
         stats = SynchronizationStats(
@@ -298,267 +310,270 @@ class TimeframeSynchronizer:
             reference_timeframe=reference_timeframe,
             reference_periods=len(reference_data),
             average_quality_score=np.mean(quality_scores) if quality_scores else 0.0,
-            processing_time=processing_time
+            processing_time=processing_time,
         )
-        
+
         logger.info(
             f"Synchronized {len(data_dict)} timeframes to {reference_timeframe} "
             f"in {processing_time:.2f}s. Success: {successful_alignments}, "
             f"Failed: {failed_alignments}, Avg Quality: {stats.average_quality_score:.3f}"
         )
-        
+
         return synchronized_data, stats
-    
+
     def interpolate_missing_data(
-        self,
-        data: pd.DataFrame,
-        method: str = "linear",
-        limit: Optional[int] = None
+        self, data: pd.DataFrame, method: str = "linear", limit: Optional[int] = None
     ) -> pd.DataFrame:
         """
         Interpolate missing data using specified method.
-        
+
         Args:
             data: DataFrame with potential missing values
             method: Interpolation method ('linear', 'time', 'cubic', etc.)
             limit: Maximum number of consecutive NaNs to fill
-            
+
         Returns:
             DataFrame with interpolated values
         """
         interpolated_data = data.interpolate(
-            method=method,
-            limit=limit,
-            limit_direction='both'
+            method=method, limit=limit, limit_direction="both"
         )
-        
+
         # Log interpolation statistics
         original_missing = data.isnull().sum().sum()
         remaining_missing = interpolated_data.isnull().sum().sum()
         filled_count = original_missing - remaining_missing
-        
+
         if filled_count > 0:
             logger.info(
                 f"Interpolated {filled_count} missing values using {method} method. "
                 f"Remaining missing: {remaining_missing}"
             )
-        
+
         return interpolated_data
-    
+
     def validate_temporal_consistency(
-        self,
-        data_dict: Dict[str, pd.DataFrame],
-        tolerance_minutes: int = 1
+        self, data_dict: Dict[str, pd.DataFrame], tolerance_minutes: int = 1
     ) -> Dict[str, bool]:
         """
         Validate temporal consistency across timeframes.
-        
+
         Args:
             data_dict: Dictionary of timeframe data
             tolerance_minutes: Tolerance for timestamp alignment (minutes)
-            
+
         Returns:
             Dictionary mapping timeframes to consistency status
         """
         consistency_results = {}
-        
+
         for timeframe, data in data_dict.items():
             try:
                 # Check if timestamps are properly spaced for timeframe
-                expected_delta = pd.Timedelta(minutes=self.TIMEFRAME_MULTIPLIERS.get(timeframe, 60))
-                
+                expected_delta = pd.Timedelta(
+                    minutes=self.TIMEFRAME_MULTIPLIERS.get(timeframe, 60)
+                )
+
                 if len(data) < 2:
                     consistency_results[timeframe] = True
                     continue
-                
+
                 # Calculate actual deltas
                 actual_deltas = data.index.to_series().diff().dropna()
-                
+
                 # Check if most deltas are within tolerance of expected
                 tolerance = pd.Timedelta(minutes=tolerance_minutes)
-                consistent_count = ((actual_deltas - expected_delta).abs() <= tolerance).sum()
+                consistent_count = (
+                    (actual_deltas - expected_delta).abs() <= tolerance
+                ).sum()
                 consistency_ratio = consistent_count / len(actual_deltas)
-                
+
                 # Consider consistent if >90% of deltas are correct
                 is_consistent = consistency_ratio >= 0.9
                 consistency_results[timeframe] = is_consistent
-                
+
                 if not is_consistent:
                     logger.warning(
                         f"Timeframe {timeframe} has poor temporal consistency: "
                         f"{consistency_ratio:.2%} of timestamps are properly spaced"
                     )
-                
+
             except Exception as e:
                 logger.warning(f"Failed to validate consistency for {timeframe}: {e}")
                 consistency_results[timeframe] = False
-        
+
         return consistency_results
-    
+
     def _validate_alignment_inputs(
         self,
         source_data: pd.DataFrame,
         reference_data: pd.DataFrame,
         source_timeframe: str,
-        reference_timeframe: str
+        reference_timeframe: str,
     ) -> None:
         """Validate inputs for alignment operation."""
         if source_data.empty:
             raise DataValidationError("Source data cannot be empty")
-        
+
         if reference_data.empty:
             raise DataValidationError("Reference data cannot be empty")
-        
+
         if not isinstance(source_data.index, pd.DatetimeIndex):
             raise DataValidationError("Source data must have DatetimeIndex")
-        
+
         if not isinstance(reference_data.index, pd.DatetimeIndex):
             raise DataValidationError("Reference data must have DatetimeIndex")
-        
+
         if source_timeframe not in self.TIMEFRAME_MULTIPLIERS:
-            raise DataValidationError(f"Unsupported source timeframe: {source_timeframe}")
-        
+            raise DataValidationError(
+                f"Unsupported source timeframe: {source_timeframe}"
+            )
+
         if reference_timeframe not in self.TIMEFRAME_MULTIPLIERS:
-            raise DataValidationError(f"Unsupported reference timeframe: {reference_timeframe}")
-    
+            raise DataValidationError(
+                f"Unsupported reference timeframe: {reference_timeframe}"
+            )
+
     def _ensure_utc_timezone(self, data: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """Ensure data has UTC timezone."""
         if data.index.tz is None:
             # Localize to UTC
             data = data.copy()
-            data.index = data.index.tz_localize('UTC')
+            data.index = data.index.tz_localize("UTC")
             logger.debug(f"Localized {timeframe} data to UTC")
-        elif str(data.index.tz) != 'UTC':
+        elif str(data.index.tz) != "UTC":
             # Convert to UTC
             data = data.copy()
-            data.index = data.index.tz_convert('UTC')
+            data.index = data.index.tz_convert("UTC")
             logger.debug(f"Converted {timeframe} data to UTC from {data.index.tz}")
-        
+
         return data
-    
+
     def _calculate_alignment_quality(
         self,
         aligned_data: pd.DataFrame,
         source_data: pd.DataFrame,
-        missing_ratio: float
+        missing_ratio: float,
     ) -> float:
         """
         Calculate quality score for alignment operation.
-        
+
         Quality score is based on:
         - Missing data ratio (lower is better)
         - Data coverage (higher is better)
         - Timestamp consistency
-        
+
         Returns:
             Quality score between 0.0 and 1.0
         """
         # Base score from missing data (inverted)
         missing_penalty = missing_ratio
-        
+
         # Coverage score (how much of the reference timeline is covered)
-        coverage_score = min(1.0, len(source_data) / len(aligned_data)) if len(aligned_data) > 0 else 0
-        
+        coverage_score = (
+            min(1.0, len(source_data) / len(aligned_data))
+            if len(aligned_data) > 0
+            else 0
+        )
+
         # Combine scores with weights
         quality_score = (
-            0.6 * (1.0 - missing_penalty) +  # 60% weight on completeness
-            0.4 * coverage_score              # 40% weight on coverage
+            0.6 * (1.0 - missing_penalty)  # 60% weight on completeness
+            + 0.4 * coverage_score  # 40% weight on coverage
         )
-        
+
         return max(0.0, min(1.0, quality_score))
-    
+
     @staticmethod
     def get_optimal_reference_timeframe(timeframes: List[str]) -> str:
         """
         Get the optimal reference timeframe for synchronization.
-        
+
         The optimal reference is typically the lowest (most granular) timeframe
         as it provides the most detailed timeline for alignment.
-        
+
         Args:
             timeframes: List of available timeframes
-            
+
         Returns:
             Optimal reference timeframe
-            
+
         Raises:
             ValueError: If no valid timeframes provided
         """
         if not timeframes:
             raise ValueError("No timeframes provided")
-        
+
         # Filter to supported timeframes only
         supported_timeframes = [
-            tf for tf in timeframes 
-            if tf in TimeframeSynchronizer.TIMEFRAME_HIERARCHY
+            tf for tf in timeframes if tf in TimeframeSynchronizer.TIMEFRAME_HIERARCHY
         ]
-        
+
         if not supported_timeframes:
             raise ValueError("No supported timeframes found")
-        
+
         # Return the lowest timeframe (most granular)
         hierarchy_positions = [
             (tf, TimeframeSynchronizer.TIMEFRAME_HIERARCHY.index(tf))
             for tf in supported_timeframes
         ]
         hierarchy_positions.sort(key=lambda x: x[1])
-        
+
         optimal_timeframe = hierarchy_positions[0][0]
         logger.info(f"Selected {optimal_timeframe} as optimal reference timeframe")
-        
+
         return optimal_timeframe
-    
+
     @staticmethod
     def estimate_memory_usage(
-        data_dict: Dict[str, pd.DataFrame],
-        target_timeframe: str
+        data_dict: Dict[str, pd.DataFrame], target_timeframe: str
     ) -> Dict[str, float]:
         """
         Estimate memory usage for synchronization operation.
-        
+
         Args:
             data_dict: Dictionary of timeframe data
             target_timeframe: Target timeframe for synchronization
-            
+
         Returns:
             Dictionary with memory usage estimates in MB
         """
         estimates = {}
-        
+
         if target_timeframe not in data_dict:
             return estimates
-        
+
         reference_size = len(data_dict[target_timeframe])
-        
+
         for timeframe, data in data_dict.items():
             # Estimate aligned data size
             if timeframe == target_timeframe:
                 aligned_size = len(data)
             else:
                 aligned_size = reference_size
-            
+
             # Estimate memory (assuming float64 = 8 bytes per value)
             columns = len(data.columns) if not data.empty else 5  # OHLCV default
             bytes_per_row = columns * 8  # 8 bytes per float64
             estimated_mb = (aligned_size * bytes_per_row) / (1024 * 1024)
-            
+
             estimates[timeframe] = estimated_mb
-        
-        estimates['total_estimated'] = sum(estimates.values())
-        
+
+        estimates["total_estimated"] = sum(estimates.values())
+
         return estimates
 
 
 # Utility functions for common operations
 def align_timeframes_to_lowest(
-    data_dict: Dict[str, pd.DataFrame]
+    data_dict: Dict[str, pd.DataFrame],
 ) -> Tuple[Dict[str, pd.DataFrame], str]:
     """
     Align all timeframes to the lowest (most granular) timeframe.
-    
+
     Args:
         data_dict: Dictionary of timeframe data
-        
+
     Returns:
         Tuple of (aligned_data, reference_timeframe)
     """
@@ -566,56 +581,54 @@ def align_timeframes_to_lowest(
     reference_timeframe = synchronizer.get_optimal_reference_timeframe(
         list(data_dict.keys())
     )
-    
+
     aligned_data, _ = synchronizer.synchronize_multiple_timeframes(
         data_dict, reference_timeframe
     )
-    
+
     return aligned_data, reference_timeframe
 
 
 def calculate_multi_timeframe_periods(
-    primary_timeframe: str,
-    auxiliary_timeframes: List[str],
-    primary_periods: int
+    primary_timeframe: str, auxiliary_timeframes: List[str], primary_periods: int
 ) -> Dict[str, int]:
     """
     Calculate required periods for all auxiliary timeframes.
-    
+
     Args:
         primary_timeframe: Primary timeframe
         auxiliary_timeframes: List of auxiliary timeframes
         primary_periods: Periods needed in primary timeframe
-        
+
     Returns:
         Dictionary mapping timeframes to required periods
     """
     periods_dict = {primary_timeframe: primary_periods}
-    
+
     for aux_tf in auxiliary_timeframes:
         periods_dict[aux_tf] = TimeframeSynchronizer.calculate_periods_needed(
             primary_timeframe, aux_tf, primary_periods
         )
-    
+
     return periods_dict
 
 
 def validate_timeframe_compatibility(timeframes: List[str]) -> List[str]:
     """
     Validate and filter compatible timeframes.
-    
+
     Args:
         timeframes: List of timeframes to validate
-        
+
     Returns:
         List of validated, compatible timeframes
     """
     compatible_timeframes = []
-    
+
     for tf in timeframes:
         if tf in TimeframeSynchronizer.TIMEFRAME_MULTIPLIERS:
             compatible_timeframes.append(tf)
         else:
             logger.warning(f"Incompatible timeframe ignored: {tf}")
-    
+
     return compatible_timeframes

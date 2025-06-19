@@ -10,7 +10,14 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Union, Any, Type, Annotated
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator, RootModel, Discriminator
+from pydantic import (
+    BaseModel,
+    Field,
+    field_validator,
+    model_validator,
+    RootModel,
+    Discriminator,
+)
 
 from ktrdr.errors import (
     ConfigurationError,
@@ -199,7 +206,7 @@ class GaussianMFConfig(BaseModel):
 # Union type for all membership function configurations with discriminator
 MembershipFunctionConfig = Annotated[
     Union[TriangularMFConfig, TrapezoidalMFConfig, GaussianMFConfig],
-    Field(discriminator='type')
+    Field(discriminator="type"),
 ]
 
 
