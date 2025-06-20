@@ -25,6 +25,7 @@ from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.backtesting.engine import BacktestConfig
 from ktrdr.data.data_manager import DataManager
 from ktrdr.errors import DataError, ValidationError
+from ktrdr.decision.base import Signal
 
 logger = get_logger(__name__)
 
@@ -37,7 +38,9 @@ class BacktestingService(BaseService):
         super().__init__()
         self.data_manager = DataManager()
         self.model_loader = ModelLoader()
-        self.operations_service = operations_service or OperationsService()
+        if operations_service is None:
+            raise ValueError("OperationsService must be provided to BacktestingService")
+        self.operations_service = operations_service
 
     async def health_check(self) -> Dict[str, Any]:
         """
@@ -433,17 +436,18 @@ class BacktestingService(BaseService):
                 }
 
                 # Get trading signal from decision orchestrator
-                signal = engine.orchestrator.decide(
+                decision = engine.orchestrator.make_decision(
                     symbol=engine.config.symbol,
-                    current_price=current_price,
+                    timeframe=engine.config.timeframe,
+                    current_bar=current_bar,
                     historical_data=historical_data,
                     portfolio_state=portfolio_state,
                 )
 
                 # Execute trade if signal is actionable
-                if signal.action in ["BUY", "SELL"]:
+                if decision.signal in [Signal.BUY, Signal.SELL]:
                     trade = engine.position_manager.execute_trade(
-                        signal=signal,
+                        signal=decision,
                         current_price=current_price,
                         timestamp=current_timestamp,
                     )
