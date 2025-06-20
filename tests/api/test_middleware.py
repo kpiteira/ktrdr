@@ -26,7 +26,7 @@ class TestRequestLoggingMiddleware:
         self.scope: Scope = {
             "type": "http",
             "method": "GET",
-            "path": "/api/v1/health",
+            "path": "/api/v1/symbols",  # Use a non-high-frequency endpoint for testing
             "headers": [
                 (b"x-request-id", b"test-id")
             ],  # Use raw list of tuples instead of Headers
@@ -64,7 +64,7 @@ class TestRequestLoggingMiddleware:
             ]  # Second arg is the message
             assert "Request started" in first_call_args
             assert "method=GET" in first_call_args
-            assert "path=/api/v1/health" in first_call_args
+            assert "path=/api/v1/symbols" in first_call_args
             assert "request_id=test-id" in first_call_args
 
             # Verify the content of the second log message (request completed)

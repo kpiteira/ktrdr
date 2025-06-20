@@ -14,7 +14,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timedelta
 
 # Test configuration
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://localhost:8000/api/v1"
 API_TIMEOUT = 30.0
 
 

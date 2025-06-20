@@ -16,7 +16,7 @@ from unittest.mock import patch, AsyncMock
 def check_api_available():
     """Check if API is available."""
     try:
-        response = httpx.get("http://localhost:8000/health", timeout=5.0)
+        response = httpx.get("http://localhost:8000/api/v1/health", timeout=5.0)
         return response.status_code == 200
     except Exception:
         return False
