@@ -33,10 +33,29 @@ export const BacktestProgressPanel: React.FC = () => {
   };
   
   const getProgressStage = () => {
+    // Use enhanced progress info if available
+    if (activeBacktest.progressInfo?.current_step) {
+      return activeBacktest.progressInfo.current_step;
+    }
+    
+    // Fallback to legacy progress stages
     if (activeBacktest.progress <= 20) return 'Loading strategy and model...';
     if (activeBacktest.progress <= 40) return 'Loading historical data...';
     if (activeBacktest.progress <= 90) return 'Executing trading simulation...';
     return 'Finalizing results...';
+  };
+  
+  const getProgressDetails = () => {
+    const progressInfo = activeBacktest.progressInfo;
+    if (!progressInfo) return null;
+    
+    const { items_processed, items_total } = progressInfo;
+    if (items_processed && items_total) {
+      return `${items_processed.toLocaleString()} / ${items_total.toLocaleString()} bars processed`;
+    } else if (items_processed) {
+      return `${items_processed.toLocaleString()} bars processed`;
+    }
+    return null;
   };
   
   return (
@@ -89,6 +108,9 @@ export const BacktestProgressPanel: React.FC = () => {
             <div className="status-message">
               <h3>{getStatusMessage()}</h3>
               <p className="stage-description">{getProgressStage()}</p>
+              {getProgressDetails() && (
+                <p className="progress-details">{getProgressDetails()}</p>
+              )}
             </div>
             
             <div className="progress-bar-container">
@@ -120,6 +142,28 @@ export const BacktestProgressPanel: React.FC = () => {
             </div>
           </div>
         </div>
+        
+        {/* Display warnings and errors */}
+        {(activeBacktest.warnings?.length || activeBacktest.errors?.length) && (
+          <div className="messages-section">
+            {activeBacktest.warnings?.length && (
+              <div className="warnings">
+                <h4>⚠️ Warnings</h4>
+                {activeBacktest.warnings.map((warning, index) => (
+                  <p key={index} className="warning-message">{warning}</p>
+                ))}
+              </div>
+            )}
+            {activeBacktest.errors?.length && (
+              <div className="errors">
+                <h4>❌ Errors</h4>
+                {activeBacktest.errors.map((error, index) => (
+                  <p key={index} className="error-message">{error}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         
         {activeBacktest.status === 'failed' && (
           <div className="error-section">

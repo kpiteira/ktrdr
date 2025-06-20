@@ -586,6 +586,77 @@ class KtrdrApiClient:
         return response.get("data", {})
 
     # =============================================================================
+    # Backtesting Endpoints
+    # =============================================================================
+
+    async def start_backtest(
+        self,
+        strategy_name: str,
+        symbol: str,
+        timeframe: str,
+        start_date: str,
+        end_date: str,
+        initial_capital: float = 100000.0,
+    ) -> Dict[str, Any]:
+        """Start a new backtest operation."""
+        payload = {
+            "strategy_name": strategy_name,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "start_date": start_date,
+            "end_date": end_date,
+            "initial_capital": initial_capital,
+        }
+
+        response = await self._make_request(
+            "POST",
+            "/backtesting/start",
+            json_data=payload,
+            timeout=10.0,  # Quick timeout for starting async operation
+        )
+
+        if not response.get("success"):
+            raise DataError(
+                message="Failed to start backtest",
+                error_code="API-StartBacktestError",
+                details={"response": response},
+            )
+        return response
+
+    async def get_backtest_results(self, backtest_id: str) -> Dict[str, Any]:
+        """Get the full results of a completed backtest."""
+        response = await self._make_request("GET", f"/backtesting/{backtest_id}/results")
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to get backtest results for {backtest_id}",
+                error_code="API-GetBacktestResultsError",
+                details={"response": response, "backtest_id": backtest_id},
+            )
+        return response
+
+    async def get_backtest_trades(self, backtest_id: str) -> Dict[str, Any]:
+        """Get the list of trades from a backtest."""
+        response = await self._make_request("GET", f"/backtesting/{backtest_id}/trades")
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to get backtest trades for {backtest_id}",
+                error_code="API-GetBacktestTradesError",
+                details={"response": response, "backtest_id": backtest_id},
+            )
+        return response
+
+    async def get_equity_curve(self, backtest_id: str) -> Dict[str, Any]:
+        """Get the equity curve data from a backtest."""
+        response = await self._make_request("GET", f"/backtesting/{backtest_id}/equity-curve")
+        if not response.get("success"):
+            raise DataError(
+                message=f"Failed to get equity curve for {backtest_id}",
+                error_code="API-GetEquityCurveError",
+                details={"response": response, "backtest_id": backtest_id},
+            )
+        return response
+
+    # =============================================================================
     # Operations Management Endpoints
     # =============================================================================
 

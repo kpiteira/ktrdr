@@ -37,13 +37,23 @@ export interface BacktestRequest {
   dataMode?: string;
 }
 
+export interface ProgressInfo {
+  percentage: number;
+  current_step: string;
+  items_processed?: number;
+  items_total?: number;
+}
+
 export interface BacktestStatus {
   id: string;
   strategyName: string;
   status: 'idle' | 'starting' | 'running' | 'completed' | 'failed';
-  progress: number;
+  progress: number; // Legacy - keep for backward compatibility
+  progressInfo?: ProgressInfo; // New enhanced progress information
   startedAt: string | null;
   error?: string;
+  warnings?: string[];
+  errors?: string[];
 }
 
 export interface BacktestMetrics {

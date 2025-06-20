@@ -236,7 +236,14 @@ export const trainModeActions = {
     }));
   },
   
-  updateBacktestProgress: (backtestId: string, progress: number, status: BacktestStatus['status']) => {
+  updateBacktestProgress: (
+    backtestId: string, 
+    progress: number, 
+    status: BacktestStatus['status'],
+    progressInfo?: any,
+    warnings?: string[],
+    errors?: string[]
+  ) => {
     trainModeStore.setState(state => {
       if (state.activeBacktest?.id !== backtestId) return state;
       
@@ -245,7 +252,10 @@ export const trainModeActions = {
         activeBacktest: {
           ...state.activeBacktest,
           progress,
-          status
+          status,
+          progressInfo,
+          warnings,
+          errors
         }
       };
     });
@@ -421,19 +431,29 @@ async function pollBacktestStatus(backtestId: string) {
   
   statusPollingInterval = window.setInterval(async () => {
     try {
-      const response = await apiClient.get(`/api/v1/backtests/${backtestId}`);
+      const response = await apiClient.get(`/api/v1/operations/${backtestId}`);
       
-      if (response.success) {
+      if (response.success && response.data) {
         // Reset error counter on successful response
         consecutiveErrors = 0;
         
+        const operationData = response.data;
+        const progress = operationData.progress?.percentage || 0;
+        const status = operationData.status;
+        const progressInfo = operationData.progress;
+        const warnings = operationData.warnings || [];
+        const errors = operationData.errors || [];
+        
         trainModeActions.updateBacktestProgress(
           backtestId,
-          response.progress,
-          response.status
+          progress,
+          status,
+          progressInfo,
+          warnings,
+          errors
         );
         
-        if (response.status === 'completed') {
+        if (status === 'completed') {
           // Stop polling
           if (statusPollingInterval) {
             clearInterval(statusPollingInterval);
@@ -442,8 +462,8 @@ async function pollBacktestStatus(backtestId: string) {
           
           // Fetch full results
           await fetchBacktestResults(backtestId);
-        } else if (response.status === 'failed') {
-          // Stop polling on failure
+        } else if (status === 'failed' || status === 'cancelled') {
+          // Stop polling on failure/cancellation
           if (statusPollingInterval) {
             clearInterval(statusPollingInterval);
             statusPollingInterval = null;

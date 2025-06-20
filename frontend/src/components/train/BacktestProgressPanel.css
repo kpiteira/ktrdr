@@ -118,6 +118,13 @@
   color: var(--text-secondary, #999);
 }
 
+.progress-details {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: var(--primary-color, #2196F3);
+  font-weight: 500;
+}
+
 /* Progress Bar */
 .progress-bar-container {
   display: flex;
@@ -200,6 +207,59 @@
 
 .stat-value.status-failed {
   color: var(--error-color, #ef5350);
+}
+
+/* Messages Section */
+.messages-section {
+  background: var(--card-background, #242424);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+}
+
+.warnings {
+  margin-bottom: 16px;
+}
+
+.warnings:last-child {
+  margin-bottom: 0;
+}
+
+.warnings h4,
+.errors h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.warnings h4 {
+  color: var(--warning-color, #FF9800);
+}
+
+.errors h4 {
+  color: var(--error-color, #ef5350);
+}
+
+.warning-message,
+.error-message {
+  margin: 4px 0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.warning-message {
+  background: rgba(255, 152, 0, 0.1);
+  border-left: 3px solid var(--warning-color, #FF9800);
+  color: var(--text-primary, #fff);
+}
+
+.error-message {
+  background: rgba(239, 83, 80, 0.1);
+  border-left: 3px solid var(--error-color, #ef5350);
+  color: var(--text-primary, #fff);
 }
 
 /* Error Section */
