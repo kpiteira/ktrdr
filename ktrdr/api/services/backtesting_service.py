@@ -436,16 +436,26 @@ class BacktestingService(BaseService):
         based on bars processed during the main simulation loop.
         """
         # Load data first to get actual bar count
-        data = engine._load_historical_data()
-        actual_bars = len(data)
+        data = self._load_data_with_warmup(engine)
+        
+        # Find the start index for actual backtest period
+        backtest_start_date = pd.to_datetime(engine.config.start_date)
+        backtest_start_idx = 0
+        for i, timestamp in enumerate(data.index):
+            if timestamp >= backtest_start_date:
+                backtest_start_idx = i
+                break
+        
+        actual_backtest_bars = len(data) - backtest_start_idx
+        total_bars_loaded = len(data)
 
         # Update progress with actual bar count
         await self.operations_service.update_progress(
             operation_id,
             OperationProgress(
                 percentage=20.0,
-                current_step=f"Starting backtest simulation on {actual_bars:,} bars",
-                items_total=actual_bars,
+                current_step=f"Starting backtest simulation on {actual_backtest_bars:,} bars (loaded {total_bars_loaded:,} total with warm-up)",
+                items_total=actual_backtest_bars,
             ),
         )
 
@@ -472,19 +482,33 @@ class BacktestingService(BaseService):
                     f"No data loaded for {engine.config.symbol} {engine.config.timeframe}"
                 )
 
+            # Find the start index for actual backtest period
+            # (data before this is warm-up data)
+            backtest_start_date = pd.to_datetime(engine.config.start_date)
+            backtest_start_idx = 0
+            for i, timestamp in enumerate(data.index):
+                if timestamp >= backtest_start_date:
+                    backtest_start_idx = i
+                    break
+
+            logger.info(f"Loaded {len(data)} total bars, backtest starts at index {backtest_start_idx}")
+
             # Initialize tracking (same as original engine)
             trades_executed = 0
 
             # Main simulation loop with progress tracking
-            for idx in range(len(data)):
+            # Only iterate over the actual backtest period, but always pass full historical data
+            for idx in range(backtest_start_idx, len(data)):
                 current_bar = data.iloc[idx]
                 current_timestamp = current_bar.name
                 current_price = current_bar["close"]
 
-                # Update progress state
-                progress_state["bars_processed"] = idx + 1
+                # Update progress state (relative to backtest period)
+                bars_in_backtest_period = idx - backtest_start_idx + 1
+                total_backtest_bars = len(data) - backtest_start_idx
+                progress_state["bars_processed"] = bars_in_backtest_period
 
-                # Prepare historical data up to current point
+                # Prepare historical data up to current point (includes warm-up data)
                 historical_data = data.iloc[: idx + 1]
 
                 # Portfolio state for decision making
