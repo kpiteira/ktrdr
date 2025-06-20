@@ -453,9 +453,7 @@ class GapFillerService:
                         return False
                 else:
                     self.stats["gaps_failed"] += 1
-                    logger.warning(
-                        f"No data returned for gap in {symbol}_{timeframe}"
-                    )
+                    logger.warning(f"No data returned for gap in {symbol}_{timeframe}")
                     return False
 
             except Exception as e:

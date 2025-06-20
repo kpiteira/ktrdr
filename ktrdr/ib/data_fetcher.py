@@ -137,7 +137,9 @@ class IbDataFetcher:
         # Request historical data (synchronous call)
         try:
             logger.debug("Making IB reqHistoricalData call")
-            logger.debug(f"Requesting historical data: {contract.symbol}, duration={duration}, barSize={ib_bar_size}")
+            logger.debug(
+                f"Requesting historical data: {contract.symbol}, duration={duration}, barSize={ib_bar_size}"
+            )
 
             bars = ib.reqHistoricalData(
                 contract=contract,
@@ -186,7 +188,9 @@ class IbDataFetcher:
             # Filter by date range
             df = df[(df.index >= start) & (df.index <= end)]
 
-            logger.info(f"Successfully processed {len(df)} bars for {symbol} {timeframe}")
+            logger.info(
+                f"Successfully processed {len(df)} bars for {symbol} {timeframe}"
+            )
             return df
 
         except Exception as e:
@@ -204,7 +208,9 @@ class IbDataFetcher:
         Returns:
             IB Contract object
         """
-        logger.debug(f"Creating contract for symbol='{symbol}', instrument_type='{instrument_type}'")
+        logger.debug(
+            f"Creating contract for symbol='{symbol}', instrument_type='{instrument_type}'"
+        )
 
         if instrument_type == "CASH" or "." in symbol:
             # Handle forex pairs
@@ -226,7 +232,9 @@ class IbDataFetcher:
             return contract
         else:
             # Default to stock for unknown types
-            logger.warning(f"Unknown instrument type '{instrument_type}', defaulting to stock")
+            logger.warning(
+                f"Unknown instrument type '{instrument_type}', defaulting to stock"
+            )
             contract = Stock(symbol, "SMART", "USD")
             logger.debug(f"Created default stock contract: {contract}")
             return contract

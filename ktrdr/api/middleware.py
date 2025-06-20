@@ -50,16 +50,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             "/api/v1/status",
             "/api/v1/data/stream",
         ]
-        
-        is_high_frequency = any(request.url.path.startswith(path) for path in high_frequency_paths)
-        
+
+        is_high_frequency = any(
+            request.url.path.startswith(path) for path in high_frequency_paths
+        )
+
         # Log the request (DEBUG for high-frequency, INFO for others)
         log_level = logging.DEBUG if is_high_frequency else logging.INFO
         # Use rate limiting for high-frequency operations
         should_log_request = True
         if is_high_frequency:
-            should_log_request = should_rate_limit_log(f"request_{request.url.path}", 30)  # Log every 30 seconds
-        
+            should_log_request = should_rate_limit_log(
+                f"request_{request.url.path}", 30
+            )  # Log every 30 seconds
+
         if should_log_request:
             logger.log(
                 log_level,

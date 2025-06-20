@@ -524,9 +524,7 @@ class IbSymbolValidator:
         # Make synchronous IB API call
         details = ib.reqContractDetails(contract)
 
-        logger.debug(
-            f"IB returned {len(details) if details else 0} contract details"
-        )
+        logger.debug(f"IB returned {len(details) if details else 0} contract details")
         return details
 
     def _fetch_head_timestamp_impl(self, ib, contract, asset_type: str):
