@@ -455,8 +455,8 @@ async def _backtest_strategy_async(
 
             while True:
                 try:
-                    # Get real status from API
-                    status_result = await api_client.get_backtest_status(backtest_id)
+                    # Get real status from operations API
+                    status_result = await api_client.get_operation_status(backtest_id)
                     status = status_result["status"]
                     progress_pct = status_result.get("progress", 0)
                     

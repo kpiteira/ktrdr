@@ -610,7 +610,7 @@ class KtrdrApiClient:
 
         response = await self._make_request(
             "POST",
-            "/backtests",
+            "/backtests/",
             json_data=payload,
             timeout=10.0,  # Quick timeout for starting async operation
         )
