@@ -6,6 +6,7 @@ bridging the API endpoints with the core backtesting engine.
 """
 
 import asyncio
+import time
 import uuid
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -367,6 +368,64 @@ class BacktestingService(BaseService):
             # Fallback estimate
             return 1000
 
+    def _load_data_with_warmup(self, engine):
+        """
+        Load historical data with warm-up period for indicators.
+        
+        This method loads extra data before the backtest start date to ensure
+        indicators have sufficient historical data for accurate calculations.
+        """
+        # Calculate warm-up period needed (conservative estimate)
+        # Most indicators need at most 50-100 bars for warm-up
+        warmup_bars = 100
+        
+        # Convert warm-up bars to time period based on timeframe
+        timeframe = engine.config.timeframe
+        if timeframe == "1m":
+            warmup_days = warmup_bars / 390  # ~390 minutes per trading day
+        elif timeframe == "5m":
+            warmup_days = warmup_bars / 78   # ~78 5-min bars per trading day
+        elif timeframe == "15m":
+            warmup_days = warmup_bars / 26   # ~26 15-min bars per trading day
+        elif timeframe == "1h":
+            warmup_days = warmup_bars / 7    # ~7 hours per trading day
+        elif timeframe == "4h":
+            warmup_days = warmup_bars / 2    # ~2 4-hour bars per trading day
+        elif timeframe == "1d":
+            warmup_days = warmup_bars        # 1 bar per day
+        else:
+            warmup_days = 50  # Default fallback
+        
+        # Ensure minimum warm-up period
+        warmup_days = max(30, warmup_days)  # At least 30 days
+        
+        # Calculate extended start date
+        original_start = pd.to_datetime(engine.config.start_date)
+        extended_start = original_start - pd.Timedelta(days=warmup_days)
+        
+        # Load data with extended range
+        try:
+            # Use the engine's data manager to load extended data
+            extended_data = engine.data_manager.load_data(
+                symbol=engine.config.symbol,
+                timeframe=engine.config.timeframe,
+                start_date=extended_start.strftime('%Y-%m-%d'),
+                end_date=engine.config.end_date,
+                mode="local"  # Use local data first
+            )
+            
+            if extended_data.empty:
+                # Fallback to original data loading if extended range fails
+                logger.warning(f"Failed to load extended data range, falling back to original range")
+                return engine._load_historical_data()
+            
+            logger.info(f"Loaded {len(extended_data)} bars including {warmup_days:.0f} days warm-up period")
+            return extended_data
+            
+        except Exception as e:
+            logger.warning(f"Failed to load extended data range: {e}, falling back to original range")
+            return engine._load_historical_data()
+
     async def _run_backtest_with_progress(
         self, engine, operation_id: str, estimated_bars: int
     ):
@@ -406,7 +465,8 @@ class BacktestingService(BaseService):
             start_time = pd.Timestamp.now()
             execution_start = time.time()
 
-            data = engine._load_historical_data()
+            # Load data with warm-up period for indicators
+            data = self._load_data_with_warmup(engine)
             if data.empty:
                 raise ValueError(
                     f"No data loaded for {engine.config.symbol} {engine.config.timeframe}"
