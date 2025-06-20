@@ -543,9 +543,14 @@ class BacktestingService(BaseService):
                 # Execute trade if signal is actionable
                 if decision.signal in [Signal.BUY, Signal.SELL]:
                     trade = engine.position_manager.execute_trade(
-                        signal=decision,
-                        current_price=current_price,
+                        signal=decision.signal,
+                        price=current_price,
                         timestamp=current_timestamp,
+                        symbol=engine.config.symbol,
+                        decision_metadata={
+                            "confidence": decision.confidence,
+                            "reasoning": decision.reasoning,
+                        },
                     )
 
                     if trade:
