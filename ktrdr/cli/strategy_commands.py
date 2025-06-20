@@ -412,19 +412,37 @@ async def _backtest_strategy_async(
             console.print(f"📅 Period: {start_date} to {end_date}")
             return
 
-        # This would call the backtesting API endpoint
-        # For now, show a placeholder message with simulated progress
-        console.print(
-            f"⚠️  [yellow]Strategy backtesting via API not yet implemented[/yellow]"
-        )
-        console.print(f"📋 Would backtest strategy with:")
+        # Call the real backtesting API endpoint
+        console.print(f"🚀 [cyan]Starting backtest via API...[/cyan]")
+        console.print(f"📋 Backtest parameters:")
         console.print(f"   Strategy: {strategy_file}")
         console.print(f"   Symbol: {symbol}")
         console.print(f"   Timeframe: {timeframe}")
         console.print(f"   Period: {start_date} to {end_date}")
         console.print(f"   Capital: ${initial_capital:,.2f}")
 
-        # Simulate backtesting progress
+        # Extract strategy name from file path for API call
+        strategy_name = Path(strategy_file).stem
+
+        # Start the backtest via API
+        try:
+            result = await api_client.start_backtest(
+                strategy_name=strategy_name,
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+            )
+            
+            backtest_id = result["backtest_id"]
+            console.print(f"✅ Backtest started with ID: [bold]{backtest_id}[/bold]")
+            
+        except Exception as e:
+            console.print(f"❌ [red]Failed to start backtest: {str(e)}[/red]")
+            return
+
+        # Poll for progress with real API calls
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -435,29 +453,56 @@ async def _backtest_strategy_async(
         ) as progress:
             task = progress.add_task("Running backtest...", total=100)
 
-            steps = [
-                ("Loading historical data", 20),
-                ("Initializing strategy", 30),
-                ("Processing signals", 70),
-                ("Calculating performance", 90),
-                ("Generating report", 100),
-            ]
+            while True:
+                try:
+                    # Get real status from API
+                    status_result = await api_client.get_backtest_status(backtest_id)
+                    status = status_result["status"]
+                    progress_pct = status_result.get("progress", 0)
+                    
+                    # Update progress bar with real progress
+                    progress.update(task, completed=progress_pct, description=f"Status: {status}")
+                    
+                    if status == "completed":
+                        console.print(f"✅ [green]Backtest completed successfully![/green]")
+                        break
+                    elif status == "failed":
+                        error_msg = status_result.get("error", "Unknown error")
+                        console.print(f"❌ [red]Backtest failed: {error_msg}[/red]")
+                        return
+                    
+                    # Wait before next poll
+                    await asyncio.sleep(2)
+                    
+                except Exception as e:
+                    console.print(f"❌ [red]Error polling backtest status: {str(e)}[/red]")
+                    return
 
-            for step_desc, target in steps:
-                progress.update(task, description=step_desc)
-                while progress.tasks[0].completed < target:
-                    await asyncio.sleep(0.1)
-                    progress.update(task, advance=2)
-
-        # Simulate results
-        console.print(f"✅ [green]Backtest completed[/green]")
-        console.print(f"📊 Total return: +15.2%")
-        console.print(f"📊 Sharpe ratio: 1.43")
-        console.print(f"📊 Max drawdown: -8.7%")
-        console.print(f"📊 Win rate: 62.3%")
-
-        if output_file:
-            console.print(f"💾 Results saved to: {output_file}")
+        # Get real results from API
+        try:
+            results = await api_client.get_backtest_results(backtest_id)
+            metrics = results.get("metrics", {})
+            summary = results.get("summary", {})
+            
+            # Display real results
+            console.print(f"📊 [bold green]Backtest Results:[/bold green]")
+            console.print(f"📈 Total return: {metrics.get('total_return', 0):.2f}")
+            console.print(f"📊 Sharpe ratio: {metrics.get('sharpe_ratio', 0):.2f}")
+            console.print(f"📉 Max drawdown: {metrics.get('max_drawdown', 0):.2f}%")
+            console.print(f"🎯 Win rate: {metrics.get('win_rate', 0):.1f}%")
+            console.print(f"🔢 Total trades: {metrics.get('total_trades', 0)}")
+            console.print(f"💰 Final value: ${summary.get('final_value', 0):,.2f}")
+            
+            if output_file:
+                # Save real results to file
+                import json
+                with open(output_file, 'w') as f:
+                    json.dump(results, f, indent=2, default=str)
+                console.print(f"💾 Results saved to: {output_file}")
+                
+        except Exception as e:
+            console.print(f"❌ [red]Error retrieving results: {str(e)}[/red]")
+            return
 
     except Exception as e:
         raise DataError(
