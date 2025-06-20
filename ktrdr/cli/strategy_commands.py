@@ -457,8 +457,10 @@ async def _backtest_strategy_async(
                 try:
                     # Get real status from operations API
                     status_result = await api_client.get_operation_status(backtest_id)
-                    status = status_result["status"]
-                    progress_pct = status_result.get("progress", 0)
+                    data = status_result.get("data", {})
+                    status = data.get("status", "unknown")
+                    progress_info = data.get("progress", {})
+                    progress_pct = progress_info.get("percentage", 0)
                     
                     # Update progress bar with real progress
                     progress.update(task, completed=progress_pct, description=f"Status: {status}")
@@ -467,7 +469,7 @@ async def _backtest_strategy_async(
                         console.print(f"✅ [green]Backtest completed successfully![/green]")
                         break
                     elif status == "failed":
-                        error_msg = status_result.get("error", "Unknown error")
+                        error_msg = data.get("error_message", "Unknown error")
                         console.print(f"❌ [red]Backtest failed: {error_msg}[/red]")
                         return
                     
