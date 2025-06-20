@@ -14,6 +14,8 @@ import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.api.services.base import BaseService
+from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.models.operations import OperationType, OperationMetadata
 from ktrdr.backtesting.engine import BacktestingEngine
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.backtesting.engine import BacktestConfig
@@ -26,13 +28,12 @@ logger = get_logger(__name__)
 class BacktestingService(BaseService):
     """Service for managing backtesting operations."""
 
-    def __init__(self):
+    def __init__(self, operations_service: Optional[OperationsService] = None):
         """Initialize the backtesting service."""
         super().__init__()
         self.data_manager = DataManager()
         self.model_loader = ModelLoader()
-        # Track active backtests
-        self._active_backtests: Dict[str, Dict[str, Any]] = {}
+        self.operations_service = operations_service or OperationsService()
 
     async def health_check(self) -> Dict[str, Any]:
         """
@@ -41,10 +42,14 @@ class BacktestingService(BaseService):
         Returns:
             Dict[str, Any]: Health check information
         """
+        active_operations = await self.operations_service.list_operations(
+            operation_type=OperationType.BACKTESTING,
+            status_filter=["running", "pending"]
+        )
         return {
             "service": "BacktestingService",
             "status": "ok",
-            "active_backtests": len(self._active_backtests),
+            "active_backtests": len(active_operations),
             "data_manager_ready": self.data_manager is not None,
             "model_loader_ready": self.model_loader is not None,
         }
@@ -70,31 +75,30 @@ class BacktestingService(BaseService):
             initial_capital: Initial capital amount
 
         Returns:
-            Dict containing backtest_id and initial status
+            Dict containing operation_id and initial status
         """
-        # Generate unique backtest ID
-        backtest_id = str(uuid.uuid4())
+        # Create operation metadata
+        metadata = OperationMetadata(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=datetime.fromisoformat(start_date),
+            end_date=datetime.fromisoformat(end_date),
+            parameters={
+                "strategy_name": strategy_name,
+                "initial_capital": initial_capital,
+            }
+        )
 
-        # Record backtest start
-        self._active_backtests[backtest_id] = {
-            "id": backtest_id,
-            "strategy_name": strategy_name,
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "start_date": start_date,
-            "end_date": end_date,
-            "status": "starting",
-            "progress": 0,
-            "started_at": datetime.now().isoformat(),
-            "completed_at": None,
-            "results": None,
-            "error": None,
-        }
+        # Create operation using operations service
+        operation_id = await self.operations_service.create_operation(
+            operation_type=OperationType.BACKTESTING,
+            metadata=metadata
+        )
 
         # Start backtest in background
-        asyncio.create_task(
+        task = asyncio.create_task(
             self._run_backtest_async(
-                backtest_id,
+                operation_id,
                 strategy_name,
                 symbol,
                 timeframe,
@@ -104,15 +108,18 @@ class BacktestingService(BaseService):
             )
         )
 
+        # Register task with operations service for cancellation support
+        await self.operations_service.start_operation(operation_id, task)
+
         return {
-            "backtest_id": backtest_id,
+            "backtest_id": operation_id,
             "status": "starting",
-            "message": f"Backtest {backtest_id} started for {strategy_name}",
+            "message": f"Backtest {operation_id} started for {strategy_name}",
         }
 
     async def _run_backtest_async(
         self,
-        backtest_id: str,
+        operation_id: str,
         strategy_name: str,
         symbol: str,
         timeframe: str,
@@ -121,23 +128,29 @@ class BacktestingService(BaseService):
         initial_capital: float,
     ) -> None:
         """
-        Run backtest asynchronously using the CLI code path to ensure consistency.
-
-        This method uses the exact same approach as the CLI to avoid divergence.
+        Run backtest asynchronously with data-driven progress tracking.
         """
         try:
-            # Update status to running
-            self._active_backtests[backtest_id]["status"] = "running"
-            self._active_backtests[backtest_id]["progress"] = 10
+            # Phase 1: Validation (5%)
+            await self.operations_service.update_progress(
+                operation_id,
+                progress=5.0,
+                current_step="Validating strategy configuration"
+            )
 
-            # Build strategy config path (same as CLI does it)
+            # Build strategy config path
             strategy_path = Path(f"strategies/{strategy_name}.yaml")
             if not strategy_path.exists():
                 raise ValidationError(f"Strategy '{strategy_name}' not found")
 
-            self._active_backtests[backtest_id]["progress"] = 20
+            # Phase 2: Data loading preparation (10%)
+            await self.operations_service.update_progress(
+                operation_id,
+                progress=10.0,
+                current_step="Preparing data loading configuration"
+            )
 
-            # Create backtest configuration (exactly like CLI does)
+            # Create backtest configuration
             config = BacktestConfig(
                 strategy_config_path=str(strategy_path),
                 model_path=None,  # Let engine find latest model
@@ -152,19 +165,30 @@ class BacktestingService(BaseService):
                 verbose=False,
             )
 
-            self._active_backtests[backtest_id]["progress"] = 30
+            # Estimate total bars for progress tracking
+            total_bars = await self._estimate_total_bars(symbol, timeframe, start_date, end_date)
+            
+            await self.operations_service.update_progress(
+                operation_id,
+                progress=15.0,
+                current_step=f"Loading {symbol} {timeframe} data",
+                items_total=total_bars
+            )
 
-            # Create and run backtesting engine (exactly like CLI does)
+            # Create modified engine with progress callback
             engine = BacktestingEngine(config)
+            
+            # Run the backtest with progress tracking
+            results = await self._run_backtest_with_progress(engine, operation_id, total_bars)
 
-            self._active_backtests[backtest_id]["progress"] = 50
+            # Results processing and completion (5%)
+            await self.operations_service.update_progress(
+                operation_id,
+                progress=95.0,
+                current_step="Processing backtest results"
+            )
 
-            # Run the backtest using the existing engine
-            results = await asyncio.to_thread(engine.run)
-
-            self._active_backtests[backtest_id]["progress"] = 90
-
-            # Convert results to dictionary format (exactly like CLI does)
+            # Convert results to dictionary format
             try:
                 results_dict = results.to_dict()
                 logger.info(
@@ -284,44 +308,219 @@ class BacktestingService(BaseService):
                     "equity_curve": {"timestamps": [], "values": [], "drawdowns": []},
                 }
 
-            self._active_backtests[backtest_id]["progress"] = 100
-            self._active_backtests[backtest_id]["status"] = "completed"
-            self._active_backtests[backtest_id][
-                "completed_at"
-            ] = datetime.now().isoformat()
-            self._active_backtests[backtest_id]["results"] = results_dict
+            # Complete the operation with full results
+            await self.operations_service.complete_operation(
+                operation_id,
+                result_summary=results_dict  # Store full results for API access
+            )
 
         except Exception as e:
-            logger.error(f"Backtest {backtest_id} failed: {str(e)}", exc_info=True)
-            self._active_backtests[backtest_id]["status"] = "failed"
-            self._active_backtests[backtest_id]["error"] = str(e)
+            logger.error(f"Backtest {operation_id} failed: {str(e)}", exc_info=True)
+            await self.operations_service.fail_operation(operation_id, str(e))
+
+    async def _estimate_total_bars(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> int:
+        """
+        Estimate total bars for progress tracking.
+        
+        This is a rough estimate based on timeframe and date range.
+        The actual data loading will provide the real count.
+        """
+        try:
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            total_days = (end - start).days
+            
+            # Rough estimates based on timeframe (assumes market hours)
+            if timeframe == "1m":
+                return total_days * 390  # ~6.5 market hours * 60 minutes
+            elif timeframe == "5m":
+                return total_days * 78   # 390 / 5
+            elif timeframe == "15m":
+                return total_days * 26   # 390 / 15  
+            elif timeframe == "1h":
+                return total_days * 7    # ~6.5 market hours
+            elif timeframe == "4h":
+                return total_days * 2    # 2 bars per day
+            elif timeframe == "1d":
+                return total_days        # 1 bar per day
+            else:
+                # Default fallback
+                return max(100, total_days * 10)
+        except Exception:
+            # Fallback estimate
+            return 1000
+
+    async def _run_backtest_with_progress(self, engine, operation_id: str, estimated_bars: int):
+        """
+        Run backtest with progress tracking based on data processing.
+        
+        This method modifies the backtesting engine to report progress
+        based on bars processed during the main simulation loop.
+        """
+        # Load data first to get actual bar count
+        data = engine._load_historical_data()
+        actual_bars = len(data)
+        
+        # Update progress with actual bar count  
+        await self.operations_service.update_progress(
+            operation_id,
+            progress=20.0,
+            current_step=f"Starting backtest simulation on {actual_bars:,} bars",
+            items_total=actual_bars
+        )
+        
+        # Run backtest with custom progress callback
+        # We'll run it in a thread and periodically check a progress file
+        import asyncio
+        import time
+        
+        # Store progress tracking state
+        progress_state = {"bars_processed": 0, "trades_executed": 0}
+        
+        # Monkey patch the engine to track progress
+        original_run = engine.run
+        
+        def progress_aware_run():
+            # Get the original run method's data loading and setup
+            start_time = pd.Timestamp.now()
+            execution_start = time.time()
+            
+            data = engine._load_historical_data()
+            if data.empty:
+                raise ValueError(f"No data loaded for {engine.config.symbol} {engine.config.timeframe}")
+            
+            # Initialize tracking (same as original engine)
+            trades_executed = 0
+            
+            # Main simulation loop with progress tracking
+            for idx in range(len(data)):
+                current_bar = data.iloc[idx]
+                current_timestamp = current_bar.name
+                current_price = current_bar["close"]
+                
+                # Update progress state
+                progress_state["bars_processed"] = idx + 1
+                
+                # Prepare historical data up to current point
+                historical_data = data.iloc[:idx + 1]
+                
+                # Portfolio state for decision making
+                portfolio_state = {
+                    "total_value": engine.position_manager.get_portfolio_value(current_price),
+                    "available_capital": engine.position_manager.available_capital,
+                }
+                
+                # Get trading signal from decision orchestrator
+                signal = engine.orchestrator.decide(
+                    symbol=engine.config.symbol,
+                    current_price=current_price,
+                    historical_data=historical_data,
+                    portfolio_state=portfolio_state,
+                )
+                
+                # Execute trade if signal is actionable
+                if signal.action in ["BUY", "SELL"]:
+                    trade = engine.position_manager.execute_trade(
+                        signal=signal,
+                        current_price=current_price,
+                        timestamp=current_timestamp,
+                    )
+                    
+                    if trade:
+                        trades_executed += 1
+                        progress_state["trades_executed"] = trades_executed
+                        engine.performance_tracker.add_trade(trade)
+                
+                # Update portfolio value tracking
+                engine.performance_tracker.update_portfolio_value(
+                    timestamp=current_timestamp,
+                    value=engine.position_manager.get_portfolio_value(current_price),
+                )
+            
+            # Build final results (same as original)
+            end_time = pd.Timestamp.now()
+            execution_time = time.time() - execution_start
+            
+            trades = engine.performance_tracker.get_trades()
+            metrics = engine.performance_tracker.calculate_metrics()
+            equity_curve = engine.performance_tracker.get_equity_curve()
+            
+            from ktrdr.backtesting.engine import BacktestResults
+            return BacktestResults(
+                strategy_name=engine.strategy_name,
+                symbol=engine.config.symbol,
+                timeframe=engine.config.timeframe,
+                config=engine.config,
+                trades=trades,
+                metrics=metrics,
+                equity_curve=equity_curve,
+                start_time=start_time,
+                end_time=end_time,
+                execution_time_seconds=execution_time,
+            )
+        
+        # Replace the run method
+        engine.run = progress_aware_run
+        
+        # Run with progress monitoring
+        task = asyncio.create_task(asyncio.to_thread(engine.run))
+        
+        # Monitor progress while running
+        last_progress = 20.0
+        while not task.done():
+            await asyncio.sleep(1.0)  # Check every second
+            
+            bars_processed = progress_state["bars_processed"]
+            trades_executed = progress_state["trades_executed"]
+            
+            if bars_processed > 0:
+                # Progress from 20% to 90% based on bars processed
+                data_progress = (bars_processed / actual_bars) * 70  # 70% range for data processing
+                current_progress = 20.0 + data_progress
+                
+                if current_progress > last_progress + 1:  # Only update if significant change
+                    await self.operations_service.update_progress(
+                        operation_id,
+                        progress=min(current_progress, 90.0),
+                        current_step=f"Processing bar {bars_processed:,}/{actual_bars:,} ({trades_executed} trades)",
+                        items_processed=bars_processed,
+                        items_total=actual_bars
+                    )
+                    last_progress = current_progress
+        
+        # Get the results
+        results = await task
+        return results
 
     async def get_backtest_status(self, backtest_id: str) -> Dict[str, Any]:
         """
         Get the current status of a backtest.
 
         Args:
-            backtest_id: The backtest identifier
+            backtest_id: The backtest identifier (operation ID)
 
         Returns:
             Dict containing current backtest status
         """
-        if backtest_id not in self._active_backtests:
+        # Get operation info from operations service
+        operation = await self.operations_service.get_operation(backtest_id)
+        if not operation:
             raise ValidationError(f"Backtest {backtest_id} not found")
 
-        backtest = self._active_backtests[backtest_id]
-
-        # Return status without full results (those are fetched separately)
+        # Extract strategy info from metadata
+        strategy_name = operation.metadata.parameters.get("strategy_name", "unknown")
+        
+        # Return status compatible with existing API
         return {
-            "backtest_id": backtest["id"],
-            "strategy_name": backtest["strategy_name"],
-            "symbol": backtest["symbol"],
-            "timeframe": backtest["timeframe"],
-            "status": backtest["status"],
-            "progress": backtest["progress"],
-            "started_at": backtest["started_at"],
-            "completed_at": backtest["completed_at"],
-            "error": backtest["error"],
+            "backtest_id": operation.operation_id,
+            "strategy_name": strategy_name,
+            "symbol": operation.metadata.symbol,
+            "timeframe": operation.metadata.timeframe,
+            "status": operation.status.value,
+            "progress": int(operation.progress.percentage),
+            "started_at": operation.started_at.isoformat() if operation.started_at else None,
+            "completed_at": operation.completed_at.isoformat() if operation.completed_at else None,
+            "error": operation.error_message,
         }
 
     async def get_backtest_results(self, backtest_id: str) -> Dict[str, Any]:
@@ -329,23 +528,26 @@ class BacktestingService(BaseService):
         Get the full results of a completed backtest.
 
         Args:
-            backtest_id: The backtest identifier
+            backtest_id: The backtest identifier (operation ID)
 
         Returns:
             Dict containing backtest results
         """
-        if backtest_id not in self._active_backtests:
+        # Get operation info from operations service
+        operation = await self.operations_service.get_operation(backtest_id)
+        if not operation:
             raise ValidationError(f"Backtest {backtest_id} not found")
 
-        backtest = self._active_backtests[backtest_id]
-
-        if backtest["status"] != "completed":
+        if operation.status.value != "completed":
             raise ValidationError(f"Backtest {backtest_id} is not completed yet")
 
-        if backtest["results"] is None:
+        # For now, we'll use a simple approach where detailed results are stored
+        # in the operation's result_summary. For very large results, we might
+        # need a separate storage mechanism in the future.
+        if not operation.result_summary:
             raise DataError(f"No results available for backtest {backtest_id}")
 
-        results = backtest["results"]
+        results = operation.result_summary
 
         # Format results for API response
         # The results structure has nested metrics and trade_count at top level
@@ -357,13 +559,17 @@ class BacktestingService(BaseService):
         total_return = metrics_data.get("total_return", 0)
         final_value = initial_capital + total_return
 
+        # Extract metadata
+        strategy_name = operation.metadata.parameters.get("strategy_name", "unknown")
+        initial_capital = operation.metadata.parameters.get("initial_capital", 100000)
+        
         return {
             "backtest_id": backtest_id,
-            "strategy_name": backtest["strategy_name"],
-            "symbol": backtest["symbol"],
-            "timeframe": backtest["timeframe"],
-            "start_date": backtest["start_date"],
-            "end_date": backtest["end_date"],
+            "strategy_name": strategy_name,
+            "symbol": operation.metadata.symbol,
+            "timeframe": operation.metadata.timeframe,
+            "start_date": operation.metadata.start_date.strftime("%Y-%m-%d") if operation.metadata.start_date else None,
+            "end_date": operation.metadata.end_date.strftime("%Y-%m-%d") if operation.metadata.end_date else None,
             "metrics": {
                 "total_return": metrics_data.get("total_return", 0),
                 "annualized_return": metrics_data.get("annualized_return", 0),
@@ -371,14 +577,12 @@ class BacktestingService(BaseService):
                 "max_drawdown": metrics_data.get("max_drawdown", 0),
                 "win_rate": metrics_data.get("win_rate", 0),
                 "profit_factor": metrics_data.get("profit_factor", 0),
-                "total_trades": metrics_data.get(
-                    "total_trades", results.get("trade_count", 0)
-                ),  # Use metrics.total_trades first, fallback to top-level trade_count
+                "total_trades": metrics_data.get("total_trades", results.get("trade_count", 0)),
             },
             "summary": {
                 "initial_capital": initial_capital,
-                "final_value": final_value,  # Calculate correctly: initial + total_return
-                "total_pnl": total_return,  # total_pnl should be same as total_return
+                "final_value": initial_capital + total_return,
+                "total_pnl": total_return,
                 "winning_trades": metrics_data.get("winning_trades", 0),
                 "losing_trades": metrics_data.get("losing_trades", 0),
             },
@@ -389,31 +593,29 @@ class BacktestingService(BaseService):
         Get the list of trades from a backtest.
 
         Args:
-            backtest_id: The backtest identifier
+            backtest_id: The backtest identifier (operation ID)
 
         Returns:
             List of trade records
         """
-        if backtest_id not in self._active_backtests:
+        # Get operation info from operations service
+        operation = await self.operations_service.get_operation(backtest_id)
+        if not operation:
             raise ValidationError(f"Backtest {backtest_id} not found")
 
-        backtest = self._active_backtests[backtest_id]
-
-        if backtest["status"] != "completed":
+        if operation.status.value != "completed":
             raise ValidationError(f"Backtest {backtest_id} is not completed yet")
 
-        if backtest["results"] is None or "trades" not in backtest["results"]:
+        # Get results from operation
+        if not operation.result_summary or "trades" not in operation.result_summary:
             return []
 
         # Format trades for API response
         trades = []
-        raw_trades = backtest["results"]["trades"]
+        raw_trades = operation.result_summary["trades"]
         logger.info(f"Raw trades data: {len(raw_trades)} trades found")
-        logger.info(
-            f"First trade sample: {raw_trades[0] if raw_trades else 'No trades'}"
-        )
 
-        for i, trade in enumerate(raw_trades):
+        for trade in raw_trades:
             formatted_trade = {
                 "trade_id": trade.get("trade_id"),
                 "entry_time": trade.get("entry_time"),
@@ -427,8 +629,6 @@ class BacktestingService(BaseService):
                 "entry_reason": trade.get("entry_reason"),
                 "exit_reason": trade.get("exit_reason"),
             }
-            if i == 0:  # Log first trade for debugging
-                logger.info(f"Formatted first trade: {formatted_trade}")
             trades.append(formatted_trade)
 
         logger.info(f"Returning {len(trades)} formatted trades")
@@ -439,25 +639,26 @@ class BacktestingService(BaseService):
         Get the equity curve data from a backtest.
 
         Args:
-            backtest_id: The backtest identifier
+            backtest_id: The backtest identifier (operation ID)
 
         Returns:
             Dict containing equity curve data
         """
-        if backtest_id not in self._active_backtests:
+        # Get operation info from operations service
+        operation = await self.operations_service.get_operation(backtest_id)
+        if not operation:
             raise ValidationError(f"Backtest {backtest_id} not found")
 
-        backtest = self._active_backtests[backtest_id]
-
-        if backtest["status"] != "completed":
+        if operation.status.value != "completed":
             raise ValidationError(f"Backtest {backtest_id} is not completed yet")
 
-        if backtest["results"] is None or "equity_curve" not in backtest["results"]:
+        # Get results from operation
+        if not operation.result_summary or "equity_curve" not in operation.result_summary:
             raise DataError(
                 f"No equity curve data available for backtest {backtest_id}"
             )
 
-        equity_curve = backtest["results"]["equity_curve"]
+        equity_curve = operation.result_summary["equity_curve"]
 
         # Convert to API format
         return {
