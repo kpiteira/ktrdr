@@ -147,6 +147,35 @@ class IbConnectionPool:
 
         self.connections = healthy_connections
 
+    async def _handle_sleep_recovery(self):
+        """
+        Handle recovery after system sleep/wake by clearing all connections.
+
+        After system sleep, connections may appear healthy but be corrupted.
+        This method proactively clears all connections to force fresh ones.
+        """
+        if not self.connections:
+            return
+
+        logger.info(
+            "Sleep/wake recovery: Clearing all connections to prevent accumulation"
+        )
+
+        # Stop all existing connections
+        for conn in self.connections:
+            try:
+                conn.stop(timeout=1.0)  # Quick stop
+            except Exception as e:
+                logger.debug(
+                    f"Error stopping connection {conn.client_id} during sleep recovery: {e}"
+                )
+
+        # Clear the pool
+        self.connections.clear()
+        self.cleanup_count += len(self.connections)
+
+        logger.info("Sleep/wake recovery complete: All connections cleared")
+
     async def _create_new_connection(self, timeout: float) -> IbConnection:
         """
         Create a new IB connection with automatic client ID handling.

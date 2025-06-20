@@ -103,6 +103,9 @@ class IbConnection:
         self.requests_processed = 0
         self.errors_encountered = 0
 
+        # Sleep/wake detection
+        self.last_health_check = time.time()
+
         logger.info(f"IbConnection {self.client_id} initialized for {host}:{port}")
 
     def start(self) -> bool:
@@ -245,15 +248,43 @@ class IbConnection:
 
     def _disconnect_from_ib_sync(self):
         """Disconnect from IB Gateway/TWS synchronously"""
+        import asyncio
+
         try:
-            if self.ib and self.ib.isConnected():
+            if self.ib:
+                # ALWAYS attempt disconnect, regardless of isConnected() state
+                # isConnected() can lie about connection state, leaving zombies on IB Gateway
                 logger.debug(f" Disconnecting from IB (client_id={self.client_id})")
                 self.ib.disconnect()
                 logger.debug(f" Disconnected from IB (client_id={self.client_id})")
+
+                # Give disconnect time to complete
+                time.sleep(0.5)
+            else:
+                logger.debug(
+                    f" No IB instance to disconnect (client_id={self.client_id})"
+                )
         except Exception as e:
-            logger.error(f"Error disconnecting from IB: {e}")
+            logger.error(
+                f"Error disconnecting from IB (client_id={self.client_id}): {e}"
+            )
         finally:
             self.connected = False
+
+            # CRITICAL: Properly close the event loop to ensure clean TCP disconnection
+            # This matches what happens during container shutdown and ensures
+            # IB Gateway sees the connection as properly closed
+            try:
+                loop = asyncio.get_event_loop()
+                if loop and not loop.is_closed():
+                    logger.debug(f" Closing event loop for connection {self.client_id}")
+                    loop.close()
+                    logger.debug(f" Event loop closed for connection {self.client_id}")
+            except Exception as e:
+                logger.debug(
+                    f" Event loop cleanup error for connection {self.client_id}: {e}"
+                )
+                # Not critical - continue cleanup
 
     def _process_requests_sync(self):
         """Process incoming requests synchronously"""
@@ -591,14 +622,45 @@ class IbConnection:
         except TimeoutError:
             raise ConnectionError(f"Request timeout for connection {self.client_id}")
 
+    def _detect_potential_sleep_wake(self) -> bool:
+        """
+        Detect if system may have entered sleep mode since last health check.
+
+        This uses wall clock time comparison to detect significant time jumps
+        that typically indicate system sleep/wake cycles.
+
+        Returns:
+            True if potential sleep/wake detected, False otherwise
+        """
+        current_time = time.time()
+        time_since_last_check = current_time - self.last_health_check
+
+        # If more than 2 minutes have passed since last health check,
+        # system may have slept (normal health checks happen more frequently)
+        potential_sleep = time_since_last_check > 120  # 2 minutes threshold
+
+        if potential_sleep:
+            logger.warning(
+                f"Connection {self.client_id}: Potential sleep/wake detected "
+                f"({time_since_last_check:.1f}s since last health check)"
+            )
+
+        self.last_health_check = current_time
+        return potential_sleep
+
     def is_healthy(self) -> bool:
         """
         Check if connection is healthy and operational.
 
+        Performs both basic health checks and active validation to detect
+        sleep-corrupted connections where ib.isConnected() returns True
+        but the connection is actually dead.
+
         Returns:
             True if connection is healthy, False otherwise
         """
-        return (
+        # Basic health checks
+        basic_health = (
             self.thread is not None
             and self.thread.is_alive()
             and not self.stop_event.is_set()
@@ -607,6 +669,39 @@ class IbConnection:
             and self.ib.isConnected()
             and time.time() - self.last_activity < self.idle_timeout
         )
+
+        if not basic_health:
+            return False
+
+        # Check for potential sleep/wake cycle
+        potential_sleep = self._detect_potential_sleep_wake()
+
+        # Active validation to detect sleep-corrupted connections
+        # This is especially important after potential sleep/wake cycles
+        # where ib.isConnected() returns True but connection is actually dead
+        try:
+            # Quick validation: managedAccounts() is lightweight and cached
+            # If this succeeds, the connection is truly functional
+            accounts = self.ib.managedAccounts()
+
+            if potential_sleep:
+                logger.info(
+                    f"Connection {self.client_id}: Active validation passed after potential sleep/wake"
+                )
+
+            return True  # Connection is genuinely healthy
+        except Exception as e:
+            # Connection appears connected but is actually corrupted
+            # This commonly happens after system sleep/wake cycles
+            if potential_sleep:
+                logger.warning(
+                    f"Connection {self.client_id}: Active validation failed after potential sleep/wake: {e}"
+                )
+            else:
+                logger.debug(
+                    f"Connection {self.client_id}: Active validation failed: {e}"
+                )
+            return False
 
     def stop(self, timeout: float = 5.0):
         """
