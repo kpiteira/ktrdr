@@ -215,9 +215,9 @@ class ContainerE2ETestRunner:
         # Test API response times
         api_endpoints = [
             "/health",
-            "/api/v1/system/status", 
-            "/api/v1/ib/status",
-            "/api/v1/ib/config"
+            "/system/status", 
+            "/ib/status",
+            "/ib/config"
         ]
         
         performance_results = {}
@@ -267,7 +267,7 @@ class ContainerE2ETestRunner:
         
         # Test 1: IB status endpoint
         try:
-            response = requests.get(f"{self.api_base_url}/api/v1/ib/status", timeout=10.0)
+            response = requests.get(f"{self.api_base_url}/ib/status", timeout=10.0)
             smoke_tests.append({
                 "name": "IB Status Endpoint",
                 "passed": response.status_code == 200,
@@ -282,7 +282,7 @@ class ContainerE2ETestRunner:
         
         # Test 2: System status endpoint
         try:
-            response = requests.get(f"{self.api_base_url}/api/v1/system/status", timeout=10.0)
+            response = requests.get(f"{self.api_base_url}/system/status", timeout=10.0)
             smoke_tests.append({
                 "name": "System Status Endpoint",
                 "passed": response.status_code == 200,
@@ -436,7 +436,7 @@ def main():
     )
     parser.add_argument(
         "--api-base-url",
-        default="http://localhost:8000",
+        default="http://localhost:8000/api/v1",
         help="Base URL for API testing"
     )
     parser.add_argument(

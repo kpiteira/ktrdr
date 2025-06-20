@@ -100,3 +100,4 @@ auth_tokens.json
 config/*_secure.yaml
 
 **/.claude/settings.local.json
+data/symbol_discovery_cache.json

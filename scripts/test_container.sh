@@ -10,7 +10,7 @@ set -e
 
 # Configuration
 CONTAINER_NAME="${CONTAINER_NAME:-ktrdr-backend}"
-API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
+API_BASE_URL="${API_BASE_URL:-http://localhost:8000/api/v1}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
