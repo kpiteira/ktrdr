@@ -49,7 +49,7 @@ class TestConnectionResilienceE2E:
 
     def test_resilience_endpoint_available(self, api_client):
         """Test that the new resilience endpoint is available."""
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         # Should succeed regardless of IB availability
         assert response.status_code in [
@@ -79,7 +79,7 @@ class TestConnectionResilienceE2E:
 
     def test_systematic_validation_status(self, api_client):
         """Test Phase 1: Systematic connection validation status."""
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         if response.status_code == 200:
             data = response.json()
@@ -95,7 +95,7 @@ class TestConnectionResilienceE2E:
 
     def test_garbage_collection_configuration(self, api_client):
         """Test Phase 2: Garbage collection configuration."""
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         if response.status_code == 200:
             data = response.json()
@@ -115,7 +115,7 @@ class TestConnectionResilienceE2E:
 
     def test_client_id_preference_logic(self, api_client):
         """Test Phase 3: Client ID 1 preference logic."""
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         if response.status_code == 200:
             data = response.json()
@@ -138,7 +138,7 @@ class TestConnectionResilienceE2E:
     def test_enhanced_ib_status_integration(self, api_client):
         """Test Phase 4: Enhanced IB status endpoint integration."""
         # Test the regular IB status endpoint
-        response = api_client.get("/api/v1/ib/status")
+        response = api_client.get("/ib/status")
         assert response.status_code in [200, 503]
 
         data = response.json()
@@ -154,7 +154,7 @@ class TestConnectionResilienceE2E:
 
     def test_health_check_with_resilience(self, api_client):
         """Test IB health check includes resilience validation."""
-        response = api_client.get("/api/v1/ib/health")
+        response = api_client.get("/ib/health")
         assert response.status_code in [200, 503]
 
         data = response.json()
@@ -175,7 +175,7 @@ class TestConnectionResilienceE2E:
 
     def test_connection_pool_metrics(self, api_client):
         """Test connection pool health metrics from resilience endpoint."""
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         if response.status_code == 200:
             data = response.json()
@@ -201,7 +201,7 @@ class TestConnectionResilienceE2E:
 
     def test_resilience_score_calculation(self, api_client):
         """Test overall resilience score calculation."""
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         if response.status_code == 200:
             data = response.json()
@@ -230,7 +230,7 @@ class TestConnectionResilienceE2E:
 
     def test_timestamp_consistency(self, api_client):
         """Test that resilience status includes consistent timestamps."""
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         if response.status_code == 200:
             data = response.json()
@@ -254,7 +254,7 @@ class TestConnectionResilienceE2E:
     def test_error_handling_resilience(self, api_client):
         """Test error handling in resilience endpoint."""
         # Test with various invalid scenarios to ensure graceful handling
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         # Should never return 500 error - always graceful handling
         assert response.status_code in [200, 503], "Should handle errors gracefully"
@@ -271,7 +271,7 @@ class TestConnectionResilienceE2E:
         """Test that resilience endpoint performs within acceptable time."""
         start_time = time.time()
 
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
 
         end_time = time.time()
         response_time = end_time - start_time
@@ -294,15 +294,15 @@ class TestConnectionResilienceIntegration:
     def test_full_resilience_workflow(self, api_client):
         """Test complete resilience workflow from status to health to resilience."""
         # Step 1: Check basic IB status
-        status_response = api_client.get("/api/v1/ib/status")
+        status_response = api_client.get("/ib/status")
         assert status_response.status_code in [200, 503]
 
         # Step 2: Check health
-        health_response = api_client.get("/api/v1/ib/health")
+        health_response = api_client.get("/ib/health")
         assert health_response.status_code in [200, 503]
 
         # Step 3: Check detailed resilience
-        resilience_response = api_client.get("/api/v1/ib/resilience")
+        resilience_response = api_client.get("/ib/resilience")
         assert resilience_response.status_code in [200, 503]
 
         # All should be consistent in their availability reporting
@@ -317,7 +317,7 @@ class TestConnectionResilienceIntegration:
     def test_circuit_breaker_endpoint_integration(self, api_client):
         """Test integration with circuit breaker endpoints."""
         # Check if circuit breaker endpoint exists
-        response = api_client.get("/api/v1/ib/circuit-breakers")
+        response = api_client.get("/ib/circuit-breakers")
 
         # Should either work or gracefully fail
         assert response.status_code in [200, 404, 503]

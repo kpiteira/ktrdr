@@ -79,6 +79,7 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if (
                 "container_api" in item.keywords
+                or "container_e2e" in item.keywords
                 or ("test_container" in item.name and "api" in item.name)
                 or "test_container_api" in item.name
             ):

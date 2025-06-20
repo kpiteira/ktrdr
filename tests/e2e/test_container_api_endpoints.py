@@ -42,7 +42,7 @@ class TestContainerAPIHealth:
 
     def test_api_health_endpoint(self, api_client):
         """Test that the API health endpoint responds correctly."""
-        response = api_client.get("/api/v1/health")
+        response = api_client.get("/health")
         assert response.status_code == 200
 
         data = response.json()
@@ -51,13 +51,13 @@ class TestContainerAPIHealth:
 
     def test_api_docs_available(self, api_client):
         """Test that API documentation is available."""
-        response = api_client.get("/api/v1/docs")
+        response = api_client.get("/docs")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
     def test_api_openapi_spec(self, api_client):
         """Test that OpenAPI spec is available."""
-        response = api_client.get("/api/v1/openapi.json")
+        response = api_client.get("/openapi.json")
         assert response.status_code == 200
 
         spec = response.json()
@@ -72,7 +72,7 @@ class TestContainerIBEndpoints:
 
     def test_ib_status_endpoint(self, api_client):
         """Test IB status endpoint returns proper structure."""
-        response = api_client.get("/api/v1/ib/status")
+        response = api_client.get("/ib/status")
         assert response.status_code == 200
 
         data = response.json()
@@ -108,7 +108,7 @@ class TestContainerIBEndpoints:
 
     def test_ib_health_endpoint(self, api_client):
         """Test IB health endpoint responds appropriately."""
-        response = api_client.get("/api/v1/ib/health")
+        response = api_client.get("/ib/health")
 
         # Should return either 200 (healthy) or 503 (unhealthy)
         assert response.status_code in [200, 503]
@@ -125,7 +125,7 @@ class TestContainerIBEndpoints:
 
     def test_ib_config_endpoint(self, api_client):
         """Test IB configuration endpoint."""
-        response = api_client.get("/api/v1/ib/config")
+        response = api_client.get("/ib/config")
         assert response.status_code == 200
 
         data = response.json()
@@ -138,7 +138,7 @@ class TestContainerIBEndpoints:
 
     def test_ib_cleanup_endpoint(self, api_client):
         """Test IB cleanup endpoint (should be safe to call)."""
-        response = api_client.post("/api/v1/ib/cleanup")
+        response = api_client.post("/ib/cleanup")
         assert response.status_code == 200
 
         data = response.json()
@@ -153,7 +153,7 @@ class TestContainerIBEndpoints:
         """Test symbol discovery endpoint with a known symbol."""
         symbol_request = {"symbol": "AAPL", "force_refresh": False}
 
-        response = api_client.post("/api/v1/ib/symbols/discover", json=symbol_request)
+        response = api_client.post("/ib/symbols/discover", json=symbol_request)
         assert response.status_code == 200
 
         data = response.json()
@@ -173,7 +173,7 @@ class TestContainerIBEndpoints:
 
     def test_ib_discovered_symbols_list(self, api_client):
         """Test getting list of discovered symbols."""
-        response = api_client.get("/api/v1/ib/symbols/discovered")
+        response = api_client.get("/ib/symbols/discovered")
         assert response.status_code == 200
 
         data = response.json()
@@ -195,7 +195,7 @@ class TestContainerDataEndpoints:
 
     def test_data_info_endpoint(self, api_client):
         """Test data info endpoint."""
-        response = api_client.get("/api/v1/data/info")
+        response = api_client.get("/data/info")
         assert response.status_code == 200
 
         data = response.json()
@@ -209,7 +209,7 @@ class TestContainerDataEndpoints:
     def test_data_load_endpoint_validation(self, api_client):
         """Test data load endpoint with invalid parameters."""
         # Test missing required parameters
-        response = api_client.post("/api/v1/data/load", json={})
+        response = api_client.post("/data/load", json={})
         assert response.status_code == 422  # Validation error
 
         # Test invalid timeframe
@@ -220,13 +220,13 @@ class TestContainerDataEndpoints:
             "end_date": "2024-01-02",
         }
 
-        response = api_client.post("/api/v1/data/load", json=invalid_request)
+        response = api_client.post("/data/load", json=invalid_request)
         assert response.status_code in [400, 422]  # Client error
 
     def test_data_cached_endpoint_local_mode(self, api_client):
         """Test cached data endpoint (should work without IB)."""
         # Use GET endpoint for cached/local data
-        response = api_client.get("/api/v1/data/AAPL/1d")
+        response = api_client.get("/data/AAPL/1d")
 
         # Should return 200 even if no local data (graceful handling)
         assert response.status_code == 200
@@ -252,7 +252,7 @@ class TestContainerSystemEndpoints:
 
     def test_system_status_endpoint(self, api_client):
         """Test system status endpoint."""
-        response = api_client.get("/api/v1/system/status")
+        response = api_client.get("/system/status")
         assert response.status_code == 200
 
         data = response.json()
@@ -265,7 +265,7 @@ class TestContainerSystemEndpoints:
 
     def test_system_config_endpoint(self, api_client):
         """Test system configuration endpoint."""
-        response = api_client.get("/api/v1/system/config")
+        response = api_client.get("/system/config")
         assert response.status_code == 200
 
         data = response.json()
@@ -290,7 +290,7 @@ class TestContainerAsyncEndpoints:
 
             # Create 5 concurrent requests
             for i in range(5):
-                task = client.get("/api/v1/ib/status")
+                task = client.get("/ib/status")
                 tasks.append(task)
 
             # Execute all requests concurrently
@@ -312,7 +312,7 @@ class TestContainerAsyncEndpoints:
 
             for symbol in symbols:
                 request_data = {"symbol": symbol, "force_refresh": False}
-                task = client.post("/api/v1/ib/symbols/discover", json=request_data)
+                task = client.post("/ib/symbols/discover", json=request_data)
                 tasks.append(task)
 
             responses = await asyncio.gather(*tasks)
@@ -331,11 +331,11 @@ class TestContainerAPIPerformance:
     def test_api_response_times(self, api_client):
         """Test that API endpoints respond within reasonable time."""
         endpoints = [
-            "/api/v1/health",
-            "/api/v1/system/status",
-            "/api/v1/ib/status",
-            "/api/v1/ib/config",
-            "/api/v1/data/info",
+            "/health",
+            "/system/status",
+            "/ib/status",
+            "/ib/config",
+            "/data/info",
         ]
 
         for endpoint in endpoints:
@@ -349,12 +349,12 @@ class TestContainerAPIPerformance:
     def test_api_error_handling(self, api_client):
         """Test API error handling for invalid requests."""
         # Test non-existent endpoint
-        response = api_client.get("/api/v1/nonexistent/endpoint")
+        response = api_client.get("/nonexistent/endpoint")
         assert response.status_code == 404
 
         # Test invalid JSON
         response = api_client.post(
-            "/api/v1/ib/symbols/discover",
+            "/ib/symbols/discover",
             content="invalid json",
             headers={"Content-Type": "application/json"},
         )

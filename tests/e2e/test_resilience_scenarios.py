@@ -33,7 +33,7 @@ class TestResilienceScenarios:
         Expected: System should gracefully handle and report unavailability.
         """
         # Test health endpoint
-        response = api_client.get("/api/v1/ib/health")
+        response = api_client.get("/ib/health")
 
         # Should either return 503 or 200 with healthy=false
         assert response.status_code in [200, 503]
@@ -45,7 +45,7 @@ class TestResilienceScenarios:
             assert "error_message" in health_data
 
         # Test resilience endpoint - should still work
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -61,7 +61,7 @@ class TestResilienceScenarios:
         # Multiple rapid requests to stress test connection handling
         results = []
         for i in range(5):
-            response = api_client.get("/api/v1/ib/status")
+            response = api_client.get("/ib/status")
             results.append(response.status_code)
             time.sleep(0.2)
 
@@ -69,7 +69,7 @@ class TestResilienceScenarios:
         assert len(set(results)) <= 2, "Should have consistent behavior"
 
         # Check that resilience features are still working
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -88,7 +88,7 @@ class TestResilienceScenarios:
         import concurrent.futures
 
         def make_request():
-            response = api_client.get("/api/v1/ib/status")
+            response = api_client.get("/ib/status")
             return response.status_code
 
         # Run 10 concurrent requests
@@ -100,7 +100,7 @@ class TestResilienceScenarios:
         assert len(results) == 10
 
         # Check pool health after stress
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -126,7 +126,7 @@ class TestResilienceScenarios:
 
         try:
             # This may timeout, which is expected
-            response = quick_client.get("/api/v1/ib/health")
+            response = quick_client.get("/ib/health")
         except httpx.TimeoutException:
             # Timeout is acceptable - system should handle gracefully
             pass
@@ -134,7 +134,7 @@ class TestResilienceScenarios:
             quick_client.close()
 
         # Normal client should still work
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         # System should maintain resilience despite timeout issues
@@ -147,7 +147,7 @@ class TestResilienceScenarios:
 
         Expected: All resilience parameters should be correctly configured.
         """
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -180,19 +180,19 @@ class TestResilienceScenarios:
 
         # Make some requests that might fail
         try:
-            response = api_client.post("/api/v1/ib/nonexistent")
+            response = api_client.post("/ib/nonexistent")
             invalid_responses.append(response.status_code)
         except:
             pass
 
         try:
-            response = api_client.get("/api/v1/ib/status?invalid=param")
+            response = api_client.get("/ib/status?invalid=param")
             invalid_responses.append(response.status_code)
         except:
             pass
 
         # Check that resilience system is still functioning after errors
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         data = response.json()["data"]

@@ -39,7 +39,7 @@ class TestContainerIbRefactorValidation:
 
     def test_ib_system_status_comprehensive(self, api_client):
         """Test comprehensive IB system status reporting."""
-        response = api_client.get("/api/v1/ib/status")
+        response = api_client.get("/ib/status")
         assert response.status_code == 200
 
         data = response.json()
@@ -76,7 +76,7 @@ class TestContainerIbRefactorValidation:
 
     def test_ib_health_monitoring(self, api_client):
         """Test IB health monitoring system."""
-        response = api_client.get("/api/v1/ib/health")
+        response = api_client.get("/ib/health")
 
         # Should return either 200 (healthy) or 503 (unhealthy)
         assert response.status_code in [200, 503]
@@ -94,7 +94,7 @@ class TestContainerIbRefactorValidation:
 
     def test_ib_configuration_management(self, api_client):
         """Test IB configuration retrieval."""
-        response = api_client.get("/api/v1/ib/config")
+        response = api_client.get("/ib/config")
         assert response.status_code == 200
 
         data = response.json()
@@ -113,7 +113,7 @@ class TestContainerIbRefactorValidation:
 
     def test_ib_connection_cleanup(self, api_client):
         """Test IB connection cleanup endpoint."""
-        response = api_client.post("/api/v1/ib/cleanup")
+        response = api_client.post("/ib/cleanup")
         assert response.status_code == 200
 
         data = response.json()
@@ -128,7 +128,7 @@ class TestContainerIbRefactorValidation:
         # Test with a well-known symbol
         symbol_request = {"symbol": "AAPL", "force_refresh": False}
 
-        response = api_client.post("/api/v1/ib/symbols/discover", json=symbol_request)
+        response = api_client.post("/ib/symbols/discover", json=symbol_request)
         assert response.status_code == 200
 
         data = response.json()
@@ -145,7 +145,7 @@ class TestContainerIbRefactorValidation:
 
     def test_ib_discovered_symbols_list(self, api_client):
         """Test getting list of discovered symbols."""
-        response = api_client.get("/api/v1/ib/symbols/discovered")
+        response = api_client.get("/ib/symbols/discovered")
         assert response.status_code == 200
 
         data = response.json()
@@ -165,7 +165,7 @@ class TestContainerIbRefactorValidation:
     def test_data_manager_integration_via_api(self, api_client):
         """Test DataManager integration through data endpoints."""
         # Test local data loading (should work without IB)
-        response = api_client.get("/api/v1/data/AAPL/1h")
+        response = api_client.get("/data/AAPL/1h")
         assert response.status_code == 200
 
         data = response.json()
@@ -186,7 +186,7 @@ class TestContainerIbRefactorValidation:
     def test_system_integration_endpoints(self, api_client):
         """Test system-level integration endpoints."""
         # Test system status
-        response = api_client.get("/api/v1/system/status")
+        response = api_client.get("/system/status")
         assert response.status_code == 200
 
         data = response.json()
@@ -203,7 +203,7 @@ class TestContainerIbRefactorValidation:
 
     def test_data_info_integration(self, api_client):
         """Test data info endpoint integration."""
-        response = api_client.get("/api/v1/data/info")
+        response = api_client.get("/data/info")
         assert response.status_code == 200
 
         data = response.json()
@@ -223,7 +223,7 @@ class TestContainerIbRefactorValidation:
         # Test with invalid symbol discovery
         invalid_request = {"symbol": "INVALID_SYMBOL_12345", "force_refresh": True}
 
-        response = api_client.post("/api/v1/ib/symbols/discover", json=invalid_request)
+        response = api_client.post("/ib/symbols/discover", json=invalid_request)
 
         # Should not crash, should handle gracefully
         assert response.status_code == 200
@@ -235,10 +235,10 @@ class TestContainerIbRefactorValidation:
     def test_performance_monitoring(self, api_client):
         """Test performance characteristics of IB endpoints."""
         endpoints_to_test = [
-            "/api/v1/ib/status",
-            "/api/v1/ib/health",
-            "/api/v1/ib/config",
-            "/api/v1/system/status",
+            "/ib/status",
+            "/ib/health",
+            "/ib/config",
+            "/system/status",
         ]
 
         for endpoint in endpoints_to_test:
@@ -258,14 +258,14 @@ class TestContainerIbRefactorValidation:
 
         def test_ib_status():
             try:
-                response = api_client.get("/api/v1/ib/status")
+                response = api_client.get("/ib/status")
                 results.put(("status", response.status_code))
             except Exception as e:
                 results.put(("status", str(e)))
 
         def test_ib_config():
             try:
-                response = api_client.get("/api/v1/ib/config")
+                response = api_client.get("/ib/config")
                 results.put(("config", response.status_code))
             except Exception as e:
                 results.put(("config", str(e)))

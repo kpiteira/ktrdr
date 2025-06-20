@@ -149,7 +149,7 @@ class TestResilienceWithMockIB:
         # Wait for mock IB to be ready
         time.sleep(0.5)
 
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -164,7 +164,7 @@ class TestResilienceWithMockIB:
         time.sleep(0.5)
 
         # Health check should detect silent connections
-        response = api_client.get("/api/v1/ib/health")
+        response = api_client.get("/ib/health")
 
         # Should fail due to timeout on silent connection
         if response.status_code == 503:
@@ -182,7 +182,7 @@ class TestResilienceWithMockIB:
         """Test Client ID 1 preference when conflicts occur."""
         time.sleep(0.5)
 
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code in [200, 503]
 
         # Even with conflicts, the preference logic should be working
@@ -197,11 +197,11 @@ class TestResilienceWithMockIB:
 
         # Make multiple rapid requests to create connections
         for _ in range(3):
-            api_client.get("/api/v1/ib/status")
+            api_client.get("/ib/status")
             time.sleep(0.1)
 
         # Check resilience status
-        response = api_client.get("/api/v1/ib/resilience")
+        response = api_client.get("/ib/resilience")
         assert response.status_code == 200
 
         data = response.json()["data"]
