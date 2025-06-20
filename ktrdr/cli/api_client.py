@@ -461,7 +461,7 @@ class KtrdrApiClient:
 
         response = await self._make_request(
             "POST",
-            "/training/start",
+            "/trainings/start",
             json_data=payload,
             timeout=300.0,  # 5 minutes for training startup
         )
@@ -476,13 +476,13 @@ class KtrdrApiClient:
 
     async def get_training_status(self, task_id: str) -> Dict[str, Any]:
         """Get training task status."""
-        response = await self._make_request("GET", f"/training/{task_id}")
+        response = await self._make_request("GET", f"/trainings/{task_id}")
         # Don't raise error for 404 - task might not exist yet
         return response
 
     async def get_training_performance(self, task_id: str) -> Dict[str, Any]:
         """Get training performance metrics."""
-        response = await self._make_request("GET", f"/training/{task_id}/performance")
+        response = await self._make_request("GET", f"/trainings/{task_id}/performance")
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to get training performance for task {task_id}",
@@ -610,7 +610,7 @@ class KtrdrApiClient:
 
         response = await self._make_request(
             "POST",
-            "/backtesting/start",
+            "/backtests",
             json_data=payload,
             timeout=10.0,  # Quick timeout for starting async operation
         )
@@ -625,7 +625,7 @@ class KtrdrApiClient:
 
     async def get_backtest_results(self, backtest_id: str) -> Dict[str, Any]:
         """Get the full results of a completed backtest."""
-        response = await self._make_request("GET", f"/backtesting/{backtest_id}/results")
+        response = await self._make_request("GET", f"/backtests/{backtest_id}/results")
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to get backtest results for {backtest_id}",
@@ -636,7 +636,7 @@ class KtrdrApiClient:
 
     async def get_backtest_trades(self, backtest_id: str) -> Dict[str, Any]:
         """Get the list of trades from a backtest."""
-        response = await self._make_request("GET", f"/backtesting/{backtest_id}/trades")
+        response = await self._make_request("GET", f"/backtests/{backtest_id}/trades")
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to get backtest trades for {backtest_id}",
@@ -647,7 +647,9 @@ class KtrdrApiClient:
 
     async def get_equity_curve(self, backtest_id: str) -> Dict[str, Any]:
         """Get the equity curve data from a backtest."""
-        response = await self._make_request("GET", f"/backtesting/{backtest_id}/equity-curve")
+        response = await self._make_request(
+            "GET", f"/backtests/{backtest_id}/equity_curve"
+        )
         if not response.get("success"):
             raise DataError(
                 message=f"Failed to get equity curve for {backtest_id}",

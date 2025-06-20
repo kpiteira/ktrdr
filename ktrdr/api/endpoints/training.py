@@ -16,7 +16,7 @@ from ktrdr.errors import ValidationError, DataError
 logger = get_logger(__name__)
 
 # Create router for training endpoints
-router = APIRouter(prefix="/training")
+router = APIRouter(prefix="/trainings")
 
 
 # Request/Response models

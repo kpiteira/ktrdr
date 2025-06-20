@@ -15,7 +15,11 @@ import pandas as pd
 from ktrdr import get_logger
 from ktrdr.api.services.base import BaseService
 from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.models.operations import OperationType, OperationMetadata
+from ktrdr.api.models.operations import (
+    OperationType,
+    OperationMetadata,
+    OperationProgress,
+)
 from ktrdr.backtesting.engine import BacktestingEngine
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.backtesting.engine import BacktestConfig
@@ -42,9 +46,8 @@ class BacktestingService(BaseService):
         Returns:
             Dict[str, Any]: Health check information
         """
-        active_operations = await self.operations_service.list_operations(
-            operation_type=OperationType.BACKTESTING,
-            status_filter=["running", "pending"]
+        active_operations, _, _ = await self.operations_service.list_operations(
+            operation_type=OperationType.BACKTESTING, active_only=True
         )
         return {
             "service": "BacktestingService",
@@ -86,14 +89,14 @@ class BacktestingService(BaseService):
             parameters={
                 "strategy_name": strategy_name,
                 "initial_capital": initial_capital,
-            }
+            },
         )
 
         # Create operation using operations service
-        operation_id = await self.operations_service.create_operation(
-            operation_type=OperationType.BACKTESTING,
-            metadata=metadata
+        operation = await self.operations_service.create_operation(
+            operation_type=OperationType.BACKTESTING, metadata=metadata
         )
+        operation_id = operation.operation_id
 
         # Start backtest in background
         task = asyncio.create_task(
@@ -134,8 +137,9 @@ class BacktestingService(BaseService):
             # Phase 1: Validation (5%)
             await self.operations_service.update_progress(
                 operation_id,
-                progress=5.0,
-                current_step="Validating strategy configuration"
+                OperationProgress(
+                    percentage=5.0, current_step="Validating strategy configuration"
+                ),
             )
 
             # Build strategy config path
@@ -146,8 +150,9 @@ class BacktestingService(BaseService):
             # Phase 2: Data loading preparation (10%)
             await self.operations_service.update_progress(
                 operation_id,
-                progress=10.0,
-                current_step="Preparing data loading configuration"
+                OperationProgress(
+                    percentage=10.0, current_step="Preparing data loading configuration"
+                ),
             )
 
             # Create backtest configuration
@@ -166,26 +171,33 @@ class BacktestingService(BaseService):
             )
 
             # Estimate total bars for progress tracking
-            total_bars = await self._estimate_total_bars(symbol, timeframe, start_date, end_date)
-            
+            total_bars = await self._estimate_total_bars(
+                symbol, timeframe, start_date, end_date
+            )
+
             await self.operations_service.update_progress(
                 operation_id,
-                progress=15.0,
-                current_step=f"Loading {symbol} {timeframe} data",
-                items_total=total_bars
+                OperationProgress(
+                    percentage=15.0,
+                    current_step=f"Loading {symbol} {timeframe} data",
+                    items_total=total_bars,
+                ),
             )
 
             # Create modified engine with progress callback
             engine = BacktestingEngine(config)
-            
+
             # Run the backtest with progress tracking
-            results = await self._run_backtest_with_progress(engine, operation_id, total_bars)
+            results = await self._run_backtest_with_progress(
+                engine, operation_id, total_bars
+            )
 
             # Results processing and completion (5%)
             await self.operations_service.update_progress(
                 operation_id,
-                progress=95.0,
-                current_step="Processing backtest results"
+                OperationProgress(
+                    percentage=95.0, current_step="Processing backtest results"
+                ),
             )
 
             # Convert results to dictionary format
@@ -311,17 +323,19 @@ class BacktestingService(BaseService):
             # Complete the operation with full results
             await self.operations_service.complete_operation(
                 operation_id,
-                result_summary=results_dict  # Store full results for API access
+                result_summary=results_dict,  # Store full results for API access
             )
 
         except Exception as e:
             logger.error(f"Backtest {operation_id} failed: {str(e)}", exc_info=True)
             await self.operations_service.fail_operation(operation_id, str(e))
 
-    async def _estimate_total_bars(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> int:
+    async def _estimate_total_bars(
+        self, symbol: str, timeframe: str, start_date: str, end_date: str
+    ) -> int:
         """
         Estimate total bars for progress tracking.
-        
+
         This is a rough estimate based on timeframe and date range.
         The actual data loading will provide the real count.
         """
@@ -329,20 +343,20 @@ class BacktestingService(BaseService):
             start = pd.to_datetime(start_date)
             end = pd.to_datetime(end_date)
             total_days = (end - start).days
-            
+
             # Rough estimates based on timeframe (assumes market hours)
             if timeframe == "1m":
                 return total_days * 390  # ~6.5 market hours * 60 minutes
             elif timeframe == "5m":
-                return total_days * 78   # 390 / 5
+                return total_days * 78  # 390 / 5
             elif timeframe == "15m":
-                return total_days * 26   # 390 / 15  
+                return total_days * 26  # 390 / 15
             elif timeframe == "1h":
-                return total_days * 7    # ~6.5 market hours
+                return total_days * 7  # ~6.5 market hours
             elif timeframe == "4h":
-                return total_days * 2    # 2 bars per day
+                return total_days * 2  # 2 bars per day
             elif timeframe == "1d":
-                return total_days        # 1 bar per day
+                return total_days  # 1 bar per day
             else:
                 # Default fallback
                 return max(100, total_days * 10)
@@ -350,66 +364,74 @@ class BacktestingService(BaseService):
             # Fallback estimate
             return 1000
 
-    async def _run_backtest_with_progress(self, engine, operation_id: str, estimated_bars: int):
+    async def _run_backtest_with_progress(
+        self, engine, operation_id: str, estimated_bars: int
+    ):
         """
         Run backtest with progress tracking based on data processing.
-        
+
         This method modifies the backtesting engine to report progress
         based on bars processed during the main simulation loop.
         """
         # Load data first to get actual bar count
         data = engine._load_historical_data()
         actual_bars = len(data)
-        
-        # Update progress with actual bar count  
+
+        # Update progress with actual bar count
         await self.operations_service.update_progress(
             operation_id,
-            progress=20.0,
-            current_step=f"Starting backtest simulation on {actual_bars:,} bars",
-            items_total=actual_bars
+            OperationProgress(
+                percentage=20.0,
+                current_step=f"Starting backtest simulation on {actual_bars:,} bars",
+                items_total=actual_bars,
+            ),
         )
-        
+
         # Run backtest with custom progress callback
         # We'll run it in a thread and periodically check a progress file
         import asyncio
         import time
-        
+
         # Store progress tracking state
         progress_state = {"bars_processed": 0, "trades_executed": 0}
-        
+
         # Monkey patch the engine to track progress
         original_run = engine.run
-        
+
         def progress_aware_run():
             # Get the original run method's data loading and setup
             start_time = pd.Timestamp.now()
             execution_start = time.time()
-            
+
             data = engine._load_historical_data()
             if data.empty:
-                raise ValueError(f"No data loaded for {engine.config.symbol} {engine.config.timeframe}")
-            
+                raise ValueError(
+                    f"No data loaded for {engine.config.symbol} {engine.config.timeframe}"
+                )
+
             # Initialize tracking (same as original engine)
             trades_executed = 0
-            
+
             # Main simulation loop with progress tracking
             for idx in range(len(data)):
                 current_bar = data.iloc[idx]
                 current_timestamp = current_bar.name
                 current_price = current_bar["close"]
-                
+
                 # Update progress state
                 progress_state["bars_processed"] = idx + 1
-                
+
                 # Prepare historical data up to current point
-                historical_data = data.iloc[:idx + 1]
-                
+                historical_data = data.iloc[: idx + 1]
+
                 # Portfolio state for decision making
                 portfolio_state = {
-                    "total_value": engine.position_manager.get_portfolio_value(current_price),
+                    "total_value": engine.position_manager.get_portfolio_value(
+                        current_price
+                    ),
                     "available_capital": engine.position_manager.available_capital,
                 }
-                
+
                 # Get trading signal from decision orchestrator
                 signal = engine.orchestrator.decide(
                     symbol=engine.config.symbol,
@@ -417,7 +439,7 @@ class BacktestingService(BaseService):
                     historical_data=historical_data,
                     portfolio_state=portfolio_state,
                 )
-                
+
                 # Execute trade if signal is actionable
                 if signal.action in ["BUY", "SELL"]:
                     trade = engine.position_manager.execute_trade(
@@ -425,27 +447,28 @@ class BacktestingService(BaseService):
                         current_price=current_price,
                         timestamp=current_timestamp,
                     )
-                    
+
                     if trade:
                         trades_executed += 1
                         progress_state["trades_executed"] = trades_executed
                         engine.performance_tracker.add_trade(trade)
-                
+
                 # Update portfolio value tracking
                 engine.performance_tracker.update_portfolio_value(
                     timestamp=current_timestamp,
                     value=engine.position_manager.get_portfolio_value(current_price),
                 )
-            
+
             # Build final results (same as original)
             end_time = pd.Timestamp.now()
             execution_time = time.time() - execution_start
-            
+
             trades = engine.performance_tracker.get_trades()
             metrics = engine.performance_tracker.calculate_metrics()
             equity_curve = engine.performance_tracker.get_equity_curve()
-            
+
             from ktrdr.backtesting.engine import BacktestResults
+
             return BacktestResults(
                 strategy_name=engine.strategy_name,
                 symbol=engine.config.symbol,
@@ -458,36 +481,42 @@ class BacktestingService(BaseService):
                 end_time=end_time,
                 execution_time_seconds=execution_time,
             )
-        
+
         # Replace the run method
         engine.run = progress_aware_run
-        
+
         # Run with progress monitoring
         task = asyncio.create_task(asyncio.to_thread(engine.run))
-        
+
         # Monitor progress while running
         last_progress = 20.0
         while not task.done():
             await asyncio.sleep(1.0)  # Check every second
-            
+
             bars_processed = progress_state["bars_processed"]
             trades_executed = progress_state["trades_executed"]
-            
+
             if bars_processed > 0:
                 # Progress from 20% to 90% based on bars processed
-                data_progress = (bars_processed / actual_bars) * 70  # 70% range for data processing
+                data_progress = (
+                    bars_processed / actual_bars
+                ) * 70  # 70% range for data processing
                 current_progress = 20.0 + data_progress
-                
-                if current_progress > last_progress + 1:  # Only update if significant change
+
+                if (
+                    current_progress > last_progress + 1
+                ):  # Only update if significant change
                     await self.operations_service.update_progress(
                         operation_id,
-                        progress=min(current_progress, 90.0),
-                        current_step=f"Processing bar {bars_processed:,}/{actual_bars:,} ({trades_executed} trades)",
-                        items_processed=bars_processed,
-                        items_total=actual_bars
+                        OperationProgress(
+                            percentage=min(current_progress, 90.0),
+                            current_step=f"Processing bar {bars_processed:,}/{actual_bars:,} ({trades_executed} trades)",
+                            items_processed=bars_processed,
+                            items_total=actual_bars,
+                        ),
                     )
                     last_progress = current_progress
-        
+
         # Get the results
         results = await task
         return results
@@ -509,7 +538,7 @@ class BacktestingService(BaseService):
 
         # Extract strategy info from metadata
         strategy_name = operation.metadata.parameters.get("strategy_name", "unknown")
-        
+
         # Return status compatible with existing API
         return {
             "backtest_id": operation.operation_id,
@@ -518,8 +547,12 @@ class BacktestingService(BaseService):
             "timeframe": operation.metadata.timeframe,
             "status": operation.status.value,
             "progress": int(operation.progress.percentage),
-            "started_at": operation.started_at.isoformat() if operation.started_at else None,
-            "completed_at": operation.completed_at.isoformat() if operation.completed_at else None,
+            "started_at": (
+                operation.started_at.isoformat() if operation.started_at else None
+            ),
+            "completed_at": (
+                operation.completed_at.isoformat() if operation.completed_at else None
+            ),
             "error": operation.error_message,
         }
 
@@ -562,14 +595,22 @@ class BacktestingService(BaseService):
         # Extract metadata
         strategy_name = operation.metadata.parameters.get("strategy_name", "unknown")
         initial_capital = operation.metadata.parameters.get("initial_capital", 100000)
-        
+
         return {
             "backtest_id": backtest_id,
             "strategy_name": strategy_name,
             "symbol": operation.metadata.symbol,
             "timeframe": operation.metadata.timeframe,
-            "start_date": operation.metadata.start_date.strftime("%Y-%m-%d") if operation.metadata.start_date else None,
-            "end_date": operation.metadata.end_date.strftime("%Y-%m-%d") if operation.metadata.end_date else None,
+            "start_date": (
+                operation.metadata.start_date.strftime("%Y-%m-%d")
+                if operation.metadata.start_date
+                else None
+            ),
+            "end_date": (
+                operation.metadata.end_date.strftime("%Y-%m-%d")
+                if operation.metadata.end_date
+                else None
+            ),
             "metrics": {
                 "total_return": metrics_data.get("total_return", 0),
                 "annualized_return": metrics_data.get("annualized_return", 0),
@@ -577,7 +618,9 @@ class BacktestingService(BaseService):
                 "max_drawdown": metrics_data.get("max_drawdown", 0),
                 "win_rate": metrics_data.get("win_rate", 0),
                 "profit_factor": metrics_data.get("profit_factor", 0),
-                "total_trades": metrics_data.get("total_trades", results.get("trade_count", 0)),
+                "total_trades": metrics_data.get(
+                    "total_trades", results.get("trade_count", 0)
+                ),
             },
             "summary": {
                 "initial_capital": initial_capital,
@@ -653,7 +696,10 @@ class BacktestingService(BaseService):
             raise ValidationError(f"Backtest {backtest_id} is not completed yet")
 
         # Get results from operation
-        if not operation.result_summary or "equity_curve" not in operation.result_summary:
+        if (
+            not operation.result_summary
+            or "equity_curve" not in operation.result_summary
+        ):
             raise DataError(
                 f"No equity curve data available for backtest {backtest_id}"
             )

@@ -233,15 +233,15 @@ class KTRDRAPIClient:
         if task_id:
             payload["task_id"] = task_id
         
-        return await self._request("POST", "/training/start", json=payload)
+        return await self._request("POST", "/trainings/start", json=payload)
     
     async def get_training_status(self, task_id: str) -> Dict[str, Any]:
         """Get neural network training status"""
-        return await self._request("GET", f"/training/{task_id}")
+        return await self._request("GET", f"/trainings/{task_id}")
     
     async def get_model_performance(self, task_id: str) -> Dict[str, Any]:
         """Get trained model performance metrics"""
-        return await self._request("GET", f"/training/{task_id}/performance")
+        return await self._request("GET", f"/trainings/{task_id}/performance")
     
     async def save_trained_model(self, task_id: str, model_name: str, 
                                 description: str = "") -> Dict[str, Any]:
