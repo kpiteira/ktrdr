@@ -390,11 +390,11 @@ class IbSymbolValidator:
                 self.metrics["total_validations"] += 1
 
                 logger.debug(
-                    f"📋 IB returned {len(details) if details else 0} contract details"
+                    f"IB returned {len(details) if details else 0} contract details"
                 )
 
                 if not details:
-                    logger.debug(f"❌ No contract details returned for: {contract}")
+                    logger.debug(f"No contract details returned for: {contract}")
                     logger.debug(
                         f"   This means IB has no security definition for this contract specification"
                     )
@@ -406,7 +406,7 @@ class IbSymbolValidator:
                 contract_details = detail.contract
 
                 logger.debug(
-                    f"✅ Contract found: {contract_details.symbol} ({contract_details.secType}) on {contract_details.exchange}"
+                    f"Contract found: {contract_details.symbol} ({contract_details.secType}) on {contract_details.exchange}"
                 )
                 logger.debug(f"   Full name: {detail.longName or 'N/A'}")
                 logger.debug(f"   Currency: {contract_details.currency}")
@@ -471,7 +471,7 @@ class IbSymbolValidator:
                     f"Contract lookup timeout for {getattr(contract, 'symbol', 'unknown')}"
                 )
                 logger.warning(
-                    f"⏰ Contract lookup timeout for {getattr(contract, 'symbol', 'unknown')} (attempt {retry_count}/{max_retries})"
+                    f"Contract lookup timeout for {getattr(contract, 'symbol', 'unknown')} (attempt {retry_count}/{max_retries})"
                 )
 
                 # Wait before retry
@@ -490,17 +490,17 @@ class IbSymbolValidator:
                     # Exponential backoff for additional delay
                     backoff_delay = min(2 ** (retry_count - 1), 30)  # Cap at 30 seconds
                     if backoff_delay > 0:
-                        logger.info(f"⏳ Backoff delay: {backoff_delay}s")
+                        logger.debug(f" {backoff_delay}s")
                         await asyncio.sleep(backoff_delay)
 
                     self.metrics["retries_performed"] += 1
                     logger.warning(
-                        f"🔄 Retrying contract lookup (attempt {retry_count}/{max_retries}): {e}"
+                        f"Retrying contract lookup (attempt {retry_count}/{max_retries}): {e}"
                     )
 
         # All retries failed
         self.metrics["failed_validations"] += 1
-        logger.error(f"❌ CONTRACT LOOKUP FAILED after {retry_count} retries")
+        logger.error(f"CONTRACT LOOKUP FAILED after {retry_count} retries")
         logger.error(f"   Final error: {last_error}")
         return None
 
@@ -525,7 +525,7 @@ class IbSymbolValidator:
         details = ib.reqContractDetails(contract)
 
         logger.debug(
-            f"📋 IB returned {len(details) if details else 0} contract details"
+            f"IB returned {len(details) if details else 0} contract details"
         )
         return details
 
@@ -541,7 +541,7 @@ class IbSymbolValidator:
         Returns:
             Head timestamp if found, None otherwise
         """
-        logger.info(f"🔍 Requesting head timestamp for {contract}")
+        logger.debug(f"Requesting head timestamp for {contract}")
 
         # For forex pairs, try different whatToShow options
         whatToShow_options = (
@@ -551,7 +551,7 @@ class IbSymbolValidator:
         head_timestamp = None
         for whatToShow in whatToShow_options:
             try:
-                logger.info(f"🔍 Trying head timestamp with whatToShow={whatToShow}")
+                logger.debug(f"Trying head timestamp with whatToShow={whatToShow}")
 
                 # Make synchronous IB API call
                 head_timestamp = ib.reqHeadTimeStamp(
@@ -562,12 +562,12 @@ class IbSymbolValidator:
                 )
 
                 if head_timestamp:
-                    logger.info(f"🔍 SUCCESS with {whatToShow}: {head_timestamp}")
+                    logger.debug(f" {head_timestamp}")
                     break
                 else:
-                    logger.warning(f"🔍 No head timestamp with {whatToShow}")
+                    logger.warning(f"No head timestamp with {whatToShow}")
             except Exception as e:
-                logger.warning(f"🔍 Error with {whatToShow}: {e}")
+                logger.warning(f"Error with {whatToShow}: {e}")
                 continue
 
         return head_timestamp
@@ -677,7 +677,7 @@ class IbSymbolValidator:
                 else:
                     # Cache expired - attempt re-validation but don't fail on connection issues
                     logger.info(
-                        f"🔄 Re-validating previously validated symbol: {normalized}"
+                        f"Re-validating previously validated symbol: {normalized}"
                     )
                     return await self._attempt_revalidation_async(normalized)
             else:
@@ -701,7 +701,7 @@ class IbSymbolValidator:
             if contract_info:
                 self._cache[symbol] = contract_info
                 self._save_cache_to_file()
-                logger.info(f"✅ Re-validation successful for {symbol}")
+                logger.info(f"Re-validation successful for {symbol}")
                 return contract_info
             else:
                 # Connection issue - return None but DON'T mark as failed
@@ -715,7 +715,7 @@ class IbSymbolValidator:
 
     async def _normal_validation_async(self, symbol: str) -> Optional[ContractInfo]:
         """Normal validation for never-before-validated symbols (async)."""
-        logger.info(f"🔍 Starting async symbol validation for {symbol}")
+        logger.debug(f"Starting async symbol validation for {symbol}")
 
         # Attempt validation...
         contract_info = await self._attempt_validation_async(symbol)
@@ -767,7 +767,7 @@ class IbSymbolValidator:
         self._cache[symbol] = contract_info
         # Save cache to persistent storage
         self._save_cache_to_file()
-        logger.info(f"✅ Symbol {symbol} marked as permanently validated")
+        logger.info(f"Symbol {symbol} marked as permanently validated")
 
     async def fetch_head_timestamp_async(
         self,
@@ -898,12 +898,12 @@ class IbSymbolValidator:
                     # Exponential backoff for additional delay
                     backoff_delay = min(2 ** (retry_count - 1), 30)  # Cap at 30 seconds
                     if backoff_delay > 0:
-                        logger.info(f"⏳ Additional backoff delay: {backoff_delay}s")
+                        logger.debug(f" {backoff_delay}s")
                         await asyncio.sleep(backoff_delay)
 
                     self.metrics["retries_performed"] += 1
                     logger.warning(
-                        f"🔄 Retrying head timestamp fetch (attempt {retry_count}/{max_retries}): {e}"
+                        f"Retrying head timestamp fetch (attempt {retry_count}/{max_retries}): {e}"
                     )
 
         # All retries failed

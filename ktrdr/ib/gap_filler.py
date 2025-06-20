@@ -442,25 +442,25 @@ class GapFillerService:
                     if fetched_bars > 0:
                         self.stats["gaps_filled"] += 1
                         logger.info(
-                            f"✅ Filled gap for {symbol}_{timeframe}: {fetched_bars} bars fetched"
+                            f"Filled gap for {symbol}_{timeframe}: {fetched_bars} bars fetched"
                         )
                         return True
                     else:
                         self.stats["gaps_failed"] += 1
                         logger.warning(
-                            f"❌ No new data fetched for gap in {symbol}_{timeframe}"
+                            f"No new data fetched for gap in {symbol}_{timeframe}"
                         )
                         return False
                 else:
                     self.stats["gaps_failed"] += 1
                     logger.warning(
-                        f"❌ No data returned for gap in {symbol}_{timeframe}"
+                        f"No data returned for gap in {symbol}_{timeframe}"
                     )
                     return False
 
             except Exception as e:
                 self.stats["gaps_failed"] += 1
-                logger.error(f"❌ Failed to fill gap for {symbol}_{timeframe}: {e}")
+                logger.error(f" {e}")
                 return False
 
         except Exception as e:

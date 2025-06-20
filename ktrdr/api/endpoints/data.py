@@ -539,6 +539,10 @@ async def load_data(
         ```
     """
     try:
+        # Log user-initiated operation clearly for CLI visibility
+        logger.info(
+            f"📥 USER OPERATION: Data loading initiated for {request.symbol} ({request.timeframe})"
+        )
         logger.info(
             f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}, async: {async_mode}"
         )

@@ -109,10 +109,7 @@ class IbDataFetcher:
 
         This method runs in the connection's dedicated thread to avoid async conflicts.
         """
-        logger.info(f"🔍 DIAGNOSIS: Starting data fetch for {symbol} ({timeframe})")
-        logger.info(
-            f"🔍 DIAGNOSIS: Parameters - start={start}, end={end}, instrument_type={instrument_type}"
-        )
+        logger.debug(f"Starting data fetch for {symbol} ({timeframe})")
 
         # Give IB a moment to settle before making requests
         time.sleep(0.5)
@@ -120,23 +117,18 @@ class IbDataFetcher:
         # Create contract based on instrument type
         try:
             contract = self._create_contract(symbol, instrument_type)
-            logger.info(f"🔍 DIAGNOSIS: Created contract - {contract}")
-            logger.info(
-                f"🔍 DIAGNOSIS: Contract details - symbol={getattr(contract, 'symbol', 'N/A')}, secType={getattr(contract, 'secType', 'N/A')}, exchange={getattr(contract, 'exchange', 'N/A')}"
-            )
+            logger.debug(f"Created contract: {contract.symbol} ({contract.secType})")
         except Exception as e:
-            logger.error(f"🚨 DIAGNOSIS: Failed to create contract for {symbol}: {e}")
+            logger.error(f"Failed to create contract for {symbol}: {e}")
             raise
 
         # Convert timeframe to IB format
         try:
             ib_bar_size = self._convert_timeframe_to_ib(timeframe)
             duration = self._calculate_duration(start, end)
-            logger.info(
-                f"🔍 DIAGNOSIS: IB parameters - duration={duration}, bar_size={ib_bar_size}"
-            )
+            logger.debug(f"IB parameters: duration={duration}, bar_size={ib_bar_size}")
         except Exception as e:
-            logger.error(f"🚨 DIAGNOSIS: Failed to convert parameters: {e}")
+            logger.error(f"Failed to convert parameters: {e}")
             raise
 
         # Determine what data to show based on instrument type
@@ -144,14 +136,8 @@ class IbDataFetcher:
 
         # Request historical data (synchronous call)
         try:
-            logger.info(f"🔍 DIAGNOSIS: Making IB reqHistoricalData call...")
-            logger.info(f"🔍 DIAGNOSIS: Call parameters:")
-            logger.info(f"   - contract: {contract}")
-            logger.info(f"   - endDateTime: {end}")
-            logger.info(f"   - durationStr: {duration}")
-            logger.info(f"   - barSizeSetting: {ib_bar_size}")
-            logger.info(f"   - whatToShow: {what_to_show}")
-            logger.info(f"   - useRTH: True")
+            logger.debug("Making IB reqHistoricalData call")
+            logger.debug(f"Requesting historical data: {contract.symbol}, duration={duration}, barSize={ib_bar_size}")
 
             bars = ib.reqHistoricalData(
                 contract=contract,
@@ -163,20 +149,19 @@ class IbDataFetcher:
                 formatDate=1,
             )
 
-            logger.info(f"🔍 DIAGNOSIS: IB returned {len(bars) if bars else 0} bars")
+            logger.debug(f"IB returned {len(bars) if bars else 0} bars")
 
         except Exception as e:
-            logger.error(f"🚨 DIAGNOSIS: IB reqHistoricalData failed: {e}")
-            logger.error(f"🚨 DIAGNOSIS: Exception type: {type(e)}")
+            logger.error(f"IB reqHistoricalData failed: {e}")
             raise
 
         if not bars:
-            logger.error(f"🚨 DIAGNOSIS: No data returned - bars is {bars}")
+            logger.warning(f"No data returned for {symbol} {timeframe}")
             raise Exception(f"No data returned for {symbol} {timeframe}")
 
         # Convert to DataFrame
         try:
-            logger.info(f"🔍 DIAGNOSIS: Converting {len(bars)} bars to DataFrame...")
+            logger.debug(f"Converting {len(bars)} bars to DataFrame")
             df = pd.DataFrame(
                 [
                     {
@@ -201,13 +186,11 @@ class IbDataFetcher:
             # Filter by date range
             df = df[(df.index >= start) & (df.index <= end)]
 
-            logger.info(
-                f"✅ DIAGNOSIS: Successfully processed {len(df)} bars for {symbol} {timeframe}"
-            )
+            logger.info(f"Successfully processed {len(df)} bars for {symbol} {timeframe}")
             return df
 
         except Exception as e:
-            logger.error(f"🚨 DIAGNOSIS: Failed to process bars to DataFrame: {e}")
+            logger.error(f"Failed to process bars to DataFrame: {e}")
             raise
 
     def _create_contract(self, symbol: str, instrument_type: str) -> Contract:
@@ -221,37 +204,31 @@ class IbDataFetcher:
         Returns:
             IB Contract object
         """
-        logger.info(
-            f"🔍 DIAGNOSIS: Creating contract for symbol='{symbol}', instrument_type='{instrument_type}'"
-        )
+        logger.debug(f"Creating contract for symbol='{symbol}', instrument_type='{instrument_type}'")
 
         if instrument_type == "CASH" or "." in symbol:
             # Handle forex pairs
             if "." in symbol:
                 base, quote = symbol.split(".")
                 forex_symbol = base + quote
-                logger.info(
-                    f"🔍 DIAGNOSIS: Dot-separated forex: {symbol} → {forex_symbol}"
-                )
+                logger.debug(f"Dot-separated forex: {symbol} → {forex_symbol}")
                 contract = Forex(forex_symbol)
             else:
-                logger.info(f"🔍 DIAGNOSIS: Direct forex symbol: {symbol}")
+                logger.debug(f"Direct forex symbol: {symbol}")
                 contract = Forex(symbol)
-            logger.info(f"🔍 DIAGNOSIS: Created forex contract: {contract}")
+            logger.debug(f"Created forex contract: {contract}")
             return contract
         elif instrument_type == "STK":
             # Stock contract
-            logger.info(f"🔍 DIAGNOSIS: Creating stock contract for {symbol}")
+            logger.debug(f"Creating stock contract for {symbol}")
             contract = Stock(symbol, "SMART", "USD")
-            logger.info(f"🔍 DIAGNOSIS: Created stock contract: {contract}")
+            logger.debug(f"Created stock contract: {contract}")
             return contract
         else:
             # Default to stock for unknown types
-            logger.info(
-                f"🔍 DIAGNOSIS: Unknown instrument type '{instrument_type}', defaulting to stock"
-            )
+            logger.warning(f"Unknown instrument type '{instrument_type}', defaulting to stock")
             contract = Stock(symbol, "SMART", "USD")
-            logger.info(f"🔍 DIAGNOSIS: Created default stock contract: {contract}")
+            logger.debug(f"Created default stock contract: {contract}")
             return contract
 
     def _convert_timeframe_to_ib(self, timeframe: str) -> str:

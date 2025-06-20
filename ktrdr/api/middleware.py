@@ -12,6 +12,8 @@ from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from ktrdr.logging.config import should_rate_limit_log
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,18 +43,30 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         request_id = request.headers.get("X-Request-ID", "")
 
-        # Log the request (DEBUG for operations polling, INFO for others)
-        log_level = (
-            logging.DEBUG
-            if request.url.path.startswith("/api/v1/operations/")
-            else logging.INFO
-        )
-        logger.log(
-            log_level,
-            f"Request started: method={request.method} path={request.url.path} "
-            f"client={request.client.host if request.client else 'unknown'} "
-            f"request_id={request_id}",
-        )
+        # Determine if this is a high-frequency operation
+        high_frequency_paths = [
+            "/api/v1/operations/",
+            "/api/v1/health",
+            "/api/v1/status",
+            "/api/v1/data/stream",
+        ]
+        
+        is_high_frequency = any(request.url.path.startswith(path) for path in high_frequency_paths)
+        
+        # Log the request (DEBUG for high-frequency, INFO for others)
+        log_level = logging.DEBUG if is_high_frequency else logging.INFO
+        # Use rate limiting for high-frequency operations
+        should_log_request = True
+        if is_high_frequency:
+            should_log_request = should_rate_limit_log(f"request_{request.url.path}", 30)  # Log every 30 seconds
+        
+        if should_log_request:
+            logger.log(
+                log_level,
+                f"Request started: method={request.method} path={request.url.path} "
+                f"client={request.client.host if request.client else 'unknown'} "
+                f"request_id={request_id}",
+            )
 
         try:
             # Process the request through the next handler
@@ -61,18 +75,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             # Calculate request processing time
             process_time = (time.time() - start_time) * 1000
 
-            # Log the response (DEBUG for operations polling, INFO for others)
-            log_level = (
-                logging.DEBUG
-                if request.url.path.startswith("/api/v1/operations/")
-                else logging.INFO
-            )
-            logger.log(
-                log_level,
-                f"Request completed: method={request.method} path={request.url.path} "
-                f"status_code={response.status_code} "
-                f"duration={process_time:.2f}ms request_id={request_id}",
-            )
+            # Log the response with same rules as request
+            if should_log_request:
+                logger.log(
+                    log_level,
+                    f"Request completed: method={request.method} path={request.url.path} "
+                    f"status_code={response.status_code} "
+                    f"duration={process_time:.2f}ms request_id={request_id}",
+                )
 
             # Add processing time header to the response
             response.headers["X-Process-Time"] = f"{process_time:.2f}ms"

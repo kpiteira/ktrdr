@@ -13,10 +13,26 @@ import logging.handlers
 import os
 from pathlib import Path
 import sys
-from typing import Optional, Dict, Any, Union
+import time
+from typing import Optional, Dict, Any, Union, Set
 
 # Global debug flag
 _DEBUG_MODE = False
+
+# Component-specific log levels
+_COMPONENT_LOG_LEVELS = {
+    "ib.connection": logging.WARNING,
+    "ib.data_fetcher": logging.INFO,
+    "ib.pool": logging.INFO,
+    "ib.pace_manager": logging.WARNING,
+    "api.middleware": logging.INFO,
+}
+
+# Log sampling state
+_LOG_SAMPLING_STATE = {}
+
+# Rate limiting state
+_RATE_LIMIT_STATE = {}
 
 # Default log format with detailed context
 _DEFAULT_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s.%(funcName)s:%(lineno)d | %(message)s"
@@ -53,7 +69,7 @@ class ColorFormatter(logging.Formatter):
 
 def get_logger(name: str) -> logging.Logger:
     """
-    Get a logger with the specified name.
+    Get a logger with the specified name and apply component-specific levels.
 
     Args:
         name: Logger name, typically __name__ of the calling module
@@ -61,7 +77,15 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         A configured logger instance
     """
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+
+    # Apply component-specific log levels
+    for component, level in _COMPONENT_LOG_LEVELS.items():
+        if component in name:
+            logger.setLevel(level)
+            break
+
+    return logger
 
 
 def set_debug_mode(enabled: bool) -> None:
@@ -154,18 +178,114 @@ def configure_logging(
         file_handler.setFormatter(logging.Formatter(file_format))
         root_logger.addHandler(file_handler)
 
-    # Now that logging is configured, log the configuration details
-    ktrdr_logger.info("Logging configured:")
-    ktrdr_logger.info(f"Console logging level: {logging.getLevelName(console_level)}")
+    # Log minimal startup message (detailed config at DEBUG level)
     if log_dir:
-        ktrdr_logger.info(f"File logging level: {logging.getLevelName(file_level)}")
-        ktrdr_logger.info(f"Log files location: {log_dir}")
         ktrdr_logger.info(
-            f"Log rotation: {max_file_size_mb}MB, {backup_count} backup files"
+            f"KTRDR logging initialized (console: {logging.getLevelName(console_level)}, files: {log_dir})"
         )
     else:
-        ktrdr_logger.info("File logging disabled")
+        ktrdr_logger.info(
+            f"KTRDR logging initialized (console only: {logging.getLevelName(console_level)})"
+        )
+
+    # Detailed configuration when debug mode is enabled
+    if is_debug_mode():
+        ktrdr_logger.info("Detailed logging configuration:")
+        ktrdr_logger.info(f"  Console level: {logging.getLevelName(console_level)}")
+        if log_dir:
+            ktrdr_logger.info(f"  File level: {logging.getLevelName(file_level)}")
+            ktrdr_logger.info(f"  Log files location: {log_dir}")
+            ktrdr_logger.info(
+                f"  Log rotation: {max_file_size_mb}MB, {backup_count} backup files"
+            )
+        else:
+            ktrdr_logger.info("  File logging: disabled")
 
     # Set debug mode based on configuration
     debug_mode = config.get("debug_mode", is_debug_mode())
     set_debug_mode(debug_mode)
+
+
+def should_sample_log(key: str, sample_rate: int = 100) -> bool:
+    """
+    Determine if a log message should be sampled based on frequency.
+
+    Args:
+        key: Unique key for the log message type
+        sample_rate: Log every Nth occurrence (default: 100)
+
+    Returns:
+        True if this occurrence should be logged
+    """
+    if key not in _LOG_SAMPLING_STATE:
+        _LOG_SAMPLING_STATE[key] = 0
+
+    _LOG_SAMPLING_STATE[key] += 1
+    return _LOG_SAMPLING_STATE[key] % sample_rate == 1
+
+
+def should_rate_limit_log(key: str, limit_seconds: int = 60) -> bool:
+    """
+    Determine if a log message should be rate limited.
+
+    Args:
+        key: Unique key for the log message type
+        limit_seconds: Minimum seconds between log messages
+
+    Returns:
+        True if the message should be logged (not rate limited)
+    """
+    current_time = time.time()
+
+    if key not in _RATE_LIMIT_STATE:
+        _RATE_LIMIT_STATE[key] = current_time
+        return True
+
+    if current_time - _RATE_LIMIT_STATE[key] >= limit_seconds:
+        _RATE_LIMIT_STATE[key] = current_time
+        return True
+
+    return False
+
+
+def set_component_log_level(component: str, level: int) -> None:
+    """
+    Set log level for a specific component.
+
+    Args:
+        component: Component name (e.g., 'ib.connection')
+        level: Log level to set
+    """
+    _COMPONENT_LOG_LEVELS[component] = level
+
+    # Update existing loggers that match this component
+    for logger_name in logging.Logger.manager.loggerDict:
+        if component in logger_name:
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(level)
+
+
+def get_component_log_levels() -> Dict[str, int]:
+    """
+    Get current component log levels.
+
+    Returns:
+        Dictionary of component names to log levels
+    """
+    return _COMPONENT_LOG_LEVELS.copy()
+
+
+def reset_sampling_state() -> None:
+    """
+    Reset log sampling counters. Useful for testing.
+    """
+    global _LOG_SAMPLING_STATE
+    _LOG_SAMPLING_STATE = {}
+
+
+def reset_rate_limit_state() -> None:
+    """
+    Reset rate limiting state. Useful for testing.
+    """
+    global _RATE_LIMIT_STATE
+    _RATE_LIMIT_STATE = {}

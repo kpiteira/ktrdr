@@ -44,7 +44,7 @@ class ContextEnricher(logging.Filter):
     def __init__(self) -> None:
         """Initialize the context enricher."""
         super().__init__()
-        self.context_stack = []
+        self.context_stack: list[LogContext] = []
 
     def push_context(self, context: LogContext) -> None:
         """

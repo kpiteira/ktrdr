@@ -14,6 +14,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Path, Query, HTTPException
 
 from ktrdr import get_logger
+from ktrdr.logging.config import should_rate_limit_log
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.api.models.operations import (
     OperationListResponse,
@@ -178,7 +179,9 @@ async def get_operation_status(
         GET /api/v1/operations/op_data_load_20241201_123456
     """
     try:
-        logger.info(f"Getting status for operation: {operation_id}")
+        # Use rate limiting for frequent status polling
+        if should_rate_limit_log(f"operation_status_{operation_id}", 10):
+            logger.info(f"Getting status for operation: {operation_id}")
 
         # Get operation from service
         operation = await operations_service.get_operation(operation_id)
@@ -190,7 +193,19 @@ async def get_operation_status(
                 detail=f"Operation not found: {operation_id}",
             )
 
-        logger.info(f"Retrieved operation {operation_id}: status={operation.status}")
+        # Log operation completion at higher visibility
+        if operation.status.value in ["completed", "failed", "cancelled"]:
+            if should_rate_limit_log(f"operation_complete_{operation_id}", 1):
+                logger.info(
+                    f"🏁 OPERATION {operation.status.value.upper()}: {operation_id} ({operation.operation_type.value})"
+                )
+        else:
+            # Rate limit routine status checks
+            if should_rate_limit_log(f"operation_status_detail_{operation_id}", 10):
+                logger.info(
+                    f"Retrieved operation {operation_id}: status={operation.status}"
+                )
+
         return OperationStatusResponse(
             success=True,
             data=operation,

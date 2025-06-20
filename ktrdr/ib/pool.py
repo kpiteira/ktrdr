@@ -196,6 +196,12 @@ class IbConnectionPool:
                     return connection
                 else:
                     logger.warning(f"Connection {client_id} failed health check")
+                    logger.debug(
+                        f"DEBUG: Failed connection state - host={self.host}:{self.port}, connected={connection.connected}"
+                    )
+                    logger.debug(
+                        f"DEBUG: Failed connection stats - errors={connection.errors_encountered}, thread_alive={connection.thread.is_alive() if connection.thread else False}"
+                    )
                     connection.stop(timeout=2.0)
                     # Wait before trying next client ID to avoid overwhelming IB Gateway
                     await asyncio.sleep(2.0)
@@ -243,6 +249,12 @@ class IbConnectionPool:
         logger.warning(
             f"Connection {connection.client_id} not ready within {timeout:.1f}s"
         )
+        logger.debug(
+            f"DEBUG: Connection state - connected={connection.connected}, thread_alive={connection.thread.is_alive() if connection.thread else False}"
+        )
+        logger.debug(
+            f"DEBUG: Connection stats - requests_processed={connection.requests_processed}, errors={connection.errors_encountered}"
+        )
 
     @asynccontextmanager
     async def get_connection(self):
@@ -253,21 +265,15 @@ class IbConnectionPool:
             async with pool.get_connection() as conn:
                 result = await conn.execute_request(some_function, args)
         """
-        logger.info(
-            f"🔍 POOL DIAGNOSIS: get_connection called, acquiring connection..."
-        )
+        logger.debug("Acquiring connection from pool")
         connection = await self.acquire_connection()
-        logger.info(
-            f"🔍 POOL DIAGNOSIS: Connection {connection.client_id} acquired successfully"
-        )
+        logger.debug(f"Connection {connection.client_id} acquired successfully")
         try:
             yield connection
         finally:
             # Note: We don't explicitly release connections since they
             # auto-timeout after 3 minutes. This simplifies the design.
-            logger.info(
-                f"🔍 POOL DIAGNOSIS: Releasing connection {connection.client_id}"
-            )
+            logger.debug(f"Releasing connection {connection.client_id}")
             pass
 
     async def execute_with_connection_sync(self, func, *args, **kwargs):
@@ -284,26 +290,21 @@ class IbConnectionPool:
         Returns:
             Result of function execution
         """
-        logger.info(
-            f"🔍 POOL DIAGNOSIS: Starting execute_with_connection_sync for {func.__name__}"
-        )
-        logger.info(
-            f"🔍 POOL DIAGNOSIS: Args: {args[:2] if args else 'None'}"
+        logger.debug(
+            f"Starting execute_with_connection_sync for {func.__name__}"
         )  # Only log first 2 args to avoid clutter
 
         try:
-            logger.info(f"🔍 POOL DIAGNOSIS: Acquiring connection...")
+            logger.debug("Acquiring connection for sync execution")
             async with self.get_connection() as conn:
-                logger.info(
-                    f"🔍 POOL DIAGNOSIS: Got connection {conn.client_id}, calling execute_sync_request"
+                logger.debug(
+                    f"Got connection {conn.client_id}, calling execute_sync_request"
                 )
                 result = conn.execute_sync_request(func, *args, **kwargs)
-                logger.info(
-                    f"🔍 POOL DIAGNOSIS: execute_sync_request completed successfully"
-                )
+                logger.debug("execute_sync_request completed successfully")
                 return result
         except Exception as e:
-            logger.error(f"🚨 POOL DIAGNOSIS: execute_with_connection_sync failed: {e}")
+            logger.error(f"execute_with_connection_sync failed: {e}")
             raise
 
     async def execute_with_connection(self, func, *args, **kwargs):
