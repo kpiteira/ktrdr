@@ -10,6 +10,17 @@ from unittest.mock import Mock, patch, AsyncMock
 from ktrdr.ib.pool import IbConnectionPool
 
 
+@pytest.fixture(autouse=True)
+def mock_async_delays():
+    """Mock async delays and time calls to speed up tests."""
+    with patch("ktrdr.ib.pool.asyncio.sleep", new_callable=AsyncMock) as mock_sleep, \
+         patch("ktrdr.ib.pool.time.time") as mock_time:
+        mock_sleep.return_value = None
+        # Mock time.time() to return predictable increments
+        mock_time.side_effect = lambda: mock_time.call_count * 0.1
+        yield mock_sleep, mock_time
+
+
 class TestIbConnectionPool:
     """Test IB connection pool functionality."""
 

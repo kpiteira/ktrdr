@@ -288,6 +288,7 @@ class TestConnectionResilienceE2E:
             ), f"Expected faster response: {response_time:.2f}s"
 
 
+@pytest.mark.container_e2e
 class TestConnectionResilienceIntegration:
     """Integration tests for resilience features working together."""
 
