@@ -88,8 +88,8 @@ class BacktestingService(BaseService):
         metadata = OperationMetadata(
             symbol=symbol,
             timeframe=timeframe,
-            start_date=datetime.fromisoformat(start_date),
-            end_date=datetime.fromisoformat(end_date),
+            start_date=pd.to_datetime(start_date).tz_localize('UTC'),
+            end_date=pd.to_datetime(end_date).tz_localize('UTC'),
             parameters={
                 "strategy_name": strategy_name,
                 "initial_capital": initial_capital,
@@ -344,8 +344,8 @@ class BacktestingService(BaseService):
         The actual data loading will provide the real count.
         """
         try:
-            start = pd.to_datetime(start_date)
-            end = pd.to_datetime(end_date)
+            start = pd.to_datetime(start_date).tz_localize('UTC')
+            end = pd.to_datetime(end_date).tz_localize('UTC')
             total_days = (end - start).days
 
             # Rough estimates based on timeframe (assumes market hours)
@@ -399,8 +399,8 @@ class BacktestingService(BaseService):
         # Ensure minimum warm-up period
         warmup_days = max(30, warmup_days)  # At least 30 days
         
-        # Calculate extended start date
-        original_start = pd.to_datetime(engine.config.start_date)
+        # Calculate extended start date (ensure UTC timezone consistency)
+        original_start = pd.to_datetime(engine.config.start_date).tz_localize('UTC')
         extended_start = original_start - pd.Timedelta(days=warmup_days)
         
         # Load data with extended range
@@ -439,7 +439,7 @@ class BacktestingService(BaseService):
         data = self._load_data_with_warmup(engine)
         
         # Find the start index for actual backtest period
-        backtest_start_date = pd.to_datetime(engine.config.start_date)
+        backtest_start_date = pd.to_datetime(engine.config.start_date).tz_localize('UTC')
         backtest_start_idx = 0
         for i, timestamp in enumerate(data.index):
             if timestamp >= backtest_start_date:
@@ -484,7 +484,7 @@ class BacktestingService(BaseService):
 
             # Find the start index for actual backtest period
             # (data before this is warm-up data)
-            backtest_start_date = pd.to_datetime(engine.config.start_date)
+            backtest_start_date = pd.to_datetime(engine.config.start_date).tz_localize('UTC')
             backtest_start_idx = 0
             for i, timestamp in enumerate(data.index):
                 if timestamp >= backtest_start_date:
@@ -587,7 +587,7 @@ class BacktestingService(BaseService):
             if bars_processed > 0:
                 # Progress from 20% to 90% based on bars processed
                 data_progress = (
-                    bars_processed / actual_bars
+                    bars_processed / actual_backtest_bars
                 ) * 70  # 70% range for data processing
                 current_progress = 20.0 + data_progress
 
@@ -598,9 +598,9 @@ class BacktestingService(BaseService):
                         operation_id,
                         OperationProgress(
                             percentage=min(current_progress, 90.0),
-                            current_step=f"Processing bar {bars_processed:,}/{actual_bars:,} ({trades_executed} trades)",
+                            current_step=f"Processing bar {bars_processed:,}/{actual_backtest_bars:,} ({trades_executed} trades)",
                             items_processed=bars_processed,
-                            items_total=actual_bars,
+                            items_total=actual_backtest_bars,
                         ),
                     )
                     last_progress = current_progress
