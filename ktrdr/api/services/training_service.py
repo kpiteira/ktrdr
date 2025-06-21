@@ -23,6 +23,7 @@ from ktrdr.training.train_strategy import StrategyTrainer
 from ktrdr.training.model_storage import ModelStorage
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError, DataError
+from ktrdr.api.endpoints.strategies import _validate_strategy_config
 
 logger = get_logger(__name__)
 
@@ -79,6 +80,19 @@ class TrainingService(BaseService):
         # Load strategy config to get training parameters
         with open(strategy_path, 'r') as f:
             strategy_config = yaml.safe_load(f)
+        
+        # Validate strategy configuration before training
+        validation_issues = _validate_strategy_config(strategy_config, strategy_name)
+        error_issues = [issue for issue in validation_issues if issue.severity == "error"]
+        
+        if error_issues:
+            # Format validation errors into clear message
+            error_messages = []
+            for issue in error_issues:
+                error_messages.append(f"{issue.category}: {issue.message}")
+            
+            validation_error = "Strategy validation failed:\n" + "\n".join(error_messages)
+            raise ValidationError(validation_error)
         
         training_config = strategy_config.get("model", {}).get("training", {})
         
