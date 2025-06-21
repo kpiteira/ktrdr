@@ -179,11 +179,7 @@ class TrainingService(BaseService):
                 operation.started_at.isoformat() if operation.started_at else None
             ),
             "estimated_completion": estimated_completion,
-            "current_metrics": (
-                operation.progress.details.get("current_metrics")
-                if operation.progress.details
-                else None
-            ),
+            "current_metrics": None,  # Current metrics not stored in progress details
             "error": operation.error_message,
         }
 

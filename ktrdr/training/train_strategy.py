@@ -234,11 +234,30 @@ class StrategyTrainer:
         """
         # Fix indicator configs to add 'type' field if missing
         fixed_configs = []
+        
+        # Mapping from strategy names to registry names
+        name_mapping = {
+            "bollinger_bands": "BollingerBands",
+            "keltner_channels": "KeltnerChannels", 
+            "momentum": "Momentum",
+            "volume_sma": "SMA",  # Use SMA for volume_sma for now
+            "atr": "ATR",
+            "rsi": "RSI",
+            "sma": "SMA",
+            "ema": "EMA",
+            "macd": "MACD"
+        }
+        
         for config in indicator_configs:
             if isinstance(config, dict) and "type" not in config:
-                # Infer type from name - keep the original case for matching with fuzzy sets
+                # Infer type from name using proper mapping
                 config = config.copy()
-                config["type"] = config["name"].upper()
+                indicator_name = config["name"].lower()
+                if indicator_name in name_mapping:
+                    config["type"] = name_mapping[indicator_name]
+                else:
+                    # Fallback: convert snake_case to PascalCase
+                    config["type"] = "".join(word.capitalize() for word in indicator_name.split("_"))
             fixed_configs.append(config)
 
         # Initialize indicator engine with configs
@@ -280,6 +299,32 @@ class StrategyTrainer:
                         ):
                             mapped_results[original_name] = indicator_results[col]
                             break
+                    elif indicator_type == "BollingerBands":
+                        # For Bollinger Bands, compute derived metrics
+                        bb_cols = [c for c in indicator_results.columns if c.startswith("BollingerBands")]
+                        if len(bb_cols) >= 3:  # Should have upper, middle, lower
+                            upper_col = next((c for c in bb_cols if "upper" in c), None)
+                            middle_col = next((c for c in bb_cols if "middle" in c), None)
+                            lower_col = next((c for c in bb_cols if "lower" in c), None)
+                            
+                            if upper_col and middle_col and lower_col:
+                                # Compute BB width as percentage of middle band
+                                mapped_results["bb_width"] = (
+                                    (indicator_results[upper_col] - indicator_results[lower_col]) / 
+                                    indicator_results[middle_col]
+                                )
+                        break
+                    elif indicator_type == "KeltnerChannels":
+                        # Store for later squeeze calculation
+                        kc_cols = [c for c in indicator_results.columns if c.startswith("KeltnerChannels")]
+                        if len(kc_cols) >= 3:
+                            upper_col = next((c for c in kc_cols if "upper" in c), None)
+                            lower_col = next((c for c in kc_cols if "lower" in c), None)
+                            if upper_col and lower_col:
+                                # Store KC bands for squeeze calculation
+                                mapped_results["_kc_upper"] = indicator_results[upper_col]
+                                mapped_results["_kc_lower"] = indicator_results[lower_col]
+                        break
                     else:
                         # For other indicators, use the raw values
                         mapped_results[original_name] = indicator_results[col]
@@ -288,6 +333,36 @@ class StrategyTrainer:
                     # If we found a non-MACD indicator, break
                     if indicator_type != "MACD":
                         break
+
+        # Compute additional derived metrics
+        # Volume ratio (current volume / volume SMA)
+        if "volume" in mapped_results.columns and "volume_sma" in mapped_results.columns:
+            mapped_results["volume_ratio"] = mapped_results["volume"] / mapped_results["volume_sma"]
+        
+        # Squeeze intensity (BB inside KC channels)
+        if "bb_width" in mapped_results.columns and "_kc_upper" in mapped_results.columns and "_kc_lower" in mapped_results.columns:
+            # Get BB bands for squeeze calculation
+            bb_cols = [c for c in indicator_results.columns if c.startswith("BollingerBands")]
+            if len(bb_cols) >= 3:
+                bb_upper_col = next((c for c in bb_cols if "upper" in c), None)
+                bb_lower_col = next((c for c in bb_cols if "lower" in c), None)
+                
+                if bb_upper_col and bb_lower_col:
+                    # Squeeze occurs when BB is inside KC
+                    bb_upper = indicator_results[bb_upper_col]
+                    bb_lower = indicator_results[bb_lower_col]
+                    kc_upper = mapped_results["_kc_upper"]
+                    kc_lower = mapped_results["_kc_lower"]
+                    
+                    # Calculate squeeze intensity: 1.0 when BB completely inside KC, 0.0 when outside
+                    squeeze_intensity = np.maximum(0, np.minimum(
+                        (kc_upper - bb_upper) / (kc_upper - kc_lower),
+                        (bb_lower - kc_lower) / (kc_upper - kc_lower)
+                    ))
+                    mapped_results["squeeze_intensity"] = squeeze_intensity
+        
+        # Clean up temporary columns
+        mapped_results = mapped_results.drop(columns=[col for col in mapped_results.columns if col.startswith("_")], errors='ignore')
 
         return mapped_results
 
