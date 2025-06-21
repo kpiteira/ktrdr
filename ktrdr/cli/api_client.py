@@ -434,29 +434,21 @@ class KtrdrApiClient:
 
     async def start_training(
         self,
-        strategy_config: Dict[str, Any],
         symbol: str,
         timeframe: str,
-        start_date: str,
-        end_date: str,
-        training_config: Dict[str, Any],
-        models_dir: str = "models",
-        data_mode: str = "local",
-        validation_split: float = 0.2,
-        dry_run: bool = False,
+        config: Dict[str, Any],
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Start a training task."""
         payload = {
-            "strategy_config": strategy_config,
             "symbol": symbol,
             "timeframe": timeframe,
+            "config": config,
             "start_date": start_date,
             "end_date": end_date,
-            "training_config": training_config,
-            "models_dir": models_dir,
-            "data_mode": data_mode,
-            "validation_split": validation_split,
-            "dry_run": dry_run,
+            "task_id": task_id,
         }
 
         response = await self._make_request(
