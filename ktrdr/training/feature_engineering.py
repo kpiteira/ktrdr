@@ -209,11 +209,27 @@ class FeatureEngineer:
         if "volume" not in price_data.columns:
             return np.array([]), []
 
-        volume = price_data["volume"]
+        volume = price_data["volume"].copy()
+        
+        # Handle IB sentinel values: -1 means "no volume data available" (e.g., Forex)
+        # Replace -1 with NaN to indicate missing data
+        volume = volume.replace(-1, np.nan)
+        
+        # For missing volume data, use forward fill then backward fill
+        # This assumes that if volume data is missing, the previous valid volume is reasonable
+        volume = volume.ffill().bfill()
+        
+        # If still NaN (no valid volume data at all), use a small positive default
+        # This prevents mathematical issues while indicating minimal volume
+        volume = volume.fillna(100.0)  # Small default volume
+        
+        # Ensure no negative volumes remain (shouldn't happen after -1 replacement, but safety check)
+        volume = np.maximum(volume, 0.0)
 
         # Volume relative to average
         volume_sma = volume.rolling(20).mean().fillna(volume.mean())
-        volume_ratio = volume / volume_sma
+        # Add epsilon to prevent division by zero in volume_sma
+        volume_ratio = volume / (volume_sma + 1e-8)
         features.append(volume_ratio.values)
         names.append("volume_ratio_20")
 
@@ -231,8 +247,16 @@ class FeatureEngineer:
 
         # On-balance volume indicator
         close = price_data["close"]
-        obv = (np.sign(close.diff()) * volume).cumsum()
-        obv_normalized = (obv - obv.mean()) / obv.std()
+        price_change = close.diff().fillna(0)  # Fill NaN for first price change
+        obv = (np.sign(price_change) * volume).cumsum()
+        # Normalize OBV with safety check for zero standard deviation
+        obv_std = obv.std()
+        if obv_std > 1e-8:  # Only normalize if there's meaningful variation
+            obv_normalized = (obv - obv.mean()) / obv_std
+        else:
+            obv_normalized = pd.Series(0.0, index=obv.index)  # Flat line if no variation
+        # Ensure no NaN values remain
+        obv_normalized = obv_normalized.fillna(0.0)
         features.append(obv_normalized.values)
         names.append("obv_normalized")
 
