@@ -368,269 +368,52 @@ class BacktestingService(BaseService):
             # Fallback estimate
             return 1000
 
-    def _load_data_with_warmup(self, engine):
-        """
-        Load historical data with warm-up period for indicators.
-
-        This method loads extra data before the backtest start date to ensure
-        indicators have sufficient historical data for accurate calculations.
-        """
-        # Calculate warm-up period needed (conservative estimate)
-        # Most indicators need at most 50-100 bars for warm-up
-        warmup_bars = 100
-
-        # Convert warm-up bars to time period based on timeframe
-        timeframe = engine.config.timeframe
-        if timeframe == "1m":
-            warmup_days = warmup_bars / 390  # ~390 minutes per trading day
-        elif timeframe == "5m":
-            warmup_days = warmup_bars / 78  # ~78 5-min bars per trading day
-        elif timeframe == "15m":
-            warmup_days = warmup_bars / 26  # ~26 15-min bars per trading day
-        elif timeframe == "1h":
-            warmup_days = warmup_bars / 7  # ~7 hours per trading day
-        elif timeframe == "4h":
-            warmup_days = warmup_bars / 2  # ~2 4-hour bars per trading day
-        elif timeframe == "1d":
-            warmup_days = warmup_bars  # 1 bar per day
-        else:
-            warmup_days = 50  # Default fallback
-
-        # Ensure minimum warm-up period
-        warmup_days = max(30, warmup_days)  # At least 30 days
-
-        # Calculate extended start date (ensure UTC timezone consistency)
-        original_start = pd.to_datetime(engine.config.start_date).tz_localize("UTC")
-        extended_start = original_start - pd.Timedelta(days=warmup_days)
-
-        # Load data with extended range
-        try:
-            # Use the engine's data manager to load extended data
-            extended_data = engine.data_manager.load_data(
-                symbol=engine.config.symbol,
-                timeframe=engine.config.timeframe,
-                start_date=extended_start.strftime("%Y-%m-%d"),
-                end_date=engine.config.end_date,
-                mode="local",  # Use local data first
-            )
-
-            if extended_data.empty:
-                # Fallback to original data loading if extended range fails
-                logger.warning(
-                    f"Failed to load extended data range, falling back to original range"
-                )
-                return engine._load_historical_data()
-
-            logger.info(
-                f"Loaded {len(extended_data)} bars including {warmup_days:.0f} days warm-up period"
-            )
-            return extended_data
-
-        except Exception as e:
-            logger.warning(
-                f"Failed to load extended data range: {e}, falling back to original range"
-            )
-            return engine._load_historical_data()
 
     async def _run_backtest_with_progress(
         self, engine, operation_id: str, estimated_bars: int
     ):
         """
-        Run backtest with progress tracking based on data processing.
-
-        This method modifies the backtesting engine to report progress
-        based on bars processed during the main simulation loop.
+        Run backtest with progress tracking using the proven BacktestingEngine.
         """
-        # Load data first to get actual bar count
-        data = self._load_data_with_warmup(engine)
-
-        # Find the start index for actual backtest period
-        backtest_start_date = pd.to_datetime(engine.config.start_date).tz_localize(
-            "UTC"
-        )
-        backtest_start_idx = 0
-        for i, timestamp in enumerate(data.index):
-            if timestamp >= backtest_start_date:
-                backtest_start_idx = i
-                break
-
-        actual_backtest_bars = len(data) - backtest_start_idx
-        total_bars_loaded = len(data)
-
-        # Update progress with actual bar count
+        # Update progress: starting backtest
         await self.operations_service.update_progress(
             operation_id,
             OperationProgress(
                 percentage=20.0,
-                current_step=f"Starting backtest simulation on {actual_backtest_bars:,} bars (loaded {total_bars_loaded:,} total with warm-up)",
-                items_total=actual_backtest_bars,
+                current_step="Starting backtest with proven engine",
             ),
         )
 
-        # Run backtest with custom progress callback
-        # We'll run it in a thread and periodically check a progress file
-        import asyncio
-        import time
-
-        # Store progress tracking state
-        progress_state = {"bars_processed": 0, "trades_executed": 0}
-
-        # Monkey patch the engine to track progress
-        original_run = engine.run
-
-        def progress_aware_run():
-            # Get the original run method's data loading and setup
-            start_time = pd.Timestamp.now()
-            execution_start = time.time()
-
-            # Load data with warm-up period for indicators
-            data = self._load_data_with_warmup(engine)
-            if data.empty:
-                raise ValueError(
-                    f"No data loaded for {engine.config.symbol} {engine.config.timeframe}"
-                )
-
-            # Find the start index for actual backtest period
-            # (data before this is warm-up data)
-            backtest_start_date = pd.to_datetime(engine.config.start_date).tz_localize(
-                "UTC"
-            )
-            backtest_start_idx = 0
-            for i, timestamp in enumerate(data.index):
-                if timestamp >= backtest_start_date:
-                    backtest_start_idx = i
-                    break
-
-            logger.info(
-                f"Loaded {len(data)} total bars, backtest starts at index {backtest_start_idx}"
-            )
-
-            # Initialize tracking (same as original engine)
-            trades_executed = 0
-
-            # Main simulation loop with progress tracking
-            # Only iterate over the actual backtest period, but always pass full historical data
-            for idx in range(backtest_start_idx, len(data)):
-                current_bar = data.iloc[idx]
-                current_timestamp = current_bar.name
-                current_price = current_bar["close"]
-
-                # Update progress state (relative to backtest period)
-                bars_in_backtest_period = idx - backtest_start_idx + 1
-                total_backtest_bars = len(data) - backtest_start_idx
-                progress_state["bars_processed"] = bars_in_backtest_period
-
-                # Prepare historical data up to current point (includes warm-up data)
-                historical_data = data.iloc[: idx + 1]
-
-                # Portfolio state for decision making
-                portfolio_state = {
-                    "total_value": engine.position_manager.get_portfolio_value(
-                        current_price
-                    ),
-                    "available_capital": engine.position_manager.available_capital,
-                }
-
-                # Get trading signal from decision orchestrator
-                decision = engine.orchestrator.make_decision(
-                    symbol=engine.config.symbol,
-                    timeframe=engine.config.timeframe,
-                    current_bar=current_bar,
-                    historical_data=historical_data,
-                    portfolio_state=portfolio_state,
-                )
-
-                # Execute trade if signal is actionable
-                if decision.signal in [Signal.BUY, Signal.SELL]:
-                    trade = engine.position_manager.execute_trade(
-                        signal=decision.signal,
-                        price=current_price,
-                        timestamp=current_timestamp,
-                        symbol=engine.config.symbol,
-                        decision_metadata={
-                            "confidence": decision.confidence,
-                            "reasoning": decision.reasoning,
-                        },
-                    )
-
-                    if trade:
-                        trades_executed += 1
-                        progress_state["trades_executed"] = trades_executed
-
-                # Update portfolio value tracking
-                current_position = engine.position_manager.current_position
-                engine.performance_tracker.update(
-                    timestamp=current_timestamp,
-                    price=current_price,
-                    portfolio_value=engine.position_manager.get_portfolio_value(current_price),
-                    position=current_position,
-                )
-
-            # Build final results (same as original)
-            end_time = pd.Timestamp.now()
-            execution_time = time.time() - execution_start
-
-            trades = engine.position_manager.get_trade_history()
-            metrics = engine.performance_tracker.calculate_metrics(
-                trades=trades,
-                initial_capital=engine.config.initial_capital,
-                start_date=pd.to_datetime(engine.config.start_date),
-                end_date=pd.to_datetime(engine.config.end_date),
-            )
-            equity_curve = engine.performance_tracker.get_equity_curve()
-
-            from ktrdr.backtesting.engine import BacktestResults
-
-            return BacktestResults(
-                strategy_name=engine.strategy_name,
-                symbol=engine.config.symbol,
-                timeframe=engine.config.timeframe,
-                config=engine.config,
-                trades=trades,
-                metrics=metrics,
-                equity_curve=equity_curve,
-                start_time=start_time,
-                end_time=end_time,
-                execution_time_seconds=execution_time,
-            )
-
-        # Replace the run method
-        engine.run = progress_aware_run
-
-        # Run with progress monitoring
+        # Use the REAL backtesting engine - no custom implementation!
+        logger.info(f"Starting real backtest with proven engine: {engine}")
+        
+        # Run the proven backtesting engine in a thread
         task = asyncio.create_task(asyncio.to_thread(engine.run))
-
-        # Monitor progress while running
+        
+        # Simple progress monitoring - let the real engine do the work
         last_progress = 20.0
+        start_time = asyncio.get_event_loop().time()
+        
         while not task.done():
-            await asyncio.sleep(1.0)  # Check every second
-
-            bars_processed = progress_state["bars_processed"]
-            trades_executed = progress_state["trades_executed"]
-
-            if bars_processed > 0:
-                # Progress from 20% to 90% based on bars processed
-                data_progress = (
-                    bars_processed / actual_backtest_bars
-                ) * 70  # 70% range for data processing
-                current_progress = 20.0 + data_progress
-
-                if (
-                    current_progress > last_progress + 1
-                ):  # Only update if significant change
-                    await self.operations_service.update_progress(
-                        operation_id,
-                        OperationProgress(
-                            percentage=min(current_progress, 90.0),
-                            current_step=f"Processing bar {bars_processed:,}/{actual_backtest_bars:,} ({trades_executed} trades)",
-                            items_processed=bars_processed,
-                            items_total=actual_backtest_bars,
-                        ),
-                    )
-                    last_progress = current_progress
-
-        # Get the results
+            await asyncio.sleep(2.0)  # Check every 2 seconds
+            
+            # Estimate progress based on elapsed time (rough approximation)
+            elapsed = asyncio.get_event_loop().time() - start_time
+            estimated_progress = min(20.0 + (elapsed / 30.0) * 70, 90.0)  # 30 sec estimate
+            
+            if estimated_progress > last_progress + 5:  # Update every 5%
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=estimated_progress,
+                        current_step="Running backtest with proven engine",
+                    ),
+                )
+                last_progress = estimated_progress
+        
+        # Get the real results from the proven engine
         results = await task
+        logger.info(f"Real backtest completed successfully")
         return results
 
     async def get_backtest_status(self, backtest_id: str) -> Dict[str, Any]:

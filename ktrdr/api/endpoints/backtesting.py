@@ -11,6 +11,7 @@ from pydantic import BaseModel, field_validator
 from ktrdr import get_logger
 from ktrdr.api.dependencies import get_api_config
 from ktrdr.api.services.backtesting_service import BacktestingService
+from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.errors import ValidationError, DataError
 
 logger = get_logger(__name__)
@@ -145,7 +146,7 @@ async def get_backtesting_service() -> BacktestingService:
     """Get backtesting service instance (singleton)."""
     global _backtesting_service
     if _backtesting_service is None:
-        _backtesting_service = BacktestingService()
+        _backtesting_service = BacktestingService(operations_service=get_operations_service())
     return _backtesting_service
 
 

@@ -39,7 +39,9 @@ class TrainingService(BaseService):
         super().__init__()
         self.model_storage = ModelStorage()
         self.model_loader = ModelLoader()
-        self.operations_service = operations_service or OperationsService()
+        if operations_service is None:
+            raise ValueError("OperationsService must be provided to TrainingService")
+        self.operations_service = operations_service
         logger.info("Training service initialized")
 
     async def health_check(self) -> Dict[str, Any]:
@@ -200,29 +202,29 @@ class TrainingService(BaseService):
             "task_id": task_id,
             "status": operation.status.value,
             "training_metrics": {
-                "final_train_loss": training_metrics.get("final_train_loss", 0.032),
-                "final_val_loss": training_metrics.get("final_val_loss", 0.038),
+                "final_train_loss": training_metrics.get("final_train_loss", 0.0),
+                "final_val_loss": training_metrics.get("final_val_loss", 0.0),
                 "final_train_accuracy": training_metrics.get(
-                    "final_train_accuracy", 0.92
+                    "final_train_accuracy", 0.0
                 ),
-                "final_val_accuracy": training_metrics.get("final_val_accuracy", 0.89),
+                "final_val_accuracy": training_metrics.get("final_val_accuracy", 0.0),
                 "epochs_completed": operation.progress.items_processed
                 or config.get("epochs", 100),
                 "early_stopped": training_metrics.get("early_stopped", False),
                 "training_time_minutes": training_metrics.get(
-                    "training_time_minutes", 25.5
+                    "training_time_minutes", 0.0
                 ),
             },
             "test_metrics": {
-                "test_loss": test_metrics.get("test_loss", 0.041),
-                "test_accuracy": test_metrics.get("test_accuracy", 0.88),
-                "precision": test_metrics.get("precision", 0.87),
-                "recall": test_metrics.get("recall", 0.89),
-                "f1_score": test_metrics.get("f1_score", 0.88),
+                "test_loss": test_metrics.get("test_loss", 0.0),
+                "test_accuracy": test_metrics.get("test_accuracy", 0.0),
+                "precision": test_metrics.get("precision", 0.0),
+                "recall": test_metrics.get("recall", 0.0),
+                "f1_score": test_metrics.get("f1_score", 0.0),
             },
             "model_info": {
-                "model_size_mb": model_info.get("model_size_mb", 12.5),
-                "parameters_count": model_info.get("parameters_count", 125430),
+                "model_size_mb": model_info.get("model_size_mb", 0.0),
+                "parameters_count": model_info.get("parameters_count", 0),
                 "architecture": model_info.get(
                     "architecture",
                     f"mlp_{'_'.join(map(str, config.get('hidden_layers', [64, 32, 16])))}",
@@ -306,9 +308,9 @@ class TrainingService(BaseService):
                 "created_at": model_info.get("created_at", ""),
                 "symbol": model_info.get("symbol", ""),
                 "timeframe": model_info.get("timeframe", ""),
-                "architecture": "mlp_64_32_16",
-                "training_accuracy": 0.89,
-                "test_accuracy": 0.88,
+                "architecture": model_info.get("architecture", ""),
+                "training_accuracy": model_info.get("training_accuracy", 0.0),
+                "test_accuracy": model_info.get("test_accuracy", 0.0),
             },
         }
 
@@ -336,12 +338,12 @@ class TrainingService(BaseService):
             "symbol": symbol,
             "test_date": test_date,
             "prediction": {
-                "signal": "buy",
-                "confidence": 0.78,
-                "signal_strength": 0.65,
-                "fuzzy_outputs": {"bullish": 0.78, "bearish": 0.22, "neutral": 0.31},
+                "signal": "hold",  # Default to hold if no real prediction
+                "confidence": 0.0,
+                "signal_strength": 0.0,
+                "fuzzy_outputs": {"bullish": 0.0, "bearish": 0.0, "neutral": 1.0},
             },
-            "input_features": {"sma_20": 152.34, "rsi_14": 64.2, "macd_signal": 0.45},
+            "input_features": {},  # Would be populated by real model prediction
         }
 
     async def list_trained_models(self) -> Dict[str, Any]:
@@ -358,8 +360,8 @@ class TrainingService(BaseService):
                 "symbol": model.get("symbol", ""),
                 "timeframe": model.get("timeframe", ""),
                 "created_at": model.get("created_at", ""),
-                "training_accuracy": 0.89,
-                "test_accuracy": 0.88,
+                "training_accuracy": model.get("training_accuracy", 0.0),
+                "test_accuracy": model.get("test_accuracy", 0.0),
                 "description": model.get("description", ""),
             }
             model_summaries.append(summary)
@@ -451,39 +453,7 @@ class TrainingService(BaseService):
                     ),
                 )
 
-                # Simulate progress updates during training
-                last_progress = 20.0
-                for epoch in range(
-                    0, total_epochs, max(1, total_epochs // 20)
-                ):  # Update every ~5% of epochs
-                    # Training progress from 20% to 90% (70% range)
-                    epoch_progress = (epoch / total_epochs) * 70
-                    current_progress = 20.0 + epoch_progress
-
-                    if (
-                        current_progress > last_progress + 2
-                    ):  # Only update if significant change
-                        # Simulate current metrics
-                        current_metrics = {
-                            "train_loss": max(0.01, 0.1 - (epoch * 0.001)),
-                            "val_loss": max(0.02, 0.12 - (epoch * 0.0008)),
-                            "train_accuracy": min(0.95, 0.7 + (epoch * 0.002)),
-                            "val_accuracy": min(0.93, 0.68 + (epoch * 0.0015)),
-                        }
-
-                        await self.operations_service.update_progress(
-                            operation_id,
-                            OperationProgress(
-                                percentage=min(current_progress, 90.0),
-                                current_step=f"Training epoch {epoch}/{total_epochs}",
-                                items_processed=epoch,
-                                items_total=total_epochs,
-                                # Note: details not supported in current OperationProgress model
-                            ),
-                        )
-                        last_progress = current_progress
-
-                    await asyncio.sleep(0.1)  # Simulate training time
+                # Let the real trainer handle the training - no fake simulation
 
                 # Phase 4: Run actual training (90%)
                 await self.operations_service.update_progress(
@@ -514,30 +484,22 @@ class TrainingService(BaseService):
                     ),
                 )
 
-                # Prepare results summary
-                results_summary = {
-                    "model_path": results.get("model_path") if results else None,
-                    "training_metrics": {
-                        "final_train_loss": 0.032,
-                        "final_val_loss": 0.038,
-                        "final_train_accuracy": 0.92,
-                        "final_val_accuracy": 0.89,
-                        "early_stopped": False,
-                        "training_time_minutes": 25.5,
-                    },
-                    "test_metrics": {
-                        "test_loss": 0.041,
-                        "test_accuracy": 0.88,
-                        "precision": 0.87,
-                        "recall": 0.89,
-                        "f1_score": 0.88,
-                    },
-                    "model_info": {
-                        "model_size_mb": 12.5,
-                        "parameters_count": 125430,
-                        "architecture": f"mlp_{'_'.join(map(str, config.get('hidden_layers', [64, 32, 16])))}",
-                    },
-                }
+                # Prepare results summary using real training results
+                if results:
+                    results_summary = {
+                        "model_path": results.get("model_path"),
+                        "training_metrics": results.get("training_metrics", {}),
+                        "test_metrics": results.get("test_metrics", {}),
+                        "model_info": results.get("model_info", {}),
+                    }
+                else:
+                    # Fallback if no results returned
+                    results_summary = {
+                        "model_path": None,
+                        "training_metrics": {},
+                        "test_metrics": {},
+                        "model_info": {},
+                    }
 
                 # Complete the operation
                 await self.operations_service.complete_operation(

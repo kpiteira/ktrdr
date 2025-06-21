@@ -1,0 +1,342 @@
+"""
+Unit tests for Operations API endpoints.
+
+Tests the unified operations endpoints for polling progress and managing
+long-running async operations like backtesting and training.
+"""
+
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi.testclient import TestClient
+from datetime import datetime, timezone
+
+from ktrdr.api.main import app
+from ktrdr.api.models.operations import OperationType, OperationStatus
+
+
+@pytest.fixture
+def client():
+    """Create a test client for the FastAPI application."""
+    return TestClient(app)
+
+
+@pytest.fixture
+def mock_operations_service():
+    """Create a mock OperationsService for testing endpoints."""
+    with patch("ktrdr.api.dependencies.OperationsService") as mock_class:
+        mock_instance = mock_class.return_value
+        # Set up async methods to return AsyncMock objects
+        mock_instance.list_operations = AsyncMock()
+        mock_instance.get_operation = AsyncMock()
+        mock_instance.cancel_operation = AsyncMock()
+        mock_instance.retry_operation = AsyncMock()
+        yield mock_instance
+
+
+class TestOperationsEndpoints:
+    """Test operations API endpoints."""
+
+    @pytest.mark.api
+    def test_list_operations_success(self, client, mock_operations_service):
+        """Test listing operations successfully."""
+        # Mock operations data
+        mock_operation_1 = MagicMock()
+        mock_operation_1.operation_id = "op_backtesting_001"
+        mock_operation_1.operation_type = OperationType.BACKTESTING
+        mock_operation_1.status = OperationStatus.RUNNING
+        mock_operation_1.progress.percentage = 45.0
+        mock_operation_1.progress.current_step = "Processing data"
+        mock_operation_1.started_at = datetime.now(timezone.utc)
+        mock_operation_1.completed_at = None
+        mock_operation_1.metadata.symbol = "AAPL"
+        mock_operation_1.metadata.timeframe = "1h"
+
+        mock_operation_2 = MagicMock()
+        mock_operation_2.operation_id = "op_training_002"
+        mock_operation_2.operation_type = OperationType.TRAINING
+        mock_operation_2.status = OperationStatus.COMPLETED
+        mock_operation_2.progress.percentage = 100.0
+        mock_operation_2.progress.current_step = "Training completed"
+        mock_operation_2.started_at = datetime.now(timezone.utc)
+        mock_operation_2.completed_at = datetime.now(timezone.utc)
+        mock_operation_2.metadata.symbol = "MSFT"
+        mock_operation_2.metadata.timeframe = "1d"
+
+        mock_operations_service.list_operations.return_value = [
+            mock_operation_1,
+            mock_operation_2,
+        ]
+
+        response = client.get("/api/v1/operations")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["data"]) == 2
+
+        # Check first operation
+        assert data["data"][0]["operation_id"] == "op_backtesting_001"
+        assert data["data"][0]["operation_type"] == "backtesting"
+        assert data["data"][0]["status"] == "running"
+        assert data["data"][0]["progress"]["percentage"] == 45.0
+
+        # Check second operation
+        assert data["data"][1]["operation_id"] == "op_training_002"
+        assert data["data"][1]["operation_type"] == "training"
+        assert data["data"][1]["status"] == "completed"
+
+    @pytest.mark.api
+    def test_list_operations_with_filters(self, client, mock_operations_service):
+        """Test listing operations with query filters."""
+        mock_operations_service.list_operations.return_value = []
+
+        response = client.get(
+            "/api/v1/operations?status=running&operation_type=backtesting&limit=50"
+        )
+
+        assert response.status_code == 200
+        # Verify filter parameters were passed
+        mock_operations_service.list_operations.assert_called_once_with(
+            status_filter=["running"],
+            operation_type=OperationType.BACKTESTING,
+            limit=50,
+            offset=0,
+            active_only=False,
+        )
+
+    @pytest.mark.api
+    def test_list_operations_active_only(self, client, mock_operations_service):
+        """Test listing only active operations."""
+        mock_operations_service.list_operations.return_value = []
+
+        response = client.get("/api/v1/operations?active_only=true")
+
+        assert response.status_code == 200
+        mock_operations_service.list_operations.assert_called_once_with(
+            status_filter=None,
+            operation_type=None,
+            limit=100,
+            offset=0,
+            active_only=True,
+        )
+
+    @pytest.mark.api
+    def test_get_operation_status_success(self, client, mock_operations_service):
+        """Test getting operation status successfully."""
+        mock_operation = MagicMock()
+        mock_operation.operation_id = "op_backtesting_123"
+        mock_operation.operation_type = OperationType.BACKTESTING
+        mock_operation.status = OperationStatus.RUNNING
+        mock_operation.progress.percentage = 75.0
+        mock_operation.progress.current_step = "Processing bar 750/1000"
+        mock_operation.progress.items_processed = 750
+        mock_operation.progress.items_total = 1000
+        mock_operation.progress.details = {"trades_executed": 15}
+        mock_operation.started_at = datetime.now(timezone.utc)
+        mock_operation.completed_at = None
+        mock_operation.error_message = None
+        mock_operation.warnings = []
+        mock_operation.errors = []
+        mock_operation.metadata.symbol = "AAPL"
+        mock_operation.metadata.timeframe = "1h"
+
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        response = client.get("/api/v1/operations/op_backtesting_123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["operation_id"] == "op_backtesting_123"
+        assert data["data"]["status"] == "running"
+        assert data["data"]["progress"]["percentage"] == 75.0
+        assert data["data"]["progress"]["current_step"] == "Processing bar 750/1000"
+        assert data["data"]["progress"]["items_processed"] == 750
+        assert data["data"]["progress"]["items_total"] == 1000
+
+    @pytest.mark.api
+    def test_get_operation_status_not_found(self, client, mock_operations_service):
+        """Test getting status for non-existent operation."""
+        mock_operations_service.get_operation.return_value = None
+
+        response = client.get("/api/v1/operations/nonexistent_id")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert data["success"] is False
+        assert "not found" in data["error"]["message"].lower()
+
+    @pytest.mark.api
+    def test_get_operation_status_completed_with_results(
+        self, client, mock_operations_service
+    ):
+        """Test getting status for completed operation with results."""
+        mock_operation = MagicMock()
+        mock_operation.operation_id = "op_training_456"
+        mock_operation.operation_type = OperationType.TRAINING
+        mock_operation.status = OperationStatus.COMPLETED
+        mock_operation.progress.percentage = 100.0
+        mock_operation.progress.current_step = "Training completed successfully"
+        mock_operation.progress.items_processed = 100
+        mock_operation.progress.items_total = 100
+        mock_operation.started_at = datetime.now(timezone.utc)
+        mock_operation.completed_at = datetime.now(timezone.utc)
+        mock_operation.error_message = None
+        mock_operation.warnings = ["Learning rate adjusted"]
+        mock_operation.errors = []
+        mock_operation.result_summary = {
+            "final_accuracy": 0.92,
+            "model_path": "/tmp/model.pth",
+        }
+        mock_operation.metadata.symbol = "MSFT"
+        mock_operation.metadata.timeframe = "1d"
+
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        response = client.get("/api/v1/operations/op_training_456")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["status"] == "completed"
+        assert data["data"]["result_summary"]["final_accuracy"] == 0.92
+        assert len(data["data"]["warnings"]) == 1
+        assert data["data"]["warnings"][0] == "Learning rate adjusted"
+
+    @pytest.mark.api
+    def test_cancel_operation_success(self, client, mock_operations_service):
+        """Test cancelling an operation successfully."""
+        mock_operations_service.cancel_operation.return_value = None
+
+        response = client.delete("/api/v1/operations/op_backtesting_789")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "cancelled" in data["message"].lower()
+
+        mock_operations_service.cancel_operation.assert_called_once_with(
+            "op_backtesting_789", reason=None, force=False
+        )
+
+    @pytest.mark.api
+    def test_cancel_operation_with_reason_and_force(
+        self, client, mock_operations_service
+    ):
+        """Test cancelling operation with reason and force flag."""
+        mock_operations_service.cancel_operation.return_value = None
+
+        payload = {"reason": "User requested cancellation", "force": True}
+
+        response = client.delete("/api/v1/operations/op_training_101", json=payload)
+
+        assert response.status_code == 200
+        mock_operations_service.cancel_operation.assert_called_once_with(
+            "op_training_101", reason="User requested cancellation", force=True
+        )
+
+    @pytest.mark.api
+    def test_cancel_operation_not_found(self, client, mock_operations_service):
+        """Test cancelling non-existent operation."""
+        from ktrdr.errors import ValidationError
+
+        mock_operations_service.cancel_operation.side_effect = ValidationError(
+            "Operation not found"
+        )
+
+        response = client.delete("/api/v1/operations/nonexistent_id")
+
+        assert response.status_code == 400
+
+    @pytest.mark.api
+    def test_retry_operation_success(self, client, mock_operations_service):
+        """Test retrying a failed operation."""
+        mock_operation = MagicMock()
+        mock_operation.operation_id = "op_backtesting_retry"
+        mock_operation.status = OperationStatus.PENDING
+
+        mock_operations_service.retry_operation.return_value = mock_operation
+
+        response = client.post("/api/v1/operations/op_backtesting_failed/retry")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "retried" in data["message"].lower()
+
+        mock_operations_service.retry_operation.assert_called_once_with(
+            "op_backtesting_failed"
+        )
+
+    @pytest.mark.api
+    def test_retry_operation_not_found(self, client, mock_operations_service):
+        """Test retrying non-existent operation."""
+        from ktrdr.errors import ValidationError
+
+        mock_operations_service.retry_operation.side_effect = ValidationError(
+            "Operation not found"
+        )
+
+        response = client.post("/api/v1/operations/nonexistent_id/retry")
+
+        assert response.status_code == 400
+
+    @pytest.mark.api
+    def test_list_operations_pagination(self, client, mock_operations_service):
+        """Test operations pagination."""
+        mock_operations_service.list_operations.return_value = []
+
+        response = client.get("/api/v1/operations?limit=25&offset=50")
+
+        assert response.status_code == 200
+        mock_operations_service.list_operations.assert_called_once_with(
+            status_filter=None,
+            operation_type=None,
+            limit=25,
+            offset=50,
+            active_only=False,
+        )
+
+    @pytest.mark.api
+    def test_get_operation_status_with_errors(self, client, mock_operations_service):
+        """Test getting status for operation with errors."""
+        mock_operation = MagicMock()
+        mock_operation.operation_id = "op_failed_123"
+        mock_operation.status = OperationStatus.FAILED
+        mock_operation.progress.percentage = 25.0
+        mock_operation.error_message = "Data validation failed"
+        mock_operation.warnings = ["Symbol may be delisted"]
+        mock_operation.errors = [
+            "Invalid timeframe specified",
+            "Start date after end date",
+        ]
+        mock_operation.started_at = datetime.now(timezone.utc)
+        mock_operation.completed_at = datetime.now(timezone.utc)
+        mock_operation.result_summary = None
+        mock_operation.metadata.symbol = "INVALID"
+        mock_operation.metadata.timeframe = "1h"
+
+        mock_operations_service.get_operation.return_value = mock_operation
+
+        response = client.get("/api/v1/operations/op_failed_123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["status"] == "failed"
+        assert data["data"]["error_message"] == "Data validation failed"
+        assert len(data["data"]["warnings"]) == 1
+        assert len(data["data"]["errors"]) == 2
+        assert data["data"]["result_summary"] is None
+
+    @pytest.mark.api
+    def test_operations_service_error_handling(self, client, mock_operations_service):
+        """Test error handling in operations endpoints."""
+        # Test service exception handling
+        mock_operations_service.list_operations.side_effect = Exception(
+            "Service unavailable"
+        )
+
+        response = client.get("/api/v1/operations")
+
+        assert response.status_code == 500

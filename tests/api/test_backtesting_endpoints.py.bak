@@ -1,0 +1,373 @@
+"""
+Unit tests for Backtesting API endpoints.
+
+Tests the backtesting endpoints that start backtest operations and retrieve results.
+"""
+
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi.testclient import TestClient
+
+from ktrdr.api.main import app
+
+
+@pytest.fixture
+def client():
+    """Create a test client for the FastAPI application."""
+    return TestClient(app)
+
+
+@pytest.fixture
+def mock_backtesting_service():
+    """Create a mock BacktestingService for testing endpoints."""
+    with patch("ktrdr.api.endpoints.backtesting.get_backtesting_service") as mock_func:
+        mock_instance = AsyncMock()
+        # Set up async methods to return AsyncMock objects
+        mock_instance.start_backtest = AsyncMock()
+        mock_instance.get_backtest_status = AsyncMock()
+        mock_instance.get_backtest_results = AsyncMock()
+        mock_instance.get_backtest_trades = AsyncMock()
+        mock_instance.get_equity_curve = AsyncMock()
+        mock_func.return_value = mock_instance
+        yield mock_instance
+
+
+class TestBacktestingEndpoints:
+    """Test backtesting API endpoints."""
+
+    @pytest.mark.api
+    def test_start_backtest_success(self, client, mock_backtesting_service):
+        """Test starting a backtest successfully."""
+        mock_backtesting_service.start_backtest.return_value = {
+            "backtest_id": "op_backtesting_12345",
+            "status": "starting",
+            "message": "Backtest started for test_strategy",
+        }
+
+        payload = {
+            "strategy_name": "test_strategy",
+            "symbol": "AAPL",
+            "timeframe": "1h",
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+            "initial_capital": 100000.0,
+        }
+
+        response = client.post("/api/v1/backtests/", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["backtest_id"] == "op_backtesting_12345"
+        assert data["status"] == "starting"
+
+        # Verify service was called with correct parameters
+        mock_backtesting_service.start_backtest.assert_called_once_with(
+            strategy_name="test_strategy",
+            symbol="AAPL",
+            timeframe="1h",
+            start_date="2024-01-01",
+            end_date="2024-06-01",
+            initial_capital=100000.0,
+        )
+
+    @pytest.mark.api
+    def test_start_backtest_with_optional_params(
+        self, client, mock_backtesting_service
+    ):
+        """Test starting backtest with default initial capital."""
+        mock_backtesting_service.start_backtest.return_value = {
+            "backtest_id": "op_backtesting_67890",
+            "status": "starting",
+            "message": "Backtest started for momentum_strategy",
+        }
+
+        payload = {
+            "strategy_name": "momentum_strategy",
+            "symbol": "MSFT",
+            "timeframe": "1d",
+            "start_date": "2023-01-01",
+            "end_date": "2023-12-31",
+            # initial_capital not provided, should use default
+        }
+
+        response = client.post("/api/v1/backtests/", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Verify default initial capital was used
+        mock_backtesting_service.start_backtest.assert_called_once_with(
+            strategy_name="momentum_strategy",
+            symbol="MSFT",
+            timeframe="1d",
+            start_date="2023-01-01",
+            end_date="2023-12-31",
+            initial_capital=100000.0,  # Default value
+        )
+
+    @pytest.mark.api
+    def test_start_backtest_validation_error(self, client, mock_backtesting_service):
+        """Test starting backtest with invalid parameters."""
+        payload = {
+            "strategy_name": "",  # Empty strategy name should be invalid
+            "symbol": "AAPL",
+            "timeframe": "1h",
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+        }
+
+        response = client.post("/api/v1/backtests/", json=payload)
+
+        assert response.status_code == 422  # Validation error
+
+    @pytest.mark.api
+    def test_start_backtest_service_error(self, client, mock_backtesting_service):
+        """Test handling service errors during backtest start."""
+        from ktrdr.errors import ValidationError
+
+        mock_backtesting_service.start_backtest.side_effect = ValidationError(
+            "Strategy not found"
+        )
+
+        payload = {
+            "strategy_name": "nonexistent_strategy",
+            "symbol": "AAPL",
+            "timeframe": "1h",
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+        }
+
+        response = client.post("/api/v1/backtests/", json=payload)
+
+        assert response.status_code == 400
+        assert "Strategy not found" in response.json()["detail"]
+
+    @pytest.mark.api
+    def test_get_backtest_results_success(self, client, mock_backtesting_service):
+        """Test getting backtest results successfully."""
+        mock_backtesting_service.get_backtest_results.return_value = {
+            "backtest_id": "completed_backtest_123",
+            "strategy_name": "test_strategy",
+            "symbol": "AAPL",
+            "timeframe": "1h",
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+            "metrics": {
+                "total_return": 15000,
+                "annualized_return": 0.25,
+                "sharpe_ratio": 1.2,
+                "max_drawdown": -0.08,
+                "win_rate": 0.65,
+                "profit_factor": 1.8,
+                "total_trades": 45,
+            },
+            "summary": {
+                "initial_capital": 100000,
+                "final_value": 115000,
+                "total_pnl": 15000,
+                "winning_trades": 29,
+                "losing_trades": 16,
+            },
+        }
+
+        response = client.get("/api/v1/backtests/completed_backtest_123/results")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["backtest_id"] == "completed_backtest_123"
+        assert data["strategy_name"] == "test_strategy"
+        assert data["metrics"]["total_return"] == 15000
+        assert data["metrics"]["sharpe_ratio"] == 1.2
+        assert data["summary"]["final_value"] == 115000
+
+    @pytest.mark.api
+    def test_get_backtest_results_not_found(self, client, mock_backtesting_service):
+        """Test getting results for non-existent backtest."""
+        from ktrdr.errors import ValidationError
+
+        mock_backtesting_service.get_backtest_results.side_effect = ValidationError(
+            "Backtest not found"
+        )
+
+        response = client.get("/api/v1/backtests/nonexistent_id/results")
+
+        assert response.status_code == 400
+
+    @pytest.mark.api
+    def test_get_backtest_trades_success(self, client, mock_backtesting_service):
+        """Test getting backtest trades successfully."""
+        mock_backtesting_service.get_backtest_trades.return_value = [
+            {
+                "trade_id": "1",
+                "entry_time": "2024-01-01T10:00:00",
+                "exit_time": "2024-01-01T14:00:00",
+                "side": "BUY",
+                "entry_price": 150.0,
+                "exit_price": 155.0,
+                "quantity": 100,
+                "pnl": 500.0,
+                "pnl_percent": 3.33,
+                "entry_reason": "Golden cross",
+                "exit_reason": "Take profit",
+            },
+            {
+                "trade_id": "2",
+                "entry_time": "2024-01-02T09:00:00",
+                "exit_time": "2024-01-02T11:00:00",
+                "side": "SELL",
+                "entry_price": 152.0,
+                "exit_price": 148.0,
+                "quantity": 100,
+                "pnl": 400.0,
+                "pnl_percent": 2.63,
+                "entry_reason": "Death cross",
+                "exit_reason": "Stop loss",
+            },
+        ]
+
+        response = client.get("/api/v1/backtests/completed_backtest_123/trades")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["trades"]) == 2
+        assert data["trades"][0]["trade_id"] == "1"
+        assert data["trades"][0]["side"] == "BUY"
+        assert data["trades"][0]["pnl"] == 500.0
+        assert data["trades"][1]["trade_id"] == "2"
+        assert data["trades"][1]["side"] == "SELL"
+
+    @pytest.mark.api
+    def test_get_backtest_trades_empty(self, client, mock_backtesting_service):
+        """Test getting trades for backtest with no trades."""
+        mock_backtesting_service.get_backtest_trades.return_value = []
+
+        response = client.get("/api/v1/backtests/no_trades_backtest/trades")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["trades"]) == 0
+
+    @pytest.mark.api
+    def test_get_equity_curve_success(self, client, mock_backtesting_service):
+        """Test getting equity curve successfully."""
+        mock_backtesting_service.get_equity_curve.return_value = {
+            "timestamps": [
+                "2024-01-01T00:00:00",
+                "2024-01-02T00:00:00",
+                "2024-01-03T00:00:00",
+                "2024-01-04T00:00:00",
+            ],
+            "values": [100000, 102000, 98000, 105000],
+            "drawdowns": [0.0, 0.0, -0.04, 0.0],
+        }
+
+        response = client.get("/api/v1/backtests/completed_backtest_123/equity_curve")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["timestamps"]) == 4
+        assert len(data["values"]) == 4
+        assert len(data["drawdowns"]) == 4
+        assert data["values"] == [100000, 102000, 98000, 105000]
+        assert data["drawdowns"] == [0.0, 0.0, -0.04, 0.0]
+
+    @pytest.mark.api
+    def test_get_equity_curve_missing_data(self, client, mock_backtesting_service):
+        """Test getting equity curve when data is missing."""
+        from ktrdr.errors import DataError
+
+        mock_backtesting_service.get_equity_curve.side_effect = DataError(
+            "No equity curve data"
+        )
+
+        response = client.get("/api/v1/backtests/no_curve_backtest/equity_curve")
+
+        assert response.status_code == 500
+
+    @pytest.mark.api
+    def test_backtest_endpoints_error_handling(self, client, mock_backtesting_service):
+        """Test general error handling in backtest endpoints."""
+        # Test unexpected service error
+        mock_backtesting_service.get_backtest_results.side_effect = Exception(
+            "Unexpected error"
+        )
+
+        response = client.get("/api/v1/backtests/error_backtest/results")
+
+        assert response.status_code == 500
+
+    @pytest.mark.api
+    def test_start_backtest_invalid_dates(self, client, mock_backtesting_service):
+        """Test starting backtest with invalid date format."""
+        payload = {
+            "strategy_name": "test_strategy",
+            "symbol": "AAPL",
+            "timeframe": "1h",
+            "start_date": "invalid-date",
+            "end_date": "2024-06-01",
+        }
+
+        response = client.post("/api/v1/backtests/", json=payload)
+
+        # Should be caught by Pydantic validation or service validation
+        assert response.status_code in [400, 422]
+
+    @pytest.mark.api
+    def test_start_backtest_negative_capital(self, client, mock_backtesting_service):
+        """Test starting backtest with negative initial capital."""
+        payload = {
+            "strategy_name": "test_strategy",
+            "symbol": "AAPL",
+            "timeframe": "1h",
+            "start_date": "2024-01-01",
+            "end_date": "2024-06-01",
+            "initial_capital": -1000.0,  # Invalid negative capital
+        }
+
+        response = client.post("/api/v1/backtests/", json=payload)
+
+        assert response.status_code == 422  # Validation error
+
+    @pytest.mark.api
+    def test_get_backtest_results_incomplete(self, client, mock_backtesting_service):
+        """Test getting results for incomplete backtest."""
+        from ktrdr.errors import ValidationError
+
+        mock_backtesting_service.get_backtest_results.side_effect = ValidationError(
+            "Backtest is not completed yet"
+        )
+
+        response = client.get("/api/v1/backtests/running_backtest/results")
+
+        assert response.status_code == 400
+        assert "not completed" in response.json()["detail"]
+
+    @pytest.mark.api
+    def test_backtest_large_payload(self, client, mock_backtesting_service):
+        """Test backtest endpoint with large payload."""
+        mock_backtesting_service.start_backtest.return_value = {
+            "backtest_id": "op_backtesting_large",
+            "status": "starting",
+            "message": "Large backtest started",
+        }
+
+        payload = {
+            "strategy_name": "test_strategy_with_very_long_name_that_might_exceed_limits",
+            "symbol": "AAPL",
+            "timeframe": "1m",  # High frequency
+            "start_date": "2020-01-01",  # Long time period
+            "end_date": "2024-06-01",
+            "initial_capital": 1000000.0,  # Large capital
+        }
+
+        response = client.post("/api/v1/backtests/", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
