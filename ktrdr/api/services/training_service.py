@@ -407,6 +407,20 @@ class TrainingService(BaseService):
             temp_strategy_config = {
                 "name": f"temp_strategy_{operation_id}",
                 "description": f"Temporary strategy for training operation {operation_id}",
+                # Add minimal required indicators section
+                "indicators": [
+                    {"name": "sma", "period": 20},
+                    {"name": "rsi", "period": 14},
+                    {"name": "macd", "fast": 12, "slow": 26, "signal": 9},
+                ],
+                # Add minimal fuzzy configuration
+                "fuzzy_sets": {
+                    "rsi": {
+                        "oversold": {"type": "triangular", "parameters": [0, 20, 35]},
+                        "neutral": {"type": "triangular", "parameters": [25, 50, 75]},
+                        "overbought": {"type": "triangular", "parameters": [65, 80, 100]},
+                    }
+                },
                 "model": {
                     "type": config.get("model_type", "mlp"),
                     "training": {
@@ -421,6 +435,17 @@ class TrainingService(BaseService):
                     "architecture": {
                         "hidden_layers": config.get("hidden_layers", [64, 32, 16])
                     },
+                },
+                # Add minimal training configuration
+                "training": {
+                    "method": "supervised",
+                    "labels": {"source": "zigzag", "zigzag_threshold": 0.05},
+                    "data_split": {"train": 0.7, "validation": 0.15, "test": 0.15},
+                },
+                # Add minimal decisions configuration  
+                "decisions": {
+                    "output_format": "classification",
+                    "confidence_threshold": 0.6,
                 },
             }
 

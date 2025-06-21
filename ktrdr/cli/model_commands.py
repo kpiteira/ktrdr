@@ -199,6 +199,10 @@ async def _train_model_async(
                 end_date=end_date,
             )
             
+            if "task_id" not in result:
+                console.print(f"❌ [red]API response missing task_id: {result}[/red]")
+                return
+                
             task_id = result["task_id"]
             console.print(f"✅ Training started with ID: [bold]{task_id}[/bold]")
             
