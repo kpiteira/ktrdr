@@ -556,20 +556,27 @@ class BacktestingService(BaseService):
                     if trade:
                         trades_executed += 1
                         progress_state["trades_executed"] = trades_executed
-                        engine.performance_tracker.add_trade(trade)
 
                 # Update portfolio value tracking
-                engine.performance_tracker.update_portfolio_value(
+                current_position = engine.position_manager.current_position
+                engine.performance_tracker.update(
                     timestamp=current_timestamp,
-                    value=engine.position_manager.get_portfolio_value(current_price),
+                    price=current_price,
+                    portfolio_value=engine.position_manager.get_portfolio_value(current_price),
+                    position=current_position,
                 )
 
             # Build final results (same as original)
             end_time = pd.Timestamp.now()
             execution_time = time.time() - execution_start
 
-            trades = engine.performance_tracker.get_trades()
-            metrics = engine.performance_tracker.calculate_metrics()
+            trades = engine.position_manager.get_trade_history()
+            metrics = engine.performance_tracker.calculate_metrics(
+                trades=trades,
+                initial_capital=engine.config.initial_capital,
+                start_date=pd.to_datetime(engine.config.start_date),
+                end_date=pd.to_datetime(engine.config.end_date),
+            )
             equity_curve = engine.performance_tracker.get_equity_curve()
 
             from ktrdr.backtesting.engine import BacktestResults
