@@ -169,42 +169,112 @@ async def _train_model_async(
             console.print(f"💾 Models directory: {models_dir}")
             return
 
-        # This would call the training API endpoint
-        # For now, show a placeholder message with simulated progress
-        console.print(f"⚠️  [yellow]Model training via API not yet implemented[/yellow]")
-        console.print(f"📋 Would train model with:")
+        # Call the real training API endpoint
+        console.print(f"🚀 [cyan]Starting model training via API...[/cyan]")
+        console.print(f"📋 Training parameters:")
         console.print(f"   Strategy: {strategy_file}")
         console.print(f"   Symbol: {symbol}")
         console.print(f"   Timeframe: {timeframe}")
         console.print(f"   Period: {start_date} to {end_date}")
+        console.print(f"   Validation split: {validation_split}")
 
-        # Simulate training progress
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Training model...", total=100)
+        # Start the training via API
+        try:
+            # Prepare training configuration
+            training_config = {
+                "epochs": 100,  # Default values - could be made configurable
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "validation_split": validation_split,
+                "early_stopping": {"patience": 10, "monitor": "val_accuracy"},
+                "optimizer": "adam",
+                "dropout_rate": 0.2,
+            }
+            
+            result = await api_client.start_training(
+                symbol=symbol,
+                timeframe=timeframe,
+                config=training_config,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            
+            task_id = result["task_id"]
+            console.print(f"✅ Training started with ID: [bold]{task_id}[/bold]")
+            
+        except Exception as e:
+            console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
+            return
 
-            steps = [
-                ("Loading training data", 20),
-                ("Preprocessing features", 40),
-                ("Training neural network", 80),
-                ("Validating model", 95),
-                ("Saving model", 100),
-            ]
+        # Poll for progress with real API calls
+        # Temporarily suppress httpx logging to keep progress display clean
+        import logging
+        httpx_logger = logging.getLogger("httpx")
+        original_level = httpx_logger.level
+        httpx_logger.setLevel(logging.WARNING)
+        
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Training model...", total=100)
 
-            for step_desc, target in steps:
-                progress.update(task, description=step_desc)
-                while progress.tasks[0].completed < target:
-                    await asyncio.sleep(0.1)
-                    progress.update(task, advance=2)
+                while True:
+                    try:
+                        # Get real status from training API
+                        status_result = await api_client.get_training_status(task_id)
+                        data = status_result.get("data", status_result)  # Handle both wrapped and direct responses
+                        status = data.get("status", "unknown")
+                        progress_pct = data.get("progress", 0)
+                        current_epoch = data.get("current_epoch", 0)
+                        total_epochs = data.get("total_epochs", 100)
+                        
+                        # Update progress bar with real progress
+                        epoch_info = f" (epoch {current_epoch}/{total_epochs})" if current_epoch > 0 else ""
+                        progress.update(task, completed=progress_pct, description=f"Status: {status}{epoch_info}")
+                        
+                        if status == "completed":
+                            console.print(f"✅ [green]Model training completed successfully![/green]")
+                            break
+                        elif status == "failed":
+                            error_msg = data.get("error", "Unknown error")
+                            console.print(f"❌ [red]Training failed: {error_msg}[/red]")
+                            return
+                        
+                        # Wait before next poll
+                        await asyncio.sleep(3)
+                        
+                    except Exception as e:
+                        console.print(f"❌ [red]Error polling training status: {str(e)}[/red]")
+                        return
+        finally:
+            # Restore original httpx logging level
+            httpx_logger.setLevel(original_level)
 
-        console.print(f"✅ [green]Model training completed[/green]")
-        console.print(f"💾 Model saved to: {models_dir}/{symbol}_{timeframe}_model.pkl")
+        # Get real results from API
+        try:
+            performance_result = await api_client.get_training_performance(task_id)
+            metrics = performance_result.get("training_metrics", {})
+            model_info = performance_result.get("model_info", {})
+            
+            # Display real results
+            console.print(f"📊 [bold green]Training Results:[/bold green]")
+            console.print(f"🎯 Final accuracy: {metrics.get('final_train_accuracy', 0):.1%}")
+            console.print(f"📈 Validation accuracy: {metrics.get('final_val_accuracy', 0):.1%}")
+            console.print(f"📉 Final loss: {metrics.get('final_train_loss', 0):.4f}")
+            console.print(f"⏱️  Training time: {metrics.get('training_time_minutes', 0):.1f} minutes")
+            console.print(f"💾 Model size: {model_info.get('model_size_mb', 0):.1f} MB")
+            
+        except Exception as e:
+            console.print(f"❌ [red]Error retrieving training results: {str(e)}[/red]")
+            console.print(f"✅ [green]Training completed, but unable to fetch detailed results[/green]")
+            
+        console.print(f"💾 Model training completed via API")
 
     except Exception as e:
         raise DataError(
