@@ -183,6 +183,7 @@ class ModelTrainer:
                     print(f"🔍 DEBUG: First batch - y contains NaN: {torch.isnan(batch_y).any()}")
                     print(f"🔍 DEBUG: First batch - X shape: {batch_X.shape}, y shape: {batch_y.shape}")
                     print(f"🔍 DEBUG: First batch - X min/max: {batch_X.min():.6f}/{batch_X.max():.6f}")
+                    print(f"🔍 DEBUG: First batch - X contains inf: {torch.isinf(batch_X).any()}")
                     print(f"🔍 DEBUG: First batch - y unique values: {torch.unique(batch_y)}")
                 
                 # Forward pass
