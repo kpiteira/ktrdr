@@ -458,34 +458,34 @@ async def _backtest_strategy_async(
                 TimeElapsedColumn(),
                 console=console,
             ) as progress:
-            task = progress.add_task("Running backtest...", total=100)
+                task = progress.add_task("Running backtest...", total=100)
 
-            while True:
-                try:
-                    # Get real status from operations API
-                    status_result = await api_client.get_operation_status(backtest_id)
-                    data = status_result.get("data", {})
-                    status = data.get("status", "unknown")
-                    progress_info = data.get("progress", {})
-                    progress_pct = progress_info.get("percentage", 0)
-                    
-                    # Update progress bar with real progress
-                    progress.update(task, completed=progress_pct, description=f"Status: {status}")
-                    
-                    if status == "completed":
-                        console.print(f"✅ [green]Backtest completed successfully![/green]")
-                        break
-                    elif status == "failed":
-                        error_msg = data.get("error_message", "Unknown error")
-                        console.print(f"❌ [red]Backtest failed: {error_msg}[/red]")
+                while True:
+                    try:
+                        # Get real status from operations API
+                        status_result = await api_client.get_operation_status(backtest_id)
+                        data = status_result.get("data", {})
+                        status = data.get("status", "unknown")
+                        progress_info = data.get("progress", {})
+                        progress_pct = progress_info.get("percentage", 0)
+                        
+                        # Update progress bar with real progress
+                        progress.update(task, completed=progress_pct, description=f"Status: {status}")
+                        
+                        if status == "completed":
+                            console.print(f"✅ [green]Backtest completed successfully![/green]")
+                            break
+                        elif status == "failed":
+                            error_msg = data.get("error_message", "Unknown error")
+                            console.print(f"❌ [red]Backtest failed: {error_msg}[/red]")
+                            return
+                        
+                        # Wait before next poll
+                        await asyncio.sleep(2)
+                        
+                    except Exception as e:
+                        console.print(f"❌ [red]Error polling backtest status: {str(e)}[/red]")
                         return
-                    
-                    # Wait before next poll
-                    await asyncio.sleep(2)
-                    
-                except Exception as e:
-                    console.print(f"❌ [red]Error polling backtest status: {str(e)}[/red]")
-                    return
         finally:
             # Restore original httpx logging level
             httpx_logger.setLevel(original_level)
