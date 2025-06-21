@@ -163,6 +163,13 @@ class StrategyTrainer:
         print(f"🔍 DEBUG: Val X contains NaN: {np.isnan(val_data[0]).any()}")
         print(f"🔍 DEBUG: Val y contains NaN: {np.isnan(val_data[1]).any()}")
         
+        # DEBUG: Check for extreme values that could cause overflow
+        print(f"🔍 DEBUG: Train X min/max: {train_data[0].min():.6f}/{train_data[0].max():.6f}")
+        print(f"🔍 DEBUG: Train X contains inf: {np.isinf(train_data[0]).any()}")
+        if np.isinf(train_data[0]).any():
+            inf_count = np.isinf(train_data[0]).sum()
+            print(f"🔍 DEBUG: Train X has {inf_count} inf values")
+        
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
             model, train_data, val_data, config["model"]["training"], progress_callback
@@ -362,10 +369,16 @@ class StrategyTrainer:
                             lower_col = next((c for c in bb_cols if "lower" in c), None)
                             
                             if upper_col and middle_col and lower_col:
-                                # Compute BB width as percentage of middle band
-                                mapped_results["bb_width"] = (
-                                    (indicator_results[upper_col] - indicator_results[lower_col]) / 
-                                    indicator_results[middle_col]
+                                # Compute BB width as percentage of middle band (safe division)
+                                upper_vals = indicator_results[upper_col]
+                                lower_vals = indicator_results[lower_col] 
+                                middle_vals = indicator_results[middle_col]
+                                
+                                # Safe division: avoid division by zero or very small values
+                                mapped_results["bb_width"] = np.where(
+                                    np.abs(middle_vals) > 1e-10,  # Avoid tiny denominators
+                                    (upper_vals - lower_vals) / middle_vals,
+                                    0.0  # Default width when middle is ~0
                                 )
                         break
                     elif indicator_type == "KeltnerChannels":
@@ -389,9 +402,17 @@ class StrategyTrainer:
                         break
 
         # Compute additional derived metrics
-        # Volume ratio (current volume / volume SMA)
+        # Volume ratio (current volume / volume SMA) - safe division
         if "volume" in mapped_results.columns and "volume_sma" in mapped_results.columns:
-            mapped_results["volume_ratio"] = mapped_results["volume"] / mapped_results["volume_sma"]
+            volume_vals = mapped_results["volume"]
+            volume_sma_vals = mapped_results["volume_sma"]
+            
+            # Safe division: avoid division by zero or very small values
+            mapped_results["volume_ratio"] = np.where(
+                np.abs(volume_sma_vals) > 1e-10,  # Avoid tiny denominators
+                volume_vals / volume_sma_vals,
+                1.0  # Default ratio when SMA is ~0
+            )
         
         # Squeeze intensity (BB inside KC channels)
         if "bb_width" in mapped_results.columns and "_kc_upper" in mapped_results.columns and "_kc_lower" in mapped_results.columns:
@@ -409,15 +430,28 @@ class StrategyTrainer:
                     kc_lower = mapped_results["_kc_lower"]
                     
                     # Calculate squeeze intensity: 1.0 when BB completely inside KC, 0.0 when outside
-                    squeeze_intensity = np.maximum(0, np.minimum(
-                        (kc_upper - bb_upper) / (kc_upper - kc_lower),
-                        (bb_lower - kc_lower) / (kc_upper - kc_lower)
-                    ))
+                    # Safe division to avoid overflow when KC range is very small
+                    kc_range = kc_upper - kc_lower
+                    
+                    # Only calculate when KC range is meaningful (not zero or tiny)
+                    squeeze_intensity = np.where(
+                        np.abs(kc_range) > 1e-10,  # Avoid tiny denominators
+                        np.maximum(0, np.minimum(
+                            (kc_upper - bb_upper) / kc_range,
+                            (bb_lower - kc_lower) / kc_range
+                        )),
+                        0.0  # Default to no squeeze when KC range is ~0
+                    )
                     mapped_results["squeeze_intensity"] = squeeze_intensity
         
         # Clean up temporary columns
         mapped_results = mapped_results.drop(columns=[col for col in mapped_results.columns if col.startswith("_")], errors='ignore')
 
+        # Final safety check: replace any inf values with NaN, then fill NaN with 0
+        # This prevents overflow from propagating to feature scaling
+        mapped_results = mapped_results.replace([np.inf, -np.inf], np.nan)
+        mapped_results = mapped_results.fillna(0.0)
+        
         return mapped_results
 
     def _generate_fuzzy_memberships(
