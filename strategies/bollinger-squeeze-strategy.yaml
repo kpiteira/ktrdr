@@ -25,10 +25,18 @@ indicators:
     period: 14
   - name: momentum
     period: 12
+  # Derived indicators (now available as proper indicator classes)
+  - name: bollinger_band_width
+    bollinger_bands_source: "bollinger_bands"
+  - name: volume_ratio
+    volume_sma_source: "volume_sma"
+  - name: squeeze_intensity
+    bollinger_bands_source: "bollinger_bands"
+    keltner_channels_source: "keltner_channels"
 
 # Fuzzy logic configuration
 fuzzy_sets:
-  bb_width:
+  bollinger_band_width:
     very_tight:
       type: triangular
       parameters: [0, 0.002, 0.005]
