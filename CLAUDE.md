@@ -1,10 +1,190 @@
-# CLAUDE.md
+# CLAUDE.md - KTRDR Development Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## 🎯 PRIME DIRECTIVE: Think Before You Code
+
+**STOP AND THINK**: Before writing any code, you MUST:
+1. Understand the root cause of the problem
+2. Consider architectural implications
+3. Propose the solution approach and get confirmation
+4. Only then implement
+
+## 🚫 ANTI-PATTERNS TO AVOID
+
+### The "Quick Fix" Trap
+❌ **DON'T**: Add try/except blocks to suppress errors
+✅ **DO**: Understand why the error occurs and fix the root cause
+
+❌ **DON'T**: Add new parameters/flags to work around issues  
+✅ **DO**: Refactor the design if current structure doesn't support the need
+
+❌ **DON'T**: Copy-paste similar code with slight modifications
+✅ **DO**: Extract common patterns into reusable functions/classes
+
+❌ **DON'T**: Add "bandaid" fixes that make code work but harder to understand
+✅ **DO**: Take time to implement clean, maintainable solutions
+
+## 🏗️ ARCHITECTURAL PRINCIPLES
+
+### 1. Separation of Concerns
+- Each module has ONE clear responsibility
+- Dependencies flow in one direction: UI → API → Core → Data
+- No circular dependencies or tight coupling
+
+### 2. Data Flow Clarity
+```
+IB Gateway → Data Manager → Indicators → Fuzzy → Neural → Decisions
+                ↓               ↓           ↓        ↓         ↓
+              Storage      Calculations  Members  Models   Signals
+```
+
+### 3. Error Handling Philosophy
+- Errors should bubble up with context
+- Handle errors at the appropriate level
+- Never silently swallow exceptions
+- Always log before re-raising
+
+## 🔍 BEFORE MAKING CHANGES
+
+### 1. Understand the Current Code
+```python
+# Ask yourself:
+# - What is this module's responsibility?
+# - Who calls this code and why?
+# - What assumptions does it make?
+# - What would break if I change this?
+```
+
+### 2. Trace the Full Flow
+Before modifying any function:
+- Find all callers (grep/search)
+- Understand the data flow
+- Check for side effects
+- Review related tests
+
+### 3. Consider Architectural Impact
+- Will this change make the code more or less maintainable?
+- Does it align with existing patterns?
+- Should we refactor instead of patching?
+
+## 📝 IMPLEMENTATION CHECKLIST
+
+When implementing features:
+
+1. **Design First**
+   - [ ] Write a brief design comment explaining the approach
+   - [ ] Identify which modules will be affected
+   - [ ] Consider edge cases and error scenarios
+
+2. **Code Quality**
+   - [ ] Follow existing patterns in the codebase
+   - [ ] Add type hints for all parameters and returns
+   - [ ] Write clear docstrings explaining "why", not just "what"
+   - [ ] Keep functions focused and under 50 lines
+
+3. **Testing**
+   - [ ] Write tests BEFORE implementing
+   - [ ] Test both happy path and error cases
+   - [ ] Run existing tests to ensure no regression
+
+4. **Integration**
+   - [ ] Trace through the full execution path
+   - [ ] Verify error handling at each level
+   - [ ] Check logs make sense for debugging
+
+## 🛑 WHEN TO STOP AND ASK
+
+You MUST stop and ask for clarification when:
+- The fix requires changing core architectural patterns
+- You're adding the 3rd try/except block to make something work
+- The solution feels like a "hack" or "workaround"
+- You need to modify more than 3 files for a "simple" fix
+- You're copy-pasting code blocks
+- You're unsure about the broader impact
+
+## 💭 THINKING PROMPTS
+
+Before implementing, ask yourself:
+1. "What problem am I actually solving?"
+2. "Is this the simplest solution that could work?"
+3. "Will someone understand this code in 6 months?"
+4. "Am I fixing the symptom or the cause?"
+5. "Is there a pattern in the codebase I should follow?"
+
+## 🎨 CODE STYLE BEYOND FORMATTING
+
+### Clarity Over Cleverness
+```python
+# ❌ Clever but unclear
+result = [x for x in data if all(f(x) for f in filters)] if filters else data
+
+# ✅ Clear and maintainable
+def apply_filters(data: List[Any], filters: List[Callable]) -> List[Any]:
+    """Apply multiple filter functions to data."""
+    if not filters:
+        return data
+    
+    filtered_data = []
+    for item in data:
+        if all(filter_func(item) for filter_func in filters):
+            filtered_data.append(item)
+    return filtered_data
+```
+
+### Explicit Over Implicit
+```python
+# ❌ Implicit behavior
+def process_data(data, skip_validation=False):
+    if not skip_validation:
+        validate(data)  # What does this validate?
+
+# ✅ Explicit behavior  
+def process_data(data: pd.DataFrame, validate_schema: bool = True):
+    """Process data with optional schema validation."""
+    if validate_schema:
+        validate_dataframe_schema(data, required_columns=['open', 'high', 'low', 'close'])
+```
+
+## 🔧 COMMON ISSUES AND ROOT CAUSES
+
+### Issue: "Function not working in async context"
+❌ **Quick Fix**: Wrap in try/except and return None
+✅ **Root Cause Fix**: Ensure proper async/await chain from top to bottom
+
+### Issue: "Data not loading correctly"
+❌ **Quick Fix**: Add more retries and error suppression
+✅ **Root Cause Fix**: Understand data format requirements and validate inputs
+
+### Issue: "Frontend not updating"
+❌ **Quick Fix**: Add setTimeout or force refresh
+✅ **Root Cause Fix**: Trace Redux action flow and fix state management
+
+## 📚 REQUIRED READING
+
+Before working on specific modules:
+- **Data Module**: Read `ktrdr/data/README.md` and understand IB integration
+- **API Module**: Review FastAPI patterns in `ktrdr/api/`
+- **Frontend**: Understand Redux Toolkit patterns in `frontend/src/store/`
+- **Testing**: Study existing test patterns in `tests/`
+
+## ⚡ FINAL REMINDERS
+
+1. **Quality > Speed**: Taking 2 hours to do it right saves 10 hours of debugging
+2. **Ask Questions**: Unclear requirements lead to wrong implementations
+3. **Refactor Fearlessly**: If the current design doesn't fit, change it
+4. **Document Why**: Code shows "what", comments explain "why"
+5. **Test Everything**: If it's not tested, it's broken
+
+Remember: You're not just writing code, you're building a system. Every line should make the system better, not just make it work.
 
 ## ⚠️ CRITICAL: THIS PROJECT USES UV ⚠️
 
 **NEVER run `python` or `python3` directly!** This project uses `uv` for Python dependency management.
+
+**Always use `uv run` for Python commands:**
+- `uv run python script.py` (NOT `python script.py`)
+- `uv run pytest` (NOT `pytest`)
+- `uv run mypy ktrdr` (NOT `mypy ktrdr`)
+- `uv run black ktrdr tests` (NOT `black ktrdr tests`)
 
 ## 🚨 CRITICAL: MCP DEVELOPMENT RULES 🚨
 
@@ -24,65 +204,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docker-compose restart` (restarts ALL containers)
 - Any command that affects backend or frontend containers
 
-**WHY:** The backend and frontend are delicate and should never be rebuilt during MCP development. Only the MCP container should be modified.
-
-**Always use `uv run` for Python commands:**
-- `uv run python script.py` (NOT `python script.py`)
-- `uv run pytest` (NOT `pytest`)
-- `uv run mypy ktrdr` (NOT `mypy ktrdr`)
-- `uv run black ktrdr tests` (NOT `black ktrdr tests`)
-
-Running Python directly will fail because dependencies are managed by uv, not installed globally.
-
-## Build/Test/Lint Commands
-
-- **Setup**: `./setup_dev.sh` to set up the environment
-- **Python Tests**: `uv run pytest` (all tests), `uv run pytest tests/path/to/test.py` (specific test)
-- **Real E2E Tests**: `./scripts/run_real_e2e_tests.sh` (requires IB Gateway), `uv run pytest tests/e2e_real/ --real-ib`
-- **Python Linting**: `uv run black ktrdr tests` (formatting), `uv run mypy ktrdr` (type checking)
-- **Frontend Dev**: Use Docker containers: `./docker_dev.sh start` (from root), NOT direct `npm run dev`
-- **Frontend Shell**: `./docker_dev.sh shell-frontend` to access frontend container
-- **Frontend Tests**: `cd frontend && npm run test` (within frontend container)
-- **Frontend Lint**: `cd frontend && npm run lint` (within frontend container)
-- **Frontend Typecheck**: `cd frontend && npm run typecheck` (within frontend container)
-
-## CLI Commands
-
-The project provides a comprehensive CLI via `uv run ktrdr` with the following commands:
-
-### Data Management Commands
-- **Show Data**: `uv run ktrdr data show AAPL --timeframe 1h --rows 20`
-- **Load Data**: `uv run ktrdr data load AAPL --timeframe 1d --async`
-- **Data Range**: `uv run ktrdr data range AAPL --timeframe 1h`
-
-### Technical Indicator Commands
-- **Compute Indicators**: `uv run ktrdr indicators compute AAPL --type RSI --period 14`
-- **Plot Charts**: `uv run ktrdr indicators plot AAPL --indicator SMA --period 20 --timeframe 1h`
-- **List Indicators**: `uv run ktrdr indicators list`
-
-### IB Integration Commands  
-- **Test IB**: `uv run ktrdr ib test AAPL --verbose`
-- **IB Status**: `uv run ktrdr ib status`
-- **IB Cleanup**: `uv run ktrdr ib cleanup`
-- **Test Head Timestamp**: `uv run ktrdr ib test-head-timestamp AAPL --timeframe 1d`
-
-### Strategy Management (Planned)
-- **Validate Strategy**: `uv run ktrdr strategies validate strategies/my_strategy.yaml`
-- **List Strategies**: `uv run ktrdr strategies list --validate`
-
-### Model & Training Commands (Planned)
-- **Train Model**: `uv run ktrdr models train strategies/neuro_mean_reversion.yaml AAPL 1h`
-- **Test Model**: `uv run ktrdr models test strategies/neuro_mean_reversion.yaml AAPL 1h`
-
-### Fuzzy Logic Commands (Planned)
-- **Fuzzify Data**: `uv run ktrdr fuzzy compute AAPL --indicator RSI --period 14`
-
-All commands support `--help` for detailed usage and common options like `--verbose`, `--output`, `--data-dir`.
-
-## 🔥 Development Best Practices
+## 🔥 DEVELOPMENT BEST PRACTICES
 
 ### Commit Discipline
-- **NEVER commit more than 20-30 files at once** - Large commits (145+ files) are unmanageable and make code review impossible
+- **NEVER commit more than 20-30 files at once** - Large commits are unmanageable
 - **Make frequent, focused commits** - Each commit should represent one logical change
 - **Always run tests before committing** - Use `uv run pytest` to catch regressions
 - **Always run linting before committing** - Use `uv run black ktrdr tests` and `uv run mypy ktrdr`
@@ -91,72 +216,7 @@ All commands support `--help` for detailed usage and common options like `--verb
 - **Run unit tests systematically** before and after any significant changes
 - **Never skip failing tests** - Fix or properly skip tests that don't pass
 - **Test-driven development** - Write tests for new functionality
-- **Separate test types**:
-  - Unit tests: `uv run pytest tests/` (excludes e2e_real)
-  - Integration tests: `uv run pytest tests/integration/`
-  - Real E2E tests: `./scripts/run_real_e2e_tests.sh`
-
-### Pytest Markers Quick Reference
-
-**💡 TIP**: Use `uv run pytest --markers` to see all available markers
-
-#### **🏃 Speed-Based Test Selection**
-```bash
-# Fast development runs (skip slow tests)
-uv run pytest -m "not integration_slow"
-
-# Skip all real IB tests (no IB Gateway needed)  
-uv run pytest -m "not (real_ib or real_cli or real_api or real_pipeline)"
-
-# Run only unit tests (fastest)
-uv run pytest tests/ -m "not (integration or api or performance)"
-```
-
-#### **🎯 Test Categories by Purpose**
-- **`@pytest.mark.integration`** - Component integration tests (needs IB setup)
-- **`@pytest.mark.integration_slow`** - Slow integration tests (>60s)
-- **`@pytest.mark.api`** - API layer tests
-- **`@pytest.mark.performance`** - Performance/timing tests
-- **`@pytest.mark.stress`** - Stress/load tests
-
-#### **🔌 Real IB Gateway Tests** 
-- **`@pytest.mark.real_ib`** - Requires live IB Gateway connection
-- **`@pytest.mark.real_cli`** - Real CLI execution with IB
-- **`@pytest.mark.real_api`** - Real API calls with IB
-- **`@pytest.mark.real_pipeline`** - Complete data pipeline with IB
-- **`@pytest.mark.real_error_scenarios`** - Real IB error conditions
-
-#### **🐳 Container/E2E Tests**
-- **`@pytest.mark.container_e2e`** - Docker container E2E tests
-- **`@pytest.mark.container_api`** - Container API tests
-- **`@pytest.mark.container_cli`** - Container CLI tests
-
-#### **🔧 Exhaustive Resilience Tests**
-- **`@pytest.mark.exhaustive_resilience`** - Exhaustive resilience tests
-- **`@pytest.mark.exhaustive_api_resilience`** - API resilience tests
-- **`@pytest.mark.exhaustive_cli_resilience`** - CLI resilience tests
-- **`@pytest.mark.exhaustive_integration_resilience`** - Integration resilience tests
-
-#### **⚡ Common Test Commands**
-```bash
-# All tests (comprehensive, slow)
-uv run pytest
-
-# Fast development feedback  
-uv run pytest -m "not integration_slow"
-
-# Only API tests
-uv run pytest -m "api"
-
-# Only performance tests
-uv run pytest -m "performance" 
-
-# Skip real IB tests (no Gateway needed)
-uv run pytest -m "not real_ib"
-
-# Run specific test categories
-uv run pytest -m "integration and not integration_slow"
-```
+- **Separate test types**: Unit, Integration, Real E2E tests
 
 ### Pre-Commit Checklist
 1. `uv run pytest` - All unit tests pass
@@ -165,81 +225,6 @@ uv run pytest -m "integration and not integration_slow"
 4. Review changed files - No debug code or secrets
 5. Write meaningful commit message
 6. Keep commits small and focused (< 30 files)
-
-## Architecture Overview
-
-- **Development Strategy**: Uses vertical slice approach, delivering end-to-end functionality
-- **Core Modules**: Data, Indicators, Fuzzy Logic, Neural, Visualization, UI
-- **Backend**: FastAPI with Pydantic models at `ktrdr/api/` (port 8000)
-- **Frontend**: React/TypeScript with Redux Toolkit at `frontend/` (port 5173)
-- **Config**: YAML-based with Pydantic validation in `config/` and `strategies/`
-- **Data Storage**: Local files in `data/`, trained models in `models/`
-- **IB Integration**: Interactive Brokers data fetching via `ktrdr/data/ib_*` modules
-
-## Code Style Guidelines
-
-- **Python**: Follow PEP 8 guidelines with Black formatting
-- **Type Hints**: Required for all function parameters and return values
-- **Docstrings**: Use Google-style docstrings
-- **Imports**: Group standard library, third-party, and local imports
-- **Error Handling**: Use the centralized error framework in `ktrdr.errors`
-- **Logging**: Use the logging system with appropriate levels
-- **Frontend**: Use TypeScript with React hooks and functional components
-- **State Management**: Use Redux Toolkit with slice pattern
-- **Testing**: Write unit tests for all new functionality
-- **Timestamps**: ALWAYS use timezone-aware UTC timestamps (`pd.Timestamp.now(tz='UTC')`) to prevent timezone comparison errors
-
-## Error Handling Standards
-
-- Use custom exception types from `ktrdr.errors` (`DataError`, `ConnectionError`, etc.)
-- Include informative error messages with error codes (e.g., "DATA-FileNotFound")
-- Add detailed context in a `details` dictionary
-- Use retry decorators for network operations: `@retry_with_backoff()`
-- Implement fallbacks for non-critical components: `@fallback()`
-- Log errors before raising them
-
-## Logging Framework
-
-- Create module-level logger: `logger = get_logger(__name__)`
-- Use appropriate log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-- Apply logging decorators: `@log_entry_exit`, `@log_performance`, `@log_data_operation`
-- Enrich context: `@with_context(operation_name="...")`
-- For errors: `log_error(e, include_traceback=True)`
-
-## Data & Config Patterns
-
-- Use central metadata system with `ktrdr.metadata`
-- Access config with direct properties: `metadata.VERSION`
-- Use path-based access for nested config: `metadata.get("database.host")`
-- Use strategy YAML files for complete configurations
-- Follow factory pattern for constructing components from config
-
-## API & Component Patterns
-
-- Use Pydantic models for request/response validation
-- Follow error model patterns in `ktrdr.api.models.errors`
-- Structure API following the module-specific endpoint pattern
-- Create service adapters to connect API with core modules
-- Follow standardized API response format with `success` flag
-- Use consistent data transformation patterns between core and API
-
-## Frontend Patterns
-
-- Create components following examples in `frontend/src/components`
-- Structure components in hierarchy: base, feature, page, layout
-- Use Redux slices with async thunks for API calls
-- Follow TypeScript interface definitions in `src/types`
-- Implement API client with typed methods in `src/api`
-- Validate user inputs with `InputValidator` to prevent injection attacks
-- Sanitize file paths to prevent traversal attacks
-
-## Indicator Implementation
-
-- Inherit from `BaseIndicator` and implement required methods
-- Add thorough parameter validation in `_validate_params`
-- Use vectorized operations (pandas, numpy) for optimal performance
-- Register new indicators in `tests/indicators/indicator_registry.py`
-- Create reference datasets for automated testing
 
 ## CRITICAL FIXES - DO NOT REMOVE
 
@@ -251,71 +236,7 @@ uv run pytest -m "integration and not integration_slow"
 
 **Solution**: Preventive visibility toggle (hide/show) of first indicator after addition. Forces TradingView to recalculate correct time range without jumping.
 
-**Key Details**:
-- Only triggers on first overlay indicator addition to synchronized charts (`preserveTimeScale=true`)
-- Uses precisely timed 1ms delays (tested minimum effective timing)
-- Completely imperceptible to users but prevents chart jumping
-- **SEVERITY: CRITICAL** - Removing this fix will cause immediate regression
-
-**Testing**: Add first indicator (SMA, EMA, etc.) and verify no time range jumping occurs.
-
-**Last Verified**: May 28, 2025 with TradingView Lightweight Charts v5.0.7
-
-## Docker Development Environment
-
-This project uses Docker containers for consistent development:
-
-- **Start Environment**: `./docker_dev.sh start` (from project root)
-- **Stop Environment**: `./docker_dev.sh stop`
-- **Backend Shell**: `./docker_dev.sh shell-backend` (Python/FastAPI environment)
-- **Frontend Shell**: `./docker_dev.sh shell-frontend` (Node.js/React environment)
-- **View Logs**: `./docker_dev.sh logs [service]`
-
-The frontend runs in Docker but serves on port 5173, accessible at `http://localhost:5173`. Always use the Docker environment rather than local npm/node installations.
-
-## Real End-to-End Testing Framework
-
-The project includes a comprehensive real E2E testing framework that exercises the complete system with actual IB Gateway connections. These tests catch integration bugs that mocked tests miss.
-
-### Test Categories
-
-- **Real CLI Tests** (`tests/e2e_real/test_real_cli.py`): CLI commands with real IB operations
-- **Real API Tests** (`tests/e2e_real/test_real_api.py`): API endpoints with real IB data flows  
-- **Real Pipeline Tests** (`tests/e2e_real/test_real_pipeline.py`): Complete data pipeline workflows
-- **Real Error Tests** (`tests/e2e_real/test_real_error_scenarios.py`): Error conditions requiring real IB
-
-### Prerequisites for Real E2E Tests
-
-1. **IB Gateway**: Running on localhost:4003 (or configured host/port)
-2. **Valid IB Account**: Paper trading account recommended
-3. **Running Backend**: API server on localhost:8000
-
-### Running Real E2E Tests
-
-```bash
-# All real E2E tests (requires IB Gateway)
-./scripts/run_real_e2e_tests.sh
-
-# Specific categories
-./scripts/run_real_e2e_tests.sh cli
-./scripts/run_real_e2e_tests.sh api  
-./scripts/run_real_e2e_tests.sh pipeline
-
-# Direct pytest with custom settings
-uv run pytest tests/e2e_real/ --real-ib --ib-host=127.0.0.1 --ib-port=4003
-
-# Skip real E2E tests (default)
-uv run pytest tests/e2e_real/  # Will skip all tests
-```
-
-### What Real E2E Tests Catch
-
-- **Runtime integration bugs**: Async/await usage errors, coroutine handling mistakes
-- **Data flow issues**: Symbol validation → data fetching → file writing coordination
-- **Error scenarios**: Real IB pace limiting, connection timeouts, invalid symbol handling
-- **Performance issues**: Memory leaks, connection pool exhaustion, blocking operations
-
-These tests would have caught the critical bug where `acquire_ib_connection()` was not properly awaited (mocked tests passed, but real usage failed with `RuntimeWarning`).
+**SEVERITY: CRITICAL** - Removing this fix will cause immediate regression
 
 ## ⚠️ CRITICAL: IB Gateway Connection Requirements
 
@@ -323,24 +244,8 @@ These tests would have caught the critical bug where `acquire_ib_connection()` w
 
 **Key Points:**
 - **Wait for "Synchronization complete"** before making API calls (minimum 2 seconds)
-- **Limit retry attempts** to 3 client IDs maximum to avoid overwhelming IB Gateway
+- **Limit retry attempts** to 3 client IDs maximum
 - **Add delays** between failed connection attempts (1-2 seconds)
 - **Use conservative health checks** - avoid heavy API calls in connection validation
 
 **⚠️ WARNING**: Ignoring these requirements will corrupt IB Gateway's socket state, requiring computer reboot to fix.
-
-**Architecture**: The new `ktrdr/ib/` module implements these protections correctly.
-
-## MCP Server Architecture
-
-This codebase includes specifications for a Model Context Protocol (MCP) server that enables Claude to conduct autonomous trading strategy research:
-
-- **Location**: `specification/ktrdr-mcp-*` files contain the complete architecture
-- **Purpose**: Allow Claude to programmatically access KTRDR capabilities for research
-- **Status**: Architecture defined, implementation in progress
-- **Integration**: Planned as separate Docker service with read-only market data access
-
-Key principles:
-- Safety first: No access to live trading, order execution, or production systems
-- Research focus: Tools for data analysis, strategy creation, model training, backtesting
-- Knowledge preservation: Built-in experiment tracking and insight accumulation

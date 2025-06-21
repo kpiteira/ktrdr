@@ -189,41 +189,6 @@ async def start_training(
         raise HTTPException(status_code=500, detail="Failed to start training")
 
 
-@router.get("/{task_id}", response_model=TrainingStatusResponse)
-async def get_training_status(
-    task_id: str, service: TrainingService = Depends(get_training_service)
-) -> TrainingStatusResponse:
-    """
-    Get the current status and progress of a training task.
-    """
-    try:
-        status = await service.get_training_status(task_id)
-
-        current_metrics = None
-        if status.get("current_metrics"):
-            current_metrics = CurrentMetrics(**status["current_metrics"])
-
-        return TrainingStatusResponse(
-            success=status["success"],
-            task_id=status["task_id"],
-            status=status["status"],
-            progress=status["progress"],
-            current_epoch=status.get("current_epoch"),
-            total_epochs=status.get("total_epochs"),
-            symbol=status["symbol"],
-            timeframe=status["timeframe"],
-            started_at=status["started_at"],
-            estimated_completion=status.get("estimated_completion"),
-            current_metrics=current_metrics,
-            error=status.get("error"),
-        )
-
-    except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Failed to get training status: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get training status")
-
 
 @router.get("/{task_id}/performance", response_model=PerformanceResponse)
 async def get_model_performance(

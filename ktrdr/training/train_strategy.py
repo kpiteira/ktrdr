@@ -40,6 +40,7 @@ class StrategyTrainer:
         end_date: str,
         validation_split: float = 0.2,
         data_mode: str = "local",
+        progress_callback=None,
     ) -> Dict[str, Any]:
         """Train a complete neuro-fuzzy strategy.
 
@@ -111,7 +112,7 @@ class StrategyTrainer:
         print("\n7. Training neural network...")
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
-            model, train_data, val_data, config["model"]["training"]
+            model, train_data, val_data, config["model"]["training"], progress_callback
         )
 
         # Step 8: Evaluate model
@@ -546,6 +547,7 @@ class StrategyTrainer:
         train_data: Tuple,
         val_data: Tuple,
         training_config: Dict[str, Any],
+        progress_callback=None,
     ) -> Dict[str, Any]:
         """Train the neural network model.
 
@@ -554,11 +556,12 @@ class StrategyTrainer:
             train_data: Training data tuple
             val_data: Validation data tuple
             training_config: Training configuration
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Training results
         """
-        trainer = ModelTrainer(training_config)
+        trainer = ModelTrainer(training_config, progress_callback=progress_callback)
         return trainer.train(
             model, train_data[0], train_data[1], val_data[0], val_data[1]
         )

@@ -252,7 +252,7 @@ async def _train_strategy_async(
                 # Poll operation status
                 while not cancelled:
                     try:
-                        status_response = await api_client.get_training_status(
+                        status_response = await api_client.get_operation_status(
                             operation_id
                         )
                         operation_data = status_response.get("data", {})
@@ -319,7 +319,7 @@ async def _train_strategy_async(
             # Simple polling without progress display
             while not cancelled:
                 try:
-                    status_response = await api_client.get_training_status(operation_id)
+                    status_response = await api_client.get_operation_status(operation_id)
                     operation_data = status_response.get("data", {})
                     status = operation_data.get("status")
 
@@ -353,7 +353,7 @@ async def _train_strategy_async(
 
         # Get final status
         try:
-            final_status_response = await api_client.get_training_status(operation_id)
+            final_status_response = await api_client.get_operation_status(operation_id)
             final_operation_data = final_status_response.get("data", {})
             final_status = final_operation_data.get("status")
 

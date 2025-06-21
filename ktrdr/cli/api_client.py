@@ -466,11 +466,6 @@ class KtrdrApiClient:
             )
         return response
 
-    async def get_training_status(self, task_id: str) -> Dict[str, Any]:
-        """Get training task status."""
-        response = await self._make_request("GET", f"/trainings/{task_id}")
-        # Don't raise error for 404 - task might not exist yet
-        return response
 
     async def get_training_performance(self, task_id: str) -> Dict[str, Any]:
         """Get training performance metrics."""

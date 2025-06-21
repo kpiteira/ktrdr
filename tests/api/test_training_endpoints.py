@@ -115,31 +115,6 @@ class TestTrainingEndpoints:
         data = response.json()
         assert data["success"] is True
 
-    @pytest.mark.api
-    def test_get_training_status_success(self, client, mock_training_service):
-        """Test getting training status for non-existent operation."""
-        # Since we're using real services, test the expected 404 behavior
-        response = client.get("/api/v1/trainings/nonexistent_training_id")
-        
-        assert response.status_code == 404
-        data = response.json()
-        assert "not found" in data["detail"].lower()
-
-    @pytest.mark.api
-    def test_get_training_status_not_found(self, client, mock_training_service):
-        """Test getting status for non-existent training."""
-        response = client.get("/api/v1/trainings/nonexistent_id")
-
-        assert response.status_code == 404
-        assert "not found" in response.json()["detail"]
-
-    @pytest.mark.api
-    def test_get_training_status_failed(self, client, mock_training_service):
-        """Test getting status for failed training (404 with real service)."""
-        response = client.get("/api/v1/trainings/failed_training_456")
-
-        # With real service, non-existent training returns 404
-        assert response.status_code == 404
 
     @pytest.mark.api
     def test_get_model_performance_success(self, client, mock_training_service):
