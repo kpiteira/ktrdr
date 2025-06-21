@@ -75,16 +75,10 @@ class StrategyTrainer:
         print("\n2. Calculating technical indicators...")
         indicators = self._calculate_indicators(price_data, config["indicators"])
         
-        # DEBUG: Check indicators for NaN
-        print(f"🔍 DEBUG: Indicators shape: {indicators.shape}")
+        # Check for critical NaN values that could break training
         indicators_nan_count = indicators.isna().sum().sum()
-        print(f"🔍 DEBUG: Indicators NaN count: {indicators_nan_count}")
         if indicators_nan_count > 0:
-            print(f"🔍 DEBUG: Indicator columns with NaN:")
-            for col in indicators.columns:
-                nan_col_count = indicators[col].isna().sum()
-                if nan_col_count > 0:
-                    print(f"  - {col}: {nan_col_count} NaN values")
+            print(f"⚠️ Warning: {indicators_nan_count} NaN values in indicators - will be filled with 0")
         
         print(f"Calculated {len(config['indicators'])} indicators")
 
@@ -96,16 +90,10 @@ class StrategyTrainer:
         # Step 4: Engineer features
         print("\n4. Engineering features...")
         
-        # DEBUG: Check fuzzy data for NaN
-        print(f"🔍 DEBUG: Fuzzy data shape: {fuzzy_data.shape}")
+        # Check for critical NaN values in fuzzy data
         fuzzy_nan_count = fuzzy_data.isna().sum().sum()
-        print(f"🔍 DEBUG: Fuzzy data NaN count: {fuzzy_nan_count}")
         if fuzzy_nan_count > 0:
-            print(f"🔍 DEBUG: Fuzzy columns with NaN:")
-            for col in fuzzy_data.columns:
-                nan_col_count = fuzzy_data[col].isna().sum()
-                if nan_col_count > 0:
-                    print(f"  - {col}: {nan_col_count} NaN values")
+            print(f"⚠️ Warning: {fuzzy_nan_count} NaN values in fuzzy data")
         
         features, feature_names, feature_scaler = self._engineer_features(
             fuzzy_data,
@@ -114,24 +102,15 @@ class StrategyTrainer:
             config.get("model", {}).get("features", {}),
         )
         
-        # DEBUG: Check engineered features for NaN
+        # Validate final features
         if hasattr(features, 'isna'):  # pandas DataFrame
             features_nan_count = features.isna().sum().sum()
-            print(f"🔍 DEBUG: Engineered features NaN count: {features_nan_count}")
-            if features_nan_count > 0:
-                print(f"🔍 DEBUG: Feature columns with NaN:")
-                for col in features.columns:
-                    nan_col_count = features[col].isna().sum()
-                    if nan_col_count > 0:
-                        print(f"  - {col}: {nan_col_count} NaN values")
         else:  # numpy array or tensor
             features_nan_count = np.isnan(features).sum() if hasattr(features, 'shape') else 0
-            print(f"🔍 DEBUG: Engineered features NaN count: {features_nan_count}")
-            print(f"🔍 DEBUG: Features type: {type(features)}")
-            if hasattr(features, 'shape'):
-                print(f"🔍 DEBUG: Features shape: {features.shape}")
-                print(f"🔍 DEBUG: Features min/max: {np.nanmin(features):.6f}/{np.nanmax(features):.6f}")
-                print(f"🔍 DEBUG: Features contains inf: {np.isinf(features).any()}")
+        
+        if features_nan_count > 0:
+            print(f"❌ Error: {features_nan_count} NaN values detected in final features")
+            raise ValueError("Features contain NaN values that would break training")
         
         print(
             f"Created {features.shape[1]} features from {len(feature_names)} components"
@@ -155,37 +134,11 @@ class StrategyTrainer:
         # Step 7: Create and train neural network
         print("\n7. Training neural network...")
         
-        # DEBUG: Check features for NaN values before training
-        print(f"🔍 DEBUG: Features shape: {features.shape}")
-        if hasattr(features, 'isna'):  # pandas DataFrame
-            nan_count = features.isna().sum().sum()
-            print(f"🔍 DEBUG: Total NaN values in features: {nan_count}")
-            if nan_count > 0:
-                print(f"🔍 DEBUG: Features with NaN:")
-                for col in features.columns:
-                    nan_col_count = features[col].isna().sum()
-                    if nan_col_count > 0:
-                        print(f"  - {col}: {nan_col_count} NaN values")
-        else:  # numpy array or tensor
-            nan_count = np.isnan(features).sum() if hasattr(features, 'shape') else 0
-            print(f"🔍 DEBUG: Total NaN values in features: {nan_count}")
-            print(f"🔍 DEBUG: Features type: {type(features)}")
-            if hasattr(features, 'shape'):
-                print(f"🔍 DEBUG: Features min/max: {np.nanmin(features):.6f}/{np.nanmax(features):.6f}")
-                print(f"🔍 DEBUG: Features contains inf: {np.isinf(features).any()}")
-        
-        print(f"🔍 DEBUG: Train data X shape: {train_data[0].shape}, y shape: {train_data[1].shape}")
-        print(f"🔍 DEBUG: Train X contains NaN: {np.isnan(train_data[0]).any()}")
-        print(f"🔍 DEBUG: Train y contains NaN: {np.isnan(train_data[1]).any()}")
-        print(f"🔍 DEBUG: Val X contains NaN: {np.isnan(val_data[0]).any()}")
-        print(f"🔍 DEBUG: Val y contains NaN: {np.isnan(val_data[1]).any()}")
-        
-        # DEBUG: Check for extreme values that could cause overflow
-        print(f"🔍 DEBUG: Train X min/max: {train_data[0].min():.6f}/{train_data[0].max():.6f}")
-        print(f"🔍 DEBUG: Train X contains inf: {np.isinf(train_data[0]).any()}")
+        # Final validation before training
+        if np.isnan(train_data[0]).any() or np.isnan(train_data[1]).any():
+            raise ValueError("Training data contains NaN values")
         if np.isinf(train_data[0]).any():
-            inf_count = np.isinf(train_data[0]).sum()
-            print(f"🔍 DEBUG: Train X has {inf_count} inf values")
+            raise ValueError("Training data contains infinite values")
         
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
@@ -377,38 +330,6 @@ class StrategyTrainer:
                         ):
                             mapped_results[original_name] = indicator_results[col]
                             break
-                    elif indicator_type == "BollingerBands":
-                        # For Bollinger Bands, compute derived metrics
-                        bb_cols = [c for c in indicator_results.columns if c.startswith("BollingerBands")]
-                        if len(bb_cols) >= 3:  # Should have upper, middle, lower
-                            upper_col = next((c for c in bb_cols if "upper" in c), None)
-                            middle_col = next((c for c in bb_cols if "middle" in c), None)
-                            lower_col = next((c for c in bb_cols if "lower" in c), None)
-                            
-                            if upper_col and middle_col and lower_col:
-                                # Compute BB width as percentage of middle band (safe division)
-                                upper_vals = indicator_results[upper_col]
-                                lower_vals = indicator_results[lower_col] 
-                                middle_vals = indicator_results[middle_col]
-                                
-                                # Safe division: avoid division by zero or very small values
-                                mapped_results["bb_width"] = np.where(
-                                    np.abs(middle_vals) > 1e-10,  # Avoid tiny denominators
-                                    (upper_vals - lower_vals) / middle_vals,
-                                    0.0  # Default width when middle is ~0
-                                )
-                        break
-                    elif indicator_type == "KeltnerChannels":
-                        # Store for later squeeze calculation
-                        kc_cols = [c for c in indicator_results.columns if c.startswith("KeltnerChannels")]
-                        if len(kc_cols) >= 3:
-                            upper_col = next((c for c in kc_cols if "upper" in c), None)
-                            lower_col = next((c for c in kc_cols if "lower" in c), None)
-                            if upper_col and lower_col:
-                                # Store KC bands for squeeze calculation
-                                mapped_results["_kc_upper"] = indicator_results[upper_col]
-                                mapped_results["_kc_lower"] = indicator_results[lower_col]
-                        break
                     else:
                         # For other indicators, use the raw values
                         mapped_results[original_name] = indicator_results[col]
@@ -418,51 +339,6 @@ class StrategyTrainer:
                     if indicator_type != "MACD":
                         break
 
-        # Compute additional derived metrics
-        # Volume ratio (current volume / volume SMA) - safe division
-        if "volume" in mapped_results.columns and "volume_sma" in mapped_results.columns:
-            volume_vals = mapped_results["volume"]
-            volume_sma_vals = mapped_results["volume_sma"]
-            
-            # Safe division: avoid division by zero or very small values
-            mapped_results["volume_ratio"] = np.where(
-                np.abs(volume_sma_vals) > 1e-10,  # Avoid tiny denominators
-                volume_vals / volume_sma_vals,
-                1.0  # Default ratio when SMA is ~0
-            )
-        
-        # Squeeze intensity (BB inside KC channels)
-        if "bb_width" in mapped_results.columns and "_kc_upper" in mapped_results.columns and "_kc_lower" in mapped_results.columns:
-            # Get BB bands for squeeze calculation
-            bb_cols = [c for c in indicator_results.columns if c.startswith("BollingerBands")]
-            if len(bb_cols) >= 3:
-                bb_upper_col = next((c for c in bb_cols if "upper" in c), None)
-                bb_lower_col = next((c for c in bb_cols if "lower" in c), None)
-                
-                if bb_upper_col and bb_lower_col:
-                    # Squeeze occurs when BB is inside KC
-                    bb_upper = indicator_results[bb_upper_col]
-                    bb_lower = indicator_results[bb_lower_col]
-                    kc_upper = mapped_results["_kc_upper"]
-                    kc_lower = mapped_results["_kc_lower"]
-                    
-                    # Calculate squeeze intensity: 1.0 when BB completely inside KC, 0.0 when outside
-                    # Safe division to avoid overflow when KC range is very small
-                    kc_range = kc_upper - kc_lower
-                    
-                    # Only calculate when KC range is meaningful (not zero or tiny)
-                    squeeze_intensity = np.where(
-                        np.abs(kc_range) > 1e-10,  # Avoid tiny denominators
-                        np.maximum(0, np.minimum(
-                            (kc_upper - bb_upper) / kc_range,
-                            (bb_lower - kc_lower) / kc_range
-                        )),
-                        0.0  # Default to no squeeze when KC range is ~0
-                    )
-                    mapped_results["squeeze_intensity"] = squeeze_intensity
-        
-        # Clean up temporary columns
-        mapped_results = mapped_results.drop(columns=[col for col in mapped_results.columns if col.startswith("_")], errors='ignore')
 
         # Final safety check: replace any inf values with NaN, then fill NaN with 0
         # This prevents overflow from propagating to feature scaling
