@@ -217,8 +217,15 @@ class FeatureEngineer:
         features.append(volume_ratio.values)
         names.append("volume_ratio_20")
 
-        # Volume trend
-        volume_change = volume.pct_change(5).fillna(0)
+        # Volume trend - handle zero volumes to avoid infinity
+        # Use a safe percentage change calculation that avoids division by zero
+        volume_shifted = volume.shift(5)
+        # Add small epsilon to avoid division by zero, but preserve the relative scale
+        epsilon = 1e-8  # Very small value relative to typical volume
+        volume_change = (volume - volume_shifted) / (volume_shifted + epsilon)
+        volume_change = volume_change.fillna(0)  # Fill NaN from initial periods
+        # Cap extreme values to prevent numerical overflow
+        volume_change = np.clip(volume_change, -100, 100)  # Cap at +/-10000% change
         features.append(volume_change.values)
         names.append("volume_change_5")
 
