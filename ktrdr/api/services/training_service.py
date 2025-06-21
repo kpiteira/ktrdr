@@ -142,60 +142,6 @@ class TrainingService(BaseService):
             "estimated_duration_minutes": 30,
         }
 
-    async def get_training_status(self, task_id: str) -> Dict[str, Any]:
-        """Get training task status."""
-        # Get operation info from operations service
-        operation = await self.operations_service.get_operation(task_id)
-        if not operation:
-            raise ValidationError(f"Training task {task_id} not found")
-
-        # Extract training info from metadata
-        symbol = operation.metadata.symbol
-        timeframe = operation.metadata.timeframe
-        current_epoch = operation.progress.items_processed or 0
-        total_epochs = operation.progress.items_total or 0
-
-        # Calculate estimated completion time
-        estimated_completion = None
-        if operation.status.value == "running" and operation.progress.percentage > 0:
-            if operation.started_at:
-                elapsed_minutes = (
-                    datetime.utcnow().replace(tzinfo=operation.started_at.tzinfo)
-                    - operation.started_at
-                ).total_seconds() / 60
-                if operation.progress.percentage > 0:
-                    total_estimated_minutes = (
-                        elapsed_minutes / operation.progress.percentage
-                    ) * 100
-                    remaining_minutes = total_estimated_minutes - elapsed_minutes
-                    if remaining_minutes > 0:
-                        estimated_completion = (
-                            (
-                                datetime.utcnow().replace(
-                                    tzinfo=operation.started_at.tzinfo
-                                )
-                                + timedelta(minutes=remaining_minutes)
-                            )
-                            .isoformat()
-                            .replace("+00:00", "Z")
-                        )
-
-        return {
-            "success": True,
-            "task_id": task_id,
-            "status": operation.status.value,
-            "progress": int(operation.progress.percentage),
-            "current_epoch": current_epoch,
-            "total_epochs": total_epochs,
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "started_at": (
-                operation.started_at.isoformat() if operation.started_at else None
-            ),
-            "estimated_completion": estimated_completion,
-            "current_metrics": None,  # Current metrics not stored in progress details
-            "error": operation.error_message,
-        }
 
     async def get_model_performance(self, task_id: str) -> Dict[str, Any]:
         """Get detailed performance metrics for completed training."""
@@ -453,28 +399,187 @@ class TrainingService(BaseService):
                     ),
                 )
 
-                # Let the real trainer handle the training - no fake simulation
-
-                # Phase 4: Run actual training (90%)
+                # Phase 4: Run actual training with progress monitoring (20% to 90%)
                 await self.operations_service.update_progress(
                     operation_id,
                     OperationProgress(
-                        percentage=90.0,
-                        current_step="Executing final training",
-                        items_processed=total_epochs,
+                        percentage=20.0,
+                        current_step="Starting neural network training...",
+                        items_processed=0,
                         items_total=total_epochs,
                     ),
                 )
 
-                results = trainer.train_strategy(
-                    strategy_config_path=strategy_path,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    start_date=start_date,
-                    end_date=end_date,
-                    validation_split=training_config.get("validation_split", 0.2),
-                    data_mode="local",
-                )
+                # Create a shared progress state file for sync/async communication
+                import tempfile
+                import json
+                from pathlib import Path
+                
+                progress_file = Path(tempfile.gettempdir()) / f"training_progress_{operation_id}.json"
+                progress_state = {
+                    "current_epoch": 0,
+                    "total_epochs": total_epochs,
+                    "current_step": "Starting training...",
+                    "last_metrics": {}
+                }
+                
+                # Write initial progress state
+                with open(progress_file, 'w') as f:
+                    json.dump(progress_state, f)
+                
+                def sync_progress_callback(epoch: int, total_epochs: int, metrics: dict):
+                    """Callback that writes progress to shared file."""
+                    try:
+                        progress_type = metrics.get('progress_type', 'epoch')
+                        
+                        if progress_type == 'batch':
+                            # Batch-level progress: more frequent updates with bars
+                            batch_idx = metrics.get('batch', 0)
+                            total_batches_per_epoch = metrics.get('total_batches_per_epoch', 1)
+                            completed_batches = metrics.get('completed_batches', 0)
+                            total_batches = metrics.get('total_batches', 1)
+                            
+                            # Use bars (market data points) instead of batches
+                            total_bars_processed = metrics.get('total_bars_processed', 0)
+                            total_bars_all_epochs = metrics.get('total_bars_all_epochs', 1)
+                            
+                            current_step = f"Epoch: {epoch}, Bars: {total_bars_processed:,}/{total_bars_all_epochs:,}"
+                            
+                            progress_state.update({
+                                "current_epoch": epoch,
+                                "total_epochs": total_epochs,
+                                "current_batch": batch_idx,
+                                "total_batches_per_epoch": total_batches_per_epoch,
+                                "completed_batches": completed_batches,
+                                "total_batches": total_batches,
+                                "total_bars_processed": total_bars_processed,
+                                "total_bars_all_epochs": total_bars_all_epochs,
+                                "current_step": current_step,
+                                "last_metrics": metrics,
+                                "progress_type": "batch"
+                            })
+                        else:
+                            # Epoch-level progress: complete epoch with validation
+                            total_bars_processed = metrics.get('total_bars_processed', 0)
+                            total_bars_all_epochs = metrics.get('total_bars_all_epochs', 1)
+                            
+                            current_step = f"Epoch: {epoch}, Bars: {total_bars_processed:,}/{total_bars_all_epochs:,} (Val Acc: {metrics.get('val_accuracy', 0):.3f})"
+                            
+                            progress_state.update({
+                                "current_epoch": epoch,
+                                "total_epochs": total_epochs,
+                                "total_bars_processed": total_bars_processed,
+                                "total_bars_all_epochs": total_bars_all_epochs,
+                                "current_step": current_step,
+                                "last_metrics": metrics,
+                                "progress_type": "epoch"
+                            })
+                        
+                        with open(progress_file, 'w') as f:
+                            json.dump(progress_state, f)
+                    except Exception as e:
+                        logger.warning(f"Failed to update progress file: {e}")
+
+                # Start training in background with progress monitoring
+                import concurrent.futures
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    # Submit training task
+                    training_future = executor.submit(
+                        trainer.train_strategy,
+                        strategy_path,
+                        symbol,
+                        timeframe,
+                        start_date,
+                        end_date,
+                        training_config.get("validation_split", 0.2),
+                        "local",
+                        sync_progress_callback,
+                    )
+                    
+                    # Monitor progress and update operations service
+                    last_reported_batch = -1
+                    while not training_future.done():
+                        try:
+                            # Read progress from shared file
+                            if progress_file.exists():
+                                with open(progress_file, 'r') as f:
+                                    current_progress = json.load(f)
+                                
+                                current_epoch = current_progress.get("current_epoch", 0)
+                                current_step = current_progress.get("current_step", "Training...")
+                                progress_type = current_progress.get("progress_type", "epoch")
+                                
+                                # Calculate fine-grained progress based on bars (market data points)
+                                if progress_type == "batch":
+                                    completed_batches = current_progress.get("completed_batches", 0)
+                                    total_batches = current_progress.get("total_batches", 1)
+                                    total_bars_processed = current_progress.get("total_bars_processed", 0)
+                                    total_bars_all_epochs = current_progress.get("total_bars_all_epochs", 1)
+                                    
+                                    # Only update if batch changed (avoid spam)
+                                    if completed_batches != last_reported_batch and total_bars_all_epochs > 0:
+                                        # Map bars progress to 20% -> 90% range  
+                                        bars_progress = (total_bars_processed / total_bars_all_epochs) * 70  # 70% of range
+                                        percentage = 20.0 + bars_progress
+                                        
+                                        await self.operations_service.update_progress(
+                                            operation_id,
+                                            OperationProgress(
+                                                percentage=min(percentage, 90.0),
+                                                current_step=current_step,
+                                                items_processed=total_bars_processed,
+                                                items_total=total_bars_all_epochs,
+                                            ),
+                                        )
+                                        last_reported_batch = completed_batches
+                                else:
+                                    # Epoch-level progress (fallback or validation updates)
+                                    total_bars_processed = current_progress.get("total_bars_processed", 0)
+                                    total_bars_all_epochs = current_progress.get("total_bars_all_epochs", 0)
+                                    
+                                    if total_bars_all_epochs > 0:
+                                        # Use bars progress if available
+                                        bars_progress = (total_bars_processed / total_bars_all_epochs) * 70
+                                        percentage = 20.0 + bars_progress
+                                        
+                                        await self.operations_service.update_progress(
+                                            operation_id,
+                                            OperationProgress(
+                                                percentage=min(percentage, 90.0),
+                                                current_step=current_step,
+                                                items_processed=total_bars_processed,
+                                                items_total=total_bars_all_epochs,
+                                            ),
+                                        )
+                                    elif total_epochs > 0:
+                                        # Fallback to epoch progress
+                                        epoch_progress = (current_epoch / total_epochs) * 70
+                                        percentage = 20.0 + epoch_progress
+                                        
+                                        await self.operations_service.update_progress(
+                                            operation_id,
+                                            OperationProgress(
+                                                percentage=min(percentage, 90.0),
+                                                current_step=current_step,
+                                                items_processed=current_epoch,
+                                                items_total=total_epochs,
+                                            ),
+                                        )
+                        except Exception as e:
+                            logger.warning(f"Progress monitoring error: {e}")
+                        
+                        # Wait before next check
+                        await asyncio.sleep(2)
+                    
+                    # Get training results
+                    results = training_future.result()
+                    
+                    # Clean up progress file
+                    try:
+                        progress_file.unlink(missing_ok=True)
+                    except:
+                        pass
 
                 # Phase 5: Finalization (95%)
                 await self.operations_service.update_progress(

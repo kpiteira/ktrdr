@@ -86,17 +86,19 @@ class EarlyStopping:
 class ModelTrainer:
     """Handle PyTorch training loop with advanced features."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], progress_callback=None):
         """Initialize trainer.
 
         Args:
             config: Training configuration
+            progress_callback: Optional callback for progress updates
         """
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.history: List[TrainingMetrics] = []
         self.best_model_state = None
         self.best_val_accuracy = 0.0
+        self.progress_callback = progress_callback
 
     def train(
         self,
@@ -158,6 +160,12 @@ class ModelTrainer:
             else None
         )
 
+        # Calculate total batches and bars for progress tracking
+        total_batches_per_epoch = len(train_loader)
+        total_batches = epochs * total_batches_per_epoch
+        total_bars = len(X_train)  # Total number of market data bars
+        total_bars_all_epochs = total_bars * epochs  # Total bars across all epochs
+
         # Training loop
         for epoch in range(epochs):
             start_time = time.time()
@@ -168,7 +176,7 @@ class ModelTrainer:
             train_correct = 0
             train_total = 0
 
-            for batch_X, batch_y in train_loader:
+            for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
                 # Forward pass
                 outputs = model(batch_X)
                 loss = criterion(outputs, batch_y)
@@ -190,6 +198,38 @@ class ModelTrainer:
                 _, predicted = torch.max(outputs.data, 1)
                 train_total += batch_y.size(0)
                 train_correct += (predicted == batch_y).sum().item()
+                
+                # Batch-level progress callback (every 10 batches to avoid spam)
+                if self.progress_callback and batch_idx % 10 == 0:
+                    try:
+                        completed_batches = epoch * total_batches_per_epoch + batch_idx
+                        current_train_loss = train_loss / max(train_total, 1)
+                        current_train_acc = train_correct / max(train_total, 1)
+                        
+                        # Calculate bars processed (market data points)
+                        bars_processed_this_epoch = batch_idx * batch_size
+                        total_bars_processed = epoch * total_bars + bars_processed_this_epoch
+                        
+                        # Create batch-level metrics
+                        batch_metrics = {
+                            'epoch': epoch,
+                            'total_epochs': epochs,
+                            'batch': batch_idx,
+                            'total_batches_per_epoch': total_batches_per_epoch,
+                            'completed_batches': completed_batches,
+                            'total_batches': total_batches,
+                            'bars_processed_this_epoch': bars_processed_this_epoch,
+                            'total_bars_processed': total_bars_processed,
+                            'total_bars': total_bars,
+                            'total_bars_all_epochs': total_bars_all_epochs,
+                            'train_loss': current_train_loss,
+                            'train_accuracy': current_train_acc,
+                            'progress_type': 'batch'
+                        }
+                        
+                        self.progress_callback(epoch, epochs, batch_metrics)
+                    except Exception as e:
+                        print(f"Warning: Batch progress callback failed: {e}")
 
             # Calculate training metrics
             avg_train_loss = train_loss / train_total
@@ -241,6 +281,29 @@ class ModelTrainer:
             # Progress logging
             if epoch % 10 == 0 or epoch == epochs - 1:
                 self._log_progress(metrics)
+            
+            # Progress callback for external monitoring (e.g., API progress updates)
+            if self.progress_callback:
+                try:
+                    # Epoch-level metrics (complete epoch with validation)
+                    epoch_metrics = {
+                        'epoch': epoch,
+                        'total_epochs': epochs,
+                        'total_batches_per_epoch': total_batches_per_epoch,
+                        'completed_batches': (epoch + 1) * total_batches_per_epoch,
+                        'total_batches': total_batches,
+                        'total_bars_processed': (epoch + 1) * total_bars,  # All bars in completed epochs
+                        'total_bars': total_bars,
+                        'total_bars_all_epochs': total_bars_all_epochs,
+                        'train_loss': avg_train_loss,
+                        'train_accuracy': train_accuracy,
+                        'val_loss': val_loss,
+                        'val_accuracy': val_accuracy,
+                        'progress_type': 'epoch'
+                    }
+                    self.progress_callback(epoch, epochs, epoch_metrics)
+                except Exception as e:
+                    print(f"Warning: Progress callback failed: {e}")
 
         # Restore best model if available
         if self.best_model_state is not None:
