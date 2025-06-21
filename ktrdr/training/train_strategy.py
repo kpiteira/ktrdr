@@ -6,6 +6,7 @@ import torch
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 import numpy as np
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 from .zigzag_labeler import ZigZagLabeler
 from .feature_engineering import FeatureEngineer
@@ -74,6 +75,12 @@ class StrategyTrainer:
         # Step 2: Calculate indicators
         print("\n2. Calculating technical indicators...")
         indicators = self._calculate_indicators(price_data, config["indicators"])
+        
+        # Check for critical NaN values that could break training
+        indicators_nan_count = indicators.isna().sum().sum()
+        if indicators_nan_count > 0:
+            print(f"⚠️ Warning: {indicators_nan_count} NaN values in indicators - will be filled with 0")
+        
         print(f"Calculated {len(config['indicators'])} indicators")
 
         # Step 3: Generate fuzzy memberships
@@ -83,12 +90,29 @@ class StrategyTrainer:
 
         # Step 4: Engineer features
         print("\n4. Engineering features...")
+        
+        # Check for critical NaN values in fuzzy data
+        fuzzy_nan_count = fuzzy_data.isna().sum().sum()
+        if fuzzy_nan_count > 0:
+            print(f"⚠️ Warning: {fuzzy_nan_count} NaN values in fuzzy data")
+        
         features, feature_names, feature_scaler = self._engineer_features(
             fuzzy_data,
             indicators,
             price_data,
             config.get("model", {}).get("features", {}),
         )
+        
+        # Validate final features
+        if hasattr(features, 'isna'):  # pandas DataFrame
+            features_nan_count = features.isna().sum().sum()
+        else:  # numpy array or tensor
+            features_nan_count = np.isnan(features).sum() if hasattr(features, 'shape') else 0
+        
+        if features_nan_count > 0:
+            print(f"❌ Error: {features_nan_count} NaN values detected in final features")
+            raise ValueError("Features contain NaN values that would break training")
+        
         print(
             f"Created {features.shape[1]} features from {len(feature_names)} components"
         )
@@ -107,9 +131,17 @@ class StrategyTrainer:
         train_data, val_data, test_data = self._split_data(
             features, labels, validation_split, config["training"]["data_split"]
         )
+        print(f"Data splits - Train: {len(train_data[0])}, Val: {len(val_data[0])}, Test: {len(test_data[0]) if test_data else 0}")
 
         # Step 7: Create and train neural network
         print("\n7. Training neural network...")
+        
+        # Final validation before training
+        if np.isnan(train_data[0]).any() or np.isnan(train_data[1]).any():
+            raise ValueError("Training data contains NaN values")
+        if np.isinf(train_data[0]).any():
+            raise ValueError("Training data contains infinite values")
+        
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
             model, train_data, val_data, config["model"]["training"], progress_callback
@@ -118,7 +150,10 @@ class StrategyTrainer:
         # Step 8: Evaluate model
         print("\n8. Evaluating model...")
         test_metrics = self._evaluate_model(model, test_data)
-        training_results.update(test_metrics)
+        if test_data is not None:
+            print(f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}")
+        else:
+            print("No test data available - returning zero metrics")
 
         # Step 9: Calculate feature importance
         print("\n9. Calculating feature importance...")
@@ -147,11 +182,26 @@ class StrategyTrainer:
 
         print(f"\nTraining completed! Model saved to: {model_path}")
 
+        # Calculate model info (size and parameters)
+        model_info = {}
+        if model is not None:
+            total_params = sum(p.numel() for p in model.parameters())
+            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            
+            model_info = {
+                "model_size_bytes": int(total_params * 4),  # Assume float32 = 4 bytes per param
+                "parameters_count": int(total_params),
+                "trainable_parameters": int(trainable_params),
+                "architecture": f"mlp_{'_'.join(map(str, config['model']['architecture']['hidden_layers']))}",
+            }
+
         return {
             "model_path": model_path,
             "training_metrics": training_results,
+            "test_metrics": test_metrics,
             "feature_importance": feature_importance,
             "label_distribution": label_dist,
+            "model_info": model_info,
             "data_summary": {
                 "symbol": symbol,
                 "timeframe": timeframe,
@@ -300,32 +350,6 @@ class StrategyTrainer:
                         ):
                             mapped_results[original_name] = indicator_results[col]
                             break
-                    elif indicator_type == "BollingerBands":
-                        # For Bollinger Bands, compute derived metrics
-                        bb_cols = [c for c in indicator_results.columns if c.startswith("BollingerBands")]
-                        if len(bb_cols) >= 3:  # Should have upper, middle, lower
-                            upper_col = next((c for c in bb_cols if "upper" in c), None)
-                            middle_col = next((c for c in bb_cols if "middle" in c), None)
-                            lower_col = next((c for c in bb_cols if "lower" in c), None)
-                            
-                            if upper_col and middle_col and lower_col:
-                                # Compute BB width as percentage of middle band
-                                mapped_results["bb_width"] = (
-                                    (indicator_results[upper_col] - indicator_results[lower_col]) / 
-                                    indicator_results[middle_col]
-                                )
-                        break
-                    elif indicator_type == "KeltnerChannels":
-                        # Store for later squeeze calculation
-                        kc_cols = [c for c in indicator_results.columns if c.startswith("KeltnerChannels")]
-                        if len(kc_cols) >= 3:
-                            upper_col = next((c for c in kc_cols if "upper" in c), None)
-                            lower_col = next((c for c in kc_cols if "lower" in c), None)
-                            if upper_col and lower_col:
-                                # Store KC bands for squeeze calculation
-                                mapped_results["_kc_upper"] = indicator_results[upper_col]
-                                mapped_results["_kc_lower"] = indicator_results[lower_col]
-                        break
                     else:
                         # For other indicators, use the raw values
                         mapped_results[original_name] = indicator_results[col]
@@ -335,36 +359,12 @@ class StrategyTrainer:
                     if indicator_type != "MACD":
                         break
 
-        # Compute additional derived metrics
-        # Volume ratio (current volume / volume SMA)
-        if "volume" in mapped_results.columns and "volume_sma" in mapped_results.columns:
-            mapped_results["volume_ratio"] = mapped_results["volume"] / mapped_results["volume_sma"]
-        
-        # Squeeze intensity (BB inside KC channels)
-        if "bb_width" in mapped_results.columns and "_kc_upper" in mapped_results.columns and "_kc_lower" in mapped_results.columns:
-            # Get BB bands for squeeze calculation
-            bb_cols = [c for c in indicator_results.columns if c.startswith("BollingerBands")]
-            if len(bb_cols) >= 3:
-                bb_upper_col = next((c for c in bb_cols if "upper" in c), None)
-                bb_lower_col = next((c for c in bb_cols if "lower" in c), None)
-                
-                if bb_upper_col and bb_lower_col:
-                    # Squeeze occurs when BB is inside KC
-                    bb_upper = indicator_results[bb_upper_col]
-                    bb_lower = indicator_results[bb_lower_col]
-                    kc_upper = mapped_results["_kc_upper"]
-                    kc_lower = mapped_results["_kc_lower"]
-                    
-                    # Calculate squeeze intensity: 1.0 when BB completely inside KC, 0.0 when outside
-                    squeeze_intensity = np.maximum(0, np.minimum(
-                        (kc_upper - bb_upper) / (kc_upper - kc_lower),
-                        (bb_lower - kc_lower) / (kc_upper - kc_lower)
-                    ))
-                    mapped_results["squeeze_intensity"] = squeeze_intensity
-        
-        # Clean up temporary columns
-        mapped_results = mapped_results.drop(columns=[col for col in mapped_results.columns if col.startswith("_")], errors='ignore')
 
+        # Final safety check: replace any inf values with NaN, then fill NaN with 0
+        # This prevents overflow from propagating to feature scaling
+        mapped_results = mapped_results.replace([np.inf, -np.inf], np.nan)
+        mapped_results = mapped_results.fillna(0.0)
+        
         return mapped_results
 
     def _generate_fuzzy_memberships(
@@ -576,10 +576,16 @@ class StrategyTrainer:
             test_data: Test data tuple
 
         Returns:
-            Test metrics
+            Test metrics including accuracy, loss, precision, recall, and f1_score
         """
         if test_data is None:
-            return {"test_accuracy": None, "test_loss": None}
+            return {
+                "test_accuracy": 0.0,
+                "test_loss": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1_score": 0.0,
+            }
 
         model.eval()
         with torch.no_grad():
@@ -594,7 +600,23 @@ class StrategyTrainer:
             criterion = torch.nn.CrossEntropyLoss()
             loss = criterion(outputs, y_test).item()
 
-        return {"test_accuracy": accuracy, "test_loss": loss}
+            # Convert tensors to numpy for sklearn metrics
+            y_true = y_test.cpu().numpy()
+            y_pred = predicted.cpu().numpy()
+
+            # Calculate precision, recall, and f1_score using weighted average
+            # This handles multi-class classification properly
+            precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+            recall = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+            f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+
+        return {
+            "test_accuracy": accuracy,
+            "test_loss": loss,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1,
+        }
 
     def _calculate_feature_importance(
         self,

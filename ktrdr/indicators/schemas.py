@@ -251,6 +251,103 @@ BOLLINGER_BANDS_SCHEMA = ParameterSchema(
 )
 
 
+# Bollinger Band Width Parameter Schema
+BOLLINGER_BAND_WIDTH_SCHEMA = ParameterSchema(
+    name="BollingerBandWidth",
+    description="Bollinger Band Width volatility indicator",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Period for Bollinger Bands calculation",
+            default=20,
+            min_value=2,
+            max_value=100,
+        ),
+        ParameterDefinition(
+            name="multiplier",
+            param_type=ParameterType.FLOAT,
+            description="Number of standard deviations for bands",
+            default=2.0,
+            min_value=0.1,
+            max_value=5.0,
+        ),
+        ParameterDefinition(
+            name="source",
+            param_type=ParameterType.STRING,
+            description="Price column to use for calculation",
+            default="close",
+            options=["open", "high", "low", "close"],
+        ),
+    ],
+)
+
+
+# Volume Ratio Parameter Schema
+VOLUME_RATIO_SCHEMA = ParameterSchema(
+    name="VolumeRatio",
+    description="Volume Ratio indicator comparing current to average volume",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Period for volume SMA calculation",
+            default=20,
+            min_value=2,
+            max_value=100,
+        ),
+    ],
+)
+
+
+# Squeeze Intensity Parameter Schema
+SQUEEZE_INTENSITY_SCHEMA = ParameterSchema(
+    name="SqueezeIntensity",
+    description="Squeeze Intensity indicator measuring BB compression in KC channels",
+    parameters=[
+        ParameterDefinition(
+            name="bb_period",
+            param_type=ParameterType.INT,
+            description="Period for Bollinger Bands calculation",
+            default=20,
+            min_value=2,
+            max_value=100,
+        ),
+        ParameterDefinition(
+            name="bb_multiplier",
+            param_type=ParameterType.FLOAT,
+            description="Standard deviation multiplier for Bollinger Bands",
+            default=2.0,
+            min_value=0.1,
+            max_value=5.0,
+        ),
+        ParameterDefinition(
+            name="kc_period",
+            param_type=ParameterType.INT,
+            description="Period for Keltner Channels calculation",
+            default=20,
+            min_value=2,
+            max_value=100,
+        ),
+        ParameterDefinition(
+            name="kc_multiplier",
+            param_type=ParameterType.FLOAT,
+            description="ATR multiplier for Keltner Channels",
+            default=2.0,
+            min_value=0.1,
+            max_value=5.0,
+        ),
+        ParameterDefinition(
+            name="source",
+            param_type=ParameterType.STRING,
+            description="Price column to use for calculation",
+            default="close",
+            options=["open", "high", "low", "close"],
+        ),
+    ],
+)
+
+
 # Commodity Channel Index Parameter Schema (for Phase 2)
 CCI_SCHEMA = ParameterSchema(
     name="CCI",
@@ -489,6 +586,9 @@ PARAMETER_SCHEMAS = {
     "ATR": ATR_SCHEMA,
     "OBV": OBV_SCHEMA,
     "BollingerBands": BOLLINGER_BANDS_SCHEMA,
+    "BollingerBandWidth": BOLLINGER_BAND_WIDTH_SCHEMA,
+    "VolumeRatio": VOLUME_RATIO_SCHEMA,
+    "SqueezeIntensity": SQUEEZE_INTENSITY_SCHEMA,
     "CCI": CCI_SCHEMA,
     "Momentum": MOMENTUM_SCHEMA,
     "ROC": ROC_SCHEMA,

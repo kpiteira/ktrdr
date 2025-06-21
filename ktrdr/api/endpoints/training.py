@@ -118,7 +118,7 @@ class TestMetrics(BaseModel):
 class ModelInfo(BaseModel):
     """Model information."""
 
-    model_size_mb: Optional[float] = None
+    model_size_bytes: Optional[int] = None
     parameters_count: Optional[int] = None
     architecture: Optional[str] = None
 

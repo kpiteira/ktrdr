@@ -476,7 +476,7 @@ class KtrdrApiClient:
                 error_code="API-GetTrainingPerformanceError",
                 details={"response": response, "task_id": task_id},
             )
-        return response.get("data", {})
+        return response
 
     # =============================================================================
     # Models Endpoints

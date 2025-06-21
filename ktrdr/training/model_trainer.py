@@ -177,9 +177,41 @@ class ModelTrainer:
             train_total = 0
 
             for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
+                # DEBUG: Check for NaN in first batch of first epoch
+                if epoch == 0 and batch_idx == 0:
+                    print(f"🔍 DEBUG: First batch - X contains NaN: {torch.isnan(batch_X).any()}")
+                    print(f"🔍 DEBUG: First batch - y contains NaN: {torch.isnan(batch_y).any()}")
+                    print(f"🔍 DEBUG: First batch - X shape: {batch_X.shape}, y shape: {batch_y.shape}")
+                    print(f"🔍 DEBUG: First batch - X min/max: {batch_X.min():.6f}/{batch_X.max():.6f}")
+                    print(f"🔍 DEBUG: First batch - X contains inf: {torch.isinf(batch_X).any()}")
+                    print(f"🔍 DEBUG: First batch - y unique values: {torch.unique(batch_y)}")
+                
                 # Forward pass
                 outputs = model(batch_X)
+                
+                # DEBUG: Check outputs and loss
+                if epoch == 0 and batch_idx == 0:
+                    print(f"🔍 DEBUG: Model outputs contains NaN: {torch.isnan(outputs).any()}")
+                    print(f"🔍 DEBUG: Model outputs min/max: {outputs.min():.6f}/{outputs.max():.6f}")
+                
                 loss = criterion(outputs, batch_y)
+                
+                # DEBUG: Check loss immediately after calculation
+                if epoch == 0 and batch_idx == 0:
+                    print(f"🔍 DEBUG: Loss value: {loss.item():.6f}")
+                    print(f"🔍 DEBUG: Loss is NaN: {torch.isnan(loss)}")
+                    if torch.isnan(loss):
+                        print("🚨 ERROR: NaN loss detected on first batch!")
+                        # Check model parameters
+                        nan_params = 0
+                        total_params = 0
+                        for name, param in model.named_parameters():
+                            if torch.isnan(param).any():
+                                nan_params += torch.isnan(param).sum().item()
+                                print(f"  Parameter '{name}' has NaN values")
+                            total_params += param.numel()
+                        print(f"  Model has {nan_params}/{total_params} NaN parameters")
+                        return {"error": "NaN loss detected on first batch"}
 
                 # Backward pass
                 optimizer.zero_grad()

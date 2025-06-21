@@ -209,23 +209,54 @@ class FeatureEngineer:
         if "volume" not in price_data.columns:
             return np.array([]), []
 
-        volume = price_data["volume"]
+        volume = price_data["volume"].copy()
+        
+        # Handle IB sentinel values: -1 means "no volume data available" (e.g., Forex)
+        # Replace -1 with NaN to indicate missing data
+        volume = volume.replace(-1, np.nan)
+        
+        # For missing volume data, use forward fill then backward fill
+        # This assumes that if volume data is missing, the previous valid volume is reasonable
+        volume = volume.ffill().bfill()
+        
+        # If still NaN (no valid volume data at all), use a small positive default
+        # This prevents mathematical issues while indicating minimal volume
+        volume = volume.fillna(100.0)  # Small default volume
+        
+        # Ensure no negative volumes remain (shouldn't happen after -1 replacement, but safety check)
+        volume = np.maximum(volume, 0.0)
 
         # Volume relative to average
         volume_sma = volume.rolling(20).mean().fillna(volume.mean())
-        volume_ratio = volume / volume_sma
+        # Add epsilon to prevent division by zero in volume_sma
+        volume_ratio = volume / (volume_sma + 1e-8)
         features.append(volume_ratio.values)
         names.append("volume_ratio_20")
 
-        # Volume trend
-        volume_change = volume.pct_change(5).fillna(0)
+        # Volume trend - handle zero volumes to avoid infinity
+        # Use a safe percentage change calculation that avoids division by zero
+        volume_shifted = volume.shift(5)
+        # Add small epsilon to avoid division by zero, but preserve the relative scale
+        epsilon = 1e-8  # Very small value relative to typical volume
+        volume_change = (volume - volume_shifted) / (volume_shifted + epsilon)
+        volume_change = volume_change.fillna(0)  # Fill NaN from initial periods
+        # Cap extreme values to prevent numerical overflow
+        volume_change = np.clip(volume_change, -100, 100)  # Cap at +/-10000% change
         features.append(volume_change.values)
         names.append("volume_change_5")
 
         # On-balance volume indicator
         close = price_data["close"]
-        obv = (np.sign(close.diff()) * volume).cumsum()
-        obv_normalized = (obv - obv.mean()) / obv.std()
+        price_change = close.diff().fillna(0)  # Fill NaN for first price change
+        obv = (np.sign(price_change) * volume).cumsum()
+        # Normalize OBV with safety check for zero standard deviation
+        obv_std = obv.std()
+        if obv_std > 1e-8:  # Only normalize if there's meaningful variation
+            obv_normalized = (obv - obv.mean()) / obv_std
+        else:
+            obv_normalized = pd.Series(0.0, index=obv.index)  # Flat line if no variation
+        # Ensure no NaN values remain
+        obv_normalized = obv_normalized.fillna(0.0)
         features.append(obv_normalized.values)
         names.append("obv_normalized")
 

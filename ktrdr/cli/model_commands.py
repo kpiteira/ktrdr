@@ -293,16 +293,30 @@ async def _train_model_async(
         # Get real results from API
         try:
             performance_result = await api_client.get_training_performance(task_id)
-            metrics = performance_result.get("training_metrics", {})
+            training_metrics = performance_result.get("training_metrics", {})
+            test_metrics = performance_result.get("test_metrics", {})
             model_info = performance_result.get("model_info", {})
             
             # Display real results
             console.print(f"📊 [bold green]Training Results:[/bold green]")
-            console.print(f"🎯 Final accuracy: {metrics.get('final_train_accuracy', 0):.1%}")
-            console.print(f"📈 Validation accuracy: {metrics.get('final_val_accuracy', 0):.1%}")
-            console.print(f"📉 Final loss: {metrics.get('final_train_loss', 0):.4f}")
-            console.print(f"⏱️  Training time: {metrics.get('training_time_minutes', 0):.1f} minutes")
-            console.print(f"💾 Model size: {model_info.get('model_size_mb', 0):.1f} MB")
+            console.print(f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0)*100:.1f}%")
+            console.print(f"📊 Precision: {test_metrics.get('precision', 0)*100:.1f}%")
+            console.print(f"📊 Recall: {test_metrics.get('recall', 0)*100:.1f}%")
+            console.print(f"📊 F1 Score: {test_metrics.get('f1_score', 0)*100:.1f}%")
+            console.print(f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0)*100:.1f}%")
+            console.print(f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}")
+            console.print(f"⏱️  Training time: {training_metrics.get('training_time_minutes', 0):.1f} minutes")
+            
+            # Format model size from bytes
+            model_size_bytes = model_info.get('model_size_bytes', 0)
+            if model_size_bytes == 0:
+                console.print(f"💾 Model size: 0 bytes")
+            elif model_size_bytes < 1024:
+                console.print(f"💾 Model size: {model_size_bytes} bytes")
+            elif model_size_bytes < 1024 * 1024:
+                console.print(f"💾 Model size: {model_size_bytes / 1024:.1f} KB")
+            else:
+                console.print(f"💾 Model size: {model_size_bytes / (1024 * 1024):.1f} MB")
             
         except Exception as e:
             console.print(f"❌ [red]Error retrieving training results: {str(e)}[/red]")
