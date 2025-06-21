@@ -74,6 +74,18 @@ class StrategyTrainer:
         # Step 2: Calculate indicators
         print("\n2. Calculating technical indicators...")
         indicators = self._calculate_indicators(price_data, config["indicators"])
+        
+        # DEBUG: Check indicators for NaN
+        print(f"🔍 DEBUG: Indicators shape: {indicators.shape}")
+        indicators_nan_count = indicators.isna().sum().sum()
+        print(f"🔍 DEBUG: Indicators NaN count: {indicators_nan_count}")
+        if indicators_nan_count > 0:
+            print(f"🔍 DEBUG: Indicator columns with NaN:")
+            for col in indicators.columns:
+                nan_col_count = indicators[col].isna().sum()
+                if nan_col_count > 0:
+                    print(f"  - {col}: {nan_col_count} NaN values")
+        
         print(f"Calculated {len(config['indicators'])} indicators")
 
         # Step 3: Generate fuzzy memberships
@@ -83,12 +95,35 @@ class StrategyTrainer:
 
         # Step 4: Engineer features
         print("\n4. Engineering features...")
+        
+        # DEBUG: Check fuzzy data for NaN
+        print(f"🔍 DEBUG: Fuzzy data shape: {fuzzy_data.shape}")
+        fuzzy_nan_count = fuzzy_data.isna().sum().sum()
+        print(f"🔍 DEBUG: Fuzzy data NaN count: {fuzzy_nan_count}")
+        if fuzzy_nan_count > 0:
+            print(f"🔍 DEBUG: Fuzzy columns with NaN:")
+            for col in fuzzy_data.columns:
+                nan_col_count = fuzzy_data[col].isna().sum()
+                if nan_col_count > 0:
+                    print(f"  - {col}: {nan_col_count} NaN values")
+        
         features, feature_names, feature_scaler = self._engineer_features(
             fuzzy_data,
             indicators,
             price_data,
             config.get("model", {}).get("features", {}),
         )
+        
+        # DEBUG: Check engineered features for NaN
+        features_nan_count = features.isna().sum().sum()
+        print(f"🔍 DEBUG: Engineered features NaN count: {features_nan_count}")
+        if features_nan_count > 0:
+            print(f"🔍 DEBUG: Feature columns with NaN:")
+            for col in features.columns:
+                nan_col_count = features[col].isna().sum()
+                if nan_col_count > 0:
+                    print(f"  - {col}: {nan_col_count} NaN values")
+        
         print(
             f"Created {features.shape[1]} features from {len(feature_names)} components"
         )
@@ -110,6 +145,24 @@ class StrategyTrainer:
 
         # Step 7: Create and train neural network
         print("\n7. Training neural network...")
+        
+        # DEBUG: Check features for NaN values before training
+        print(f"🔍 DEBUG: Features shape: {features.shape}")
+        nan_count = features.isna().sum().sum()
+        print(f"🔍 DEBUG: Total NaN values in features: {nan_count}")
+        if nan_count > 0:
+            print(f"🔍 DEBUG: Features with NaN:")
+            for col in features.columns:
+                nan_col_count = features[col].isna().sum()
+                if nan_col_count > 0:
+                    print(f"  - {col}: {nan_col_count} NaN values")
+        
+        print(f"🔍 DEBUG: Train data X shape: {train_data[0].shape}, y shape: {train_data[1].shape}")
+        print(f"🔍 DEBUG: Train X contains NaN: {np.isnan(train_data[0]).any()}")
+        print(f"🔍 DEBUG: Train y contains NaN: {np.isnan(train_data[1]).any()}")
+        print(f"🔍 DEBUG: Val X contains NaN: {np.isnan(val_data[0]).any()}")
+        print(f"🔍 DEBUG: Val y contains NaN: {np.isnan(val_data[1]).any()}")
+        
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
             model, train_data, val_data, config["model"]["training"], progress_callback
