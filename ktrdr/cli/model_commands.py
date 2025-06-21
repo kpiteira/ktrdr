@@ -84,15 +84,7 @@ def train_model(
         ktrdr models train strategies/trend_momentum.yaml MSFT 1d --start-date 2023-01-01 --end-date 2024-01-01 --dry-run
     """
     try:
-        # Input validation
-        strategy_path = Path(strategy_file)
-        if not strategy_path.exists():
-            raise ValidationError(
-                message=f"Strategy file not found: {strategy_file}",
-                error_code="VALIDATION-FileNotFound",
-                details={"file": strategy_file},
-            )
-
+        # Basic client-side input validation (let API handle strategy file validation)
         symbol = InputValidator.validate_string(
             symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
@@ -180,21 +172,13 @@ async def _train_model_async(
 
         # Start the training via API
         try:
-            # Prepare training configuration
-            training_config = {
-                "epochs": 100,  # Default values - could be made configurable
-                "learning_rate": 0.001,
-                "batch_size": 32,
-                "validation_split": validation_split,
-                "early_stopping": {"patience": 10, "monitor": "val_accuracy"},
-                "optimizer": "adam",
-                "dropout_rate": 0.2,
-            }
+            # Extract strategy name from file path (remove .yaml extension)
+            strategy_name = Path(strategy_file).stem
             
             result = await api_client.start_training(
                 symbol=symbol,
                 timeframe=timeframe,
-                config=training_config,
+                strategy_name=strategy_name,
                 start_date=start_date,
                 end_date=end_date,
             )

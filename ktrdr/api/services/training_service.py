@@ -6,7 +6,6 @@ Provides neural network training functionality for the API layer.
 
 import asyncio
 import uuid
-import tempfile
 import yaml
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -66,12 +65,23 @@ class TrainingService(BaseService):
         self,
         symbol: str,
         timeframe: str,
-        config: Dict[str, Any],
+        strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Start neural network training task."""
+        # Validate strategy file exists
+        strategy_path = Path(f"/app/strategies/{strategy_name}.yaml")
+        if not strategy_path.exists():
+            raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
+        
+        # Load strategy config to get training parameters
+        with open(strategy_path, 'r') as f:
+            strategy_config = yaml.safe_load(f)
+        
+        training_config = strategy_config.get("model", {}).get("training", {})
+        
         # Create operation metadata
         metadata = OperationMetadata(
             symbol=symbol,
@@ -79,9 +89,10 @@ class TrainingService(BaseService):
             start_date=datetime.fromisoformat(start_date) if start_date else None,
             end_date=datetime.fromisoformat(end_date) if end_date else None,
             parameters={
-                "config": config,
-                "training_type": config.get("model_type", "mlp"),
-                "epochs": config.get("epochs", 100),
+                "strategy_name": strategy_name,
+                "strategy_path": str(strategy_path),
+                "training_type": strategy_config.get("model", {}).get("type", "mlp"),
+                "epochs": training_config.get("epochs", 100),
             },
         )
 
@@ -97,7 +108,7 @@ class TrainingService(BaseService):
                 operation_id,
                 symbol,
                 timeframe,
-                config,
+                strategy_name,
                 start_date,
                 end_date,
             )
@@ -110,10 +121,10 @@ class TrainingService(BaseService):
             "success": True,
             "task_id": operation_id,
             "status": "training_started",
-            "message": f"Neural network training started for {symbol}",
+            "message": f"Neural network training started for {symbol} using {strategy_name} strategy",
             "symbol": symbol,
             "timeframe": timeframe,
-            "config": config,
+            "strategy_name": strategy_name,
             "estimated_duration_minutes": 30,
         }
 
@@ -375,7 +386,7 @@ class TrainingService(BaseService):
         operation_id: str,
         symbol: str,
         timeframe: str,
-        config: Dict[str, Any],
+        strategy_name: str,
         start_date: Optional[str],
         end_date: Optional[str],
     ):
@@ -391,8 +402,15 @@ class TrainingService(BaseService):
                 ),
             )
 
-            # Get total epochs for progress tracking
-            total_epochs = config.get("epochs", 100)
+            # Use the real strategy file that exists in the Docker volume
+            strategy_path = f"/app/strategies/{strategy_name}.yaml"
+            
+            # Load strategy config to get training parameters
+            with open(strategy_path, 'r') as f:
+                strategy_config = yaml.safe_load(f)
+            
+            training_config = strategy_config.get("model", {}).get("training", {})
+            total_epochs = training_config.get("epochs", 100)
 
             await self.operations_service.update_progress(
                 operation_id,
@@ -402,59 +420,6 @@ class TrainingService(BaseService):
                     items_total=total_epochs,
                 ),
             )
-
-            # Create temporary strategy config for training
-            temp_strategy_config = {
-                "name": f"temp_strategy_{operation_id}",
-                "description": f"Temporary strategy for training operation {operation_id}",
-                # Add minimal required indicators section
-                "indicators": [
-                    {"name": "sma", "period": 20},
-                    {"name": "rsi", "period": 14},
-                    {"name": "macd", "fast": 12, "slow": 26, "signal": 9},
-                ],
-                # Add minimal fuzzy configuration
-                "fuzzy_sets": {
-                    "rsi": {
-                        "oversold": {"type": "triangular", "parameters": [0, 20, 35]},
-                        "neutral": {"type": "triangular", "parameters": [25, 50, 75]},
-                        "overbought": {"type": "triangular", "parameters": [65, 80, 100]},
-                    }
-                },
-                "model": {
-                    "type": config.get("model_type", "mlp"),
-                    "training": {
-                        "epochs": config.get("epochs", 100),
-                        "learning_rate": config.get("learning_rate", 0.001),
-                        "batch_size": config.get("batch_size", 32),
-                        "validation_split": config.get("validation_split", 0.2),
-                        "early_stopping": config.get("early_stopping", {}),
-                        "optimizer": config.get("optimizer", "adam"),
-                        "dropout_rate": config.get("dropout_rate", 0.2),
-                    },
-                    "architecture": {
-                        "hidden_layers": config.get("hidden_layers", [64, 32, 16])
-                    },
-                },
-                # Add minimal training configuration
-                "training": {
-                    "method": "supervised",
-                    "labels": {"source": "zigzag", "zigzag_threshold": 0.05},
-                    "data_split": {"train": 0.7, "validation": 0.15, "test": 0.15},
-                },
-                # Add minimal decisions configuration  
-                "decisions": {
-                    "output_format": "classification",
-                    "confidence_threshold": 0.6,
-                },
-            }
-
-            # Create temporary strategy file
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".yaml", delete=False
-            ) as tmp_file:
-                yaml.dump(temp_strategy_config, tmp_file)
-                strategy_path = tmp_file.name
 
             try:
                 # Phase 2: Setup trainer (15%)
@@ -497,7 +462,7 @@ class TrainingService(BaseService):
                     timeframe=timeframe,
                     start_date=start_date,
                     end_date=end_date,
-                    validation_split=config.get("validation_split", 0.2),
+                    validation_split=training_config.get("validation_split", 0.2),
                     data_mode="local",
                 )
 
@@ -533,9 +498,11 @@ class TrainingService(BaseService):
 
                 logger.info(f"Training operation {operation_id} completed successfully")
 
-            finally:
-                # Clean up temporary file
-                Path(strategy_path).unlink(missing_ok=True)
+            except Exception as e:
+                logger.error(
+                    f"Training operation {operation_id} failed: {str(e)}", exc_info=True
+                )
+                await self.operations_service.fail_operation(operation_id, str(e))
 
         except Exception as e:
             logger.error(

@@ -436,7 +436,7 @@ class KtrdrApiClient:
         self,
         symbol: str,
         timeframe: str,
-        config: Dict[str, Any],
+        strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
@@ -445,7 +445,7 @@ class KtrdrApiClient:
         payload = {
             "symbol": symbol,
             "timeframe": timeframe,
-            "config": config,
+            "strategy_name": strategy_name,
             "start_date": start_date,
             "end_date": end_date,
             "task_id": task_id,
@@ -464,7 +464,7 @@ class KtrdrApiClient:
                 error_code="API-StartTrainingError",
                 details={"response": response},
             )
-        return response.get("data", {})
+        return response
 
     async def get_training_status(self, task_id: str) -> Dict[str, Any]:
         """Get training task status."""

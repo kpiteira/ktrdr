@@ -40,7 +40,7 @@ class TrainingRequest(BaseModel):
 
     symbol: str
     timeframe: str
-    config: TrainingConfig
+    strategy_name: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     task_id: Optional[str] = None
@@ -63,7 +63,7 @@ class TrainingStartResponse(BaseModel):
     message: str
     symbol: str
     timeframe: str
-    config: TrainingConfig
+    strategy_name: str
     estimated_duration_minutes: Optional[int] = None
 
 
@@ -163,7 +163,7 @@ async def start_training(
         result = await service.start_training(
             symbol=request.symbol,
             timeframe=request.timeframe,
-            config=request.config.model_dump(),
+            strategy_name=request.strategy_name,
             start_date=request.start_date,
             end_date=request.end_date,
             task_id=request.task_id,
@@ -176,7 +176,7 @@ async def start_training(
             message=result["message"],
             symbol=result["symbol"],
             timeframe=result["timeframe"],
-            config=TrainingConfig(**result["config"]),
+            strategy_name=result["strategy_name"],
             estimated_duration_minutes=result.get("estimated_duration_minutes"),
         )
 

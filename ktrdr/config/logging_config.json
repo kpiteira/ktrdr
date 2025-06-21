@@ -23,7 +23,7 @@
       "class": "logging.handlers.RotatingFileHandler",
       "level": "INFO",
       "formatter": "json",
-      "filename": "/tmp/ktrdr.log",
+      "filename": "/app/logs/ktrdr.log",
       "maxBytes": 10485760,
       "backupCount": 5,
       "encoding": "utf8"

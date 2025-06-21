@@ -179,9 +179,6 @@ class GapClassifier:
                 start_time, end_time, symbol, timeframe
             ):
                 classification = GapClassification.EXPECTED_TRADING_HOURS
-                logger.info(
-                    f"🔄 Reclassified gap as EXPECTED_TRADING_HOURS due to IB volume=-1 indicators: {start_time} to {end_time}"
-                )
 
         # Calculate gap metrics
         duration_hours = (end_time - start_time).total_seconds() / 3600
