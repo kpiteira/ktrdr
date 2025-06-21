@@ -190,7 +190,7 @@ class TrainingService(BaseService):
                 "f1_score": test_metrics.get("f1_score", 0.0),
             },
             "model_info": {
-                "model_size_mb": model_info.get("model_size_mb", 0.0),
+                "model_size_bytes": model_info.get("model_size_bytes", 0),
                 "parameters_count": model_info.get("parameters_count", 0),
                 "architecture": model_info.get(
                     "architecture",

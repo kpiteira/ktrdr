@@ -6,6 +6,7 @@ import torch
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 import numpy as np
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 from .zigzag_labeler import ZigZagLabeler
 from .feature_engineering import FeatureEngineer
@@ -130,6 +131,7 @@ class StrategyTrainer:
         train_data, val_data, test_data = self._split_data(
             features, labels, validation_split, config["training"]["data_split"]
         )
+        print(f"Data splits - Train: {len(train_data[0])}, Val: {len(val_data[0])}, Test: {len(test_data[0]) if test_data else 0}")
 
         # Step 7: Create and train neural network
         print("\n7. Training neural network...")
@@ -148,7 +150,10 @@ class StrategyTrainer:
         # Step 8: Evaluate model
         print("\n8. Evaluating model...")
         test_metrics = self._evaluate_model(model, test_data)
-        training_results.update(test_metrics)
+        if test_data is not None:
+            print(f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}")
+        else:
+            print("No test data available - returning zero metrics")
 
         # Step 9: Calculate feature importance
         print("\n9. Calculating feature importance...")
@@ -177,11 +182,26 @@ class StrategyTrainer:
 
         print(f"\nTraining completed! Model saved to: {model_path}")
 
+        # Calculate model info (size and parameters)
+        model_info = {}
+        if model is not None:
+            total_params = sum(p.numel() for p in model.parameters())
+            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            
+            model_info = {
+                "model_size_bytes": int(total_params * 4),  # Assume float32 = 4 bytes per param
+                "parameters_count": int(total_params),
+                "trainable_parameters": int(trainable_params),
+                "architecture": f"mlp_{'_'.join(map(str, config['model']['architecture']['hidden_layers']))}",
+            }
+
         return {
             "model_path": model_path,
             "training_metrics": training_results,
+            "test_metrics": test_metrics,
             "feature_importance": feature_importance,
             "label_distribution": label_dist,
+            "model_info": model_info,
             "data_summary": {
                 "symbol": symbol,
                 "timeframe": timeframe,
@@ -556,10 +576,16 @@ class StrategyTrainer:
             test_data: Test data tuple
 
         Returns:
-            Test metrics
+            Test metrics including accuracy, loss, precision, recall, and f1_score
         """
         if test_data is None:
-            return {"test_accuracy": None, "test_loss": None}
+            return {
+                "test_accuracy": 0.0,
+                "test_loss": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1_score": 0.0,
+            }
 
         model.eval()
         with torch.no_grad():
@@ -574,7 +600,23 @@ class StrategyTrainer:
             criterion = torch.nn.CrossEntropyLoss()
             loss = criterion(outputs, y_test).item()
 
-        return {"test_accuracy": accuracy, "test_loss": loss}
+            # Convert tensors to numpy for sklearn metrics
+            y_true = y_test.cpu().numpy()
+            y_pred = predicted.cpu().numpy()
+
+            # Calculate precision, recall, and f1_score using weighted average
+            # This handles multi-class classification properly
+            precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+            recall = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+            f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+
+        return {
+            "test_accuracy": accuracy,
+            "test_loss": loss,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1,
+        }
 
     def _calculate_feature_importance(
         self,
