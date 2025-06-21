@@ -40,6 +40,9 @@ from ktrdr.indicators.cmf_indicator import CMFIndicator
 from ktrdr.indicators.adx_indicator import ADXIndicator
 from ktrdr.indicators.supertrend_indicator import SuperTrendIndicator
 from ktrdr.indicators.fisher_transform import FisherTransformIndicator
+from ktrdr.indicators.bollinger_band_width_indicator import BollingerBandWidthIndicator
+from ktrdr.indicators.volume_ratio_indicator import VolumeRatioIndicator
+from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicator
 
 logger = get_logger(__name__)
 
@@ -100,6 +103,12 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "SuperTrendIndicator": SuperTrendIndicator,
     "FisherTransform": FisherTransformIndicator,
     "FisherTransformIndicator": FisherTransformIndicator,
+    "BollingerBandWidth": BollingerBandWidthIndicator,
+    "BollingerBandWidthIndicator": BollingerBandWidthIndicator,
+    "VolumeRatio": VolumeRatioIndicator,
+    "VolumeRatioIndicator": VolumeRatioIndicator,
+    "SqueezeIntensity": SqueezeIntensityIndicator,
+    "SqueezeIntensityIndicator": SqueezeIntensityIndicator,
 }
 
 
