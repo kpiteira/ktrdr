@@ -115,14 +115,23 @@ class StrategyTrainer:
         )
         
         # DEBUG: Check engineered features for NaN
-        features_nan_count = features.isna().sum().sum()
-        print(f"🔍 DEBUG: Engineered features NaN count: {features_nan_count}")
-        if features_nan_count > 0:
-            print(f"🔍 DEBUG: Feature columns with NaN:")
-            for col in features.columns:
-                nan_col_count = features[col].isna().sum()
-                if nan_col_count > 0:
-                    print(f"  - {col}: {nan_col_count} NaN values")
+        if hasattr(features, 'isna'):  # pandas DataFrame
+            features_nan_count = features.isna().sum().sum()
+            print(f"🔍 DEBUG: Engineered features NaN count: {features_nan_count}")
+            if features_nan_count > 0:
+                print(f"🔍 DEBUG: Feature columns with NaN:")
+                for col in features.columns:
+                    nan_col_count = features[col].isna().sum()
+                    if nan_col_count > 0:
+                        print(f"  - {col}: {nan_col_count} NaN values")
+        else:  # numpy array or tensor
+            features_nan_count = np.isnan(features).sum() if hasattr(features, 'shape') else 0
+            print(f"🔍 DEBUG: Engineered features NaN count: {features_nan_count}")
+            print(f"🔍 DEBUG: Features type: {type(features)}")
+            if hasattr(features, 'shape'):
+                print(f"🔍 DEBUG: Features shape: {features.shape}")
+                print(f"🔍 DEBUG: Features min/max: {np.nanmin(features):.6f}/{np.nanmax(features):.6f}")
+                print(f"🔍 DEBUG: Features contains inf: {np.isinf(features).any()}")
         
         print(
             f"Created {features.shape[1]} features from {len(feature_names)} components"
