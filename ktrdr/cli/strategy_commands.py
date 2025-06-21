@@ -443,14 +443,21 @@ async def _backtest_strategy_async(
             return
 
         # Poll for progress with real API calls
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
+        # Temporarily suppress httpx logging to keep progress display clean
+        import logging
+        httpx_logger = logging.getLogger("httpx")
+        original_level = httpx_logger.level
+        httpx_logger.setLevel(logging.WARNING)
+        
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=console,
+            ) as progress:
             task = progress.add_task("Running backtest...", total=100)
 
             while True:
@@ -479,6 +486,9 @@ async def _backtest_strategy_async(
                 except Exception as e:
                     console.print(f"❌ [red]Error polling backtest status: {str(e)}[/red]")
                     return
+        finally:
+            # Restore original httpx logging level
+            httpx_logger.setLevel(original_level)
 
         # Get real results from API
         try:
