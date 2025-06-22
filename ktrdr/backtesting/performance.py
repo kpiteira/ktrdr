@@ -4,12 +4,33 @@ from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
 import pandas as pd
 import numpy as np
+import math
 from datetime import datetime
 
 from .position_manager import Trade, PositionStatus
 from .. import get_logger
 
 logger = get_logger(__name__)
+
+
+def sanitize_float_for_json(value: float) -> float:
+    """Sanitize float values for JSON serialization.
+    
+    Args:
+        value: Float value to sanitize
+        
+    Returns:
+        JSON-safe float value (replaces inf/nan with safe values)
+    """
+    if math.isnan(value):
+        return 0.0
+    elif math.isinf(value):
+        if value > 0:
+            return 999999.0  # Large positive number instead of infinity
+        else:
+            return -999999.0  # Large negative number instead of -infinity
+    else:
+        return value
 
 
 @dataclass
@@ -51,30 +72,30 @@ class PerformanceMetrics:
     recovery_factor: float
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert metrics to dictionary."""
+        """Convert metrics to dictionary with JSON-safe float values."""
         return {
-            "total_return": self.total_return,
-            "total_return_pct": self.total_return_pct,
-            "annualized_return": self.annualized_return,
-            "volatility": self.volatility,
-            "sharpe_ratio": self.sharpe_ratio,
-            "max_drawdown": self.max_drawdown,
-            "max_drawdown_pct": self.max_drawdown_pct,
-            "total_trades": self.total_trades,
-            "winning_trades": self.winning_trades,
-            "losing_trades": self.losing_trades,
-            "win_rate": self.win_rate,
-            "profit_factor": self.profit_factor,
-            "avg_holding_period": self.avg_holding_period,
-            "avg_win_holding_period": self.avg_win_holding_period,
-            "avg_loss_holding_period": self.avg_loss_holding_period,
-            "avg_win": self.avg_win,
-            "avg_loss": self.avg_loss,
-            "largest_win": self.largest_win,
-            "largest_loss": self.largest_loss,
-            "calmar_ratio": self.calmar_ratio,
-            "sortino_ratio": self.sortino_ratio,
-            "recovery_factor": self.recovery_factor,
+            "total_return": sanitize_float_for_json(self.total_return),
+            "total_return_pct": sanitize_float_for_json(self.total_return_pct),
+            "annualized_return": sanitize_float_for_json(self.annualized_return),
+            "volatility": sanitize_float_for_json(self.volatility),
+            "sharpe_ratio": sanitize_float_for_json(self.sharpe_ratio),
+            "max_drawdown": sanitize_float_for_json(self.max_drawdown),
+            "max_drawdown_pct": sanitize_float_for_json(self.max_drawdown_pct),
+            "total_trades": self.total_trades,  # Integer, no sanitization needed
+            "winning_trades": self.winning_trades,  # Integer, no sanitization needed
+            "losing_trades": self.losing_trades,  # Integer, no sanitization needed
+            "win_rate": sanitize_float_for_json(self.win_rate),
+            "profit_factor": sanitize_float_for_json(self.profit_factor),
+            "avg_holding_period": sanitize_float_for_json(self.avg_holding_period),
+            "avg_win_holding_period": sanitize_float_for_json(self.avg_win_holding_period),
+            "avg_loss_holding_period": sanitize_float_for_json(self.avg_loss_holding_period),
+            "avg_win": sanitize_float_for_json(self.avg_win),
+            "avg_loss": sanitize_float_for_json(self.avg_loss),
+            "largest_win": sanitize_float_for_json(self.largest_win),
+            "largest_loss": sanitize_float_for_json(self.largest_loss),
+            "calmar_ratio": sanitize_float_for_json(self.calmar_ratio),
+            "sortino_ratio": sanitize_float_for_json(self.sortino_ratio),
+            "recovery_factor": sanitize_float_for_json(self.recovery_factor),
         }
 
 
@@ -183,17 +204,18 @@ class PerformanceTracker:
             else 0
         )  # Return as decimal 0-1
 
-        # Volatility and Sharpe ratio
+        # Volatility and Sharpe ratio with safe calculation
         if len(self.daily_returns) > 1:
-            volatility = np.std(self.daily_returns) * np.sqrt(
-                252
-            )  # Annualized, return as decimal 0-1
+            volatility = np.std(self.daily_returns) * np.sqrt(252)  # Annualized
             avg_return = np.mean(self.daily_returns)
-            sharpe_ratio = (
-                (avg_return / (np.std(self.daily_returns) + 1e-10)) * np.sqrt(252)
-                if np.std(self.daily_returns) > 0
-                else 0
-            )
+            returns_std = np.std(self.daily_returns)
+            
+            if returns_std > 1e-10:  # Avoid division by near-zero values
+                sharpe_ratio = (avg_return / returns_std) * np.sqrt(252)
+                # Cap extreme values to prevent JSON serialization issues
+                sharpe_ratio = max(-999999.0, min(999999.0, sharpe_ratio))
+            else:
+                sharpe_ratio = 0.0
         else:
             volatility = 0.0
             sharpe_ratio = 0.0
@@ -213,11 +235,13 @@ class PerformanceTracker:
             # P&L metrics
             total_wins = sum(t.net_pnl for t in winning_trades)
             total_losses = abs(sum(t.net_pnl for t in losing_trades))
-            profit_factor = (
-                (total_wins / total_losses)
-                if total_losses > 0
-                else float("inf") if total_wins > 0 else 0
-            )
+            # Calculate profit factor with safe maximum value instead of infinity
+            if total_losses > 0:
+                profit_factor = total_wins / total_losses
+            elif total_wins > 0:
+                profit_factor = 999999.0  # Very high but finite value instead of infinity
+            else:
+                profit_factor = 0.0
 
             avg_win = (
                 np.mean([t.net_pnl for t in winning_trades]) if winning_trades else 0
@@ -268,24 +292,31 @@ class PerformanceTracker:
         if max_drawdown_abs < 0:
             logger.error(f"🚨 IMPOSSIBLE: max_drawdown_abs ${max_drawdown_abs:,.2f} < 0!")
 
-        # Additional risk metrics
-        calmar_ratio = (
-            (annualized_return / max_drawdown_pct) if max_drawdown_pct > 0 else 0
-        )
+        # Additional risk metrics - Calmar ratio with safe division
+        if max_drawdown_pct > 0:
+            calmar_ratio = annualized_return / max_drawdown_pct
+            # Cap extreme values to prevent JSON serialization issues
+            calmar_ratio = max(-999999.0, min(999999.0, calmar_ratio))
+        else:
+            calmar_ratio = 0.0
 
-        # Sortino ratio (downside deviation)
+        # Sortino ratio (downside deviation) with safe calculation
         negative_returns = [r for r in self.daily_returns if r < 0]
         downside_std = np.std(negative_returns) if negative_returns else 0
-        sortino_ratio = (
-            (np.mean(self.daily_returns) / (downside_std + 1e-10)) * np.sqrt(252)
-            if downside_std > 0
-            else 0
-        )
+        if downside_std > 1e-10:  # Avoid division by near-zero values
+            sortino_ratio = (np.mean(self.daily_returns) / downside_std) * np.sqrt(252)
+            # Cap extreme values to prevent JSON serialization issues
+            sortino_ratio = max(-999999.0, min(999999.0, sortino_ratio))
+        else:
+            sortino_ratio = 0.0
 
-        # Recovery factor
-        recovery_factor = (
-            (total_return / max_drawdown_abs) if max_drawdown_abs > 0 else 0
-        )
+        # Recovery factor with safe calculation
+        if max_drawdown_abs > 0:
+            recovery_factor = total_return / max_drawdown_abs
+            # Cap extreme values to prevent JSON serialization issues
+            recovery_factor = max(-999999.0, min(999999.0, recovery_factor))
+        else:
+            recovery_factor = 0.0
 
         return PerformanceMetrics(
             total_return=total_return,
