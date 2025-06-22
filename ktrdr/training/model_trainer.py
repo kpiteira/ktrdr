@@ -94,7 +94,16 @@ class ModelTrainer:
             progress_callback: Optional callback for progress updates
         """
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # GPU device selection with Apple Silicon support
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+            print(f"🚀 Using CUDA GPU: {torch.cuda.get_device_name(0)}")
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+            print("🚀 Using Apple Silicon GPU (MPS)")
+        else:
+            self.device = torch.device("cpu")
+            print("⚠️ Using CPU - GPU acceleration not available")
         self.history: List[TrainingMetrics] = []
         self.best_model_state = None
         self.best_val_accuracy = 0.0

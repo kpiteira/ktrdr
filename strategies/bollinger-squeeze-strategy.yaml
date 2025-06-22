@@ -84,7 +84,6 @@ model:
   architecture:
     hidden_layers: [40, 20, 10]  # More complex for pattern recognition
     activation: "relu"
-    output_activation: "softmax"
     dropout: 0.25
   
   training:

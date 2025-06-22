@@ -59,7 +59,7 @@ fuzzy_sets:
 model:
   type: "mlp"  # Multi-Layer Perceptron
   architecture:
-    hidden_layers: [30, 15, 8]  # input_size auto-calculated
+    hidden_layers: [50, 25, 12]  # input_size auto-calculated - larger for 15-year training
     activation: "relu"
     output_activation: "softmax"  # for BUY/SELL/HOLD classification
     dropout: 0.2

@@ -53,13 +53,12 @@ class MLPTradingModel(BaseNeuralModel):
         # Output layer (3 classes: BUY=0, HOLD=1, SELL=2)
         layers.append(nn.Linear(prev_size, 3))
 
-        # Use softmax for output activation
-        output_activation = self.config["architecture"].get(
-            "output_activation", "softmax"
-        )
-        if output_activation.lower() == "softmax":
-            layers.append(nn.Softmax(dim=1))
-
+        # CLASSIFICATION MODELS ALWAYS OUTPUT RAW LOGITS
+        # - CrossEntropyLoss expects raw logits and applies softmax internally
+        # - This prevents dangerous double-softmax bugs
+        # - Config "output_activation" is IGNORED for classification tasks
+        # - Inference code handles logit-to-probability conversion
+        
         return nn.Sequential(*layers)
 
     def prepare_features(
@@ -121,6 +120,10 @@ class MLPTradingModel(BaseNeuralModel):
         features_tensor, feature_names = engineer.prepare_features(
             fuzzy_data=fuzzy_data, indicators=indicators, price_data=price_data
         )
+
+        # Ensure tensor is on the correct device for GPU acceleration
+        device = self._get_device()
+        features_tensor = features_tensor.to(device)
 
         return features_tensor
 
