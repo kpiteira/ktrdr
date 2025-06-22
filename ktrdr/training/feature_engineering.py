@@ -141,7 +141,8 @@ class FeatureEngineer:
                 names.append(column)
 
         if not features:
-            raise ValueError("No fuzzy membership features found")
+            # During warm-up period, this is normal - not enough data for indicators yet
+            raise ValueError("No fuzzy membership features found (likely warm-up period)")
 
         return np.column_stack(features), names
 

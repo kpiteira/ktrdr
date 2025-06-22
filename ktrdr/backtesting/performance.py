@@ -7,6 +7,9 @@ import numpy as np
 from datetime import datetime
 
 from .position_manager import Trade, PositionStatus
+from .. import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -124,7 +127,19 @@ class PerformanceTracker:
             self.current_drawdown = (
                 self.peak_equity - portfolio_value
             ) / self.peak_equity
+            
+            # CRITICAL DEBUG: Check for impossible drawdown values
+            if self.current_drawdown > 1.0:
+                logger.error(f"🚨 IMPOSSIBLE DRAWDOWN: {self.current_drawdown:.4f} ({self.current_drawdown*100:.1f}%)")
+                logger.error(f"   Peak equity: ${self.peak_equity:,.2f}")
+                logger.error(f"   Current portfolio: ${portfolio_value:,.2f}")
+                logger.error(f"   Difference: ${self.peak_equity - portfolio_value:,.2f}")
+            
             self.max_drawdown = max(self.max_drawdown, self.current_drawdown)
+            
+            # CRITICAL DEBUG: Log when max drawdown updates
+            if self.current_drawdown == self.max_drawdown and self.current_drawdown > 0.1:
+                logger.warning(f"📉 New max drawdown: {self.max_drawdown:.4f} ({self.max_drawdown*100:.1f}%) at portfolio ${portfolio_value:,.2f}")
 
         self.last_equity = portfolio_value
 
@@ -238,6 +253,20 @@ class PerformanceTracker:
         # Max drawdown in absolute terms
         max_drawdown_abs = self.max_drawdown * self.peak_equity
         max_drawdown_pct = self.max_drawdown  # Already as decimal 0-1
+        
+        # CRITICAL DEBUG: Check for corrupted values
+        logger.info(f"📊 Final metrics calculation:")
+        logger.info(f"   self.max_drawdown: {self.max_drawdown:.6f}")
+        logger.info(f"   self.peak_equity: ${self.peak_equity:,.2f}")
+        logger.info(f"   max_drawdown_abs: ${max_drawdown_abs:,.2f}")
+        logger.info(f"   max_drawdown_pct: {max_drawdown_pct:.6f} ({max_drawdown_pct*100:.2f}%)")
+        
+        if max_drawdown_pct > 1.0:
+            logger.error(f"🚨 IMPOSSIBLE: max_drawdown_pct {max_drawdown_pct:.6f} > 1.0!")
+        if self.peak_equity <= 0:
+            logger.error(f"🚨 IMPOSSIBLE: peak_equity ${self.peak_equity:,.2f} <= 0!")
+        if max_drawdown_abs < 0:
+            logger.error(f"🚨 IMPOSSIBLE: max_drawdown_abs ${max_drawdown_abs:,.2f} < 0!")
 
         # Additional risk metrics
         calmar_ratio = (

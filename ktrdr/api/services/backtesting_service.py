@@ -373,7 +373,7 @@ class BacktestingService(BaseService):
         self, engine, operation_id: str, estimated_bars: int
     ):
         """
-        Run backtest with progress tracking using the proven BacktestingEngine.
+        Run backtest with REAL progress tracking based on actual bars processed.
         """
         # Update progress: starting backtest
         await self.operations_service.update_progress(
@@ -384,32 +384,73 @@ class BacktestingService(BaseService):
             ),
         )
 
-        # Use the REAL backtesting engine - no custom implementation!
         logger.info(f"Starting real backtest with proven engine: {engine}")
         
-        # Run the proven backtesting engine in a thread
+        # Create shared progress state for thread communication
+        progress_state = {
+            'current_bar': 0,
+            'total_bars': estimated_bars,
+            'portfolio_value': 0,
+            'trades_executed': 0,
+            'last_update': 0
+        }
+        
+        # Create a progress callback that gets REAL progress from the engine
+        def progress_callback(current_bar: int, total_bars: int, additional_data: dict = None):
+            """Real progress callback based on actual bars processed."""
+            try:
+                progress_state['current_bar'] = current_bar
+                progress_state['total_bars'] = total_bars
+                if additional_data:
+                    progress_state['portfolio_value'] = additional_data.get('portfolio_value', 0)
+                    progress_state['trades_executed'] = additional_data.get('trades_executed', 0)
+            except Exception as e:
+                logger.warning(f"Progress callback error: {e}")
+        
+        # Set the progress callback on the engine
+        engine.progress_callback = progress_callback
+        
+        # Run the backtesting engine in a thread
         task = asyncio.create_task(asyncio.to_thread(engine.run))
         
-        # Simple progress monitoring - let the real engine do the work
-        last_progress = 20.0
-        start_time = asyncio.get_event_loop().time()
+        # Monitor REAL progress from the engine
+        last_reported_percentage = 20.0
         
         while not task.done():
-            await asyncio.sleep(2.0)  # Check every 2 seconds
+            await asyncio.sleep(1.0)  # Check every second for responsive updates
             
-            # Estimate progress based on elapsed time (rough approximation)
-            elapsed = asyncio.get_event_loop().time() - start_time
-            estimated_progress = min(20.0 + (elapsed / 30.0) * 70, 90.0)  # 30 sec estimate
+            # Calculate REAL progress based on actual bars processed
+            current_bar = progress_state['current_bar']
+            total_bars = progress_state['total_bars']
             
-            if estimated_progress > last_progress + 5:  # Update every 5%
-                await self.operations_service.update_progress(
-                    operation_id,
-                    OperationProgress(
-                        percentage=estimated_progress,
-                        current_step="Running backtest with proven engine",
-                    ),
-                )
-                last_progress = estimated_progress
+            if total_bars > 0:
+                # Calculate percentage: 20% (start) + 70% (processing) = 90% max
+                bar_progress = (current_bar / total_bars) * 70.0
+                real_percentage = min(20.0 + bar_progress, 90.0)
+                
+                # Only update if progress increased by at least 2%
+                if real_percentage - last_reported_percentage >= 2.0:
+                    portfolio_value = progress_state['portfolio_value']
+                    trades_executed = progress_state['trades_executed']
+                    
+                    # Create meaningful progress description
+                    step_desc = f"Processing bar {current_bar:,} of {total_bars:,}"
+                    if portfolio_value > 0:
+                        step_desc += f" | Portfolio: ${portfolio_value:,.0f}"
+                    if trades_executed > 0:
+                        step_desc += f" | Trades: {trades_executed}"
+                    
+                    await self.operations_service.update_progress(
+                        operation_id,
+                        OperationProgress(
+                            percentage=real_percentage,
+                            current_step=step_desc,
+                            items_processed=current_bar,
+                            items_total=total_bars
+                        ),
+                    )
+                    last_reported_percentage = real_percentage
+                    logger.debug(f"Real progress update: {real_percentage:.1f}% ({current_bar}/{total_bars} bars)")
         
         # Get the real results from the proven engine
         results = await task
@@ -510,7 +551,7 @@ class BacktestingService(BaseService):
                 "total_return": metrics_data.get("total_return", 0),
                 "annualized_return": metrics_data.get("annualized_return", 0),
                 "sharpe_ratio": metrics_data.get("sharpe_ratio", 0),
-                "max_drawdown": metrics_data.get("max_drawdown", 0),
+                "max_drawdown": metrics_data.get("max_drawdown_pct", 0) * 100,  # Convert to percentage for display
                 "win_rate": metrics_data.get("win_rate", 0),
                 "profit_factor": metrics_data.get("profit_factor", 0),
                 "total_trades": metrics_data.get(

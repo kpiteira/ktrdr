@@ -11,6 +11,9 @@ from .performance import PerformanceTracker, PerformanceMetrics
 from .model_loader import ModelLoader
 from ..decision.base import Signal
 from ..data.data_manager import DataManager
+from .. import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -77,6 +80,7 @@ class BacktestingEngine:
             config: Backtesting configuration
         """
         self.config = config
+        self.progress_callback = None  # Can be set by API service for real progress tracking
 
         # Initialize components
         self.data_manager = DataManager()
@@ -107,6 +111,11 @@ class BacktestingEngine:
         start_time = pd.Timestamp.now()
         execution_start = time.time()
 
+        logger.info(f"🚀 Starting backtest: {self.strategy_name}")
+        logger.info(f"📊 Symbol: {self.config.symbol} | Timeframe: {self.config.timeframe}")
+        logger.info(f"📅 Period: {self.config.start_date} to {self.config.end_date}")
+        logger.info(f"💰 Initial Capital: ${self.config.initial_capital:,.2f}")
+        
         if self.config.verbose:
             print(f"🚀 Starting backtest: {self.strategy_name}")
             print(
@@ -133,6 +142,15 @@ class BacktestingEngine:
             print(
                 f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
             )
+            print(f"🚀 Pre-computing features for backtesting performance...")
+            
+        # PERFORMANCE OPTIMIZATION: Pre-compute all features for fast backtesting
+        logger.info("🚀 Pre-computing indicators and fuzzy memberships...")
+        self.orchestrator.prepare_feature_cache(data)
+        logger.info("✅ Feature cache ready - backtesting should be much faster!")
+        
+        if self.config.verbose:
+            print(f"✅ Feature cache prepared - backtesting optimized!")
             print(f"🔧 Running simulation...")
             print(
                 f"🔍 DEBUG: Data range check - Start: {self.config.start_date}, End: {self.config.end_date}"
@@ -154,11 +172,25 @@ class BacktestingEngine:
         # Main simulation loop with progress tracking
         last_processed_timestamp = None
         repeated_timestamp_count = 0
+        
+        logger.info(f"🚀 Starting main simulation loop with {len(data)} bars from {data.index[0]} to {data.index[-1]}")
+        
+        # Initial progress callback to set total bars
+        if self.progress_callback:
+            try:
+                self.progress_callback(0, len(data), {'portfolio_value': config.initial_capital, 'trades_executed': 0})
+            except Exception as e:
+                logger.warning(f"Initial progress callback failed: {e}")
 
         for idx in range(len(data)):
             current_bar = data.iloc[idx]
             current_timestamp = current_bar.name
             current_price = current_bar["close"]
+            
+            # DEBUG: Log first few bars to ensure loop is running
+            if idx < 5:
+                # logger.info(f"📊 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Processing bar {idx+1}/{len(data)}, Price: ${current_price:.2f}")  # Commented for performance
+                pass
 
             # Debug: Check for infinite loops on the same timestamp
             if current_timestamp == last_processed_timestamp:
@@ -198,6 +230,8 @@ class BacktestingEngine:
             }
 
             # Generate trading decision using orchestrator
+            logger.debug(f"🎯 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Calling orchestrator.make_decision for bar {idx+1}/{len(data)}")
+            
             try:
                 decision = self.orchestrator.make_decision(
                     symbol=self.config.symbol,
@@ -206,9 +240,26 @@ class BacktestingEngine:
                     historical_data=historical_data,
                     portfolio_state=portfolio_state,
                 )
+                logger.debug(f"✅ [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Orchestrator returned: {decision.signal.value} (confidence: {decision.confidence:.4f})")
             except Exception as e:
-                if self.config.verbose:
-                    print(f"⚠️  Decision error at {current_timestamp}: {e}")
+                # Check if this is a warm-up period error (normal and expected)
+                is_warmup_error = (
+                    "No fuzzy membership features found" in str(e) or
+                    "likely warm-up period" in str(e) or
+                    idx < 100  # First 100 bars are likely warm-up
+                )
+                
+                if is_warmup_error:
+                    # Log warm-up errors at DEBUG level - they're expected
+                    logger.debug(f"🔄 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Warm-up period - insufficient data: {e}")
+                else:
+                    # Log real errors at ERROR level
+                    logger.error(f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Decision error: {e}")
+                    logger.error(f"🚨 Error details: {type(e).__name__}: {str(e)}")
+                    
+                    # Also print to console for immediate visibility (real errors only)
+                    print(f"🚨 DECISION ERROR at {current_timestamp}: {e}")
+                
                 # Create a HOLD decision if error occurs
                 from ..decision.base import TradingDecision, Position
 
@@ -216,12 +267,22 @@ class BacktestingEngine:
                     signal=Signal.HOLD,
                     confidence=0.0,
                     timestamp=current_timestamp,
-                    reasoning={"error": str(e)},
+                    reasoning={"error": str(e), "warmup": is_warmup_error},
                     current_position=Position.FLAT,
                 )
+                
+                if is_warmup_error:
+                    logger.debug(f"🔄 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Using HOLD during warm-up period")
+                else:
+                    logger.info(f"🛑 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Created fallback HOLD decision due to error")
 
             # DEBUG: Track all signals
             signal_counts[decision.signal.value] += 1
+            
+            # Log signal distribution every 1000 bars for debugging
+            if idx > 0 and idx % 1000 == 0:
+                # logger.info(f"📊 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Signal counts so far: BUY={signal_counts['BUY']}, HOLD={signal_counts['HOLD']}, SELL={signal_counts['SELL']}")  # Commented for performance
+                pass
 
             # Track decision for analysis (even HOLD decisions)
             if (
@@ -235,6 +296,20 @@ class BacktestingEngine:
 
             # Execute decision if action required
             if decision.signal != Signal.HOLD:
+                logger.debug(f"🎯 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Non-HOLD signal detected: {decision.signal.value}")
+                
+                # CRITICAL DEBUG: Track position states before trade
+                pm_position = self.position_manager.current_position_status
+                de_position = self.orchestrator.decision_engine.current_position
+                
+                logger.debug(f"🔍 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Position states - PositionManager: {pm_position.value}, DecisionEngine: {de_position.value}")
+                
+                # CRITICAL: Validate signal logic
+                if decision.signal == Signal.SELL and pm_position.value == 'FLAT':
+                    logger.error(f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: SELL signal when PositionManager shows FLAT!")
+                    logger.error(f"🚨 Signal source: {decision.reasoning}")
+                if decision.signal == Signal.BUY and pm_position.value == 'LONG':
+                    logger.error(f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: BUY signal when PositionManager shows LONG!")
                 # DEBUG: Log every non-HOLD signal
                 non_hold_signals.append(
                     {
@@ -276,16 +351,52 @@ class BacktestingEngine:
 
                 if trade:
                     trades_executed += 1
+                    
+                    # CRITICAL DEBUG: Verify position states after trade
+                    pm_position_after = self.position_manager.current_position_status
+                    
                     # Update the decision engine's position state
                     self.orchestrator.decision_engine.update_position(
                         decision.signal, current_timestamp
                     )
+                    
+                    de_position_after = self.orchestrator.decision_engine.current_position
+                    
+                    # DEBUG: Log detailed trade execution with position tracking
+                    portfolio_after = self.position_manager.get_portfolio_value(current_price)
+                    position_info = self.position_manager.get_position_summary()
+                    
+                    action = "BUY" if decision.signal == Signal.BUY else "SELL"
+                    logger.debug(f"ORDER EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action} @ ${current_price:.2f} "
+                               f"| Confidence: {decision.confidence:.2f} | Order #{trades_executed}")
+                    
+                    # CRITICAL: Log position synchronization
+                    logger.debug(f"🔄 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Position sync after trade - PM: {pm_position_after.value}, DE: {de_position_after.value}")
+                    
+                    # FIXED: Only log DESYNC when positions are actually different (compare values)
+                    if pm_position_after.value != de_position_after.value:
+                        logger.error(f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] POSITION DESYNC! PositionManager: {pm_position_after.value} vs DecisionEngine: {de_position_after.value}")
+                    else:
+                        logger.debug(f"✅ [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Positions synchronized: {pm_position_after.value}")
+                    
+                    # CRITICAL: Portfolio value tracking
+                    portfolio_change = portfolio_after - self.config.initial_capital
+                    portfolio_pct = (portfolio_change / self.config.initial_capital) * 100
+                    
+                    logger.debug(f"💰 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Portfolio: ${portfolio_after:,.2f} | Change: ${portfolio_change:,.2f} ({portfolio_pct:+.2f}%) | Cash: ${position_info['capital']:,.2f}")
+                    
+                    # Check for impossible portfolio states
+                    if position_info['capital'] < 0:
+                        logger.error(f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: Negative cash ${position_info['capital']:,.2f}")
+                    if portfolio_pct < -100:
+                        logger.error(f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: Portfolio loss > 100% ({portfolio_pct:.1f}%)")
+                    if portfolio_after <= 0:
+                        logger.error(f"🚨 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] IMPOSSIBLE: Portfolio value ${portfolio_after:,.2f} <= 0")
+                    
                     if self.config.verbose:
-                        action = (
-                            "🟢 BUY " if decision.signal == Signal.BUY else "🔴 SELL"
-                        )
+                        action_emoji = "🟢 BUY " if decision.signal == Signal.BUY else "🔴 SELL"
                         print(
-                            f"✅ ORDER EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action} @ ${current_price:.2f} "
+                            f"✅ ORDER EXECUTED: {current_timestamp.strftime('%Y-%m-%d %H:%M')} | {action_emoji} @ ${current_price:.2f} "
                             f"| Confidence: {decision.confidence:.2f} | Order #{trades_executed}"
                         )
                 else:
@@ -300,6 +411,19 @@ class BacktestingEngine:
             # Track performance metrics
             portfolio_value = self.position_manager.get_portfolio_value(current_price)
             position_status = self.position_manager.current_position_status
+            
+            # DEBUG: Log portfolio state every 1000 bars to track capital management
+            if idx % 1000 == 0 or self.config.verbose:
+                position_summary = self.position_manager.get_position_summary()
+                logger.debug(f"Portfolio state [{idx}/{len(data)}]: Portfolio=${portfolio_value:,.2f}, "
+                           f"Cash=${position_summary['capital']:,.2f}, Available=${position_summary['available_capital']:,.2f}, "
+                           f"Position={position_status.value}")
+                
+                # Check for impossible metrics early
+                if portfolio_value < 0:
+                    logger.error(f"IMPOSSIBLE PORTFOLIO VALUE: ${portfolio_value:,.2f} detected at {current_timestamp}")
+                if position_summary['capital'] < 0:
+                    logger.error(f"NEGATIVE CASH: ${position_summary['capital']:,.2f} detected at {current_timestamp}")
 
             self.performance_tracker.update(
                 timestamp=current_timestamp,
@@ -308,14 +432,58 @@ class BacktestingEngine:
                 position=position_status,
             )
 
-            # Progress update
-            if self.config.verbose and idx > 0:
+            # Progress update with REAL progress tracking
+            if idx > 0:
                 progress = (idx / len(data)) * 100
                 if progress - last_progress_update >= 10:  # Update every 10%
-                    print(
-                        f"⏳ Progress: {progress:.0f}% | Portfolio: ${portfolio_value:,.2f} | Orders: {trades_executed}"
-                    )
+                    total_trades = len(self.position_manager.get_trade_history())
+                    
+                    # Log progress at info level
+                    logger.info(f"Progress: {progress:.0f}% | Portfolio: ${portfolio_value:,.2f} | "
+                              f"Orders: {trades_executed} | Completed Trades: {total_trades}")
+                    
+                    # Check for drawdown issues
+                    if hasattr(self.performance_tracker, 'get_current_drawdown'):
+                        try:
+                            current_dd = self.performance_tracker.get_current_drawdown()
+                            if current_dd > 0.5:  # > 50% drawdown
+                                logger.warning(f"High drawdown detected: {current_dd*100:.1f}%")
+                        except:
+                            pass
+                    
+                    # Additional sanity checks at progress milestones
+                    if portfolio_value <= 0:
+                        logger.error(f"BANKRUPT: Portfolio value reached ${portfolio_value:,.2f} at {progress:.0f}% progress")
+                        logger.warning("Should backtest terminate here? Current logic continues...")
+                    
+                    # Verbose console output for user feedback
+                    if self.config.verbose:
+                        drawdown_info = ""
+                        if hasattr(self.performance_tracker, 'get_current_drawdown'):
+                            try:
+                                current_dd = self.performance_tracker.get_current_drawdown()
+                                if current_dd > 0.5:  # > 50% drawdown
+                                    drawdown_info = f" | 🚨 Drawdown: {current_dd*100:.1f}%"
+                            except:
+                                pass
+                        
+                        print(
+                            f"⏳ Progress: {progress:.0f}% | Portfolio: ${portfolio_value:,.2f} | "
+                            f"Orders: {trades_executed} | Completed Trades: {total_trades}{drawdown_info}"
+                        )
+                    
                     last_progress_update = progress
+                    
+            # Call API progress callback with REAL data
+            if self.progress_callback and idx % 100 == 0:  # Update every 100 bars for API responsiveness
+                try:
+                    additional_data = {
+                        'portfolio_value': portfolio_value,
+                        'trades_executed': trades_executed
+                    }
+                    self.progress_callback(idx + 1, len(data), additional_data)
+                except Exception as e:
+                    logger.warning(f"Progress callback failed: {e}")
 
         # Force-close any open position at the end of the backtest
         # This prevents unrealized losses from skewing performance metrics
@@ -326,7 +494,14 @@ class BacktestingEngine:
             if hasattr(final_bar.name, "strftime")
             else pd.Timestamp(final_bar.name)
         )
-
+        
+        # CRITICAL DEBUG: Track force-close logic
+        pm_final_position = self.position_manager.current_position_status
+        logger.info(f"🔒 [{final_timestamp.strftime('%Y-%m-%d %H:%M')}] Force-close check - Position: {pm_final_position.value}")
+        
+        if pm_final_position.value != 'FLAT':
+            logger.info(f"🔒 [{final_timestamp.strftime('%Y-%m-%d %H:%M')}] Force-closing {pm_final_position.value} position at ${final_price:.2f}")
+        
         forced_trade = self.position_manager.force_close_position(
             price=final_price,
             timestamp=final_timestamp,
