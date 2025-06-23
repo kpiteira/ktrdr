@@ -88,19 +88,103 @@ class IbService:
         Returns:
             IbStatusResponse with connection info, metrics, and availability
         """
-        # Check if IB connection pool is available
+        # Import dependencies at top of method
+        from ktrdr.config.loader import ConfigLoader
+        from ktrdr.config.models import KtrdrConfig, IbHostServiceConfig
+        from ktrdr.config.ib_config import get_ib_config
+        from ktrdr.data.ib_data_adapter import IbDataAdapter
+        from datetime import datetime, timezone
+        from pathlib import Path
+        import os
+        
+        # Load host service configuration to determine connection method
         try:
-            # Use shared IB connection pool for consistency
-            from ktrdr.ib.pool_manager import get_shared_ib_pool
 
-            pool = get_shared_ib_pool()
-            pool_stats = pool.get_pool_stats()
-            ib_available = pool_stats["total_connections"] >= 0  # Pool exists
+            # Load host service configuration
+            try:
+                config_loader = ConfigLoader()
+                config_path = Path("config/settings.yaml")
+                if config_path.exists():
+                    main_config = config_loader.load(config_path, KtrdrConfig)
+                    host_service_config = main_config.ib_host_service
+                else:
+                    host_service_config = IbHostServiceConfig()
+                    
+                # Check environment variable override (same logic as DataManager)
+                env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
+                if env_enabled in ("true", "1", "yes"):
+                    host_service_config.enabled = True
+                    # Use environment URL if provided
+                    env_url = os.getenv("IB_HOST_SERVICE_URL")
+                    if env_url:
+                        host_service_config.url = env_url
+                elif env_enabled in ("false", "0", "no"):
+                    host_service_config.enabled = False
+                    
+                logger.info(f"🔍 IB status check: host_service.enabled={host_service_config.enabled}, url={host_service_config.url}")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to load host service config: {e}")
+                host_service_config = IbHostServiceConfig()
 
-            logger.info("🔍 New IB architecture status - checking connection pool")
+            if host_service_config.enabled:
+                # Use host service for status
+                ib_config = get_ib_config()
+                
+                # Create IbDataAdapter in host service mode
+                adapter = IbDataAdapter(
+                    host=ib_config.host,
+                    port=ib_config.port,
+                    use_host_service=True,
+                    host_service_url=host_service_config.url
+                )
+                
+                # Get health check from host service
+                health = await adapter.health_check()
+                
+                # Convert health check to IbStatusResponse format
+                ib_available = health.get("healthy", False)
+                connected = health.get("connected", False)
+                
+                logger.info(f"🔍 IB status via host service: healthy={ib_available}, connected={connected}")
+                
+                # Create response based on host service health
+                return IbStatusResponse(
+                    connection=ConnectionInfo(
+                        connected=connected,
+                        host=host_service_config.url,
+                        port=5001,  # Host service port
+                        client_id=0,
+                        connection_time=datetime.now(timezone.utc) if connected else None,
+                    ),
+                    connection_metrics=ConnectionMetrics(
+                        total_connections=1 if connected else 0,
+                        failed_connections=health.get("error_count", 0),
+                        last_connect_time=None,
+                        last_disconnect_time=None,
+                        uptime_seconds=None,
+                    ),
+                    data_metrics=DataFetchMetrics(
+                        total_requests=health.get("provider_info", {}).get("requests_made", 0),
+                        successful_requests=0,
+                        failed_requests=health.get("error_count", 0),
+                        total_bars_fetched=0,
+                        success_rate=1.0 if connected else 0.0,
+                    ),
+                    ib_available=ib_available,
+                )
+            else:
+                # Use direct IB connection pool (existing behavior)
+                from ktrdr.ib.pool_manager import get_shared_ib_pool
+
+                pool = get_shared_ib_pool()
+                pool_stats = pool.get_pool_stats()
+                ib_available = pool_stats["total_connections"] >= 0  # Pool exists
+
+                logger.info("🔍 IB status via direct connection - checking connection pool")
 
         except Exception as e:
-            logger.warning(f"IB connection pool not available: {e}")
+            logger.warning(f"IB status check failed: {e}")
             ib_available = False
             pool_stats = {}
 
