@@ -554,7 +554,7 @@ class IbService:
                 config_loader = ConfigLoader()
                 config_path = Path("config/settings.yaml")
                 if config_path.exists():
-                    main_config = config_loader.load_config(config_path, KtrdrConfig)
+                    main_config = config_loader.load(config_path, KtrdrConfig)
                     host_service_config = main_config.ib_host_service
                 else:
                     host_service_config = IbHostServiceConfig()

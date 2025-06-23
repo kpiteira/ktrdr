@@ -184,7 +184,7 @@ class DataManager:
                 config_loader = ConfigLoader()
                 config_path = Path("config/settings.yaml")
                 if config_path.exists():
-                    config = config_loader.load_config(config_path, KtrdrConfig)
+                    config = config_loader.load(config_path, KtrdrConfig)
                     host_service_config = config.ib_host_service
                 else:
                     # Use defaults if no config file
@@ -196,7 +196,7 @@ class DataManager:
                     override_path = Path(f"config/environment/{override_file}.yaml")
                     if override_path.exists():
                         # Load override config and merge
-                        override_config = config_loader.load_config(override_path, KtrdrConfig)
+                        override_config = config_loader.load(override_path, KtrdrConfig)
                         if override_config.ib_host_service:
                             host_service_config = override_config.ib_host_service
                             logger.info(f"Loaded IB host service override from {override_path}")

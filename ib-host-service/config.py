@@ -48,7 +48,7 @@ def get_host_service_config() -> IbHostServiceConfig:
             # Try to load from project config directory
             config_path = Path(__file__).parent.parent / "config" / "ib_host_service.yaml"
             if config_path.exists():
-                _service_config = _config_loader.load_config(config_path, IbHostServiceConfig)
+                _service_config = _config_loader.load(config_path, IbHostServiceConfig)
             else:
                 # Use defaults if no config file
                 _service_config = IbHostServiceConfig()
