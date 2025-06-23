@@ -1157,6 +1157,165 @@ find /backup -name "*.gz" -mtime +30 -delete
 4. Regular cleanup of old data
 5. Compress historical data
 
+## Phase 0 Architectural Considerations (December 2024 Analysis)
+
+### Service vs. Library Organization Discussion
+
+During Phase 0 planning for immediate critical fixes, significant architectural questions emerged about the optimal organization of the codebase, particularly around service boundaries and deployment units. This section captures the design discussion and analysis for future reference.
+
+#### Current Structure Analysis
+
+The current project structure mixes two organizational principles:
+
+```
+ktrdr2/
+├── frontend/           # Deployment unit (React application)
+├── ktrdr/             # Monolithic library containing multiple concerns
+│   ├── api/           # FastAPI application layer
+│   ├── ib/            # IB integration modules
+│   ├── training/      # Training logic modules
+│   ├── indicators/    # Technical indicators
+│   ├── fuzzy/         # Fuzzy logic
+│   └── neural/        # Neural network models
+├── mcp/               # Deployment unit (MCP server)
+└── docker/            # Infrastructure
+```
+
+**Issue Identified**: `frontend/` and `mcp/` represent deployable applications, while `ktrdr/` is a monolithic library mixing multiple domains that could themselves be services.
+
+#### Critical Issues Driving Phase 0
+
+The original Phase 0 plan included both IB Connector and Training Service extraction, but analysis revealed different priorities:
+
+1. **IB Connectivity**: Completely broken - connections drop after sleep/wake, port 4002 unavailable
+2. **Training Performance**: 5-10x slower but functional - performance issue, not broken functionality
+
+#### Dependency Analysis: IB Connector vs. Training Service
+
+**IB Connector Characteristics**:
+- **Minimal dependencies**: Only needs `ib_insync`, `pandas`, `datetime`, basic logging
+- **Clear service boundary**: Self-contained IB operations
+- **Isolated functionality**: No dependencies on core trading logic (`indicators`, `fuzzy`, `data`)
+- **High extraction feasibility**: Easy to move to standalone service
+- **Critical priority**: Broken functionality blocking all research
+
+**Training Service Characteristics**:
+- **Heavy dependencies**: Requires `ktrdr.data`, `ktrdr.indicators`, `ktrdr.fuzzy`, `ktrdr.neural`
+- **Deep integration**: Tightly coupled with core trading infrastructure
+- **Complex extraction**: Would require coordinating multiple modules or significant code duplication
+- **Lower extraction priority**: Currently functional, performance issue only
+- **GPU access needed**: Requires host execution for Apple Metal/NVIDIA CUDA access
+
+#### Proposed Long-Term Structure (Future Consideration)
+
+Based on the analysis, the cleanest long-term architecture would separate deployment units from shared libraries:
+
+```
+ktrdr2/
+├── services/                    # Deployable applications
+│   ├── web-frontend/           # React application
+│   ├── api-backend/            # FastAPI application
+│   ├── ib-connector/           # IB integration service
+│   ├── training-service/       # Neural network training service
+│   └── mcp-server/             # Research automation service
+├── libraries/                   # Shared libraries
+│   ├── ktrdr-core/            # Core trading logic
+│   │   ├── indicators/        # Technical analysis
+│   │   ├── fuzzy/             # Fuzzy logic engine
+│   │   └── data/              # Data management
+│   ├── ktrdr-models/          # Neural network models
+│   └── ktrdr-common/          # Shared utilities
+└── infrastructure/             # Deployment configurations
+    ├── docker/                # Container definitions
+    ├── k8s/                   # Kubernetes manifests
+    └── terraform/             # Infrastructure as code
+```
+
+**Benefits of Services/Libraries Architecture**:
+- **Clear service boundaries**: Each service has single responsibility
+- **Independent deployment**: Services can be versioned and deployed separately
+- **Shared libraries**: Common functionality reused across services
+- **Better scaling**: Services can scale independently based on load
+- **Technology flexibility**: Services can use different tech stacks as needed
+- **Development velocity**: Teams can work on services independently
+
+#### Phase 0 Implementation Decision
+
+**Decision**: Focus only on IB Connector extraction for Phase 0
+
+**Rationale**:
+1. **Critical priority**: IB connectivity is completely broken, training is just slow
+2. **Risk management**: Tackle one critical problem at a time
+3. **Feasibility**: IB has minimal dependencies, easy extraction
+4. **Speed**: Get unblocked on data collection immediately
+5. **Validation**: Prove host service approach before expanding scope
+
+**Training Service GPU Acceleration**: Deferred to Phase 1+ for proper architectural planning
+
+#### Revised Phase 0 Architecture
+
+Based on priority analysis, Phase 0 scope refined to focus solely on critical IB connectivity:
+
+```
+Host Machine (macOS/Linux)
+├── IB Connector Service (Python)
+│   └── Direct connection to IB Gateway/TWS
+│
+└── Docker Environment
+    ├── Frontend (React)
+    ├── API Backend (FastAPI) - calls IB Connector via HTTP
+    ├── Training (PyTorch) - remains in container for now
+    ├── PostgreSQL
+    ├── Redis
+    └── MCP Server
+
+Communication: Docker Backend ←→ HTTP ←→ Host IB Connector
+```
+
+**Benefits of Focused Approach**:
+- Faster delivery of critical fix
+- Reduced implementation risk
+- Validated host service pattern before broader adoption
+- Training remains functional during IB fixes
+
+#### Migration Strategy for Future Phases
+
+**Phase 1 Goals** (after IB Connector success):
+- Extract training service to host for GPU acceleration
+- Implement proper service boundaries
+- Begin library extraction process
+- Apply lessons learned from IB Connector extraction
+
+**Phase 2+ Goals**:
+- Complete migration to services/libraries structure
+- Implement inter-service communication patterns
+- Add service mesh for advanced traffic management
+- Full distributed architecture as outlined in main deployment plan
+
+#### Key Architectural Insights
+
+1. **Service Extraction Feasibility**: Dependencies matter more than size - IB's minimal dependencies make it ideal for extraction despite being smaller than training
+2. **Priority-Driven Architecture**: Critical broken functionality takes precedence over performance optimization
+3. **Incremental Service Evolution**: Prove patterns with simple services before tackling complex ones
+4. **Hybrid Approaches Work**: Not everything needs to be extracted simultaneously - strategic hybrid architectures can solve immediate problems
+
+### Training GPU Acceleration Considerations
+
+While deferred from Phase 0, the analysis confirmed that training service extraction will be necessary for Phase 1 to achieve GPU acceleration:
+
+**GPU Access Requirements**:
+- Docker on macOS cannot access Metal Performance Shaders
+- Direct host execution required for Apple M4 Pro GPU utilization
+- 5-10x performance improvement expected with proper GPU access
+
+**Implementation Strategy for Phase 1**:
+- Apply IB Connector patterns to training service
+- Address heavy dependency challenges through shared library approach
+- Implement job queue system for GPU resource management
+- Maintain API compatibility during transition
+
+This architectural analysis provides the foundation for future service extraction and the evolution toward the services/libraries structure outlined above.
+
 ## Conclusion
 
 This deployment evolution plan provides a **practical path** from the current development setup to a production-ready distributed system. Each phase builds on the previous one, allowing you to:
@@ -1166,4 +1325,4 @@ This deployment evolution plan provides a **practical path** from the current de
 3. **Scale horizontally** with job distribution
 4. **Evolve to production** when needed
 
-The key is **incremental improvement** - implement what you need when you need it, always keeping simplicity as a guiding principle.
+The key is **incremental improvement** - implement what you need when you need it, always keeping simplicity as a guiding principle. The Phase 0 architectural analysis ensures that immediate critical fixes (IB connectivity) are prioritized while establishing patterns for future service extraction and the eventual evolution to a clean services/libraries architecture.

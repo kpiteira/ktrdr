@@ -1,172 +1,417 @@
-## ktrdr Product Roadmap and MVP Definition (Updated)
+# KTRDR Product Roadmap
 
-### Product Vision (Reminder)
+## Executive Summary
 
-ktrdr is an automated trading agent for a single user (you), built around a neuro-fuzzy decision engine. It will:
-
-- Allow strategy prototyping and validation through backtesting
-- Support paper trading to test live integration without capital risk
-- Eventually enable live trading with protective mechanisms
-
-The system is deeply visual, introspectable, and iterative. The UX serves both development and monitoring.
+KTRDR is an automated trading system built around a neuro-fuzzy decision engine. The roadmap is divided into three major versions:
+- **V1 (MVP)**: Research platform to discover profitable strategies
+- **V2**: Personal trading system for a $10K account  
+- **V3**: Scaled automated platform
 
 ---
 
-### Updated MVP Definition
+## Current State (December 2024)
 
-The MVP should allow end-to-end strategy execution and validation *in backtesting and paper trading modes*, without risking capital.
+### ✅ What's Working
+- Data management with IB integration and CSV storage
+- 26+ technical indicators across 6 categories
+- Fuzzy logic engine with configurable membership functions
+- Neural network training (realistic 42-52% accuracy)
+- Complete backtesting system
+- FastAPI backend with 25+ endpoints
+- React frontend with visualization tools
+- CLI with 30+ commands
 
-#### ✅ MVP Must Include:
+### 🚨 Critical Issues
+- IB Gateway disconnects frequently (Docker networking issues)
+- No GPU acceleration available (Docker blocks M4 Pro access)
+- Limited training data (only 15 years per symbol)
+- No profitable strategy discovered yet
 
-- **Data Management**
-
-  - CSV + IB data fetching (historical + gap fill)
-  - Local persistence (CSV)
-  - At least one working indicator and fuzzy set defined in YAML
-
-- **Core Decision Engine**
-
-  - Fuzzy-to-neural flow with pluggable config
-  - Working training/inference shared pipeline
-  - Configurable inputs via YAML
-
-- **Order Management**
-
-  - Market order simulation (paper adapter)
-  - IB paper trading support
-  - Error handling and logging
-
-- **UX**
-
-  - Plot candlesticks + indicators + trades
-  - Show fuzzy memberships per trade
-  - Manual config reload (no UI editing)
-  - Emergency stop trigger (UI button only)
-
-- **System-Wide**
-
-  - YAML config structure
-  - Unit tests for major logic
-  - Docker-compose dev setup
-
-#### ❌ Not in MVP:
-
-- Stop-loss / capital controls (enable later, post-paper trading)
-- Multi-symbol or timeframe
-- Live capital deployment
-- Automated re-training or optimization
+### 📊 Actual Performance
+- Training accuracy: 42-52% (down from suspicious 77-98%)
+- Backtesting has look-ahead bias (less critical for intraday)
+- Models need more data for better generalization
 
 ---
 
-### Version Strategy
+## Version 1.0: MVP - Research & Validation Platform (9 weeks)
 
-#### MVP (Current)
+### Goal
+Build a rock-solid research platform that can discover and validate profitable trading strategies using neuro-fuzzy approach.
 
-See MVP definition above.
+### Phase 1: Platform Stability (Week 1)
+**Remove critical blockers that prevent effective research**
 
-#### Version 1 (V1): Fully Featured Paper Trading Platform
+**Tasks:**
+- Move IB connector from Docker to host
+  - Direct network connection to IB Gateway
+  - Eliminate Docker socket layer issues
+  - Test connection stability through sleep/wake cycles
+- Move training module from Docker to host
+  - Enable Apple M4 Pro GPU acceleration
+  - Alternative: Use PC with RTX 3060
+  - Benchmark training speed improvements
+- Integration testing of hybrid architecture
 
-- Emergency stop logic implemented and testable
-- Stop-loss and capital protection enabled
-- Rich UI: logs, portfolio views, live updates
-- Structured logging persisted to DB
-- Support for model versions and configuration profiles
-- Integrated test suite + reproducible builds (Dockerized)
+**Success Metrics:**
+- IB stays connected for 24+ hours
+- Training speed improved by 5-10x
+- Full pipeline works: download → train → backtest
 
-#### Version 2 (V2): Production-Grade Live Trading System
+### Phase 2: Multi-Symbol Training (Weeks 2-3)
+**Address data scarcity by training models on multiple symbols**
 
-**Note:** The transition to V2 represents a significant increase in requirements for reliability, security, monitoring, and operational robustness compared to V1. Foundational work supporting these aspects (e.g., robust error handling, enhanced logging, infrastructure readiness) should be considered during V1 development.
+**Week 2 Tasks:**
+- Design universal model storage structure
+- Implement multi-symbol data loader
+  - Handle different trading hours
+  - Temporal alignment across symbols
+  - Data quality validation
+- Create training pipeline for multiple symbols
+- Handle MACD normalization issues
 
-- Live IB trading with full capital risk controls
-- Notification integration (email, webhook)
-- Broker reconnection/resume engine
-- Strategy A/B experimentation support
-- Multi-symbol, multi-timeframe architecture
-- Model visualization tools (weights, fuzzy activations)
+**Week 3 Tasks:**
+- Update backtesting to load universal models
+- Implement fallback system (universal → symbol-specific)
+- Test with 3-4 forex pairs (EURUSD, GBPUSD, USDJPY, AUDUSD)
+- Validate model performance across symbols
 
-**Deferred Cross-Cutting Concerns** (To be implemented in V2):
-- Advanced observability and monitoring capabilities (metrics dashboards, performance tracking)
-- Enhanced security measures beyond basic credential management
-- Circuit breaker patterns for advanced error handling
-- Comprehensive dependency management and vulnerability scanning
-- Advanced configuration versioning and history tracking
+**Success Metrics:**
+- Train one model on 4+ symbols
+- 60+ years of combined training data
+- Model works on symbols not in training set
+- Backtesting supports universal models
+
+### Phase 3: Strategy Discovery (Weeks 4-5)
+**Find at least one profitable trading strategy**
+
+**Strategy Research Areas:**
+- Mean reversion patterns
+- Momentum breakouts
+- Volatility clustering
+- Multi-timeframe alignment
+- Fuzzy rule combinations
+
+**Research Process:**
+- Daily strategy experiments
+- Document what works/fails
+- Iterate on fuzzy set definitions
+- Tune neural network architectures
+- Analyze losing trades for patterns
+
+**Success Metrics:**
+- At least one strategy with Sharpe > 0.5
+- Consistent performance across multiple symbols
+- Clear understanding of edge
+- Documented strategy rationale
+
+### Phase 4: Research Automation - MCP Server (Weeks 6-7)
+**Scale successful strategy research with automation**
+
+**MCP Server Capabilities:**
+- Create strategy variations programmatically
+- Launch parallel training jobs
+- Run systematic backtests
+- Generate performance reports
+- Suggest parameter optimizations
+
+**Implementation Focus:**
+- Job queue for long-running tasks
+- Progress tracking and monitoring
+- Result aggregation and analysis
+- Automated experiment documentation
+
+**Success Metrics:**
+- MCP server running experiments overnight
+- 10x increase in strategies tested
+- Automated performance reporting
+- Discovery of strategy improvements
+
+### Phase 5: Paper Trading Validation (Weeks 8-9)
+**Validate that strategies work in "live" conditions**
+
+**Implementation:**
+- Paper trading connector to IB
+- Real-time decision engine
+- Position and order tracking
+- Performance monitoring
+
+**Validation Focus:**
+- Compare paper trades to backtest expectations
+- Analyze timing differences
+- Measure slippage and execution quality
+- Document behavioral differences
+
+**Success Metrics:**
+- Paper trading matches backtest behavior (>85% similarity)
+- Execution timing understood
+- Slippage within acceptable bounds
+- Ready for real capital deployment
+
+### V1 Deliverables Summary
+1. Stable research platform with GPU acceleration
+2. Multi-symbol training capability
+3. At least one profitable strategy
+4. MCP-powered research automation
+5. Paper trading validation complete
 
 ---
 
-### Roadmap Milestones (Refined by Phases)
+## Version 2.0: Personal Trading System - $10K Account (6 months)
 
-#### Phase 1: Development – Visual + Incremental Validation (Backbone of System)
+### Goal
+Transform the research platform into a safe, automated trading system for personal capital with strict risk controls.
 
-- ✅ Scaffold Python modules and configs
-- ✅ Connect to IB and pull historical OHLCV (initial simple case: e.g., 1 year of data)
-- ✅ Save to CSV
-- ✅ Visualize candlesticks (basic charting)
-- ✅ Compute and overlay one indicator (e.g., RSI)
-- ✅ Fuzzy membership visualization per indicator (basic static example)
+### Core V2 Principles
+- **Capital Preservation First**: Never risk more than the $10K account value
+- **Gradual Automation**: Supervised → Monitored → Trusted
+- **Daily Oversight**: Not fully autonomous initially
+- **Personal Use Only**: No external investor complexity
 
-#### Phase 2: Research – Backtesting with Neuro-Fuzzy Logic (Exploration, Metrics, Tuning)
+### Month 1: Safety Framework
+**Build protective infrastructure before risking any capital**
 
-- ✅ Design and parse fuzzy inputs (YAML-based config definitions)
-- ✅ Fuzzy activation visualization (indicator → set mapping)
-- ✅ Define and implement one basic model architecture (e.g., MLP) with training pipeline
-- ✅ Implement standalone inference logic that uses trained model on new fuzzy inputs
-- ✅ Train model on simple historical data (limited set)
-- ✅ Evaluate training output and log diagnostic info
-- ✅ Plot trades vs. zigzag or benchmark reference
-- ✅ Chart PnL, win/loss breakdown, confusion matrix
-- ✅ Tune fuzzy parameters and view impact
+**Position Sizing Engine:**
+- Universal algorithm for all instrument types
+- Confidence-based position scaling
+- Portfolio heat tracking (total risk)
+- Margin requirement monitoring
+- Per-trade risk limits (1-2% max)
 
-#### Phase 3: Paper Trading – Live Data + Paper Orders (Runtime Validation, UI Feedback)
+**Account Protection System:**
+- Intraday loss monitoring
+- Daily loss circuit breaker ($200 = 2%)
+- Weekly drawdown limits ($500 = 5%)
+- Position concentration limits
+- Correlation-based exposure management
+- Emergency stop procedures
 
-- Dependency Note: Initiation of Phase 3 assumes sufficient stability and validation of the core Neuro-Fuzzy logic and backtesting results from Phase 2. Key model performance metrics should meet baseline criteria before proceeding to paper trading.
-- ✅ Live price feed from IB
-- ✅ Paper order submission via broker adapter
-- ✅ Order state tracking and logs
-- ✅ Emergency stop button
-- ✅ UI: open positions, trades, and capital snapshot
+**Success Metrics:**
+- All safety systems tested
+- Circuit breakers trigger correctly
+- Risk calculations accurate
+- Emergency procedures documented
 
-#### Phase 4: Productionization – Risk, Recovery, and Stability (Pre-Live Protection Layer)
+### Month 2: Production Trading Engine
+**Adapt V1 strategies for live trading**
 
-- ✅ Stop-loss enforcement on orders
-- ✅ Capital-based trading limits
-- ✅ Auto-restart on system crash
-- ✅ UI alerts and error visibility
+**Strategy Migration:**
+- Add production safety filters
+- Time-of-day restrictions
+- Spread and liquidity checks
+- News event avoidance
+- Minimum confidence thresholds
 
-#### Phase 5: Expansion and Experimentation (Advanced Capabilities & System Growth)
+**Trade Execution:**
+- Order management system
+- Partial fill handling
+- Slippage tracking
+- State persistence
+- Error recovery
 
-- ✅ Add more indicators and fuzzy configs
-- ✅ Add multi-symbol support
-- ✅ Add webhook/email notifications
-- ✅ Enable strategy switching by config
-- ✅ Add backend performance dashboards
-- Configurable live vs paper switch
-- Logging to DB or structured file
-- More indicators and fuzzy sets
-- UX performance polish
+**Trade Accounting:**
+- Real-time P&L tracking
+- Wash sale monitoring
+- Tax lot management
+- Transaction logging
+- Performance attribution
 
-### UX/API Path – Cross-Cutting UI Enablement
+**Success Metrics:**
+- Strategies migrated successfully
+- Paper trading with V2 features
+- Accounting system accurate
+- Ready for real capital
 
-- ✅ Phase 1: Console and simple static plots via Streamlit, plotly or notebook
-- ✅ Phase 2: Expand visualization with fuzzy input diagnostics and performance
-- ✅ Phase 3: Web UI backend with REST API endpoints (FastAPI or Flask)
-- ✅ Phase 3+: React frontend or Dash (optional) for interactive dashboards
-- ✅ Throughout: Ensure all visual components are testable and evolve with system maturity
+### Month 3: Gradual Go-Live
+**Deploy with real money in stages**
+
+**Week 1: Minimal Deployment**
+- $1,000 initial capital (10%)
+- Single position limit
+- All trades manually approved
+- Hourly monitoring
+
+**Week 2: Confidence Building**
+- Scale to $2,500 (25%)
+- 2 position limit
+- High-confidence trades auto-approved
+- 4x daily monitoring
+
+**Week 3: Expanded Operations**
+- Scale to $5,000 (50%)
+- 3 position limit
+- Most trades automated
+- 2x daily monitoring
+
+**Week 4: Full Deployment**
+- Full $10,000 capital
+- 5 position limit
+- Full automation with overrides
+- Daily monitoring
+
+**Success Metrics:**
+- No major incidents
+- Performance tracking expectations
+- Risk controls working
+- Comfortable with automation level
+
+### Months 4-6: Operations & Optimization
+**Build confidence and refine the system**
+
+**Operational Improvements:**
+- Automated daily reports
+- Mobile monitoring app
+- Performance analytics dashboard
+- Alert refinement
+- Backup procedures
+
+**Strategy Optimization:**
+- A/B testing framework
+- Dynamic strategy weighting
+- Underperformance detection
+- Market regime adaptation
+- Correlation analysis
+
+**Risk Management Evolution:**
+- Volatility-based sizing
+- Drawdown-based scaling
+- Recovery procedures
+- Stress testing
+- Scenario analysis
+
+**Success Metrics:**
+- 4/6 months profitable
+- Max drawdown < 15%
+- Sharpe ratio > 0.8
+- Can leave unmonitored for 4+ hours
+- Tax reporting accurate
+
+### V2 Technology Components
+
+**Infrastructure:**
+- Redundant IB Gateway connections
+- PostgreSQL for trade data
+- Redis for state management
+- Prometheus/Grafana monitoring
+- Automated backup system
+- Disaster recovery procedures
+
+**User Interfaces:**
+- Web dashboard for monitoring
+- Mobile app for alerts/control
+- CLI for administration
+- API for integrations
+- Emergency stop button
+
+**Operational Tools:**
+- Deployment automation
+- Health monitoring
+- Performance analytics
+- Tax reporting
+- Audit logging
 
 ---
 
-### 📝 Notes on Neural Training and Inference Steps
+## Version 3.0: Scaled Automation Platform (Year 2+)
 
-- **Define and implement one basic model architecture**:
-  - Choose a simple neural network structure (MLP)
-  - Specify input shape based on fuzzy input vector size
-  - Define model layers, activations, output (e.g., softmax for signal class)
-  - Integrate with a training loop using loss/optimizer/scheduler as needed
-  - Enable training on small historical sets to test viability
+### Goal
+Evolution to a truly automated system capable of running unattended for extended periods with larger capital.
 
-- **Implement standalone inference logic**:
-  - Load saved model weights (e.g., `.pt` file)
-  - Accept fuzzy input vector as runtime input
-  - Run forward pass and produce decision output (e.g., action + confidence)
-  - Integrate into backtest and paper trading modes
+### V3 Major Enhancements
 
-Let’s iterate from this structure as needed!
+**Extended Autonomous Operation:**
+- Multi-day unattended running
+- Self-healing from common issues
+- Automated issue resolution
+- Intelligent alert filtering
+- Vacation mode
+
+**Advanced Strategies:**
+- Options strategies for hedging
+- Multi-asset class support
+- Market regime detection
+- Dynamic strategy allocation
+- Cross-market arbitrage
+
+**Enhanced Machine Learning:**
+- Online learning from results
+- Transformer architectures
+- Reinforcement learning
+- Feature discovery
+- Model ensembles
+
+**Scaled Operations:**
+- $50K-100K+ account support
+- Multiple account management
+- Cross-broker execution
+- International markets
+- 24-hour trading
+
+**Platform Features:**
+- Cloud deployment option
+- Strategy marketplace
+- Performance sharing
+- Backtesting service
+- API monetization
+
+### V3 Success Metrics
+- 6+ months profitable operation
+- Minimal manual intervention
+- Multiple revenue streams
+- Platform stability
+- Scalable architecture
+
+---
+
+## Risk Factors & Mitigation
+
+### Technical Risks
+- **IB API changes**: Maintain adapter pattern
+- **Model degradation**: Continuous retraining
+- **System failures**: Comprehensive monitoring
+- **Data quality**: Multiple validation layers
+
+### Financial Risks
+- **Strategy failure**: Multiple uncorrelated strategies
+- **Black swan events**: Circuit breakers
+- **Overleverage**: Hard position limits
+- **Correlation spike**: Dynamic limits
+
+### Operational Risks
+- **Key person dependency**: Documentation
+- **Complexity growth**: Simplification sprints
+- **Technical debt**: Regular refactoring
+- **Security**: Best practices, audits
+
+---
+
+## Success Definition
+
+### V1 Success (MVP)
+✓ Found profitable strategies  
+✓ Paper trading validates backtest  
+✓ System stable for research  
+✓ Clear path forward
+
+### V2 Success  
+✓ Trading real money safely  
+✓ Consistent monthly profits  
+✓ Risk under control  
+✓ Operationally stable
+
+### V3 Success
+✓ Truly automated  
+✓ Scaled capital  
+✓ Multiple strategies  
+✓ Platform potential
+
+---
+
+## Next Steps (This Week)
+
+1. **Monday-Tuesday**: Fix IB connectivity issues
+2. **Wednesday-Thursday**: Enable GPU training  
+3. **Friday**: Integration testing
+4. **Weekend**: Plan multi-symbol implementation
+
+The journey from research platform to automated trading system is methodical and risk-aware, with each phase building on proven success from the previous one.
