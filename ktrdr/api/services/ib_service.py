@@ -543,11 +543,34 @@ class IbService:
             Dictionary with symbol information or None if not found
         """
         try:
-            # Use new IB data adapter with simplified architecture
+            # Use IB data adapter with host service support
             from ktrdr.config.ib_config import get_ib_config
+            from ktrdr.config.loader import ConfigLoader
+            from ktrdr.config.models import KtrdrConfig, IbHostServiceConfig
+            from pathlib import Path
 
-            config = get_ib_config()
-            adapter = IbDataAdapter(host=config.host, port=config.port)
+            # Load host service configuration
+            try:
+                config_loader = ConfigLoader()
+                config_path = Path("config/settings.yaml")
+                if config_path.exists():
+                    main_config = config_loader.load_config(config_path, KtrdrConfig)
+                    host_service_config = main_config.ib_host_service
+                else:
+                    host_service_config = IbHostServiceConfig()
+            except Exception:
+                host_service_config = IbHostServiceConfig()
+
+            # Get IB connection config for fallback
+            ib_config = get_ib_config()
+            
+            # Initialize adapter with appropriate mode
+            adapter = IbDataAdapter(
+                host=ib_config.host,
+                port=ib_config.port,
+                use_host_service=host_service_config.enabled,
+                host_service_url=host_service_config.url
+            )
 
             # Validate symbol using new architecture
             is_valid = await adapter.validate_symbol(symbol)

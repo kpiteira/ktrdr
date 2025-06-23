@@ -62,6 +62,17 @@ class SecurityConfig(BaseModel):
     )
 
 
+class IbHostServiceConfig(BaseModel):
+    """Configuration settings for IB Host Service."""
+
+    enabled: bool = Field(
+        False, description="Whether to use host service instead of direct IB connection"
+    )
+    url: str = Field(
+        "http://localhost:5001", description="URL of the IB host service"
+    )
+
+
 class IndicatorConfig(BaseModel):
     """Configuration for a technical indicator."""
 
@@ -189,6 +200,7 @@ class KtrdrConfig(BaseModel):
     data: DataConfig
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    ib_host_service: IbHostServiceConfig = Field(default_factory=IbHostServiceConfig)
     debug: bool = Field(False, description="Global debug flag")
     indicators: Optional[IndicatorsConfig] = Field(
         None, description="Indicator configurations"

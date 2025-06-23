@@ -174,8 +174,60 @@ class DataManager:
         # Initialize external data provider (using adapter pattern)
         self.enable_ib = enable_ib
         if enable_ib:
-            self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter()
-            logger.info("IB integration enabled (using new adapter pattern)")
+            # Load configuration to determine if host service should be used
+            try:
+                from ktrdr.config.loader import ConfigLoader
+                from ktrdr.config.models import KtrdrConfig, IbHostServiceConfig
+                from pathlib import Path
+                import os
+                
+                config_loader = ConfigLoader()
+                config_path = Path("config/settings.yaml")
+                if config_path.exists():
+                    config = config_loader.load_config(config_path, KtrdrConfig)
+                    host_service_config = config.ib_host_service
+                else:
+                    # Use defaults if no config file
+                    host_service_config = IbHostServiceConfig()
+                
+                # Check for environment override (for easy Docker toggle)
+                override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
+                if override_file:
+                    override_path = Path(f"config/environment/{override_file}.yaml")
+                    if override_path.exists():
+                        # Load override config and merge
+                        override_config = config_loader.load_config(override_path, KtrdrConfig)
+                        if override_config.ib_host_service:
+                            host_service_config = override_config.ib_host_service
+                            logger.info(f"Loaded IB host service override from {override_path}")
+                
+                # Environment variable override for enabled flag (quick toggle)
+                env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
+                if env_enabled in ("true", "1", "yes"):
+                    host_service_config.enabled = True
+                    # Use environment URL if provided
+                    env_url = os.getenv("IB_HOST_SERVICE_URL")
+                    if env_url:
+                        host_service_config.url = env_url
+                elif env_enabled in ("false", "0", "no"):
+                    host_service_config.enabled = False
+                
+                # Initialize IbDataAdapter with host service configuration
+                self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter(
+                    use_host_service=host_service_config.enabled,
+                    host_service_url=host_service_config.url
+                )
+                
+                if host_service_config.enabled:
+                    logger.info(f"IB integration enabled using host service at {host_service_config.url}")
+                else:
+                    logger.info("IB integration enabled (direct connection)")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to load host service config, using direct connection: {e}")
+                # Fallback to direct connection
+                self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter()
+                logger.info("IB integration enabled (direct connection - fallback)")
         else:
             self.external_provider = None
             logger.info("IB integration disabled")

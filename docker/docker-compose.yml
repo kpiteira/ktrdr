@@ -48,6 +48,10 @@ services:
       - IB_HOST=172.17.0.1
       - IB_PORT=4002
       - IB_CLIENT_ID=1
+      # IB Host Service configuration (Phase 0)
+      # Set to true to enable host service mode, false for direct connection
+      - USE_IB_HOST_SERVICE=false
+      - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

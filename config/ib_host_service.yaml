@@ -1,0 +1,12 @@
+# IB Connector Host Service Configuration
+# This service runs on the host machine to provide direct IB Gateway connectivity
+
+host_service:
+  # Host to bind the service to (127.0.0.1 for localhost only)
+  host: "127.0.0.1"
+  
+  # Port for the service (5001 to avoid conflicts)
+  port: 5001
+  
+  # Logging level for the service
+  log_level: "INFO"

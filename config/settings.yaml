@@ -31,6 +31,13 @@ security:
     - "*_credentials*"
     - "*.cert"
 
+# IB Host Service Configuration (Phase 0)
+ib_host_service:
+  # Whether to use host service instead of direct IB connection
+  enabled: false
+  # URL of the IB host service
+  url: "http://localhost:5001"
+
 # IB Data Sync Configuration
 ib_sync:
   # Sync frequency: manual, hourly, daily, disabled

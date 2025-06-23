@@ -16,6 +16,7 @@ import asyncio
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 import pandas as pd
+import json
 
 from ktrdr.logging import get_logger
 from ktrdr.errors import DataError, ConnectionError as KtrdrConnectionError
@@ -30,6 +31,13 @@ from .external_data_interface import (
 # Import IB module components
 from ktrdr.ib import IbErrorClassifier, IbErrorType
 
+# HTTP client for host service communication
+try:
+    import httpx
+    HTTPX_AVAILABLE = True
+except ImportError:
+    HTTPX_AVAILABLE = False
+
 logger = get_logger(__name__)
 
 
@@ -43,33 +51,101 @@ class IbDataAdapter(ExternalDataProvider):
     """
 
     def __init__(
-        self, host: str = "localhost", port: int = 4002, max_connections: int = 3
+        self, 
+        host: str = "localhost", 
+        port: int = 4002, 
+        max_connections: int = 3,
+        use_host_service: bool = False,
+        host_service_url: Optional[str] = None
     ):
         """
         Initialize IB data adapter.
 
         Args:
-            host: IB Gateway/TWS host
-            port: IB Gateway/TWS port
-            max_connections: Maximum number of IB connections
+            host: IB Gateway/TWS host (used for direct connection)
+            port: IB Gateway/TWS port (used for direct connection)
+            max_connections: Maximum number of IB connections (direct mode only)
+            use_host_service: Whether to use host service instead of direct IB connection
+            host_service_url: URL of the IB host service (e.g., http://localhost:5001)
         """
         self.host = host
         self.port = port
+        self.use_host_service = use_host_service
+        self.host_service_url = host_service_url or "http://localhost:5001"
 
-        # Use new IB module components for clean separation
-        from ktrdr.ib import IbSymbolValidator, IbDataFetcher, ValidationResult
+        # Validate configuration
+        if use_host_service and not HTTPX_AVAILABLE:
+            raise DataProviderError(
+                "httpx library required for host service mode but not available",
+                provider="IB"
+            )
 
-        self.symbol_validator = IbSymbolValidator(
-            component_name="data_adapter_validator"
-        )
-        self.data_fetcher = IbDataFetcher()
+        # Initialize appropriate components based on mode
+        if not use_host_service:
+            # Direct IB connection mode (existing behavior)
+            from ktrdr.ib import IbSymbolValidator, IbDataFetcher, ValidationResult
+
+            self.symbol_validator = IbSymbolValidator(
+                component_name="data_adapter_validator"
+            )
+            self.data_fetcher = IbDataFetcher()
+            logger.info(f"IbDataAdapter initialized for direct IB connection {host}:{port}")
+        else:
+            # Host service mode
+            self.symbol_validator = None
+            self.data_fetcher = None
+            logger.info(f"IbDataAdapter initialized for host service at {self.host_service_url}")
 
         # Statistics
         self.requests_made = 0
         self.errors_encountered = 0
         self.last_request_time: Optional[datetime] = None
 
-        logger.info(f"IbDataAdapter initialized for {host}:{port}")
+    async def _call_host_service_post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Make POST request to host service."""
+        if not self.use_host_service:
+            raise RuntimeError("Host service not enabled")
+        
+        url = f"{self.host_service_url}{endpoint}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=data)
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPError as e:
+            raise DataProviderConnectionError(
+                f"Host service request failed: {str(e)}",
+                provider="IB"
+            )
+        except Exception as e:
+            raise DataProviderError(
+                f"Host service communication error: {str(e)}",
+                provider="IB"
+            )
+
+    async def _call_host_service_get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make GET request to host service."""
+        if not self.use_host_service:
+            raise RuntimeError("Host service not enabled")
+        
+        url = f"{self.host_service_url}{endpoint}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, params=params or {})
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPError as e:
+            raise DataProviderConnectionError(
+                f"Host service request failed: {str(e)}",
+                provider="IB"
+            )
+        except Exception as e:
+            raise DataProviderError(
+                f"Host service communication error: {str(e)}",
+                provider="IB"
+            )
 
     async def validate_and_get_metadata(self, symbol: str, timeframes: List[str]):
         """
@@ -88,12 +164,49 @@ class IbDataAdapter(ExternalDataProvider):
             DataProviderError: If validation fails
         """
         try:
-            # Use IB module for validation
-            validation_result = (
-                await self.symbol_validator.validate_symbol_with_metadata(
-                    symbol, timeframes
+            if self.use_host_service:
+                # Use host service for validation
+                response = await self._call_host_service_post("/data/validate", {
+                    "symbol": symbol,
+                    "timeframes": timeframes
+                })
+                
+                if not response["success"]:
+                    raise DataProviderDataError(
+                        response.get("error", f"Validation failed for {symbol}"),
+                        provider="IB"
+                    )
+                
+                # Convert response to ValidationResult-like structure
+                from ktrdr.ib import ValidationResult, ContractInfo
+                
+                contract_info = None
+                if response.get("contract_info"):
+                    # Create ContractInfo from response data
+                    contract_info = ContractInfo(**response["contract_info"])
+                
+                # Convert ISO timestamps back to datetime objects
+                head_timestamps = {}
+                if response.get("head_timestamps"):
+                    for tf, timestamp_str in response["head_timestamps"].items():
+                        if timestamp_str:
+                            head_timestamps[tf] = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                        else:
+                            head_timestamps[tf] = None
+                
+                validation_result = ValidationResult(
+                    is_valid=response.get("is_valid", False),
+                    error_message=response.get("error_message"),
+                    contract_info=contract_info,
+                    head_timestamps=head_timestamps
                 )
-            )
+            else:
+                # Use direct IB connection (existing behavior)
+                validation_result = (
+                    await self.symbol_validator.validate_symbol_with_metadata(
+                        symbol, timeframes
+                    )
+                )
 
             self._update_stats()
 
@@ -147,14 +260,39 @@ class IbDataAdapter(ExternalDataProvider):
                 else:
                     instrument_type = "STK"
 
-            # Use IB data fetcher for clean separation
-            result = await self.data_fetcher.fetch_historical_data(
-                symbol=symbol,
-                timeframe=timeframe,
-                start=start,
-                end=end,
-                instrument_type=instrument_type,
-            )
+            if self.use_host_service:
+                # Use host service for data fetching
+                response = await self._call_host_service_post("/data/historical", {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "instrument_type": instrument_type
+                })
+                
+                if not response["success"]:
+                    raise DataProviderDataError(
+                        response.get("error", f"Data fetch failed for {symbol}"),
+                        provider="IB"
+                    )
+                
+                # Convert JSON response back to DataFrame
+                if response.get("data"):
+                    result = pd.read_json(response["data"], orient="index")
+                    # Ensure datetime index
+                    if not result.empty:
+                        result.index = pd.to_datetime(result.index)
+                else:
+                    result = pd.DataFrame()
+            else:
+                # Use direct IB connection (existing behavior)
+                result = await self.data_fetcher.fetch_historical_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start=start,
+                    end=end,
+                    instrument_type=instrument_type,
+                )
 
             self._update_stats()
             return result
@@ -167,7 +305,7 @@ class IbDataAdapter(ExternalDataProvider):
         self, symbol: str, instrument_type: Optional[str] = None
     ) -> bool:
         """
-        Validate symbol using IB module.
+        Validate symbol using IB module or host service.
 
         Args:
             symbol: Trading symbol to validate
@@ -177,8 +315,17 @@ class IbDataAdapter(ExternalDataProvider):
             True if symbol is valid, False otherwise
         """
         try:
-            # Use IB module for validation
-            result = await self.symbol_validator.validate_symbol_async(symbol)
+            if self.use_host_service:
+                # Use host service for validation
+                response = await self._call_host_service_post("/data/validate", {
+                    "symbol": symbol,
+                    "timeframes": []  # Simple validation doesn't need timeframes
+                })
+                
+                result = response["success"] and response.get("is_valid", False)
+            else:
+                # Use direct IB connection (existing behavior)
+                result = await self.symbol_validator.validate_symbol_async(symbol)
 
             self._update_stats()
             return result
@@ -203,21 +350,39 @@ class IbDataAdapter(ExternalDataProvider):
             Earliest available datetime, or None if not available
         """
         try:
-            # Use IB module for head timestamp lookup
-            head_timestamp_iso = await self.symbol_validator.fetch_head_timestamp_async(
-                symbol, timeframe
-            )
+            if self.use_host_service:
+                # Use host service for head timestamp lookup
+                response = await self._call_host_service_get("/data/head-timestamp", {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "instrument_type": instrument_type
+                })
+                
+                if response["success"] and response.get("timestamp"):
+                    dt = datetime.fromisoformat(response["timestamp"].replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    
+                    self._update_stats()
+                    return dt
+                
+                return None
+            else:
+                # Use direct IB connection (existing behavior)
+                head_timestamp_iso = await self.symbol_validator.fetch_head_timestamp_async(
+                    symbol, timeframe
+                )
 
-            if head_timestamp_iso:
-                # Convert ISO string back to datetime
-                dt = datetime.fromisoformat(head_timestamp_iso.replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                if head_timestamp_iso:
+                    # Convert ISO string back to datetime
+                    dt = datetime.fromisoformat(head_timestamp_iso.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
 
-                self._update_stats()
-                return dt
+                    self._update_stats()
+                    return dt
 
-            return None
+                return None
 
         except Exception as e:
             self.errors_encountered += 1
@@ -246,31 +411,51 @@ class IbDataAdapter(ExternalDataProvider):
         return ["STK", "FOREX", "CRYPTO", "FUTURE", "OPTION", "INDEX"]
 
     async def health_check(self) -> Dict[str, Any]:
-        """Check health of IB components"""
+        """Check health of IB components or host service"""
         try:
-            # Get health from data fetcher and symbol validator
-            data_fetcher_stats = self.data_fetcher.get_stats()
-            validator_stats = self.symbol_validator.get_cache_stats()
+            if self.use_host_service:
+                # Check host service health
+                response = await self._call_host_service_get("/health")
+                
+                # Convert host service response to expected format
+                return {
+                    "healthy": response.get("healthy", False),
+                    "connected": response.get("ib_status", {}).get("connected", False),
+                    "last_request_time": self.last_request_time,
+                    "error_count": self.errors_encountered,
+                    "rate_limit_status": {},
+                    "provider_info": {
+                        "mode": "host_service",
+                        "host_service_url": self.host_service_url,
+                        "host_service_status": response,
+                        "requests_made": self.requests_made,
+                    },
+                }
+            else:
+                # Direct IB connection health check (existing behavior)
+                data_fetcher_stats = self.data_fetcher.get_stats()
+                validator_stats = self.symbol_validator.get_cache_stats()
 
-            # Check if we can connect (basic health check)
-            from ktrdr.ib.pool_manager import get_shared_ib_pool
+                # Check if we can connect (basic health check)
+                from ktrdr.ib.pool_manager import get_shared_ib_pool
 
-            pool = get_shared_ib_pool()
-            pool_health = await pool.health_check()
+                pool = get_shared_ib_pool()
+                pool_health = await pool.health_check()
 
-            return {
-                "healthy": pool_health["healthy"],
-                "connected": pool_health["healthy_connections"] > 0,
-                "last_request_time": self.last_request_time,
-                "error_count": self.errors_encountered,
-                "rate_limit_status": {},
-                "provider_info": {
-                    "data_fetcher_stats": data_fetcher_stats,
-                    "validator_stats": validator_stats,
-                    "pool_stats": pool_health,
-                    "requests_made": self.requests_made,
-                },
-            }
+                return {
+                    "healthy": pool_health["healthy"],
+                    "connected": pool_health["healthy_connections"] > 0,
+                    "last_request_time": self.last_request_time,
+                    "error_count": self.errors_encountered,
+                    "rate_limit_status": {},
+                    "provider_info": {
+                        "mode": "direct_connection",
+                        "data_fetcher_stats": data_fetcher_stats,
+                        "validator_stats": validator_stats,
+                        "pool_stats": pool_health,
+                        "requests_made": self.requests_made,
+                    },
+                }
 
         except Exception as e:
             logger.error(f"Health check failed: {e}")

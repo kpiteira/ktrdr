@@ -1,0 +1,8 @@
+# IB Host Service Configuration Override
+# Use this config to enable host service mode
+
+ib_host_service:
+  # Enable host service instead of direct IB connection  
+  enabled: true
+  # URL of the IB host service (accessible from Docker via host.docker.internal)
+  url: "http://host.docker.internal:5001"
