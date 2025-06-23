@@ -30,8 +30,14 @@ from ktrdr.logging import get_logger
 from endpoints.data import router as data_router
 from endpoints.health import router as health_router
 
+# Import configuration
+from config import get_host_service_config
+
+# Get configuration
+service_config = get_host_service_config()
+
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=getattr(logging, service_config.host_service.log_level))
 logger = get_logger(__name__)
 
 # Create FastAPI app
@@ -58,7 +64,7 @@ app.include_router(health_router)
 async def startup_event():
     """Initialize service on startup."""
     logger.info("Starting IB Connector Host Service...")
-    logger.info(f"Service will listen on http://localhost:5001")
+    logger.info(f"Service will listen on http://{service_config.host_service.host}:{service_config.host_service.port}")
     logger.info("Available endpoints:")
     logger.info("  GET  /                     - Service info")
     logger.info("  GET  /health               - Basic health check")
@@ -93,11 +99,11 @@ async def health_check():
     }
 
 if __name__ == "__main__":
-    # Run the service
+    # Run the service using configuration
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",  # Localhost only for security
-        port=5001,
+        host=service_config.host_service.host,
+        port=service_config.host_service.port,
         reload=True,
-        log_level="info"
+        log_level=service_config.host_service.log_level.lower()
     )

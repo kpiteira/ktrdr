@@ -49,7 +49,23 @@ Docker Backend → HTTP → Host Service → IB Gateway
 
 ## Configuration
 
-The service imports configuration from `ktrdr.config.ib_config` to maintain consistency with existing settings.
+The service uses YAML-based configuration consistent with KTRDR patterns:
+
+- **IB Settings**: Uses existing `ktrdr.config.ib_config` for IB Gateway connection
+- **Host Service Settings**: Configured via `config/ib_host_service.yaml`
+
+### Configuration File
+
+Create or modify `config/ib_host_service.yaml`:
+
+```yaml
+host_service:
+  host: "127.0.0.1"  # Localhost only for security
+  port: 5001         # Service port
+  log_level: "INFO"  # Logging level
+```
+
+If no config file exists, sensible defaults are used.
 
 ## Logging
 

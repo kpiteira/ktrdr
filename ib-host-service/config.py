@@ -1,52 +1,64 @@
 """
 Configuration for IB Connector Host Service
 
-Imports and re-exports existing IB configuration from ktrdr.config
-to maintain consistency with existing settings.
+Uses YAML-based configuration consistent with KTRDR patterns.
+Imports existing IB configuration and extends with host service settings.
 """
 
-import os
+from pathlib import Path
 from typing import Optional
+from pydantic import BaseModel, Field
 
-# Import existing IB configuration
-try:
-    from ktrdr.config.ib_config import (
-        IB_HOST,
-        IB_PORT, 
-        IB_CLIENT_ID_BASE,
-        IB_CONNECTION_TIMEOUT,
-        IB_REQUEST_TIMEOUT,
-        IB_MAX_RETRIES
-    )
-except ImportError:
-    # Fallback defaults if config not available
-    IB_HOST = os.getenv("IB_HOST", "localhost")
-    IB_PORT = int(os.getenv("IB_PORT", "4002"))
-    IB_CLIENT_ID_BASE = int(os.getenv("IB_CLIENT_ID_BASE", "100"))
-    IB_CONNECTION_TIMEOUT = int(os.getenv("IB_CONNECTION_TIMEOUT", "10"))
-    IB_REQUEST_TIMEOUT = int(os.getenv("IB_REQUEST_TIMEOUT", "30"))
-    IB_MAX_RETRIES = int(os.getenv("IB_MAX_RETRIES", "3"))
+# Import existing ktrdr config utilities
+from ktrdr.config.loader import ConfigLoader
+from ktrdr.config.ib_config import IbConfig as KtrdrIbConfig
 
-# Host service specific configuration
-HOST_SERVICE_HOST = os.getenv("HOST_SERVICE_HOST", "127.0.0.1")
-HOST_SERVICE_PORT = int(os.getenv("HOST_SERVICE_PORT", "5001"))
-
-# Logging configuration
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-
-class IbConfig:
-    """IB connection configuration."""
+# Define host service specific configuration model
+class HostServiceConfig(BaseModel):
+    """Configuration for IB Connector Host Service."""
     
-    host: str = IB_HOST
-    port: int = IB_PORT
-    client_id_base: int = IB_CLIENT_ID_BASE
-    connection_timeout: int = IB_CONNECTION_TIMEOUT
-    request_timeout: int = IB_REQUEST_TIMEOUT
-    max_retries: int = IB_MAX_RETRIES
-
-class HostServiceConfig:
-    """Host service configuration."""
+    host: str = Field(default="127.0.0.1", description="Host to bind service to")
+    port: int = Field(default=5001, description="Port to bind service to")
+    log_level: str = Field(default="INFO", description="Logging level")
     
-    host: str = HOST_SERVICE_HOST
-    port: int = HOST_SERVICE_PORT
-    log_level: str = LOG_LEVEL
+    class Config:
+        extra = "forbid"
+
+class IbHostServiceConfig(BaseModel):
+    """Complete configuration for IB Host Service."""
+    
+    host_service: HostServiceConfig = Field(default_factory=HostServiceConfig)
+    
+    class Config:
+        extra = "forbid"
+
+# Configuration loader instance
+_config_loader = ConfigLoader()
+_service_config: Optional[IbHostServiceConfig] = None
+
+def get_host_service_config() -> IbHostServiceConfig:
+    """
+    Get host service configuration.
+    
+    Loads from YAML config if available, otherwise uses defaults.
+    """
+    global _service_config
+    if _service_config is None:
+        try:
+            # Try to load from project config directory
+            config_path = Path(__file__).parent.parent / "config" / "ib_host_service.yaml"
+            if config_path.exists():
+                _service_config = _config_loader.load_config(config_path, IbHostServiceConfig)
+            else:
+                # Use defaults if no config file
+                _service_config = IbHostServiceConfig()
+        except Exception:
+            # Fallback to defaults on any error
+            _service_config = IbHostServiceConfig()
+    
+    return _service_config
+
+def get_ktrdr_ib_config() -> KtrdrIbConfig:
+    """Get IB configuration using existing ktrdr config system."""
+    from ktrdr.config.ib_config import get_ib_config
+    return get_ib_config()
