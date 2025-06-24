@@ -1,8 +1,8 @@
-# IB Volume=-1 Analysis and Enhanced Handling System
+# IB Volume=-1 Handling Analysis
 
 ## 🔍 **Issue Discovery**
 
-Based on your observations from the logs, we discovered that:
+Analysis of IB data behavior revealed that:
 
 1. **IB sends actual OHLC price data with volume=-1**
    - This appears contradictory: valid prices but "no data available" volume
@@ -66,23 +66,28 @@ DataQualityValidator(auto_correct=True)
 
 ## 🎯 **Key Improvements Implemented**
 
-### 1. **Raw IB Data Logging**
+### 1. **✅ IMPLEMENTED: Volume=-1 Classification**
 ```python
-# In ib_data_fetcher_sync.py:
-logger.info(f"🔍 RAW IB BAR {i}: {bar.date} | O:{bar.open} H:{bar.high} L:{bar.low} C:{bar.close} V:{bar.volume}")
-```
-- Shows exactly what IB sends before any processing
-- Identifies when IB provides OHLC data with volume=-1
+# In ktrdr/data/data_quality_validator.py:
+no_data_volume = (df["volume"] == -1)  # IB's explicit "no data available" indicator
+other_negative = negative_volume & ~no_data_volume
 
-### 2. **Non-Correcting IB Validation**
-```python
-# In ib_data_loader.py:
-non_correcting_validator = DataQualityValidator(auto_correct=False)
-data_original, quality_report = non_correcting_validator.validate_data(data, symbol, timeframe, "ib_raw")
+if no_data_count > 0:
+    logger.info(f"📊 IB Volume Indicator: {no_data_count} bars have volume=-1 (volume data not available, price data valid)")
 ```
-- IB data is validated but not auto-corrected
+- IB volume=-1 is correctly classified as informational, not an error
 - Preserves original IB data integrity
-- Provides warnings about data characteristics
+- Provides clear logging about data characteristics
+
+### 2. **✅ IMPLEMENTED: Auto-Correction Control**
+```python
+# In ktrdr/data/data_quality_validator.py:
+validator = DataQualityValidator(auto_correct=False)  # Preserve raw data
+quality_report = validator.validate_data(data, symbol, timeframe)
+```
+- DataQualityValidator supports auto_correct parameter
+- Can validate without modifying original data
+- Provides detailed quality reports
 
 ### 3. **Intelligent Volume Classification**
 ```python
@@ -108,22 +113,21 @@ elif volume < 0:
 
 ### Before Enhancement:
 ```
-🔍 NEGATIVE VOLUME: 2024-11-05 09:00:00+00:00 -> Volume: -1
-Set 24 negative volume values to 0 (24 were 'no data' indicators)
+# Previous approach (problematic)
+Set negative volume values to 0 (silent correction)
 ```
-- Silent correction
-- Loss of IB metadata
-- Treating valid data as errors
+- Silent correction of volume=-1
+- Loss of IB metadata information
+- Treating valid IB indicators as errors
 
-### After Enhancement:
+### ✅ Current Implementation:
 ```
-🔍 RAW IB BAR 1: 2024-11-05 09:00:00 | O:1.08750 H:1.08800 L:1.08700 C:1.08780 V:-1
 📊 IB Volume Indicator: 5 bars have volume=-1 (volume data not available, price data valid)
-⚠️ PRESERVING ORIGINAL IB DATA - No auto-corrections applied
+📊 Quality Report: issue_type='ib_volume_indicator', severity='info', corrected=False
 ```
-- Complete transparency
-- Preserved IB data integrity  
-- Clear distinction between indicators vs errors
+- ✅ Preserves original IB data integrity  
+- ✅ Clear classification of volume=-1 as informational
+- ✅ Transparent reporting without silent corrections
 
 ## 🎯 **Best Practices for Volume=-1**
 
@@ -159,11 +163,22 @@ else:
 
 ## 📋 **Summary**
 
-The enhanced system now:
-- ✅ **Preserves IB data integrity** - No silent corrections of volume=-1
-- ✅ **Provides transparency** - Shows raw IB data vs processed data
-- ✅ **Intelligent classification** - Distinguishes IB indicators from actual errors
+The current system implements:
+- ✅ **Preserves IB data integrity** - No silent corrections of volume=-1 
+- ✅ **Intelligent classification** - Distinguishes IB indicators (`ib_volume_indicator`) from actual errors
 - ✅ **Maintains functionality** - Data is still considered "healthy" with volume=-1
-- ✅ **Enhanced gap analysis** - Uses volume=-1 as context for gap classification
+- ✅ **Configurable behavior** - `DataQualityValidator(auto_correct=False)` preserves raw data
+- ✅ **Proper logging** - Clear messages about volume=-1 as informational
 
-**Bottom Line**: Volume=-1 is not a bug to be fixed, but valuable metadata from IB indicating "price data available, volume data not available" - especially relevant for forex trading where volume is synthetic anyway.
+**Bottom Line**: Volume=-1 is correctly handled as valuable metadata from IB indicating "price data available, volume data not available" - especially relevant for forex trading where volume is synthetic anyway.
+
+## 🏗️ **Implementation Status**
+
+**✅ Implemented:**
+- Volume=-1 classification in `DataQualityValidator` 
+- Auto-correction control via `auto_correct` parameter
+- Proper issue type classification (`ib_volume_indicator`)
+- Informational severity level for volume=-1
+
+**📍 Current Location:**
+- Primary implementation: `ktrdr/data/data_quality_validator.py` lines 379-444

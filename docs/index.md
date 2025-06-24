@@ -61,6 +61,9 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 * [Indicator Architecture](developer/indicator-architecture.md) - Comprehensive guide for indicator system development
 * [Testing Guide](developer/testing-guide.md) - Complete testing guide for neuro-fuzzy engine
 * [Test Recovery Plan](developer/test-recovery-plan.md) - Current test suite status and maintenance plan
+* [Development Insights](developer/development-insights-temp.md) - Key architectural learnings from development sessions
+* [Volume Handling Analysis](developer/volume-handling-analysis.md) - IB volume=-1 data handling and validation patterns
+* [Progress Tracking Implementation](developer/progress-tracking-implementation.md) - Real-time progress tracking system architecture
 * [Backtesting Issues](developer/backtesting-issues.md) - Critical analysis of backtesting realism issues
 * [Contributing Guide](developer/contributing.md)
 * [API Development](developer/api-development.md)
