@@ -76,54 +76,72 @@ class MLPTradingModel(BaseNeuralModel):
         Returns:
             Tensor of prepared features
         """
-        # Use the same feature engineering logic as training to avoid dimension mismatch
-        from ...training.feature_engineering import FeatureEngineer
-
-        # Get feature config from model config, with defaults that match training
+        # Use the same feature processing logic as training to avoid dimension mismatch
         feature_config = self.config.get("features", {})
-        # Ensure the same defaults as training
-        feature_config.setdefault("include_price_context", True)
-        feature_config.setdefault("include_volume_context", True)
-        feature_config.setdefault("include_raw_indicators", False)
-        feature_config.setdefault("lookback_periods", 1)
-        feature_config.setdefault("scale_features", True)
-
-        # Create FeatureEngineer with the same config
-        engineer = FeatureEngineer(feature_config)
-
-        # CRITICAL: Use the saved scaler from training to ensure consistent scaling
-        if saved_scaler is not None:
-            engineer.scaler = saved_scaler
-
-        # Create a dummy price_data DataFrame from indicators if needed
-        # For inference, we typically only have the current bar, so create minimal price data
-        if "close" in indicators.columns:
-            price_data = (
-                indicators[["open", "high", "low", "close", "volume"]].copy()
-                if "volume" in indicators.columns
-                else indicators[["open", "high", "low", "close"]].copy()
-            )
-        else:
-            # Fallback: create minimal price data
-            price_data = pd.DataFrame(
-                {
-                    "open": indicators.get("open", 0),
-                    "high": indicators.get("high", 0),
-                    "low": indicators.get("low", 0),
-                    "close": indicators.get("close", 0),
-                    "volume": indicators.get("volume", 0),
-                },
-                index=indicators.index,
-            )
-
-        # Use the same feature preparation as training
-        features_tensor, feature_names = engineer.prepare_features(
-            fuzzy_data=fuzzy_data, indicators=indicators, price_data=price_data
+        
+        # Check if this model uses pure fuzzy processing (Phase 3 of feature engineering removal)
+        use_pure_fuzzy = (
+            not feature_config.get("include_raw_indicators", False) and
+            not feature_config.get("include_price_context", False) and 
+            not feature_config.get("include_volume_context", False) and
+            not feature_config.get("scale_features", True)
         )
+        
+        if use_pure_fuzzy:
+            # Use FuzzyNeuralProcessor for pure neuro-fuzzy models
+            from ...training.fuzzy_neural_processor import FuzzyNeuralProcessor
+            processor = FuzzyNeuralProcessor(feature_config)
+            features_tensor, _ = processor.prepare_input(fuzzy_data)
+            # No need for scaler - fuzzy values are already 0-1
+            device = self._get_device()
+            return features_tensor.to(device)
+        else:
+            # Use legacy FeatureEngineer for backward compatibility
+            from ...training.feature_engineering import FeatureEngineer
+            
+            # Ensure the same defaults as training
+            feature_config.setdefault("include_price_context", True)
+            feature_config.setdefault("include_volume_context", True)
+            feature_config.setdefault("include_raw_indicators", False)
+            feature_config.setdefault("lookback_periods", 1)
+            feature_config.setdefault("scale_features", True)
 
-        # Ensure tensor is on the correct device for GPU acceleration
-        device = self._get_device()
-        features_tensor = features_tensor.to(device)
+            # Create FeatureEngineer with the same config
+            engineer = FeatureEngineer(feature_config)
+
+            # CRITICAL: Use the saved scaler from training to ensure consistent scaling
+            if saved_scaler is not None:
+                engineer.scaler = saved_scaler
+
+            # Create a dummy price_data DataFrame from indicators if needed
+            # For inference, we typically only have the current bar, so create minimal price data
+            if "close" in indicators.columns:
+                price_data = (
+                    indicators[["open", "high", "low", "close", "volume"]].copy()
+                    if "volume" in indicators.columns
+                    else indicators[["open", "high", "low", "close"]].copy()
+                )
+            else:
+                # Fallback: create minimal price data
+                price_data = pd.DataFrame(
+                    {
+                        "open": indicators.get("open", 0),
+                        "high": indicators.get("high", 0),
+                        "low": indicators.get("low", 0),
+                        "close": indicators.get("close", 0),
+                        "volume": indicators.get("volume", 0),
+                    },
+                    index=indicators.index,
+                )
+
+            # Use the same feature preparation as training
+            features_tensor, feature_names = engineer.prepare_features(
+                fuzzy_data=fuzzy_data, indicators=indicators, price_data=price_data
+            )
+
+            # Ensure tensor is on the correct device for GPU acceleration
+            device = self._get_device()
+            features_tensor = features_tensor.to(device)
 
         return features_tensor
 

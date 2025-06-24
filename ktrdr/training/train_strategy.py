@@ -10,6 +10,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 
 from .zigzag_labeler import ZigZagLabeler
 from .feature_engineering import FeatureEngineer
+from .fuzzy_neural_processor import FuzzyNeuralProcessor
 from .model_trainer import ModelTrainer
 from .model_storage import ModelStorage
 from ..neural.models.mlp import MLPTradingModel
@@ -416,13 +417,28 @@ class StrategyTrainer:
             feature_config: Feature engineering configuration
 
         Returns:
-            Tuple of (features tensor, feature names, scaler)
+            Tuple of (features tensor, feature names, scaler/None)
         """
-        engineer = FeatureEngineer(feature_config)
-        features, feature_names = engineer.prepare_features(
-            fuzzy_data, indicators, price_data
+        # Check if pure fuzzy processing is enabled (Phase 3 of feature engineering removal)
+        use_pure_fuzzy = (
+            not feature_config.get("include_raw_indicators", False) and
+            not feature_config.get("include_price_context", False) and 
+            not feature_config.get("include_volume_context", False) and
+            not feature_config.get("scale_features", True)
         )
-        return features, feature_names, engineer.scaler
+        
+        if use_pure_fuzzy:
+            # Use new FuzzyNeuralProcessor for pure neuro-fuzzy architecture
+            processor = FuzzyNeuralProcessor(feature_config)
+            features, feature_names = processor.prepare_input(fuzzy_data)
+            return features, feature_names, None  # No scaler needed for fuzzy values
+        else:
+            # Use legacy FeatureEngineer for backward compatibility
+            engineer = FeatureEngineer(feature_config)
+            features, feature_names = engineer.prepare_features(
+                fuzzy_data, indicators, price_data
+            )
+            return features, feature_names, engineer.scaler
 
     def _generate_labels(
         self, price_data: pd.DataFrame, label_config: Dict[str, Any]
@@ -636,6 +652,8 @@ class StrategyTrainer:
         Returns:
             Feature importance dictionary
         """
+        # Use FeatureEngineer's permutation importance method
+        # This works for both fuzzy and mixed features
         engineer = FeatureEngineer({})
         engineer.feature_names = feature_names
         return engineer.calculate_feature_importance(model, X_val, y_val)
