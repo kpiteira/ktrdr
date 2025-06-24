@@ -94,15 +94,56 @@ async def get_historical_data(request: HistoricalDataRequest):
         logger.info(f"Fetching historical data: {request.symbol} {request.timeframe} "
                    f"{request.start} to {request.end}")
         
+        # Determine instrument type if not provided by validating with IB
+        instrument_type = request.instrument_type
+        if instrument_type is None:
+            logger.info(f"Auto-validating {request.symbol} to determine contract type")
+            validator = await get_symbol_validator()
+            validation_result = await validator.validate_symbol_with_metadata(
+                symbol=request.symbol,
+                timeframes=[]  # No need for head timestamps in data fetch
+            )
+            
+            if not validation_result.is_valid:
+                return HistoricalDataResponse(
+                    success=False,
+                    error=f"Symbol validation failed: {validation_result.error_message or 'Unknown error'}"
+                )
+            
+            # Use the validated contract type and check head timestamp
+            if validation_result.contract_info:
+                instrument_type = validation_result.contract_info.asset_type
+                logger.info(f"Validated {request.symbol} as {instrument_type}")
+                
+                # Check if request start is before head timestamp (like backend used to do)
+                if hasattr(validation_result.contract_info, 'head_timestamp') and validation_result.contract_info.head_timestamp:
+                    from datetime import datetime
+                    head_timestamp = datetime.fromisoformat(validation_result.contract_info.head_timestamp.replace('Z', '+00:00'))
+                    
+                    if request.start < head_timestamp:
+                        return HistoricalDataResponse(
+                            success=False,
+                            error=f"Data not available before {head_timestamp.isoformat()}. Requested start: {request.start.isoformat()}. Head timestamp: {head_timestamp.isoformat()}"
+                        )
+                
+            else:
+                logger.warning(f"No contract info returned for {request.symbol}, defaulting to STK")
+                instrument_type = "STK"
+        
         fetcher = await get_data_fetcher()
         
-        # Call existing IbDataFetcher method
+        # Ensure IB connection is properly synchronized before making requests
+        # This prevents race conditions where we make calls before sync is complete
+        import asyncio
+        await asyncio.sleep(0.5)  # Give IB time to settle after connection
+        
+        # Call existing IbDataFetcher method with validated instrument type
         data = await fetcher.fetch_historical_data(
             symbol=request.symbol,
             timeframe=request.timeframe,
             start=request.start,
             end=request.end,
-            instrument_type=request.instrument_type
+            instrument_type=instrument_type
         )
         
         if data.empty:
@@ -152,7 +193,14 @@ async def validate_symbol(request: ValidationRequest):
         head_timestamps = {}
         if validation_result.head_timestamps:
             for tf, timestamp in validation_result.head_timestamps.items():
-                head_timestamps[tf] = timestamp.isoformat() if timestamp else None
+                if timestamp is None:
+                    head_timestamps[tf] = None
+                elif hasattr(timestamp, 'isoformat'):
+                    # It's a datetime object
+                    head_timestamps[tf] = timestamp.isoformat()
+                else:
+                    # It's already a string or other type
+                    head_timestamps[tf] = str(timestamp)
         
         return ValidationResponse(
             success=True,
@@ -164,6 +212,53 @@ async def validate_symbol(request: ValidationRequest):
         
     except Exception as e:
         logger.error(f"Error validating symbol: {str(e)}")
+        return ValidationResponse(
+            success=False,
+            error=str(e)
+        )
+
+@router.get("/symbol-info/{symbol}", response_model=ValidationResponse)
+async def get_symbol_info(symbol: str):
+    """
+    Get comprehensive symbol information including contract details, head timestamp,
+    trading hours, and all cached metadata.
+    
+    This endpoint exposes the same symbol validation and caching that the backend
+    used to have, allowing the Data Manager to make intelligent segment decisions.
+    """
+    try:
+        logger.info(f"Getting symbol info: {symbol}")
+        
+        validator = await get_symbol_validator()
+        
+        # Get full symbol validation with metadata (same as backend used to do)
+        # Include a default timeframe to trigger head timestamp fetching
+        validation_result = await validator.validate_symbol_with_metadata(
+            symbol=symbol,
+            timeframes=["1h"]  # Default timeframe to get head timestamp
+        )
+        
+        # Convert head timestamps to ISO format strings
+        head_timestamps = {}
+        if validation_result.head_timestamps:
+            for tf, timestamp in validation_result.head_timestamps.items():
+                if timestamp is None:
+                    head_timestamps[tf] = None
+                elif hasattr(timestamp, 'isoformat'):
+                    head_timestamps[tf] = timestamp.isoformat()
+                else:
+                    head_timestamps[tf] = str(timestamp)
+        
+        return ValidationResponse(
+            success=True,
+            is_valid=validation_result.is_valid,
+            error_message=validation_result.error_message,
+            contract_info=validation_result.contract_info.__dict__ if validation_result.contract_info else None,
+            head_timestamps=head_timestamps
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting symbol info: {str(e)}")
         return ValidationResponse(
             success=False,
             error=str(e)
@@ -187,15 +282,14 @@ async def get_head_timestamp(
         validator = await get_symbol_validator()
         
         # Get head timestamp using existing method
-        head_timestamp = await validator.get_head_timestamp(
+        head_timestamp = await validator.fetch_head_timestamp_async(
             symbol=symbol,
-            timeframe=timeframe,
-            instrument_type=instrument_type
+            timeframe=timeframe
         )
         
         return HeadTimestampResponse(
             success=True,
-            timestamp=head_timestamp.isoformat() if head_timestamp else None
+            timestamp=head_timestamp if head_timestamp else None
         )
         
     except Exception as e:

@@ -8,10 +8,12 @@
 
 echo "Starting IB Connector Host Service..."
 
-# Check if IB Gateway is running
-if ! pgrep -f "TWS\|IB Gateway" > /dev/null; then
+# Check if IB Gateway is running  
+if ! ps aux | grep -i "IB Gateway\|TWS" | grep -v grep > /dev/null; then
     echo "⚠️  Warning: IB Gateway/TWS not detected running"
     echo "   Make sure IB Gateway is started before using the service"
+else
+    echo "✅ IB Gateway/TWS detected running"
 fi
 
 # Change to service directory
@@ -20,16 +22,14 @@ cd "$(dirname "$0")"
 # Set Python path to include parent directory for ktrdr imports
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/.."
 
-# Install dependencies if not already installed
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-else
-    source venv/bin/activate
-fi
+# Create logs directory if it doesn't exist
+mkdir -p logs
 
-# Start the service
+# Start the service with uv (this project uses uv for dependency management)
 echo "Starting service on http://localhost:5001"
-python main.py
+echo "Logs will be written to: logs/ib-host-service.log"
+uv run python main.py > logs/ib-host-service.log 2>&1 &
+
+# Show the process ID
+echo "Service started with PID: $!"
+echo "Monitor logs with: tail -f logs/ib-host-service.log"

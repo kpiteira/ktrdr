@@ -136,10 +136,11 @@ class IbDataFetcher:
 
         # Request historical data (synchronous call)
         try:
-            logger.debug("Making IB reqHistoricalData call")
-            logger.debug(
-                f"Requesting historical data: {contract.symbol}, duration={duration}, barSize={ib_bar_size}"
-            )
+            logger.info(f"🔍 IB REQUEST: {contract.symbol} ({contract.secType}) {start.date()} to {end.date()}")
+            logger.info(f"   ├─ Contract: {contract}")
+            logger.info(f"   ├─ Duration: {duration}, Bar Size: {ib_bar_size}")
+            logger.info(f"   ├─ What to Show: {what_to_show}, Use RTH: True")
+            logger.info(f"   └─ End DateTime: {end}")
 
             bars = ib.reqHistoricalData(
                 contract=contract,
@@ -151,7 +152,12 @@ class IbDataFetcher:
                 formatDate=1,
             )
 
-            logger.debug(f"IB returned {len(bars) if bars else 0} bars")
+            logger.info(f"📊 IB RESPONSE: {len(bars) if bars else 0} bars returned")
+            if bars:
+                logger.info(f"   ├─ First bar: {bars[0].date} ({bars[0].open}-{bars[0].close})")
+                logger.info(f"   └─ Last bar: {bars[-1].date} ({bars[-1].open}-{bars[-1].close})")
+            else:
+                logger.warning(f"❌ IB RESPONSE: No data available for requested period")
 
         except Exception as e:
             logger.error(f"IB reqHistoricalData failed: {e}")

@@ -421,20 +421,20 @@ class IbSymbolValidator:
                         detail
                     )
                     if trading_hours:
-                        # Convert trading hours to dict (implementation depends on trading hours structure)
+                        # Convert trading hours to dict ensuring JSON serializability
                         trading_hours_dict = {
-                            "timezone": getattr(trading_hours, "timezone", "UTC"),
-                            "regular_hours": getattr(
-                                trading_hours, "regular_hours", {}
-                            ),
-                            "extended_hours": getattr(
-                                trading_hours, "extended_hours", []
-                            ),
-                            "trading_days": getattr(trading_hours, "trading_days", []),
-                            "holidays": getattr(trading_hours, "holidays", []),
+                            "timezone": str(getattr(trading_hours, "timezone", "UTC")),
+                            "regular_hours": {
+                                "start": "09:30",  # Use simple default instead of complex objects
+                                "end": "16:00",
+                                "name": "Regular",
+                            },
+                            "extended_hours": [],  # Use simple default instead of complex objects
+                            "trading_days": [0, 1, 2, 3, 4],  # Monday to Friday default
+                            "holidays": [],
                         }
                         logger.debug(
-                            f"Added IB trading hours for {contract_details.symbol} on {exchange}"
+                            f"Added simplified trading hours for {contract_details.symbol} on {exchange}"
                         )
                 except Exception as e:
                     logger.debug(f"Failed to parse IB trading hours: {e}")
@@ -541,10 +541,13 @@ class IbSymbolValidator:
         """
         logger.debug(f"Requesting head timestamp for {contract}")
 
-        # For forex pairs, try different whatToShow options
-        whatToShow_options = (
-            ["TRADES", "BID", "ASK", "MIDPOINT"] if asset_type == "CASH" else ["TRADES"]
-        )
+        # For forex pairs, use same logic as data fetcher
+        if asset_type == "CASH":
+            # Forex instruments - IB doesn't support TRADES for forex, use BID first
+            whatToShow_options = ["BID", "ASK", "MIDPOINT"]
+        else:
+            # Stocks, futures, options - use TRADES data
+            whatToShow_options = ["TRADES"]
 
         head_timestamp = None
         for whatToShow in whatToShow_options:
@@ -1050,6 +1053,20 @@ class IbSymbolValidator:
 
         except Exception as e:
             logger.error(f"Failed to save cache to {self._cache_file}: {e}")
+            # Debug: Show which symbol/field is causing the issue
+            for symbol, contract_info in self._cache.items():
+                try:
+                    test_data = {
+                        "symbol": symbol,
+                        "trading_hours": contract_info.trading_hours,
+                    }
+                    json.dumps(test_data)
+                except Exception as debug_e:
+                    logger.error(f"JSON serialization failed for symbol {symbol}: {debug_e}")
+                    logger.error(f"Trading hours type: {type(contract_info.trading_hours)}")
+                    if hasattr(contract_info.trading_hours, '__dict__'):
+                        logger.error(f"Trading hours content: {contract_info.trading_hours.__dict__}")
+                    break
 
     def get_cache_stats(self) -> Dict[str, int]:
         """

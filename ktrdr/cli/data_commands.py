@@ -453,6 +453,22 @@ async def _load_data_async(
                     # Poll operation status
                     while not cancelled:
                         try:
+                            # Check for cancellation and send cancel request immediately
+                            if cancelled:
+                                console.print("[yellow]🛑 Sending cancellation to server...[/yellow]")
+                                try:
+                                    cancel_response = await api_client.cancel_operation(
+                                        operation_id=operation_id,
+                                        reason="User requested cancellation via CLI",
+                                    )
+                                    if cancel_response.get("success"):
+                                        console.print("✅ [yellow]Cancellation sent successfully[/yellow]")
+                                    else:
+                                        console.print(f"[red]Cancel failed: {cancel_response}[/red]")
+                                except Exception as e:
+                                    console.print(f"[red]Cancel request failed: {str(e)}[/red]")
+                                break  # Exit the polling loop
+                            
                             status_response = await api_client.get_operation_status(
                                 operation_id
                             )
@@ -522,6 +538,25 @@ async def _load_data_async(
                 # Simple polling without progress display
                 while not cancelled:
                     try:
+                        # Check for cancellation and send cancel request immediately
+                        if cancelled:
+                            if not quiet:
+                                console.print("🛑 Sending cancellation to server...")
+                            try:
+                                cancel_response = await api_client.cancel_operation(
+                                    operation_id=operation_id,
+                                    reason="User requested cancellation via CLI",
+                                )
+                                if not quiet:
+                                    if cancel_response.get("success"):
+                                        console.print("✅ Cancellation sent successfully")
+                                    else:
+                                        console.print(f"Cancel failed: {cancel_response}")
+                            except Exception as e:
+                                if not quiet:
+                                    console.print(f"Cancel request failed: {str(e)}")
+                            break  # Exit the polling loop
+                        
                         status_response = await api_client.get_operation_status(
                             operation_id
                         )
@@ -540,24 +575,11 @@ async def _load_data_async(
                             )
                         break
 
-            # Handle cancellation
-            if cancelled and operation_id:
-                try:
-                    cancel_response = await api_client.cancel_operation(
-                        operation_id=operation_id,
-                        reason="User requested cancellation via CLI",
-                    )
-                    if not quiet:
-                        console.print(
-                            "✅ [yellow]Operation cancelled successfully[/yellow]"
-                        )
-                    return
-                except Exception as e:
-                    if not quiet:
-                        console.print(
-                            f"[red]Failed to cancel operation: {str(e)}[/red]"
-                        )
-                    return
+            # If we reach here and cancelled is True, the operation was cancelled
+            if cancelled:
+                if not quiet:
+                    console.print("🛑 [yellow]Operation cancelled by user[/yellow]")
+                return
 
             # Get final operation status
             try:

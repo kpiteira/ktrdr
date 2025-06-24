@@ -196,6 +196,7 @@ class IbDataAdapter(ExternalDataProvider):
                 
                 validation_result = ValidationResult(
                     is_valid=response.get("is_valid", False),
+                    symbol=symbol,
                     error_message=response.get("error_message"),
                     contract_info=contract_info,
                     head_timestamps=head_timestamps
@@ -252,13 +253,8 @@ class IbDataAdapter(ExternalDataProvider):
             self._validate_timeframe(timeframe)
             self._validate_datetime_range(start, end)
 
-            # Determine instrument type if not provided
-            if instrument_type is None:
-                # Simple heuristic: check if it looks like forex
-                if "." in symbol or len(symbol.replace(".", "")) == 6:
-                    instrument_type = "CASH"
-                else:
-                    instrument_type = "STK"
+            # Let host service determine instrument type via IB validation
+            # No backend heuristics - IB is the authoritative source
 
             if self.use_host_service:
                 # Use host service for data fetching
@@ -334,6 +330,69 @@ class IbDataAdapter(ExternalDataProvider):
             self.errors_encountered += 1
             logger.warning(f"Symbol validation failed for {symbol}: {e}")
             return False
+
+    async def get_symbol_info(self, symbol: str):
+        """
+        Get comprehensive symbol information from host service or direct IB.
+        
+        This restores the same symbol validation and caching functionality 
+        the Data Manager used to have for intelligent segment planning.
+        
+        Args:
+            symbol: Trading symbol
+            
+        Returns:
+            ValidationResult with full symbol metadata
+        """
+        try:
+            if self.use_host_service:
+                # Use host service for symbol info
+                response = await self._call_host_service_get(f"/data/symbol-info/{symbol}")
+                
+                if not response["success"]:
+                    raise DataProviderDataError(
+                        response.get("error", f"Symbol info lookup failed for {symbol}"),
+                        provider="IB"
+                    )
+                
+                # Convert response to ValidationResult-like structure
+                from ktrdr.ib import ValidationResult, ContractInfo
+                
+                contract_info = None
+                if response.get("contract_info"):
+                    contract_info = ContractInfo(**response["contract_info"])
+                
+                # Convert ISO timestamps back to datetime objects
+                head_timestamps = {}
+                if response.get("head_timestamps"):
+                    for tf, timestamp_str in response["head_timestamps"].items():
+                        if timestamp_str:
+                            head_timestamps[tf] = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                        else:
+                            head_timestamps[tf] = None
+                
+                validation_result = ValidationResult(
+                    is_valid=response.get("is_valid", False),
+                    symbol=symbol,
+                    error_message=response.get("error_message"),
+                    contract_info=contract_info,
+                    head_timestamps=head_timestamps
+                )
+            else:
+                # Use direct IB connection (existing behavior)
+                validation_result = await self.symbol_validator.validate_symbol_with_metadata(
+                    symbol, []
+                )
+
+            self._update_stats()
+            return validation_result
+
+        except Exception as e:
+            self.errors_encountered += 1
+            if isinstance(e, DataProviderError):
+                raise
+            else:
+                self._handle_ib_error(e, "get_symbol_info")
 
     async def get_head_timestamp(
         self, symbol: str, timeframe: str, instrument_type: Optional[str] = None

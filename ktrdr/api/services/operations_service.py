@@ -144,7 +144,7 @@ class OperationsService:
         errors: Optional[List[str]] = None,
     ) -> None:
         """
-        Update operation progress.
+        Update operation progress (lock-free for performance).
 
         Args:
             operation_id: Operation identifier
@@ -152,27 +152,28 @@ class OperationsService:
             warnings: Optional list of warning messages
             errors: Optional list of error messages
         """
-        async with self._lock:
-            if operation_id not in self._operations:
-                logger.warning(
-                    f"Cannot update progress - operation not found: {operation_id}"
-                )
-                return
+        # Lock-free progress updates for performance
+        if operation_id not in self._operations:
+            logger.warning(
+                f"Cannot update progress - operation not found: {operation_id}"
+            )
+            return
 
-            operation = self._operations[operation_id]
-            operation.progress = progress
+        operation = self._operations[operation_id]
+        # Atomic assignment - no lock needed
+        operation.progress = progress
 
-            # Update warnings and errors if provided
-            if warnings:
-                operation.warnings.extend(warnings)
-            if errors:
-                operation.errors.extend(errors)
+        # For lists, replace entire list instead of extending (atomic)
+        if warnings:
+            operation.warnings = operation.warnings + warnings
+        if errors:
+            operation.errors = operation.errors + errors
 
-            # Log progress at intervals
-            if progress.percentage % 10 == 0:  # Log every 10%
-                logger.debug(
-                    f"Operation {operation_id} progress: {progress.percentage:.1f}%"
-                )
+        # Log progress at intervals
+        if progress.percentage % 10 == 0:  # Log every 10%
+            logger.debug(
+                f"Operation {operation_id} progress: {progress.percentage:.1f}%"
+            )
 
     async def complete_operation(
         self,
@@ -267,6 +268,11 @@ class OperationsService:
                     "success": False,
                     "error": f"Operation {operation_id} is already finished (status: {operation.status})",
                 }
+
+            # Signal cancellation event if it exists (for lock-free signaling)
+            if hasattr(self, '_cancellation_events') and operation_id in self._cancellation_events:
+                self._cancellation_events[operation_id].set()
+                del self._cancellation_events[operation_id]
 
             # Cancel the asyncio task if it exists
             cancelled_task = False

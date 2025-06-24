@@ -6,6 +6,7 @@ management capabilities, integrity checks, and utilities for detecting
 and handling gaps or missing values in time series data.
 """
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any, Set, Callable
@@ -936,15 +937,30 @@ class DataManager:
                     failed_count += 1
                     logger.warning(f"❌ IB FAILURE {i+1}: No data returned from IB")
 
+            except asyncio.CancelledError:
+                # Cancellation detected - stop processing immediately
+                logger.info(f"🛑 Segment fetching cancelled at segment {i+1}/{len(segments)}")
+                break
             except Exception as e:
                 failed_count += 1
                 logger.error(f"❌ IB ERROR {i+1}: Request failed - {e}")
                 # Continue with next segment rather than failing completely
                 continue
 
-        logger.info(
-            f"Segment fetching complete: {successful_count} successful, {failed_count} failed"
-        )
+        # Check if operation was cancelled during segment fetching
+        was_cancelled = False
+        if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
+            was_cancelled = True
+            logger.info(f"🛑 Segment fetching cancelled after {successful_count} successful segments")
+        else:
+            logger.info(
+                f"Segment fetching complete: {successful_count} successful, {failed_count} failed"
+            )
+        
+        # If cancelled, raise CancelledError to stop the entire data loading operation
+        if was_cancelled:
+            raise asyncio.CancelledError(f"Data loading cancelled during segment {successful_count + 1}")
+            
         return successful_data, successful_count, failed_count
 
     def _fetch_segment_sync(
@@ -974,8 +990,13 @@ class DataManager:
         import asyncio
 
         async def fetch_async():
-            """Async fetch function with enhanced timeout protection."""
-            # Apply same timeout protection as symbol validator
+            """Async fetch function with enhanced timeout protection and cancellation support."""
+            # Check for cancellation before starting expensive IB operation
+            if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
+                logger.info(f"🛑 Cancellation detected before IB fetch for {symbol}")
+                raise asyncio.CancelledError("Operation cancelled before IB request")
+            
+            # Use shorter timeout and check for cancellation during fetch
             return await asyncio.wait_for(
                 self.external_provider.fetch_historical_data(
                     symbol=symbol,
@@ -984,17 +1005,25 @@ class DataManager:
                     end=end,
                     instrument_type=None,  # Auto-detect
                 ),
-                timeout=60.0,  # 60 second timeout for data fetching operations
+                timeout=15.0,  # Shorter timeout for more responsive cancellation
             )
 
         try:
+            # Check for cancellation one more time before expensive operation
+            if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
+                logger.info(f"🛑 Cancellation detected before IB fetch for {symbol}")
+                return None
+                
             # Simplified: just use asyncio.run to avoid event loop conflicts
             return asyncio.run(fetch_async())
 
         except asyncio.TimeoutError:
             logger.error(
-                f"⏰ Data fetch timeout for {symbol} {timeframe} (60s limit) - possible IB Gateway issue"
+                f"⏰ Data fetch timeout for {symbol} {timeframe} (15s limit) - possible IB Gateway issue"
             )
+            return None
+        except asyncio.CancelledError:
+            logger.info(f"🛑 Data fetch cancelled for {symbol} {timeframe}")
             return None
         except Exception as e:
             logger.error(f"Sync fetch wrapper failed for {symbol} {timeframe}: {e}")
@@ -1198,49 +1227,11 @@ class DataManager:
         Returns:
             DataFrame with data or None if no data found
         """
-        # Normalize and validate date range - ALWAYS respect user-provided dates
-        if start_date is None:
-            # Default range based on mode
-            if mode == "tail":
-                # Tail: recent data if no range specified
-                requested_start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30)
-            elif mode == "backfill":
-                # Backfill: go back as far as IB allows for this timeframe
-                from ktrdr.config.ib_limits import IbLimitsRegistry
-
-                max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
-                requested_start = pd.Timestamp.now(tz="UTC") - max_duration
-            else:  # mode == "full" or any other mode
-                # Full: use maximum available range if no start specified
-                from ktrdr.config.ib_limits import IbLimitsRegistry
-
-                max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
-                requested_start = pd.Timestamp.now(tz="UTC") - max_duration
-        else:
-            # ALWAYS respect user-provided start_date regardless of mode
-            requested_start = self._normalize_timezone(start_date)
-
-        if end_date is None:
-            requested_end = pd.Timestamp.now(tz="UTC")
-        else:
-            # ALWAYS respect user-provided end_date regardless of mode
-            requested_end = self._normalize_timezone(end_date)
-
-        if requested_start >= requested_end:
-            logger.warning(
-                f"Invalid date range: start {requested_start} >= end {requested_end}"
-            )
-            return None
-
-        logger.info(
-            f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}"
-        )
-
         # Initialize progress if not provided
         if progress is None:
             progress = DataLoadingProgress(steps_total=10)
 
-        # Step 1: FAIL FAST - Validate symbol and get metadata (2%)
+        # Step 1: FAIL FAST - Validate symbol and get metadata FIRST (2%)
         progress.current_step = "Validating symbol with IB"
         progress.steps_completed = 1
         progress.percentage = 2.0
@@ -1295,6 +1286,49 @@ class DataManager:
         else:
             logger.warning("External data provider not available for symbol validation")
 
+        # Step 2: Set intelligent date ranges using head timestamp info
+        # ALWAYS respect user-provided dates, but use head timestamp for defaults
+        if start_date is None:
+            # Default range based on mode and head timestamp
+            if mode == "tail":
+                # Tail: recent data if no range specified
+                requested_start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30)
+            elif mode == "backfill" or mode == "full":
+                # Use head timestamp if available, otherwise fall back to IB limits
+                if cached_head_timestamp:
+                    requested_start = self._normalize_timezone(cached_head_timestamp)
+                    logger.info(f"📅 Using head timestamp for default start: {requested_start}")
+                else:
+                    # Fallback: go back as far as IB allows for this timeframe
+                    from ktrdr.config.ib_limits import IbLimitsRegistry
+                    max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
+                    requested_start = pd.Timestamp.now(tz="UTC") - max_duration
+                    logger.info(f"📅 Using IB duration limit for default start: {requested_start}")
+            else:
+                # Other modes: use IB limits
+                from ktrdr.config.ib_limits import IbLimitsRegistry
+                max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
+                requested_start = pd.Timestamp.now(tz="UTC") - max_duration
+        else:
+            # ALWAYS respect user-provided start_date regardless of mode
+            requested_start = self._normalize_timezone(start_date)
+
+        if end_date is None:
+            requested_end = pd.Timestamp.now(tz="UTC")
+        else:
+            # ALWAYS respect user-provided end_date regardless of mode
+            requested_end = self._normalize_timezone(end_date)
+
+        if requested_start >= requested_end:
+            logger.warning(
+                f"Invalid date range: start {requested_start} >= end {requested_end}"
+            )
+            return None
+
+        logger.info(
+            f"🧠 ENHANCED STRATEGY ({mode}): Loading {symbol} {timeframe} from {requested_start} to {requested_end}"
+        )
+
         # Step 2: Validate request range against cached head timestamp (4%)
         progress.current_step = "Validating request against head timestamp"
         progress.steps_completed = 2
@@ -1308,12 +1342,19 @@ class DataManager:
         # Use cached head timestamp from validation step if available
         if cached_head_timestamp:
             try:
-                # Convert ISO timestamp to datetime for range validation
-                head_dt = datetime.fromisoformat(
-                    cached_head_timestamp.replace("Z", "+00:00")
-                )
-                if head_dt.tzinfo is None:
-                    head_dt = head_dt.replace(tzinfo=timezone.utc)
+                # Handle both datetime objects and string timestamps
+                if isinstance(cached_head_timestamp, datetime):
+                    head_dt = cached_head_timestamp
+                    # Ensure timezone awareness
+                    if head_dt.tzinfo is None:
+                        head_dt = head_dt.replace(tzinfo=timezone.utc)
+                else:
+                    # Convert ISO timestamp string to datetime for range validation
+                    head_dt = datetime.fromisoformat(
+                        cached_head_timestamp.replace("Z", "+00:00")
+                    )
+                    if head_dt.tzinfo is None:
+                        head_dt = head_dt.replace(tzinfo=timezone.utc)
 
                 # Check if requested start is before available data
                 if requested_start < head_dt:

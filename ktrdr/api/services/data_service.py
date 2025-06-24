@@ -407,35 +407,39 @@ class DataService(BaseService):
         # Start periodic progress updates
         progress_task = asyncio.create_task(update_progress_periodically())
 
+        # Create a cancellation event that can be triggered externally
+        cancellation_event = asyncio.Event()
+        
+        # Store the cancellation event so the operations service can signal it
+        if not hasattr(self.operations_service, '_cancellation_events'):
+            self.operations_service._cancellation_events = {}
+        self.operations_service._cancellation_events[operation_id] = cancellation_event
+
+        async def check_cancellation():
+            """Wait for external cancellation signal via event."""
+            try:
+                await cancellation_event.wait()  # Block until signaled
+                logger.info(f"Cancelling data loading operation: {operation_id}")
+                cancel_event.set()  # Signal the worker thread to stop
+            except Exception as e:
+                logger.warning(f"Error in cancellation checker: {e}")
+
         try:
             # Run data loading in executor with real-time progress updates
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_data_load)
-
-                # Poll for completion or cancellation
+                
+                # Start the cancellation checker
+                cancellation_task = asyncio.create_task(check_cancellation())
+                
+                # Wait for completion (no polling needed)
                 while not future.done():
-                    # Check if operation was cancelled
-                    operation = await self.operations_service.get_operation(
-                        operation_id
-                    )
-                    if operation and operation.is_cancelled_requested:
-                        logger.info(
-                            f"Cancelling data loading operation: {operation_id}"
-                        )
-
-                        # Set cancellation flag for worker thread
-                        cancel_event.set()
-
-                        # Cancel the future immediately
-                        future.cancel()
-
-                        # Don't wait - just raise cancellation
-                        logger.info(f"Data loading operation cancelled: {operation_id}")
-                        raise asyncio.CancelledError("Operation was cancelled")
-
-                    # Sleep briefly before checking again
-                    await asyncio.sleep(0.5)  # Check every 500ms for responsive updates
+                    await asyncio.sleep(0.1)  # Just wait for completion or cancellation
         finally:
+            # Clean up cancellation event
+            if hasattr(self.operations_service, '_cancellation_events'):
+                self.operations_service._cancellation_events.pop(operation_id, None)
+            
             # Stop progress updates
             cancel_event.set()
             try:

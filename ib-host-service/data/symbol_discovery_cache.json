@@ -1,0 +1,356 @@
+{
+  "cache": {
+    "USDJPY": {
+      "symbol": "USDJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "United States dollar",
+      "validated_at": 1750724704.7403772,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750724705.167627
+    },
+    "AUDCAD": {
+      "symbol": "AUDCAD",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "CAD",
+      "description": "Australian dollar",
+      "validated_at": 1750724864.6846669,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2007-07-15T21:00:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2007-07-15T21:00:00+00:00",
+        "default": "2007-07-15T21:00:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750724865.3683689
+    },
+    "NZDUSD": {
+      "symbol": "NZDUSD",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "USD",
+      "description": "New Zealand dollar",
+      "validated_at": 1750724885.830252,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2007-11-01T21:15:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2007-11-01T21:15:00+00:00",
+        "default": "2007-11-01T21:15:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750724886.046664
+    },
+    "EURUSD": {
+      "symbol": "EURUSD",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "USD",
+      "description": "European Monetary Union Euro",
+      "validated_at": 1750726142.397093,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750726142.4753761
+    },
+    "GBPCAD": {
+      "symbol": "GBPCAD",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "CAD",
+      "description": "British pound",
+      "validated_at": 1750726186.681825,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750726186.8592372
+    },
+    "GBPJPY": {
+      "symbol": "GBPJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "British pound",
+      "validated_at": 1750726678.466913,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750726678.7174988
+    },
+    "CADJPY": {
+      "symbol": "CADJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "Canadian dollar",
+      "validated_at": 1750726865.637013,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2007-07-15T21:00:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2007-07-15T21:00:00+00:00",
+        "default": "2007-07-15T21:00:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750726865.8253398
+    },
+    "EURJPY": {
+      "symbol": "EURJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "European Monetary Union Euro",
+      "validated_at": 1750727028.913586,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750727029.136409
+    },
+    "GBPCHF": {
+      "symbol": "GBPCHF",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "CHF",
+      "description": "British pound",
+      "validated_at": 1750727306.735157,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": null,
+      "head_timestamp_timeframes": null,
+      "head_timestamp_fetched_at": null
+    },
+    "AUDJPY": {
+      "symbol": "AUDJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "Australian dollar",
+      "validated_at": 1750728545.93654,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750728546.114379
+    },
+    "CHFJPY": {
+      "symbol": "CHFJPY",
+      "asset_type": "CASH",
+      "exchange": "IDEALPRO",
+      "currency": "JPY",
+      "description": "Swiss franc",
+      "validated_at": 1750728616.71451,
+      "trading_hours": {
+        "timezone": "America/New_York",
+        "regular_hours": {
+          "start": "09:30",
+          "end": "16:00",
+          "name": "Regular"
+        },
+        "extended_hours": [],
+        "trading_days": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "holidays": []
+      },
+      "head_timestamp": "2005-03-09T04:30:00+00:00",
+      "head_timestamp_timeframes": {
+        "1h": "2005-03-09T04:30:00+00:00",
+        "default": "2005-03-09T04:30:00+00:00"
+      },
+      "head_timestamp_fetched_at": 1750728616.884385
+    }
+  },
+  "validated_symbols": [
+    "EURJPY",
+    "AUDCAD",
+    "AUDJPY",
+    "USDJPY",
+    "CADJPY",
+    "GBPCHF",
+    "NZDUSD",
+    "CHFJPY",
+    "GBPJPY",
+    "GBPCAD",
+    "EURUSD"
+  ],
+  "last_updated": 1750728616.884387
+}
