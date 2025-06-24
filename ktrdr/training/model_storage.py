@@ -66,27 +66,60 @@ class ModelStorage:
         with open(model_dir / "metrics.json", "w") as f:
             json.dump(training_metrics, f, indent=2, default=str)
 
-        # Save feature information
-        feature_info = {
-            "feature_names": feature_names,
-            "feature_count": len(feature_names),
-            "feature_importance": feature_importance or {},
-        }
+        # Determine model type (Phase 4 of feature engineering removal)
+        is_pure_fuzzy = scaler is None
+        model_version = "pure_fuzzy_v1" if is_pure_fuzzy else "mixed_features_v1"
+        
+        # Save feature information with enhanced metadata
+        if is_pure_fuzzy:
+            # Pure fuzzy model - enhanced metadata
+            feature_config = config.get("model", {}).get("features", {})
+            feature_info = {
+                "model_version": model_version,
+                "feature_type": "pure_fuzzy",
+                "fuzzy_features": feature_names,
+                "feature_count": len(feature_names),
+                "temporal_config": {
+                    "lookback_periods": feature_config.get("lookback_periods", 0),
+                    "enabled": feature_config.get("lookback_periods", 0) > 0
+                },
+                "scaling_info": {
+                    "requires_scaling": False,
+                    "reason": "fuzzy_values_already_normalized"
+                },
+                "feature_importance": feature_importance or {},
+            }
+        else:
+            # Legacy mixed features model
+            feature_info = {
+                "model_version": model_version,
+                "feature_type": "mixed_features",
+                "feature_names": feature_names,
+                "feature_count": len(feature_names),
+                "scaling_info": {
+                    "requires_scaling": True,
+                    "scaler_type": type(scaler).__name__ if scaler else None
+                },
+                "feature_importance": feature_importance or {},
+            }
+        
         with open(model_dir / "features.json", "w") as f:
             json.dump(feature_info, f, indent=2)
 
-        # Save scaler if provided
+        # Save scaler only for mixed feature models
         if scaler is not None:
             with open(model_dir / "scaler.pkl", "wb") as f:
                 pickle.dump(scaler, f)
 
-        # Save metadata
+        # Save metadata with enhanced versioning
         metadata = {
             "strategy_name": strategy_name,
             "symbol": symbol,
             "timeframe": timeframe,
             "created_at": datetime.now().isoformat(),
             "model_type": model.__class__.__name__,
+            "model_version": model_version,
+            "architecture_type": "pure_fuzzy" if is_pure_fuzzy else "mixed_features",
             "input_size": config.get("model", {}).get(
                 "input_size", getattr(model, "input_size", None)
             ),
@@ -96,6 +129,11 @@ class ModelStorage:
                 "final_accuracy": training_metrics.get("final_train_accuracy", 0),
                 "best_val_accuracy": training_metrics.get("best_val_accuracy", 0),
             },
+            "feature_engineering": {
+                "removed": is_pure_fuzzy,
+                "scaler_required": not is_pure_fuzzy,
+                "fuzzy_only": is_pure_fuzzy
+            }
         }
         with open(model_dir / "metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
@@ -167,12 +205,17 @@ class ModelStorage:
         with open(model_dir / "metadata.json", "r") as f:
             metadata = json.load(f)
 
-        # Load scaler if exists
+        # Load scaler if exists (backward compatibility + mixed feature models)
         scaler = None
         scaler_path = model_dir / "scaler.pkl"
         if scaler_path.exists():
             with open(scaler_path, "rb") as f:
                 scaler = pickle.load(f)
+
+        # Determine model architecture type
+        model_version = metadata.get("model_version", "legacy")
+        architecture_type = metadata.get("architecture_type", "unknown")
+        is_pure_fuzzy = architecture_type == "pure_fuzzy" or features.get("feature_type") == "pure_fuzzy"
 
         return {
             "model": model,
@@ -182,6 +225,9 @@ class ModelStorage:
             "metadata": metadata,
             "scaler": scaler,
             "model_path": str(model_dir),
+            "model_version": model_version,
+            "architecture_type": architecture_type,
+            "is_pure_fuzzy": is_pure_fuzzy,
         }
 
     def list_models(self, strategy_name: Optional[str] = None) -> List[Dict[str, Any]]:
