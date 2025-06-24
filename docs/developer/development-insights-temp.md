@@ -175,3 +175,86 @@ Original fix summary files to remove after integration:
 - `NEURAL_ARCHITECTURE_FIXES.md` ✅ (insights extracted, removed)
 - `CLAUDE-training-fix-plan.md` (extract insights then remove)
 - `ADR-003-neuro-fuzzy-strategy-framework.md` ✅ (insights extracted, archived)
+
+## Training System Architecture Insights (from ADR-004)
+
+### 🎯 ZigZag Labeling Strategy
+**Innovation**: Use forward-looking price movements for "perfect" supervised learning labels
+**Honesty**: Explicitly acknowledges "cheating" nature of future knowledge
+**Implementation**: Configurable threshold detection (5% movement, 20-bar lookahead)
+**Success**: Creates strong learning signals that enable >60% model accuracy
+
+### 🔄 Pipeline Orchestration Pattern
+**Architecture**: Complete end-to-end coordination from data to trained model
+**Integration**: Seamless reuse of existing DataManager, IndicatorEngine, FuzzyEngine
+**Separation**: Training isolated from inference - models are portable artifacts
+**Result**: Clean pipeline that leverages all existing KTRDR infrastructure
+
+### 💾 Model Storage Strategy
+**Pattern**: Directory-based versioning with complete metadata persistence
+**Structure**: `models/strategy/SYMBOL_TIMEFRAME_vN/` with reproducibility data
+**Benefits**: Complete traceability, easy comparison, version management
+**Evidence**: 70+ models successfully stored with metadata across strategies
+
+### 🧠 Feature Engineering Excellence
+**Core Innovation**: Transform fuzzy membership values into neural network features
+**Enhancement Strategy**: Add price context, volume context, temporal windows
+**Result**: Rich feature vectors that combine human expertise with ML capability
+**Validation**: Feature importance analysis shows meaningful feature rankings
+
+### ⚡ Training Performance Patterns
+**Early Stopping**: Intelligent overfitting prevention with configurable patience
+**GPU Acceleration**: Automatic device detection and utilization
+**Memory Efficiency**: Large feature matrix handling without memory issues
+**Progress Tracking**: Detailed metrics and validation monitoring
+
+### 🔧 Multi-Timeframe Training
+**Achievement**: Cross-timeframe feature engineering and model coordination
+**Pattern**: Timeframe-aware versioning and storage management
+**Integration**: Works with existing multi-timeframe orchestrator
+**Success**: Models trained across various timeframe combinations
+
+## Production Readiness Insights
+
+### ✅ What Makes Training Production-Capable
+1. **Complete error handling** throughout training pipeline
+2. **Robust data validation** and quality checks before training
+3. **Automatic versioning** prevents model overwrites and loss
+4. **Configuration validation** ensures valid training parameters
+5. **Progress monitoring** enables training supervision and debugging
+
+### 🚧 Training System Extensions Needed
+1. **CLI interface enhancement** for user-friendly operations
+2. **Hyperparameter optimization** for automated parameter search
+3. **Multi-symbol training** for more robust model development
+4. **Advanced architectures** beyond MLP (LSTM, Transformer)
+
+- `ADR-004-training-system.md` ✅ (insights extracted, archived)
+
+## Backtesting System Architecture Insights (from ADR-005)
+
+### ⚡ Event-Driven Simulation
+**Architecture**: Bar-by-bar historical data processing with realistic market simulation
+**Benefits**: Accurate trade timing, proper position management, realistic performance metrics
+**Implementation**: `BacktestEngine` orchestrates event-driven processing
+**Success**: Complete backtesting pipeline integrated with trained neural networks
+
+### 📊 Performance Analytics Excellence
+**Components**: `PerformanceTracker` with comprehensive metrics calculation
+**Metrics**: Sharpe ratio, maximum drawdown, win rate, profit factor, trade analysis
+**Integration**: Works seamlessly with position manager and trade execution
+**Value**: Enables systematic strategy evaluation and comparison
+
+### 🎯 Position Management Sophistication
+**Features**: Full trade lifecycle simulation with realistic costs
+**Implementation**: `PositionManager` handles execution, slippage, commissions
+**Benefits**: Accurate simulation of trading costs and market impact
+**Result**: Realistic performance expectations for strategy validation
+
+### 🔧 Model Integration Success
+**Pattern**: Direct integration with trained neural network models
+**Loading**: `ModelLoader` handles model persistence and inference
+**Pipeline**: Backtesting uses same decision engine as live trading
+**Evidence**: Works with 70+ trained models across multiple strategies
+
+- `ADR-005-backtesting-system.md` ✅ (insights extracted, archived)
