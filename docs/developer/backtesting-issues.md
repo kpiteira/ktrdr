@@ -8,7 +8,7 @@ This audit identifies critical execution realism issues in the KTRDR backtesting
 
 ### 1. Instant Order Execution (MAJOR ISSUE)
 
-**Location**: `engine.py:254-296`, `position_manager.py:234-386`
+**Location**: `engine.py:329-338`, `position_manager.py:280,369`
 
 **Current Implementation**:
 ```python
@@ -32,11 +32,11 @@ trade = self.position_manager.execute_trade(
 
 ### 2. Look-Ahead Bias (CRITICAL - HIGHEST PRIORITY)
 
-**Location**: `engine.py:192-208`
+**Location**: `engine.py:224, 236-242`
 
 **Current Problematic Code**:
 ```python
-# Line 192: Uses current complete bar in decision making
+# Line 224: Uses current complete bar in decision making
 historical_data = data.iloc[:idx + 1]  # INCLUDES current bar with close price
 
 decision = self.orchestrator.make_decision(
@@ -63,7 +63,7 @@ decision_price = current_bar['open']  # Use open price for decisions
 
 ### 3. Perfect Price Execution (UNREALISTIC)
 
-**Location**: `position_manager.py:264-266`, `position_manager.py:342`
+**Location**: `position_manager.py:280`, `position_manager.py:369`
 
 **Current Implementation**:
 ```python
@@ -86,7 +86,7 @@ execution_price = price * (1 - self.slippage)  # 0.05% fixed
 
 ### 4. Fixed Position Sizing (UNREALISTIC)
 
-**Location**: `position_manager.py:388-407`
+**Location**: `position_manager.py:430-432`
 
 **Current Implementation**:
 ```python
@@ -163,7 +163,7 @@ for idx in range(len(data)):
 
 ### Priority 1: Fix Look-Ahead Bias (CRITICAL)
 
-**Change Required**: `engine.py:192`
+**Change Required**: `engine.py:224`
 ```python
 # Current (problematic)
 historical_data = data.iloc[:idx + 1]
@@ -179,7 +179,7 @@ decision_price = current_bar['open']  # Use open for decisions
 
 ### Priority 2: Implement Dynamic Slippage
 
-**Add to**: `position_manager.py:264-342`
+**Add to**: `position_manager.py:280,369`
 ```python
 def calculate_dynamic_slippage(self, base_slippage: float, volume_ratio: float) -> float:
     """Calculate slippage based on volume and market conditions."""
@@ -282,12 +282,12 @@ def calculate_market_impact(self, order_size: int, avg_volume: float,
 
 ## 🚨 Most Critical Fix Summary
 
-**The look-ahead bias in `engine.py:192` is the most serious flaw.** The backtest currently makes decisions using complete bar data including the close price, which is impossible in real trading where decisions must be made during bar formation.
+**The look-ahead bias in `engine.py:224` is the most serious flaw.** The backtest currently makes decisions using complete bar data including the close price, which is impossible in real trading where decisions must be made during bar formation.
 
 **Immediate Action Required**:
 ```python
 # File: ktrdr/backtesting/engine.py
-# Line: 192
+# Line: 224
 
 # Change from:
 historical_data = data.iloc[:idx + 1]  # Includes current complete bar
@@ -302,7 +302,7 @@ This single line change will make the backtest significantly more realistic and 
 
 ## 📋 Implementation Checklist
 
-- [ ] **Fix look-ahead bias** (engine.py:192)
+- [ ] **Fix look-ahead bias** (engine.py:224)
 - [ ] **Implement execution delay** (1-bar delay)
 - [ ] **Add dynamic slippage** calculation
 - [ ] **Implement ATR-based position sizing**

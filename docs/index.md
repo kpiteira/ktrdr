@@ -58,7 +58,10 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 
 * [Developer Setup](developer/setup.md)
 * [Architecture Overview](developer/architecture.md)
+* [Indicator Architecture](developer/indicator-architecture.md) - Comprehensive guide for indicator system development
 * [Testing Guide](developer/testing-guide.md) - Complete testing guide for neuro-fuzzy engine
+* [Test Recovery Plan](developer/test-recovery-plan.md) - Current test suite status and maintenance plan
+* [Backtesting Issues](developer/backtesting-issues.md) - Critical analysis of backtesting realism issues
 * [Contributing Guide](developer/contributing.md)
 * [API Development](developer/api-development.md)
 * [Neural Network Development](developer/neural-development.md)

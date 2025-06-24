@@ -325,6 +325,25 @@ Priority areas identified:
 - 📈 Reduced onboarding time for new developers
 - 📈 Documentation lifecycle process established
 
+## 🔄 Implementation Workflow
+
+**📋 PRECISE WORKFLOW: Every file must follow this exact process**
+
+```
+1. READ → 2. ANALYSE → 3. CHECK ACCURACY → 4. CORRECT/DELETE → 5. MOVE → 6. UPDATE INDEX
+```
+
+### Step-by-Step Process for Each File:
+
+1. **📖 READ**: Complete file content review
+2. **🔍 ANALYSE**: Determine relevance, accuracy, and current state
+3. **✅ CHECK ACCURACY**: Compare against current codebase implementation
+4. **🔧 CORRECT/DELETE**: Update outdated content OR delete if obsolete
+5. **📁 MOVE**: Relocate to proper directory (if needed)
+6. **📚 UPDATE INDEX**: Add to relevant docs/index.md section with proper cross-references
+
+**⚠️ CRITICAL**: No file moves until steps 1-4 are complete and verified.
+
 ## ⚠️ Critical Next Steps - UPDATED APPROACH
 
 **🚨 CHANGED METHODOLOGY: Analysis-First Approach (Not Blind Reorganization)**
@@ -359,6 +378,214 @@ Audit content accuracy → Update outdated information → Verify with codebase 
 ```
 
 This ensures documentation cleanup actually improves accuracy, not just appearance.
+
+## 📚 Documentation Index & Navigation Updates
+
+**⚠️ CRITICAL: As we move and update files, we must maintain consistent navigation and cross-references**
+
+### Current docs/index.md Analysis
+
+The current `docs/index.md` is well-structured but needs updates to reflect:
+1. **New files** being moved from root level
+2. **Updated content** with current system capabilities  
+3. **Module-based organization** matching the sophisticated neuro-fuzzy system
+4. **Missing sections** for implemented features
+
+### Required Index Updates
+
+#### Step 1: Add New Sections for Moved Content
+
+**Add to "User Guides" section:**
+```markdown
+## User Guides
+
+* [Data Management](user-guides/data-management.md)
+* [Strategy Management](user-guides/strategy-management.md) ← NEW (from STRATEGY_CLI_GUIDE.md)
+* [CLI Reference](user-guides/cli-reference.md) ← NEW (from UNIFIED_CLI_GUIDE.md)
+* [Multi-Timeframe Trading](user-guides/multi-timeframe-trading.md)
+* [Derived Indicators](user-guides/derived-indicators.md)
+* [Neural Networks](user-guides/neural-networks.md)
+```
+
+**Add to "Developer Resources" section:**
+```markdown
+## Developer Resources
+
+* [Developer Setup](developer/setup.md)
+* [Architecture Overview](developer/architecture.md)
+* [Indicator Architecture](developer/indicator-architecture.md) ← NEW (from ARCHITECTURE_INDICATORS.md)
+* [Testing Guide](developer/testing-guide.md) ← NEW (from TESTING_GUIDE.md)
+* [Test Recovery Plan](developer/test-recovery-plan.md) ← NEW (from UNIT_TEST_RECOVERY_PLAN.md)
+* [Backtesting Issues](developer/backtesting-issues.md) ← NEW (from BACKTESTING_EXECUTION_AUDIT.md)
+* [Training Pipeline Architecture](developer/training-pipeline-architecture.md)
+* [Frontend Development](developer/frontend/)
+```
+
+**Add new "System Architecture" section:**
+```markdown
+## System Architecture
+
+* [Neuro-Fuzzy Framework Overview](architecture/neuro-fuzzy-overview.md)
+* [Neural Network Architecture](architecture/neural-networks.md)
+* [Decision Engine Architecture](architecture/decision-engine.md) 
+* [Training System Architecture](architecture/training-system.md)
+* [Data Flow Architecture](architecture/data-flow.md)
+* [API Architecture](api/ARCHITECTURE.md)
+```
+
+#### Step 2: Update Existing Sections
+
+**Update "API Reference" to reflect current capabilities:**
+```markdown
+## API Reference
+
+* [API Overview](api-reference/index.md)
+* [Data API](api-reference/data-api.md)
+* [Indicator API](api-reference/indicator-api.md)
+* [Neural Network API](api-reference/neural-api.md) ← Verify exists and is current
+* [Training API](api-reference/training-api.md) ← NEW for training endpoints
+* [Decision API](api-reference/decision-api.md) ← NEW for decision orchestrator
+* [Multi-Timeframe API](api/multi-timeframe-api.md)
+```
+
+**Update "CLI Reference" for current commands:**
+```markdown
+## CLI Reference
+
+* [CLI Overview](cli/index.md)
+* [Data Commands](cli/fetch.md) ← Update to current structure
+* [Training Commands](cli/training-commands.md) ← NEW for neural training
+* [Strategy Commands](cli/strategy-commands.md) ← Verify currency
+* [Multi-Timeframe Commands](cli/multi-timeframe-commands.md)
+```
+
+#### Step 3: Add Module-Based Organization
+
+**New "Core Modules" section for technical reference:**
+```markdown
+## Core Modules
+
+### Data & Indicators
+* [Data Management](user-guides/data-management.md)
+* [Technical Indicators](developer/indicator-architecture.md)
+* [IB Connection System](developer/ib-architecture.md)
+
+### Fuzzy Logic & Neural Networks  
+* [Fuzzy Logic Engine](architecture/fuzzy-engine.md)
+* [Neural Network Models](architecture/neural-networks.md)
+* [Training Pipeline](developer/training-pipeline-architecture.md)
+
+### Decision & Trading
+* [Decision Engine](architecture/decision-engine.md)
+* [Strategy Framework](user-guides/strategy-management.md)
+* [Backtesting System](user-guides/backtesting.md)
+
+### API & Integration
+* [FastAPI Backend](api/ARCHITECTURE.md)
+* [Frontend Architecture](developer/frontend/architecture.md)
+* [MCP Integration](developer/mcp-integration.md)
+```
+
+### Cross-Reference Updates Required
+
+#### Update Internal Links in Moved Files
+
+**When moving files, update these internal references:**
+
+1. **STRATEGY_CLI_GUIDE.md → strategy-management.md**:
+   - Update any links to other documentation
+   - Ensure CLI examples reference current commands
+   - Add links to related neural network documentation
+
+2. **TESTING_GUIDE.md → testing-guide.md**:
+   - Update links to current test structure
+   - Add references to neural network testing
+   - Link to architecture documentation for context
+
+3. **ARCHITECTURE_INDICATORS.md → indicator-architecture.md**:
+   - Update links to fuzzy logic integration
+   - Add references to neural network feature engineering
+   - Link to current API documentation
+
+#### Add Forward References
+
+**Add "See Also" sections to key documents:**
+
+```markdown
+## See Also
+
+* [Neural Network Training](user-guides/neural-networks.md) - For strategy training
+* [API Reference](api-reference/neural-api.md) - For programmatic access
+* [Architecture Overview](developer/architecture.md) - For system design
+* [Backtesting Guide](user-guides/backtesting.md) - For strategy validation
+```
+
+### Navigation Improvements
+
+#### Add Module Navigation
+
+**Create module-specific navigation in key files:**
+
+**Example for neural-networks.md:**
+```markdown
+# Neural Networks Guide
+
+## Quick Navigation
+* 📊 [Training Your First Model](#training) 
+* ⚙️ [Model Configuration](#configuration)
+* 🔍 [Troubleshooting](#troubleshooting)
+* 📈 [Performance Analysis](#performance)
+
+## Related Documentation
+* [Strategy Management](strategy-management.md) - Define trading strategies
+* [CLI Reference](cli-reference.md) - Command-line training tools
+* [Training Architecture](../developer/training-pipeline-architecture.md) - Technical details
+```
+
+#### Create Topic Maps
+
+**Add topic-based cross-references:**
+
+```markdown
+## Documentation Map by Topic
+
+### Getting Started with Neural Trading
+1. [Strategy Management](user-guides/strategy-management.md) - Define your strategy
+2. [Neural Networks](user-guides/neural-networks.md) - Train your model  
+3. [Backtesting](user-guides/backtesting.md) - Test your strategy
+4. [CLI Reference](user-guides/cli-reference.md) - Command reference
+
+### Architecture Deep Dive
+1. [System Overview](developer/architecture.md) - High-level design
+2. [Neuro-Fuzzy Framework](architecture/neuro-fuzzy-overview.md) - Core concepts
+3. [Decision Engine](architecture/decision-engine.md) - Trading logic
+4. [Training Pipeline](developer/training-pipeline-architecture.md) - Model training
+
+### Troubleshooting & Development
+1. [Testing Guide](developer/testing-guide.md) - Run tests
+2. [Backtesting Issues](developer/backtesting-issues.md) - Known issues
+3. [Test Recovery Plan](developer/test-recovery-plan.md) - Fix broken tests
+```
+
+### Implementation Checklist
+
+**After each file move, verify:**
+- [ ] File appears in appropriate docs/index.md section
+- [ ] Internal links updated and functional
+- [ ] Cross-references added to related documents  
+- [ ] Module navigation includes the new file
+- [ ] "See Also" sections reference the moved file
+- [ ] CLI examples tested and current
+- [ ] API references verified and functional
+
+**Global navigation validation:**
+- [ ] No broken internal links
+- [ ] Consistent naming conventions
+- [ ] Module-based organization maintained
+- [ ] Progressive disclosure (beginner → advanced)
+- [ ] Search-friendly section headers
+
+This ensures the documentation reorganization creates a **coherent, navigable system** rather than just moving files around.
 
 ## 💡 Document Lifecycle Process
 

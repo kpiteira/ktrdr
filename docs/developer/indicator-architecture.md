@@ -110,7 +110,7 @@ class BaseIndicator(ABC):
 Indicators are automatically registered via the factory pattern:
 
 ```python
-# /ktrdr/indicators/indicator_factory.py
+# ktrdr/indicators/indicator_factory.py
 BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "RSI": RSIIndicator,
     "RSIIndicator": RSIIndicator,  # Multiple aliases supported
@@ -138,7 +138,7 @@ class IndicatorFactory:
 Advanced validation using structured schemas:
 
 ```python
-# /ktrdr/indicators/parameter_schema.py
+# ktrdr/indicators/parameter_schema.py
 class ParameterSchema:
     """Schema for validating indicator parameters."""
     
@@ -179,7 +179,7 @@ class ParameterDefinition:
 Indicators are organized into logical categories:
 
 ```python
-# /ktrdr/indicators/categories.py
+# ktrdr/indicators/categories.py
 class IndicatorCategory:
     TREND = "trend"                    # 6 indicators
     MOMENTUM = "momentum"              # 8 indicators  
@@ -204,7 +204,7 @@ class IndicatorCategory:
 #### 1. Create the Indicator Class
 
 ```python
-# /ktrdr/indicators/my_new_indicator.py
+# ktrdr/indicators/my_new_indicator.py
 from typing import Union, Dict, Any
 import pandas as pd
 import numpy as np
@@ -264,7 +264,7 @@ class MyNewIndicator(BaseIndicator):
 #### 2. Register in Factory
 
 ```python
-# Add to /ktrdr/indicators/indicator_factory.py
+# Add to ktrdr/indicators/indicator_factory.py
 from ktrdr.indicators.my_new_indicator import MyNewIndicator
 
 BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
@@ -277,7 +277,7 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
 #### 3. Add Parameter Schema
 
 ```python
-# Add to /ktrdr/indicators/schemas.py
+# Add to ktrdr/indicators/schemas.py
 from ktrdr.indicators.my_new_indicator import MyNewIndicator
 
 # Import schema from indicator
@@ -294,7 +294,7 @@ PARAMETER_SCHEMAS: Dict[str, ParameterSchema] = {
 #### 4. Add to Categories
 
 ```python
-# Add to /ktrdr/indicators/categories.py
+# Add to ktrdr/indicators/categories.py
 INDICATOR_CATEGORIES = {
     # ... existing categories ...
     IndicatorCategory.TREND: [
@@ -307,7 +307,7 @@ INDICATOR_CATEGORIES = {
 #### 5. Create Tests
 
 ```python
-# /tests/indicators/test_my_new_indicator.py
+# tests/indicators/test_my_new_indicator.py
 import pytest
 import pandas as pd
 import numpy as np
@@ -349,7 +349,7 @@ class TestMyNewIndicator:
 #### 6. Register in Test Registry
 
 ```python
-# Add to /tests/indicators/indicator_registry.py
+# Add to tests/indicators/indicator_registry.py
 INDICATOR_TEST_REGISTRY = {
     # ... existing indicators ...
     "MyNewIndicator": {
@@ -960,7 +960,7 @@ The KTRDR indicator system provides a robust, extensible foundation for technica
 
 **Remember**: This is not just a coding standard - it's an architectural requirement. ALL indicator functionality must go through this system.
 
-For questions or clarifications, refer to the existing indicator implementations in `/ktrdr/indicators/` as reference examples.
+For questions or clarifications, refer to the existing indicator implementations in `ktrdr/indicators/` as reference examples.
 
 ---
 

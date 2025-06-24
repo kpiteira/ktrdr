@@ -170,18 +170,37 @@ class IbDataFetcher:
         # Convert to DataFrame
         try:
             logger.debug(f"Converting {len(bars)} bars to DataFrame")
+            
+            # Debug: Check bar values before DataFrame conversion
+            if bars:
+                first_bar = bars[0]
+                logger.info(f"🔍 DEBUG: Raw bar values:")
+                logger.info(f"   open: {first_bar.open} (type: {type(first_bar.open)})")
+                logger.info(f"   open precision: {first_bar.open:.16f}")
+                logger.info(f"   high: {first_bar.high} (type: {type(first_bar.high)})")
+                logger.info(f"   high precision: {first_bar.high:.16f}")
+                logger.info(f"   low: {first_bar.low} (type: {type(first_bar.low)})")
+                logger.info(f"   close: {first_bar.close} (type: {type(first_bar.close)})")
+                logger.info(f"   close precision: {first_bar.close:.16f}")
+            
+            # Create DataFrame using column arrays to avoid list comprehension precision issues
             df = pd.DataFrame(
-                [
-                    {
-                        "open": bar.open,
-                        "high": bar.high,
-                        "low": bar.low,
-                        "close": bar.close,
-                        "volume": bar.volume,
-                    }
-                    for bar in bars
-                ]
+                {
+                    "open": [bar.open for bar in bars],
+                    "high": [bar.high for bar in bars],
+                    "low": [bar.low for bar in bars],
+                    "close": [bar.close for bar in bars],
+                    "volume": [bar.volume for bar in bars],
+                }
             )
+            
+            # Debug: Check DataFrame values after conversion
+            if not df.empty:
+                logger.info(f"🔍 DEBUG: DataFrame values after conversion:")
+                logger.info(f"   open[0]: {df['open'].iloc[0]:.16f}")
+                logger.info(f"   high[0]: {df['high'].iloc[0]:.16f}") 
+                logger.info(f"   low[0]: {df['low'].iloc[0]:.16f}")
+                logger.info(f"   close[0]: {df['close'].iloc[0]:.16f}")
 
             # Set datetime index
             df.index = pd.to_datetime([bar.date for bar in bars])
