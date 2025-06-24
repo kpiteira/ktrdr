@@ -311,7 +311,7 @@ def load_data(
                 details={"mode": mode, "valid_modes": valid_modes},
             )
 
-        # Run async operation
+        # Run async operation with proper signal handling
         asyncio.run(
             _load_data_async(
                 symbol,
@@ -387,20 +387,28 @@ async def _load_data_async(
         # Use async mode for cancellable operations
         async_mode = True  # Always use async mode for cancellation support
 
-        # Set up cancellation handling
+        # Set up async signal handling
+        import signal
         cancelled = False
         operation_id = None
-
-        def signal_handler(signum, frame):
+        
+        # Set up signal handler using asyncio
+        loop = asyncio.get_running_loop()
+        
+        def signal_handler():
             """Handle Ctrl+C for graceful cancellation."""
             nonlocal cancelled
             cancelled = True
             console.print(
                 "\n[yellow]🛑 Cancellation requested... stopping operation[/yellow]"
             )
-
-        # Set up signal handler for Ctrl+C
-        signal.signal(signal.SIGINT, signal_handler)
+            # Debug output
+            import sys
+            sys.stderr.write("\n[DEBUG] Async signal handler called, cancelled flag set to True\n")
+            sys.stderr.flush()
+        
+        # Register signal handler with the event loop
+        loop.add_signal_handler(signal.SIGINT, signal_handler)
 
         try:
             # Start async operation
@@ -451,7 +459,7 @@ async def _load_data_async(
                     task = progress.add_task("Loading data...", total=100)
 
                     # Poll operation status
-                    while not cancelled:
+                    while True:
                         try:
                             # Check for cancellation and send cancel request immediately
                             if cancelled:
@@ -536,7 +544,7 @@ async def _load_data_async(
                             break
             else:
                 # Simple polling without progress display
-                while not cancelled:
+                while True:
                     try:
                         # Check for cancellation and send cancel request immediately
                         if cancelled:
@@ -630,8 +638,12 @@ async def _load_data_async(
                 return
 
         finally:
-            # Restore default signal handler
-            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            # Remove signal handler from event loop
+            try:
+                loop.remove_signal_handler(signal.SIGINT)
+            except (ValueError, OSError):
+                # Signal handler was not set or already removed
+                pass
 
         # Process the final response using the helper function
         await _process_data_load_response(

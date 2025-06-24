@@ -989,33 +989,52 @@ class DataManager:
         """
         import asyncio
 
-        async def fetch_async():
-            """Async fetch function with enhanced timeout protection and cancellation support."""
-            # Check for cancellation before starting expensive IB operation
-            if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
-                logger.info(f"🛑 Cancellation detected before IB fetch for {symbol}")
-                raise asyncio.CancelledError("Operation cancelled before IB request")
-            
-            # Use shorter timeout and check for cancellation during fetch
-            return await asyncio.wait_for(
-                self.external_provider.fetch_historical_data(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    start=start,
-                    end=end,
-                    instrument_type=None,  # Auto-detect
-                ),
-                timeout=15.0,  # Shorter timeout for more responsive cancellation
-            )
-
         try:
-            # Check for cancellation one more time before expensive operation
+            # Check for cancellation before expensive operation
             if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
                 logger.info(f"🛑 Cancellation detected before IB fetch for {symbol}")
                 return None
+
+            # Create a cancellable async wrapper that polls for cancellation
+            async def fetch_with_cancellation_polling():
+                """Fetch with periodic cancellation checks."""
+                import concurrent.futures
                 
-            # Simplified: just use asyncio.run to avoid event loop conflicts
-            return asyncio.run(fetch_async())
+                # Start the IB fetch in a separate task
+                fetch_task = asyncio.create_task(
+                    self.external_provider.fetch_historical_data(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        start=start,
+                        end=end,
+                        instrument_type=None,  # Auto-detect
+                    )
+                )
+                
+                # Poll for cancellation every 0.5 seconds
+                while not fetch_task.done():
+                    # Check cancellation token from worker thread
+                    if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
+                        logger.info(f"🛑 Cancelling IB fetch for {symbol} during operation")
+                        fetch_task.cancel()
+                        try:
+                            await fetch_task
+                        except asyncio.CancelledError:
+                            pass
+                        raise asyncio.CancelledError("Operation cancelled during IB fetch")
+                    
+                    # Wait up to 0.5 seconds for fetch completion  
+                    try:
+                        await asyncio.wait_for(asyncio.shield(fetch_task), timeout=0.5)
+                        break
+                    except asyncio.TimeoutError:
+                        # Continue checking for cancellation
+                        continue
+                
+                return await fetch_task
+                
+            # Run with cancellation polling
+            return asyncio.run(fetch_with_cancellation_polling())
 
         except asyncio.TimeoutError:
             logger.error(
