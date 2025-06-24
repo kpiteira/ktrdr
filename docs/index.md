@@ -12,6 +12,7 @@ Welcome to the KTRDR documentation. This documentation provides comprehensive in
 
 * [Data Management](user-guides/data-management.md)
 * [Strategy Management](user-guides/strategy-management.md) - CLI tools for validating and upgrading trading strategies
+* [CLI Reference](user-guides/cli-reference.md) - Complete command reference for all KTRDR operations
 * [Technical Indicators](user-guides/indicators.md)
 * [Visualization](user-guides/visualization.md)
 * [Strategy Development](user-guides/strategy-development.md)
