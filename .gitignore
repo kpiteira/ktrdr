@@ -101,3 +101,4 @@ config/*_secure.yaml
 
 **/.claude/settings.local.json
 data/symbol_discovery_cache.json
+ib-host-service/data/symbol_discovery_cache.json
