@@ -1,44 +1,332 @@
-# Fuzzy set definitions for common indicators
+# Enhanced fuzzy set definitions for all standard indicators
 # These serve as default templates that can be overridden in specific strategies
+# 
+# Phase 2 of Feature Engineering Removal: Comprehensive indicator fuzzy sets
+# Designed to be asset-class agnostic and work across stocks, forex, crypto
 
-# Each indicator has a set of fuzzy sets (e.g., "low", "neutral", "high")
+# Each indicator has a set of fuzzy sets with semantic trading meaning
 # Each fuzzy set is defined by a membership function type and its parameters
 
-# In Phase 1, only triangular membership functions are supported
 # Triangular MF parameters: [a, b, c] where:
 #  - a: start point (membership = 0)
-#  - b: peak point (membership = 1)
+#  - b: peak point (membership = 1)  
 #  - c: end point (membership = 0)
 
-rsi:
-  low:
-    type: triangular
-    parameters: [0, 30, 45]
-  neutral:
-    type: triangular
-    parameters: [30, 50, 70]
-  high:
-    type: triangular
-    parameters: [55, 70, 100]
+# =============================================================================
+# MOMENTUM INDICATORS
+# =============================================================================
 
-macd:
-  negative:
+# RSI - Relative Strength Index (0-100 range)
+rsi:
+  oversold:
     type: triangular
-    parameters: [-10, -2, 0]
+    parameters: [0, 10, 30]
+    description: "Extremely oversold conditions, potential reversal signal"
+  weak:
+    type: triangular
+    parameters: [20, 35, 50]
+    description: "Weak momentum, below neutral"
   neutral:
+    type: triangular
+    parameters: [40, 50, 60] 
+    description: "Balanced momentum, no clear direction"
+  strong:
+    type: triangular
+    parameters: [50, 65, 80]
+    description: "Strong momentum, above neutral"
+  overbought:
+    type: triangular
+    parameters: [70, 90, 100]
+    description: "Extremely overbought conditions, potential reversal signal"
+
+# Williams %R - Williams Percent Range (-100 to 0 range)
+williams_r:
+  oversold:
+    type: triangular
+    parameters: [-100, -90, -70]
+    description: "Oversold territory, potential buying opportunity"
+  weak:
+    type: triangular
+    parameters: [-80, -65, -50]
+    description: "Weak price position in range"
+  middle:
+    type: triangular
+    parameters: [-60, -50, -40]
+    description: "Middle of trading range"
+  strong:
+    type: triangular
+    parameters: [-50, -35, -20]
+    description: "Strong price position in range"
+  overbought:
+    type: triangular
+    parameters: [-30, -10, 0]
+    description: "Overbought territory, potential selling opportunity"
+
+# Rate of Change - Short-term momentum (percentage)
+roc:
+  strong_down:
+    type: triangular
+    parameters: [-15, -8, -3]
+    description: "Strong downward momentum"
+  down:
+    type: triangular
+    parameters: [-6, -2, 0]
+    description: "Mild downward momentum"
+  flat:
     type: triangular
     parameters: [-1, 0, 1]
-  positive:
+    description: "No significant momentum"
+  up:
     type: triangular
-    parameters: [0, 2, 10]
+    parameters: [0, 2, 6]
+    description: "Mild upward momentum"
+  strong_up:
+    type: triangular
+    parameters: [3, 8, 15]
+    description: "Strong upward momentum"
 
-ema:
-  below:
+# Money Flow Index - Volume-weighted momentum (0-100 range)
+mfi:
+  oversold:
     type: triangular
-    parameters: [-100, -5, 0]
+    parameters: [0, 10, 25]
+    description: "Money flow oversold, potential buying interest"
+  weak:
+    type: triangular
+    parameters: [15, 30, 45]
+    description: "Weak money flow momentum"
   neutral:
     type: triangular
-    parameters: [-2, 0, 2]
+    parameters: [35, 50, 65]
+    description: "Balanced money flow"
+  strong:
+    type: triangular
+    parameters: [55, 70, 85]
+    description: "Strong money flow momentum"
+  overbought:
+    type: triangular
+    parameters: [75, 90, 100]
+    description: "Money flow overbought, potential selling pressure"
+
+# =============================================================================
+# TREND INDICATORS
+# =============================================================================
+
+# Simple Moving Average - Price ratio (typically 0.8-1.2 range)
+sma:
+  far_below:
+    type: triangular
+    parameters: [0.85, 0.92, 0.97]
+    description: "Price significantly below moving average"
+  below:
+    type: triangular
+    parameters: [0.94, 0.97, 1.00]
+    description: "Price below moving average"
+  near:
+    type: triangular
+    parameters: [0.98, 1.00, 1.02]
+    description: "Price near moving average"
   above:
     type: triangular
-    parameters: [0, 5, 100]
+    parameters: [1.00, 1.03, 1.06]
+    description: "Price above moving average"
+  far_above:
+    type: triangular
+    parameters: [1.03, 1.08, 1.15]
+    description: "Price significantly above moving average"
+
+# Exponential Moving Average - Price ratio (typically 0.8-1.2 range)
+ema:
+  far_below:
+    type: triangular
+    parameters: [0.85, 0.92, 0.97]
+    description: "Price significantly below EMA"
+  below:
+    type: triangular
+    parameters: [0.94, 0.97, 1.00]
+    description: "Price below EMA"
+  near:
+    type: triangular
+    parameters: [0.98, 1.00, 1.02]
+    description: "Price near EMA"
+  above:
+    type: triangular
+    parameters: [1.00, 1.03, 1.06]
+    description: "Price above EMA"
+  far_above:
+    type: triangular
+    parameters: [1.03, 1.08, 1.15]
+    description: "Price significantly above EMA"
+
+# MACD - Moving Average Convergence Divergence (normalized range)
+macd:
+  strong_negative:
+    type: triangular
+    parameters: [-3, -1.5, -0.5]
+    description: "Strong bearish momentum"
+  negative:
+    type: triangular
+    parameters: [-1, -0.3, 0]
+    description: "Bearish momentum"
+  neutral:
+    type: triangular
+    parameters: [-0.2, 0, 0.2]
+    description: "Neutral momentum"
+  positive:
+    type: triangular
+    parameters: [0, 0.3, 1]
+    description: "Bullish momentum"
+  strong_positive:
+    type: triangular
+    parameters: [0.5, 1.5, 3]
+    description: "Strong bullish momentum"
+
+# Distance from Moving Average - Percentage distance (new indicator)
+distance_from_ma:
+  far_below:
+    type: triangular
+    parameters: [-15, -8, -3]
+    description: "Price far below MA, potential oversold"
+  below:
+    type: triangular
+    parameters: [-6, -2, 0]
+    description: "Price below MA, mild bearish"
+  near:
+    type: triangular
+    parameters: [-1, 0, 1]
+    description: "Price near MA, neutral trend"
+  above:
+    type: triangular
+    parameters: [0, 2, 6]
+    description: "Price above MA, mild bullish"
+  far_above:
+    type: triangular
+    parameters: [3, 8, 15]
+    description: "Price far above MA, potential overbought"
+
+# =============================================================================
+# VOLATILITY INDICATORS
+# =============================================================================
+
+# Average True Range - Volatility measure (normalized by price)
+atr:
+  very_low:
+    type: triangular
+    parameters: [0, 0.5, 1.0]
+    description: "Very low volatility, tight trading range"
+  low:
+    type: triangular
+    parameters: [0.5, 1.0, 1.5]
+    description: "Low volatility"
+  medium:
+    type: triangular
+    parameters: [1.0, 2.0, 3.0]
+    description: "Medium volatility"
+  high:
+    type: triangular
+    parameters: [2.5, 4.0, 6.0]
+    description: "High volatility"
+  very_high:
+    type: triangular
+    parameters: [5.0, 8.0, 12.0]
+    description: "Very high volatility, wide trading range"
+
+# =============================================================================
+# VOLUME INDICATORS
+# =============================================================================
+
+# Volume Ratio - Current volume vs average (ratio)
+volume_ratio:
+  very_weak:
+    type: triangular
+    parameters: [0, 0.3, 0.6]
+    description: "Very low volume, lack of interest"
+  weak:
+    type: triangular
+    parameters: [0.4, 0.7, 1.0]
+    description: "Below average volume"
+  normal:
+    type: triangular
+    parameters: [0.8, 1.0, 1.2]
+    description: "Normal volume levels"
+  strong:
+    type: triangular
+    parameters: [1.0, 1.5, 2.0]
+    description: "Above average volume"
+  very_strong:
+    type: triangular
+    parameters: [1.8, 3.0, 5.0]
+    description: "Very high volume, strong interest"
+
+# Chaikin Money Flow - Volume-weighted accumulation/distribution (-1 to +1)
+cmf:
+  strong_selling:
+    type: triangular
+    parameters: [-1.0, -0.3, -0.1]
+    description: "Strong selling pressure"
+  selling:
+    type: triangular
+    parameters: [-0.2, -0.1, 0]
+    description: "Mild selling pressure"
+  neutral:
+    type: triangular
+    parameters: [-0.05, 0, 0.05]
+    description: "Balanced money flow"
+  buying:
+    type: triangular
+    parameters: [0, 0.1, 0.2]
+    description: "Mild buying pressure"
+  strong_buying:
+    type: triangular
+    parameters: [0.1, 0.3, 1.0]
+    description: "Strong buying pressure"
+
+# =============================================================================
+# ADVANCED INDICATORS (for future expansion)
+# =============================================================================
+
+# Bollinger Band Width - Volatility measure
+bollinger_band_width:
+  squeezed:
+    type: triangular
+    parameters: [0, 0.02, 0.05]
+    description: "Bands very tight, low volatility"
+  narrow:
+    type: triangular
+    parameters: [0.03, 0.06, 0.10]
+    description: "Bands narrow"
+  normal:
+    type: triangular
+    parameters: [0.08, 0.12, 0.18]
+    description: "Normal band width"
+  wide:
+    type: triangular
+    parameters: [0.15, 0.25, 0.35]
+    description: "Bands wide"
+  very_wide:
+    type: triangular
+    parameters: [0.30, 0.50, 1.00]
+    description: "Bands very wide, high volatility"
+
+# Stochastic Oscillator - Momentum (0-100 range)  
+stochastic:
+  oversold:
+    type: triangular
+    parameters: [0, 10, 25]
+    description: "Stochastic oversold"
+  weak:
+    type: triangular
+    parameters: [15, 30, 45]
+    description: "Weak stochastic momentum"
+  neutral:
+    type: triangular
+    parameters: [35, 50, 65]
+    description: "Neutral stochastic"
+  strong:
+    type: triangular
+    parameters: [55, 70, 85]
+    description: "Strong stochastic momentum"
+  overbought:
+    type: triangular
+    parameters: [75, 90, 100]
+    description: "Stochastic overbought"
