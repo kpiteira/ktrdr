@@ -154,13 +154,6 @@ async def get_historical_data(request: HistoricalDataRequest):
             )
         
         # Convert DataFrame to JSON for HTTP transport
-        # Debug: Check precision in host service
-        logger.info(f"🔍 DEBUG: Host service DataFrame precision:")
-        for col in ['open', 'high', 'low', 'close']:
-            if col in data.columns and len(data) > 0:
-                sample_val = data[col].iloc[0]
-                logger.info(f"   {col}[0]: {sample_val:.16f}")
-        
         data_json = data.to_json(orient="index", date_format="iso")
         
         return HistoricalDataResponse(
