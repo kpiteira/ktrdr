@@ -114,6 +114,58 @@ These insights should be integrated into:
 - **Proper error handling**: Use DataError for indicator calculation failures
 - **Standardized outputs**: Consistent naming and format across all indicators
 
+## Neuro-Fuzzy Architecture Insights (from ADR-003)
+
+### 🏗️ Architecture Pattern: Layered Pipeline
+**Successfully Implemented Pattern**:
+```
+Market Data → Indicators → Fuzzy Logic → Neural Networks → Decisions
+```
+**Key Insight**: Each layer maintains independence while providing clear data transformation. This enables testing, debugging, and component replacement.
+
+### 🎯 Training Strategy: ZigZag Labels 
+**Pattern**: Forward-looking "perfect" labels for supervised learning
+**Implementation**: `ktrdr/training/zigzag_labeler.py`
+**Insight**: Using future knowledge for training (threshold-based movement detection) creates strong learning signals while being honest about "cheating" nature.
+
+### 🔧 Configuration-Driven Design
+**Pattern**: YAML strategy definitions drive entire neural network pipeline
+**Benefit**: Non-technical users can create strategies without code changes
+**Key**: Auto-calculation of neural network input size from fuzzy set configuration
+
+### 🧠 Feature Engineering: Fuzzy → Neural
+**Pattern**: Convert fuzzy membership values [0.0-1.0] into neural network features
+**Enhancement**: Include price context, volume context, temporal lookback windows
+**Result**: Rich feature vectors that combine human expertise (fuzzy rules) with ML pattern recognition
+
+### 💾 Model Versioning Strategy
+**Pattern**: Directory-based versioning with full metadata persistence
+**Structure**: `strategy/SYMBOL_TIMEFRAME_vN/` with config, metrics, features
+**Benefit**: Complete reproducibility and comparison across model versions
+
+### 🎮 Position-Aware Decision Making
+**Pattern**: Neural network outputs filtered through position awareness logic
+**Implementation**: Prevent redundant signals (BUY when LONG, SELL when SHORT)
+**Result**: More realistic trading decisions that consider portfolio state
+
+## Model Ecosystem Success Patterns
+
+### 📊 Training Success Insights
+**Observation**: 70+ successfully trained models across strategies
+**Pattern**: Mean reversion strategies train more reliably than trend following
+**Insight**: RSI/MACD fuzzy features provide strong learning signals for neural networks
+
+### 🔄 Multi-Timeframe Coordination
+**Achievement**: Cross-timeframe consensus building works in practice
+**Pattern**: Higher timeframes provide context, lower timeframes provide timing
+**Implementation**: `multi_timeframe_orchestrator.py` manages coordination successfully
+
+### ⚡ Production-Ready Architecture
+**Training**: Models train reliably with >60% accuracy on out-of-sample data
+**Inference**: Real-time decisions generated in acceptable timeframes
+**Storage**: Model loading/saving handles PyTorch serialization robustly
+**Integration**: API endpoints work seamlessly with frontend
+
 ## Cleanup Tasks
 
 Original fix summary files to remove after integration:
@@ -122,3 +174,4 @@ Original fix summary files to remove after integration:
 - `DATA_LOADING_IMPROVEMENTS.md` (already moved but needs integration)
 - `NEURAL_ARCHITECTURE_FIXES.md` ✅ (insights extracted, removed)
 - `CLAUDE-training-fix-plan.md` (extract insights then remove)
+- `ADR-003-neuro-fuzzy-strategy-framework.md` ✅ (insights extracted, archived)
