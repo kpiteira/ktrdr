@@ -43,6 +43,7 @@ from ktrdr.indicators.fisher_transform import FisherTransformIndicator
 from ktrdr.indicators.bollinger_band_width_indicator import BollingerBandWidthIndicator
 from ktrdr.indicators.volume_ratio_indicator import VolumeRatioIndicator
 from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicator
+from ktrdr.indicators.distance_from_ma_indicator import DistanceFromMAIndicator
 
 logger = get_logger(__name__)
 
@@ -109,6 +110,8 @@ BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
     "VolumeRatioIndicator": VolumeRatioIndicator,
     "SqueezeIntensity": SqueezeIntensityIndicator,
     "SqueezeIntensityIndicator": SqueezeIntensityIndicator,
+    "DistanceFromMA": DistanceFromMAIndicator,
+    "DistanceFromMAIndicator": DistanceFromMAIndicator,
 }
 
 

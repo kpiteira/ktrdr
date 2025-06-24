@@ -575,6 +575,37 @@ AROON_SCHEMA = ParameterSchema(
 )
 
 
+# Distance from Moving Average Parameter Schema
+DISTANCE_FROM_MA_SCHEMA = ParameterSchema(
+    name="DistanceFromMA",
+    description="Distance from Moving Average indicator measuring percentage distance from MA",
+    parameters=[
+        ParameterDefinition(
+            name="period",
+            param_type=ParameterType.INT,
+            description="Period for moving average calculation",
+            default=20,
+            min_value=1,
+            max_value=200,
+        ),
+        ParameterDefinition(
+            name="ma_type",
+            param_type=ParameterType.STRING,
+            description="Type of moving average to use",
+            default="SMA",
+            options=["SMA", "EMA"],
+        ),
+        ParameterDefinition(
+            name="source",
+            param_type=ParameterType.STRING,
+            description="Price column to use for calculation",
+            default="close",
+            options=["open", "high", "low", "close"],
+        ),
+    ],
+)
+
+
 # Registry of all parameter schemas
 PARAMETER_SCHEMAS = {
     "RSI": RSI_SCHEMA,
@@ -598,6 +629,7 @@ PARAMETER_SCHEMAS = {
     "RVI": RVI_SCHEMA,
     "MFI": MFI_SCHEMA,
     "Aroon": AROON_SCHEMA,
+    "DistanceFromMA": DISTANCE_FROM_MA_SCHEMA,
 }
 
 
