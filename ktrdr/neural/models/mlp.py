@@ -64,86 +64,34 @@ class MLPTradingModel(BaseNeuralModel):
     def prepare_features(
         self, fuzzy_data: pd.DataFrame, indicators: pd.DataFrame, saved_scaler=None
     ) -> torch.Tensor:
-        """Create feature vector from fuzzy memberships and context.
-
-        IMPORTANT: This must create the same features as training FeatureEngineer!
+        """Create feature vector from pure fuzzy memberships.
 
         Args:
             fuzzy_data: DataFrame with fuzzy membership values
-            indicators: DataFrame with raw indicator values
-            saved_scaler: Pre-trained scaler from model training (for consistent scaling)
+            indicators: DataFrame with raw indicator values (not used in pure fuzzy mode)
+            saved_scaler: Not used - pure fuzzy values don't need scaling
 
         Returns:
-            Tensor of prepared features
+            Tensor of prepared fuzzy features
         """
-        # Use the same feature processing logic as training to avoid dimension mismatch
+        # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
         feature_config = self.config.get("features", {})
         
-        # Check if this model uses pure fuzzy processing (Phase 3 of feature engineering removal)
-        use_pure_fuzzy = (
-            not feature_config.get("include_raw_indicators", False) and
-            not feature_config.get("include_price_context", False) and 
-            not feature_config.get("include_volume_context", False) and
-            not feature_config.get("scale_features", True)
-        )
+        # CRITICAL FIX: Disable temporal features in backtesting mode
+        # When fuzzy_data has only 1 row, we're in backtesting and FeatureCache provides lag features
+        disable_temporal = len(fuzzy_data) == 1
+        if disable_temporal:
+            from ... import get_logger
+            logger = get_logger(__name__)
+            logger.debug(f"Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)")
         
-        if use_pure_fuzzy:
-            # Use FuzzyNeuralProcessor for pure neuro-fuzzy models
-            from ...training.fuzzy_neural_processor import FuzzyNeuralProcessor
-            processor = FuzzyNeuralProcessor(feature_config)
-            features_tensor, _ = processor.prepare_input(fuzzy_data)
-            # No need for scaler - fuzzy values are already 0-1
-            device = self._get_device()
-            return features_tensor.to(device)
-        else:
-            # Use legacy FeatureEngineer for backward compatibility
-            from ...training.feature_engineering import FeatureEngineer
-            
-            # Ensure the same defaults as training
-            feature_config.setdefault("include_price_context", True)
-            feature_config.setdefault("include_volume_context", True)
-            feature_config.setdefault("include_raw_indicators", False)
-            feature_config.setdefault("lookback_periods", 1)
-            feature_config.setdefault("scale_features", True)
-
-            # Create FeatureEngineer with the same config
-            engineer = FeatureEngineer(feature_config)
-
-            # CRITICAL: Use the saved scaler from training to ensure consistent scaling
-            if saved_scaler is not None:
-                engineer.scaler = saved_scaler
-
-            # Create a dummy price_data DataFrame from indicators if needed
-            # For inference, we typically only have the current bar, so create minimal price data
-            if "close" in indicators.columns:
-                price_data = (
-                    indicators[["open", "high", "low", "close", "volume"]].copy()
-                    if "volume" in indicators.columns
-                    else indicators[["open", "high", "low", "close"]].copy()
-                )
-            else:
-                # Fallback: create minimal price data
-                price_data = pd.DataFrame(
-                    {
-                        "open": indicators.get("open", 0),
-                        "high": indicators.get("high", 0),
-                        "low": indicators.get("low", 0),
-                        "close": indicators.get("close", 0),
-                        "volume": indicators.get("volume", 0),
-                    },
-                    index=indicators.index,
-                )
-
-            # Use the same feature preparation as training
-            features_tensor, feature_names = engineer.prepare_features(
-                fuzzy_data=fuzzy_data, indicators=indicators, price_data=price_data
-            )
-
-            # Ensure tensor is on the correct device for GPU acceleration
-            device = self._get_device()
-            features_tensor = features_tensor.to(device)
-
-        return features_tensor
+        # Use FuzzyNeuralProcessor for pure neuro-fuzzy models
+        from ...training.fuzzy_neural_processor import FuzzyNeuralProcessor
+        processor = FuzzyNeuralProcessor(feature_config, disable_temporal=disable_temporal)
+        features_tensor, _ = processor.prepare_input(fuzzy_data)
+        
+        device = self._get_device()
+        return features_tensor.to(device)
 
     def train(
         self, X: torch.Tensor, y: torch.Tensor, validation_data: Optional[tuple] = None

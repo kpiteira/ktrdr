@@ -1,7 +1,7 @@
 """Training system for neuro-fuzzy strategies."""
 
 from .zigzag_labeler import ZigZagLabeler, ZigZagConfig
-from .feature_engineering import FeatureEngineer
+# FeatureEngineer removed - using pure fuzzy processing
 from .model_trainer import ModelTrainer, TrainingMetrics, EarlyStopping
 from .model_storage import ModelStorage
 from .train_strategy import StrategyTrainer
@@ -14,15 +14,15 @@ from .multi_timeframe_label_generator import (
     MultiTimeframeLabelResult,
     create_multi_timeframe_label_generator,
 )
-from .multi_timeframe_model_storage import (
-    MultiTimeframeModelStorage,
-    create_multi_timeframe_model_storage,
-)
+# Multi-timeframe temporarily disabled while updating for pure fuzzy
+# from .multi_timeframe_model_storage import (
+#     MultiTimeframeModelStorage,
+#     create_multi_timeframe_model_storage,
+# )
 
 __all__ = [
     "ZigZagLabeler",
     "ZigZagConfig",
-    "FeatureEngineer",
     "ModelTrainer",
     "TrainingMetrics",
     "EarlyStopping",
@@ -35,6 +35,6 @@ __all__ = [
     "LabelValidationResult",
     "MultiTimeframeLabelResult",
     "create_multi_timeframe_label_generator",
-    "MultiTimeframeModelStorage",
-    "create_multi_timeframe_model_storage",
+    # "MultiTimeframeModelStorage",  # Temporarily disabled
+    # "create_multi_timeframe_model_storage",  # Temporarily disabled
 ]

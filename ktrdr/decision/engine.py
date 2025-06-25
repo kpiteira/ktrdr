@@ -91,6 +91,7 @@ class DecisionEngine:
 
         # Prepare features for neural network
         logger.debug(f"🛠️ [{timestamp_str}] Preparing features from {len(fuzzy_memberships)} fuzzy + {len(indicators)} indicators...")
+        logger.debug(f"🔍 [{timestamp_str}] Fuzzy features available: {list(fuzzy_memberships.keys())}")
         
         try:
             features = self._prepare_decision_features(

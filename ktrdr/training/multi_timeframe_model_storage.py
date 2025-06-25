@@ -26,7 +26,7 @@ from ktrdr.training.multi_timeframe_label_generator import (
     LabelValidationResult,
 )
 from ktrdr.neural.models.multi_timeframe_mlp import MultiTimeframeTrainingResult
-from ktrdr.neural.feature_engineering import FeatureEngineeringResult
+# from ktrdr.neural.feature_engineering import FeatureEngineeringResult  # TODO: Update for pure fuzzy
 
 # Set up module-level logger
 logger = get_logger(__name__)

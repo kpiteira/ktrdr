@@ -84,14 +84,14 @@ model:
       monitor: "val_loss"
       min_delta: 0.0001
   
-  # Feature engineering
+  # Feature engineering - PURE FUZZY MODE ONLY
   features:
-    include_price_context: true  # include current price vs SMA
-    include_volume_context: true
+    include_price_context: false  # pure fuzzy - no raw price context
+    include_volume_context: false  # pure fuzzy - no raw volume context
     include_raw_indicators: false
-    lookback_periods: 3  # include last N fuzzy values
-    scale_features: true
-    scaling_method: "standard"  # standard or minmax
+    lookback_periods: 2  # include last 2 fuzzy values for temporal context
+    scale_features: false  # fuzzy values already 0-1, no scaling needed
+    scaling_method: "standard"  # not used in pure fuzzy mode
 
 # Decision logic configuration
 decisions:

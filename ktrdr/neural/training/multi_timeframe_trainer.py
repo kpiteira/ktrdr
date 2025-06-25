@@ -29,7 +29,7 @@ from ktrdr.neural.models.multi_timeframe_mlp import (
     MultiTimeframeMLP,
     MultiTimeframeTrainingResult,
 )
-from ktrdr.neural.feature_engineering import MultiTimeframeFeatureEngineer
+# from ktrdr.neural.feature_engineering import MultiTimeframeFeatureEngineer  # TODO: Update for pure fuzzy
 from ktrdr.errors import ConfigurationError, ProcessingError
 
 # Set up module-level logger

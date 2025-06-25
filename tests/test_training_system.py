@@ -11,7 +11,6 @@ from pathlib import Path
 
 from ktrdr.training import (
     ZigZagLabeler,
-    FeatureEngineer,
     ModelTrainer,
     ModelStorage,
     StrategyTrainer,
@@ -95,73 +94,6 @@ class TestZigZagLabeler:
         assert len(fitness_labels) == len(price_data)
 
 
-class TestFeatureEngineer:
-    """Test feature engineering functionality."""
-
-    def test_feature_preparation(self):
-        """Test complete feature preparation pipeline."""
-        # Create sample data
-        dates = pd.date_range("2024-01-01", periods=50, freq="1h")
-
-        fuzzy_data = pd.DataFrame(
-            {
-                "rsi_oversold_membership": np.random.rand(50),
-                "rsi_neutral_membership": np.random.rand(50),
-                "macd_positive_membership": np.random.rand(50),
-            },
-            index=dates,
-        )
-
-        indicators = pd.DataFrame(
-            {
-                "rsi": np.random.uniform(20, 80, 50),
-                "macd": np.random.uniform(-0.1, 0.1, 50),
-                "sma_20": np.random.uniform(95, 105, 50),
-            },
-            index=dates,
-        )
-
-        price_data = pd.DataFrame(
-            {
-                "close": np.random.uniform(95, 105, 50),
-                "high": np.random.uniform(100, 110, 50),
-                "low": np.random.uniform(90, 100, 50),
-                "volume": np.random.uniform(800, 1200, 50),
-            },
-            index=dates,
-        )
-
-        config = {
-            "include_price_context": True,
-            "include_volume_context": True,
-            "include_raw_indicators": False,
-            "lookback_periods": 2,
-            "scale_features": True,
-        }
-
-        engineer = FeatureEngineer(config)
-        features, feature_names = engineer.prepare_features(
-            fuzzy_data, indicators, price_data
-        )
-
-        assert isinstance(features, torch.Tensor)
-        assert features.shape[0] == 50  # Same number of samples
-        assert len(feature_names) == features.shape[1]
-        assert features.shape[1] > 3  # Should have more than just fuzzy features
-
-    def test_feature_scaling(self):
-        """Test feature scaling functionality."""
-        # Create features with different scales
-        features = np.array([[1, 100, 0.5], [2, 200, 0.8], [3, 300, 0.3]])
-
-        config = {"scale_features": True, "scaling_method": "standard"}
-        engineer = FeatureEngineer(config)
-
-        scaled_features = engineer._scale_features(features)
-
-        # Check that features are scaled (mean ~0, std ~1)
-        assert abs(scaled_features.mean()) < 0.1
-        assert abs(scaled_features.std() - 1.0) < 0.1
 
 
 class TestModelTrainer:

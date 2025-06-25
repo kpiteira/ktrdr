@@ -35,10 +35,29 @@ class FeatureCache:
         """Setup indicator engine from strategy config."""
         indicator_configs = self.strategy_config["indicators"]
         fixed_configs = []
+        
+        # Use same mapping as training to ensure consistency
+        name_mapping = {
+            "bollinger_bands": "BollingerBands",
+            "keltner_channels": "KeltnerChannels", 
+            "momentum": "Momentum",
+            "volume_sma": "SMA",
+            "atr": "ATR",
+            "rsi": "RSI",
+            "sma": "SMA",
+            "ema": "EMA",
+            "macd": "MACD"
+        }
+        
         for config in indicator_configs:
             if isinstance(config, dict) and "type" not in config:
                 config = config.copy()
-                config["type"] = config["name"].upper()
+                indicator_name = config["name"].lower()
+                if indicator_name in name_mapping:
+                    config["type"] = name_mapping[indicator_name]
+                else:
+                    # Fallback: convert snake_case to PascalCase
+                    config["type"] = "".join(word.capitalize() for word in indicator_name.split("_"))
             fixed_configs.append(config)
         
         self.indicator_engine = IndicatorEngine(indicators=fixed_configs)
@@ -64,6 +83,7 @@ class FeatureCache:
         logger.debug("📊 Computing indicators...")
         self.indicators_df = self.indicator_engine.apply(historical_data)
         
+        
         # Step 2: Map indicators to original names (optimized but correct approach)
         logger.debug("🗺️ Mapping indicators to original names...")
         mapped_data = []
@@ -72,12 +92,12 @@ class FeatureCache:
         # The key insight: indicators computed on full dataset are equivalent to sliding window
         # for most indicators once sufficient lookback is available
         for idx in range(len(historical_data)):
-            current_bar_indicators = {}
-            
-            # Skip early bars with insufficient data
+            # Skip early bars with insufficient data for indicators
             if idx < 50:  # Minimum lookback for indicators
-                mapped_data.append(current_bar_indicators)
+                # Don't add empty dictionaries - skip entirely
                 continue
+                
+            current_bar_indicators = {}
             
             for config in self.strategy_config["indicators"]:
                 original_name = config["name"]
@@ -109,8 +129,8 @@ class FeatureCache:
             
             mapped_data.append(current_bar_indicators)
         
-        # Convert to DataFrame with historical_data index
-        self.mapped_indicators_df = pd.DataFrame(mapped_data, index=historical_data.index)
+        # Convert to DataFrame with historical_data index (skip first 50 bars)
+        self.mapped_indicators_df = pd.DataFrame(mapped_data, index=historical_data.index[50:])
         
         # Step 3: Compute all fuzzy memberships
         logger.debug("🔀 Computing fuzzy memberships...")
@@ -122,7 +142,7 @@ class FeatureCache:
             
             for indicator_name, indicator_value in current_indicators.items():
                 if indicator_name in self.strategy_config["fuzzy_sets"]:
-                    # Skip NaN values (early bars before indicator calculation)
+                    # Skip NaN values
                     if pd.isna(indicator_value):
                         continue
                         
@@ -134,8 +154,12 @@ class FeatureCache:
             
             fuzzy_data.append(current_bar_fuzzy)
         
-        # Convert to DataFrame with historical_data index
-        self.fuzzy_df = pd.DataFrame(fuzzy_data, index=historical_data.index)
+        # Convert to DataFrame with historical_data index (skip first 50 bars)
+        self.fuzzy_df = pd.DataFrame(fuzzy_data, index=historical_data.index[50:])
+        
+        # Step 4: PRE-COMPUTE TEMPORAL FEATURES (lag features) to fix backtesting NaN issue
+        logger.debug("⏰ Pre-computing temporal fuzzy features...")
+        self._add_temporal_features()
         
         logger.debug(f"✅ Feature pre-computation complete!")
         logger.debug(f"   Indicators: {len(self.mapped_indicators_df.columns)} columns")
@@ -184,6 +208,42 @@ class FeatureCache:
         fuzzy_memberships = {k: v for k, v in fuzzy_memberships.items() if not pd.isna(v)}
         
         return indicators, fuzzy_memberships
+    
+    def _add_temporal_features(self) -> None:
+        """Add temporal (lag) features to fuzzy_df to fix backtesting NaN issue.
+        
+        This method pre-computes lag features on the full dataset, preventing the
+        single-row DataFrame issue that causes all lag features to be NaN during backtesting.
+        """
+        # Get lookback periods from strategy config
+        model_config = self.strategy_config.get("model", {})
+        feature_config = model_config.get("features", {})
+        lookback = feature_config.get("lookback_periods", 0)
+        
+        if lookback < 1:
+            logger.debug("⏰ No temporal features configured (lookback_periods = 0)")
+            return
+        
+        logger.debug(f"⏰ Adding {lookback} lag periods for {len(self.fuzzy_df.columns)} base fuzzy features")
+        
+        # Get base fuzzy columns
+        base_fuzzy_columns = list(self.fuzzy_df.columns)
+        
+        # Create lag features
+        temporal_data = {}
+        
+        for lag in range(1, lookback + 1):
+            for column in base_fuzzy_columns:
+                lag_column_name = f"{column}_lag_{lag}"
+                # Create lagged values using shift operation on the full dataset
+                temporal_data[lag_column_name] = self.fuzzy_df[column].shift(lag)
+        
+        # Add temporal features to the fuzzy DataFrame
+        for lag_column_name, lag_values in temporal_data.items():
+            self.fuzzy_df[lag_column_name] = lag_values
+        
+        logger.debug(f"⏰ Added {len(temporal_data)} temporal features to fuzzy_df")
+        logger.debug(f"⏰ Total fuzzy features now: {len(self.fuzzy_df.columns)}")
         
     def save_cache(self, filepath: str) -> None:
         """Save computed features to disk.

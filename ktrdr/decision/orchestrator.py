@@ -288,13 +288,32 @@ class DecisionOrchestrator:
         # Step 1: Calculate indicators (original logic)
         # Initialize indicator engine with strategy configs if not already done
         if not self.indicator_engine.indicators:
-            # Convert dict configs to proper format
+            # Convert dict configs to proper format using same mapping as training
             indicator_configs = self.strategy_config["indicators"]
             fixed_configs = []
+            
+            # Use same mapping as training for consistency
+            name_mapping = {
+                "bollinger_bands": "BollingerBands",
+                "keltner_channels": "KeltnerChannels", 
+                "momentum": "Momentum",
+                "volume_sma": "SMA",
+                "atr": "ATR",
+                "rsi": "RSI",
+                "sma": "SMA",
+                "ema": "EMA",
+                "macd": "MACD"
+            }
+            
             for config in indicator_configs:
                 if isinstance(config, dict) and "type" not in config:
                     config = config.copy()
-                    config["type"] = config["name"].upper()
+                    indicator_name = config["name"].lower()
+                    if indicator_name in name_mapping:
+                        config["type"] = name_mapping[indicator_name]
+                    else:
+                        # Fallback: convert snake_case to PascalCase
+                        config["type"] = "".join(word.capitalize() for word in indicator_name.split("_"))
                 fixed_configs.append(config)
 
             from ..indicators.indicator_engine import IndicatorEngine

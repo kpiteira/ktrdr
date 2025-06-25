@@ -9,7 +9,6 @@ import numpy as np
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 from .zigzag_labeler import ZigZagLabeler
-from .feature_engineering import FeatureEngineer
 from .fuzzy_neural_processor import FuzzyNeuralProcessor
 from .model_trainer import ModelTrainer
 from .model_storage import ModelStorage
@@ -408,37 +407,21 @@ class StrategyTrainer:
         price_data: pd.DataFrame,
         feature_config: Dict[str, Any],
     ) -> Tuple[torch.Tensor, List[str], Any]:
-        """Engineer features for neural network training.
+        """Engineer features for neural network training using pure fuzzy approach.
 
         Args:
             fuzzy_data: Fuzzy membership values
-            indicators: Technical indicators
-            price_data: OHLCV data
+            indicators: Technical indicators (not used in pure fuzzy mode)
+            price_data: OHLCV data (not used in pure fuzzy mode)
             feature_config: Feature engineering configuration
 
         Returns:
-            Tuple of (features tensor, feature names, scaler/None)
+            Tuple of (features tensor, feature names, None for scaler)
         """
-        # Check if pure fuzzy processing is enabled (Phase 3 of feature engineering removal)
-        use_pure_fuzzy = (
-            not feature_config.get("include_raw_indicators", False) and
-            not feature_config.get("include_price_context", False) and 
-            not feature_config.get("include_volume_context", False) and
-            not feature_config.get("scale_features", True)
-        )
-        
-        if use_pure_fuzzy:
-            # Use new FuzzyNeuralProcessor for pure neuro-fuzzy architecture
-            processor = FuzzyNeuralProcessor(feature_config)
-            features, feature_names = processor.prepare_input(fuzzy_data)
-            return features, feature_names, None  # No scaler needed for fuzzy values
-        else:
-            # Use legacy FeatureEngineer for backward compatibility
-            engineer = FeatureEngineer(feature_config)
-            features, feature_names = engineer.prepare_features(
-                fuzzy_data, indicators, price_data
-            )
-            return features, feature_names, engineer.scaler
+        # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
+        processor = FuzzyNeuralProcessor(feature_config)
+        features, feature_names = processor.prepare_input(fuzzy_data)
+        return features, feature_names, None  # No scaler needed for fuzzy values
 
     def _generate_labels(
         self, price_data: pd.DataFrame, label_config: Dict[str, Any]
@@ -641,7 +624,7 @@ class StrategyTrainer:
         y_val: torch.Tensor,
         feature_names: List[str],
     ) -> Dict[str, float]:
-        """Calculate feature importance scores.
+        """Calculate feature importance scores using permutation importance.
 
         Args:
             model: Trained model
@@ -652,8 +635,36 @@ class StrategyTrainer:
         Returns:
             Feature importance dictionary
         """
-        # Use FeatureEngineer's permutation importance method
-        # This works for both fuzzy and mixed features
-        engineer = FeatureEngineer({})
-        engineer.feature_names = feature_names
-        return engineer.calculate_feature_importance(model, X_val, y_val)
+        import torch.nn.functional as F
+        from sklearn.metrics import accuracy_score
+        
+        model.eval()
+        device = next(model.parameters()).device
+        
+        # Get baseline accuracy
+        with torch.no_grad():
+            X_val = X_val.to(device)
+            y_val = y_val.to(device)
+            outputs = model(X_val)
+            predictions = torch.argmax(outputs, dim=1)
+            baseline_accuracy = accuracy_score(y_val.cpu().numpy(), predictions.cpu().numpy())
+        
+        importance_scores = {}
+        
+        # Permutation importance for each feature
+        for i, feature_name in enumerate(feature_names):
+            # Create a copy and shuffle the i-th feature
+            X_permuted = X_val.clone()
+            idx = torch.randperm(X_permuted.size(0))
+            X_permuted[:, i] = X_permuted[idx, i]
+            
+            # Calculate accuracy with permuted feature
+            with torch.no_grad():
+                outputs = model(X_permuted)
+                predictions = torch.argmax(outputs, dim=1)
+                permuted_accuracy = accuracy_score(y_val.cpu().numpy(), predictions.cpu().numpy())
+            
+            # Importance is the drop in accuracy
+            importance_scores[feature_name] = baseline_accuracy - permuted_accuracy
+        
+        return importance_scores

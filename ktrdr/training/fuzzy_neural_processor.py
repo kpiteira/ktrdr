@@ -18,14 +18,17 @@ class FuzzyNeuralProcessor:
     temporal context, eliminating all raw feature engineering.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], disable_temporal: bool = False):
         """Initialize fuzzy neural processor.
 
         Args:
             config: Fuzzy processing configuration
+            disable_temporal: If True, disable temporal feature generation 
+                             (used in backtesting when FeatureCache handles lag features)
         """
         self.config = config
         self.feature_names: List[str] = []
+        self.disable_temporal = disable_temporal
 
     def prepare_input(
         self,
@@ -50,14 +53,17 @@ class FuzzyNeuralProcessor:
         feature_names.extend(fuzzy_names)
 
         # 2. Temporal features (optional - lagged fuzzy values)
+        # Skip temporal feature generation if disabled (e.g., in backtesting when FeatureCache handles this)
         lookback = self.config.get("lookback_periods", 0)
-        if lookback > 0:
+        if lookback > 0 and not self.disable_temporal:
             temporal_features, temporal_names = self._extract_temporal_features(
                 fuzzy_data, lookback
             )
             if temporal_features.size > 0:
                 features.append(temporal_features)
                 feature_names.extend(temporal_names)
+        elif self.disable_temporal and lookback > 0:
+            logger.debug(f"Temporal feature generation disabled - assuming FeatureCache provides lag features")
 
         # Combine all features
         if not features:
@@ -170,8 +176,10 @@ class FuzzyNeuralProcessor:
             feature_names: Names of features for error reporting
         """
         # Check for values outside 0-1 range (allowing small numerical errors)
-        min_vals = np.nanmin(feature_matrix, axis=0)
-        max_vals = np.nanmax(feature_matrix, axis=0)
+        # Suppress warnings for all-NaN slices (handled separately below)
+        with np.errstate(invalid='ignore'):
+            min_vals = np.nanmin(feature_matrix, axis=0)
+            max_vals = np.nanmax(feature_matrix, axis=0)
         
         tolerance = 1e-6
         out_of_range_features = []
@@ -189,15 +197,16 @@ class FuzzyNeuralProcessor:
                          f"{out_of_range_features[:3]}...")
             # Don't fail - just warn, as some indicators might have slight overflows
         
-        # Check for completely invalid data
+        # Check for completely invalid data (NaN only - zero values are valid fuzzy memberships)
         invalid_features = []
         for i, name in enumerate(feature_names):
             col_data = feature_matrix[:, i]
-            if np.all(np.isnan(col_data)) or np.all(col_data == 0):
+            if np.all(np.isnan(col_data)):
                 invalid_features.append(name)
         
         if invalid_features:
-            logger.warning(f"Found {len(invalid_features)} features with no valid data: {invalid_features[:5]}...")
+            logger.warning(f"Found {len(invalid_features)} features with all NaN values: {invalid_features[:5]}...")
+            logger.warning("This may indicate missing indicators or fuzzy configuration issues.")
 
     def get_feature_count(self) -> int:
         """Get total number of features that will be generated.

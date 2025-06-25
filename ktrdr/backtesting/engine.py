@@ -174,21 +174,27 @@ class BacktestingEngine:
         repeated_timestamp_count = 0
         
         logger.info(f"🚀 Starting main simulation loop with {len(data)} bars from {data.index[0]} to {data.index[-1]}")
+        logger.info(f"📊 Processing {len(data) - 50} bars (skipping first 50 for indicator warm-up)")
         
-        # Initial progress callback to set total bars
+        # Initial progress callback to set total bars (only processable bars, not warm-up bars)
+        processable_bars = len(data) - 50  # Skip first 50 bars for indicator warm-up
         if self.progress_callback:
             try:
-                self.progress_callback(0, len(data), {'portfolio_value': config.initial_capital, 'trades_executed': 0})
+                self.progress_callback(0, processable_bars, {'portfolio_value': self.config.initial_capital, 'trades_executed': 0})
             except Exception as e:
                 logger.warning(f"Initial progress callback failed: {e}")
 
-        for idx in range(len(data)):
+        # PERFORMANCE OPTIMIZATION: Start from bar 50 to align with FeatureCache
+        # The first 50 bars are skipped because indicators need sufficient lookback data
+        start_idx = 50
+        
+        for idx in range(start_idx, len(data)):
             current_bar = data.iloc[idx]
             current_timestamp = current_bar.name
             current_price = current_bar["close"]
             
             # DEBUG: Log first few bars to ensure loop is running
-            if idx < 5:
+            if idx < start_idx + 5:
                 # logger.info(f"📊 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Processing bar {idx+1}/{len(data)}, Price: ${current_price:.2f}")  # Commented for performance
                 pass
 
@@ -243,10 +249,11 @@ class BacktestingEngine:
                 logger.debug(f"✅ [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Orchestrator returned: {decision.signal.value} (confidence: {decision.confidence:.4f})")
             except Exception as e:
                 # Check if this is a warm-up period error (normal and expected)
+                # NOTE: We now start from bar 50, so warm-up errors should be rare
                 is_warmup_error = (
                     "No fuzzy membership features found" in str(e) or
                     "likely warm-up period" in str(e) or
-                    idx < 100  # First 100 bars are likely warm-up
+                    idx < start_idx + 10  # First 10 bars after start_idx might still have issues
                 )
                 
                 if is_warmup_error:
@@ -280,15 +287,15 @@ class BacktestingEngine:
             signal_counts[decision.signal.value] += 1
             
             # Log signal distribution every 1000 bars for debugging
-            if idx > 0 and idx % 1000 == 0:
+            if idx > start_idx and (idx - start_idx) % 1000 == 0:
                 # logger.info(f"📊 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Signal counts so far: BUY={signal_counts['BUY']}, HOLD={signal_counts['HOLD']}, SELL={signal_counts['SELL']}")  # Commented for performance
                 pass
 
             # Track decision for analysis (even HOLD decisions)
             if (
-                self.config.verbose and idx % max(1, len(data) // 10) == 0
+                self.config.verbose and (idx - start_idx) % max(1, (len(data) - start_idx) // 10) == 0
             ):  # Log every 10% of progress
-                progress = (idx / len(data)) * 100
+                progress = ((idx - start_idx) / (len(data) - start_idx)) * 100
                 signal_name = decision.signal.value
                 print(
                     f"⏳ {progress:.0f}% | {current_timestamp.strftime('%Y-%m-%d')} | Signal: {signal_name} | Confidence: {decision.confidence:.3f}"
@@ -413,7 +420,7 @@ class BacktestingEngine:
             position_status = self.position_manager.current_position_status
             
             # DEBUG: Log portfolio state every 1000 bars to track capital management
-            if idx % 1000 == 0 or self.config.verbose:
+            if (idx - start_idx) % 1000 == 0 or self.config.verbose:
                 position_summary = self.position_manager.get_position_summary()
                 logger.debug(f"Portfolio state [{idx}/{len(data)}]: Portfolio=${portfolio_value:,.2f}, "
                            f"Cash=${position_summary['capital']:,.2f}, Available=${position_summary['available_capital']:,.2f}, "
@@ -433,8 +440,8 @@ class BacktestingEngine:
             )
 
             # Progress update with REAL progress tracking
-            if idx > 0:
-                progress = (idx / len(data)) * 100
+            if idx > start_idx:
+                progress = ((idx - start_idx) / (len(data) - start_idx)) * 100
                 if progress - last_progress_update >= 10:  # Update every 10%
                     total_trades = len(self.position_manager.get_trade_history())
                     
@@ -475,13 +482,14 @@ class BacktestingEngine:
                     last_progress_update = progress
                     
             # Call API progress callback with REAL data
-            if self.progress_callback and idx % 100 == 0:  # Update every 100 bars for API responsiveness
+            if self.progress_callback and (idx - start_idx) % 100 == 0:  # Update every 100 bars for API responsiveness
                 try:
                     additional_data = {
                         'portfolio_value': portfolio_value,
                         'trades_executed': trades_executed
                     }
-                    self.progress_callback(idx + 1, len(data), additional_data)
+                    # Progress callback expects current processed bars vs total processable bars
+                    self.progress_callback(idx - start_idx + 1, len(data) - start_idx, additional_data)
                 except Exception as e:
                     logger.warning(f"Progress callback failed: {e}")
 
@@ -543,7 +551,8 @@ class BacktestingEngine:
 
             # DEBUG: Print detailed signal analysis
             print(f"\n🔍 SIGNAL ANALYSIS:")
-            print(f"   Total bars processed: {len(data):,}")
+            print(f"   Total bars in dataset: {len(data):,}")
+            print(f"   Bars processed (after warm-up): {len(data) - 50:,}")
             print(f"   HOLD signals: {signal_counts['HOLD']:,}")
             print(f"   BUY signals: {signal_counts['BUY']:,}")
             print(f"   SELL signals: {signal_counts['SELL']:,}")
