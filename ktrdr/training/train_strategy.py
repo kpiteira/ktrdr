@@ -144,7 +144,7 @@ class StrategyTrainer:
         
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
-            model, train_data, val_data, config["model"]["training"], progress_callback
+            model, train_data, val_data, config, symbol, timeframe, progress_callback
         )
 
         # Step 8: Evaluate model
@@ -545,7 +545,9 @@ class StrategyTrainer:
         model: torch.nn.Module,
         train_data: Tuple,
         val_data: Tuple,
-        training_config: Dict[str, Any],
+        config: Dict[str, Any],
+        symbol: str,
+        timeframe: str,
         progress_callback=None,
     ) -> Dict[str, Any]:
         """Train the neural network model.
@@ -554,12 +556,19 @@ class StrategyTrainer:
             model: Neural network model
             train_data: Training data tuple
             val_data: Validation data tuple
-            training_config: Training configuration
+            config: Full strategy configuration
             progress_callback: Optional callback for progress updates
 
         Returns:
             Training results
         """
+        # Extract training config and merge with full config for analytics access
+        training_config = config["model"]["training"].copy()
+        # Add metadata for analytics
+        config_with_metadata = config.copy()
+        config_with_metadata["symbol"] = symbol
+        config_with_metadata["timeframe"] = timeframe
+        training_config["full_config"] = config_with_metadata
         trainer = ModelTrainer(training_config, progress_callback=progress_callback)
         return trainer.train(
             model, train_data[0], train_data[1], val_data[0], val_data[1]

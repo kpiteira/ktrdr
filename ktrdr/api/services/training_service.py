@@ -7,6 +7,7 @@ Provides neural network training functionality for the API layer.
 import asyncio
 import uuid
 import yaml
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -415,7 +416,6 @@ class TrainingService(BaseService):
                 # If analytics is enabled, create a temporary strategy file with modified config
                 actual_strategy_path = strategy_path
                 if detailed_analytics:
-                    import tempfile
                     temp_strategy_file = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
                     try:
                         yaml.dump(strategy_config, temp_strategy_file, default_flow_style=False, indent=2)
@@ -448,7 +448,6 @@ class TrainingService(BaseService):
                 )
 
                 # Create a shared progress state file for sync/async communication
-                import tempfile
                 import json
                 from pathlib import Path
                 

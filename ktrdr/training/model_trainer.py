@@ -112,26 +112,27 @@ class ModelTrainer:
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
         
-        # Analytics setup
-        self.analytics_enabled = config.get("model", {}).get("training", {}).get("analytics", {}).get("enabled", False)
+        # Analytics setup - check both direct config and full_config
+        full_config = config.get("full_config", config)
+        self.analytics_enabled = full_config.get("model", {}).get("training", {}).get("analytics", {}).get("enabled", False)
         self.analyzer: Optional[TrainingAnalyzer] = None
         if self.analytics_enabled:
-            self._setup_analytics()
+            self._setup_analytics(full_config)
 
-    def _setup_analytics(self):
+    def _setup_analytics(self, full_config):
         """Setup analytics system for detailed training monitoring."""
         try:
             # Generate unique run ID
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            symbol = self.config.get('symbol', 'unknown')
-            strategy = self.config.get('strategy', 'unknown')
+            symbol = full_config.get('symbol', 'unknown')
+            strategy = full_config.get('name', 'unknown')
             run_id = f"{symbol}_{strategy}_{timestamp}"
             
             # Create analytics directory
             analytics_dir = Path("training_analytics/runs") / run_id
             
             # Initialize analyzer
-            self.analyzer = TrainingAnalyzer(run_id, analytics_dir, self.config)
+            self.analyzer = TrainingAnalyzer(run_id, analytics_dir, full_config)
             print(f"🔍 Analytics enabled - Run ID: {run_id}")
             
         except Exception as e:

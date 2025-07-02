@@ -84,6 +84,9 @@ logs/
 output/
 examples/*.html
 
+# Training analytics (generated data)
+training_analytics/
+
 # Trained models (large binary files) - root level only
 /models/
 

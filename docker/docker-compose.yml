@@ -37,6 +37,8 @@ services:
       - ../models:/app/models
       # Mount output directory for visualization files
       - ../output:/app/output
+      # Mount training analytics directory for detailed analytics exports
+      - ../training_analytics:/app/training_analytics
       # Cache directories for pip and uv
       - pip-cache:/root/.cache/pip
       - uv-cache:/root/.cache/uv
