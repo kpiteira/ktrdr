@@ -71,6 +71,9 @@ def train_model(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"
     ),
+    detailed_analytics: bool = typer.Option(
+        False, "--detailed-analytics", help="Enable detailed training analytics with CSV/JSON export"
+    ),
 ):
     """
     Train neural network models using strategy configurations.
@@ -108,6 +111,7 @@ def train_model(
                 data_mode,
                 dry_run,
                 verbose,
+                detailed_analytics,
             )
         )
 
@@ -134,6 +138,7 @@ async def _train_model_async(
     data_mode: str,
     dry_run: bool,
     verbose: bool,
+    detailed_analytics: bool,
 ):
     """Async implementation of train model command."""
     try:
@@ -169,6 +174,8 @@ async def _train_model_async(
         console.print(f"   Timeframe: {timeframe}")
         console.print(f"   Period: {start_date} to {end_date}")
         console.print(f"   Validation split: {validation_split}")
+        if detailed_analytics:
+            console.print("   Analytics: [green]✅ Detailed analytics enabled[/green]")
 
         # Start the training via API
         try:
@@ -181,6 +188,7 @@ async def _train_model_async(
                 strategy_name=strategy_name,
                 start_date=start_date,
                 end_date=end_date,
+                detailed_analytics=detailed_analytics,
             )
             
             if "task_id" not in result:
