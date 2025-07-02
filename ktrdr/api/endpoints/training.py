@@ -44,6 +44,7 @@ class TrainingRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     task_id: Optional[str] = None
+    detailed_analytics: bool = False
 
     @field_validator("symbol", "timeframe")
     @classmethod
@@ -167,6 +168,7 @@ async def start_training(
             start_date=request.start_date,
             end_date=request.end_date,
             task_id=request.task_id,
+            detailed_analytics=request.detailed_analytics,
         )
 
         return TrainingStartResponse(

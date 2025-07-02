@@ -70,6 +70,7 @@ class TrainingService(BaseService):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
+        detailed_analytics: bool = False,
     ) -> Dict[str, Any]:
         """Start neural network training task."""
         # Validate strategy file exists
@@ -125,6 +126,7 @@ class TrainingService(BaseService):
                 strategy_name,
                 start_date,
                 end_date,
+                detailed_analytics,
             )
         )
 
@@ -345,6 +347,7 @@ class TrainingService(BaseService):
         strategy_name: str,
         start_date: Optional[str],
         end_date: Optional[str],
+        detailed_analytics: bool = False,
     ):
         """Run training task asynchronously with data-driven progress tracking."""
         try:
@@ -367,6 +370,27 @@ class TrainingService(BaseService):
             
             training_config = strategy_config.get("model", {}).get("training", {})
             total_epochs = training_config.get("epochs", 100)
+            
+            # Inject analytics configuration if detailed_analytics is enabled
+            if detailed_analytics:
+                # Ensure model.training.analytics exists in strategy config
+                if "model" not in strategy_config:
+                    strategy_config["model"] = {}
+                if "training" not in strategy_config["model"]:
+                    strategy_config["model"]["training"] = {}
+                if "analytics" not in strategy_config["model"]["training"]:
+                    strategy_config["model"]["training"]["analytics"] = {}
+                
+                # Enable analytics
+                strategy_config["model"]["training"]["analytics"]["enabled"] = True
+                strategy_config["model"]["training"]["analytics"]["export_csv"] = True
+                strategy_config["model"]["training"]["analytics"]["export_json"] = True
+                strategy_config["model"]["training"]["analytics"]["export_alerts"] = True
+                
+                logger.info(f"Analytics enabled for training operation {operation_id}")
+            
+            # Update training_config reference after modification
+            training_config = strategy_config.get("model", {}).get("training", {})
 
             await self.operations_service.update_progress(
                 operation_id,
@@ -387,6 +411,19 @@ class TrainingService(BaseService):
                 )
 
                 trainer = StrategyTrainer(models_dir="models")
+                
+                # If analytics is enabled, create a temporary strategy file with modified config
+                actual_strategy_path = strategy_path
+                if detailed_analytics:
+                    import tempfile
+                    temp_strategy_file = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
+                    try:
+                        yaml.dump(strategy_config, temp_strategy_file, default_flow_style=False, indent=2)
+                        temp_strategy_file.flush()
+                        actual_strategy_path = temp_strategy_file.name
+                        logger.info(f"Created temporary strategy config with analytics: {actual_strategy_path}")
+                    finally:
+                        temp_strategy_file.close()
 
                 # Phase 3: Training loop with epoch-based progress (15% to 90%)
                 await self.operations_service.update_progress(
@@ -487,7 +524,7 @@ class TrainingService(BaseService):
                     # Submit training task
                     training_future = executor.submit(
                         trainer.train_strategy,
-                        strategy_path,
+                        actual_strategy_path,
                         symbol,
                         timeframe,
                         start_date,
@@ -580,6 +617,14 @@ class TrainingService(BaseService):
                         progress_file.unlink(missing_ok=True)
                     except:
                         pass
+                    
+                    # Clean up temporary strategy file if analytics was enabled
+                    if detailed_analytics and actual_strategy_path != strategy_path:
+                        try:
+                            Path(actual_strategy_path).unlink(missing_ok=True)
+                            logger.info(f"Cleaned up temporary strategy config: {actual_strategy_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up temporary strategy config: {e}")
 
                 # Phase 5: Finalization (95%)
                 await self.operations_service.update_progress(
