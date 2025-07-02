@@ -48,9 +48,9 @@ class TrainingAnalyzer:
         
         # Analytics configuration
         analytics_config = config.get("model", {}).get("training", {}).get("analytics", {})
-        self.export_csv = analytics_config.get("export_csv", True)
-        self.export_json = analytics_config.get("export_json", True)
-        self.export_alerts = analytics_config.get("export_alerts", True)
+        self.export_csv_enabled = analytics_config.get("export_csv", True)
+        self.export_json_enabled = analytics_config.get("export_json", True)
+        self.export_alerts_enabled = analytics_config.get("export_alerts", True)
         
         logger.info(f"Training analyzer initialized for run: {run_id}")
         
@@ -289,9 +289,9 @@ class TrainingAnalyzer:
             'total_epochs_completed': final_epoch,
             'stopping_reason': stopping_reason,
             'training_duration_minutes': (self.end_time - self.start_time).total_seconds() / 60,
-            'best_val_accuracy': max((m.val_accuracy for m in self.metrics_history if m.val_accuracy), default=0.0),
+            'best_val_accuracy': max((m.val_accuracy for m in self.metrics_history if m.val_accuracy is not None), default=0.0),
             'best_epoch': max(enumerate(self.metrics_history), 
-                            key=lambda x: x[1].val_accuracy if x[1].val_accuracy else 0.0)[0] + 1 if self.metrics_history else 0,
+                            key=lambda x: x[1].val_accuracy if x[1].val_accuracy is not None else 0.0)[0] + 1 if self.metrics_history else 0,
             'final_gradient_norm': self.metrics_history[-1].gradient_norm_avg if self.metrics_history else 0.0,
             'alert_count': len(self.alerts)
         }
@@ -304,7 +304,7 @@ class TrainingAnalyzer:
         Returns:
             Path to exported CSV file
         """
-        if not self.export_csv or not self.metrics_history:
+        if not self.export_csv_enabled or not self.metrics_history:
             return None
         
         try:
@@ -330,7 +330,7 @@ class TrainingAnalyzer:
         Returns:
             Path to exported JSON file
         """
-        if not self.export_json:
+        if not self.export_json_enabled:
             return None
         
         try:
@@ -367,7 +367,7 @@ class TrainingAnalyzer:
         Returns:
             Path to exported alerts file
         """
-        if not self.export_alerts:
+        if not self.export_alerts_enabled:
             return None
         
         try:
@@ -428,10 +428,29 @@ class TrainingAnalyzer:
         """
         export_paths = {}
         
-        export_paths['csv'] = self.export_csv()
-        export_paths['json'] = self.export_json()
-        export_paths['alerts'] = self.export_alerts()
-        export_paths['config'] = self.export_config()
+        try:
+            export_paths['csv'] = self.export_csv()
+        except Exception as e:
+            logger.error(f"CSV export failed: {e}")
+            export_paths['csv'] = None
+            
+        try:
+            export_paths['json'] = self.export_json()
+        except Exception as e:
+            logger.error(f"JSON export failed: {e}")
+            export_paths['json'] = None
+            
+        try:
+            export_paths['alerts'] = self.export_alerts()
+        except Exception as e:
+            logger.error(f"Alerts export failed: {e}")
+            export_paths['alerts'] = None
+            
+        try:
+            export_paths['config'] = self.export_config()
+        except Exception as e:
+            logger.error(f"Config export failed: {e}")
+            export_paths['config'] = None
         
         # Log summary
         successful_exports = [k for k, v in export_paths.items() if v is not None]
