@@ -10,6 +10,9 @@ from dataclasses import dataclass
 import time
 from pathlib import Path
 import json
+from datetime import datetime
+
+from .analytics import TrainingAnalyzer
 
 
 @dataclass
@@ -108,6 +111,33 @@ class ModelTrainer:
         self.best_model_state = None
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
+        
+        # Analytics setup
+        self.analytics_enabled = config.get("model", {}).get("training", {}).get("analytics", {}).get("enabled", False)
+        self.analyzer: Optional[TrainingAnalyzer] = None
+        if self.analytics_enabled:
+            self._setup_analytics()
+
+    def _setup_analytics(self):
+        """Setup analytics system for detailed training monitoring."""
+        try:
+            # Generate unique run ID
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            symbol = self.config.get('symbol', 'unknown')
+            strategy = self.config.get('strategy', 'unknown')
+            run_id = f"{symbol}_{strategy}_{timestamp}"
+            
+            # Create analytics directory
+            analytics_dir = Path("training_analytics/runs") / run_id
+            
+            # Initialize analyzer
+            self.analyzer = TrainingAnalyzer(run_id, analytics_dir, self.config)
+            print(f"🔍 Analytics enabled - Run ID: {run_id}")
+            
+        except Exception as e:
+            print(f"⚠️ Failed to setup analytics: {e}")
+            self.analytics_enabled = False
+            self.analyzer = None
 
     def train(
         self,
@@ -306,6 +336,49 @@ class ModelTrainer:
                 duration=duration,
             )
             self.history.append(metrics)
+            
+            # Analytics collection (if enabled)
+            if self.analyzer:
+                try:
+                    # Determine which outputs and labels to use for analytics
+                    if X_val is not None:
+                        # Use validation data for more reliable metrics
+                        analytics_outputs = val_outputs
+                        analytics_predicted = val_predicted 
+                        analytics_true = y_val
+                    else:
+                        # Fallback to training data if no validation
+                        with torch.no_grad():
+                            model.eval()
+                            analytics_outputs = model(X_train[:1000])  # Sample for efficiency
+                            _, analytics_predicted = torch.max(analytics_outputs.data, 1)
+                            analytics_true = y_train[:1000]
+                            model.train()
+                    
+                    # Collect detailed analytics
+                    detailed_metrics = self.analyzer.collect_epoch_metrics(
+                        epoch=epoch,
+                        model=model,
+                        train_metrics={'loss': avg_train_loss, 'accuracy': train_accuracy},
+                        val_metrics={'loss': val_loss, 'accuracy': val_accuracy},
+                        optimizer=optimizer,
+                        y_pred=analytics_predicted,
+                        y_true=analytics_true,
+                        model_outputs=analytics_outputs,
+                        batch_count=len(train_loader),
+                        total_samples=len(X_train),
+                        early_stopping_triggered=False  # Will be updated if early stopping triggers
+                    )
+                    
+                    # Log any alerts
+                    if hasattr(self.analyzer, 'alerts') and self.analyzer.alerts:
+                        recent_alerts = [a for a in self.analyzer.alerts if a.get('epoch') == epoch]
+                        for alert in recent_alerts:
+                            print(f"🚨 Training Alert: {alert['message']}")
+                            
+                except Exception as e:
+                    print(f"⚠️ Analytics collection failed for epoch {epoch}: {e}")
+                    # Continue training even if analytics fail
 
             # Learning rate scheduling
             if scheduler is not None:
@@ -317,6 +390,9 @@ class ModelTrainer:
             # Early stopping check
             if early_stopping and early_stopping(metrics):
                 print(f"Early stopping triggered at epoch {epoch}")
+                # Update analytics with early stopping info
+                if self.analyzer and self.analyzer.metrics_history:
+                    self.analyzer.metrics_history[-1].early_stopping_triggered = True
                 break
 
             # Progress logging
@@ -350,7 +426,36 @@ class ModelTrainer:
         if self.best_model_state is not None:
             model.load_state_dict(self.best_model_state)
 
-        return self._create_training_summary()
+        # Finalize analytics and export results
+        analytics_results = {}
+        if self.analyzer:
+            try:
+                # Determine stopping reason
+                final_epoch = len(self.history)
+                stopping_reason = "early_stopping" if final_epoch < epochs else "completed"
+                
+                # Finalize analytics
+                self.analyzer.finalize_training(final_epoch, stopping_reason)
+                
+                # Export all analytics
+                export_paths = self.analyzer.export_all()
+                analytics_results = {
+                    'analytics_enabled': True,
+                    'run_id': self.analyzer.run_id,
+                    'export_paths': {k: str(v) if v else None for k, v in export_paths.items()},
+                    'total_alerts': len(self.analyzer.alerts),
+                    'final_analysis': getattr(self.analyzer, 'final_analysis', {})
+                }
+                
+                print(f"📊 Analytics exported to: {self.analyzer.output_dir}")
+                if export_paths.get('csv'):
+                    print(f"📈 CSV for LLM analysis: {export_paths['csv']}")
+                    
+            except Exception as e:
+                print(f"⚠️ Analytics finalization failed: {e}")
+                analytics_results = {'analytics_enabled': True, 'error': str(e)}
+
+        return {**self._create_training_summary(), **analytics_results}
 
     def _create_optimizer(
         self, model: nn.Module, learning_rate: float

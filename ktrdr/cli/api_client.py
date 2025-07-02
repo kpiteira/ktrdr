@@ -440,6 +440,8 @@ class KtrdrApiClient:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
+        detailed_analytics: bool = False,
+        **kwargs  # Accept additional parameters for backward compatibility
     ) -> Dict[str, Any]:
         """Start a training task."""
         payload = {
@@ -449,6 +451,7 @@ class KtrdrApiClient:
             "start_date": start_date,
             "end_date": end_date,
             "task_id": task_id,
+            "detailed_analytics": detailed_analytics,
         }
 
         response = await self._make_request(

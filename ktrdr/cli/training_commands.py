@@ -77,6 +77,9 @@ def train_strategy(
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress all output except errors"
     ),
+    detailed_analytics: bool = typer.Option(
+        False, "--detailed-analytics", help="Enable detailed training analytics with CSV/JSON export"
+    ),
 ):
     """
     Train a neuro-fuzzy trading strategy using the KTRDR API.
@@ -104,6 +107,7 @@ def train_strategy(
             dry_run=dry_run,
             save_model=save_model,
             quiet=quiet,
+            detailed_analytics=detailed_analytics,
         )
     )
 
@@ -122,6 +126,7 @@ async def _train_strategy_async(
     dry_run: bool,
     save_model: Optional[str],
     quiet: bool,
+    detailed_analytics: bool,
 ):
     """Run training using async API with progress tracking."""
     global cancelled
@@ -196,6 +201,8 @@ async def _train_strategy_async(
             console.print(f"  Epochs: [blue]{training_config['epochs']}[/blue]")
             console.print(f"  Validation Split: [blue]{validation_split:.1%}[/blue]")
             console.print(f"  Data Mode: [blue]{data_mode}[/blue]")
+            if detailed_analytics:
+                console.print("  Analytics: [green]✅ Detailed analytics enabled[/green]")
             console.print()
 
         if dry_run:
@@ -220,6 +227,7 @@ async def _train_strategy_async(
             data_mode=data_mode,
             validation_split=validation_split,
             dry_run=dry_run,
+            detailed_analytics=detailed_analytics,
         )
 
         if not response.get("success"):
