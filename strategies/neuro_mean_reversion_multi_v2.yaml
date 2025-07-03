@@ -1,0 +1,195 @@
+# Neuro-Fuzzy Multi-Scope Mean Reversion Strategy (V2 Format)
+name: "neuro_mean_reversion_multi"
+description: "Multi-symbol, multi-timeframe adaptive mean reversion with attention mechanisms"
+version: "2.0"
+scope: "universal"  # Can trade any compatible symbol
+
+# Training Data Configuration
+training_data:
+  # Symbol configuration
+  symbols:
+    mode: "multi_symbol"
+    list: ["EURUSD", "GBPUSD", "USDJPY"]  # Major forex pairs for training
+    # Alternative: use selection criteria instead of explicit list
+    # selection_criteria:
+    #   asset_class: "forex"
+    #   liquidity_tier: "tier1"
+    
+  # Timeframe configuration  
+  timeframes:
+    mode: "multi_timeframe"
+    list: ["15m", "1h", "4h"]
+    base_timeframe: "1h"  # Reference timeframe for alignment
+    
+  # Data requirements
+  history_required: 500
+  start_date: "2020-01-01"
+  end_date: "2024-01-01"
+
+# Deployment Configuration
+deployment:
+  # Where this model can be used
+  target_symbols:
+    mode: "universal"  # Can trade any symbol with similar characteristics
+    # restrictions:  # Only needed for group_restricted mode
+    #   asset_classes: ["forex"]
+    #   excluded_symbols: ["EXOTIC_PAIRS"]
+      
+  target_timeframes:
+    mode: "multi_timeframe"
+    supported: ["15m", "1h", "4h"]  # Must be subset of training timeframes
+
+# Technical indicators configuration (unchanged from v1)
+indicators:
+  - name: rsi
+    period: 14
+    source: close
+  - name: macd
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  - name: sma
+    period: 20
+    source: close
+
+# Fuzzy logic configuration (unchanged from v1)
+fuzzy_sets:
+  rsi:
+    oversold:
+      type: triangular
+      parameters: [0, 10, 30]
+    neutral:
+      type: triangular
+      parameters: [25, 50, 75]
+    overbought:
+      type: triangular
+      parameters: [70, 90, 100]
+  macd:
+    negative:
+      type: triangular
+      parameters: [-0.1, -0.05, 0]
+    neutral:
+      type: triangular
+      parameters: [-0.02, 0, 0.02]
+    positive:
+      type: triangular
+      parameters: [0, 0.05, 0.1]
+  sma:
+    below:
+      type: triangular
+      parameters: [0.95, 0.98, 1.0]
+    near:
+      type: triangular
+      parameters: [0.98, 1.0, 1.02]
+    above:
+      type: triangular
+      parameters: [1.0, 1.02, 1.05]
+
+# Neural network configuration (enhanced for multi-scope)
+model:
+  type: "mlp"
+  architecture:
+    hidden_layers: [150, 75, 35]  # Larger for multi-timeframe features
+    activation: "relu"
+    output_activation: "softmax"
+    dropout: 0.3
+    
+    # Multi-scope specific settings
+    symbol_embedding_dim: 32  # Symbol embeddings for cross-symbol learning
+    attention_mechanism: true  # Attention for timeframe selection
+  
+  training:
+    learning_rate: 0.0005  # Lower for stability with larger models
+    batch_size: 64  # Larger batches for multi-symbol training
+    epochs: 150
+    optimizer: "adam"
+    weight_decay: 0.0001
+    
+    # Multi-symbol training settings
+    balanced_sampling: true  # Equal representation per symbol in batches
+    cross_symbol_validation: true  # Validate on unseen symbols
+    
+    lr_scheduler:
+      type: "reduce_on_plateau"
+      factor: 0.5
+      patience: 15
+    
+    early_stopping:
+      patience: 25  # More patience for complex training
+      monitor: "val_loss"
+      min_delta: 0.0001
+  
+  # Feature engineering - enhanced for multi-timeframe
+  features:
+    include_price_context: false  # Pure fuzzy mode
+    include_volume_context: false
+    include_raw_indicators: false
+    lookback_periods: 3  # Temporal context across timeframes
+    scale_features: false  # Fuzzy values already 0-1
+    
+    # Multi-timeframe specific
+    timeframe_features: true  # Enable multi-timeframe feature engineering
+    feature_combination: "concatenation"  # How to combine timeframe features
+
+# Decision logic configuration (enhanced)
+decisions:
+  output_format: "classification"
+  confidence_threshold: 0.6  # Higher for universal model
+  position_awareness: true
+  
+  # Multi-symbol decision logic
+  symbol_aware_decisions: true  # Consider symbol characteristics
+  cross_symbol_consistency: true  # Ensure consistent logic across symbols
+  
+  filters:
+    min_signal_separation: 2
+    volume_filter: false
+
+# Training configuration (enhanced for multi-scope)
+training:
+  method: "supervised"
+  labels:
+    source: "zigzag"
+    zigzag_threshold: 0.025  # 2.5% for forex
+    label_lookahead: 20
+  
+  data_split:
+    train: 0.65  # Less for validation due to complexity
+    validation: 0.25  # More validation for generalization
+    test: 0.10
+    
+  # Multi-symbol specific
+  split_strategy: "temporal"  # Time-based splits across all symbols
+  cross_symbol_evaluation: true  # Test on unseen symbols
+    
+  fitness_metrics:
+    primary: "cross_symbol_accuracy"  # New metric for universal models
+    secondary: ["per_symbol_accuracy", "generalization_score", "attention_diversity"]
+
+# Decision orchestrator settings (unchanged)
+orchestrator:
+  max_position_size: 0.95
+  signal_cooldown: 4
+  
+  modes:
+    backtest:
+      confidence_threshold: 0.6
+    paper:
+      confidence_threshold: 0.65
+    live:
+      confidence_threshold: 0.7
+      require_confirmation: true
+
+# Risk management (unchanged)
+risk_management:
+  position_sizing: "fixed_fraction"
+  risk_per_trade: 0.02
+  max_portfolio_risk: 0.10
+
+# Backtesting configuration (unchanged)
+backtesting:
+  start_date: "2020-01-01"
+  end_date: "2024-01-01"
+  initial_capital: 100000
+  transaction_costs: 0.001
+  slippage: 0.0005
