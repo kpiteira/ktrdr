@@ -12,7 +12,7 @@ This module contains all CLI commands related to neural network models:
 import asyncio
 import sys
 import json
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from pathlib import Path
 
@@ -31,6 +31,7 @@ from ktrdr.cli.api_client import get_api_client, check_api_connection
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import ValidationError, DataError
 from ktrdr.logging import get_logger
+from ktrdr.config.strategy_loader import strategy_loader
 
 # Setup logging and console
 logger = get_logger(__name__)
@@ -48,8 +49,8 @@ models_app = typer.Typer(
 @models_app.command("train")
 def train_model(
     strategy_file: str = typer.Argument(..., help="Path to strategy YAML file"),
-    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Argument(..., help="Data timeframe (e.g., 1d, 1h)"),
+    symbol: Optional[str] = typer.Argument(None, help="Trading symbol (optional, overrides strategy config)"),
+    timeframe: Optional[str] = typer.Argument(None, help="Data timeframe (optional, overrides strategy config)"),
     start_date: str = typer.Option(
         ..., "--start-date", help="Training start date (YYYY-MM-DD)"
     ),
@@ -78,32 +79,86 @@ def train_model(
     """
     Train neural network models using strategy configurations.
 
-    This command trains new models using the specified strategy configuration,
-    market data, and training parameters. Training is done via the API with
-    progress tracking and result validation.
+    This command trains new models using the specified strategy configuration.
+    Symbols and timeframes are extracted from the strategy file unless explicitly
+    overridden with command arguments. Supports both single and multi-symbol/timeframe training.
 
     Examples:
+        # Strategy-driven training (recommended)
+        ktrdr models train strategies/neuro_mean_reversion.yaml --start-date 2024-01-01 --end-date 2024-06-01
+        
+        # Override strategy config (legacy)
         ktrdr models train strategies/neuro_mean_reversion.yaml AAPL 1h --start-date 2024-01-01 --end-date 2024-06-01
-        ktrdr models train strategies/trend_momentum.yaml MSFT 1d --start-date 2023-01-01 --end-date 2024-01-01 --dry-run
+        
+        # Dry run to see what would be trained
+        ktrdr models train strategies/trend_momentum.yaml --start-date 2023-01-01 --end-date 2024-01-01 --dry-run
     """
     try:
-        # Basic client-side input validation (let API handle strategy file validation)
-        symbol = InputValidator.validate_string(
-            symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
+        # Validate strategy file exists
+        strategy_path = Path(strategy_file)
+        if not strategy_path.exists():
+            console.print(f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]")
+            raise typer.Exit(1)
+
+        # Load strategy configuration to extract symbols/timeframes if not provided
+        try:
+            config, is_v2 = strategy_loader.load_strategy_config(str(strategy_path))
+            config_symbols, config_timeframes = strategy_loader.extract_training_symbols_and_timeframes(config)
+        except Exception as e:
+            console.print(f"[red]❌ Error loading strategy config: {e}[/red]")
+            raise typer.Exit(1)
+
+        # Use strategy config or CLI overrides
+        final_symbols = [symbol] if symbol else config_symbols
+        final_timeframes = [timeframe] if timeframe else config_timeframes
+        
+        # Validate we have symbols and timeframes
+        if not final_symbols:
+            console.print(f"[red]❌ Error: No symbols specified in strategy config or CLI arguments[/red]")
+            raise typer.Exit(1)
+        if not final_timeframes:
+            console.print(f"[red]❌ Error: No timeframes specified in strategy config or CLI arguments[/red]")
+            raise typer.Exit(1)
+
+        # Use first symbol but support all timeframes for multi-timeframe training
+        training_symbol = final_symbols[0]  # TODO: Update API to support multi-symbol training
+        training_timeframes = final_timeframes  # Now supporting multi-timeframe!
+        
+        # Show what will be trained
+        if len(final_symbols) > 1:
+            console.print(f"[yellow]⚠️  Multi-symbol detected. Using first symbol for training:[/yellow]")
+            console.print(f"   Symbols: {', '.join(final_symbols)} -> using {training_symbol}")
+        
+        if len(final_timeframes) > 1:
+            console.print(f"[green]✅ Multi-timeframe training enabled:[/green]")
+            console.print(f"   Timeframes: {', '.join(final_timeframes)}")
+        else:
+            console.print(f"[blue]📊 Single-timeframe training:[/blue]")
+            console.print(f"   Timeframe: {final_timeframes[0]}")
+        
+        # Validate symbol
+        training_symbol = InputValidator.validate_string(
+            training_symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
-        timeframe = InputValidator.validate_string(
-            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
-        )
+        
+        # Validate all timeframes
+        validated_timeframes = []
+        for tf in training_timeframes:
+            validated_tf = InputValidator.validate_string(
+                tf, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
+            )
+            validated_timeframes.append(validated_tf)
+        training_timeframes = validated_timeframes
         validation_split = InputValidator.validate_numeric(
             validation_split, min_value=0.0, max_value=0.5
         )
 
-        # Run async operation
+        # Run async operation with extracted/validated symbols and timeframes
         asyncio.run(
             _train_model_async(
                 strategy_file,
-                symbol,
-                timeframe,
+                training_symbol,
+                training_timeframes,
                 start_date,
                 end_date,
                 models_dir,
@@ -130,7 +185,7 @@ def train_model(
 async def _train_model_async(
     strategy_file: str,
     symbol: str,
-    timeframe: str,
+    timeframes: List[str],
     start_date: str,
     end_date: str,
     models_dir: str,
@@ -155,13 +210,15 @@ async def _train_model_async(
         api_client = get_api_client()
 
         if verbose:
-            console.print(f"🧠 Training model for {symbol} ({timeframe})")
+            timeframes_str = ', '.join(timeframes)
+            console.print(f"🧠 Training model for {symbol} ({timeframes_str})")
             console.print(f"📋 Strategy: {strategy_file}")
             console.print(f"📅 Training period: {start_date} to {end_date}")
 
         if dry_run:
             console.print(f"🔍 [yellow]DRY RUN - No model will be trained[/yellow]")
-            console.print(f"📋 Would train: {symbol} on {timeframe}")
+            timeframes_str = ', '.join(timeframes)
+            console.print(f"📋 Would train: {symbol} on {timeframes_str}")
             console.print(f"📊 Validation split: {validation_split}")
             console.print(f"💾 Models directory: {models_dir}")
             return
@@ -171,7 +228,8 @@ async def _train_model_async(
         console.print(f"📋 Training parameters:")
         console.print(f"   Strategy: {strategy_file}")
         console.print(f"   Symbol: {symbol}")
-        console.print(f"   Timeframe: {timeframe}")
+        timeframes_str = ', '.join(timeframes)
+        console.print(f"   Timeframes: {timeframes_str}")
         console.print(f"   Period: {start_date} to {end_date}")
         console.print(f"   Validation split: {validation_split}")
         if detailed_analytics:
@@ -184,7 +242,7 @@ async def _train_model_async(
             
             result = await api_client.start_training(
                 symbol=symbol,
-                timeframe=timeframe,
+                timeframes=timeframes,
                 strategy_name=strategy_name,
                 start_date=start_date,
                 end_date=end_date,

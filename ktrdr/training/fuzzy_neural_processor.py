@@ -82,6 +82,138 @@ class FuzzyNeuralProcessor:
         logger.info(f"Prepared {feature_matrix.shape[1]} pure fuzzy features for neural network")
         return torch.FloatTensor(feature_matrix), feature_names
 
+    def prepare_multi_timeframe_input(
+        self,
+        multi_timeframe_fuzzy: Dict[str, pd.DataFrame],
+        timeframe_order: Optional[List[str]] = None
+    ) -> Tuple[torch.Tensor, List[str]]:
+        """Prepare multi-timeframe fuzzy features for neural network training.
+
+        This method extends the single-timeframe approach to handle multiple timeframes
+        by combining fuzzy membership values from each timeframe into a single feature vector.
+        Single-timeframe processing becomes a special case of this multi-timeframe approach.
+
+        Args:
+            multi_timeframe_fuzzy: Dictionary mapping timeframes to fuzzy DataFrames
+                                 Format: {timeframe: fuzzy_membership_dataframe}
+            timeframe_order: Optional list specifying the order of timeframes for feature combination.
+                           If None, uses sorted order of available timeframes for consistency.
+
+        Returns:
+            Tuple of (combined_feature_tensor, feature_names_list)
+            
+        Raises:
+            ValueError: If no timeframe data provided or no valid features found
+
+        Example:
+            >>> processor = FuzzyNeuralProcessor(config)
+            >>> multi_fuzzy = {
+            ...     '15m': fuzzy_15m_df,  # columns: ['15m_rsi_low', '15m_rsi_high', ...]
+            ...     '1h': fuzzy_1h_df,    # columns: ['1h_rsi_low', '1h_rsi_high', ...]
+            ...     '4h': fuzzy_4h_df     # columns: ['4h_rsi_low', '4h_rsi_high', ...]
+            ... }
+            >>> features, names = processor.prepare_multi_timeframe_input(multi_fuzzy)
+            >>> # features.shape: (batch_size, total_features_all_timeframes)
+            >>> # names: ['15m_rsi_low', '15m_rsi_high', ..., '1h_rsi_low', ..., '4h_rsi_low', ...]
+        """
+        if not multi_timeframe_fuzzy:
+            raise ValueError("No timeframe data provided for multi-timeframe processing")
+
+        # Handle single timeframe case (special case of multi-timeframe)
+        if len(multi_timeframe_fuzzy) == 1:
+            timeframe, fuzzy_data = next(iter(multi_timeframe_fuzzy.items()))
+            logger.debug(f"Single timeframe detected ({timeframe}), using standard processing")
+            return self.prepare_input(fuzzy_data)
+
+        # Determine timeframe processing order
+        if timeframe_order is None:
+            # Use sorted order for consistency when no order specified
+            timeframe_order = sorted(multi_timeframe_fuzzy.keys())
+            logger.debug(f"No timeframe order specified, using sorted order: {timeframe_order}")
+        else:
+            # Validate that all specified timeframes are available
+            available_timeframes = set(multi_timeframe_fuzzy.keys())
+            specified_timeframes = set(timeframe_order)
+            
+            missing_timeframes = specified_timeframes - available_timeframes
+            if missing_timeframes:
+                logger.warning(f"Specified timeframes not available: {missing_timeframes}")
+                # Filter out missing timeframes
+                timeframe_order = [tf for tf in timeframe_order if tf in available_timeframes]
+            
+            extra_timeframes = available_timeframes - specified_timeframes
+            if extra_timeframes:
+                logger.info(f"Additional timeframes available but not in order: {extra_timeframes}")
+                # Add extra timeframes at the end in sorted order
+                timeframe_order.extend(sorted(extra_timeframes))
+
+        logger.info(f"Processing {len(timeframe_order)} timeframes in order: {timeframe_order}")
+
+        # Process each timeframe separately and collect results
+        all_features = []
+        all_feature_names = []
+        processing_errors = {}
+
+        for timeframe in timeframe_order:
+            try:
+                # Get fuzzy data for this timeframe
+                fuzzy_data = multi_timeframe_fuzzy[timeframe]
+                
+                if fuzzy_data is None or fuzzy_data.empty:
+                    logger.warning(f"Empty fuzzy data for timeframe {timeframe}, skipping")
+                    processing_errors[timeframe] = "Empty fuzzy data"
+                    continue
+
+                logger.debug(f"Processing timeframe {timeframe} with {len(fuzzy_data.columns)} fuzzy features")
+
+                # Use existing single-timeframe processing for this timeframe
+                tf_features, tf_names = self.prepare_input(fuzzy_data)
+                
+                # Features are already torch tensors, so we can collect them directly
+                all_features.append(tf_features)
+                all_feature_names.extend(tf_names)
+                
+                logger.debug(f"Successfully processed {tf_features.shape[1]} features for timeframe {timeframe}")
+
+            except Exception as e:
+                error_msg = f"Failed to process timeframe {timeframe}: {str(e)}"
+                logger.error(error_msg)
+                processing_errors[timeframe] = str(e)
+                continue
+
+        # Check if we got any valid results
+        if not all_features:
+            raise ValueError(
+                f"Failed to process features for any timeframe. "
+                f"Errors: {processing_errors}"
+            )
+
+        # Combine features from all timeframes
+        # Each element in all_features is a torch tensor of shape (batch_size, timeframe_features)
+        combined_features = torch.cat(all_features, dim=1)
+        
+        # Log summary
+        total_features = combined_features.shape[1]
+        successful_timeframes = len(all_features)
+        failed_timeframes = len(processing_errors)
+        
+        if failed_timeframes > 0:
+            logger.warning(
+                f"Multi-timeframe processing completed with warnings: "
+                f"{successful_timeframes}/{len(timeframe_order)} timeframes successful"
+            )
+            for tf, error in processing_errors.items():
+                logger.warning(f"  {tf}: {error}")
+        else:
+            logger.info(f"Successfully processed all {successful_timeframes} timeframes")
+
+        logger.info(
+            f"Combined {total_features} features from {successful_timeframes} timeframes "
+            f"for neural network input"
+        )
+
+        return combined_features, all_feature_names
+
     def _extract_fuzzy_features(
         self, fuzzy_data: pd.DataFrame
     ) -> Tuple[np.ndarray, List[str]]:

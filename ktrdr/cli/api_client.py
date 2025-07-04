@@ -435,7 +435,7 @@ class KtrdrApiClient:
     async def start_training(
         self,
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -446,7 +446,7 @@ class KtrdrApiClient:
         """Start a training task."""
         payload = {
             "symbol": symbol,
-            "timeframe": timeframe,
+            "timeframes": timeframes,
             "strategy_name": strategy_name,
             "start_date": start_date,
             "end_date": end_date,

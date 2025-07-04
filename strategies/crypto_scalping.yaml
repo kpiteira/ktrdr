@@ -1,8 +1,8 @@
 # === STRATEGY IDENTITY ===
-name: "neuro_mean_reversion"  # Neural network trained on RSI/MACD fuzzy outputs for mean reversion
-description: "Neural network trained on RSI/MACD fuzzy outputs for mean reversion"  # Clear one-line strategy summary
+name: "crypto_scalping"  # Cryptocurrency scalping strategy for rapid EMA-based signals
+description: "Cryptocurrency scalping strategy for rapid EMA-based signals"  # Clear one-line strategy summary
 version: "2.0"  # Clean format version for AI agent compatibility
-hypothesis: "RSI oversold/overbought conditions combined with MACD momentum confirmation create profitable mean reversion opportunities in trending markets"  # Core strategy belief being tested
+hypothesis: "Fast EMA crossovers in cryptocurrency markets create profitable short-term momentum opportunities"  # Core strategy belief being tested
 
 # === STRATEGY SCOPE ===
 scope: "universal"  # Universal model
@@ -10,18 +10,19 @@ scope: "universal"  # Universal model
 # === TRAINING APPROACH ===
 training_data:  # Data configuration for model training
   symbols:  # Asset selection for cross-market learning
-    mode: "multi_symbol"  # Multi-symbol training across 3 assets for cross-market learning
+    mode: "multi_symbol"  # Multi-symbol training across 4 assets for cross-market learning
     list:  # Selected assets for diversified training
-    - "AAPL"  # Selected for specific market characteristics
-    - "MSFT"  # Selected for specific market characteristics
-    - "GOOGL"  # Selected for specific market characteristics
+    - "BTCUSDT"  # Selected for specific market characteristics
+    - "ETHUSDT"  # Selected for specific market characteristics
+    - "SOLUSDT"  # Selected for specific market characteristics
+    - "BNBUSDT"  # Selected for specific market characteristics
   timeframes:  # Multi-timeframe analysis configuration
     mode: "multi_timeframe"  # Multi-timeframe analysis using 3 time horizons for context
     list:  # Multiple timeframes for context and confirmation
-    - "1h"  # Selected timeframe for optimal signal characteristics
-    - "4h"  # Selected timeframe for optimal signal characteristics
-    - "1d"  # Selected timeframe for optimal signal characteristics
-    base_timeframe: "1h"  # Primary signal generation timeframe
+    - "1m"  # Selected timeframe for optimal signal characteristics
+    - "5m"  # Selected timeframe for optimal signal characteristics
+    - "15m"  # Selected timeframe for optimal signal characteristics
+    base_timeframe: "1m"  # Primary signal generation timeframe
   history_required: 200  # Standard history for reliable pattern recognition
 
 # === DEPLOYMENT TARGETS ===
@@ -31,9 +32,9 @@ deployment:  # Target configuration for live trading
   target_timeframes:  # Supported timeframes for deployment
     mode: "multi_timeframe"  # Support multiple timeframes for flexible deployment
     supported:  # Validated timeframes for this strategy
-    - "1h"  # Tested and validated for 1h trading
-    - "4h"  # Tested and validated for 4h trading
-    - "1d"  # Tested and validated for 1d trading
+    - "1m"  # Tested and validated for 1m trading
+    - "5m"  # Tested and validated for 5m trading
+    - "15m"  # Tested and validated for 15m trading
 
 # === TECHNICAL INDICATORS ===
 indicators:  # Core technical analysis components

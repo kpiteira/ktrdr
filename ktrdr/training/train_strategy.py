@@ -36,27 +36,33 @@ class StrategyTrainer:
         self,
         strategy_config_path: str,
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         start_date: str,
         end_date: str,
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
     ) -> Dict[str, Any]:
-        """Train a complete neuro-fuzzy strategy.
+        """Train a complete neuro-fuzzy strategy with multi-timeframe support.
 
         Args:
             strategy_config_path: Path to strategy YAML configuration
             symbol: Trading symbol to train on
-            timeframe: Timeframe for training data
+            timeframes: List of timeframes for multi-timeframe training (e.g., ['15m', '1h', '4h'])
             start_date: Start date for training data
             end_date: End date for training data
             validation_split: Fraction of data to use for validation
+            data_mode: Data loading mode ('local', 'tail', 'backfill', 'full')
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Dictionary with training results and model information
         """
-        print(f"Starting training for {symbol} {timeframe} strategy...")
+        # Handle single timeframe case (backward compatibility)
+        if len(timeframes) == 1:
+            print(f"Starting training for {symbol} {timeframes[0]} strategy...")
+        else:
+            print(f"Starting multi-timeframe training for {symbol} {timeframes} strategy...")
 
         # Load strategy configuration
         config = self._load_strategy_config(strategy_config_path)
@@ -68,9 +74,18 @@ class StrategyTrainer:
         # Step 1: Load and prepare data
         print("\n1. Loading market data...")
         price_data = self._load_price_data(
-            symbol, timeframe, start_date, end_date, data_mode
+            symbol, timeframes, start_date, end_date, data_mode
         )
-        print(f"Loaded {len(price_data)} bars of data")
+        
+        # Print data loading summary
+        if len(timeframes) == 1:
+            data_count = len(list(price_data.values())[0])
+            print(f"Loaded {data_count} bars of data for {timeframes[0]}")
+        else:
+            total_data = sum(len(df) for df in price_data.values())
+            print(f"Loaded {total_data} total bars across {len(timeframes)} timeframes:")
+            for tf, df in price_data.items():
+                print(f"  {tf}: {len(df)} bars")
 
         # Step 2: Calculate indicators
         print("\n2. Calculating technical indicators...")
@@ -144,7 +159,7 @@ class StrategyTrainer:
         
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
-            model, train_data, val_data, config, symbol, timeframe, progress_callback
+            model, train_data, val_data, config, symbol, timeframes, progress_callback
         )
 
         # Step 8: Evaluate model
@@ -168,11 +183,13 @@ class StrategyTrainer:
         model_config = config.copy()
         model_config["model"]["input_size"] = features.shape[1]
 
+        # Use first timeframe for model storage compatibility
+        primary_timeframe = timeframes[0] if timeframes else "1h"
         model_path = self.model_storage.save_model(
             model=model,
             strategy_name=strategy_name,
             symbol=symbol,
-            timeframe=timeframe,
+            timeframe=primary_timeframe,
             config=model_config,
             training_metrics=training_results,
             feature_names=feature_names,
@@ -204,7 +221,7 @@ class StrategyTrainer:
             "model_info": model_info,
             "data_summary": {
                 "symbol": symbol,
-                "timeframe": timeframe,
+                "timeframes": timeframes,
                 "start_date": start_date,
                 "end_date": end_date,
                 "total_samples": len(features),
@@ -235,54 +252,87 @@ class StrategyTrainer:
     def _load_price_data(
         self,
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         start_date: str,
         end_date: str,
         data_mode: str = "local",
-    ) -> pd.DataFrame:
-        """Load price data for training.
+    ) -> Dict[str, pd.DataFrame]:
+        """Load price data for training with multi-timeframe support.
 
         Args:
             symbol: Trading symbol
-            timeframe: Data timeframe
+            timeframes: List of timeframes for multi-timeframe training
             start_date: Start date
             end_date: End date
+            data_mode: Data loading mode
 
         Returns:
-            OHLCV DataFrame
+            Dictionary mapping timeframes to OHLCV DataFrames
         """
-        # Load data using specified mode
-        data = self.data_manager.load_data(symbol, timeframe, mode=data_mode)
+        # Handle single timeframe case (backward compatibility)
+        if len(timeframes) == 1:
+            timeframe = timeframes[0]
+            data = self.data_manager.load_data(symbol, timeframe, mode=data_mode)
+            
+            # Filter by date range if possible
+            if hasattr(data.index, "to_pydatetime"):
+                data = self._filter_data_by_date_range(data, start_date, end_date)
+            
+            return {timeframe: data}
+        
+        # Multi-timeframe case
+        base_timeframe = timeframes[1] if len(timeframes) > 1 else timeframes[0]  # Use second timeframe as base
+        multi_data = self.data_manager.load_multi_timeframe_data(
+            symbol=symbol,
+            timeframes=timeframes,
+            start_date=start_date,
+            end_date=end_date,
+            base_timeframe=base_timeframe,
+            mode=data_mode
+        )
 
-        # Filter by date range if possible
-        if hasattr(data.index, "to_pydatetime"):
-            # Convert dates to timezone-aware if the data index is timezone-aware
-            start = pd.to_datetime(start_date)
-            end = pd.to_datetime(end_date)
+        return multi_data
 
-            # Make dates timezone-aware if needed
-            if data.index.tz is not None:
-                if start.tz is None:
-                    start = start.tz_localize("UTC")
-                if end.tz is None:
-                    end = end.tz_localize("UTC")
+    def _filter_data_by_date_range(self, data: pd.DataFrame, start_date: str, end_date: str) -> pd.DataFrame:
+        """Helper method to filter data by date range."""
+        # Convert dates to timezone-aware if the data index is timezone-aware
+        start = pd.to_datetime(start_date)
+        end = pd.to_datetime(end_date)
 
-            data = data.loc[start:end]
+        # Make dates timezone-aware if needed
+        if data.index.tz is not None:
+            if start.tz is None:
+                start = start.tz_localize("UTC")
+            if end.tz is None:
+                end = end.tz_localize("UTC")
 
-        return data
+        return data.loc[start:end]
 
     def _calculate_indicators(
-        self, price_data: pd.DataFrame, indicator_configs: List[Dict[str, Any]]
-    ) -> pd.DataFrame:
-        """Calculate technical indicators.
+        self, price_data: Dict[str, pd.DataFrame], indicator_configs: List[Dict[str, Any]]
+    ) -> Dict[str, pd.DataFrame]:
+        """Calculate technical indicators with multi-timeframe support.
 
         Args:
-            price_data: OHLCV data
+            price_data: Dictionary mapping timeframes to OHLCV data
             indicator_configs: List of indicator configurations
 
         Returns:
-            DataFrame with calculated indicators
+            Dictionary mapping timeframes to DataFrames with calculated indicators
         """
+        # Handle single timeframe case (backward compatibility)
+        if len(price_data) == 1:
+            timeframe, data = next(iter(price_data.items()))
+            indicators = self._calculate_indicators_single_timeframe(data, indicator_configs)
+            return {timeframe: indicators}
+        
+        # Multi-timeframe case
+        return self._calculate_indicators_multi_timeframe(price_data, indicator_configs)
+
+    def _calculate_indicators_single_timeframe(
+        self, price_data: pd.DataFrame, indicator_configs: List[Dict[str, Any]]
+    ) -> pd.DataFrame:
+        """Calculate indicators for a single timeframe (original implementation)."""
         # Fix indicator configs to add 'type' field if missing
         fixed_configs = []
         
@@ -367,17 +417,99 @@ class StrategyTrainer:
         
         return mapped_results
 
+    def _calculate_indicators_multi_timeframe(
+        self, price_data: Dict[str, pd.DataFrame], indicator_configs: List[Dict[str, Any]]
+    ) -> Dict[str, pd.DataFrame]:
+        """Calculate indicators for multiple timeframes using the new multi-timeframe method."""
+        # Fix indicator configs to add 'type' field if missing (same as single timeframe)
+        fixed_configs = []
+        
+        # Mapping from strategy names to registry names
+        name_mapping = {
+            "bollinger_bands": "BollingerBands",
+            "keltner_channels": "KeltnerChannels", 
+            "momentum": "Momentum",
+            "volume_sma": "SMA",  # Use SMA for volume_sma for now
+            "sma": "SMA",
+            "ema": "EMA",
+            "rsi": "RSI",
+            "macd": "MACD",
+        }
+        
+        for config in indicator_configs:
+            if isinstance(config, dict) and "type" not in config:
+                # Infer type from name using proper mapping
+                config = config.copy()
+                indicator_name = config["name"].lower()
+                if indicator_name in name_mapping:
+                    config["type"] = name_mapping[indicator_name]
+                else:
+                    # Fallback: convert snake_case to PascalCase
+                    config["type"] = "".join(word.capitalize() for word in indicator_name.split("_"))
+            fixed_configs.append(config)
+
+        # Initialize indicator engine with configs and use multi-timeframe method
+        self.indicator_engine = IndicatorEngine(indicators=fixed_configs)
+        indicator_results = self.indicator_engine.apply_multi_timeframe(price_data, fixed_configs)
+
+        # Map results for each timeframe (similar to single timeframe but for each TF)
+        mapped_results = {}
+        
+        for timeframe, tf_indicators in indicator_results.items():
+            tf_price_data = price_data[timeframe]
+            mapped_tf_results = pd.DataFrame(index=tf_indicators.index)
+
+            # Copy price data columns first
+            for col in tf_price_data.columns:
+                if col in tf_indicators.columns:
+                    mapped_tf_results[col] = tf_indicators[col]
+
+            # Map indicator results to original names for fuzzy matching
+            for config in indicator_configs:
+                original_name = config["name"]  # e.g., 'rsi'
+                indicator_type = config["name"].upper()  # e.g., 'RSI'
+
+                # Find the calculated column that matches this indicator
+                for col in tf_indicators.columns:
+                    if col.upper().startswith(indicator_type):
+                        if indicator_type in ["SMA", "EMA"]:
+                            # For moving averages, create a ratio (price / moving_average)
+                            mapped_tf_results[original_name] = (
+                                tf_price_data["close"] / tf_indicators[col]
+                            )
+                        elif indicator_type == "MACD":
+                            # For MACD, use the main MACD line (not signal or histogram)
+                            if (
+                                col.startswith("MACD_")
+                                and "_signal_" not in col
+                                and "_hist_" not in col
+                            ):
+                                mapped_tf_results[original_name] = tf_indicators[col]
+                                break
+                        else:
+                            # For other indicators, use the raw values
+                            mapped_tf_results[original_name] = tf_indicators[col]
+                            break
+
+                        # If we found a non-MACD indicator, break
+                        if indicator_type != "MACD":
+                            break
+
+            mapped_results[timeframe] = mapped_tf_results
+
+        return mapped_results
+
     def _generate_fuzzy_memberships(
-        self, indicators: pd.DataFrame, fuzzy_configs: Dict[str, Any]
-    ) -> pd.DataFrame:
-        """Generate fuzzy membership values.
+        self, indicators: Dict[str, pd.DataFrame], fuzzy_configs: Dict[str, Any]
+    ) -> Dict[str, pd.DataFrame]:
+        """Generate fuzzy membership values with multi-timeframe support.
 
         Args:
-            indicators: Technical indicators DataFrame
+            indicators: Dictionary mapping timeframes to technical indicators DataFrames
             fuzzy_configs: Fuzzy set configurations
 
         Returns:
-            DataFrame with fuzzy membership values
+            Dictionary mapping timeframes to DataFrames with fuzzy membership values
         """
         # Initialize fuzzy engine if not already done
         if self.fuzzy_engine is None:
@@ -388,31 +520,38 @@ class StrategyTrainer:
             fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
             self.fuzzy_engine = FuzzyEngine(fuzzy_config)
 
-        # Process each indicator
-        fuzzy_results = {}
-        for indicator_name, indicator_data in indicators.items():
-            if indicator_name in fuzzy_configs:
-                # Fuzzify the indicator
-                membership_values = self.fuzzy_engine.fuzzify(
-                    indicator_name, indicator_data
-                )
-                fuzzy_results.update(membership_values)
+        # Handle single timeframe case (backward compatibility)
+        if len(indicators) == 1 and isinstance(list(indicators.values())[0], pd.DataFrame):
+            timeframe, tf_indicators = next(iter(indicators.items()))
+            
+            # Process each indicator (original single-timeframe logic)
+            fuzzy_results = {}
+            for indicator_name, indicator_data in tf_indicators.items():
+                if indicator_name in fuzzy_configs:
+                    # Fuzzify the indicator
+                    membership_values = self.fuzzy_engine.fuzzify(
+                        indicator_name, indicator_data
+                    )
+                    fuzzy_results.update(membership_values)
 
-        return pd.DataFrame(fuzzy_results, index=indicators.index)
+            return {timeframe: pd.DataFrame(fuzzy_results, index=tf_indicators.index)}
+
+        # Multi-timeframe case - use the new multi-timeframe method
+        return self.fuzzy_engine.generate_multi_timeframe_memberships(indicators, fuzzy_configs)
 
     def _engineer_features(
         self,
-        fuzzy_data: pd.DataFrame,
-        indicators: pd.DataFrame,
-        price_data: pd.DataFrame,
+        fuzzy_data: Dict[str, pd.DataFrame],
+        indicators: Dict[str, pd.DataFrame],
+        price_data: Dict[str, pd.DataFrame],
         feature_config: Dict[str, Any],
     ) -> Tuple[torch.Tensor, List[str], Any]:
-        """Engineer features for neural network training using pure fuzzy approach.
+        """Engineer features for neural network training using pure fuzzy approach with multi-timeframe support.
 
         Args:
-            fuzzy_data: Fuzzy membership values
-            indicators: Technical indicators (not used in pure fuzzy mode)
-            price_data: OHLCV data (not used in pure fuzzy mode)
+            fuzzy_data: Dictionary mapping timeframes to fuzzy membership values
+            indicators: Dictionary mapping timeframes to technical indicators (not used in pure fuzzy mode)
+            price_data: Dictionary mapping timeframes to OHLCV data (not used in pure fuzzy mode)
             feature_config: Feature engineering configuration
 
         Returns:
@@ -420,32 +559,52 @@ class StrategyTrainer:
         """
         # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
         processor = FuzzyNeuralProcessor(feature_config)
-        features, feature_names = processor.prepare_input(fuzzy_data)
+        
+        # Handle single timeframe case (backward compatibility)
+        if len(fuzzy_data) == 1:
+            timeframe, tf_fuzzy_data = next(iter(fuzzy_data.items()))
+            features, feature_names = processor.prepare_input(tf_fuzzy_data)
+            return features, feature_names, None  # No scaler needed for fuzzy values
+        
+        # Multi-timeframe case - use the new multi-timeframe method
+        features, feature_names = processor.prepare_multi_timeframe_input(fuzzy_data)
         return features, feature_names, None  # No scaler needed for fuzzy values
 
     def _generate_labels(
-        self, price_data: pd.DataFrame, label_config: Dict[str, Any]
+        self, price_data: Dict[str, pd.DataFrame], label_config: Dict[str, Any]
     ) -> torch.Tensor:
-        """Generate training labels using ZigZag method.
+        """Generate training labels using ZigZag method with multi-timeframe support.
 
         Args:
-            price_data: OHLCV data
+            price_data: Dictionary mapping timeframes to OHLCV data
             label_config: Label generation configuration
 
         Returns:
             Tensor of labels
         """
+        # For multi-timeframe, use the base timeframe (typically the middle one) for labels
+        # Labels should be generated from a single timeframe to maintain consistency
+        if len(price_data) == 1:
+            # Single timeframe case
+            timeframe, tf_price_data = next(iter(price_data.items()))
+            print(f"Generating labels from {timeframe} data")
+        else:
+            # Multi-timeframe case - use middle timeframe or first available
+            timeframe_list = sorted(price_data.keys())
+            base_timeframe = timeframe_list[len(timeframe_list) // 2]  # Use middle timeframe
+            tf_price_data = price_data[base_timeframe]
+            print(f"Generating labels from base timeframe {base_timeframe} (out of {timeframe_list})")
+
         labeler = ZigZagLabeler(
             threshold=label_config["zigzag_threshold"],
             lookahead=label_config["label_lookahead"],
         )
 
         # Use segment-based labeling for better class balance
-        # This should fix the neural network collapse issue
         print(
             "Using ZigZag segment labeling (balanced) instead of sparse extreme labeling..."
         )
-        labels = labeler.generate_segment_labels(price_data)
+        labels = labeler.generate_segment_labels(tf_price_data)
         return torch.LongTensor(labels.values)
 
     def _get_label_distribution(self, labels: torch.Tensor) -> Dict[str, Any]:
@@ -547,7 +706,7 @@ class StrategyTrainer:
         val_data: Tuple,
         config: Dict[str, Any],
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         progress_callback=None,
     ) -> Dict[str, Any]:
         """Train the neural network model.
@@ -567,7 +726,7 @@ class StrategyTrainer:
         # Add metadata for analytics
         config_with_metadata = config.copy()
         config_with_metadata["symbol"] = symbol
-        config_with_metadata["timeframe"] = timeframe
+        config_with_metadata["timeframes"] = timeframes
         training_config["full_config"] = config_with_metadata
         trainer = ModelTrainer(training_config, progress_callback=progress_callback)
         return trainer.train(

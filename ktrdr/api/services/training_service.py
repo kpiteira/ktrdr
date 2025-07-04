@@ -66,7 +66,7 @@ class TrainingService(BaseService):
     async def start_training(
         self,
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -74,9 +74,19 @@ class TrainingService(BaseService):
         detailed_analytics: bool = False,
     ) -> Dict[str, Any]:
         """Start neural network training task."""
-        # Validate strategy file exists
-        strategy_path = Path(f"/app/strategies/{strategy_name}.yaml")
-        if not strategy_path.exists():
+        # Validate strategy file exists - check both Docker and local paths
+        strategy_paths = [
+            Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
+            Path(f"strategies/{strategy_name}.yaml"),       # Local path
+        ]
+        
+        strategy_path = None
+        for path in strategy_paths:
+            if path.exists():
+                strategy_path = path
+                break
+        
+        if not strategy_path:
             raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
         
         # Load strategy config to get training parameters
@@ -101,7 +111,7 @@ class TrainingService(BaseService):
         # Create operation metadata
         metadata = OperationMetadata(
             symbol=symbol,
-            timeframe=timeframe,
+            timeframe=timeframes[0] if timeframes else "1h",  # Use first timeframe for metadata compatibility
             start_date=datetime.fromisoformat(start_date) if start_date else None,
             end_date=datetime.fromisoformat(end_date) if end_date else None,
             parameters={
@@ -109,6 +119,7 @@ class TrainingService(BaseService):
                 "strategy_path": str(strategy_path),
                 "training_type": strategy_config.get("model", {}).get("type", "mlp"),
                 "epochs": training_config.get("epochs", 100),
+                "timeframes": timeframes,  # Store all timeframes in parameters
             },
         )
 
@@ -123,7 +134,7 @@ class TrainingService(BaseService):
             self._run_training_async(
                 operation_id,
                 symbol,
-                timeframe,
+                timeframes,
                 strategy_name,
                 start_date,
                 end_date,
@@ -140,7 +151,7 @@ class TrainingService(BaseService):
             "status": "training_started",
             "message": f"Neural network training started for {symbol} using {strategy_name} strategy",
             "symbol": symbol,
-            "timeframe": timeframe,
+            "timeframes": timeframes,
             "strategy_name": strategy_name,
             "estimated_duration_minutes": 30,
         }
@@ -344,7 +355,7 @@ class TrainingService(BaseService):
         self,
         operation_id: str,
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str],
         end_date: Optional[str],
@@ -362,8 +373,21 @@ class TrainingService(BaseService):
                 ),
             )
 
-            # Use the real strategy file that exists in the Docker volume
-            strategy_path = f"/app/strategies/{strategy_name}.yaml"
+            # Use the real strategy file that exists - check both Docker and local paths
+            from pathlib import Path
+            strategy_paths = [
+                Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
+                Path(f"strategies/{strategy_name}.yaml"),       # Local path
+            ]
+            
+            strategy_path = None
+            for path in strategy_paths:
+                if path.exists():
+                    strategy_path = str(path)
+                    break
+            
+            if not strategy_path:
+                raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
             
             # Load strategy config to get training parameters
             with open(strategy_path, 'r') as f:
@@ -525,7 +549,7 @@ class TrainingService(BaseService):
                         trainer.train_strategy,
                         actual_strategy_path,
                         symbol,
-                        timeframe,
+                        timeframes,
                         start_date,
                         end_date,
                         training_config.get("validation_split", 0.2),

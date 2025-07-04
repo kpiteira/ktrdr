@@ -67,14 +67,16 @@ class StrategyConfigurationLoader:
                 config = StrategyConfigurationV2(**raw_config)
                 return config, True
             except ValidationError as e:
-                raise ValidationError(f"V2 strategy validation failed for {config_path}: {e}")
+                raise ValueError(f"V2 strategy validation failed for {config_path}: {e}") from e
         else:
             logger.info(f"Loading v1 legacy strategy configuration: {config_path.name}")
             try:
+                # Add sensible defaults for missing required fields
+                raw_config = self._add_legacy_defaults(raw_config)
                 config = LegacyStrategyConfiguration(**raw_config)
                 return config, False
             except ValidationError as e:
-                raise ValidationError(f"Legacy strategy validation failed for {config_path}: {e}")
+                raise ValueError(f"Legacy strategy validation failed for {config_path}: {e}") from e
 
     def _detect_v2_format(self, config: Dict[str, Any]) -> bool:
         """
@@ -205,12 +207,97 @@ class StrategyConfigurationLoader:
         if output_path:
             output_path = Path(output_path)
             with open(output_path, 'w') as f:
-                # Convert to dict for YAML serialization
-                config_dict = v2_config.model_dump(exclude_unset=True)
+                # Convert to dict for YAML serialization with enum value extraction
+                config_dict = v2_config.model_dump(exclude_unset=True, mode='json')
                 yaml.dump(config_dict, f, default_flow_style=False, indent=2)
             logger.info(f"Migrated configuration saved to: {output_path}")
 
         return v2_config
+
+    def _add_legacy_defaults(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Add sensible defaults for missing required fields in legacy strategies.
+        
+        Args:
+            config: Raw configuration dictionary
+            
+        Returns:
+            Configuration with missing required fields filled with defaults
+        """
+        # Create a copy to avoid modifying the original
+        config = config.copy()
+        
+        # Add default decisions section if missing
+        if "decisions" not in config:
+            config["decisions"] = {
+                "output_format": "classification",
+                "confidence_threshold": 0.6,
+                "position_awareness": True,
+                "filters": {
+                    "min_signal_separation": 4,
+                    "volume_filter": False
+                }
+            }
+            logger.info(f"Added default decisions section to legacy strategy")
+        
+        # Add default data section if missing 
+        if "data" not in config:
+            config["data"] = {
+                "symbols": ["AAPL"],  # Default single symbol
+                "timeframes": ["1h"],  # Default single timeframe
+                "history_required": 200
+            }
+            logger.info(f"Added default data section to legacy strategy")
+            
+        # Ensure required training fields exist
+        if "training" not in config:
+            config["training"] = {}
+            
+        training = config["training"]
+        if "method" not in training:
+            training["method"] = "supervised"
+        if "labels" not in training:
+            training["labels"] = {
+                "source": "zigzag",
+                "zigzag_threshold": 0.03,
+                "label_lookahead": 20
+            }
+        if "data_split" not in training:
+            training["data_split"] = {
+                "train": 0.7,
+                "validation": 0.15,
+                "test": 0.15
+            }
+            
+        # Ensure model section has required fields
+        if "model" in config:
+            model = config["model"]
+            if "type" not in model:
+                model["type"] = "mlp"
+            if "architecture" not in model:
+                model["architecture"] = {
+                    "hidden_layers": [50, 25],
+                    "activation": "relu",
+                    "output_activation": "softmax",
+                    "dropout": 0.2
+                }
+            if "training" not in model:
+                model["training"] = {
+                    "learning_rate": 0.001,
+                    "batch_size": 32,
+                    "epochs": 100,
+                    "optimizer": "adam"
+                }
+            if "features" not in model:
+                model["features"] = {
+                    "include_price_context": False,
+                    "include_volume_context": False,
+                    "include_raw_indicators": False,
+                    "lookback_periods": 2,
+                    "scale_features": False
+                }
+        
+        return config
 
     def extract_training_symbols_and_timeframes(
         self, config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration]

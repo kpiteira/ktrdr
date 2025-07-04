@@ -45,6 +45,7 @@ from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.gap_classifier import GapClassifier, GapClassification
 from ktrdr.data.timeframe_constants import TimeframeConstants
+from ktrdr.data.timeframe_synchronizer import TimeframeSynchronizer
 
 # Get module logger
 logger = get_logger(__name__)
@@ -475,6 +476,211 @@ class DataManager:
             f"Successfully loaded and processed {len(df)} rows of data for {symbol} ({timeframe})"
         )
         return df
+
+    @log_entry_exit(logger=logger, log_args=True)
+    def load_multi_timeframe_data(
+        self,
+        symbol: str,
+        timeframes: List[str],
+        start_date: Optional[Union[str, datetime]] = None,
+        end_date: Optional[Union[str, datetime]] = None,
+        base_timeframe: str = "1h",
+        mode: str = "local",
+        validate: bool = True,
+        repair: bool = False,
+        cancellation_token: Optional[Any] = None,
+        progress_callback: Optional[ProgressCallback] = None,
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Load OHLCV data for multiple timeframes with temporal alignment.
+
+        This method loads data for multiple timeframes simultaneously and aligns them
+        temporally using the base_timeframe as the reference grid. All timeframes
+        are synchronized to ensure consistent timestamps for multi-timeframe analysis.
+
+        Args:
+            symbol: The trading symbol (e.g., 'EURUSD', 'AAPL')
+            timeframes: List of timeframes to load (e.g., ['15m', '1h', '4h'])
+            start_date: Optional start date for filtering data
+            end_date: Optional end date for filtering data
+            base_timeframe: Reference timeframe for alignment (default: '1h')
+            mode: Loading mode - 'local', 'tail', 'backfill', 'full'
+            validate: Whether to validate data integrity
+            repair: Whether to repair any detected issues
+            cancellation_token: Optional cancellation token for early termination
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            Dictionary mapping timeframes to aligned DataFrames
+            Format: {timeframe: aligned_ohlcv_dataframe}
+
+        Raises:
+            DataError: If loading fails for critical timeframes
+            DataValidationError: If base_timeframe not in timeframes list
+        """
+        if not timeframes:
+            raise DataValidationError(
+                "At least one timeframe must be specified",
+                error_code="MULTI_TF_NO_TIMEFRAMES",
+                details={"symbol": symbol, "timeframes": timeframes},
+            )
+
+        if base_timeframe not in timeframes:
+            raise DataValidationError(
+                f"Base timeframe '{base_timeframe}' must be included in timeframes list",
+                error_code="MULTI_TF_INVALID_BASE",
+                details={
+                    "symbol": symbol,
+                    "base_timeframe": base_timeframe,
+                    "timeframes": timeframes,
+                },
+            )
+
+        # Initialize progress tracking
+        progress = DataLoadingProgress(
+            steps_total=len(timeframes) + 1,  # Load each TF + synchronization
+            current_step="Loading multi-timeframe data",
+        )
+
+        if progress_callback:
+            progress_callback(progress)
+
+        # Dictionary to store loaded data for each timeframe
+        timeframe_data = {}
+        loading_errors = {}
+
+        # Step 1: Load data for each timeframe
+        logger.info(f"Loading data for {len(timeframes)} timeframes: {timeframes}")
+
+        for i, timeframe in enumerate(timeframes):
+            try:
+                # Check for cancellation
+                if cancellation_token and getattr(cancellation_token, "is_cancelled", False):
+                    progress.is_cancelled = True
+                    progress.current_step = "Cancelled by user"
+                    if progress_callback:
+                        progress_callback(progress)
+                    break
+
+                # Update progress for current timeframe
+                progress.current_step = f"Loading {timeframe} data"
+                progress.steps_completed = i
+                progress.percentage = (i / (len(timeframes) + 1)) * 100
+                if progress_callback:
+                    progress_callback(progress)
+
+                logger.debug(f"Loading {symbol} data for timeframe: {timeframe}")
+
+                # Load data for this timeframe using existing load_data method
+                tf_data = self.load_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_date=start_date,
+                    end_date=end_date,
+                    mode=mode,
+                    validate=validate,
+                    repair=repair,
+                    cancellation_token=cancellation_token,
+                )
+
+                if tf_data is not None and not tf_data.empty:
+                    timeframe_data[timeframe] = tf_data
+                    logger.debug(
+                        f"Successfully loaded {len(tf_data)} rows for {symbol} {timeframe}"
+                    )
+                else:
+                    logger.warning(f"No data loaded for {symbol} {timeframe}")
+                    loading_errors[timeframe] = "No data returned"
+
+            except Exception as e:
+                error_msg = f"Failed to load {timeframe} data: {str(e)}"
+                logger.error(error_msg)
+                loading_errors[timeframe] = error_msg
+                progress.errors.append(error_msg)
+
+                # If base timeframe fails, this is critical
+                if timeframe == base_timeframe:
+                    raise DataError(
+                        f"Failed to load base timeframe {base_timeframe} for {symbol}",
+                        error_code="MULTI_TF_BASE_LOAD_FAILED",
+                        details={
+                            "symbol": symbol,
+                            "base_timeframe": base_timeframe,
+                            "error": str(e),
+                        },
+                    ) from e
+
+        # Check if we have any data to work with
+        if not timeframe_data:
+            raise DataError(
+                f"Failed to load data for any timeframe for {symbol}",
+                error_code="MULTI_TF_NO_DATA_LOADED",
+                details={
+                    "symbol": symbol,
+                    "timeframes": timeframes,
+                    "errors": loading_errors,
+                },
+            )
+
+        # Check if we have the base timeframe
+        if base_timeframe not in timeframe_data:
+            available_timeframes = list(timeframe_data.keys())
+            logger.warning(
+                f"Base timeframe {base_timeframe} failed to load, using {available_timeframes[0]} as reference"
+            )
+            base_timeframe = available_timeframes[0]
+
+        # Step 2: Synchronize timeframes using TimeframeSynchronizer
+        progress.current_step = "Synchronizing timeframes"
+        progress.steps_completed = len(timeframes)
+        progress.percentage = (len(timeframes) / (len(timeframes) + 1)) * 100
+        if progress_callback:
+            progress_callback(progress)
+
+        try:
+            synchronizer = TimeframeSynchronizer()
+            aligned_data, sync_stats = synchronizer.synchronize_multiple_timeframes(
+                timeframe_data, base_timeframe
+            )
+
+            logger.info(
+                f"Multi-timeframe synchronization completed: "
+                f"{sync_stats.successfully_aligned}/{sync_stats.total_timeframes} timeframes aligned "
+                f"(avg quality: {sync_stats.average_quality_score:.3f})"
+            )
+
+            # Final progress update
+            progress.current_step = "Multi-timeframe loading completed"
+            progress.steps_completed = len(timeframes) + 1
+            progress.percentage = 100.0
+            progress.items_processed = sum(len(df) for df in aligned_data.values())
+
+            if loading_errors:
+                for tf, error in loading_errors.items():
+                    progress.warnings.append(f"Failed to load {tf}: {error}")
+
+            if progress_callback:
+                progress_callback(progress)
+
+            logger.info(
+                f"Successfully loaded and synchronized {len(aligned_data)} timeframes for {symbol}"
+            )
+
+            return aligned_data
+
+        except Exception as e:
+            error_msg = f"Failed to synchronize timeframes: {str(e)}"
+            logger.error(error_msg)
+            raise DataError(
+                f"Multi-timeframe synchronization failed for {symbol}",
+                error_code="MULTI_TF_SYNC_FAILED",
+                details={
+                    "symbol": symbol,
+                    "timeframes": list(timeframe_data.keys()),
+                    "base_timeframe": base_timeframe,
+                    "error": str(e),
+                },
+            ) from e
 
     @log_entry_exit(logger=logger, log_args=True)
     def load(

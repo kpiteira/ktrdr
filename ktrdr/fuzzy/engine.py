@@ -317,3 +317,220 @@ class FuzzyEngine:
         """
         fuzzy_sets = self.get_fuzzy_sets(indicator)
         return [self._get_output_name(indicator, set_name) for set_name in fuzzy_sets]
+
+    def generate_multi_timeframe_memberships(
+        self,
+        multi_timeframe_indicators: Dict[str, pd.DataFrame],
+        fuzzy_sets_config: Optional[Dict[str, Dict]] = None
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Generate fuzzy membership values for indicators across multiple timeframes.
+
+        This method processes fuzzy membership generation on multiple timeframes
+        simultaneously, applying the same fuzzy set configurations to each
+        timeframe's indicator data. It prefixes timeframe identifiers to
+        feature names for clarity (e.g., "15m_rsi_low", "1h_macd_bearish").
+
+        Args:
+            multi_timeframe_indicators: Dictionary mapping timeframes to indicator DataFrames
+                                      Format: {timeframe: indicators_dataframe}
+            fuzzy_sets_config: Optional fuzzy set configuration. If None, uses the
+                             current engine's configuration for all timeframes.
+
+        Returns:
+            Dictionary mapping timeframes to DataFrames with fuzzy membership values
+            Format: {timeframe: fuzzy_memberships_dataframe}
+
+        Raises:
+            ConfigurationError: If no timeframe data or fuzzy configuration provided
+            ProcessingError: If fuzzy membership generation fails for any timeframe
+
+        Example:
+            >>> engine = FuzzyEngine(config)
+            >>> multi_indicators = {'1h': indicators_1h, '4h': indicators_4h}
+            >>> results = engine.generate_multi_timeframe_memberships(multi_indicators)
+            >>> # results = {'1h': fuzzy_1h, '4h': fuzzy_4h}
+            >>> # fuzzy_1h columns: ['1h_rsi_low', '1h_rsi_neutral', '1h_rsi_high', ...]
+        """
+        # Validate inputs
+        if not multi_timeframe_indicators:
+            raise ConfigurationError(
+                "No timeframe data provided for multi-timeframe fuzzy processing",
+                error_code="MTFUZZ-NoTimeframes",
+                details={"timeframes_provided": list(multi_timeframe_indicators.keys())},
+            )
+
+        # Use provided fuzzy config or current engine configuration
+        if fuzzy_sets_config is not None:
+            # Create temporary engine with the provided configuration
+            from ktrdr.fuzzy.config import FuzzyConfig, FuzzySetConfig, MembershipFunctionConfig
+            
+            # Convert config dict to FuzzyConfig objects if needed
+            if isinstance(fuzzy_sets_config, dict):
+                try:
+                    # Validate that we have the necessary indicators
+                    available_indicators = set()
+                    for tf_data in multi_timeframe_indicators.values():
+                        available_indicators.update(tf_data.columns)
+                    
+                    # Create FuzzyConfig from the provided configuration
+                    temp_config = FuzzyConfig(fuzzy_sets={})
+                    for indicator, sets_config in fuzzy_sets_config.items():
+                        if indicator in available_indicators:
+                            temp_config.fuzzy_sets[indicator] = FuzzySetConfig(
+                                membership_functions=sets_config
+                            )
+                    
+                    processing_engine = FuzzyEngine(temp_config)
+                except Exception as e:
+                    raise ConfigurationError(
+                        f"Failed to create FuzzyEngine from provided configuration: {str(e)}",
+                        error_code="MTFUZZ-ConfigError",
+                        details={"config": fuzzy_sets_config, "error": str(e)},
+                    ) from e
+            else:
+                processing_engine = FuzzyEngine(fuzzy_sets_config)
+        else:
+            if not self._membership_functions:
+                raise ConfigurationError(
+                    "No fuzzy configuration in engine and no config provided",
+                    error_code="MTFUZZ-NoConfig",
+                    details={"engine_indicators": len(self._membership_functions)},
+                )
+            # Use current engine
+            processing_engine = self
+
+        logger.info(
+            f"Processing fuzzy memberships for {len(multi_timeframe_indicators)} timeframes: "
+            f"{list(multi_timeframe_indicators.keys())}"
+        )
+
+        results = {}
+        processing_errors = {}
+
+        # Process each timeframe
+        for timeframe, indicators_data in multi_timeframe_indicators.items():
+            try:
+                logger.debug(f"Processing fuzzy memberships for timeframe: {timeframe}")
+
+                # Validate timeframe data
+                if indicators_data is None or indicators_data.empty:
+                    logger.warning(f"Empty indicator data for timeframe {timeframe}, skipping")
+                    processing_errors[timeframe] = "Empty indicator data"
+                    continue
+
+                # Process each indicator column and generate fuzzy memberships
+                timeframe_fuzzy_data = {}
+
+                for indicator_col in indicators_data.columns:
+                    # Skip non-indicator columns (OHLCV data)
+                    if indicator_col.lower() in ['open', 'high', 'low', 'close', 'volume']:
+                        continue
+
+                    # Extract base indicator name (remove suffix like "_14" from "rsi_14")
+                    base_indicator = self._extract_base_indicator_name(indicator_col)
+                    
+                    # Check if this indicator has fuzzy configuration
+                    if base_indicator in processing_engine._membership_functions:
+                        try:
+                            # Get indicator values
+                            indicator_values = indicators_data[indicator_col]
+                            
+                            # Generate fuzzy memberships using existing fuzzify method
+                            fuzzy_result = processing_engine.fuzzify(base_indicator, indicator_values)
+                            
+                            # Add timeframe prefix to column names and store results
+                            if isinstance(fuzzy_result, pd.DataFrame):
+                                for col in fuzzy_result.columns:
+                                    # Add timeframe prefix: "rsi_low" -> "15m_rsi_low"
+                                    prefixed_col = f"{timeframe}_{col}"
+                                    timeframe_fuzzy_data[prefixed_col] = fuzzy_result[col]
+                            
+                            logger.debug(f"Generated fuzzy memberships for {base_indicator} in {timeframe}")
+                            
+                        except Exception as e:
+                            logger.warning(f"Failed to process indicator {indicator_col} in {timeframe}: {str(e)}")
+                            continue
+                    else:
+                        logger.debug(f"No fuzzy configuration for indicator {base_indicator}, skipping")
+
+                # Create DataFrame with fuzzy membership results
+                if timeframe_fuzzy_data:
+                    results[timeframe] = pd.DataFrame(timeframe_fuzzy_data, index=indicators_data.index)
+                    logger.debug(
+                        f"Successfully generated {len(timeframe_fuzzy_data)} fuzzy features "
+                        f"for {timeframe} ({len(results[timeframe])} rows)"
+                    )
+                else:
+                    logger.warning(f"No fuzzy features generated for timeframe {timeframe}")
+                    processing_errors[timeframe] = "No fuzzy features generated"
+
+            except Exception as e:
+                error_msg = f"Failed to process fuzzy memberships for timeframe {timeframe}: {str(e)}"
+                logger.error(error_msg)
+                processing_errors[timeframe] = str(e)
+                continue
+
+        # Check if we got any results
+        if not results:
+            raise ProcessingError(
+                "Failed to generate fuzzy memberships for any timeframe",
+                error_code="MTFUZZ-AllTimeframesFailed",
+                details={
+                    "requested_timeframes": list(multi_timeframe_indicators.keys()),
+                    "processing_errors": processing_errors,
+                },
+            )
+
+        # Log summary
+        successful_timeframes = len(results)
+        failed_timeframes = len(processing_errors)
+        total_timeframes = len(multi_timeframe_indicators)
+
+        if failed_timeframes > 0:
+            logger.warning(
+                f"Multi-timeframe fuzzy processing completed with warnings: "
+                f"{successful_timeframes}/{total_timeframes} timeframes successful"
+            )
+            for tf, error in processing_errors.items():
+                logger.warning(f"  {tf}: {error}")
+        else:
+            logger.info(
+                f"Successfully generated fuzzy memberships for all {successful_timeframes} timeframes"
+            )
+
+        return results
+
+    def _extract_base_indicator_name(self, indicator_col: str) -> str:
+        """
+        Extract base indicator name from column name.
+        
+        Examples:
+            "rsi_14" -> "rsi"
+            "macd" -> "macd"
+            "sma_20" -> "sma"
+            
+        Args:
+            indicator_col: Full indicator column name
+            
+        Returns:
+            Base indicator name
+        """
+        # Common indicator patterns
+        common_indicators = ['rsi', 'macd', 'sma', 'ema', 'bb', 'stoch', 'cci', 'atr']
+        
+        # Check if the column starts with any known indicator
+        for indicator in common_indicators:
+            if indicator_col.lower().startswith(indicator.lower()):
+                return indicator.lower()
+        
+        # Fallback: use the part before the first underscore or number
+        base_name = indicator_col.lower()
+        
+        # Remove trailing numbers and underscores (e.g., "rsi_14" -> "rsi")
+        for i, char in enumerate(base_name):
+            if char.isdigit() or char == '_':
+                base_name = base_name[:i]
+                break
+        
+        return base_name if base_name else indicator_col.lower()

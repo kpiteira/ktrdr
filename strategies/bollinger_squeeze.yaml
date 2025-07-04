@@ -1,8 +1,8 @@
 # === STRATEGY IDENTITY ===
-name: "neuro_mean_reversion"  # Neural network trained on RSI/MACD fuzzy outputs for mean reversion
-description: "Neural network trained on RSI/MACD fuzzy outputs for mean reversion"  # Clear one-line strategy summary
+name: "bollinger_squeeze"  # Bollinger Band squeeze strategy for volatility breakouts
+description: "Bollinger Band squeeze strategy for volatility breakouts"  # Clear one-line strategy summary
 version: "2.0"  # Clean format version for AI agent compatibility
-hypothesis: "RSI oversold/overbought conditions combined with MACD momentum confirmation create profitable mean reversion opportunities in trending markets"  # Core strategy belief being tested
+hypothesis: "Bollinger Band squeeze conditions followed by expansion create high-probability directional breakout opportunities"  # Core strategy belief being tested
 
 # === STRATEGY SCOPE ===
 scope: "universal"  # Universal model
@@ -10,11 +10,12 @@ scope: "universal"  # Universal model
 # === TRAINING APPROACH ===
 training_data:  # Data configuration for model training
   symbols:  # Asset selection for cross-market learning
-    mode: "multi_symbol"  # Multi-symbol training across 3 assets for cross-market learning
+    mode: "multi_symbol"  # Multi-symbol training across 4 assets for cross-market learning
     list:  # Selected assets for diversified training
-    - "AAPL"  # Selected for specific market characteristics
-    - "MSFT"  # Selected for specific market characteristics
-    - "GOOGL"  # Selected for specific market characteristics
+    - "EURUSD"  # Selected for specific market characteristics
+    - "GBPUSD"  # Selected for specific market characteristics
+    - "BTCUSD"  # Selected for specific market characteristics
+    - "ETHUSD"  # Selected for specific market characteristics
   timeframes:  # Multi-timeframe analysis configuration
     mode: "multi_timeframe"  # Multi-timeframe analysis using 3 time horizons for context
     list:  # Multiple timeframes for context and confirmation

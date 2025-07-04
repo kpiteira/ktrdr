@@ -1,39 +1,29 @@
 # === STRATEGY IDENTITY ===
-name: "neuro_mean_reversion"  # Neural network trained on RSI/MACD fuzzy outputs for mean reversion
-description: "Neural network trained on RSI/MACD fuzzy outputs for mean reversion"  # Clear one-line strategy summary
+name: "trend_momentum"  # Trend-following strategy capturing sustained moves
+description: "A strategy combining trend and momentum indicators with customized fuzzy sets"  # Clear one-line strategy summary
 version: "2.0"  # Clean format version for AI agent compatibility
-hypothesis: "RSI oversold/overbought conditions combined with MACD momentum confirmation create profitable mean reversion opportunities in trending markets"  # Core strategy belief being tested
+hypothesis: "Strong momentum signals combined with trend confirmation create sustainable directional moves with favorable risk-reward ratios"  # Core strategy belief being tested
 
 # === STRATEGY SCOPE ===
-scope: "universal"  # Universal model
+scope: "symbol_specific"  # Symbol-specific model optimized for single asset characteristics
 
 # === TRAINING APPROACH ===
 training_data:  # Data configuration for model training
   symbols:  # Asset selection for cross-market learning
-    mode: "multi_symbol"  # Multi-symbol training across 3 assets for cross-market learning
-    list:  # Selected assets for diversified training
-    - "AAPL"  # Selected for specific market characteristics
-    - "MSFT"  # Selected for specific market characteristics
-    - "GOOGL"  # Selected for specific market characteristics
+    mode: "single"  # Single-symbol training for asset-specific optimization
+    symbol: "AAPL"  # Technology stock with high liquidity and predictable patterns
   timeframes:  # Multi-timeframe analysis configuration
-    mode: "multi_timeframe"  # Multi-timeframe analysis using 3 time horizons for context
-    list:  # Multiple timeframes for context and confirmation
-    - "1h"  # Selected timeframe for optimal signal characteristics
-    - "4h"  # Selected timeframe for optimal signal characteristics
-    - "1d"  # Selected timeframe for optimal signal characteristics
-    base_timeframe: "1h"  # Primary signal generation timeframe
+    mode: "single"  # Single timeframe for focused signal generation
+    timeframe: "1h"  # Primary signal timeframe balancing noise and responsiveness
   history_required: 200  # Standard history for reliable pattern recognition
 
 # === DEPLOYMENT TARGETS ===
 deployment:  # Target configuration for live trading
   target_symbols:  # Which assets can use this trained model
-    mode: "group_restricted"  # Deploy on related assets with similar characteristics
+    mode: "training_only"  # Deploy only on assets used in training for consistency
   target_timeframes:  # Supported timeframes for deployment
-    mode: "multi_timeframe"  # Support multiple timeframes for flexible deployment
-    supported:  # Validated timeframes for this strategy
-    - "1h"  # Tested and validated for 1h trading
-    - "4h"  # Tested and validated for 4h trading
-    - "1d"  # Tested and validated for 1d trading
+    mode: "single"  # Single timeframe deployment for focused application
+    timeframe: "1h"  # Single target timeframe
 
 # === TECHNICAL INDICATORS ===
 indicators:  # Core technical analysis components
@@ -45,9 +35,30 @@ indicators:  # Core technical analysis components
   slow_period: 26  # Slow EMA period for trend stability
   signal_period: 9  # Signal line period for entry/exit timing
   source: "close"  # Price source for calculation consistency
+- name: "stoch"  # Stochastic oscillator for overbought/oversold conditions
+  k_period: 14  # K percent period for stochastic calculation
+  d_period: 3  # D smoothing period for stochastic signal
+  source: "close"  # Price source for calculation consistency
+- name: "adx"  # Average Directional Index for trend strength measurement
+  period: 14  # Lookback period balancing responsiveness vs stability
+  source: "close"  # Price source for calculation consistency
+- name: "bbands"  # Bollinger Bands for volatility and mean reversion
+  period: 20  # Lookback period balancing responsiveness vs stability
+  source: "close"  # Price source for calculation consistency
+  std_dev: 2  # Standard deviation multiplier for band width
 
 # === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:  # Membership functions for indicator interpretation
+  adx:  # Fuzzy membership functions for ADX interpretation
+    weak:  # Low intensity values indicating uncertainty
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [0, 15, 30]  # Triangular membership: left=0, peak=15, right=30
+    moderate:  # Medium intensity values indicating normal conditions
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [20, 35, 50]  # Triangular membership: left=20, peak=35, right=50
+    strong:  # High intensity values indicating conviction
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [40, 60, 100]  # Triangular membership: left=40, peak=60, right=100
   rsi:  # Fuzzy membership functions for RSI interpretation
     oversold:  # Extreme low values indicating potential reversal
       type: "triangular"  # Triangular membership for crisp boundaries
@@ -70,7 +81,7 @@ model:  # Pure fuzzy-neural architecture configuration
   features:  # Input feature engineering configuration
     include_price_context: false  # Include OHLC price context for market structure awareness
     lookback_periods: 2  # Historical window size for temporal pattern recognition
-    scale_features: true  # Feature normalization for stable neural network training
+    scale_features: false  # Feature normalization for stable neural network training
   training:  # Neural network optimization configuration
     learning_rate: 0.001  # Standard learning rate for stable convergence
     batch_size: 32  # Standard batch size balancing stability and memory
