@@ -1,0 +1,103 @@
+# === STRATEGY IDENTITY ===
+name: "test_eurusd_3tf"  # Triple timeframe test for EURUSD 5m+1h+1d
+description: "Neural network trained on RSI/MACD fuzzy outputs for mean reversion"  # Clear one-line strategy summary
+version: "2.0"  # Clean format version for AI agent compatibility
+hypothesis: "RSI oversold/overbought conditions combined with MACD momentum confirmation create profitable mean reversion opportunities in trending markets"  # Core strategy belief being tested
+
+# === STRATEGY SCOPE ===
+scope: "universal"  # Universal model
+
+# === TRAINING APPROACH ===
+training_data:  # Data configuration for model training
+  symbols:  # Triple timeframe stress test
+    mode: "single"  # Single symbol for comprehensive testing
+    symbol: "EURUSD"  # EURUSD has excellent coverage for 5m, 1h, and 1d (2005-2025)
+  timeframes:  # High-frequency stress test
+    mode: "multi_timeframe"  # Multi-timeframe for 2 high-frequency timeframes  
+    list: ["5m", "1h"]  # 5m and 1h combination for high-frequency testing
+    base_timeframe: "5m"  # 5m as primary signal timeframe for maximum data
+  history_required: 200  # Standard history for reliable pattern recognition
+
+# === DEPLOYMENT TARGETS ===
+deployment:  # Target configuration for live trading
+  target_symbols:  # Which assets can use this trained model
+    mode: "group_restricted"  # Deploy on related assets with similar characteristics
+  target_timeframes:  # Supported timeframes for deployment
+    mode: "multi_timeframe"  # Support multiple timeframes for flexible deployment
+    supported:  # Validated timeframes for this strategy
+    - "5m"  # Tested and validated for 5m trading
+    - "1h"  # Tested and validated for 1h trading
+    - "1d"  # Tested and validated for 1d trading
+
+# === TECHNICAL INDICATORS ===
+indicators:  # Core technical analysis components
+- name: "rsi"  # Relative Strength Index for momentum and reversal signals
+  period: 14  # Lookback period balancing responsiveness vs stability
+  source: "close"  # Price source for calculation consistency
+- name: "macd"  # MACD for trend direction and momentum confirmation
+  fast_period: 12  # Fast EMA period for responsive signal generation
+  slow_period: 26  # Slow EMA period for trend stability
+  signal_period: 9  # Signal line period for entry/exit timing
+  source: "close"  # Price source for calculation consistency
+
+# === FUZZY LOGIC CONFIGURATION ===
+fuzzy_sets:  # Membership functions for indicator interpretation
+  rsi:  # Fuzzy membership functions for RSI interpretation
+    oversold:  # Extreme low values indicating potential reversal
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [0, 20, 35]  # Triangular membership: left=0, peak=20, right=35
+    neutral:  # Middle range values indicating market balance
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [30, 50, 70]  # Triangular membership: left=30, peak=50, right=70
+    overbought:  # Extreme high values indicating potential reversal
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [65, 80, 100]  # Triangular membership: left=65, peak=80, right=100
+  macd:  # Fuzzy membership functions for MACD interpretation
+    bearish:  # Negative MACD values indicating downward momentum
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [-0.002, -0.001, 0]  # Triangular membership: left=-0.002, peak=-0.001, right=0
+    neutral:  # MACD values near zero indicating sideways momentum
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [-0.0005, 0, 0.0005]  # Triangular membership: left=-0.0005, peak=0, right=0.0005
+    bullish:  # Positive MACD values indicating upward momentum
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [0, 0.001, 0.002]  # Triangular membership: left=0, peak=0.001, right=0.002
+
+# === NEURAL NETWORK MODEL ===
+model:  # Pure fuzzy-neural architecture configuration
+  type: "mlp"  # Multi-Layer Perceptron for fuzzy feature processing
+  architecture:  # Network topology and activation configuration
+    hidden_layers: [50, 25]  # Network topology: 50 -> 25 neurons for optimal complexity
+    activation: "relu"  # ReLU activation for fast training and gradient flow
+    output_activation: "softmax"  # Softmax for multi-class probability distribution
+    dropout: 0.2  # Moderate dropout for balanced regularization
+  features:  # Input feature engineering configuration
+    include_price_context: false  # Include OHLC price context for market structure awareness
+    lookback_periods: 2  # Historical window size for temporal pattern recognition
+    scale_features: true  # Feature normalization for stable neural network training
+  training:  # Neural network optimization configuration
+    learning_rate: 0.001  # Standard learning rate for stable convergence
+    batch_size: 32  # Standard batch size balancing stability and memory
+    epochs: 100  # Standard training duration for convergence
+    optimizer: "adam"  # Adam optimizer for adaptive learning and momentum
+
+# === DECISION LOGIC ===
+decisions:  # Trading signal generation rules
+  output_format: "classification"  # Discrete buy/sell/hold class predictions
+  confidence_threshold: 0.6  # Moderate confidence for balanced signal quality
+  position_awareness: true  # Consider existing positions for intelligent signal filtering
+  filters:  # Signal quality and timing filters
+    min_signal_separation: 4  # Minimum 4 periods between signals to prevent overtrading
+    volume_filter: false  # Accept signals regardless of volume conditions
+
+# === TRAINING CONFIGURATION ===
+training:  # Model training methodology and evaluation
+  method: "supervised"  # Supervised learning with labeled historical data
+  labels:  # Target generation for supervised learning
+    source: "zigzag"  # ZigZag-based labels identifying significant price swings
+    zigzag_threshold: 0.03  # Minimum 3.0% price swing for signal significance
+    label_lookahead: 20  # Look 20 periods ahead for target value determination
+  data_split:  # Train/validation/test split configuration
+    train: 0.7  # Training data (70%) for model learning
+    validation: 0.15  # Validation data (15%) for hyperparameter tuning
+    test: 0.15  # Test data (15%) for unbiased performance evaluation

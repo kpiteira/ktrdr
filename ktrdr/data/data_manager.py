@@ -622,13 +622,69 @@ class DataManager:
                 },
             )
 
-        # Check if we have the base timeframe
+        # Step 1.5: Find common data coverage intersection across all loaded timeframes
+        if len(timeframe_data) > 1:
+            common_coverage = self._find_common_data_coverage(timeframe_data, symbol)
+            
+            # If we have a meaningful data intersection, rescope all timeframes to it
+            if common_coverage["is_sufficient"]:
+                logger.info(
+                    f"📊 Found common data coverage: {common_coverage['start_date']} to {common_coverage['end_date']} "
+                    f"({common_coverage['days']} days, {common_coverage['min_bars']} min bars across timeframes)"
+                )
+                
+                # Rescope all timeframes to the common coverage window
+                rescoped_data = {}
+                for tf, df in timeframe_data.items():
+                    rescoped_df = df.loc[common_coverage['start_date']:common_coverage['end_date']]
+                    rescoped_data[tf] = rescoped_df
+                    logger.debug(f"  {tf}: {len(rescoped_df)} bars (was {len(df)})")
+                
+                timeframe_data = rescoped_data
+                
+                # Add a warning to surface to the user
+                coverage_warning = (
+                    f"⚠️ Multi-timeframe training rescoped to common data coverage: "
+                    f"{common_coverage['start_date']:%Y-%m-%d} to {common_coverage['end_date']:%Y-%m-%d} "
+                    f"({common_coverage['days']} days). Some requested data outside this window was excluded."
+                )
+                logger.warning(coverage_warning)
+                progress.warnings.append(coverage_warning)
+                
+            else:
+                # Insufficient common coverage - this is a real problem
+                insufficient_msg = (
+                    f"❌ Insufficient common data coverage across timeframes. "
+                    f"Common window: {common_coverage.get('days', 0)} days, "
+                    f"Min bars: {common_coverage.get('min_bars', 0)} "
+                    f"(need at least 50 bars for indicators + training)"
+                )
+                logger.error(insufficient_msg)
+                raise DataError(
+                    f"Multi-timeframe training requires overlapping data across timeframes",
+                    error_code="MULTI_TF_INSUFFICIENT_COVERAGE",
+                    details={
+                        "symbol": symbol,
+                        "timeframes": list(timeframe_data.keys()),
+                        "common_coverage": common_coverage,
+                        "recommendation": "Use longer date range or timeframes with better data availability"
+                    },
+                )
+
+        # Check if we have the base timeframe (after potential rescoping)
         if base_timeframe not in timeframe_data:
             available_timeframes = list(timeframe_data.keys())
-            logger.warning(
-                f"Base timeframe {base_timeframe} failed to load, using {available_timeframes[0]} as reference"
-            )
-            base_timeframe = available_timeframes[0]
+            if available_timeframes:
+                logger.warning(
+                    f"Base timeframe {base_timeframe} failed to load, using {available_timeframes[0]} as reference"
+                )
+                base_timeframe = available_timeframes[0]
+            else:
+                raise DataError(
+                    f"No timeframes successfully loaded for {symbol}",
+                    error_code="MULTI_TF_NO_SUCCESSFUL_LOADS",
+                    details={"symbol": symbol, "errors": loading_errors},
+                )
 
         # Step 2: Synchronize timeframes using TimeframeSynchronizer
         progress.current_step = "Synchronizing timeframes"
@@ -681,6 +737,128 @@ class DataManager:
                     "error": str(e),
                 },
             ) from e
+
+    def _find_common_data_coverage(self, timeframe_data: Dict[str, pd.DataFrame], symbol: str) -> Dict[str, Any]:
+        """
+        Find the common data coverage intersection across all timeframes.
+        
+        This method analyzes the date ranges of all loaded timeframes and identifies
+        the largest common time window where all timeframes have data. It also
+        validates that this window is sufficient for meaningful training.
+        
+        Args:
+            timeframe_data: Dictionary mapping timeframes to DataFrames
+            symbol: Trading symbol (for logging/error context)
+            
+        Returns:
+            Dictionary with coverage analysis results:
+            {
+                'start_date': pd.Timestamp,     # Common coverage start
+                'end_date': pd.Timestamp,       # Common coverage end  
+                'days': int,                    # Number of days in common window
+                'min_bars': int,                # Minimum bars across all timeframes in window
+                'max_bars': int,                # Maximum bars across all timeframes in window
+                'is_sufficient': bool,          # Whether coverage is sufficient for training
+                'timeframe_details': Dict       # Per-timeframe coverage details
+            }
+        """
+        if len(timeframe_data) < 2:
+            # Single timeframe case - no intersection needed
+            tf, df = next(iter(timeframe_data.items()))
+            return {
+                'start_date': df.index[0],
+                'end_date': df.index[-1],
+                'days': (df.index[-1] - df.index[0]).days,
+                'min_bars': len(df),
+                'max_bars': len(df),
+                'is_sufficient': len(df) >= 50,  # Minimum for MACD + training
+                'timeframe_details': {tf: {'bars': len(df), 'start': df.index[0], 'end': df.index[-1]}}
+            }
+        
+        # Multi-timeframe case - find intersection
+        timeframe_ranges = {}
+        
+        for tf, df in timeframe_data.items():
+            if df.empty:
+                logger.warning(f"Empty DataFrame for timeframe {tf}, skipping from coverage analysis")
+                continue
+                
+            timeframe_ranges[tf] = {
+                'start': df.index[0],
+                'end': df.index[-1], 
+                'bars': len(df),
+                'df': df
+            }
+        
+        if not timeframe_ranges:
+            return {
+                'start_date': None,
+                'end_date': None,
+                'days': 0,
+                'min_bars': 0,
+                'max_bars': 0,
+                'is_sufficient': False,
+                'timeframe_details': {}
+            }
+        
+        # Find the intersection: latest start date and earliest end date
+        common_start = max(info['start'] for info in timeframe_ranges.values())
+        common_end = min(info['end'] for info in timeframe_ranges.values())
+        
+        # Validate that we have a positive time window
+        if common_start >= common_end:
+            logger.warning(
+                f"No temporal overlap found between timeframes for {symbol}. "
+                f"Start: {common_start}, End: {common_end}"
+            )
+            return {
+                'start_date': common_start,
+                'end_date': common_end,
+                'days': 0,
+                'min_bars': 0,
+                'max_bars': 0,
+                'is_sufficient': False,
+                'timeframe_details': timeframe_ranges
+            }
+        
+        # Calculate how many bars each timeframe has in the common window
+        common_window_bars = {}
+        for tf, info in timeframe_ranges.items():
+            # Slice DataFrame to common window
+            common_slice = info['df'].loc[common_start:common_end]
+            common_window_bars[tf] = len(common_slice)
+        
+        min_bars = min(common_window_bars.values()) if common_window_bars else 0
+        max_bars = max(common_window_bars.values()) if common_window_bars else 0
+        days = (common_end - common_start).days
+        
+        # Determine if coverage is sufficient
+        # Need at least 50 bars for MACD calculation (26+9=35) plus some training data
+        is_sufficient = min_bars >= 50 and days >= 7  # At least 1 week and 50 bars
+        
+        logger.debug(
+            f"Common coverage analysis for {symbol}: "
+            f"{common_start.strftime('%Y-%m-%d')} to {common_end.strftime('%Y-%m-%d')} "
+            f"({days} days, {min_bars}-{max_bars} bars)"
+        )
+        
+        return {
+            'start_date': common_start,
+            'end_date': common_end,
+            'days': days,
+            'min_bars': min_bars,
+            'max_bars': max_bars,
+            'is_sufficient': is_sufficient,
+            'timeframe_details': {
+                tf: {
+                    'original_bars': info['bars'],
+                    'common_bars': common_window_bars.get(tf, 0),
+                    'original_start': info['start'],
+                    'original_end': info['end']
+                }
+                for tf, info in timeframe_ranges.items()
+            }
+        }
 
     @log_entry_exit(logger=logger, log_args=True)
     def load(

@@ -342,7 +342,7 @@ async def _train_model_async(
                             console.print(f"✅ [green]Model training completed successfully![/green]")
                             break
                         elif status == "failed":
-                            error_msg = data.get("error", "Unknown error")
+                            error_msg = operation_data.get("error", "Unknown error")
                             console.print(f"❌ [red]Training failed: {error_msg}[/red]")
                             return
                         

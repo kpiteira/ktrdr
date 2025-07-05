@@ -127,9 +127,9 @@ class FuzzyNeuralProcessor:
 
         # Determine timeframe processing order
         if timeframe_order is None:
-            # Use sorted order for consistency when no order specified
-            timeframe_order = sorted(multi_timeframe_fuzzy.keys())
-            logger.debug(f"No timeframe order specified, using sorted order: {timeframe_order}")
+            # Use frequency-based order (highest frequency first) for proper temporal alignment
+            timeframe_order = self._sort_timeframes_by_frequency(list(multi_timeframe_fuzzy.keys()))
+            logger.debug(f"No timeframe order specified, using frequency order: {timeframe_order}")
         else:
             # Validate that all specified timeframes are available
             available_timeframes = set(multi_timeframe_fuzzy.keys())
@@ -149,9 +149,9 @@ class FuzzyNeuralProcessor:
 
         logger.info(f"Processing {len(timeframe_order)} timeframes in order: {timeframe_order}")
 
-        # Process each timeframe separately and collect results
-        all_features = []
-        all_feature_names = []
+        # Process each timeframe separately to extract fuzzy features
+        timeframe_features = {}
+        timeframe_feature_names = {}
         processing_errors = {}
 
         for timeframe in timeframe_order:
@@ -166,14 +166,18 @@ class FuzzyNeuralProcessor:
 
                 logger.debug(f"Processing timeframe {timeframe} with {len(fuzzy_data.columns)} fuzzy features")
 
-                # Use existing single-timeframe processing for this timeframe
-                tf_features, tf_names = self.prepare_input(fuzzy_data)
+                # Extract fuzzy features while preserving DataFrame structure for temporal alignment
+                tf_features, tf_names = self._extract_fuzzy_features(fuzzy_data)
                 
-                # Features are already torch tensors, so we can collect them directly
-                all_features.append(tf_features)
-                all_feature_names.extend(tf_names)
+                # Store as DataFrame with original index for temporal alignment
+                timeframe_features[timeframe] = pd.DataFrame(
+                    tf_features, 
+                    index=fuzzy_data.index, 
+                    columns=tf_names
+                )
+                timeframe_feature_names[timeframe] = tf_names
                 
-                logger.debug(f"Successfully processed {tf_features.shape[1]} features for timeframe {timeframe}")
+                logger.debug(f"Successfully processed {len(tf_names)} features for timeframe {timeframe} ({len(fuzzy_data)} timestamps)")
 
             except Exception as e:
                 error_msg = f"Failed to process timeframe {timeframe}: {str(e)}"
@@ -182,19 +186,20 @@ class FuzzyNeuralProcessor:
                 continue
 
         # Check if we got any valid results
-        if not all_features:
+        if not timeframe_features:
             raise ValueError(
                 f"Failed to process features for any timeframe. "
                 f"Errors: {processing_errors}"
             )
 
-        # Combine features from all timeframes
-        # Each element in all_features is a torch tensor of shape (batch_size, timeframe_features)
-        combined_features = torch.cat(all_features, dim=1)
+        # Perform temporal alignment for multi-timeframe neural network input
+        combined_features, all_feature_names = self._align_multi_timeframe_features(
+            timeframe_features, timeframe_feature_names, timeframe_order
+        )
         
         # Log summary
         total_features = combined_features.shape[1]
-        successful_timeframes = len(all_features)
+        successful_timeframes = len(timeframe_features)
         failed_timeframes = len(processing_errors)
         
         if failed_timeframes > 0:
@@ -213,6 +218,172 @@ class FuzzyNeuralProcessor:
         )
 
         return combined_features, all_feature_names
+
+    def _align_multi_timeframe_features(
+        self,
+        timeframe_features: Dict[str, pd.DataFrame],
+        timeframe_feature_names: Dict[str, List[str]],
+        timeframe_order: List[str],
+    ) -> Tuple[torch.Tensor, List[str]]:
+        """
+        Align multi-timeframe fuzzy features for neural network input.
+        
+        This method implements proper temporal alignment where each neural network
+        input row contains features from all timeframes at the corresponding time.
+        Higher frequency timeframes drive the temporal resolution.
+        
+        Example for 1h + 1d alignment:
+        - 1h timestamp 2024-01-02 09:00 → uses 1d features from 2024-01-02
+        - 1h timestamp 2024-01-02 10:00 → uses SAME 1d features from 2024-01-02
+        - 1h timestamp 2024-01-03 09:00 → uses NEW 1d features from 2024-01-03
+        
+        Args:
+            timeframe_features: Dict mapping timeframes to feature DataFrames
+            timeframe_feature_names: Dict mapping timeframes to feature name lists
+            timeframe_order: Ordered list of timeframes for feature combination
+            
+        Returns:
+            Tuple of (aligned_features_tensor, combined_feature_names)
+        """
+        # Find the highest frequency (most granular) timeframe to use as base
+        # Assume first timeframe in order is highest frequency (shortest period)
+        base_timeframe = timeframe_order[0]
+        base_features = timeframe_features[base_timeframe]
+        
+        logger.info(f"Using {base_timeframe} as base timeframe for temporal alignment ({len(base_features)} timestamps)")
+        
+        # Create aligned feature matrix
+        aligned_features_list = []
+        combined_feature_names = []
+        
+        # Start with base timeframe features
+        aligned_features_list.append(base_features.values)
+        combined_feature_names.extend([f"{base_timeframe}_{name}" for name in timeframe_feature_names[base_timeframe]])
+        
+        # Align other timeframes to base timeframe timestamps
+        for timeframe in timeframe_order[1:]:
+            tf_features = timeframe_features[timeframe]
+            tf_names = timeframe_feature_names[timeframe]
+            
+            logger.debug(f"Aligning {timeframe} ({len(tf_features)} bars) to {base_timeframe} ({len(base_features)} bars)")
+            
+            # Align using forward-fill to match base timeframe timestamps
+            # This correctly maps daily features to each hour within that day
+            aligned_tf_features = tf_features.reindex(base_features.index, method='ffill')
+            
+            # Check for NaN values and provide detailed logging
+            nan_count = aligned_tf_features.isnull().sum().sum()
+            if nan_count > 0:
+                logger.warning(
+                    f"Temporal alignment of {timeframe} created {nan_count} NaN values. "
+                    f"This indicates gaps between {timeframe} and {base_timeframe} coverage."
+                )
+                logger.debug(f"Original {timeframe} coverage: {tf_features.index[0]} to {tf_features.index[-1]}")
+                logger.debug(f"Base {base_timeframe} coverage: {base_features.index[0]} to {base_features.index[-1]}")
+            
+            # Handle any remaining NaN values using multiple strategies
+            if nan_count > 0:
+                # First try backward fill for gaps at the beginning
+                aligned_tf_features = aligned_tf_features.bfill()
+                
+                # Then forward fill for any remaining gaps
+                aligned_tf_features = aligned_tf_features.ffill()
+                
+                # Finally, fill any remaining NaN with 0.0 (neutral fuzzy values)
+                aligned_tf_features = aligned_tf_features.fillna(0.0)
+                
+                # Verify all NaN values are resolved
+                remaining_nans = aligned_tf_features.isnull().sum().sum()
+                if remaining_nans > 0:
+                    logger.error(f"Failed to resolve {remaining_nans} NaN values in {timeframe} alignment")
+                else:
+                    logger.debug(f"Successfully resolved all NaN values in {timeframe} alignment")
+            
+            aligned_features_list.append(aligned_tf_features.values)
+            combined_feature_names.extend([f"{timeframe}_{name}" for name in tf_names])
+            
+            logger.debug(f"Aligned {timeframe}: {aligned_tf_features.shape[1]} features → {len(aligned_tf_features)} timestamps")
+        
+        # Combine all aligned features horizontally
+        combined_features_matrix = np.concatenate(aligned_features_list, axis=1)
+        
+        # Check for NaN values after alignment but before temporal features
+        pre_temporal_nans = np.isnan(combined_features_matrix).sum()
+        if pre_temporal_nans > 0:
+            logger.warning(f"Found {pre_temporal_nans} NaN values after alignment, before temporal features")
+            # Fill any remaining NaN values before temporal processing
+            combined_features_matrix = np.nan_to_num(combined_features_matrix, nan=0.0)
+            logger.debug("Filled NaN values with 0.0 before temporal feature extraction")
+        
+        # Apply temporal features if configured
+        if self.config.get('lookback_periods', 0) > 0:
+            lookback = self.config['lookback_periods']
+            temporal_features, temporal_names = self._extract_temporal_features(
+                pd.DataFrame(combined_features_matrix, columns=combined_feature_names),
+                lookback
+            )
+            
+            if temporal_features.size > 0:
+                # Check for NaN values in temporal features
+                temporal_nans = np.isnan(temporal_features).sum()
+                if temporal_nans > 0:
+                    logger.warning(f"Temporal features introduced {temporal_nans} NaN values (likely at beginning due to lookback)")
+                    # Fill temporal NaN values with 0.0
+                    temporal_features = np.nan_to_num(temporal_features, nan=0.0)
+                    logger.debug("Filled temporal feature NaN values with 0.0")
+                
+                # Combine current + temporal features
+                combined_features_matrix = np.concatenate([combined_features_matrix, temporal_features], axis=1)
+                combined_feature_names.extend(temporal_names)
+                logger.debug(f"Added {len(temporal_names)} temporal features (lookback={lookback})")
+        
+        # Convert to tensor
+        features_tensor = torch.FloatTensor(combined_features_matrix)
+        
+        logger.info(
+            f"Multi-timeframe alignment complete: {features_tensor.shape[0]} samples, "
+            f"{features_tensor.shape[1]} total features from {len(timeframe_order)} timeframes"
+        )
+        
+        return features_tensor, combined_feature_names
+
+    def _sort_timeframes_by_frequency(self, timeframes: List[str]) -> List[str]:
+        """
+        Sort timeframes by frequency (highest frequency first).
+        
+        This ensures proper temporal alignment where the highest frequency
+        timeframe drives the neural network input resolution.
+        
+        Args:
+            timeframes: List of timeframe strings (e.g., ['1h', '1d', '4h'])
+            
+        Returns:
+            List of timeframes sorted by frequency (highest first)
+            
+        Example:
+            ['1h', '1d'] → ['1h', '1d']  # 1h is higher frequency 
+            ['1d', '4h', '1h'] → ['1h', '4h', '1d']  # 1h > 4h > 1d
+        """
+        def timeframe_to_minutes(tf: str) -> int:
+            """Convert timeframe string to minutes for comparison."""
+            tf = tf.lower().strip()
+            if tf.endswith('m'):
+                return int(tf[:-1])
+            elif tf.endswith('h'):
+                return int(tf[:-1]) * 60
+            elif tf.endswith('d'):
+                return int(tf[:-1]) * 60 * 24
+            elif tf.endswith('w'):
+                return int(tf[:-1]) * 60 * 24 * 7
+            else:
+                # Default to hours if no suffix
+                return int(tf) * 60
+        
+        # Sort by minutes (ascending = highest frequency first)
+        sorted_timeframes = sorted(timeframes, key=timeframe_to_minutes)
+        
+        logger.debug(f"Sorted timeframes by frequency: {sorted_timeframes}")
+        return sorted_timeframes
 
     def _extract_fuzzy_features(
         self, fuzzy_data: pd.DataFrame

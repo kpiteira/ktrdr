@@ -16,7 +16,10 @@ from ..neural.models.mlp import MLPTradingModel
 from ..data.data_manager import DataManager
 from ..indicators.indicator_engine import IndicatorEngine
 from ..fuzzy.engine import FuzzyEngine
+from ..logging import get_logger
 
+
+logger = get_logger(__name__)
 
 class StrategyTrainer:
     """Coordinate the complete training pipeline from data to trained model."""
@@ -92,7 +95,17 @@ class StrategyTrainer:
         indicators = self._calculate_indicators(price_data, config["indicators"])
         
         # Check for critical NaN values that could break training
-        indicators_nan_count = indicators.isna().sum().sum()
+        if isinstance(indicators, dict):
+            # Multi-timeframe case: check each timeframe
+            total_nan_count = 0
+            for tf, tf_indicators in indicators.items():
+                tf_nan_count = tf_indicators.isna().sum().sum()
+                total_nan_count += tf_nan_count
+            indicators_nan_count = total_nan_count
+        else:
+            # Single timeframe case: direct DataFrame
+            indicators_nan_count = indicators.isna().sum().sum()
+        
         if indicators_nan_count > 0:
             print(f"⚠️ Warning: {indicators_nan_count} NaN values in indicators - will be filled with 0")
         
@@ -107,7 +120,17 @@ class StrategyTrainer:
         print("\n4. Engineering features...")
         
         # Check for critical NaN values in fuzzy data
-        fuzzy_nan_count = fuzzy_data.isna().sum().sum()
+        if isinstance(fuzzy_data, dict):
+            # Multi-timeframe case: check each timeframe
+            total_fuzzy_nan_count = 0
+            for tf, tf_fuzzy in fuzzy_data.items():
+                tf_fuzzy_nan_count = tf_fuzzy.isna().sum().sum()
+                total_fuzzy_nan_count += tf_fuzzy_nan_count
+            fuzzy_nan_count = total_fuzzy_nan_count
+        else:
+            # Single timeframe case: direct DataFrame
+            fuzzy_nan_count = fuzzy_data.isna().sum().sum()
+        
         if fuzzy_nan_count > 0:
             print(f"⚠️ Warning: {fuzzy_nan_count} NaN values in fuzzy data")
         
@@ -280,8 +303,8 @@ class StrategyTrainer:
             
             return {timeframe: data}
         
-        # Multi-timeframe case
-        base_timeframe = timeframes[1] if len(timeframes) > 1 else timeframes[0]  # Use second timeframe as base
+        # Multi-timeframe case - use first timeframe (highest frequency) as base
+        base_timeframe = timeframes[0]  # Always use first timeframe as base
         multi_data = self.data_manager.load_multi_timeframe_data(
             symbol=symbol,
             timeframes=timeframes,
@@ -290,6 +313,21 @@ class StrategyTrainer:
             base_timeframe=base_timeframe,
             mode=data_mode
         )
+
+        # Validate multi-timeframe loading success
+        if len(multi_data) != len(timeframes):
+            available_tfs = list(multi_data.keys())
+            missing_tfs = set(timeframes) - set(available_tfs)
+            logger.warning(
+                f"⚠️ Multi-timeframe loading partial success: {len(multi_data)}/{len(timeframes)} timeframes loaded. "
+                f"Missing: {missing_tfs}, Available: {available_tfs}"
+            )
+            
+            # Continue with available timeframes but warn user
+            if len(multi_data) == 0:
+                raise ValueError(f"No timeframes successfully loaded for {symbol}")
+        else:
+            logger.info(f"✅ Multi-timeframe data loaded successfully: {', '.join(multi_data.keys())}")
 
         return multi_data
 

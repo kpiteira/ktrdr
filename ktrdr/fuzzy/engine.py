@@ -373,13 +373,41 @@ class FuzzyEngine:
                     for tf_data in multi_timeframe_indicators.values():
                         available_indicators.update(tf_data.columns)
                     
-                    # Create FuzzyConfig from the provided configuration
-                    temp_config = FuzzyConfig(fuzzy_sets={})
+                    logger.debug(f"Available indicators in multi-timeframe data: {available_indicators}")
+                    logger.debug(f"Fuzzy sets config keys: {list(fuzzy_sets_config.keys())}")
+                    
+                    # Filter fuzzy config to only include indicators that are available
+                    filtered_fuzzy_config = {}
                     for indicator, sets_config in fuzzy_sets_config.items():
-                        if indicator in available_indicators:
-                            temp_config.fuzzy_sets[indicator] = FuzzySetConfig(
-                                membership_functions=sets_config
-                            )
+                        # Check if the base indicator name is in available indicators
+                        # or if any column starts with the indicator name
+                        matching_indicators = [
+                            col for col in available_indicators 
+                            if col == indicator or col.lower().startswith(indicator.lower())
+                        ]
+                        
+                        if matching_indicators:
+                            logger.debug(f"Found matches for {indicator}: {matching_indicators}")
+                            filtered_fuzzy_config[indicator] = sets_config
+                        else:
+                            logger.warning(f"No matching indicators found for fuzzy set '{indicator}'")
+                    
+                    # Only proceed if we have at least one matched fuzzy set
+                    if not filtered_fuzzy_config:
+                        raise ConfigurationError(
+                            f"No fuzzy sets match available indicators. "
+                            f"Available: {list(available_indicators)}, "
+                            f"Requested: {list(fuzzy_sets_config.keys())}",
+                            error_code="MTFUZZ-NoMatches",
+                            details={
+                                "available_indicators": list(available_indicators),
+                                "fuzzy_sets_requested": list(fuzzy_sets_config.keys())
+                            },
+                        )
+                    
+                    # Use FuzzyConfigLoader to properly process the filtered config
+                    from ktrdr.fuzzy.config import FuzzyConfigLoader
+                    temp_config = FuzzyConfigLoader.load_from_dict(filtered_fuzzy_config)
                     
                     processing_engine = FuzzyEngine(temp_config)
                 except Exception as e:

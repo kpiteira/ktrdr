@@ -249,17 +249,21 @@ class TimeframeSynchronizer:
         self, data_dict: Dict[str, pd.DataFrame], reference_timeframe: str
     ) -> Tuple[Dict[str, pd.DataFrame], SynchronizationStats]:
         """
-        Synchronize multiple timeframes to a reference timeline.
+        Validate and prepare multiple timeframes without destroying timeframe integrity.
+        
+        This method does NOT expand or synchronize raw data to a common timeline.
+        Each timeframe maintains its native temporal resolution for proper indicator calculation.
+        Temporal alignment happens later in the FuzzyNeuralProcessor for neural network input.
 
         Args:
             data_dict: Dictionary mapping timeframes to DataFrames
-            reference_timeframe: Timeframe to use as reference
+            reference_timeframe: Timeframe to use as reference (for stats only)
 
         Returns:
-            Tuple of (synchronized_data, synchronization_stats)
+            Tuple of (validated_data, synchronization_stats)
 
         Raises:
-            DataValidationError: If reference timeframe not in data_dict
+            DataValidationError: If reference timeframe not found or data invalid
         """
         import time
 
@@ -270,56 +274,43 @@ class TimeframeSynchronizer:
                 f"Reference timeframe {reference_timeframe} not found in data"
             )
 
-        reference_data = data_dict[reference_timeframe]
-        synchronized_data = {reference_timeframe: reference_data}
-
-        # Track statistics
-        successful_alignments = 0
-        failed_alignments = 0
+        # Return original data without modification - preserve timeframe integrity!
+        validated_data = {}
         quality_scores = []
 
-        # Align each timeframe to reference
+        # Validate and ensure UTC timezone for each timeframe
         for timeframe, data in data_dict.items():
-            if timeframe == reference_timeframe:
-                quality_scores.append(1.0)  # Reference is perfect quality
-                continue
-
             try:
-                alignment_result = self.forward_fill_alignment(
-                    data, reference_data, timeframe, reference_timeframe
-                )
-                synchronized_data[timeframe] = alignment_result.aligned_data
-                quality_scores.append(alignment_result.quality_score)
-                successful_alignments += 1
+                # Ensure timezone consistency (UTC) but don't modify temporal structure
+                validated_data[timeframe] = self._ensure_utc_timezone(data, timeframe)
+                quality_scores.append(1.0)  # All timeframes are valid as-is
+                logger.debug(f"Validated {timeframe}: {len(data)} bars preserved")
 
             except Exception as e:
-                logger.warning(
-                    f"Failed to align {timeframe} to {reference_timeframe}: {e}"
-                )
-                # Include original data if alignment fails
-                synchronized_data[timeframe] = data
-                quality_scores.append(0.5)  # Penalty for failed alignment
-                failed_alignments += 1
+                logger.warning(f"Failed to validate {timeframe}: {e}")
+                # Include original data if validation fails
+                validated_data[timeframe] = data
+                quality_scores.append(0.5)  # Penalty for validation failure
 
-        # Create statistics
+        # Create statistics (no actual alignment performed)
         processing_time = time.time() - start_time
         stats = SynchronizationStats(
             total_timeframes=len(data_dict),
-            successfully_aligned=successful_alignments,
-            failed_alignments=failed_alignments,
+            successfully_aligned=len(validated_data),  # All validated timeframes
+            failed_alignments=0,  # No alignment failures since we don't align
             reference_timeframe=reference_timeframe,
-            reference_periods=len(reference_data),
-            average_quality_score=np.mean(quality_scores) if quality_scores else 0.0,
+            reference_periods=len(data_dict[reference_timeframe]),
+            average_quality_score=np.mean(quality_scores) if quality_scores else 1.0,
             processing_time=processing_time,
         )
 
         logger.info(
-            f"Synchronized {len(data_dict)} timeframes to {reference_timeframe} "
-            f"in {processing_time:.2f}s. Success: {successful_alignments}, "
-            f"Failed: {failed_alignments}, Avg Quality: {stats.average_quality_score:.3f}"
+            f"Validated {len(data_dict)} timeframes in {processing_time:.2f}s. "
+            f"Timeframes preserved: {list(validated_data.keys())}, "
+            f"Avg Quality: {stats.average_quality_score:.3f}"
         )
 
-        return synchronized_data, stats
+        return validated_data, stats
 
     def interpolate_missing_data(
         self, data: pd.DataFrame, method: str = "linear", limit: Optional[int] = None
