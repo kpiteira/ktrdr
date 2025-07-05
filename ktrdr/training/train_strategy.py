@@ -620,18 +620,22 @@ class StrategyTrainer:
         Returns:
             Tensor of labels
         """
-        # For multi-timeframe, use the base timeframe (typically the middle one) for labels
-        # Labels should be generated from a single timeframe to maintain consistency
+        # CRITICAL: For multi-timeframe, MUST use the same base timeframe as features
+        # Features are generated from timeframes[0], so labels must also use timeframes[0]
+        # This ensures tensor size consistency (same number of samples)
         if len(price_data) == 1:
             # Single timeframe case
             timeframe, tf_price_data = next(iter(price_data.items()))
             print(f"Generating labels from {timeframe} data")
         else:
-            # Multi-timeframe case - use middle timeframe or first available
+            # Multi-timeframe case - use SAME base timeframe as features (highest frequency)
+            # Features use frequency-based ordering, so we must match that
             timeframe_list = sorted(price_data.keys())
-            base_timeframe = timeframe_list[len(timeframe_list) // 2]  # Use middle timeframe
+            # Convert to frequency-based order (highest frequency first)
+            frequency_order = self._sort_timeframes_by_frequency(timeframe_list)
+            base_timeframe = frequency_order[0]  # Use highest frequency (same as features)
             tf_price_data = price_data[base_timeframe]
-            print(f"Generating labels from base timeframe {base_timeframe} (out of {timeframe_list})")
+            print(f"Generating labels from base timeframe {base_timeframe} (out of {frequency_order}) - matching features")
 
         labeler = ZigZagLabeler(
             threshold=label_config["zigzag_threshold"],
@@ -874,3 +878,40 @@ class StrategyTrainer:
             importance_scores[feature_name] = baseline_accuracy - permuted_accuracy
         
         return importance_scores
+
+    def _sort_timeframes_by_frequency(self, timeframes: List[str]) -> List[str]:
+        """
+        Sort timeframes by frequency (highest frequency first).
+        
+        This ensures proper temporal alignment where the highest frequency
+        timeframe drives the neural network input resolution.
+        
+        Args:
+            timeframes: List of timeframe strings (e.g., ['1h', '1d', '4h'])
+            
+        Returns:
+            List of timeframes sorted by frequency (highest first)
+            
+        Example:
+            ['1h', '1d'] → ['1h', '1d']  # 1h is higher frequency 
+            ['1d', '4h', '1h'] → ['1h', '4h', '1d']  # 1h > 4h > 1d
+        """
+        def timeframe_to_minutes(tf: str) -> int:
+            """Convert timeframe string to minutes for comparison."""
+            tf = tf.lower().strip()
+            if tf.endswith('m'):
+                return int(tf[:-1])
+            elif tf.endswith('h'):
+                return int(tf[:-1]) * 60
+            elif tf.endswith('d'):
+                return int(tf[:-1]) * 60 * 24
+            elif tf.endswith('w'):
+                return int(tf[:-1]) * 60 * 24 * 7
+            else:
+                # Default to hours if no suffix
+                return int(tf) * 60
+        
+        # Sort by minutes (ascending = highest frequency first)
+        sorted_timeframes = sorted(timeframes, key=timeframe_to_minutes)
+        
+        return sorted_timeframes

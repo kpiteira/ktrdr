@@ -12,9 +12,9 @@ training_data:  # Data configuration for model training
   symbols:  # Triple timeframe stress test
     mode: "single"  # Single symbol for comprehensive testing
     symbol: "EURUSD"  # EURUSD has excellent coverage for 5m, 1h, and 1d (2005-2025)
-  timeframes:  # High-frequency stress test
-    mode: "multi_timeframe"  # Multi-timeframe for 2 high-frequency timeframes  
-    list: ["5m", "1h"]  # 5m and 1h combination for high-frequency testing
+  timeframes:  # Triple timeframe comprehensive test
+    mode: "multi_timeframe"  # Multi-timeframe for 3 comprehensive timeframes  
+    list: ["5m", "1h", "1d"]  # 5m, 1h and 1d combination for full spectrum analysis
     base_timeframe: "5m"  # 5m as primary signal timeframe for maximum data
   history_required: 200  # Standard history for reliable pattern recognition
 
