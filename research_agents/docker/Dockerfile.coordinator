@@ -1,0 +1,66 @@
+# Dockerfile for Research Coordinator Service
+# LangGraph workflow orchestration for research agents
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for security
+RUN useradd --create-home --shell /bin/bash app
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt /app/
+COPY requirements-dev.txt /app/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install LangGraph and AI libraries
+RUN pip install --no-cache-dir \
+    langgraph \
+    langchain \
+    langchain-openai \
+    langchain-anthropic \
+    openai \
+    anthropic \
+    redis \
+    asyncpg \
+    uvicorn[standard] \
+    fastapi
+
+# Copy application code
+COPY research_agents/ /app/research_agents/
+COPY ktrdr/ /app/ktrdr/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/checkpoints
+
+# Change ownership to app user
+RUN chown -R app:app /app
+
+# Switch to app user
+USER app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Expose port
+EXPOSE 8000
+
+# Run the coordinator service
+CMD ["python", "-m", "research_agents.workflows.coordinator"]

@@ -1,0 +1,424 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # RESEARCH INFRASTRUCTURE SERVICES
+  # ============================================================================
+  
+  # PostgreSQL database with pgvector extension for research data
+  research-postgres:
+    image: pgvector/pgvector:pg15
+    container_name: research-postgres
+    environment:
+      POSTGRES_DB: research_agents
+      POSTGRES_USER: research_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-research_dev_password}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - research_postgres_data:/var/lib/postgresql/data
+      - ../research_agents/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../research_agents/database/seed_data.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    ports:
+      - "5433:5432"  # Avoid conflict with existing KTRDR postgres on 5432
+    networks:
+      - research_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research_admin -d research_agents"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  # Redis for agent communication and workflow state caching
+  research-redis:
+    image: redis:7-alpine
+    container_name: research-redis
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - research_redis_data:/data
+    ports:
+      - "6380:6379"  # Avoid conflict with existing Redis on 6379
+    networks:
+      - research_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Database migrations container (runs once on startup)
+  research-migrations:
+    build:
+      context: ../
+      dockerfile: research_agents/docker/Dockerfile.migrations
+    container_name: research-migrations
+    environment:
+      DATABASE_URL: postgresql://research_admin:${POSTGRES_PASSWORD:-research_dev_password}@research-postgres:5432/research_agents
+    depends_on:
+      research-postgres:
+        condition: service_healthy
+    networks:
+      - research_network
+    restart: "no"  # Run once on startup
+    volumes:
+      - ../research_agents/database:/app/database:ro
+
+  # ============================================================================
+  # RESEARCH CORE SERVICES
+  # ============================================================================
+
+  # Research Coordinator - LangGraph workflow orchestration
+  research-coordinator:
+    build:
+      context: ../
+      dockerfile: research_agents/docker/Dockerfile.coordinator
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: research-coordinator
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://research_admin:${POSTGRES_PASSWORD:-research_dev_password}@research-postgres:5432/research_agents
+      REDIS_URL: redis://research-redis:6379
+      
+      # KTRDR Integration
+      KTRDR_API_URL: http://backend:8000  # Connect to existing KTRDR backend
+      KTRDR_API_KEY: ${KTRDR_API_KEY:-}
+      
+      # LLM Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      
+      # Service Configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      COORDINATOR_PORT: 8000
+      
+      # Research Configuration
+      MAX_CONCURRENT_EXPERIMENTS: ${MAX_CONCURRENT_EXPERIMENTS:-3}
+      DEFAULT_EXPERIMENT_TIMEOUT: ${DEFAULT_EXPERIMENT_TIMEOUT:-14400}  # 4 hours
+      
+    depends_on:
+      research-postgres:
+        condition: service_healthy
+      research-redis:
+        condition: service_healthy
+      research-migrations:
+        condition: service_completed_successfully
+    ports:
+      - "8100:8000"  # Research Coordinator API
+    networks:
+      - research_network
+      - default  # Connect to existing KTRDR network for backend access
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    volumes:
+      - research_logs:/app/logs
+      - research_checkpoints:/app/checkpoints
+
+  # Research Agent MVP - Scalable research agent instances
+  research-agent-mvp:
+    build:
+      context: ../
+      dockerfile: research_agents/docker/Dockerfile.agent
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    environment:
+      # Agent Configuration
+      AGENT_ID: ${AGENT_ID:-research-agent-001}
+      AGENT_TYPE: ${AGENT_TYPE:-researcher}  # researcher, assistant, coordinator
+      
+      # Database and Communication
+      DATABASE_URL: postgresql://research_admin:${POSTGRES_PASSWORD:-research_dev_password}@research-postgres:5432/research_agents
+      REDIS_URL: redis://research-redis:6379
+      COORDINATOR_URL: http://research-coordinator:8000
+      
+      # KTRDR Integration
+      KTRDR_API_URL: http://backend:8000
+      KTRDR_API_KEY: ${KTRDR_API_KEY:-}
+      
+      # LLM Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      
+      # Agent Configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      MAX_MEMORY_CONTEXT: ${MAX_MEMORY_CONTEXT:-50}
+      HEARTBEAT_INTERVAL: ${HEARTBEAT_INTERVAL:-30}  # seconds
+      
+    depends_on:
+      research-coordinator:
+        condition: service_healthy
+    networks:
+      - research_network
+      - default  # Access to KTRDR backend
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Start with 2 agent instances
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    volumes:
+      - research_logs:/app/logs
+      - research_models:/app/models  # For storing trained models
+
+  # Research API - FastAPI REST endpoints
+  research-api:
+    build:
+      context: ../
+      dockerfile: research_agents/docker/Dockerfile.api
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: research-api
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://research_admin:${POSTGRES_PASSWORD:-research_dev_password}@research-postgres:5432/research_agents
+      REDIS_URL: redis://research-redis:6379
+      
+      # Service Communication
+      COORDINATOR_URL: http://research-coordinator:8000
+      
+      # Authentication and Security
+      JWT_SECRET: ${JWT_SECRET:-research_dev_jwt_secret_change_in_production}
+      API_KEY: ${RESEARCH_API_KEY:-research_dev_api_key}
+      
+      # API Configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      API_PORT: 8000
+      
+      # Rate Limiting
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-1000}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-3600}  # 1 hour
+      
+    depends_on:
+      research-coordinator:
+        condition: service_healthy
+    ports:
+      - "8101:8000"  # Research API endpoints
+    networks:
+      - research_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    volumes:
+      - research_logs:/app/logs
+
+  # ============================================================================
+  # ADVANCED RESEARCH SERVICES
+  # ============================================================================
+
+  # Board Agent MCP - Human interface via MCP protocol
+  research-board-mcp:
+    build:
+      context: ../
+      dockerfile: research_agents/docker/Dockerfile.board-mcp
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: research-board-mcp
+    environment:
+      # Service Integration
+      RESEARCH_API_URL: http://research-api:8000
+      DATABASE_URL: postgresql://research_admin:${POSTGRES_PASSWORD:-research_dev_password}@research-postgres:5432/research_agents
+      
+      # MCP Configuration
+      MCP_PORT: 8001
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+      # LLM for Board Agent Intelligence
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      
+    depends_on:
+      research-api:
+        condition: service_healthy
+    ports:
+      - "8102:8001"  # MCP server port
+    networks:
+      - research_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    volumes:
+      - research_logs:/app/logs
+
+  # Knowledge Engine - Vector search and insight analysis
+  research-knowledge-engine:
+    build:
+      context: ../
+      dockerfile: research_agents/docker/Dockerfile.knowledge
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: research-knowledge-engine
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://research_admin:${POSTGRES_PASSWORD:-research_dev_password}@research-postgres:5432/research_agents
+      
+      # Vector Embeddings
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      EMBEDDING_MODEL: text-embedding-3-small
+      EMBEDDING_DIMENSIONS: 1536
+      
+      # Knowledge Processing
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-100}
+      
+      # Pattern Analysis
+      MIN_PATTERN_CONFIDENCE: ${MIN_PATTERN_CONFIDENCE:-0.7}
+      MIN_INSIGHT_SUPPORT: ${MIN_INSIGHT_SUPPORT:-3}  # Minimum experiments to support insight
+      
+    depends_on:
+      research-postgres:
+        condition: service_healthy
+    networks:
+      - research_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    volumes:
+      - research_logs:/app/logs
+      - research_embeddings_cache:/app/cache
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  research_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+    labels:
+      - "com.ktrdr.network=research"
+      - "com.ktrdr.environment=${ENVIRONMENT:-development}"
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  # Database Storage
+  research_postgres_data:
+    driver: local
+    labels:
+      - "com.ktrdr.volume=research-database"
+      - "com.ktrdr.backup=true"
+  
+  research_redis_data:
+    driver: local
+    labels:
+      - "com.ktrdr.volume=research-cache"
+  
+  # Application Data
+  research_logs:
+    driver: local
+    labels:
+      - "com.ktrdr.volume=research-logs"
+  
+  research_models:
+    driver: local
+    labels:
+      - "com.ktrdr.volume=research-models"
+      - "com.ktrdr.backup=true"
+  
+  research_checkpoints:
+    driver: local
+    labels:
+      - "com.ktrdr.volume=research-checkpoints"
+      - "com.ktrdr.backup=true"
+  
+  research_embeddings_cache:
+    driver: local
+    labels:
+      - "com.ktrdr.volume=research-embeddings"
+
+# ============================================================================
+# DEVELOPMENT PROFILES
+# ============================================================================
+# Usage examples:
+# docker-compose -f docker-compose.research.yml --profile minimal up -d
+# docker-compose -f docker-compose.research.yml --profile full up -d
+
+# Minimal profile for basic development
+x-minimal-services: &minimal-services
+  - research-postgres
+  - research-redis
+  - research-migrations
+  - research-coordinator
+
+# Full profile for complete system
+x-full-services: &full-services
+  - research-postgres
+  - research-redis
+  - research-migrations
+  - research-coordinator
+  - research-agent-mvp
+  - research-api
+  - research-board-mcp
+  - research-knowledge-engine

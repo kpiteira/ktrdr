@@ -23,7 +23,7 @@ function print_help() {
     echo -e "${BLUE}KTRDR Docker Development Helper${NC}"
     echo -e "${YELLOW}Usage:${NC}"
     echo -e "  ${GREEN}./docker_dev.sh${NC} ${YELLOW}<command>${NC}"
-    echo -e "\n${YELLOW}Core Development Commands:${NC}"
+    echo -e "\n${YELLOW}Available commands:${NC}"
     echo -e "  ${GREEN}start${NC}        Start development environment"
     echo -e "  ${GREEN}stop${NC}         Stop development environment"
     echo -e "  ${GREEN}restart${NC}      Restart development environment"
@@ -43,27 +43,7 @@ function print_help() {
     echo -e "  ${GREEN}ci${NC}           Run CI checks locally (linting, tests)"
     echo -e "  ${GREEN}prod${NC}         Start the production environment"
     echo -e "  ${GREEN}health${NC}       Check container health status"
-    
-    echo -e "\n${YELLOW}Research Agent Commands:${NC}"
-    echo -e "  ${GREEN}start-research${NC}    Start research agent containers"
-    echo -e "  ${GREEN}stop-research${NC}     Stop research agent containers"
-    echo -e "  ${GREEN}restart-research${NC}  Restart research agent containers"
-    echo -e "  ${GREEN}logs-research${NC}     View logs from research containers"
-    echo -e "  ${GREEN}logs-coordinator${NC}  View logs from coordinator container"
-    echo -e "  ${GREEN}logs-agent${NC}        View logs from agent containers"
-    echo -e "  ${GREEN}shell-coordinator${NC} Open shell in coordinator container"
-    echo -e "  ${GREEN}shell-agent${NC}       Open shell in agent container"
-    echo -e "  ${GREEN}shell-postgres-research${NC} Open shell in research postgres"
-    echo -e "  ${GREEN}rebuild-research${NC}  Rebuild research containers"
-    echo -e "  ${GREEN}clean-research${NC}    Stop and remove research containers/volumes"
-    echo -e "  ${GREEN}test-research${NC}     Run research agent tests"
-    echo -e "  ${GREEN}health-research${NC}   Check research container health"
-    
-    echo -e "\n${YELLOW}Combined Commands:${NC}"
-    echo -e "  ${GREEN}start-all${NC}         Start both KTRDR and research containers"
-    echo -e "  ${GREEN}stop-all${NC}          Stop both KTRDR and research containers"
-    echo -e "  ${GREEN}logs-all${NC}          View logs from all containers"
-    echo -e "  ${GREEN}help${NC}              Show this help message"
+    echo -e "  ${GREEN}help${NC}         Show this help message"
 }
 
 function start_dev() {
@@ -267,139 +247,6 @@ function check_health() {
     docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 }
 
-# ============================================================================
-# RESEARCH AGENT FUNCTIONS
-# ============================================================================
-
-function start_research() {
-    echo -e "${BLUE}Starting KTRDR Research Agents...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml up -d
-    echo -e "${GREEN}Research agents started!${NC}"
-    echo -e "Research API available at: ${YELLOW}http://localhost:8101${NC}"
-    echo -e "Research Coordinator available at: ${YELLOW}http://localhost:8100${NC}"
-    echo -e "Research Board MCP available at: ${YELLOW}http://localhost:8102${NC}"
-    echo -e "Research PostgreSQL available at: ${YELLOW}localhost:5433${NC}"
-}
-
-function stop_research() {
-    echo -e "${BLUE}Stopping KTRDR Research Agents...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml down
-    echo -e "${GREEN}Research agents stopped!${NC}"
-}
-
-function restart_research() {
-    echo -e "${BLUE}Restarting KTRDR Research Agents...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml restart
-    echo -e "${GREEN}Research agents restarted!${NC}"
-}
-
-function view_research_logs() {
-    echo -e "${BLUE}Showing logs from research containers...${NC}"
-    echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml logs -f
-}
-
-function view_coordinator_logs() {
-    echo -e "${BLUE}Showing logs from coordinator container...${NC}"
-    echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml logs -f research-coordinator
-}
-
-function view_agent_logs() {
-    echo -e "${BLUE}Showing logs from agent containers...${NC}"
-    echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml logs -f research-agent-mvp
-}
-
-function open_coordinator_shell() {
-    echo -e "${BLUE}Opening shell in coordinator container...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml exec research-coordinator bash
-}
-
-function open_agent_shell() {
-    echo -e "${BLUE}Opening shell in agent container...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    # Connect to the first agent instance
-    docker-compose -f docker-compose.research.yml exec research-agent-mvp bash
-}
-
-function open_postgres_research_shell() {
-    echo -e "${BLUE}Opening shell in research postgres container...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml exec research-postgres psql -U research_admin -d research_agents
-}
-
-function rebuild_research() {
-    echo -e "${BLUE}Rebuilding research containers with optimized caching...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml down
-    # Use optimized build with BuildKit
-    export DOCKER_BUILDKIT=1
-    docker-compose -f docker-compose.research.yml build --parallel
-    docker-compose -f docker-compose.research.yml up -d
-    echo -e "${GREEN}Research containers rebuilt and started!${NC}"
-}
-
-function clean_research() {
-    echo -e "${RED}WARNING: This will remove all research containers and volumes.${NC}"
-    read -p "Are you sure you want to continue? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}Cleaning up research environment...${NC}"
-        cd "$SCRIPT_DIR/docker"
-        docker-compose -f docker-compose.research.yml down -v
-        echo -e "${GREEN}Research environment cleaned up!${NC}"
-    fi
-}
-
-function run_research_tests() {
-    echo -e "${BLUE}Running research agent tests...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml exec research-coordinator python -m pytest tests/research/ -v
-}
-
-function check_research_health() {
-    echo -e "${BLUE}Checking research container health...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml ps
-    echo -e "\n${BLUE}Detailed health status:${NC}"
-    docker-compose -f docker-compose.research.yml exec research-postgres pg_isready -U research_admin -d research_agents
-    docker-compose -f docker-compose.research.yml exec research-redis redis-cli ping
-}
-
-function start_all() {
-    echo -e "${BLUE}Starting both KTRDR and Research systems...${NC}"
-    start_dev
-    start_research
-}
-
-function stop_all() {
-    echo -e "${BLUE}Stopping both KTRDR and Research systems...${NC}"
-    stop_dev
-    stop_research
-}
-
-function view_all_logs() {
-    echo -e "${BLUE}Showing logs from all containers...${NC}"
-    echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
-    # Run both log commands in parallel
-    (cd "$SCRIPT_DIR" && docker-compose logs -f) &
-    KTRDR_PID=$!
-    (cd "$SCRIPT_DIR/docker" && docker-compose -f docker-compose.research.yml logs -f) &
-    RESEARCH_PID=$!
-    
-    # Wait for either process to exit (user hits Ctrl+C)
-    wait $KTRDR_PID $RESEARCH_PID
-}
-
-# ============================================================================
 # Main command handling
 case "$1" in
     start)
@@ -458,54 +305,6 @@ case "$1" in
         ;;
     health)
         check_health
-        ;;
-    start-research)
-        start_research
-        ;;
-    stop-research)
-        stop_research
-        ;;
-    restart-research)
-        restart_research
-        ;;
-    logs-research)
-        view_research_logs
-        ;;
-    logs-coordinator)
-        view_coordinator_logs
-        ;;
-    logs-agent)
-        view_agent_logs
-        ;;
-    shell-coordinator)
-        open_coordinator_shell
-        ;;
-    shell-agent)
-        open_agent_shell
-        ;;
-    shell-postgres-research)
-        open_postgres_research_shell
-        ;;
-    rebuild-research)
-        rebuild_research
-        ;;
-    clean-research)
-        clean_research
-        ;;
-    test-research)
-        run_research_tests
-        ;;
-    health-research)
-        check_research_health
-        ;;
-    start-all)
-        start_all
-        ;;
-    stop-all)
-        stop_all
-        ;;
-    logs-all)
-        view_all_logs
         ;;
     help|*)
         print_help

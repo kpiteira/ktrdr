@@ -1,0 +1,61 @@
+# Dockerfile for Research Board Agent (MCP)
+# Human interface via MCP protocol for strategic oversight
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for security
+RUN useradd --create-home --shell /bin/bash app
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt /app/
+COPY requirements-dev.txt /app/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install MCP and AI libraries
+RUN pip install --no-cache-dir \
+    mcp \
+    openai \
+    anthropic \
+    asyncpg \
+    requests \
+    uvicorn[standard]
+
+# Copy application code
+COPY research_agents/ /app/research_agents/
+COPY ktrdr/ /app/ktrdr/
+
+# Create necessary directories
+RUN mkdir -p /app/logs
+
+# Change ownership to app user
+RUN chown -R app:app /app
+
+# Switch to app user
+USER app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
+
+# Expose port
+EXPOSE 8001
+
+# Run the MCP board agent
+CMD ["python", "-m", "research_agents.agents.board_mcp"]
