@@ -308,6 +308,7 @@ class DataManager:
         strict: bool = False,
         cancellation_token: Optional[Any] = None,
         progress_callback: Optional[ProgressCallback] = None,
+        periodic_save_minutes: float = 2.0,
     ) -> pd.DataFrame:
         """
         Load data with optional validation and repair using unified validator.
@@ -324,6 +325,7 @@ class DataManager:
             strict: If True, raises an exception for integrity issues instead of warning (default: False)
             cancellation_token: Optional cancellation token to check for early termination
             progress_callback: Optional callback for progress updates during loading
+            periodic_save_minutes: Save progress every N minutes during long downloads (default: 2.0)
 
         Returns:
             DataFrame containing validated (and optionally repaired) OHLCV data
@@ -371,6 +373,7 @@ class DataManager:
                 cancellation_token,
                 progress_callback,
                 progress,
+                periodic_save_minutes,
             )
 
         # Check if df is None (happens when fallback returns None)
@@ -1238,17 +1241,22 @@ class DataManager:
         cancellation_token: Optional[Any] = None,
         progress_callback: Optional[ProgressCallback] = None,
         progress: Optional[DataLoadingProgress] = None,
+        periodic_save_minutes: float = 2.0,
     ) -> Tuple[List[pd.DataFrame], int, int]:
         """
-        Fetch multiple segments with failure resilience.
+        Fetch multiple segments with failure resilience and periodic progress saves.
 
         Attempts to fetch each segment individually, continuing with other segments
         if some fail. This ensures partial success rather than complete failure.
+        
+        NEW: Saves progress every periodic_save_minutes to prevent data loss
+        during long downloads if container restarts.
 
         Args:
             symbol: Trading symbol
             timeframe: Data timeframe
             segments: List of (start, end) segments to fetch
+            periodic_save_minutes: Save progress every N minutes (default: 2.0)
 
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
@@ -1262,6 +1270,14 @@ class DataManager:
             return successful_data, successful_count, len(segments)
 
         logger.info(f"Fetching {len(segments)} segments with failure resilience")
+        
+        # Periodic save tracking
+        import time
+        last_save_time = time.time()
+        save_interval_seconds = periodic_save_minutes * 60
+        total_bars_saved = 0
+        
+        logger.info(f"💾 Periodic saves enabled: every {periodic_save_minutes} minutes")
 
         for i, (segment_start, segment_end) in enumerate(segments):
             # Check for cancellation before each segment
@@ -1317,6 +1333,33 @@ class DataManager:
                         completed_segment_progress = ((i + 1) / len(segments)) * 86.0
                         progress.percentage = 10.0 + completed_segment_progress
                         progress_callback(progress)
+                    
+                    # 💾 PERIODIC SAVE: Check if it's time to save progress
+                    current_time = time.time()
+                    time_since_last_save = current_time - last_save_time
+                    
+                    if time_since_last_save >= save_interval_seconds or i == len(segments) - 1:
+                        # Time to save! Merge accumulated data and save to CSV
+                        try:
+                            if successful_data:
+                                bars_to_save = self._save_periodic_progress(
+                                    successful_data, symbol, timeframe, total_bars_saved
+                                )
+                                total_bars_saved += bars_to_save
+                                last_save_time = current_time
+                                
+                                logger.info(
+                                    f"💾 Progress saved: {bars_to_save:,} new bars "
+                                    f"({total_bars_saved:,} total) after {time_since_last_save/60:.1f} minutes"
+                                )
+                                
+                                # Update progress to show save occurred
+                                if progress and progress_callback:
+                                    progress.current_step = f"✅ Saved {total_bars_saved:,} bars to CSV (segment {i+1}/{len(segments)})"
+                                    progress_callback(progress)
+                        except Exception as e:
+                            logger.warning(f"⚠️ Failed to save periodic progress: {e}")
+                            # Continue fetching even if save fails
                 else:
                     failed_count += 1
                     logger.warning(f"❌ IB FAILURE {i+1}: No data returned from IB")
@@ -1346,6 +1389,64 @@ class DataManager:
             raise asyncio.CancelledError(f"Data loading cancelled during segment {successful_count + 1}")
             
         return successful_data, successful_count, failed_count
+
+    def _save_periodic_progress(
+        self,
+        successful_data: List[pd.DataFrame],
+        symbol: str,
+        timeframe: str,
+        previous_bars_saved: int,
+    ) -> int:
+        """
+        Save accumulated data progress to CSV file.
+        
+        This merges the new data with any existing data and saves to CSV,
+        allowing downloads to resume from where they left off.
+        
+        Args:
+            successful_data: List of DataFrames with newly fetched data
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            previous_bars_saved: Number of bars saved in previous saves (for counting)
+        
+        Returns:
+            Number of new bars saved in this operation
+        """
+        if not successful_data:
+            return 0
+        
+        try:
+            # Merge newly fetched segments into single DataFrame
+            new_data = pd.concat(successful_data, ignore_index=False).sort_index()
+            new_data = new_data[~new_data.index.duplicated(keep='first')]
+            
+            # Load existing data if it exists
+            try:
+                existing_data = self.data_loader.load(symbol, timeframe)
+                if existing_data is not None and not existing_data.empty:
+                    # Merge new data with existing data
+                    combined_data = pd.concat([existing_data, new_data], ignore_index=False)
+                    combined_data = combined_data.sort_index()
+                    combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
+                    
+                    # Count only truly new bars (not in existing data)
+                    new_bars_count = len(new_data[~new_data.index.isin(existing_data.index)])
+                else:
+                    combined_data = new_data
+                    new_bars_count = len(new_data)
+            except (DataNotFoundError, FileNotFoundError):
+                # No existing data - this is all new
+                combined_data = new_data
+                new_bars_count = len(new_data)
+            
+            # Save the combined data
+            self.data_loader.save(combined_data, symbol, timeframe)
+            
+            return new_bars_count
+            
+        except Exception as e:
+            logger.error(f"Failed to save periodic progress: {e}")
+            raise
 
     def _fetch_segment_sync(
         self,
@@ -1605,6 +1706,7 @@ class DataManager:
         cancellation_token: Optional[Any] = None,
         progress_callback: Optional[ProgressCallback] = None,
         progress: Optional[DataLoadingProgress] = None,
+        periodic_save_minutes: float = 2.0,
     ) -> Optional[pd.DataFrame]:
         """
         Load data with intelligent gap analysis and resilient segment fetching.
@@ -1917,6 +2019,7 @@ class DataManager:
                     cancellation_token,
                     progress_callback,
                     progress,
+                    periodic_save_minutes,
                 )
             )
             fetched_data_frames = successful_frames
