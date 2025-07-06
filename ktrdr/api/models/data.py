@@ -270,6 +270,12 @@ class DataLoadRequest(BaseModel):
     )
     end_date: Optional[datetime] = Field(None, description="Optional end date override")
     filters: Optional[DataFilters] = Field(None, description="Data filtering options")
+    periodic_save_minutes: float = Field(
+        default=2.0, 
+        description="Save progress every N minutes during long downloads (default: 2.0)",
+        gt=0.1,  # Must be at least 6 seconds
+        le=60.0  # Max 1 hour between saves
+    )
 
     model_config = {
         "json_schema_extra": {

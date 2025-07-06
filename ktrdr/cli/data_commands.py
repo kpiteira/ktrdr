@@ -277,6 +277,9 @@ def load_data(
         False, "--verbose", "-v", help="Enable verbose output"
     ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output"),
+    periodic_save_minutes: float = typer.Option(
+        2.0, "--save-interval", help="Save progress every N minutes during long downloads (default: 2.0)"
+    ),
 ):
     """
     Load data via the KTRDR API with intelligent gap analysis.
@@ -325,6 +328,7 @@ def load_data(
                 output_format,
                 verbose,
                 quiet,
+                periodic_save_minutes,
             )
         )
 
@@ -354,6 +358,7 @@ async def _load_data_async(
     output_format: str,
     verbose: bool,
     quiet: bool,
+    periodic_save_minutes: float,
 ):
     """Async implementation of load-data command using API."""
     # Reduce HTTP logging noise unless verbose mode
@@ -421,6 +426,7 @@ async def _load_data_async(
                 trading_hours_only=trading_hours_only,
                 include_extended=include_extended,
                 async_mode=async_mode,
+                periodic_save_minutes=periodic_save_minutes,
             )
 
             # Get operation ID from response
