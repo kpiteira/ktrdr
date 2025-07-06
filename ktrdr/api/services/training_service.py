@@ -66,7 +66,7 @@ class TrainingService(BaseService):
     async def start_training(
         self,
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -74,9 +74,19 @@ class TrainingService(BaseService):
         detailed_analytics: bool = False,
     ) -> Dict[str, Any]:
         """Start neural network training task."""
-        # Validate strategy file exists
-        strategy_path = Path(f"/app/strategies/{strategy_name}.yaml")
-        if not strategy_path.exists():
+        # Validate strategy file exists - check both Docker and local paths
+        strategy_paths = [
+            Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
+            Path(f"strategies/{strategy_name}.yaml"),       # Local path
+        ]
+        
+        strategy_path = None
+        for path in strategy_paths:
+            if path.exists():
+                strategy_path = path
+                break
+        
+        if not strategy_path:
             raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
         
         # Load strategy config to get training parameters
@@ -101,7 +111,7 @@ class TrainingService(BaseService):
         # Create operation metadata
         metadata = OperationMetadata(
             symbol=symbol,
-            timeframe=timeframe,
+            timeframe=timeframes[0] if timeframes else "1h",  # Use first timeframe for metadata compatibility
             start_date=datetime.fromisoformat(start_date) if start_date else None,
             end_date=datetime.fromisoformat(end_date) if end_date else None,
             parameters={
@@ -109,6 +119,7 @@ class TrainingService(BaseService):
                 "strategy_path": str(strategy_path),
                 "training_type": strategy_config.get("model", {}).get("type", "mlp"),
                 "epochs": training_config.get("epochs", 100),
+                "timeframes": timeframes,  # Store all timeframes in parameters
             },
         )
 
@@ -123,7 +134,7 @@ class TrainingService(BaseService):
             self._run_training_async(
                 operation_id,
                 symbol,
-                timeframe,
+                timeframes,
                 strategy_name,
                 start_date,
                 end_date,
@@ -140,11 +151,106 @@ class TrainingService(BaseService):
             "status": "training_started",
             "message": f"Neural network training started for {symbol} using {strategy_name} strategy",
             "symbol": symbol,
-            "timeframe": timeframe,
+            "timeframes": timeframes,
             "strategy_name": strategy_name,
             "estimated_duration_minutes": 30,
         }
 
+    async def start_multi_symbol_training(
+        self,
+        symbols: List[str],
+        timeframes: List[str],
+        strategy_name: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        task_id: Optional[str] = None,
+        detailed_analytics: bool = False,
+    ) -> Dict[str, Any]:
+        """Start multi-symbol neural network training task."""
+        # Validate strategy file exists - check both Docker and local paths
+        strategy_paths = [
+            Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
+            Path(f"strategies/{strategy_name}.yaml"),       # Local path
+        ]
+        
+        strategy_path = None
+        for path in strategy_paths:
+            if path.exists():
+                strategy_path = path
+                break
+        
+        if not strategy_path:
+            raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
+        
+        # Load strategy config to get training parameters
+        with open(strategy_path, 'r') as f:
+            strategy_config = yaml.safe_load(f)
+        
+        # Validate strategy configuration before training
+        validation_issues = _validate_strategy_config(strategy_config, strategy_name)
+        error_issues = [issue for issue in validation_issues if issue.severity == "error"]
+        
+        if error_issues:
+            # Format validation errors into clear message
+            error_messages = []
+            for issue in error_issues:
+                error_messages.append(f"{issue.category}: {issue.message}")
+            
+            validation_error = "Strategy validation failed:\n" + "\n".join(error_messages)
+            raise ValidationError(validation_error)
+        
+        training_config = strategy_config.get("model", {}).get("training", {})
+        
+        # Create operation metadata for multi-symbol training
+        symbols_str = "_".join(symbols)  # Combined symbols for metadata
+        metadata = OperationMetadata(
+            symbol=symbols_str,  # Use combined symbols string
+            timeframe=timeframes[0] if timeframes else "1h",  # Use first timeframe for metadata compatibility
+            start_date=datetime.fromisoformat(start_date) if start_date else None,
+            end_date=datetime.fromisoformat(end_date) if end_date else None,
+            parameters={
+                "strategy_name": strategy_name,
+                "strategy_path": str(strategy_path),
+                "training_type": "multi_symbol_" + strategy_config.get("model", {}).get("type", "mlp"),
+                "epochs": training_config.get("epochs", 100),
+                "symbols": symbols,  # Store all symbols in parameters
+                "timeframes": timeframes,  # Store all timeframes in parameters
+                "multi_symbol": True,  # Mark as multi-symbol training
+            },
+        )
+
+        # Create operation using operations service
+        operation = await self.operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=metadata
+        )
+        operation_id = operation.operation_id
+
+        # Start multi-symbol training in background
+        task = asyncio.create_task(
+            self._run_multi_symbol_training_async(
+                operation_id,
+                symbols,
+                timeframes,
+                strategy_name,
+                start_date,
+                end_date,
+                detailed_analytics,
+            )
+        )
+
+        # Register task with operations service for cancellation support
+        await self.operations_service.start_operation(operation_id, task)
+
+        return {
+            "success": True,
+            "task_id": operation_id,
+            "status": "training_started",
+            "message": f"Multi-symbol neural network training started for {symbols} using {strategy_name} strategy",
+            "symbols": symbols,
+            "timeframes": timeframes,
+            "strategy_name": strategy_name,
+            "estimated_duration_minutes": 45,  # Longer for multi-symbol
+        }
 
     async def get_model_performance(self, task_id: str) -> Dict[str, Any]:
         """Get detailed performance metrics for completed training."""
@@ -344,7 +450,7 @@ class TrainingService(BaseService):
         self,
         operation_id: str,
         symbol: str,
-        timeframe: str,
+        timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str],
         end_date: Optional[str],
@@ -362,8 +468,20 @@ class TrainingService(BaseService):
                 ),
             )
 
-            # Use the real strategy file that exists in the Docker volume
-            strategy_path = f"/app/strategies/{strategy_name}.yaml"
+            # Use the real strategy file that exists - check both Docker and local paths
+            strategy_paths = [
+                Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
+                Path(f"strategies/{strategy_name}.yaml"),       # Local path
+            ]
+            
+            strategy_path = None
+            for path in strategy_paths:
+                if path.exists():
+                    strategy_path = str(path)
+                    break
+            
+            if not strategy_path:
+                raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
             
             # Load strategy config to get training parameters
             with open(strategy_path, 'r') as f:
@@ -449,7 +567,6 @@ class TrainingService(BaseService):
 
                 # Create a shared progress state file for sync/async communication
                 import json
-                from pathlib import Path
                 
                 progress_file = Path(tempfile.gettempdir()) / f"training_progress_{operation_id}.json"
                 progress_state = {
@@ -525,7 +642,7 @@ class TrainingService(BaseService):
                         trainer.train_strategy,
                         actual_strategy_path,
                         symbol,
-                        timeframe,
+                        timeframes,
                         start_date,
                         end_date,
                         training_config.get("validation_split", 0.2),
@@ -666,5 +783,352 @@ class TrainingService(BaseService):
         except Exception as e:
             logger.error(
                 f"Training operation {operation_id} failed: {str(e)}", exc_info=True
+            )
+            await self.operations_service.fail_operation(operation_id, str(e))
+
+    async def _run_multi_symbol_training_async(
+        self,
+        operation_id: str,
+        symbols: List[str],
+        timeframes: List[str],
+        strategy_name: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        detailed_analytics: bool,
+    ):
+        """Run multi-symbol training asynchronously with progress updates."""
+        try:
+            # Get strategy configuration
+            strategy_paths = [
+                Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
+                Path(f"strategies/{strategy_name}.yaml"),       # Local path
+            ]
+            
+            strategy_path = None
+            for path in strategy_paths:
+                if path.exists():
+                    strategy_path = path
+                    break
+            
+            if not strategy_path:
+                raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
+            
+            # Load strategy configuration
+            with open(strategy_path, 'r') as f:
+                strategy_config = yaml.safe_load(f)
+            
+            training_config = strategy_config.get("model", {}).get("training", {})
+            total_epochs = training_config.get("epochs", 100)
+
+            # Phase 1: Configuration and validation (10%)
+            await self.operations_service.update_progress(
+                operation_id,
+                OperationProgress(
+                    percentage=5.0,
+                    current_step="Configuring multi-symbol training environment",
+                ),
+            )
+            
+            # Enable analytics if requested
+            if detailed_analytics:
+                # Ensure model.training.analytics exists in strategy config
+                if "model" not in strategy_config:
+                    strategy_config["model"] = {}
+                if "training" not in strategy_config["model"]:
+                    strategy_config["model"]["training"] = {}
+                if "analytics" not in strategy_config["model"]["training"]:
+                    strategy_config["model"]["training"]["analytics"] = {}
+                
+                # Enable analytics
+                strategy_config["model"]["training"]["analytics"]["enabled"] = True
+                strategy_config["model"]["training"]["analytics"]["export_csv"] = True
+                strategy_config["model"]["training"]["analytics"]["export_json"] = True
+                strategy_config["model"]["training"]["analytics"]["export_alerts"] = True
+                
+                logger.info(f"Analytics enabled for multi-symbol training operation {operation_id}")
+            
+            # Update training_config reference after modification
+            training_config = strategy_config.get("model", {}).get("training", {})
+
+            await self.operations_service.update_progress(
+                operation_id,
+                OperationProgress(
+                    percentage=10.0,
+                    current_step="Preparing multi-symbol training environment",
+                    items_total=total_epochs,
+                ),
+            )
+
+            try:
+                # Phase 2: Setup trainer (15%)
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=15.0, current_step="Initializing multi-symbol strategy trainer"
+                    ),
+                )
+
+                trainer = StrategyTrainer(models_dir="models")
+                
+                # If analytics is enabled, create a temporary strategy file with modified config
+                actual_strategy_path = strategy_path
+                if detailed_analytics:
+                    temp_strategy_file = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
+                    try:
+                        yaml.dump(strategy_config, temp_strategy_file, default_flow_style=False, indent=2)
+                        temp_strategy_file.flush()
+                        actual_strategy_path = temp_strategy_file.name
+                        logger.info(f"Created temporary strategy config with analytics: {actual_strategy_path}")
+                    finally:
+                        temp_strategy_file.close()
+
+                # Phase 3: Training loop with epoch-based progress (15% to 90%)
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=20.0,
+                        current_step=f"Starting multi-symbol training for {total_epochs} epochs",
+                        items_processed=0,
+                        items_total=total_epochs,
+                    ),
+                )
+
+                # Phase 4: Run actual multi-symbol training with progress monitoring (20% to 90%)
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=20.0,
+                        current_step=f"Starting multi-symbol neural network training for {len(symbols)} symbols...",
+                        items_processed=0,
+                        items_total=total_epochs,
+                    ),
+                )
+
+                # Create a shared progress state file for sync/async communication
+                import json
+                
+                progress_file = Path(tempfile.gettempdir()) / f"training_progress_{operation_id}.json"
+                progress_state = {
+                    "current_epoch": 0,
+                    "total_epochs": total_epochs,
+                    "current_step": "Starting multi-symbol training...",
+                    "last_metrics": {},
+                    "multi_symbol": True,
+                }
+                
+                # Write initial progress state
+                with open(progress_file, 'w') as f:
+                    json.dump(progress_state, f)
+                
+                def sync_progress_callback(epoch: int, total_epochs: int, metrics: dict):
+                    """Callback that writes progress to shared file."""
+                    try:
+                        progress_type = metrics.get('progress_type', 'epoch')
+                        is_multi_symbol = metrics.get('multi_symbol', False)
+                        
+                        if progress_type == 'batch':
+                            # Batch-level progress: more frequent updates with bars
+                            batch_idx = metrics.get('batch', 0)
+                            total_batches_per_epoch = metrics.get('total_batches_per_epoch', 1)
+                            completed_batches = metrics.get('completed_batches', 0)
+                            total_batches = metrics.get('total_batches', 1)
+                            
+                            # Use bars (market data points) instead of batches
+                            total_bars_processed = metrics.get('total_bars_processed', 0)
+                            total_bars_all_epochs = metrics.get('total_bars_all_epochs', 1)
+                            
+                            symbols_info = f" ({len(symbols)} symbols)" if is_multi_symbol else ""
+                            current_step = f"Epoch: {epoch}, Bars: {total_bars_processed:,}/{total_bars_all_epochs:,}{symbols_info}"
+                            
+                            progress_state.update({
+                                "current_epoch": epoch,
+                                "total_epochs": total_epochs,
+                                "current_batch": batch_idx,
+                                "total_batches_per_epoch": total_batches_per_epoch,
+                                "completed_batches": completed_batches,
+                                "total_batches": total_batches,
+                                "total_bars_processed": total_bars_processed,
+                                "total_bars_all_epochs": total_bars_all_epochs,
+                                "current_step": current_step,
+                                "last_metrics": metrics,
+                                "progress_type": "batch",
+                                "multi_symbol": is_multi_symbol,
+                            })
+                        else:
+                            # Epoch-level progress: complete epoch with validation
+                            total_bars_processed = metrics.get('total_bars_processed', 0)
+                            total_bars_all_epochs = metrics.get('total_bars_all_epochs', 1)
+                            
+                            symbols_info = f" ({len(symbols)} symbols)" if is_multi_symbol else ""
+                            current_step = f"Epoch: {epoch}, Bars: {total_bars_processed:,}/{total_bars_all_epochs:,}{symbols_info} (Val Acc: {metrics.get('val_accuracy', 0):.3f})"
+                            
+                            progress_state.update({
+                                "current_epoch": epoch,
+                                "total_epochs": total_epochs,
+                                "total_bars_processed": total_bars_processed,
+                                "total_bars_all_epochs": total_bars_all_epochs,
+                                "current_step": current_step,
+                                "last_metrics": metrics,
+                                "progress_type": "epoch",
+                                "multi_symbol": is_multi_symbol,
+                            })
+                        
+                        with open(progress_file, 'w') as f:
+                            json.dump(progress_state, f)
+                    except Exception as e:
+                        logger.warning(f"Failed to update progress file: {e}")
+
+                # Start multi-symbol training in background with progress monitoring
+                import concurrent.futures
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    # Submit multi-symbol training task
+                    training_future = executor.submit(
+                        trainer.train_multi_symbol_strategy,
+                        actual_strategy_path,
+                        symbols,
+                        timeframes,
+                        start_date,
+                        end_date,
+                        training_config.get("validation_split", 0.2),
+                        "local",
+                        sync_progress_callback,
+                    )
+                    
+                    # Monitor progress and update operations service (same logic as single-symbol)
+                    last_reported_batch = -1
+                    while not training_future.done():
+                        try:
+                            # Read progress from shared file
+                            if progress_file.exists():
+                                with open(progress_file, 'r') as f:
+                                    current_progress = json.load(f)
+                                
+                                current_epoch = current_progress.get("current_epoch", 0)
+                                current_step = current_progress.get("current_step", "Multi-symbol training...")
+                                progress_type = current_progress.get("progress_type", "epoch")
+                                
+                                # Calculate fine-grained progress based on bars (market data points)
+                                if progress_type == "batch":
+                                    completed_batches = current_progress.get("completed_batches", 0)
+                                    total_batches = current_progress.get("total_batches", 1)
+                                    total_bars_processed = current_progress.get("total_bars_processed", 0)
+                                    total_bars_all_epochs = current_progress.get("total_bars_all_epochs", 1)
+                                    
+                                    # Only update if batch changed (avoid spam)
+                                    if completed_batches != last_reported_batch and total_bars_all_epochs > 0:
+                                        # Map bars progress to 20% -> 90% range  
+                                        bars_progress = (total_bars_processed / total_bars_all_epochs) * 70  # 70% of range
+                                        percentage = 20.0 + bars_progress
+                                        
+                                        await self.operations_service.update_progress(
+                                            operation_id,
+                                            OperationProgress(
+                                                percentage=min(percentage, 90.0),
+                                                current_step=current_step,
+                                                items_processed=total_bars_processed,
+                                                items_total=total_bars_all_epochs,
+                                            ),
+                                        )
+                                        last_reported_batch = completed_batches
+                                else:
+                                    # Epoch-level progress (fallback or validation updates)
+                                    total_bars_processed = current_progress.get("total_bars_processed", 0)
+                                    total_bars_all_epochs = current_progress.get("total_bars_all_epochs", 0)
+                                    
+                                    if total_bars_all_epochs > 0:
+                                        # Use bars progress if available
+                                        bars_progress = (total_bars_processed / total_bars_all_epochs) * 70
+                                        percentage = 20.0 + bars_progress
+                                        
+                                        await self.operations_service.update_progress(
+                                            operation_id,
+                                            OperationProgress(
+                                                percentage=min(percentage, 90.0),
+                                                current_step=current_step,
+                                                items_processed=total_bars_processed,
+                                                items_total=total_bars_all_epochs,
+                                            ),
+                                        )
+                                    elif total_epochs > 0:
+                                        # Fallback to epoch progress
+                                        epoch_progress = (current_epoch / total_epochs) * 70
+                                        percentage = 20.0 + epoch_progress
+                                        
+                                        await self.operations_service.update_progress(
+                                            operation_id,
+                                            OperationProgress(
+                                                percentage=min(percentage, 90.0),
+                                                current_step=current_step,
+                                                items_processed=current_epoch,
+                                                items_total=total_epochs,
+                                            ),
+                                        )
+                        except Exception as e:
+                            logger.warning(f"Progress monitoring error: {e}")
+                        
+                        # Wait before next check
+                        await asyncio.sleep(2)
+                    
+                    # Get training results
+                    results = training_future.result()
+                    
+                    # Clean up progress file
+                    try:
+                        progress_file.unlink(missing_ok=True)
+                    except:
+                        pass
+                    
+                    # Clean up temporary strategy file if analytics was enabled
+                    if detailed_analytics and actual_strategy_path != strategy_path:
+                        try:
+                            Path(actual_strategy_path).unlink(missing_ok=True)
+                            logger.info(f"Cleaned up temporary strategy config: {actual_strategy_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up temporary strategy config: {e}")
+
+                # Phase 5: Finalization (95%)
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=95.0, current_step="Processing multi-symbol training results"
+                    ),
+                )
+
+                # Prepare results summary using real training results
+                if results:
+                    results_summary = {
+                        "model_path": results.get("model_path"),
+                        "training_metrics": results.get("training_metrics", {}),
+                        "test_metrics": results.get("test_metrics", {}),
+                        "per_symbol_metrics": results.get("per_symbol_metrics", {}),  # Multi-symbol specific
+                        "model_info": results.get("model_info", {}),
+                    }
+                else:
+                    # Fallback if no results returned
+                    results_summary = {
+                        "model_path": None,
+                        "training_metrics": {},
+                        "test_metrics": {},
+                        "per_symbol_metrics": {},
+                        "model_info": {},
+                    }
+
+                # Complete the operation
+                await self.operations_service.complete_operation(
+                    operation_id, result_summary=results_summary
+                )
+
+                logger.info(f"Multi-symbol training operation {operation_id} completed successfully")
+
+            except Exception as e:
+                logger.error(
+                    f"Multi-symbol training operation {operation_id} failed: {str(e)}", exc_info=True
+                )
+                await self.operations_service.fail_operation(operation_id, str(e))
+
+        except Exception as e:
+            logger.error(
+                f"Multi-symbol training operation {operation_id} failed: {str(e)}", exc_info=True
             )
             await self.operations_service.fail_operation(operation_id, str(e))

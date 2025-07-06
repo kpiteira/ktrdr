@@ -251,7 +251,9 @@ def _validate_strategy_config(config: Dict[str, Any], strategy_name: str) -> Lis
     
     # Get name mapping for strategy indicators
     name_mapping = {
+        # Common aliases to official names
         "bollinger_bands": "BollingerBands",
+        "bbands": "BollingerBands",
         "keltner_channels": "KeltnerChannels", 
         "momentum": "Momentum",
         "volume_sma": "SMA",
@@ -259,7 +261,35 @@ def _validate_strategy_config(config: Dict[str, Any], strategy_name: str) -> Lis
         "rsi": "RSI",
         "sma": "SMA",
         "ema": "EMA",
-        "macd": "MACD"
+        "macd": "MACD",
+        "stoch": "Stochastic",
+        "stochastic": "Stochastic",
+        "adx": "ADX",
+        "zigzag": "ZigZag",
+        "williams_r": "WilliamsR",
+        "obv": "OBV",
+        "cci": "CCI",
+        "roc": "ROC",
+        "vwap": "VWAP",
+        "parabolic_sar": "ParabolicSAR",
+        "psar": "ParabolicSAR",
+        "ichimoku": "Ichimoku",
+        "rvi": "RVI",
+        "mfi": "MFI",
+        "aroon": "Aroon",
+        "donchian_channels": "DonchianChannels",
+        "donchian": "DonchianChannels",
+        "ad_line": "ADLine",
+        "accumulation_distribution": "AccumulationDistribution",
+        "cmf": "CMF",
+        "chaikin_money_flow": "ChaikinMoneyFlow",
+        "supertrend": "SuperTrend",
+        "fisher_transform": "FisherTransform",
+        "bollinger_band_width": "BollingerBandWidth",
+        "bb_width": "BollingerBandWidth",
+        "volume_ratio": "VolumeRatio",
+        "squeeze_intensity": "SqueezeIntensity",
+        "distance_from_ma": "DistanceFromMA"
     }
     
     # 1. Check basic structure
@@ -310,8 +340,15 @@ def _validate_strategy_config(config: Dict[str, Any], strategy_name: str) -> Lis
                 strategy_indicators.append(indicator_name)
                 
                 # Check if indicator exists in registry
-                mapped_name = name_mapping.get(indicator_name.lower(), 
-                                               "".join(word.capitalize() for word in indicator_name.split("_")))
+                mapped_name = name_mapping.get(indicator_name.lower())
+                
+                if mapped_name is None:
+                    # Try the original name as-is (for PascalCase names like "BollingerBands")
+                    if indicator_name in BUILT_IN_INDICATORS:
+                        mapped_name = indicator_name
+                    else:
+                        # Fallback: convert snake_case to PascalCase
+                        mapped_name = "".join(word.capitalize() for word in indicator_name.split("_"))
                 
                 if mapped_name not in BUILT_IN_INDICATORS:
                     missing_indicators.append(indicator_name)

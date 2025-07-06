@@ -146,6 +146,134 @@ class IndicatorEngine:
         logger.debug(f"Successfully applied {len(self.indicators)} indicators to data")
         return result_df
 
+    def apply_multi_timeframe(
+        self,
+        multi_timeframe_ohlcv: Dict[str, pd.DataFrame],
+        indicator_configs: Optional[List[Dict]] = None
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Apply indicators across multiple timeframes using the same configuration.
+
+        This method processes indicators on multiple timeframes simultaneously,
+        applying the same set of indicators to each timeframe's OHLCV data.
+        It leverages the existing apply() method for consistency and reuse.
+
+        Args:
+            multi_timeframe_ohlcv: Dictionary mapping timeframes to OHLCV DataFrames
+                                 Format: {timeframe: ohlcv_dataframe}
+            indicator_configs: Optional list of indicator configurations. If None,
+                             uses the indicators configured in this engine instance.
+
+        Returns:
+            Dictionary mapping timeframes to DataFrames with computed indicators
+            Format: {timeframe: indicators_dataframe}
+
+        Raises:
+            ConfigurationError: If no timeframe data or indicator configs provided
+            ProcessingError: If indicator computation fails for any timeframe
+
+        Example:
+            >>> engine = IndicatorEngine()
+            >>> multi_data = {'1h': ohlcv_1h, '4h': ohlcv_4h}
+            >>> configs = [{'name': 'rsi', 'period': 14}]
+            >>> results = engine.apply_multi_timeframe(multi_data, configs)
+            >>> # results = {'1h': indicators_1h, '4h': indicators_4h}
+        """
+        # Validate inputs
+        if not multi_timeframe_ohlcv:
+            raise ConfigurationError(
+                "No timeframe data provided for multi-timeframe indicator processing",
+                error_code="MTIND-NoTimeframes",
+                details={"timeframes_provided": list(multi_timeframe_ohlcv.keys())},
+            )
+
+        # Use provided configs or fall back to existing indicators
+        if indicator_configs is not None:
+            if not indicator_configs:
+                raise ConfigurationError(
+                    "Empty indicator configurations provided",
+                    error_code="MTIND-NoConfigs",
+                    details={"configs_provided": indicator_configs},
+                )
+            # Create temporary engine with the provided configs
+            processing_engine = IndicatorEngine(indicators=indicator_configs)
+        else:
+            if not self.indicators:
+                raise ConfigurationError(
+                    "No indicators configured in engine and no configs provided",
+                    error_code="MTIND-NoIndicators",
+                    details={"engine_indicators": len(self.indicators)},
+                )
+            # Use current engine
+            processing_engine = self
+
+        logger.info(
+            f"Processing indicators for {len(multi_timeframe_ohlcv)} timeframes: "
+            f"{list(multi_timeframe_ohlcv.keys())}"
+        )
+
+        results = {}
+        processing_errors = {}
+
+        # Process each timeframe
+        for timeframe, ohlcv_data in multi_timeframe_ohlcv.items():
+            try:
+                logger.debug(f"Processing {len(processing_engine.indicators)} indicators for timeframe: {timeframe}")
+
+                # Validate timeframe data
+                if ohlcv_data is None or ohlcv_data.empty:
+                    logger.warning(f"Empty OHLCV data for timeframe {timeframe}, skipping")
+                    processing_errors[timeframe] = "Empty OHLCV data"
+                    continue
+
+                # Apply indicators using existing apply() method
+                timeframe_result = processing_engine.apply(ohlcv_data)
+
+                results[timeframe] = timeframe_result
+
+                logger.debug(
+                    f"Successfully processed {len(timeframe_result.columns)} indicator columns "
+                    f"for {timeframe} ({len(timeframe_result)} rows)"
+                )
+
+            except Exception as e:
+                error_msg = f"Failed to process indicators for timeframe {timeframe}: {str(e)}"
+                logger.error(error_msg)
+                processing_errors[timeframe] = str(e)
+
+                # Continue processing other timeframes unless this is critical
+                continue
+
+        # Check if we got any results
+        if not results:
+            raise ProcessingError(
+                "Failed to process indicators for any timeframe",
+                error_code="MTIND-AllTimeframesFailed",
+                details={
+                    "requested_timeframes": list(multi_timeframe_ohlcv.keys()),
+                    "processing_errors": processing_errors,
+                },
+            )
+
+        # Log summary
+        successful_timeframes = len(results)
+        failed_timeframes = len(processing_errors)
+        total_timeframes = len(multi_timeframe_ohlcv)
+
+        if failed_timeframes > 0:
+            logger.warning(
+                f"Multi-timeframe indicator processing completed with warnings: "
+                f"{successful_timeframes}/{total_timeframes} timeframes successful"
+            )
+            for tf, error in processing_errors.items():
+                logger.warning(f"  {tf}: {error}")
+        else:
+            logger.info(
+                f"Successfully processed indicators for all {successful_timeframes} timeframes"
+            )
+
+        return results
+
     def compute_rsi(
         self, data: pd.DataFrame, period: int = 14, source: str = "close"
     ) -> pd.DataFrame:

@@ -1,11 +1,11 @@
 """
 Strategy management commands for the KTRDR CLI.
 
-This module contains all CLI commands related to trading strategies:
+This module contains essential CLI commands related to trading strategies:
 - validate: Validate strategy configurations
-- upgrade: Upgrade strategy files to latest format
 - list: List available strategies
 - backtest: Run backtesting on strategies
+- validate-all: Validate all strategies in a directory
 """
 
 import asyncio
@@ -30,6 +30,7 @@ from ktrdr.config.validation import InputValidator
 from ktrdr.errors import ValidationError, DataError
 from ktrdr.logging import get_logger
 from ktrdr.config.strategy_validator import StrategyValidator
+from ktrdr.config.strategy_loader import strategy_loader
 
 # Setup logging and console
 logger = get_logger(__name__)
@@ -97,294 +98,166 @@ def validate_strategy(
 
     console.print("\n" + "=" * 60)
 
+    summary_status = "[green]VALID[/green]" if result.is_valid else "[red]INVALID[/red]"
+    console.print(f"📊 [bold]Validation Summary: {summary_status}[/bold]")
+
+    if not quiet and (result.errors or result.warnings):
+        console.print(
+            f"   Errors: {len(result.errors)} | "
+            f"Warnings: {len(result.warnings)} | "
+            f"Suggestions: {len(result.suggestions)}"
+        )
+
     if not result.is_valid:
-        console.print("[red]❌ Validation failed.[/red]")
-        if not quiet:
-            console.print(
-                "[yellow]💡 Run 'ktrdr strategy-upgrade' to automatically fix issues[/yellow]"
-            )
-        raise typer.Exit(1)
-    else:
-        console.print("[green]✅ Strategy is ready for neuro-fuzzy training![/green]")
-
-
-@strategies_app.command("upgrade")
-def upgrade_strategy(
-    strategy: str = typer.Argument(..., help="Path to strategy YAML file"),
-    output: Optional[str] = typer.Option(
-        None, "--output", "-o", help="Output path for upgraded file"
-    ),
-    inplace: bool = typer.Option(
-        False, "--inplace", "-i", help="Upgrade in place (overwrites original)"
-    ),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output"),
-):
-    """
-    Upgrade a strategy to neuro-fuzzy format.
-
-    Adds missing sections with sensible defaults to make old strategies compatible
-    with the new neuro-fuzzy training system.
-    """
-    validator = StrategyValidator()
-
-    strategy_path = Path(strategy)
-    if not strategy_path.exists():
-        console.print(f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]")
-        raise typer.Exit(1)
-
-    # Determine output path
-    output_path = output
-    if output_path is None:
-        if inplace:
-            output_path = str(strategy_path)
-        else:
-            # Default: add .upgraded before extension
-            output_path = str(
-                strategy_path.parent
-                / f"{strategy_path.stem}.upgraded{strategy_path.suffix}"
-            )
-
-    console.print(f"🔧 Upgrading strategy: [blue]{strategy_path}[/blue]")
-    if not inplace:
-        console.print(f"📁 Output path: [blue]{output_path}[/blue]")
-    console.print("=" * 60)
-
-    # First validate to show current issues
-    if not quiet:
-        console.print("📊 Current validation status:")
-        result = validator.validate_strategy(str(strategy_path))
-
-        if result.errors:
-            console.print(f"  [red]🚨 {len(result.errors)} errors[/red]")
-        if result.warnings:
-            console.print(f"  [yellow]⚠️  {len(result.warnings)} warnings[/yellow]")
-        if result.missing_sections:
-            console.print(
-                f"  [blue]📋 {len(result.missing_sections)} missing sections[/blue]"
-            )
-        console.print()
-
-    # Perform upgrade
-    success, message = validator.upgrade_strategy(str(strategy_path), output_path)
-
-    if success:
-        console.print("[green]✅ Strategy upgrade completed![/green]")
-        console.print(f"💾 {message}")
-
-        if not quiet:
-            # Validate upgraded file
-            console.print("\n🔍 Validating upgraded strategy...")
-            upgraded_result = validator.validate_strategy(output_path)
-
-            if upgraded_result.is_valid:
-                console.print("[green]✅ Upgraded strategy is valid![/green]")
-            else:
-                console.print(
-                    "[yellow]⚠️  Upgraded strategy still has some issues:[/yellow]"
-                )
-                for error in upgraded_result.errors[:3]:  # Show first 3 errors
-                    console.print(f"  • {error}")
-                if len(upgraded_result.errors) > 3:
-                    console.print(f"  ... and {len(upgraded_result.errors) - 3} more")
-
-        console.print("\n" + "=" * 60)
-        console.print(
-            "[green]🚀 Your strategy is now ready for neuro-fuzzy training![/green]"
-        )
-        console.print(
-            f"[cyan]💡 Use: uv run python -m ktrdr.training.cli --strategy {output_path}[/cyan]"
-        )
-
-    else:
-        console.print(f"[red]❌ Upgrade failed: {message}[/red]")
         raise typer.Exit(1)
 
 
 @strategies_app.command("list")
 def list_strategies(
-    directory: str = typer.Option(
-        "strategies", "--directory", "-d", help="Strategies directory"
-    ),
-    validate: bool = typer.Option(
-        False, "--validate", "-v", help="Validate each strategy"
-    ),
-    verbose: bool = typer.Option(
-        False, "--verbose", help="Show detailed validation results"
-    ),
+    directory: str = typer.Argument("strategies", help="Directory containing strategy files"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information"),
 ):
     """
-    List all strategy files in a directory.
+    List all available trading strategies.
 
-    Shows strategy names, descriptions, and optionally validates each one.
+    Scans the strategies directory and shows all valid strategy configurations.
     """
     strategies_dir = Path(directory)
-
     if not strategies_dir.exists():
-        console.print(
-            f"[red]❌ Error: Strategies directory not found: {strategies_dir}[/red]"
-        )
+        console.print(f"[red]❌ Error: Strategies directory not found: {strategies_dir}[/red]")
         raise typer.Exit(1)
 
-    console.print(f"📂 Strategies in [blue]{strategies_dir}[/blue]:")
-    console.print("=" * 60)
-
-    validator = StrategyValidator()
-    strategy_files = list(strategies_dir.glob("*.yaml")) + list(
-        strategies_dir.glob("*.yml")
-    )
+    # Find all YAML files
+    strategy_files = list(strategies_dir.glob("*.yaml")) + list(strategies_dir.glob("*.yml"))
+    strategy_files = [f for f in strategy_files if not f.name.startswith('.')]
 
     if not strategy_files:
-        console.print("[yellow]📭 No strategy files found (.yaml or .yml)[/yellow]")
+        console.print(f"[yellow]📭 No strategy files found in {strategies_dir}[/yellow]")
         return
 
-    # Create a table for better formatting
-    table = Table(title=None, show_header=True, header_style="bold cyan")
-    table.add_column("File", style="blue")
-    table.add_column("Name", style="white")
-    table.add_column("Status", style="green")
-    if validate:
-        table.add_column("Issues", style="yellow")
+    console.print(f"📋 Found {len(strategy_files)} strategy files in [blue]{strategies_dir}[/blue]")
+    console.print("=" * 80)
+
+    validator = StrategyValidator()
+    valid_strategies = []
+    invalid_strategies = []
+
+    table = Table(title="Trading Strategies")
+    if verbose:
+        table.add_column("Name", style="cyan", no_wrap=True)
+        table.add_column("File", style="blue")
+        table.add_column("Scope", style="green")
+        table.add_column("Symbols", style="yellow")
+        table.add_column("Timeframes", style="magenta")
+        table.add_column("Status", style="white")
+    else:
+        table.add_column("Name", style="cyan", no_wrap=True)
+        table.add_column("File", style="blue")
+        table.add_column("Status", style="white")
 
     for strategy_file in sorted(strategy_files):
         try:
-            import yaml
+            # Load and validate strategy
+            config, is_v2 = strategy_loader.load_strategy_config(str(strategy_file))
+            result = validator.validate_strategy(str(strategy_file))
+            
+            status = "[green]✅ Valid[/green]" if result.is_valid else "[red]❌ Invalid[/red]"
+            
+            if result.is_valid:
+                valid_strategies.append(strategy_file.name)
+            else:
+                invalid_strategies.append(strategy_file.name)
 
-            with open(strategy_file, "r") as f:
-                config = yaml.safe_load(f)
-                name = config.get("name", "Unknown")
-
-                if validate:
-                    result = validator.validate_strategy(str(strategy_file))
-                    if result.is_valid:
-                        status = "✅ Valid"
-                        issues = ""
-                    else:
-                        status = "❌ Invalid"
-                        issues = f"{len(result.errors)} errors, {len(result.warnings)} warnings"
-                    table.add_row(strategy_file.name, name, status, issues)
-                else:
-                    table.add_row(strategy_file.name, name, "Not validated", "")
+            if verbose:
+                # Extract detailed info
+                symbols, timeframes = strategy_loader.extract_training_symbols_and_timeframes(config)
+                scope = getattr(config, 'scope', 'unknown')
+                scope_str = str(scope).split('.')[-1] if hasattr(scope, 'value') else str(scope)
+                
+                symbols_str = ', '.join(symbols[:2]) + ('...' if len(symbols) > 2 else '')
+                timeframes_str = ', '.join(timeframes[:2]) + ('...' if len(timeframes) > 2 else '')
+                
+                table.add_row(
+                    config.name,
+                    strategy_file.name,
+                    scope_str,
+                    symbols_str,
+                    timeframes_str,
+                    status
+                )
+            else:
+                table.add_row(
+                    config.name,
+                    strategy_file.name,
+                    status
+                )
 
         except Exception as e:
-            table.add_row(strategy_file.name, "Error reading file", "❌ Error", str(e))
+            invalid_strategies.append(strategy_file.name)
+            status = f"[red]❌ Error: {str(e)[:50]}...[/red]"
+            
+            if verbose:
+                table.add_row("Unknown", strategy_file.name, "Unknown", "Unknown", "Unknown", status)
+            else:
+                table.add_row("Unknown", strategy_file.name, status)
 
     console.print(table)
+    console.print("\n" + "=" * 80)
+    console.print(f"📊 [bold]Summary:[/bold]")
+    console.print(f"   [green]✅ Valid: {len(valid_strategies)}[/green]")
+    console.print(f"   [red]❌ Invalid: {len(invalid_strategies)}[/red]")
+    console.print(f"   Total: {len(strategy_files)}")
 
-    if validate and verbose:
-        console.print("\n[cyan]Detailed validation results:[/cyan]")
-        console.print("=" * 60)
-
-        for strategy_file in sorted(strategy_files):
-            result = validator.validate_strategy(str(strategy_file))
-            if not result.is_valid:
-                console.print(f"\n📄 [blue]{strategy_file.name}[/blue]")
-                if result.errors:
-                    console.print(f"  [red]Errors:[/red]")
-                    for error in result.errors[:3]:
-                        console.print(f"    • {error}")
-                    if len(result.errors) > 3:
-                        console.print(f"    ... and {len(result.errors) - 3} more")
+    if invalid_strategies:
+        console.print(f"\n[red]❌ Invalid strategies:[/red]")
+        for strategy in invalid_strategies:
+            console.print(f"   • {strategy}")
 
 
 @strategies_app.command("backtest")
 def backtest_strategy(
-    strategy_file: str = typer.Argument(..., help="Path to strategy YAML file"),
-    symbol: str = typer.Argument(..., help="Trading symbol (e.g., AAPL, MSFT)"),
-    timeframe: str = typer.Argument(..., help="Data timeframe (e.g., 1d, 1h)"),
-    start_date: str = typer.Option(
-        ..., "--start-date", help="Backtest start date (YYYY-MM-DD)"
-    ),
-    end_date: str = typer.Option(
-        ..., "--end-date", help="Backtest end date (YYYY-MM-DD)"
-    ),
-    initial_capital: float = typer.Option(
-        100000.0, "--capital", help="Initial capital for backtesting"
-    ),
-    output_file: Optional[str] = typer.Option(
-        None, "--output", "-o", help="Save results to file"
-    ),
-    data_mode: str = typer.Option(
-        "local", "--data-mode", help="Data loading mode (local, ib)"
-    ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show backtest plan without executing"
-    ),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose output"
-    ),
+    strategy_file: str = typer.Argument(..., help="Path to strategy configuration file"),
+    symbol: str = typer.Argument(..., help="Symbol to backtest (e.g., AAPL, EURUSD)"),
+    timeframe: str = typer.Argument(..., help="Timeframe for backtesting (e.g., 1h, 4h, 1d)"),
+    start_date: str = typer.Option("2020-01-01", "--start", help="Start date (YYYY-MM-DD)"),
+    end_date: str = typer.Option("2024-01-01", "--end", help="End date (YYYY-MM-DD)"),
+    initial_capital: float = typer.Option(100000.0, "--capital", help="Initial capital"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without executing"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
 ):
     """
-    Run backtesting on trading strategies.
+    Run backtesting for a trading strategy.
 
-    This command performs historical backtesting of trading strategies using
-    market data and provides performance metrics and analysis.
-
-    Examples:
-        ktrdr strategies backtest strategies/neuro_mean_reversion.yaml AAPL 1h --start-date 2024-07-01 --end-date 2024-12-31
-        ktrdr strategies backtest strategies/trend_momentum.yaml MSFT 1d --start-date 2023-01-01 --end-date 2024-01-01 --capital 50000
-        ktrdr strategies backtest strategies/rsi_strategy.yaml TSLA 1h --dry-run --verbose
+    Executes a backtest for the specified strategy on the given symbol and timeframe.
+    Results are stored and can be retrieved via the API.
     """
-    try:
-        # Input validation
-        strategy_path = Path(strategy_file)
-        if not strategy_path.exists():
-            raise ValidationError(
-                message=f"Strategy file not found: {strategy_file}",
-                error_code="VALIDATION-FileNotFound",
-                details={"file": strategy_file},
-            )
+    strategy_path = Path(strategy_file)
+    if not strategy_path.exists():
+        console.print(f"[red]❌ Error: Strategy file not found: {strategy_path}[/red]")
+        raise typer.Exit(1)
 
-        symbol = InputValidator.validate_string(
-            symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
-        )
-        timeframe = InputValidator.validate_string(
-            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
-        )
-        initial_capital = InputValidator.validate_numeric(
-            initial_capital, min_value=1000.0, max_value=10000000.0
-        )
+    # Validate inputs
+    validator = InputValidator()
+    if not validator.is_valid_symbol(symbol):
+        console.print(f"[red]❌ Error: Invalid symbol format: {symbol}[/red]")
+        raise typer.Exit(1)
 
-        # Run async operation
-        asyncio.run(
-            _backtest_strategy_async(
-                strategy_file,
-                symbol,
-                timeframe,
-                start_date,
-                end_date,
-                initial_capital,
-                output_file,
-                data_mode,
-                dry_run,
-                verbose,
-            )
-        )
+    if not validator.is_valid_timeframe(timeframe):
+        console.print(f"[red]❌ Error: Invalid timeframe: {timeframe}[/red]")
+        console.print("Valid timeframes: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w")
+        raise typer.Exit(1)
 
-    except ValidationError as e:
-        error_console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
-        if verbose:
-            logger.error(f"Validation error: {str(e)}")
-        sys.exit(1)
-    except Exception as e:
-        error_console.print(f"[bold red]Error:[/bold red] {str(e)}")
-        if verbose:
-            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-        sys.exit(1)
+    # Run the backtest asynchronously
+    asyncio.run(run_backtest_async(
+        strategy_file, symbol, timeframe, start_date, end_date, initial_capital, dry_run, verbose
+    ))
 
 
-async def _backtest_strategy_async(
-    strategy_file: str,
-    symbol: str,
-    timeframe: str,
-    start_date: str,
-    end_date: str,
-    initial_capital: float,
-    output_file: Optional[str],
-    data_mode: str,
-    dry_run: bool,
-    verbose: bool,
+async def run_backtest_async(
+    strategy_file: str, symbol: str, timeframe: str, start_date: str, end_date: str,
+    initial_capital: float, dry_run: bool, verbose: bool
 ):
-    """Async implementation of backtest strategy command."""
+    """Async wrapper for backtest execution."""
     try:
         # Check API connection
         if not await check_api_connection():
@@ -486,44 +359,114 @@ async def _backtest_strategy_async(
                     except Exception as e:
                         console.print(f"❌ [red]Error polling backtest status: {str(e)}[/red]")
                         return
+                        
         finally:
-            # Restore original httpx logging level
+            # Restore original logging level
             httpx_logger.setLevel(original_level)
 
-        # Get real results from API
+        # Get final results
         try:
             results = await api_client.get_backtest_results(backtest_id)
-            metrics = results.get("metrics", {})
-            summary = results.get("summary", {})
             
-            # Display real results
-            console.print(f"📊 [bold green]Backtest Results:[/bold green]")
-            console.print(f"📈 Total return: {metrics.get('total_return', 0):.2f}")
-            console.print(f"📊 Sharpe ratio: {metrics.get('sharpe_ratio', 0):.2f}")
-            console.print(f"📉 Max drawdown: {metrics.get('max_drawdown', 0):.2f}%")
-            console.print(f"🎯 Win rate: {metrics.get('win_rate', 0):.1f}%")
-            console.print(f"🔢 Total trades: {metrics.get('total_trades', 0)}")
-            console.print(f"💰 Final value: ${summary.get('final_value', 0):,.2f}")
-            
-            if output_file:
-                # Save real results to file
-                import json
-                with open(output_file, 'w') as f:
-                    json.dump(results, f, indent=2, default=str)
-                console.print(f"💾 Results saved to: {output_file}")
+            if results:
+                console.print(f"\n📊 [bold green]Backtest Results:[/bold green]")
+                console.print(f"   Total Return: {results.get('total_return', 'N/A')}")
+                console.print(f"   Sharpe Ratio: {results.get('sharpe_ratio', 'N/A')}")
+                console.print(f"   Max Drawdown: {results.get('max_drawdown', 'N/A')}")
+                console.print(f"   Total Trades: {results.get('total_trades', 'N/A')}")
+                console.print(f"   Win Rate: {results.get('win_rate', 'N/A')}")
+            else:
+                console.print(f"[yellow]⚠️  Results not yet available[/yellow]")
                 
         except Exception as e:
-            console.print(f"❌ [red]Error retrieving results: {str(e)}[/red]")
-            return
+            console.print(f"[yellow]⚠️  Could not retrieve results: {str(e)}[/yellow]")
 
     except Exception as e:
-        raise DataError(
-            message=f"Failed to backtest strategy for {symbol}",
-            error_code="CLI-BacktestError",
-            details={
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "strategy": strategy_file,
-                "error": str(e),
-            },
-        ) from e
+        console.print(f"❌ [red]Backtest failed: {str(e)}[/red]")
+        sys.exit(1)
+
+
+@strategies_app.command("validate-all")
+def validate_all_cmd(
+    directory: str = typer.Argument(..., help="Directory containing strategy files"),
+    fail_fast: bool = typer.Option(False, "--fail-fast", help="Stop on first validation error"),
+    summary_only: bool = typer.Option(False, "--summary", help="Show only summary statistics"),
+):
+    """
+    Validate all strategy files in a directory.
+    
+    Runs validation on all strategy files and provides a comprehensive
+    report of validation results.
+    """
+    dir_path = Path(directory)
+    if not dir_path.exists() or not dir_path.is_dir():
+        console.print(f"[red]❌ Error: Directory not found: {dir_path}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"🔍 Validating all strategies in: [blue]{dir_path}[/blue]")
+    console.print("=" * 60)
+
+    validator = StrategyValidator()
+    strategy_files = list(dir_path.glob("*.yaml")) + list(dir_path.glob("*.yml"))
+    
+    if not strategy_files:
+        console.print("[yellow]📭 No strategy files found[/yellow]")
+        return
+    
+    valid_count = 0
+    invalid_count = 0
+    error_details = []
+    
+    for file_path in sorted(strategy_files):
+        try:
+            result = validator.validate_strategy(str(file_path))
+            
+            if result.is_valid:
+                valid_count += 1
+                if not summary_only:
+                    console.print(f"[green]✅[/green] {file_path.name}")
+            else:
+                invalid_count += 1
+                error_details.append((file_path.name, result.errors))
+                
+                if not summary_only:
+                    console.print(f"[red]❌[/red] {file_path.name} ({len(result.errors)} errors)")
+                    for error in result.errors[:2]:  # Show first 2 errors
+                        console.print(f"    • {error}")
+                    if len(result.errors) > 2:
+                        console.print(f"    ... and {len(result.errors) - 2} more")
+                
+                if fail_fast:
+                    console.print(f"\n[red]💥 Stopping on first error (--fail-fast)[/red]")
+                    break
+                    
+        except Exception as e:
+            invalid_count += 1
+            if not summary_only:
+                console.print(f"[red]❌[/red] {file_path.name} (validation failed: {e})")
+            
+            if fail_fast:
+                console.print(f"\n[red]💥 Stopping on first error (--fail-fast)[/red]")
+                break
+    
+    # Summary
+    total = valid_count + invalid_count
+    success_rate = (valid_count / total * 100) if total > 0 else 0
+    
+    console.print("\n" + "=" * 60)
+    console.print(f"[bold]📊 Validation Summary:[/bold]")
+    console.print(f"  Total files: {total}")
+    console.print(f"  [green]✅ Valid: {valid_count}[/green]")
+    console.print(f"  [red]❌ Invalid: {invalid_count}[/red]")
+    console.print(f"  Success rate: {success_rate:.1f}%")
+    
+    if invalid_count > 0:
+        console.print(f"\n[red]❌ {invalid_count} files have validation errors[/red]")
+        if summary_only and error_details:
+            console.print("\n[red]Files with errors:[/red]")
+            for filename, errors in error_details:
+                console.print(f"  • {filename} ({len(errors)} errors)")
+        
+        raise typer.Exit(1)
+    else:
+        console.print(f"\n[green]🎉 All strategies are valid![/green]")

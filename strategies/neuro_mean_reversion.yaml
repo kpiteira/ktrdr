@@ -1,153 +1,99 @@
-# Neuro-Fuzzy Mean Reversion Strategy
-name: "neuro_mean_reversion"
-description: "Neural network trained on RSI/MACD fuzzy outputs for mean reversion"
-version: "1.0"
+# === STRATEGY IDENTITY ===
+name: "neuro_mean_reversion"  # Neural network trained on RSI/MACD fuzzy outputs for mean reversion
+description: "Neural network trained on RSI/MACD fuzzy outputs for mean reversion"  # Clear one-line strategy summary
+version: "2.0"  # Clean format version for AI agent compatibility
+hypothesis: "RSI oversold/overbought conditions combined with MACD momentum confirmation create profitable mean reversion opportunities in trending markets"  # Core strategy belief being tested
 
-# Data requirements
-data:
-  symbols: ["AAPL", "MSFT", "GOOGL"]
-  timeframes: ["1h", "4h", "1d"]
-  history_required: 200  # minimum bars for indicators
+# === STRATEGY SCOPE ===
+scope: "universal"  # Universal model
 
-# Technical indicators configuration
-indicators:
-  - name: rsi
-    period: 14
-    source: close
-  - name: macd
-    fast_period: 12
-    slow_period: 26
-    signal_period: 9
-  - name: sma
-    period: 20
-    source: close
+# === TRAINING APPROACH ===
+training_data:  # Data configuration for model training
+  symbols:  # Asset selection for cross-market learning
+    mode: "multi_symbol"  # Multi-symbol training across 3 assets for cross-market learning
+    list:  # Selected assets for diversified training
+    - "AAPL"  # Selected for specific market characteristics
+    - "MSFT"  # Selected for specific market characteristics
+    - "GOOGL"  # Selected for specific market characteristics
+  timeframes:  # Multi-timeframe analysis configuration
+    mode: "multi_timeframe"  # Multi-timeframe analysis using 3 time horizons for context
+    list:  # Multiple timeframes for context and confirmation
+    - "1h"  # Selected timeframe for optimal signal characteristics
+    - "4h"  # Selected timeframe for optimal signal characteristics
+    - "1d"  # Selected timeframe for optimal signal characteristics
+    base_timeframe: "1h"  # Primary signal generation timeframe
+  history_required: 200  # Standard history for reliable pattern recognition
 
-# Fuzzy logic configuration
-fuzzy_sets:
-  rsi:
-    oversold:
-      type: triangular
-      parameters: [0, 10, 30]
-    neutral:
-      type: triangular
-      parameters: [25, 50, 75]
-    overbought:
-      type: triangular
-      parameters: [70, 90, 100]
-  macd:
-    negative:
-      type: triangular
-      parameters: [-0.1, -0.05, 0]
-    neutral:
-      type: triangular
-      parameters: [-0.02, 0, 0.02]
-    positive:
-      type: triangular
-      parameters: [0, 0.05, 0.1]
-  sma:
-    below:
-      type: triangular
-      parameters: [0.95, 0.98, 1.0]
-    near:
-      type: triangular
-      parameters: [0.98, 1.0, 1.02]
-    above:
-      type: triangular
-      parameters: [1.0, 1.02, 1.05]
+# === DEPLOYMENT TARGETS ===
+deployment:  # Target configuration for live trading
+  target_symbols:  # Which assets can use this trained model
+    mode: "group_restricted"  # Deploy on related assets with similar characteristics
+  target_timeframes:  # Supported timeframes for deployment
+    mode: "multi_timeframe"  # Support multiple timeframes for flexible deployment
+    supported:  # Validated timeframes for this strategy
+    - "1h"  # Tested and validated for 1h trading
+    - "4h"  # Tested and validated for 4h trading
+    - "1d"  # Tested and validated for 1d trading
 
-# Neural network configuration
-model:
-  type: "mlp"  # Multi-Layer Perceptron
-  architecture:
-    hidden_layers: [50, 25, 12]  # input_size auto-calculated - larger for 15-year training
-    activation: "relu"
-    output_activation: "softmax"  # for BUY/SELL/HOLD classification
-    dropout: 0.2
-  
-  # Training parameters
-  training:
-    learning_rate: 0.001
-    batch_size: 32
-    epochs: 100
-    optimizer: "adam"
-    weight_decay: 0.0001
-    
-    # Learning rate scheduling
-    lr_scheduler:
-      type: "reduce_on_plateau"
-      factor: 0.5
-      patience: 10
-    
-    # Early stopping
-    early_stopping:
-      patience: 15
-      monitor: "val_loss"
-      min_delta: 0.0001
-  
-  # Feature engineering - PURE FUZZY MODE ONLY
-  features:
-    include_price_context: false  # pure fuzzy - no raw price context
-    include_volume_context: false  # pure fuzzy - no raw volume context
-    include_raw_indicators: false
-    lookback_periods: 2  # include last 2 fuzzy values for temporal context
-    scale_features: false  # fuzzy values already 0-1, no scaling needed
-    scaling_method: "standard"  # not used in pure fuzzy mode
+# === TECHNICAL INDICATORS ===
+indicators:  # Core technical analysis components
+- name: "rsi"  # Relative Strength Index for momentum and reversal signals
+  period: 14  # Lookback period balancing responsiveness vs stability
+  source: "close"  # Price source for calculation consistency
+- name: "macd"  # MACD for trend direction and momentum confirmation
+  fast_period: 12  # Fast EMA period for responsive signal generation
+  slow_period: 26  # Slow EMA period for trend stability
+  signal_period: 9  # Signal line period for entry/exit timing
+  source: "close"  # Price source for calculation consistency
 
-# Decision logic configuration
-decisions:
-  output_format: "classification"  # BUY=0, HOLD=1, SELL=2
-  confidence_threshold: 0.5  # LOWERED - minimum confidence for action
-  position_awareness: true    # ENABLED - consider current position in decisions
-  
-  # Signal filtering
-  filters:
-    min_signal_separation: 1  # REDUCED - minimum bars between signals
-    volume_filter: false       # require above-average volume
+# === FUZZY LOGIC CONFIGURATION ===
+fuzzy_sets:  # Membership functions for indicator interpretation
+  rsi:  # Fuzzy membership functions for RSI interpretation
+    oversold:  # Extreme low values indicating potential reversal
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [0, 20, 35]  # Triangular membership: left=0, peak=20, right=35
+    neutral:  # Middle range values indicating market balance
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [30, 50, 70]  # Triangular membership: left=30, peak=50, right=70
+    overbought:  # Extreme high values indicating potential reversal
+      type: "triangular"  # Triangular membership for crisp boundaries
+      parameters: [65, 80, 100]  # Triangular membership: left=65, peak=80, right=100
 
-# Decision orchestrator settings
-orchestrator:
-  max_position_size: 0.95  # Use max 95% of capital
-  signal_cooldown: 4  # Minimum bars between signals
-  
-  # Mode-specific settings
-  modes:
-    backtest:
-      confidence_threshold: 0.6
-    paper:
-      confidence_threshold: 0.65
-    live:
-      confidence_threshold: 0.7
-      require_confirmation: true
+# === NEURAL NETWORK MODEL ===
+model:  # Pure fuzzy-neural architecture configuration
+  type: "mlp"  # Multi-Layer Perceptron for fuzzy feature processing
+  architecture:  # Network topology and activation configuration
+    hidden_layers: [50, 25]  # Network topology: 50 -> 25 neurons for optimal complexity
+    activation: "relu"  # ReLU activation for fast training and gradient flow
+    output_activation: "softmax"  # Softmax for multi-class probability distribution
+    dropout: 0.2  # Moderate dropout for balanced regularization
+  features:  # Input feature engineering configuration
+    include_price_context: false  # Include OHLC price context for market structure awareness
+    lookback_periods: 2  # Historical window size for temporal pattern recognition
+    scale_features: true  # Feature normalization for stable neural network training
+  training:  # Neural network optimization configuration
+    learning_rate: 0.001  # Standard learning rate for stable convergence
+    batch_size: 32  # Standard batch size balancing stability and memory
+    epochs: 100  # Standard training duration for convergence
+    optimizer: "adam"  # Adam optimizer for adaptive learning and momentum
 
-# Training configuration
-training:
-  method: "supervised"
-  labels:
-    source: "zigzag"  # forward-looking ZigZag operator
-    zigzag_threshold: 0.03  # 3% price movement for label generation (more sensitive)
-    label_lookahead: 20     # maximum bars to look ahead
-  
-  # Train/validation/test split
-  data_split:
-    train: 0.7
-    validation: 0.15
-    test: 0.15
-    
-  # Fitness evaluation
-  fitness_metrics:
-    primary: "accuracy"
-    secondary: ["precision", "recall", "f1_score"]
+# === DECISION LOGIC ===
+decisions:  # Trading signal generation rules
+  output_format: "classification"  # Discrete buy/sell/hold class predictions
+  confidence_threshold: 0.6  # Moderate confidence for balanced signal quality
+  position_awareness: true  # Consider existing positions for intelligent signal filtering
+  filters:  # Signal quality and timing filters
+    min_signal_separation: 4  # Minimum 4 periods between signals to prevent overtrading
+    volume_filter: false  # Accept signals regardless of volume conditions
 
-# Money management (for future backtesting)
-risk_management:
-  position_sizing: "fixed_fraction"
-  risk_per_trade: 0.02  # 2% of portfolio
-  max_portfolio_risk: 0.10  # 10% total exposure
-
-# Backtesting configuration (for future use)
-backtesting:
-  start_date: "2020-01-01"
-  end_date: "2024-01-01"
-  initial_capital: 100000
-  transaction_costs: 0.001  # 0.1% per trade
-  slippage: 0.0005  # 0.05% average slippage
+# === TRAINING CONFIGURATION ===
+training:  # Model training methodology and evaluation
+  method: "supervised"  # Supervised learning with labeled historical data
+  labels:  # Target generation for supervised learning
+    source: "zigzag"  # ZigZag-based labels identifying significant price swings
+    zigzag_threshold: 0.03  # Minimum 3.0% price swing for signal significance
+    label_lookahead: 20  # Look 20 periods ahead for target value determination
+  data_split:  # Train/validation/test split configuration
+    train: 0.7  # Training data (70%) for model learning
+    validation: 0.15  # Validation data (15%) for hyperparameter tuning
+    test: 0.15  # Test data (15%) for unbiased performance evaluation
