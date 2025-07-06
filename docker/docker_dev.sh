@@ -273,8 +273,7 @@ function check_health() {
 
 function start_research() {
     echo -e "${BLUE}Starting KTRDR Research Agents...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml up -d
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" up -d
     echo -e "${GREEN}Research agents started!${NC}"
     echo -e "Research API available at: ${YELLOW}http://localhost:8101${NC}"
     echo -e "Research Coordinator available at: ${YELLOW}http://localhost:8100${NC}"
@@ -284,66 +283,57 @@ function start_research() {
 
 function stop_research() {
     echo -e "${BLUE}Stopping KTRDR Research Agents...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml down
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" down
     echo -e "${GREEN}Research agents stopped!${NC}"
 }
 
 function restart_research() {
     echo -e "${BLUE}Restarting KTRDR Research Agents...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml restart
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" restart
     echo -e "${GREEN}Research agents restarted!${NC}"
 }
 
 function view_research_logs() {
     echo -e "${BLUE}Showing logs from research containers...${NC}"
     echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml logs -f
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" logs -f
 }
 
 function view_coordinator_logs() {
     echo -e "${BLUE}Showing logs from coordinator container...${NC}"
     echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml logs -f research-coordinator
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" logs -f research-coordinator
 }
 
 function view_agent_logs() {
     echo -e "${BLUE}Showing logs from agent containers...${NC}"
     echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml logs -f research-agent-mvp
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" logs -f research-agent-mvp
 }
 
 function open_coordinator_shell() {
     echo -e "${BLUE}Opening shell in coordinator container...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml exec research-coordinator bash
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-coordinator bash
 }
 
 function open_agent_shell() {
     echo -e "${BLUE}Opening shell in agent container...${NC}"
-    cd "$SCRIPT_DIR/docker"
     # Connect to the first agent instance
-    docker-compose -f docker-compose.research.yml exec research-agent-mvp bash
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-agent-mvp bash
 }
 
 function open_postgres_research_shell() {
     echo -e "${BLUE}Opening shell in research postgres container...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml exec research-postgres psql -U research_admin -d research_agents
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-postgres psql -U research_admin -d research_agents
 }
 
 function rebuild_research() {
     echo -e "${BLUE}Rebuilding research containers with optimized caching...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml down
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" down
     # Use optimized build with BuildKit
     export DOCKER_BUILDKIT=1
-    docker-compose -f docker-compose.research.yml build --parallel
-    docker-compose -f docker-compose.research.yml up -d
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" build --parallel
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" up -d
     echo -e "${GREEN}Research containers rebuilt and started!${NC}"
 }
 
@@ -353,25 +343,22 @@ function clean_research() {
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${BLUE}Cleaning up research environment...${NC}"
-        cd "$SCRIPT_DIR/docker"
-        docker-compose -f docker-compose.research.yml down -v
+        docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" down -v
         echo -e "${GREEN}Research environment cleaned up!${NC}"
     fi
 }
 
 function run_research_tests() {
     echo -e "${BLUE}Running research agent tests...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml exec research-coordinator python -m pytest tests/research/ -v
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-coordinator python -m pytest tests/research/ -v
 }
 
 function check_research_health() {
     echo -e "${BLUE}Checking research container health...${NC}"
-    cd "$SCRIPT_DIR/docker"
-    docker-compose -f docker-compose.research.yml ps
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" ps
     echo -e "\n${BLUE}Detailed health status:${NC}"
-    docker-compose -f docker-compose.research.yml exec research-postgres pg_isready -U research_admin -d research_agents
-    docker-compose -f docker-compose.research.yml exec research-redis redis-cli ping
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-postgres pg_isready -U research_admin -d research_agents
+    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-redis redis-cli ping
 }
 
 function start_all() {
@@ -392,7 +379,7 @@ function view_all_logs() {
     # Run both log commands in parallel
     (cd "$SCRIPT_DIR" && docker-compose logs -f) &
     KTRDR_PID=$!
-    (cd "$SCRIPT_DIR/docker" && docker-compose -f docker-compose.research.yml logs -f) &
+    (docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" logs -f) &
     RESEARCH_PID=$!
     
     # Wait for either process to exit (user hits Ctrl+C)
