@@ -33,7 +33,7 @@ from ktrdr.training.error_handler import ErrorHandler, ErrorSeverity, RecoveryAc
 from ktrdr.training.data_validator import DataValidator, ValidationRule
 from ktrdr.training.training_stabilizer import TrainingStabilizer, TrainingStatus
 from ktrdr.training.production_error_handler import ProductionErrorHandler, AlertConfig, AlertLevel
-from ktrdr.neural.models.mlp import UniversalMLP
+from ktrdr.neural.models.mlp import MultiSymbolMLP
 
 
 class TestPhase7EdgeCases:
@@ -279,8 +279,10 @@ class TestPhase7EdgeCases:
             )
             
             # Test 3.2: Checkpoint saving and loading
-            model = UniversalMLP(
+            model = MultiSymbolMLP(
                 input_size=30,
+                num_symbols=3,
+                symbol_embedding_dim=16,
                 hidden_layers=[64, 32],
                 dropout=0.2,
                 activation_fn=nn.ReLU,
@@ -530,9 +532,14 @@ class TestPhase7EdgeCases:
             )
             
             # Test 5.3: Simulated training with error recovery
-            model = UniversalMLP(
-                input_size=25, hidden_layers=[32, 16], 
-                dropout=0.1, activation_fn=nn.ReLU, num_classes=3
+            model = MultiSymbolMLP(
+                input_size=25,
+                num_symbols=3,
+                symbol_embedding_dim=16,
+                hidden_layers=[32, 16], 
+                dropout=0.1,
+                activation_fn=nn.ReLU,
+                num_classes=3
             ).to(self.device)
             
             optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -551,9 +558,10 @@ class TestPhase7EdgeCases:
                     # Normal training step
                     batch_features = clean_features[:32].to(self.device)
                     batch_labels = clean_labels[:32].to(self.device)
+                    batch_symbols = dirty_symbols[:32].to(self.device)  # Use symbol indices
                     
                     optimizer.zero_grad()
-                    outputs = model(batch_features)
+                    outputs = model(batch_features, batch_symbols)
                     loss = criterion(outputs, batch_labels)
                     loss.backward()
                     optimizer.step()
