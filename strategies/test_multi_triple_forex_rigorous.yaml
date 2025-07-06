@@ -1,0 +1,130 @@
+# === STRATEGY IDENTITY ===
+name: "test_multi_triple_forex_rigorous"
+description: "Rigorous three-symbol test using multi-symbol infrastructure with major forex pairs from different markets"
+version: "2.0"
+hypothesis: "Multi-symbol infrastructure should learn cross-market patterns from EUR, GBP, and JPY markets with balanced representation"
+
+# === STRATEGY SCOPE ===
+scope: "universal"
+
+# === TRAINING APPROACH ===
+training_data:
+  symbols:
+    mode: "multi_symbol"
+    list: ["EURUSD", "GBPUSD", "USDJPY"]  # Three major pairs: European, British, Asian markets
+  timeframes:
+    mode: "single" 
+    timeframe: "1h"
+  history_required: 200
+
+# === DEPLOYMENT TARGETS ===
+deployment:
+  target_symbols:
+    mode: "universal"
+  target_timeframes:
+    mode: "single"
+    timeframe: "1h"
+
+# === TECHNICAL INDICATORS ===
+indicators:
+- name: "rsi"
+  period: 14
+  source: "close"
+- name: "macd"
+  fast_period: 12
+  slow_period: 26
+  signal_period: 9
+  source: "close"
+- name: "sma"
+  period: 20
+  source: "close"
+- name: "BollingerBands"
+  period: 20
+  multiplier: 2.0
+  source: "close"
+- name: "atr"
+  period: 14
+  source: "close"
+
+# === FUZZY LOGIC CONFIGURATION ===
+fuzzy_sets:
+  rsi:
+    oversold:
+      type: "triangular"
+      parameters: [0, 20, 35]
+    neutral:
+      type: "triangular"
+      parameters: [30, 50, 70]
+    overbought:
+      type: "triangular"
+      parameters: [65, 80, 100]
+  sma:
+    below:
+      type: "triangular"
+      parameters: [0.85, 0.95, 1.0]
+    neutral:
+      type: "triangular"
+      parameters: [0.98, 1.0, 1.02]
+    above:
+      type: "triangular"
+      parameters: [1.0, 1.05, 1.15]
+  BollingerBands:
+    below_lower:
+      type: "triangular"
+      parameters: [0.85, 0.95, 1.0]
+    between_bands:
+      type: "triangular"
+      parameters: [0.98, 1.0, 1.02]
+    above_upper:
+      type: "triangular"
+      parameters: [1.0, 1.05, 1.15]
+  atr:
+    low_volatility:
+      type: "triangular"
+      parameters: [0.0, 0.3, 0.6]
+    normal_volatility:
+      type: "triangular"
+      parameters: [0.4, 0.7, 1.0]
+    high_volatility:
+      type: "triangular"
+      parameters: [0.8, 1.2, 2.0]
+
+# === NEURAL NETWORK MODEL ===
+model:
+  type: "mlp"
+  symbol_embedding_dim: 32  # Sufficient embedding for 3 symbols
+  architecture:
+    hidden_layers: [256, 128, 64]  # Larger network for 3 symbols and more indicators
+    activation: "relu"
+    output_activation: "softmax"
+    dropout: 0.3  # Prevent overfitting with more complexity
+  features:
+    include_price_context: true  # Include OHLC for symbol-specific patterns
+    lookback_periods: 5  # Temporal context for patterns
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 64  # Stable batch size
+    epochs: 50  # More epochs for 3-symbol convergence
+    optimizer: "adam"
+
+# === DECISION LOGIC ===
+decisions:
+  output_format: "classification"
+  confidence_threshold: 0.6
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+    volume_filter: false
+
+# === TRAINING CONFIGURATION ===
+training:
+  method: "supervised"
+  labels:
+    source: "zigzag"
+    zigzag_threshold: 0.02  # Realistic threshold for forex
+    label_lookahead: 12  # Reasonable lookahead
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
