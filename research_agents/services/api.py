@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
+from enum import Enum
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
@@ -21,6 +22,20 @@ from pydantic import BaseModel, Field
 from .database import ResearchDatabaseService, create_database_service, DatabaseConfig
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# ENUMS AND CONSTANTS
+# ============================================================================
+
+class ExperimentType(str, Enum):
+    """Valid experiment types"""
+    NEURAL_FUZZY = "neural_fuzzy"
+    STRATEGY_OPTIMIZATION = "strategy_optimization"
+    PARAMETER_SWEEP = "parameter_sweep"
+    BACKTEST = "backtest"
+    TEST_STRATEGY = "test_strategy"
+    RESEARCH_ANALYSIS = "research_analysis"
 
 
 # ============================================================================
@@ -48,7 +63,7 @@ class ExperimentRequest(BaseModel):
     """Request model for creating experiments"""
     experiment_name: str = Field(..., description="Name of the experiment")
     hypothesis: str = Field(..., description="Research hypothesis to test")
-    experiment_type: str = Field(..., description="Type of experiment")
+    experiment_type: ExperimentType = Field(..., description="Type of experiment")
     configuration: Dict[str, Any] = Field(default_factory=dict, description="Experiment configuration")
     session_id: Optional[UUID] = Field(None, description="Session ID (uses active session if not provided)")
 
@@ -504,58 +519,6 @@ async def create_knowledge_entry(
         )
 
 
-@app.get("/knowledge/{entry_id}", response_model=KnowledgeEntry)
-async def get_knowledge_entry(
-    entry_id: UUID,
-    db: ResearchDatabaseService = Depends(get_database)
-):
-    """Get knowledge entry by ID"""
-    try:
-        entry = await db.execute_query(
-            "SELECT * FROM research.knowledge_base WHERE id = $1",
-            entry_id,
-            fetch="one"
-        )
-        
-        if not entry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Knowledge entry {entry_id} not found"
-            )
-        
-        # Parse JSON fields
-        keywords = entry.get("keywords") or []
-        if isinstance(keywords, str):
-            import json
-            keywords = json.loads(keywords)
-            
-        tags = entry.get("tags") or []
-        if isinstance(tags, str):
-            import json
-            tags = json.loads(tags)
-        
-        return KnowledgeEntry(
-            id=entry["id"],
-            content_type=entry["content_type"],
-            title=entry["title"],
-            content=entry["content"],
-            summary=entry["summary"],
-            keywords=keywords,
-            tags=tags,
-            quality_score=entry["quality_score"],
-            created_at=entry["created_at"]
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get knowledge entry: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve knowledge entry: {e}"
-        )
-
-
 @app.get("/knowledge/search", response_model=List[KnowledgeEntry])
 async def search_knowledge_by_query(
     tags: Optional[str] = None,
@@ -642,6 +605,58 @@ async def search_knowledge(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Knowledge search failed: {e}"
+        )
+
+
+@app.get("/knowledge/{entry_id}", response_model=KnowledgeEntry)
+async def get_knowledge_entry(
+    entry_id: UUID,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Get knowledge entry by ID"""
+    try:
+        entry = await db.execute_query(
+            "SELECT * FROM research.knowledge_base WHERE id = $1",
+            entry_id,
+            fetch="one"
+        )
+        
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Knowledge entry {entry_id} not found"
+            )
+        
+        # Parse JSON fields
+        keywords = entry.get("keywords") or []
+        if isinstance(keywords, str):
+            import json
+            keywords = json.loads(keywords)
+            
+        tags = entry.get("tags") or []
+        if isinstance(tags, str):
+            import json
+            tags = json.loads(tags)
+        
+        return KnowledgeEntry(
+            id=entry["id"],
+            content_type=entry["content_type"],
+            title=entry["title"],
+            content=entry["content"],
+            summary=entry["summary"],
+            keywords=keywords,
+            tags=tags,
+            quality_score=entry["quality_score"],
+            created_at=entry["created_at"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get knowledge entry: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve knowledge entry: {e}"
         )
 
 

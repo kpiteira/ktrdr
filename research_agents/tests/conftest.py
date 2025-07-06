@@ -201,6 +201,17 @@ def test_app():
         elif "SELECT id, session_name, description, status, started_at" in query and "ORDER BY started_at DESC" in query:
             # Return list of sessions for listing endpoint
             return list(created_sessions.values())
+        elif "SELECT * FROM research.knowledge_base WHERE id = $1" in query and fetch == "one":
+            # Knowledge entry retrieval by ID
+            entry_id_param = args[1] if len(args) > 1 else None
+            if entry_id_param:
+                entry_id_str = str(entry_id_param)
+                return created_knowledge.get(entry_id_str)
+            return None
+        elif "SELECT * FROM research.knowledge_base ORDER BY created_at DESC LIMIT" in query and fetch == "all":
+            # Recent knowledge entries
+            limit_param = args[0] if args else 10
+            return list(created_knowledge.values())[:limit_param]
         else:
             return []
     
@@ -254,6 +265,12 @@ def test_app():
                 created_experiments[experiment_id_str]["results"] = results
             if fitness_score:
                 created_experiments[experiment_id_str]["fitness_score"] = fitness_score
+            
+            # Set completed_at timestamp for completed experiments
+            if status == "completed":
+                created_experiments[experiment_id_str]["completed_at"] = datetime(2024, 1, 2)  # Mock completion time
+            elif status == "running" and not created_experiments[experiment_id_str]["started_at"]:
+                created_experiments[experiment_id_str]["started_at"] = datetime(2024, 1, 1, 12, 0)  # Mock start time
     
     mock_db.update_experiment_status.side_effect = mock_update_experiment_status
     
