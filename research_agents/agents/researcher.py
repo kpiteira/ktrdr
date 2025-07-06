@@ -12,8 +12,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-import openai
+from typing import Optional
 from .base import BaseResearchAgent
+from ..services.interfaces import LLMService
+from ..services.llm_service import OpenAILLMService, NullLLMService
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +31,19 @@ class ResearcherAgent(BaseResearchAgent):
     - Learn from past experiment results
     """
     
-    def __init__(self, agent_id: str, **config):
+    def __init__(self, agent_id: str, llm_service: Optional[LLMService] = None, **config):
         super().__init__(agent_id, "researcher", **config)
         
-        # Initialize LLM client
-        self.openai_client = None
-        if config.get("openai_api_key"):
-            self.openai_client = openai.AsyncOpenAI(
-                api_key=config["openai_api_key"]
+        # Dependency injection with sensible defaults
+        if llm_service:
+            self.llm_service = llm_service
+        elif config.get("openai_api_key"):
+            self.llm_service = OpenAILLMService(
+                api_key=config["openai_api_key"],
+                model=config.get("llm_model", "gpt-4")
             )
+        else:
+            self.llm_service = NullLLMService()
         
         # Researcher-specific configuration
         self.creativity_level = config.get("creativity_level", 0.8)
@@ -178,117 +184,14 @@ class ResearcherAgent(BaseResearchAgent):
         }
     
     async def _generate_hypotheses(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate novel hypotheses using LLM"""
-        if not self.openai_client:
-            # Fallback to template-based hypotheses if no LLM
-            return await self._generate_template_hypotheses(context)
-        
+        """Generate novel hypotheses using LLM service"""
         try:
-            # Construct prompt for hypothesis generation
-            prompt = self._build_hypothesis_prompt(context)
-            
-            response = await self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a creative AI researcher specializing in novel neuro-fuzzy trading strategies. Generate innovative, testable hypotheses that go beyond conventional approaches."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=self.creativity_level,
-                max_tokens=2000
-            )
-            
-            # Parse response into structured hypotheses
-            hypotheses_text = response.choices[0].message.content
-            return await self._parse_hypotheses_response(hypotheses_text)
-            
+            return await self.llm_service.generate_hypotheses(context)
         except Exception as e:
             self.logger.error(f"LLM hypothesis generation failed: {e}")
             # Fallback to template-based generation
             return await self._generate_template_hypotheses(context)
     
-    def _build_hypothesis_prompt(self, context: Dict[str, Any]) -> str:
-        """Build prompt for LLM hypothesis generation"""
-        prompt_parts = [
-            "Generate 3-5 novel trading strategy hypotheses based on the following context:",
-            "",
-            "RECENT EXPERIMENT RESULTS:",
-        ]
-        
-        for exp in context["recent_experiments"][-5:]:
-            prompt_parts.append(
-                f"- {exp['name']}: {exp['hypothesis']} (Fitness: {exp['fitness_score']:.3f})"
-            )
-        
-        prompt_parts.extend([
-            "",
-            "KNOWN PATTERNS AND INSIGHTS:",
-        ])
-        
-        for insight in context["knowledge_insights"][:3]:
-            prompt_parts.append(f"- {insight['title']}: {insight['summary']}")
-        
-        prompt_parts.extend([
-            "",
-            "AVOID THESE FAILURE PATTERNS:",
-        ])
-        
-        for failure in context["failure_patterns"]:
-            prompt_parts.append(f"- {failure['title']}")
-        
-        prompt_parts.extend([
-            "",
-            "Generate hypotheses that:",
-            "1. Explore novel neuro-fuzzy architecture combinations",
-            "2. Address unexplored market conditions or timeframes",
-            "3. Apply creative cross-domain inspiration",
-            "4. Build on successful patterns while avoiding known failures",
-            "5. Are specific enough to be testable",
-            "",
-            "Format each hypothesis as:",
-            "NAME: [Brief descriptive name]",
-            "HYPOTHESIS: [Detailed hypothesis statement]",
-            "APPROACH: [Technical approach and architecture]",
-            "INSPIRATION: [What inspired this idea]",
-            "EXPECTED_OUTCOME: [What success would look like]",
-            "",
-            "Hypotheses:"
-        ])
-        
-        return "\n".join(prompt_parts)
-    
-    async def _parse_hypotheses_response(self, response_text: str) -> List[Dict[str, Any]]:
-        """Parse LLM response into structured hypotheses"""
-        hypotheses = []
-        current_hypothesis = {}
-        
-        for line in response_text.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            
-            if line.startswith('NAME:'):
-                if current_hypothesis:
-                    hypotheses.append(current_hypothesis)
-                current_hypothesis = {"name": line[5:].strip()}
-            elif line.startswith('HYPOTHESIS:'):
-                current_hypothesis["hypothesis"] = line[11:].strip()
-            elif line.startswith('APPROACH:'):
-                current_hypothesis["approach"] = line[9:].strip()
-            elif line.startswith('INSPIRATION:'):
-                current_hypothesis["inspiration"] = line[12:].strip()
-            elif line.startswith('EXPECTED_OUTCOME:'):
-                current_hypothesis["expected_outcome"] = line[17:].strip()
-        
-        if current_hypothesis:
-            hypotheses.append(current_hypothesis)
-        
-        return hypotheses
     
     async def _generate_template_hypotheses(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate hypotheses using templates (fallback)"""
@@ -444,25 +347,8 @@ class ResearcherAgent(BaseResearchAgent):
     
     async def generate_hypothesis(self) -> Dict[str, Any]:
         """Generate a single hypothesis based on current research context"""
-        # If we have a mock llm_client (for tests), use it directly
-        if hasattr(self, 'llm_client') and hasattr(self.llm_client, 'generate_hypothesis'):
-            return await self.llm_client.generate_hypothesis()
-        
-        # Otherwise use the full implementation
         context = await self._gather_research_context()
-        hypotheses = await self._generate_hypotheses(context)
-        
-        # Return the first hypothesis with highest confidence
-        if hypotheses:
-            return max(hypotheses, key=lambda h: h.get("confidence", 0))
-        else:
-            # Fallback for when LLM is not available
-            return {
-                "hypothesis": "Test momentum strategy with adaptive parameters",
-                "rationale": "Momentum strategies have shown promise in trending markets",
-                "confidence": 0.6,
-                "experiment_type": "momentum_strategy"
-            }
+        return await self.llm_service.generate_hypothesis(context)
     
     async def search_knowledge(self, tags: List[str], limit: int = 10) -> List[Dict[str, Any]]:
         """Search knowledge base by tags"""

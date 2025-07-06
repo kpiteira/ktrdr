@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from .base import BaseResearchAgent
+from ..services.interfaces import KTRDRService
+from ..services.ktrdr_service import HTTPKTRDRService, NullKTRDRService
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +32,19 @@ class AssistantAgent(BaseResearchAgent):
     - Provide detailed updates to coordinator and knowledge base
     """
     
-    def __init__(self, agent_id: str, **config):
+    def __init__(self, agent_id: str, ktrdr_service: Optional[KTRDRService] = None, **config):
         super().__init__(agent_id, "assistant", **config)
         
-        # KTRDR API configuration
-        self.ktrdr_api_url = config.get("ktrdr_api_url", "http://localhost:8000")
-        self.ktrdr_api_key = config.get("ktrdr_api_key")
+        # Dependency injection with sensible defaults
+        if ktrdr_service:
+            self.ktrdr_service = ktrdr_service
+        elif config.get("ktrdr_api_url"):
+            self.ktrdr_service = HTTPKTRDRService(
+                api_url=config["ktrdr_api_url"],
+                api_key=config.get("ktrdr_api_key")
+            )
+        else:
+            self.ktrdr_service = NullKTRDRService()
         
         # Assistant-specific configuration
         self.max_concurrent_experiments = config.get("max_concurrent_experiments", 2)
@@ -259,20 +268,12 @@ class AssistantAgent(BaseResearchAgent):
     async def _start_ktrdr_training(self, experiment_id: UUID, config: Dict[str, Any]) -> Dict[str, Any]:
         """Start KTRDR training job"""
         try:
-            url = f"{self.ktrdr_api_url}/training/start"
-            
-            async with self.http_session.post(url, json=config) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    await self.log_activity(
-                        f"KTRDR training started for experiment {experiment_id}",
-                        {"job_id": result.get("job_id")}
-                    )
-                    return result
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"KTRDR API error {response.status}: {error_text}")
-                    
+            result = await self.ktrdr_service.start_training(config)
+            await self.log_activity(
+                f"KTRDR training started for experiment {experiment_id}",
+                {"job_id": result.get("job_id")}
+            )
+            return result
         except Exception as e:
             self.logger.error(f"Failed to start KTRDR training: {e}")
             raise
@@ -299,7 +300,7 @@ class AssistantAgent(BaseResearchAgent):
                     raise Exception("Training timeout exceeded")
                 
                 # Get training status
-                status = await self._get_training_status(job_id)
+                status = await self.ktrdr_service.get_training_status(job_id)
                 
                 if status["status"] == "completed":
                     await self.log_activity(f"Training completed for experiment {experiment_id}")
@@ -318,7 +319,7 @@ class AssistantAgent(BaseResearchAgent):
                         # Analyze metrics for early stopping decisions
                         if await self._should_stop_training(experiment_id, status["metrics"]):
                             await self.log_activity(f"Early stopping triggered for experiment {experiment_id}")
-                            await self._stop_ktrdr_training(job_id)
+                            await self.ktrdr_service.stop_training(job_id)
                             break
                 
                 # Wait before next check
@@ -328,22 +329,6 @@ class AssistantAgent(BaseResearchAgent):
                 self.logger.error(f"Error monitoring training for {experiment_id}: {e}")
                 raise
     
-    async def _get_training_status(self, job_id: str) -> Dict[str, Any]:
-        """Get KTRDR training job status"""
-        try:
-            url = f"{self.ktrdr_api_url}/training/status/{job_id}"
-            
-            async with self.http_session.get(url) as response:
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"KTRDR API error {response.status}: {error_text}")
-                    
-        except Exception as e:
-            self.logger.error(f"Failed to get training status: {e}")
-            # Return a default status to avoid breaking the monitoring loop
-            return {"status": "unknown", "error": str(e)}
     
     async def _should_stop_training(self, experiment_id: UUID, metrics: Dict[str, Any]) -> bool:
         """Decide whether to stop training early based on metrics analysis"""
@@ -376,20 +361,6 @@ class AssistantAgent(BaseResearchAgent):
         
         return False
     
-    async def _stop_ktrdr_training(self, job_id: str) -> None:
-        """Stop KTRDR training job"""
-        try:
-            url = f"{self.ktrdr_api_url}/training/stop/{job_id}"
-            
-            async with self.http_session.post(url) as response:
-                if response.status == 200:
-                    await self.log_activity(f"KTRDR training stopped: {job_id}")
-                else:
-                    error_text = await response.text()
-                    self.logger.error(f"Failed to stop training: {error_text}")
-                    
-        except Exception as e:
-            self.logger.error(f"Error stopping KTRDR training: {e}")
     
     async def _analyze_experiment_results(self, experiment_id: UUID) -> None:
         """Analyze experiment results and generate insights"""
@@ -397,7 +368,7 @@ class AssistantAgent(BaseResearchAgent):
         job_id = experiment_data["ktrdr_job_id"]
         
         # Get final results from KTRDR
-        results = await self._get_training_results(job_id)
+        results = await self.ktrdr_service.get_training_results(job_id)
         
         # Calculate fitness score
         fitness_score = await self._calculate_fitness_score(results)
@@ -418,21 +389,6 @@ class AssistantAgent(BaseResearchAgent):
             {"fitness_score": fitness_score, "success": fitness_score > self.fitness_threshold}
         )
     
-    async def _get_training_results(self, job_id: str) -> Dict[str, Any]:
-        """Get final training results from KTRDR"""
-        try:
-            url = f"{self.ktrdr_api_url}/training/results/{job_id}"
-            
-            async with self.http_session.get(url) as response:
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"Failed to get results: {error_text}")
-                    
-        except Exception as e:
-            self.logger.error(f"Error getting training results: {e}")
-            return {"error": str(e), "status": "failed"}
     
     async def _calculate_fitness_score(self, results: Dict[str, Any]) -> float:
         """Calculate fitness score based on training results"""
@@ -523,7 +479,7 @@ class AssistantAgent(BaseResearchAgent):
         job_id = experiment_data.get("ktrdr_job_id")
         
         if job_id:
-            await self._stop_ktrdr_training(job_id)
+            await self.ktrdr_service.stop_training(job_id)
         
         await self.db.update_experiment_status(experiment_id, "aborted")
         del self.active_experiments[experiment_id]
@@ -576,17 +532,7 @@ class AssistantAgent(BaseResearchAgent):
     async def execute_experiment(self, experiment_config: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an experiment with the given configuration"""
         try:
-            # If we have a mock ktrdr_client (for tests), use it directly
-            if hasattr(self.ktrdr_client, 'start_training'):
-                return await self.ktrdr_client.start_training()
-            
-            # Otherwise use the real implementation (would call KTRDR API)
-            # For now, return a mock result
-            return {
-                "training_id": "test-training-001",
-                "status": "started",
-                "experiment_config": experiment_config
-            }
+            return await self.ktrdr_service.start_training(experiment_config)
         except Exception as e:
             # Update agent status to error
             self.status = "error"
@@ -598,18 +544,7 @@ class AssistantAgent(BaseResearchAgent):
     
     async def monitor_training(self, training_id: str) -> Dict[str, Any]:
         """Monitor the status of a training session"""
-        # If we have a mock ktrdr_client (for tests), use it directly
-        if hasattr(self.ktrdr_client, 'get_training_status'):
-            return await self.ktrdr_client.get_training_status()
-        
-        # Otherwise use the real implementation
-        return {
-            "training_id": training_id,
-            "status": "running",
-            "progress": 0.5,
-            "current_epoch": 5,
-            "total_epochs": 10
-        }
+        return await self.ktrdr_service.get_training_status(training_id)
     
     async def analyze_results(self, training_results: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze training/backtesting results"""
