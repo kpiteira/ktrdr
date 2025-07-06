@@ -14,6 +14,7 @@ from typing import Optional
 
 from .researcher import ResearcherAgent
 from .assistant import AssistantAgent
+from .research_agent_mvp import ResearchAgentMVP
 
 # Configure logging
 logging.basicConfig(
@@ -59,6 +60,8 @@ class AgentRunner:
             self.agent = ResearcherAgent(agent_id, **common_config)
         elif agent_type == "assistant":
             self.agent = AssistantAgent(agent_id, **common_config)
+        elif agent_type == "research_mvp":
+            self.agent = ResearchAgentMVP(agent_id, **common_config)
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
         
@@ -118,7 +121,7 @@ async def main():
     try:
         # Get configuration from environment
         agent_id = os.getenv("AGENT_ID", "research-agent-001")
-        agent_type = os.getenv("AGENT_TYPE", "researcher")
+        agent_type = os.getenv("AGENT_TYPE", "research_mvp")  # Default to MVP
         
         logger.info(f"Starting agent runner: {agent_type} ({agent_id})")
         

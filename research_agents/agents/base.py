@@ -6,6 +6,7 @@ Provides common functionality for all AI agents in the research laboratory.
 
 import asyncio
 import logging
+import json
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -58,9 +59,13 @@ class BaseResearchAgent(ABC):
         
         # Initialize state
         self.is_running = False
+        self._stop_requested = False
+        self._status = "idle"
         self.current_activity = "Initializing"
         self.state_data = {}
         self.memory_context = {}
+        self._error_count = 0
+        self._max_errors = config.get("max_errors", 3)  # Allow max 3 errors before stopping
         
         # Database service
         self.db: Optional[ResearchDatabaseService] = None
@@ -73,17 +78,38 @@ class BaseResearchAgent(ABC):
         # Configure logging
         self.logger = logging.getLogger(f"{__name__}.{agent_type}.{agent_id}")
     
+    @property
+    def db_service(self) -> Optional[ResearchDatabaseService]:
+        """Alias for db to maintain compatibility with tests"""
+        return self.db
+    
+    @db_service.setter
+    def db_service(self, value: Optional[ResearchDatabaseService]) -> None:
+        """Setter for db_service alias"""
+        self.db = value
+    
+    @property
+    def status(self) -> str:
+        """Get current agent status"""
+        return getattr(self, '_status', 'idle')
+    
+    @status.setter
+    def status(self, value: str) -> None:
+        """Set current agent status"""
+        self._status = value
+    
     async def initialize(self) -> None:
         """Initialize the agent"""
         try:
             self.logger.info(f"Initializing {self.agent_type} agent: {self.agent_id}")
             
             # Initialize database connection
-            self.db = create_database_service(self.database_url)
-            await self.db.initialize()
+            if self.db is None:
+                self.db = create_database_service(self.database_url)
+                await self.db.initialize()
             
             # Register agent in database
-            await self._register_agent()
+            loaded_existing = await self._register_agent()
             
             # Start heartbeat
             await self._start_heartbeat()
@@ -92,8 +118,11 @@ class BaseResearchAgent(ABC):
             await self._initialize_agent()
             
             self.is_running = True
-            self.current_activity = "Ready"
-            await self._update_status("idle", "Agent initialized and ready")
+            
+            # Only update status if we didn't load existing state
+            if not loaded_existing:
+                self.current_activity = "Ready"
+                await self._update_status("idle", "Agent initialized and ready")
             
             self.logger.info(f"Agent {self.agent_id} initialized successfully")
             
@@ -136,7 +165,7 @@ class BaseResearchAgent(ABC):
             
             self.logger.info(f"Starting main execution loop for agent: {self.agent_id}")
             
-            while self.is_running:
+            while self.is_running and not self._stop_requested:
                 try:
                     # Execute agent-specific logic
                     await self._execute_cycle()
@@ -145,8 +174,15 @@ class BaseResearchAgent(ABC):
                     await asyncio.sleep(1)
                     
                 except Exception as e:
-                    self.logger.error(f"Error in agent execution cycle: {e}")
+                    self._error_count += 1
+                    self.logger.error(f"Error in agent execution cycle: {e} (error {self._error_count}/{self._max_errors})")
                     await self._update_status("error", f"Execution error: {e}")
+                    
+                    # Stop if too many errors
+                    if self._error_count >= self._max_errors:
+                        self.logger.error(f"Agent stopping due to too many errors ({self._max_errors})")
+                        self.is_running = False
+                        raise AgentExecutionError(f"Agent failed after {self._max_errors} errors: {e}") from e
                     
                     # Brief pause before retrying
                     await asyncio.sleep(5)
@@ -157,31 +193,30 @@ class BaseResearchAgent(ABC):
         finally:
             await self.shutdown()
     
-    async def _register_agent(self) -> None:
+    async def _register_agent(self) -> bool:
         """Register agent in the database"""
+        """Returns True if existing state was loaded, False if new state was created"""
         try:
             # Check if agent already exists
             existing_agent = await self.db.get_agent_state(self.agent_id)
             
             if existing_agent:
-                # Update existing agent
-                await self.db.update_agent_status(
-                    self.agent_id, "idle", "Agent restarted"
-                )
-                self.logger.info(f"Updated existing agent registration: {self.agent_id}")
+                # Load existing agent state
+                self._status = existing_agent["status"]
+                self.current_activity = existing_agent["current_activity"]
+                self.state_data = existing_agent["state_data"] or {}
+                self.memory_context = existing_agent["memory_context"] or {}
+                
+                self.logger.info(f"Loaded existing agent state: {self.agent_id}")
+                return True
             else:
                 # Create new agent registration
-                query = """
-                INSERT INTO research.agent_states (
-                    agent_id, agent_type, status, current_activity, 
-                    state_data, memory_context
-                ) VALUES ($1, $2, $3, $4, $5, $6)
-                """
-                await self.db.execute_query(
-                    query, self.agent_id, self.agent_type, "idle",
+                await self.db.create_agent_state(
+                    self.agent_id, self.agent_type, "idle",
                     "Agent registered", self.state_data, self.memory_context
                 )
                 self.logger.info(f"Registered new agent: {self.agent_id}")
+                return False
                 
         except Exception as e:
             self.logger.error(f"Failed to register agent: {e}")
@@ -238,6 +273,52 @@ class BaseResearchAgent(ABC):
         
         # Update in database
         await self._update_state_data({"memory_context": self.memory_context})
+    
+    async def _persist_state(self) -> None:
+        """Persist current agent state to database"""
+        try:
+            await self.db.update_agent_state(
+                self.agent_id, self.status, self.current_activity,
+                self.state_data, self.memory_context
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to persist agent state: {e}")
+    
+    def add_memory(self, key: str, value: Any) -> None:
+        """Add item to agent memory"""
+        self.memory_context[key] = value
+    
+    def get_memory(self, key: str) -> Any:
+        """Get item from agent memory"""
+        return self.memory_context.get(key)
+    
+    def clear_memory(self, key: str) -> None:
+        """Remove item from agent memory"""
+        if key in self.memory_context:
+            del self.memory_context[key]
+    
+    async def update_activity(self, activity: str) -> None:
+        """Update current activity and persist to database"""
+        self.current_activity = activity
+        await self._persist_state()
+    
+    def update_config(self, config: Dict[str, Any]) -> None:
+        """Update agent configuration"""
+        self.config.update(config)
+    
+    def get_config_value(self, key: str, default: Any = None) -> Any:
+        """Get configuration value"""
+        return self.config.get(key, default)
+    
+    async def stop(self) -> None:
+        """Stop the agent"""
+        self.is_running = False
+        self._stop_requested = True
+        await self._update_status("stopped", "Agent stopped")
+    
+    async def _send_heartbeat(self) -> None:
+        """Send heartbeat to database"""
+        await self.db.update_agent_heartbeat(self.agent_id)
     
     # ========================================================================
     # ABSTRACT METHODS - TO BE IMPLEMENTED BY SUBCLASSES

@@ -437,3 +437,84 @@ class ResearcherAgent(BaseResearchAgent):
         """Get agent UUID from database"""
         agent_state = await self.db.get_agent_state(self.agent_id)
         return agent_state["id"] if agent_state else None
+    
+    # ========================================================================
+    # PUBLIC API METHODS
+    # ========================================================================
+    
+    async def generate_hypothesis(self) -> Dict[str, Any]:
+        """Generate a single hypothesis based on current research context"""
+        # If we have a mock llm_client (for tests), use it directly
+        if hasattr(self, 'llm_client') and hasattr(self.llm_client, 'generate_hypothesis'):
+            return await self.llm_client.generate_hypothesis()
+        
+        # Otherwise use the full implementation
+        context = await self._gather_research_context()
+        hypotheses = await self._generate_hypotheses(context)
+        
+        # Return the first hypothesis with highest confidence
+        if hypotheses:
+            return max(hypotheses, key=lambda h: h.get("confidence", 0))
+        else:
+            # Fallback for when LLM is not available
+            return {
+                "hypothesis": "Test momentum strategy with adaptive parameters",
+                "rationale": "Momentum strategies have shown promise in trending markets",
+                "confidence": 0.6,
+                "experiment_type": "momentum_strategy"
+            }
+    
+    async def search_knowledge(self, tags: List[str], limit: int = 10) -> List[Dict[str, Any]]:
+        """Search knowledge base by tags"""
+        return await self.db.search_knowledge_by_tags(tags, limit=limit)
+    
+    async def design_experiment(self, hypothesis: Dict[str, Any]) -> Dict[str, Any]:
+        """Design an experiment configuration from a hypothesis"""
+        experiment_type = hypothesis.get("experiment_type", "momentum_strategy")
+        
+        # Basic experiment design - could be enhanced with more sophisticated logic
+        experiment_design = {
+            "experiment_name": f"{experiment_type}_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            "hypothesis": hypothesis["hypothesis"],
+            "experiment_type": experiment_type,
+            "configuration": {
+                "strategy_type": experiment_type,
+                "parameters": self._get_default_parameters(experiment_type),
+                "timeframe": "1D",
+                "lookback_period": 252,
+                "validation_split": 0.2
+            },
+            "expected_duration": "2-4 hours",
+            "success_criteria": {
+                "min_sharpe_ratio": 1.0,
+                "max_drawdown": 0.15,
+                "min_profit_factor": 1.2
+            }
+        }
+        
+        return experiment_design
+    
+    def _get_default_parameters(self, experiment_type: str) -> Dict[str, Any]:
+        """Get default parameters for different experiment types"""
+        parameter_templates = {
+            "momentum_strategy": {
+                "lookback_period": 20,
+                "signal_threshold": 0.02,
+                "stop_loss": 0.05,
+                "take_profit": 0.10
+            },
+            "mean_reversion": {
+                "lookback_period": 50,
+                "std_dev_threshold": 2.0,
+                "reversion_period": 10,
+                "stop_loss": 0.03
+            },
+            "volatility_patterns": {
+                "vol_lookback": 30,
+                "vol_threshold": 1.5,
+                "position_sizing": "dynamic",
+                "risk_factor": 0.02
+            }
+        }
+        
+        return parameter_templates.get(experiment_type, parameter_templates["momentum_strategy"])

@@ -23,6 +23,7 @@ from research_agents.services.database import (
     create_database_service
 )
 from research_agents.services.api import create_app
+from datetime import datetime
 
 
 # Test database configuration
@@ -113,7 +114,66 @@ async def _cleanup_test_data(db: ResearchDatabaseService) -> None:
 @pytest.fixture
 def test_app():
     """Create a test FastAPI application."""
+    from research_agents.services.api import create_app
+    from unittest.mock import AsyncMock
+    
+    # Get the app but skip lifespan 
+    import os
+    os.environ["TESTING"] = "1"  # Signal to skip database initialization
+    
     app = create_app()
+    
+    # Create a mock database service for testing
+    mock_db = AsyncMock()
+    mock_db.health_check.return_value = {"status": "healthy", "host": "test"}
+    mock_db.get_active_agents.return_value = []
+    
+    # Session-related mocks
+    test_session_id = "12345678-1234-5678-9012-123456789012"
+    mock_db.create_session.return_value = test_session_id 
+    mock_db.execute_query.return_value = []  # Default empty list for checking existing sessions
+    
+    # Create proper responses for session data
+    def mock_execute_query_side_effect(*args, **kwargs):
+        query = args[0] if args else ""
+        fetch = kwargs.get("fetch", "none")
+        
+        if "SELECT id, session_name, description" in query and fetch == "one":
+            # Return session data for getting created session
+            return {
+                "id": test_session_id,
+                "session_name": "Test Session",
+                "description": "Test description",
+                "status": "active",
+                "started_at": datetime(2024, 1, 1),
+                "strategic_goals": [],
+                "priority_areas": []
+            }
+        elif "SELECT id FROM research.sessions WHERE session_name" in query and fetch == "all":
+            # Return empty list for session name check (no duplicates)
+            return []
+        else:
+            return []
+    
+    mock_db.execute_query.side_effect = mock_execute_query_side_effect
+    
+    # Experiment-related mocks
+    test_experiment_id = "87654321-4321-8765-4321-876543218765"
+    mock_db.get_experiment.return_value = {
+        "id": test_experiment_id,
+        "experiment_name": "Test Experiment",
+        "hypothesis": "Test hypothesis",
+        "experiment_type": "test_strategy",
+        "status": "pending",
+        "configuration": {},
+        "session_id": test_session_id,
+        "created_at": datetime(2024, 1, 1)
+    }
+    mock_db.create_experiment.return_value = test_experiment_id
+    
+    # Set the mock database on app state
+    app.state.db = mock_db
+    
     return app
 
 
@@ -126,7 +186,8 @@ def test_client(test_app):
 @pytest_asyncio.fixture
 async def async_test_client(test_app):
     """Create an async test client for API testing."""
-    async with AsyncClient(app=test_app, base_url="http://test") as client:
+    from httpx import ASGITransport
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
         yield client
 
 

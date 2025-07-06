@@ -7,6 +7,7 @@ and performance optimization for the research laboratory system.
 
 import asyncio
 import logging
+import json
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID, uuid4
@@ -165,6 +166,47 @@ class ResearchDatabaseService:
         """
         await self.execute_query(query, agent_id)
     
+    async def create_agent_state(
+        self,
+        agent_id: str,
+        agent_type: str,
+        status: str,
+        current_activity: str,
+        state_data: Dict[str, Any],
+        memory_context: Dict[str, Any]
+    ) -> None:
+        """Create new agent state record"""
+        query = """
+        INSERT INTO research.agent_states (
+            agent_id, agent_type, status, current_activity, 
+            state_data, memory_context
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        """
+        await self.execute_query(
+            query, agent_id, agent_type, status, current_activity,
+            json.dumps(state_data), json.dumps(memory_context)
+        )
+
+    async def update_agent_state(
+        self,
+        agent_id: str,
+        status: str,
+        current_activity: str,
+        state_data: Dict[str, Any],
+        memory_context: Dict[str, Any]
+    ) -> None:
+        """Update complete agent state"""
+        query = """
+        UPDATE research.agent_states 
+        SET status = $2, current_activity = $3, state_data = $4, 
+            memory_context = $5, last_heartbeat = NOW()
+        WHERE agent_id = $1
+        """
+        await self.execute_query(
+            query, agent_id, status, current_activity,
+            json.dumps(state_data), json.dumps(memory_context)
+        )
+    
     async def update_agent_status(
         self, 
         agent_id: str, 
@@ -198,7 +240,7 @@ class ResearchDatabaseService:
         SET state_data = $2, last_heartbeat = NOW()
         WHERE agent_id = $1
         """
-        await self.execute_query(query, agent_id, state_data)
+        await self.execute_query(query, agent_id, json.dumps(state_data))
     
     async def get_active_agents(self) -> List[Dict[str, Any]]:
         """Get all active agents"""
@@ -235,7 +277,7 @@ class ResearchDatabaseService:
         
         result = await self.execute_query(
             query, experiment_id, session_id, experiment_name, hypothesis,
-            experiment_type, configuration, assigned_agent_id, fetch="val"
+            experiment_type, json.dumps(configuration), assigned_agent_id, fetch="val"
         )
         return result
     
@@ -268,7 +310,7 @@ class ResearchDatabaseService:
         if results is not None:
             param_count += 1
             set_clauses.append(f"results = ${param_count}")
-            params.append(results)
+            params.append(json.dumps(results))
             
         if fitness_score is not None:
             param_count += 1
@@ -278,7 +320,7 @@ class ResearchDatabaseService:
         if error_details is not None:
             param_count += 1
             set_clauses.append(f"error_details = ${param_count}")
-            params.append(error_details)
+            params.append(json.dumps(error_details))
         
         # Set appropriate timestamp based on status
         if status == "running":
@@ -367,7 +409,7 @@ class ResearchDatabaseService:
         
         result = await self.execute_query(
             query, entry_id, content_type, title, content, summary,
-            keywords or [], tags or [], source_experiment_id, source_agent_id,
+            json.dumps(keywords or []), json.dumps(tags or []), source_experiment_id, source_agent_id,
             quality_score, embedding_vector, fetch="val"
         )
         return result
@@ -437,6 +479,15 @@ class ResearchDatabaseService:
             """
             return await self.execute_query(query, keywords, limit, fetch="all")
     
+    async def search_knowledge_by_tags(
+        self,
+        tags: List[str],
+        content_type_filter: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Search knowledge base by tags (alias for search_knowledge_by_keywords)"""
+        return await self.search_knowledge_by_keywords(tags, content_type_filter, limit)
+    
     async def get_knowledge_by_source(
         self, 
         source_experiment_id: UUID
@@ -486,7 +537,7 @@ class ResearchDatabaseService:
         
         result = await self.execute_query(
             query, session_id, session_name, description,
-            strategic_goals or [], priority_areas or [], coordinator_id,
+            json.dumps(strategic_goals or []), json.dumps(priority_areas or []), coordinator_id,
             fetch="val"
         )
         return result

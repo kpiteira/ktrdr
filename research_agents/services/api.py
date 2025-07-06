@@ -8,7 +8,7 @@ and agent coordination in the autonomous research laboratory.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -55,7 +55,7 @@ class ExperimentRequest(BaseModel):
 
 class ExperimentResponse(BaseModel):
     """Response model for experiments"""
-    id: UUID
+    id: UUID = Field(alias="experiment_id")
     experiment_name: str
     hypothesis: str
     experiment_type: str
@@ -65,6 +65,7 @@ class ExperimentResponse(BaseModel):
     fitness_score: Optional[float] = None
     assigned_agent_name: Optional[str] = None
     session_name: Optional[str] = None
+    session_id: Optional[UUID] = None
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -95,13 +96,56 @@ class KnowledgeSearchRequest(BaseModel):
 class SessionStatistics(BaseModel):
     """Session statistics model"""
     total_experiments: int
-    completed: int
+    completed_experiments: int = Field(alias="completed")
+    pending_experiments: int = Field(alias="queued") 
     failed: int
     running: int
     queued: int
     avg_fitness: Optional[float] = None
     max_fitness: Optional[float] = None
     high_quality_results: int
+
+
+class SessionRequest(BaseModel):
+    """Request model for creating sessions"""
+    session_name: str = Field(..., min_length=1, description="Name of the session")
+    description: Optional[str] = Field(None, description="Session description")
+    strategic_goals: List[str] = Field(default_factory=list, description="Strategic goals for the session")
+    priority_areas: List[str] = Field(default_factory=list, description="Priority research areas")
+
+
+class SessionResponse(BaseModel):
+    """Response model for sessions"""
+    id: UUID = Field(alias="session_id")
+    session_name: str
+    description: Optional[str] = None
+    status: str
+    started_at: datetime
+    strategic_goals: List[str] = Field(default_factory=list)
+    priority_areas: List[str] = Field(default_factory=list)
+
+
+class KnowledgeRequest(BaseModel):
+    """Request model for creating knowledge entries"""
+    content_type: str = Field(..., description="Type of knowledge content")
+    title: str = Field(..., min_length=1, description="Title of the entry")
+    content: str = Field(..., min_length=1, description="Main content")
+    summary: Optional[str] = Field(None, description="Summary of the content")
+    keywords: List[str] = Field(default_factory=list, description="Keywords for searchability")
+    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    quality_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Quality score between 0 and 1")
+
+
+class StatusUpdateRequest(BaseModel):
+    """Request model for status updates"""
+    status: str = Field(..., description="New status")
+
+
+class CompletionRequest(BaseModel):
+    """Request model for experiment completion"""
+    status: str = Field(default="completed", description="Completion status")
+    results: Dict[str, Any] = Field(..., description="Experiment results")
+    fitness_score: Optional[float] = Field(None, description="Calculated fitness score")
 
 
 # ============================================================================
@@ -111,6 +155,15 @@ class SessionStatistics(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
+    import os
+    
+    # Check if we're in testing mode
+    if os.getenv("TESTING") == "1":
+        # Skip database initialization in tests
+        app.state.background_tasks = set()
+        yield
+        return
+    
     # Startup
     logger.info("Starting Research Agents API...")
     
@@ -135,31 +188,30 @@ async def lifespan(app: FastAPI):
         await app.state.db.close()
 
 
+# Create the global app instance first
+app = FastAPI(
+    title="KTRDR Research Agents API",
+    description="REST API for autonomous AI research laboratory",
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 def create_app() -> FastAPI:
     """Create and configure FastAPI application"""
-    
-    app = FastAPI(
-        title="KTRDR Research Agents API",
-        description="REST API for autonomous AI research laboratory",
-        version="0.1.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        lifespan=lifespan
-    )
-    
-    # CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:8000"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
+    # Return the global app instance which has all routes attached
     return app
-
-
-app = create_app()
 
 
 # ============================================================================
@@ -175,6 +227,17 @@ async def get_database() -> ResearchDatabaseService:
 # HEALTH AND STATUS ENDPOINTS
 # ============================================================================
 
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "KTRDR Research Agents API",
+        "version": "0.1.0",
+        "status": "running",
+        "docs": "/docs"
+    }
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check(db: ResearchDatabaseService = Depends(get_database)):
     """Health check endpoint"""
@@ -183,7 +246,7 @@ async def health_check(db: ResearchDatabaseService = Depends(get_database)):
         
         return HealthResponse(
             status="healthy",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             database=db_health
         )
     except Exception as e:
@@ -194,12 +257,12 @@ async def health_check(db: ResearchDatabaseService = Depends(get_database)):
         )
 
 
-@app.get("/agents/status", response_model=List[AgentStatus])
+@app.get("/agents/status")
 async def get_agents_status(db: ResearchDatabaseService = Depends(get_database)):
     """Get status of all agents"""
     try:
         agents = await db.get_active_agents()
-        return [
+        agent_details = [
             AgentStatus(
                 agent_id=agent["agent_id"],
                 agent_type=agent["agent_type"],
@@ -209,6 +272,12 @@ async def get_agents_status(db: ResearchDatabaseService = Depends(get_database))
             )
             for agent in agents
         ]
+        
+        return {
+            "active_agents": len([a for a in agents if a["status"] in ["active", "processing"]]),
+            "total_agents": len(agents),
+            "agent_details": agent_details
+        }
     except Exception as e:
         logger.error(f"Failed to get agent status: {e}")
         raise HTTPException(
@@ -255,7 +324,17 @@ async def create_experiment(
         # Add background task to notify coordinator (if implemented)
         background_tasks.add_task(notify_coordinator_new_experiment, experiment_id)
         
-        return ExperimentResponse(**experiment_data)
+        # Create response with correct field mapping
+        return {
+            "experiment_id": str(experiment_data["id"]),
+            "experiment_name": experiment_data["experiment_name"],
+            "hypothesis": experiment_data["hypothesis"],
+            "experiment_type": experiment_data["experiment_type"],
+            "status": experiment_data["status"],
+            "configuration": experiment_data["configuration"],
+            "session_id": str(experiment_data["session_id"]) if experiment_data.get("session_id") else None,
+            "created_at": experiment_data["created_at"]
+        }
         
     except HTTPException:
         raise
@@ -327,6 +406,51 @@ async def list_experiments(
         )
 
 
+@app.patch("/experiments/{experiment_id}/status")
+async def update_experiment_status(
+    experiment_id: UUID,
+    status_update: StatusUpdateRequest,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Update experiment status"""
+    try:
+        await db.update_experiment_status(experiment_id, status_update.status)
+        
+        return {"message": f"Experiment {experiment_id} status updated to {status_update.status}"}
+        
+    except Exception as e:
+        logger.error(f"Failed to update experiment status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update experiment status: {e}"
+        )
+
+
+@app.patch("/experiments/{experiment_id}/complete")
+async def complete_experiment(
+    experiment_id: UUID,
+    completion: CompletionRequest,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Complete an experiment with results"""
+    try:
+        await db.update_experiment_status(
+            experiment_id,
+            completion.status,
+            results=completion.results,
+            fitness_score=completion.fitness_score
+        )
+        
+        return {"message": f"Experiment {experiment_id} completed successfully"}
+        
+    except Exception as e:
+        logger.error(f"Failed to complete experiment: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to complete experiment: {e}"
+        )
+
+
 @app.get("/experiments/queue", response_model=List[ExperimentResponse])
 async def get_experiment_queue(
     limit: int = 10,
@@ -348,6 +472,148 @@ async def get_experiment_queue(
 # ============================================================================
 # KNOWLEDGE BASE ENDPOINTS
 # ============================================================================
+
+@app.post("/knowledge", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED)
+async def create_knowledge_entry(
+    knowledge: KnowledgeRequest,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Create a new knowledge base entry"""
+    try:
+        entry_id = await db.add_knowledge_entry(
+            content_type=knowledge.content_type,
+            title=knowledge.title,
+            content=knowledge.content,
+            summary=knowledge.summary,
+            keywords=knowledge.keywords,
+            tags=knowledge.tags,
+            quality_score=knowledge.quality_score
+        )
+        
+        return {
+            "entry_id": str(entry_id),
+            "title": knowledge.title,
+            "message": "Knowledge entry created successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to create knowledge entry: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create knowledge entry: {e}"
+        )
+
+
+@app.get("/knowledge/{entry_id}", response_model=KnowledgeEntry)
+async def get_knowledge_entry(
+    entry_id: UUID,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Get knowledge entry by ID"""
+    try:
+        entry = await db.execute_query(
+            "SELECT * FROM research.knowledge_base WHERE id = $1",
+            entry_id,
+            fetch="one"
+        )
+        
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Knowledge entry {entry_id} not found"
+            )
+        
+        # Parse JSON fields
+        keywords = entry.get("keywords") or []
+        if isinstance(keywords, str):
+            import json
+            keywords = json.loads(keywords)
+            
+        tags = entry.get("tags") or []
+        if isinstance(tags, str):
+            import json
+            tags = json.loads(tags)
+        
+        return KnowledgeEntry(
+            id=entry["id"],
+            content_type=entry["content_type"],
+            title=entry["title"],
+            content=entry["content"],
+            summary=entry["summary"],
+            keywords=keywords,
+            tags=tags,
+            quality_score=entry["quality_score"],
+            created_at=entry["created_at"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get knowledge entry: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve knowledge entry: {e}"
+        )
+
+
+@app.get("/knowledge/search", response_model=List[KnowledgeEntry])
+async def search_knowledge_by_query(
+    tags: Optional[str] = None,
+    content_type: Optional[str] = None,
+    limit: int = 10,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Search knowledge base by tags or content type"""
+    try:
+        if tags:
+            tag_list = [tag.strip() for tag in tags.split(",")]
+            results = await db.search_knowledge_by_tags(
+                tags=tag_list,
+                content_type_filter=content_type,
+                limit=limit
+            )
+        else:
+            # Return recent entries if no search criteria
+            results = await db.execute_query(
+                "SELECT * FROM research.knowledge_base ORDER BY created_at DESC LIMIT $1",
+                limit,
+                fetch="all"
+            )
+        
+        # Parse JSON fields for each result
+        processed_results = []
+        for entry in results:
+            keywords = entry.get("keywords") or []
+            if isinstance(keywords, str):
+                import json
+                keywords = json.loads(keywords)
+                
+            tags_data = entry.get("tags") or []
+            if isinstance(tags_data, str):
+                import json
+                tags_data = json.loads(tags_data)
+            
+            processed_results.append(KnowledgeEntry(
+                id=entry["id"],
+                content_type=entry["content_type"],
+                title=entry["title"],
+                content=entry["content"],
+                summary=entry["summary"],
+                keywords=keywords,
+                tags=tags_data,
+                quality_score=entry["quality_score"],
+                created_at=entry["created_at"]
+            ))
+        
+        return processed_results
+        
+    except Exception as e:
+        logger.error(f"Failed to search knowledge: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Knowledge search failed: {e}"
+        )
+
 
 @app.post("/knowledge/search", response_model=List[KnowledgeEntry])
 async def search_knowledge(
@@ -398,8 +664,187 @@ async def get_experiment_knowledge(
 
 
 # ============================================================================
-# SESSION AND ANALYTICS ENDPOINTS
+# SESSION ENDPOINTS
 # ============================================================================
+
+@app.post("/sessions", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
+async def create_session(
+    session: SessionRequest,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Create a new research session"""
+    try:
+        # Check if session name already exists
+        existing_sessions = await db.execute_query(
+            "SELECT id FROM research.sessions WHERE session_name = $1",
+            session.session_name,
+            fetch="all"
+        )
+        
+        if existing_sessions:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Session with name '{session.session_name}' already exists"
+            )
+        
+        session_id = await db.create_session(
+            session_name=session.session_name,
+            description=session.description,
+            strategic_goals=session.strategic_goals,
+            priority_areas=session.priority_areas
+        )
+        
+        # Get created session details
+        created_session = await db.execute_query(
+            "SELECT id, session_name, description, status, started_at, strategic_goals, priority_areas FROM research.sessions WHERE id = $1",
+            session_id,
+            fetch="one"
+        )
+        
+        return SessionResponse(
+            session_id=created_session["id"],
+            session_name=created_session["session_name"],
+            description=created_session["description"],
+            status=created_session["status"],
+            started_at=created_session["started_at"],
+            strategic_goals=created_session.get("strategic_goals", []) or [],
+            priority_areas=created_session.get("priority_areas", []) or []
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create session: {e}"
+        )
+
+
+@app.get("/sessions/{session_id}", response_model=SessionResponse)
+async def get_session(
+    session_id: UUID,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Get session by ID"""
+    try:
+        session = await db.execute_query(
+            "SELECT id, session_name, description, status, started_at, strategic_goals, priority_areas FROM research.sessions WHERE id = $1",
+            session_id,
+            fetch="one"
+        )
+        
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session {session_id} not found"
+            )
+        
+        return SessionResponse(
+            session_id=session["id"],
+            session_name=session["session_name"],
+            description=session["description"],
+            status=session["status"],
+            started_at=session["started_at"],
+            strategic_goals=session.get("strategic_goals", []) or [],
+            priority_areas=session.get("priority_areas", []) or []
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get session {session_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve session: {e}"
+        )
+
+
+@app.get("/sessions", response_model=List[SessionResponse])
+async def list_sessions(
+    limit: int = 20,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """List all sessions"""
+    try:
+        sessions = await db.execute_query(
+            "SELECT id, session_name, description, status, started_at, strategic_goals, priority_areas FROM research.sessions ORDER BY started_at DESC LIMIT $1",
+            limit,
+            fetch="all"
+        )
+        
+        return [
+            SessionResponse(
+                session_id=session["id"],
+                session_name=session["session_name"],
+                description=session["description"],
+                status=session["status"],
+                started_at=session["started_at"],
+                strategic_goals=session.get("strategic_goals", []) or [],
+                priority_areas=session.get("priority_areas", []) or []
+            )
+            for session in sessions
+        ]
+        
+    except Exception as e:
+        logger.error(f"Failed to list sessions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list sessions: {e}"
+        )
+
+
+@app.get("/sessions/{session_id}/experiments", response_model=List[ExperimentResponse])
+async def list_experiments_by_session(
+    session_id: UUID,
+    status_filter: Optional[str] = None,
+    limit: int = 20,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """List experiments by session"""
+    try:
+        experiments = await db.get_experiments_by_session(session_id, status_filter)
+        experiments = experiments[:limit]
+        
+        return [ExperimentResponse(**exp) for exp in experiments]
+        
+    except Exception as e:
+        logger.error(f"Failed to list experiments for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list experiments: {e}"
+        )
+
+
+@app.get("/sessions/{session_id}/statistics", response_model=SessionStatistics)
+async def get_session_statistics(
+    session_id: UUID,
+    db: ResearchDatabaseService = Depends(get_database)
+):
+    """Get session statistics"""
+    try:
+        stats = await db.get_experiment_statistics(session_id)
+        
+        # Map the database response to the expected response format
+        return SessionStatistics(
+            total_experiments=stats["total_experiments"],
+            completed=stats["completed"],
+            pending_experiments=stats["queued"],
+            failed=stats["failed"],
+            running=stats["running"],
+            queued=stats["queued"],
+            avg_fitness=stats["avg_fitness"],
+            max_fitness=stats["max_fitness"],
+            high_quality_results=stats["high_quality_results"]
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get session statistics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve statistics: {e}"
+        )
+
 
 @app.get("/session/active")
 async def get_active_session(db: ResearchDatabaseService = Depends(get_database)):

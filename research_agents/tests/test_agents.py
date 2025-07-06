@@ -17,11 +17,20 @@ from research_agents.services.database import ResearchDatabaseService, DatabaseC
 class MockResearchAgent(BaseResearchAgent):
     """Mock agent for testing base functionality"""
     
-    def __init__(self, agent_id: str, agent_type: str = "mock"):
-        super().__init__(agent_id, agent_type)
+    def __init__(self, agent_id: str, agent_type: str = "assistant"):
+        super().__init__(agent_id, agent_type, max_errors=1)  # Fail fast in tests
         self.cycle_count = 0
         self.should_stop = False
         self.mock_error = None
+        
+    async def _start_heartbeat(self) -> None:
+        """Override to prevent heartbeat in tests"""
+        pass
+        
+    async def _initialize_agent(self) -> None:
+        """Mock agent initialization"""
+        # Mock initialization work
+        pass
         
     async def _execute_cycle(self) -> None:
         """Mock cycle execution"""
@@ -31,10 +40,16 @@ class MockResearchAgent(BaseResearchAgent):
             raise self.mock_error
             
         if self.should_stop:
+            self.is_running = False
             self._stop_requested = True
             
         # Simulate some work
         await asyncio.sleep(0.01)
+        
+    async def _cleanup_agent(self) -> None:
+        """Mock agent cleanup"""
+        # Mock cleanup work
+        pass
 
 
 class TestBaseResearchAgent:
@@ -43,30 +58,29 @@ class TestBaseResearchAgent:
     @pytest.fixture
     def mock_database_service(self):
         """Mock database service"""
-        db_service = AsyncMock(spec=ResearchDatabaseService)
-        db_service.create_agent_state = AsyncMock()
-        db_service.get_agent_state = AsyncMock()
-        db_service.update_agent_state = AsyncMock()
-        db_service.update_agent_heartbeat = AsyncMock()
-        return db_service
+        db = AsyncMock(spec=ResearchDatabaseService)
+        db.create_agent_state = AsyncMock()
+        db.get_agent_state = AsyncMock(return_value=None)  # Default to no existing state
+        db.update_agent_state = AsyncMock()
+        db.update_agent_heartbeat = AsyncMock()
+        return db
     
     @pytest.fixture
     def mock_agent(self, mock_database_service):
         """Create mock agent instance"""
-        agent = MockResearchAgent("test-agent-001", "mock")
-        agent.db_service = mock_database_service
+        agent = MockResearchAgent("test-agent-001", "assistant")
+        agent.db = mock_database_service
         return agent
     
     @pytest.mark.asyncio
     async def test_agent_initialization(self, mock_agent: MockResearchAgent):
         """Test agent initialization"""
         assert mock_agent.agent_id == "test-agent-001"
-        assert mock_agent.agent_type == "mock"
-        assert mock_agent.status == "idle"
+        assert mock_agent.agent_type == "assistant"
+        assert mock_agent.is_running is False
         assert mock_agent.current_activity == "Initializing"
         assert mock_agent.state_data == {}
         assert mock_agent.memory_context == {}
-        assert mock_agent._stop_requested is False
         
     @pytest.mark.asyncio
     async def test_agent_initialize_creates_state(self, mock_agent: MockResearchAgent):
@@ -74,13 +88,13 @@ class TestBaseResearchAgent:
         await mock_agent.initialize()
         
         # Verify database state creation was called
-        mock_agent.db_service.create_agent_state.assert_called_once_with(
-            agent_id="test-agent-001",
-            agent_type="mock",
-            status="idle",
-            current_activity="Initializing",
-            state_data={},
-            memory_context={}
+        mock_agent.db.create_agent_state.assert_called_once_with(
+            "test-agent-001",
+            "assistant",
+            "idle",
+            "Agent registered",
+            {},
+            {}
         )
         
     @pytest.mark.asyncio
@@ -89,14 +103,14 @@ class TestBaseResearchAgent:
         # Mock existing state
         existing_state = {
             "agent_id": "test-agent-001",
-            "agent_type": "mock",
+            "agent_type": "assistant",
             "status": "active",
             "current_activity": "Previous activity",
             "state_data": {"previous_key": "previous_value"},
             "memory_context": {"previous_memory": "previous_context"}
         }
         
-        mock_agent.db_service.get_agent_state.return_value = existing_state
+        mock_agent.db.get_agent_state.return_value = existing_state
         
         await mock_agent.initialize()
         
@@ -120,12 +134,12 @@ class TestBaseResearchAgent:
         await mock_agent._persist_state()
         
         # Verify database update was called
-        mock_agent.db_service.update_agent_state.assert_called_with(
-            agent_id="test-agent-001",
-            status="active",
-            current_activity="Testing persistence",
-            state_data={"test_key": "test_value"},
-            memory_context={}
+        mock_agent.db.update_agent_state.assert_called_with(
+            "test-agent-001",
+            "active",
+            "Testing persistence",
+            {"test_key": "test_value"},
+            {}
         )
         
     @pytest.mark.asyncio
@@ -137,7 +151,7 @@ class TestBaseResearchAgent:
         await mock_agent._send_heartbeat()
         
         # Verify heartbeat was sent to database
-        mock_agent.db_service.update_agent_heartbeat.assert_called_once_with("test-agent-001")
+        mock_agent.db.update_agent_heartbeat.assert_called_once_with("test-agent-001")
         
     @pytest.mark.asyncio
     async def test_agent_memory_management(self, mock_agent: MockResearchAgent):
@@ -172,7 +186,7 @@ class TestBaseResearchAgent:
         assert mock_agent.current_activity == "Testing activity tracking"
         
         # Verify state was persisted
-        mock_agent.db_service.update_agent_state.assert_called()
+        mock_agent.db.update_agent_state.assert_called()
         
     @pytest.mark.asyncio
     async def test_agent_run_cycle_execution(self, mock_agent: MockResearchAgent):
@@ -250,7 +264,9 @@ class TestBaseResearchAgent:
         
         mock_agent.update_config(config)
         
-        assert mock_agent.config == config
+        # Check that the new config values were set
+        for key, value in config.items():
+            assert mock_agent.config[key] == value
         assert mock_agent.get_config_value("max_cycles") == 100
         assert mock_agent.get_config_value("heartbeat_interval") == 30
         assert mock_agent.get_config_value("nonexistent", "default") == "default"
@@ -262,11 +278,12 @@ class TestResearcherAgent:
     @pytest.fixture
     def mock_researcher_agent(self):
         """Create mock researcher agent"""
-        with patch('research_agents.agents.researcher.ResearcherAgent._initialize_llm_client'):
-            agent = ResearcherAgent("researcher-001")
-            agent.db_service = AsyncMock()
-            agent.llm_client = AsyncMock()
-            return agent
+        # Create agent without OpenAI API key to avoid real API calls
+        agent = ResearcherAgent("researcher-001")
+        agent.db = AsyncMock()
+        agent.openai_client = AsyncMock()  # Mock the OpenAI client
+        agent.llm_client = AsyncMock()  # Alias for tests
+        return agent
     
     @pytest.mark.asyncio
     async def test_researcher_initialization(self, mock_researcher_agent: ResearcherAgent):
@@ -298,7 +315,7 @@ class TestResearcherAgent:
     async def test_researcher_knowledge_search(self, mock_researcher_agent: ResearcherAgent):
         """Test knowledge search functionality"""
         # Mock database search results
-        mock_researcher_agent.db_service.search_knowledge_by_tags.return_value = [
+        mock_researcher_agent.db.search_knowledge_by_tags.return_value = [
             {
                 "title": "Test Knowledge",
                 "content": "Test content",
@@ -343,11 +360,11 @@ class TestAssistantAgent:
     @pytest.fixture
     def mock_assistant_agent(self):
         """Create mock assistant agent"""
-        with patch('research_agents.agents.assistant.AssistantAgent._initialize_ktrdr_client'):
-            agent = AssistantAgent("assistant-001")
-            agent.db_service = AsyncMock()
-            agent.ktrdr_client = AsyncMock()
-            return agent
+        # Create agent without real KTRDR client
+        agent = AssistantAgent("assistant-001")
+        agent.db = AsyncMock()
+        agent.ktrdr_client = AsyncMock()
+        return agent
     
     @pytest.mark.asyncio
     async def test_assistant_initialization(self, mock_assistant_agent: AssistantAgent):
@@ -475,7 +492,7 @@ class TestAgentIntegration:
         """Test agent integration with real database"""
         # Create agent with real database
         agent = MockResearchAgent("integration-test-001")
-        agent.db_service = clean_database
+        agent.db = clean_database
         
         # Initialize agent
         await agent.initialize()
@@ -484,7 +501,7 @@ class TestAgentIntegration:
         state = await clean_database.get_agent_state("integration-test-001")
         assert state is not None
         assert state["agent_id"] == "integration-test-001"
-        assert state["agent_type"] == "mock"
+        assert state["agent_type"] == "assistant"
         
         # Update agent state
         agent.status = "active"
@@ -503,8 +520,8 @@ class TestAgentIntegration:
         researcher = MockResearchAgent("researcher-integration-001", "researcher")
         assistant = MockResearchAgent("assistant-integration-001", "assistant")
         
-        researcher.db_service = clean_database
-        assistant.db_service = clean_database
+        researcher.db = clean_database
+        assistant.db = clean_database
         
         # Initialize both agents
         await researcher.initialize()

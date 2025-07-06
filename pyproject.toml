@@ -35,6 +35,7 @@ dependencies = [
     "langchain>=0.3.26",
     "langchain-openai>=0.3.27",
     "redis>=6.2.0",
+    "aiohttp>=3.12.13",
 ]
 
 [project.optional-dependencies]
