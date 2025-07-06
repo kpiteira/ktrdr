@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ============================================================================
   # RESEARCH INFRASTRUCTURE SERVICES
@@ -101,7 +99,7 @@ services:
       KTRDR_API_KEY: ${KTRDR_API_KEY:-}
       
       # LLM Configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       
       # Service Configuration
@@ -166,7 +164,7 @@ services:
       KTRDR_API_KEY: ${KTRDR_API_KEY:-}
       
       # LLM Configuration
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       
       # Agent Configuration
@@ -271,7 +269,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       
       # LLM for Board Agent Intelligence
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       
     depends_on:
@@ -309,7 +307,7 @@ services:
       DATABASE_URL: postgresql://research_admin:${POSTGRES_PASSWORD:-research_dev_password}@research-postgres:5432/research_agents
       
       # Vector Embeddings
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       EMBEDDING_MODEL: text-embedding-3-small
       EMBEDDING_DIMENSIONS: 1536
       

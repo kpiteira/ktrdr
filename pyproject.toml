@@ -30,6 +30,11 @@ dependencies = [
     "uvicorn>=0.34.3",
     "httpx>=0.28.1",
     "tomli-w>=1.2.0",
+    "openai>=1.93.0",
+    "anthropic>=0.57.1",
+    "langchain>=0.3.26",
+    "langchain-openai>=0.3.27",
+    "redis>=6.2.0",
 ]
 
 [project.optional-dependencies]
@@ -46,5 +51,9 @@ ktrdr = "ktrdr.cli:app"
 
 [dependency-groups]
 dev = [
+    "asyncpg>=0.30.0",
+    "httpx>=0.28.1",
+    "pytest>=8.3.5",
     "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
 ]

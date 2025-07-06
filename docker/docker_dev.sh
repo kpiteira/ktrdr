@@ -273,6 +273,12 @@ function check_health() {
 
 function start_research() {
     echo -e "${BLUE}Starting KTRDR Research Agents...${NC}"
+    
+    # Environment check
+    if [ -z "$OPENAI_API_KEY" ]; then
+        echo -e "${YELLOW}⚠️  Notice: OPENAI_API_KEY not set - AI features will be limited${NC}"
+    fi
+    
     docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" up -d
     echo -e "${GREEN}Research agents started!${NC}"
     echo -e "Research API available at: ${YELLOW}http://localhost:8101${NC}"
@@ -355,10 +361,34 @@ function run_research_tests() {
 
 function check_research_health() {
     echo -e "${BLUE}Checking research container health...${NC}"
+    
+    # Check for important environment variables
+    if [ -z "$OPENAI_API_KEY" ]; then
+        echo -e "${YELLOW}⚠️  Notice: OPENAI_API_KEY not set - AI features will be limited${NC}"
+    fi
+    
     docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" ps
-    echo -e "\n${BLUE}Detailed health status:${NC}"
-    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-postgres pg_isready -U research_admin -d research_agents
-    docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-redis redis-cli ping
+    
+    echo -e "\n${BLUE}Service connectivity tests:${NC}"
+    
+    # PostgreSQL health check
+    echo -e "${YELLOW}Testing PostgreSQL connection...${NC}"
+    if docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-postgres pg_isready -U research_admin -d research_agents > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ PostgreSQL: Ready and accepting connections${NC}"
+    else
+        echo -e "${RED}✗ PostgreSQL: Connection failed${NC}"
+    fi
+    
+    # Redis health check
+    echo -e "${YELLOW}Testing Redis connection...${NC}"
+    REDIS_RESPONSE=$(docker-compose -f "$SCRIPT_DIR/docker-compose.research.yml" exec research-redis redis-cli ping 2>/dev/null | tr -d '\r\n')
+    if [ "$REDIS_RESPONSE" = "PONG" ]; then
+        echo -e "${GREEN}✓ Redis: Responding correctly (PONG received)${NC}"
+    else
+        echo -e "${RED}✗ Redis: Connection failed or unexpected response${NC}"
+    fi
+    
+    echo -e "\n${GREEN}Health check completed${NC}"
 }
 
 function start_all() {
