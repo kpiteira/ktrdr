@@ -96,8 +96,8 @@ class KnowledgeSearchRequest(BaseModel):
 class SessionStatistics(BaseModel):
     """Session statistics model"""
     total_experiments: int
-    completed_experiments: int = Field(alias="completed")
-    pending_experiments: int = Field(alias="queued") 
+    completed_experiments: int
+    pending_experiments: int
     failed: int
     running: int
     queued: int
@@ -116,7 +116,7 @@ class SessionRequest(BaseModel):
 
 class SessionResponse(BaseModel):
     """Response model for sessions"""
-    id: UUID = Field(alias="session_id")
+    session_id: UUID
     session_name: str
     description: Optional[str] = None
     status: str
@@ -290,7 +290,7 @@ async def get_agents_status(db: ResearchDatabaseService = Depends(get_database))
 # EXPERIMENT ENDPOINTS
 # ============================================================================
 
-@app.post("/experiments", response_model=ExperimentResponse)
+@app.post("/experiments", response_model=ExperimentResponse, status_code=status.HTTP_201_CREATED)
 async def create_experiment(
     experiment: ExperimentRequest,
     background_tasks: BackgroundTasks,
@@ -828,11 +828,11 @@ async def get_session_statistics(
         # Map the database response to the expected response format
         return SessionStatistics(
             total_experiments=stats["total_experiments"],
-            completed=stats["completed"],
-            pending_experiments=stats["queued"],
+            completed_experiments=stats.get("completed", stats.get("completed_experiments", 0)),
+            pending_experiments=stats.get("queued", stats.get("pending_experiments", 0)),
             failed=stats["failed"],
             running=stats["running"],
-            queued=stats["queued"],
+            queued=stats.get("queued", stats.get("pending_experiments", 0)),
             avg_fitness=stats["avg_fitness"],
             max_fitness=stats["max_fitness"],
             high_quality_results=stats["high_quality_results"]

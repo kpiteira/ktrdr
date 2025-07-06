@@ -133,25 +133,74 @@ def test_app():
     mock_db.create_session.return_value = test_session_id 
     mock_db.execute_query.return_value = []  # Default empty list for checking existing sessions
     
+    # Store session data for dynamic responses
+    created_sessions = {}
+    session_counter = 0
+    
+    def mock_create_session_side_effect(session_name, description=None, strategic_goals=None, priority_areas=None):
+        nonlocal session_counter
+        session_counter += 1
+        # Generate unique session ID for each session
+        session_id = f"12345678-1234-5678-9012-12345678901{session_counter}"
+        
+        # Store the created session data
+        created_sessions[session_id] = {
+            "id": session_id,
+            "session_name": session_name,
+            "description": description,
+            "status": "active",
+            "started_at": datetime(2024, 1, 1),
+            "strategic_goals": strategic_goals or [],
+            "priority_areas": priority_areas or []
+        }
+        return session_id
+    
+    mock_db.create_session.side_effect = mock_create_session_side_effect
+    
     # Create proper responses for session data
     def mock_execute_query_side_effect(*args, **kwargs):
         query = args[0] if args else ""
         fetch = kwargs.get("fetch", "none")
         
         if "SELECT id, session_name, description" in query and fetch == "one":
-            # Return session data for getting created session
-            return {
-                "id": test_session_id,
-                "session_name": "Test Session",
-                "description": "Test description",
-                "status": "active",
-                "started_at": datetime(2024, 1, 1),
-                "strategic_goals": [],
-                "priority_areas": []
-            }
+            # Extract session ID from the query for specific session lookup
+            session_id_param = args[1] if len(args) > 1 else None
+            
+            # Convert UUID to string for consistent lookup
+            if session_id_param:
+                session_id_str = str(session_id_param)
+                
+                if session_id_str in created_sessions:
+                    return created_sessions[session_id_str]
+                else:
+                    # Session ID requested but not found - return None for 404
+                    return None
+            elif created_sessions:
+                # No specific ID, return the most recently created session
+                return list(created_sessions.values())[-1]
+            else:
+                # Fallback for when no session was created yet
+                return {
+                    "id": test_session_id,
+                    "session_name": "Test Session",
+                    "description": "Test description",
+                    "status": "active",
+                    "started_at": datetime(2024, 1, 1),
+                    "strategic_goals": [],
+                    "priority_areas": []
+                }
         elif "SELECT id FROM research.sessions WHERE session_name" in query and fetch == "all":
-            # Return empty list for session name check (no duplicates)
-            return []
+            # Check for duplicate session names
+            session_name_param = args[1] if len(args) > 1 else None
+            if session_name_param:
+                # Check if this session name already exists
+                for session in created_sessions.values():
+                    if session["session_name"] == session_name_param:
+                        return [{"id": session["id"]}]  # Return non-empty to indicate duplicate
+            return []  # Return empty list if no duplicate found
+        elif "SELECT id, session_name, description, status, started_at" in query and "ORDER BY started_at DESC" in query:
+            # Return list of sessions for listing endpoint
+            return list(created_sessions.values())
         else:
             return []
     
@@ -159,17 +208,135 @@ def test_app():
     
     # Experiment-related mocks
     test_experiment_id = "87654321-4321-8765-4321-876543218765"
-    mock_db.get_experiment.return_value = {
-        "id": test_experiment_id,
-        "experiment_name": "Test Experiment",
-        "hypothesis": "Test hypothesis",
-        "experiment_type": "test_strategy",
-        "status": "pending",
-        "configuration": {},
-        "session_id": test_session_id,
-        "created_at": datetime(2024, 1, 1)
-    }
-    mock_db.create_experiment.return_value = test_experiment_id
+    created_experiments = {}
+    experiment_counter = 0
+    
+    def mock_create_experiment_side_effect(session_id, experiment_name, hypothesis, experiment_type, configuration=None):
+        nonlocal experiment_counter
+        experiment_counter += 1
+        # Generate unique experiment ID
+        experiment_id = f"87654321-4321-8765-4321-87654321876{experiment_counter}"
+        
+        # Store the created experiment data
+        created_experiments[experiment_id] = {
+            "id": experiment_id,  # Database field name for create endpoint
+            "experiment_id": experiment_id,  # Alias field name for response models
+            "experiment_name": experiment_name,
+            "hypothesis": hypothesis,
+            "experiment_type": experiment_type,
+            "status": "pending",
+            "configuration": configuration or {},
+            "session_id": str(session_id),
+            "created_at": datetime(2024, 1, 1),
+            "results": None,
+            "fitness_score": None,
+            "assigned_agent_name": None,
+            "session_name": None,
+            "started_at": None,
+            "completed_at": None
+        }
+        return experiment_id
+    
+    mock_db.create_experiment.side_effect = mock_create_experiment_side_effect
+    
+    def mock_get_experiment_side_effect(experiment_id):
+        experiment_id_str = str(experiment_id)
+        return created_experiments.get(experiment_id_str)
+    
+    mock_db.get_experiment.side_effect = mock_get_experiment_side_effect
+    
+    # Add methods for experiment operations
+    async def mock_update_experiment_status(experiment_id, status, results=None, fitness_score=None):
+        experiment_id_str = str(experiment_id)
+        if experiment_id_str in created_experiments:
+            created_experiments[experiment_id_str]["status"] = status
+            if results:
+                created_experiments[experiment_id_str]["results"] = results
+            if fitness_score:
+                created_experiments[experiment_id_str]["fitness_score"] = fitness_score
+    
+    mock_db.update_experiment_status.side_effect = mock_update_experiment_status
+    
+    def mock_get_experiments_by_session_side_effect(session_id, status_filter=None):
+        session_id_str = str(session_id)
+        session_experiments = [
+            exp for exp in created_experiments.values() 
+            if exp["session_id"] == session_id_str
+        ]
+        if status_filter:
+            session_experiments = [exp for exp in session_experiments if exp["status"] == status_filter]
+        return session_experiments
+    
+    mock_db.get_experiments_by_session.side_effect = mock_get_experiments_by_session_side_effect
+    
+    # Knowledge base mocks
+    created_knowledge = {}
+    knowledge_counter = 0
+    
+    def mock_add_knowledge_entry_side_effect(content_type, title, content, summary=None, keywords=None, tags=None, quality_score=None, **kwargs):
+        nonlocal knowledge_counter
+        knowledge_counter += 1
+        entry_id = f"11111111-2222-3333-4444-55555555555{knowledge_counter}"
+        
+        created_knowledge[entry_id] = {
+            "id": entry_id,
+            "content_type": content_type,
+            "title": title,
+            "content": content,
+            "summary": summary,
+            "keywords": keywords or [],
+            "tags": tags or [],
+            "quality_score": quality_score,
+            "relevance_score": None,
+            "created_at": datetime(2024, 1, 1)
+        }
+        return entry_id
+    
+    mock_db.add_knowledge_entry.side_effect = mock_add_knowledge_entry_side_effect
+    
+    def mock_search_knowledge_by_tags_side_effect(tags, content_type_filter=None, limit=10):
+        results = []
+        for entry in created_knowledge.values():
+            if any(tag in entry["tags"] for tag in tags):
+                if content_type_filter and entry["content_type"] != content_type_filter:
+                    continue
+                results.append(entry)
+                if len(results) >= limit:
+                    break
+        return results
+    
+    mock_db.search_knowledge_by_tags.side_effect = mock_search_knowledge_by_tags_side_effect
+    
+    # Mock experiment statistics
+    def mock_get_experiment_statistics_side_effect(session_id=None):
+        if session_id:
+            session_id_str = str(session_id)
+            session_experiments = [
+                exp for exp in created_experiments.values()
+                if exp["session_id"] == session_id_str
+            ]
+        else:
+            session_experiments = list(created_experiments.values())
+        
+        total = len(session_experiments)
+        completed = len([exp for exp in session_experiments if exp["status"] == "completed"])
+        failed = len([exp for exp in session_experiments if exp["status"] == "failed"])
+        running = len([exp for exp in session_experiments if exp["status"] == "running"])
+        queued = len([exp for exp in session_experiments if exp["status"] == "pending"])
+        
+        return {
+            "total_experiments": total,
+            "completed_experiments": completed,  # Full field name
+            "pending_experiments": queued,  # Full field name  
+            "failed": failed,
+            "running": running,
+            "queued": queued,
+            "avg_fitness": 1.0,  # Mock value
+            "max_fitness": 1.0,  # Mock value
+            "high_quality_results": completed
+        }
+    
+    mock_db.get_experiment_statistics.side_effect = mock_get_experiment_statistics_side_effect
     
     # Set the mock database on app state
     app.state.db = mock_db

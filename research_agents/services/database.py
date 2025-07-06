@@ -409,7 +409,7 @@ class ResearchDatabaseService:
         
         result = await self.execute_query(
             query, entry_id, content_type, title, content, summary,
-            json.dumps(keywords or []), json.dumps(tags or []), source_experiment_id, source_agent_id,
+            keywords or [], tags or [], source_experiment_id, source_agent_id,
             quality_score, embedding_vector, fetch="val"
         )
         return result

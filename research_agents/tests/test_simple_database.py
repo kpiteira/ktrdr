@@ -63,8 +63,12 @@ async def test_session_operations():
         print(f"Created session: {session_id}")
         assert session_id is not None
         
-        # Get session
-        session = await db_service.get_session(session_id)
+        # Get session - use direct query since get_session method doesn't exist
+        session = await db_service.execute_query(
+            "SELECT * FROM research.sessions WHERE id = $1",
+            session_id,
+            fetch="one"
+        )
         assert session is not None
         assert session["session_name"] == session_name
         print(f"Retrieved session: {session['session_name']}")
@@ -103,7 +107,9 @@ async def test_agent_state_operations():
             agent_id=agent_id,
             agent_type="researcher",
             status="idle",
-            current_activity="Testing"
+            current_activity="Testing",
+            state_data={},
+            memory_context={}
         )
         
         print(f"Created agent: {agent_id}")
@@ -119,7 +125,9 @@ async def test_agent_state_operations():
         await db_service.update_agent_state(
             agent_id=agent_id,
             status="active",
-            current_activity="Testing update"
+            current_activity="Testing update",
+            state_data={},
+            memory_context={}
         )
         
         # Verify update
@@ -158,7 +166,7 @@ async def test_knowledge_operations():
         
         # Create knowledge entry
         title = f"TEST_Knowledge_{uuid4().hex[:8]}"
-        entry_id = await db_service.create_knowledge_entry(
+        entry_id = await db_service.add_knowledge_entry(
             content_type="insight",
             title=title,
             content="Test knowledge content",
@@ -171,15 +179,19 @@ async def test_knowledge_operations():
         print(f"Created knowledge entry: {entry_id}")
         assert entry_id is not None
         
-        # Get knowledge entry
-        entry = await db_service.get_knowledge_entry(entry_id)
+        # Get knowledge entry - use direct query since get_knowledge_entry method doesn't exist
+        entry = await db_service.execute_query(
+            "SELECT * FROM research.knowledge_base WHERE id = $1",
+            entry_id,
+            fetch="one"
+        )
         assert entry is not None
         assert entry["title"] == title
-        assert entry["quality_score"] == 0.85
+        assert float(entry["quality_score"]) == 0.85
         print(f"Retrieved knowledge: {entry['title']}")
         
-        # Search by tags
-        results = await db_service.search_knowledge_by_tags(["test_tag"])
+        # Search by keywords (the method actually searches keywords, not tags)
+        results = await db_service.search_knowledge_by_keywords(["test", "knowledge"])
         assert len(results) >= 1
         found_our_entry = any(r["id"] == entry_id for r in results)
         assert found_our_entry
