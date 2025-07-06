@@ -70,6 +70,48 @@ class TrainingRequest(BaseModel):
         return valid_timeframes
 
 
+class MultiSymbolTrainingRequest(BaseModel):
+    """Request model for starting multi-symbol neural network training."""
+
+    symbols: List[str]
+    timeframes: List[str]
+    strategy_name: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    task_id: Optional[str] = None
+    detailed_analytics: bool = False
+
+    @field_validator("symbols")
+    @classmethod
+    def validate_symbols(cls, v: List[str]) -> List[str]:
+        """Validate that symbols list is not empty and contains valid symbols."""
+        if not v or len(v) == 0:
+            raise ValueError("At least one symbol must be specified")
+        
+        valid_symbols = []
+        for symbol in v:
+            if not symbol or not symbol.strip():
+                raise ValueError("Symbol cannot be empty")
+            valid_symbols.append(symbol.strip())
+        
+        return valid_symbols
+    
+    @field_validator("timeframes")
+    @classmethod
+    def validate_timeframes(cls, v: List[str]) -> List[str]:
+        """Validate that timeframes list is not empty and contains valid timeframes."""
+        if not v or len(v) == 0:
+            raise ValueError("At least one timeframe must be specified")
+        
+        valid_timeframes = []
+        for timeframe in v:
+            if not timeframe or not timeframe.strip():
+                raise ValueError("Timeframe cannot be empty")
+            valid_timeframes.append(timeframe.strip())
+        
+        return valid_timeframes
+
+
 class TrainingStartResponse(BaseModel):
     """Response model for training start."""
 
@@ -78,6 +120,19 @@ class TrainingStartResponse(BaseModel):
     status: str
     message: str
     symbol: str
+    timeframes: List[str]
+    strategy_name: str
+    estimated_duration_minutes: Optional[int] = None
+
+
+class MultiSymbolTrainingStartResponse(BaseModel):
+    """Response model for multi-symbol training start."""
+
+    success: bool
+    task_id: str
+    status: str
+    message: str
+    symbols: List[str]
     timeframes: List[str]
     strategy_name: str
     estimated_duration_minutes: Optional[int] = None
@@ -205,6 +260,46 @@ async def start_training(
         logger.error(f"Failed to start training: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to start training")
 
+
+@router.post("/start-multi-symbol", response_model=MultiSymbolTrainingStartResponse)
+async def start_multi_symbol_training(
+    request: MultiSymbolTrainingRequest, service: TrainingService = Depends(get_training_service)
+) -> MultiSymbolTrainingStartResponse:
+    """
+    Start multi-symbol neural network model training.
+
+    This endpoint starts a background training task for multiple symbols simultaneously
+    and returns immediately with a task ID for tracking progress.
+    """
+    try:
+        result = await service.start_multi_symbol_training(
+            symbols=request.symbols,
+            timeframes=request.timeframes,
+            strategy_name=request.strategy_name,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            task_id=request.task_id,
+            detailed_analytics=request.detailed_analytics,
+        )
+
+        return MultiSymbolTrainingStartResponse(
+            success=result["success"],
+            task_id=result["task_id"],
+            status=result["status"],
+            message=result["message"],
+            symbols=result["symbols"],
+            timeframes=result["timeframes"],
+            strategy_name=result["strategy_name"],
+            estimated_duration_minutes=result.get("estimated_duration_minutes"),
+        )
+
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except DataError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to start multi-symbol training: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to start multi-symbol training")
 
 
 @router.get("/{task_id}/performance", response_model=PerformanceResponse)

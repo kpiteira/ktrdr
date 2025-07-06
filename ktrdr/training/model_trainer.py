@@ -13,6 +13,7 @@ import json
 from datetime import datetime
 
 from .analytics import TrainingAnalyzer
+from .multi_symbol_data_loader import MultiSymbolDataLoader
 
 
 @dataclass
@@ -454,6 +455,265 @@ class ModelTrainer:
                     
             except Exception as e:
                 print(f"⚠️ Analytics finalization failed: {e}")
+                analytics_results = {'analytics_enabled': True, 'error': str(e)}
+
+        return {**self._create_training_summary(), **analytics_results}
+
+    def train_multi_symbol(
+        self,
+        model: nn.Module,
+        X_train: torch.Tensor,
+        y_train: torch.Tensor,
+        symbol_indices_train: torch.Tensor,
+        symbols: List[str],
+        X_val: Optional[torch.Tensor] = None,
+        y_val: Optional[torch.Tensor] = None,
+        symbol_indices_val: Optional[torch.Tensor] = None,
+    ) -> Dict[str, Any]:
+        """Train the multi-symbol neural network model with balanced sampling.
+
+        Args:
+            model: PyTorch model to train (must support symbol indices)
+            X_train: Training features
+            y_train: Training labels
+            symbol_indices_train: Symbol indices for training data
+            symbols: List of symbol names
+            X_val: Optional validation features
+            y_val: Optional validation labels
+            symbol_indices_val: Optional symbol indices for validation data
+
+        Returns:
+            Training history and metrics
+        """
+        # Move model to device
+        model = model.to(self.device)
+
+        # Prepare data
+        X_train = X_train.to(self.device)
+        y_train = y_train.to(self.device)
+        symbol_indices_train = symbol_indices_train.to(self.device)
+
+        if X_val is not None:
+            X_val = X_val.to(self.device)
+            y_val = y_val.to(self.device)
+            if symbol_indices_val is not None:
+                symbol_indices_val = symbol_indices_val.to(self.device)
+
+        # Get training parameters
+        learning_rate = self.config.get("learning_rate", 0.001)
+        batch_size = self.config.get("batch_size", 32)
+        epochs = self.config.get("epochs", 100)
+
+        # Create balanced multi-symbol data loader
+        train_loader = MultiSymbolDataLoader.create_balanced_loader(
+            features=X_train,
+            labels=y_train,
+            symbol_indices=symbol_indices_train,
+            symbols=symbols,
+            batch_size=batch_size,
+            shuffle=True,
+        )
+
+        # Setup optimizer
+        optimizer = self._create_optimizer(model, learning_rate)
+
+        # Setup loss function
+        criterion = nn.CrossEntropyLoss()
+
+        # Setup learning rate scheduler
+        scheduler = self._create_scheduler(optimizer)
+
+        # Setup early stopping
+        early_stopping_config = self.config.get("early_stopping", {})
+        early_stopping = (
+            EarlyStopping(
+                patience=early_stopping_config.get("patience", 10),
+                monitor=early_stopping_config.get("monitor", "val_loss"),
+            )
+            if early_stopping_config
+            else None
+        )
+
+        # Calculate total batches for progress tracking
+        total_batches_per_epoch = len(train_loader)
+        total_batches = epochs * total_batches_per_epoch
+        total_bars = len(X_train)
+        total_bars_all_epochs = total_bars * epochs
+
+        # Training loop
+        for epoch in range(epochs):
+            start_time = time.time()
+
+            # Training phase
+            model.train()
+            train_loss = 0.0
+            train_correct = 0
+            train_total = 0
+
+            for batch_idx, (batch_X, batch_y, batch_symbol_indices) in enumerate(train_loader):
+                # Move batch to device (should already be there, but just in case)
+                batch_X = batch_X.to(self.device)
+                batch_y = batch_y.to(self.device)
+                batch_symbol_indices = batch_symbol_indices.to(self.device)
+
+                # DEBUG: Check for NaN in first batch of first epoch
+                if epoch == 0 and batch_idx == 0:
+                    print(f"🔍 Multi-symbol DEBUG: First batch - X contains NaN: {torch.isnan(batch_X).any()}")
+                    print(f"🔍 Multi-symbol DEBUG: First batch - y contains NaN: {torch.isnan(batch_y).any()}")
+                    print(f"🔍 Multi-symbol DEBUG: First batch - symbol_indices: {batch_symbol_indices}")
+                    print(f"🔍 Multi-symbol DEBUG: First batch - X shape: {batch_X.shape}, y shape: {batch_y.shape}")
+
+                # Forward pass with symbol indices
+                if hasattr(model, 'forward') and 'symbol_indices' in model.forward.__code__.co_varnames:
+                    outputs = model(batch_X, batch_symbol_indices)
+                else:
+                    # Fallback for models without symbol embedding support
+                    outputs = model(batch_X)
+
+                loss = criterion(outputs, batch_y)
+
+                # DEBUG: Check loss
+                if epoch == 0 and batch_idx == 0:
+                    print(f"🔍 Multi-symbol DEBUG: Loss value: {loss.item():.6f}")
+                    if torch.isnan(loss):
+                        print("🚨 ERROR: NaN loss detected in multi-symbol training!")
+                        return {"error": "NaN loss detected in multi-symbol training"}
+
+                # Backward pass
+                optimizer.zero_grad()
+                loss.backward()
+
+                # Gradient clipping
+                if self.config.get("gradient_clip", 0) > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), self.config["gradient_clip"]
+                    )
+
+                optimizer.step()
+
+                # Track metrics
+                train_loss += loss.item() * batch_X.size(0)
+                _, predicted = torch.max(outputs.data, 1)
+                train_total += batch_y.size(0)
+                train_correct += (predicted == batch_y).sum().item()
+
+                # Batch-level progress callback
+                if self.progress_callback and batch_idx % 10 == 0:
+                    try:
+                        completed_batches = epoch * total_batches_per_epoch + batch_idx
+                        current_train_loss = train_loss / max(train_total, 1)
+                        current_train_acc = train_correct / max(train_total, 1)
+
+                        batch_metrics = {
+                            'epoch': epoch,
+                            'total_epochs': epochs,
+                            'batch': batch_idx,
+                            'total_batches_per_epoch': total_batches_per_epoch,
+                            'completed_batches': completed_batches,
+                            'total_batches': total_batches,
+                            'train_loss': current_train_loss,
+                            'train_accuracy': current_train_acc,
+                            'progress_type': 'batch',
+                            'multi_symbol': True,
+                        }
+
+                        self.progress_callback(epoch, epochs, batch_metrics)
+                    except Exception as e:
+                        print(f"Warning: Multi-symbol batch progress callback failed: {e}")
+
+            # Calculate training metrics
+            avg_train_loss = train_loss / train_total
+            train_accuracy = train_correct / train_total
+
+            # Validation phase
+            val_loss = None
+            val_accuracy = None
+
+            if X_val is not None:
+                model.eval()
+                with torch.no_grad():
+                    if hasattr(model, 'forward') and 'symbol_indices' in model.forward.__code__.co_varnames:
+                        val_outputs = model(X_val, symbol_indices_val)
+                    else:
+                        val_outputs = model(X_val)
+                    
+                    val_loss = criterion(val_outputs, y_val)
+                    _, val_predicted = torch.max(val_outputs.data, 1)
+                    val_accuracy = (val_predicted == y_val).float().mean().item()
+                    val_loss = val_loss.item()
+
+                # Save best model
+                if val_accuracy > self.best_val_accuracy:
+                    self.best_val_accuracy = val_accuracy
+                    self.best_model_state = model.state_dict().copy()
+
+            # Record metrics
+            duration = time.time() - start_time
+            metrics = TrainingMetrics(
+                epoch=epoch,
+                train_loss=avg_train_loss,
+                train_accuracy=train_accuracy,
+                val_loss=val_loss,
+                val_accuracy=val_accuracy,
+                learning_rate=optimizer.param_groups[0]["lr"],
+                duration=duration,
+            )
+            self.history.append(metrics)
+
+            # Update learning rate scheduler
+            if scheduler is not None:
+                if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
+                    scheduler.step(val_loss if val_loss is not None else avg_train_loss)
+                else:
+                    scheduler.step()
+
+            # Check early stopping
+            if early_stopping and early_stopping(metrics):
+                print(f"Early stopping triggered at epoch {epoch}")
+                break
+
+            # Progress logging
+            if epoch % 10 == 0 or epoch == epochs - 1:
+                self._log_progress(metrics)
+
+            # Progress callback for external monitoring
+            if self.progress_callback:
+                try:
+                    epoch_metrics = {
+                        'epoch': epoch,
+                        'total_epochs': epochs,
+                        'train_loss': avg_train_loss,
+                        'train_accuracy': train_accuracy,
+                        'val_loss': val_loss,
+                        'val_accuracy': val_accuracy,
+                        'progress_type': 'epoch',
+                        'multi_symbol': True,
+                    }
+                    self.progress_callback(epoch, epochs, epoch_metrics)
+                except Exception as e:
+                    print(f"Warning: Multi-symbol progress callback failed: {e}")
+
+        # Restore best model if available
+        if self.best_model_state is not None:
+            model.load_state_dict(self.best_model_state)
+
+        # Finalize analytics (reuse existing analytics system)
+        analytics_results = {}
+        if self.analyzer:
+            try:
+                final_epoch = len(self.history)
+                stopping_reason = "early_stopping" if final_epoch < epochs else "completed"
+                self.analyzer.finalize_training(final_epoch, stopping_reason)
+                export_paths = self.analyzer.export_all()
+                analytics_results = {
+                    'analytics_enabled': True,
+                    'run_id': self.analyzer.run_id,
+                    'export_paths': {k: str(v) if v else None for k, v in export_paths.items()},
+                    'total_alerts': len(self.analyzer.alerts),
+                }
+                print(f"📊 Multi-symbol analytics exported to: {self.analyzer.output_dir}")
+            except Exception as e:
+                print(f"⚠️ Multi-symbol analytics finalization failed: {e}")
                 analytics_results = {'analytics_enabled': True, 'error': str(e)}
 
         return {**self._create_training_summary(), **analytics_results}

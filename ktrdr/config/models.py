@@ -271,8 +271,8 @@ class SymbolConfiguration(BaseModel):
         if hasattr(info, 'data') and info.data.get('mode') == SymbolMode.MULTI_SYMBOL:
             if not v and not info.data.get('selection_criteria'):
                 raise ValueError("Either symbol list or selection criteria must be specified for multi_symbol mode")
-            if v and len(v) < 2:
-                raise ValueError("Multi-symbol mode requires at least 2 symbols")
+            if v and len(v) < 1:
+                raise ValueError("Multi-symbol mode requires at least 1 symbol")
         return v
 
 
