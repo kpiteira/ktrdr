@@ -6,7 +6,7 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from research_agents.agents.base import BaseResearchAgent
 from ktrdr.errors import ProcessingError
@@ -22,7 +22,7 @@ class MockResearchAgent(BaseResearchAgent):
         super().__init__(agent_id, agent_type, max_errors=1)  # Fail fast in tests
         self.cycle_count = 0
         self.should_stop = False
-        self.mock_error = None
+        self.mock_error: Optional[Exception] = None
         
     async def _start_heartbeat(self) -> None:
         """Override to prevent heartbeat in tests"""
@@ -60,10 +60,12 @@ class TestBaseResearchAgent:
     def mock_database_service(self):
         """Mock database service"""
         db = AsyncMock(spec=ResearchDatabaseService)
-        db.create_agent_state = AsyncMock()
-        db.get_agent_state = AsyncMock(return_value=None)  # Default to no existing state
-        db.update_agent_state = AsyncMock()
-        db.update_agent_heartbeat = AsyncMock()
+        # Type cast to help mypy understand these are AsyncMock objects
+        from typing import cast
+        db.create_agent_state = cast(AsyncMock, AsyncMock())
+        db.get_agent_state = cast(AsyncMock, AsyncMock(return_value=None))  # Default to no existing state
+        db.update_agent_state = cast(AsyncMock, AsyncMock())
+        db.update_agent_heartbeat = cast(AsyncMock, AsyncMock())
         return db
     
     @pytest.fixture
@@ -89,7 +91,10 @@ class TestBaseResearchAgent:
         await mock_agent.initialize()
         
         # Verify database state creation was called
-        mock_agent.db.create_agent_state.assert_called_once_with(
+        assert mock_agent.db is not None  # Type check
+        from typing import cast
+        from unittest.mock import AsyncMock
+        cast(AsyncMock, mock_agent.db.create_agent_state).assert_called_once_with(
             "test-agent-001",
             "assistant",
             "idle",
@@ -111,7 +116,10 @@ class TestBaseResearchAgent:
             "memory_context": {"previous_memory": "previous_context"}
         }
         
-        mock_agent.db.get_agent_state.return_value = existing_state
+        assert mock_agent.db is not None  # Type check
+        from typing import cast
+        from unittest.mock import AsyncMock
+        cast(AsyncMock, mock_agent.db.get_agent_state).return_value = existing_state
         
         await mock_agent.initialize()
         
@@ -135,7 +143,10 @@ class TestBaseResearchAgent:
         await mock_agent._persist_state()
         
         # Verify database update was called
-        mock_agent.db.update_agent_state.assert_called_with(
+        assert mock_agent.db is not None  # Type check
+        from typing import cast
+        from unittest.mock import AsyncMock
+        cast(AsyncMock, mock_agent.db.update_agent_state).assert_called_with(
             "test-agent-001",
             "active",
             "Testing persistence",
@@ -152,7 +163,10 @@ class TestBaseResearchAgent:
         await mock_agent._send_heartbeat()
         
         # Verify heartbeat was sent to database
-        mock_agent.db.update_agent_heartbeat.assert_called_once_with("test-agent-001")
+        assert mock_agent.db is not None  # Type check
+        from typing import cast
+        from unittest.mock import AsyncMock
+        cast(AsyncMock, mock_agent.db.update_agent_heartbeat).assert_called_once_with("test-agent-001")
         
     @pytest.mark.asyncio
     async def test_agent_memory_management(self, mock_agent: MockResearchAgent):
@@ -187,7 +201,10 @@ class TestBaseResearchAgent:
         assert mock_agent.current_activity == "Testing activity tracking"
         
         # Verify state was persisted
-        mock_agent.db.update_agent_state.assert_called()
+        assert mock_agent.db is not None  # Type check
+        from typing import cast
+        from unittest.mock import AsyncMock
+        cast(AsyncMock, mock_agent.db.update_agent_state).assert_called()
         
     @pytest.mark.asyncio
     async def test_agent_run_cycle_execution(self, mock_agent: MockResearchAgent):
@@ -522,6 +539,7 @@ class TestAgentIntegration:
         
         # Verify state was updated
         updated_state = await clean_database.get_agent_state("integration-test-001")
+        assert updated_state is not None  # Type check
         assert updated_state["status"] == "active"
         assert updated_state["current_activity"] == "Integration testing"
         
