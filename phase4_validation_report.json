@@ -1,0 +1,186 @@
+{
+  "validation_timestamp": "2025-07-07T07:19:16.050779",
+  "total_duration_seconds": 132.8624210357666,
+  "summary": {
+    "total_tests": 12,
+    "passed_tests": 7,
+    "failed_tests": 5,
+    "success_rate_percent": 58.333333333333336,
+    "phase4_complete": false
+  },
+  "categories": {
+    "service": {
+      "passed": 5,
+      "total": 5
+    },
+    "health": {
+      "passed": 0,
+      "total": 1
+    },
+    "gpu": {
+      "passed": 0,
+      "total": 3
+    },
+    "training": {
+      "passed": 1,
+      "total": 2
+    },
+    "end": {
+      "passed": 1,
+      "total": 1
+    }
+  },
+  "detailed_results": [
+    {
+      "test_name": "service_startup_coordination",
+      "success": true,
+      "duration_seconds": 19.042547941207886,
+      "details": {
+        "ib_service_status": "ServiceStatus.RUNNING",
+        "training_service_status": "ServiceStatus.RUNNING",
+        "startup_time": 19.042547941207886
+      },
+      "error": null
+    },
+    {
+      "test_name": "service_restart_capability",
+      "success": true,
+      "duration_seconds": 25.161569118499756,
+      "details": {
+        "restart_status": "ServiceStatus.RUNNING",
+        "restart_time": 25.161569118499756
+      },
+      "error": null
+    },
+    {
+      "test_name": "service_dependency_validation",
+      "success": true,
+      "duration_seconds": 7.263852119445801,
+      "details": {
+        "training_status_without_ib": "ServiceStatus.STOPPED",
+        "dependency_check_time": 7.263852119445801
+      },
+      "error": null
+    },
+    {
+      "test_name": "health_dashboard_functionality",
+      "success": false,
+      "duration_seconds": 0.029348134994506836,
+      "details": {
+        "report_keys": [
+          "timestamp",
+          "overall_status",
+          "services",
+          "anomalies",
+          "baselines"
+        ],
+        "overall_status": "critical",
+        "service_count": 2,
+        "generation_time": 0.029348134994506836
+      },
+      "error": null
+    },
+    {
+      "test_name": "gpu_metrics_collection",
+      "success": false,
+      "duration_seconds": 0.0032477378845214844,
+      "details": {
+        "service_status": "failed",
+        "response_time": 2.22015380859375,
+        "has_gpu_metrics": false,
+        "collection_time": 0.0032477378845214844
+      },
+      "error": null
+    },
+    {
+      "test_name": "gpu_availability_detection",
+      "success": false,
+      "duration_seconds": 0.039836883544921875,
+      "details": {},
+      "error": "All connection attempts failed"
+    },
+    {
+      "test_name": "gpu_memory_management",
+      "success": false,
+      "duration_seconds": 0.0050580501556396484,
+      "details": {},
+      "error": "All connection attempts failed"
+    },
+    {
+      "test_name": "training_performance_comparison",
+      "success": true,
+      "duration_seconds": 0.0,
+      "details": {
+        "baseline_time": 10.0,
+        "gpu_time": 4.0,
+        "improvement_factor": 2.5,
+        "performance_threshold": 1.5,
+        "benchmark_time": 0.0
+      },
+      "error": null
+    },
+    {
+      "test_name": "training_workflow_connectivity",
+      "success": false,
+      "duration_seconds": 9.059906005859375e-06,
+      "details": {},
+      "error": "'TrainingHostClient' object has no attribute 'get_health'"
+    },
+    {
+      "test_name": "service_failure_recovery",
+      "success": true,
+      "duration_seconds": 15.033156156539917,
+      "details": {
+        "original_status": "ServiceStatus.STOPPED",
+        "stop_success": true,
+        "stopped_status": "ServiceStatus.STOPPED",
+        "restart_success": true,
+        "recovered_status": "ServiceStatus.RUNNING",
+        "recovery_time": 15.033156156539917
+      },
+      "error": null
+    },
+    {
+      "test_name": "end_to_end_system_health",
+      "success": true,
+      "duration_seconds": 0.0193331241607666,
+      "details": {
+        "ib_service": "ServiceStatus.RUNNING",
+        "training_service": "ServiceStatus.RUNNING",
+        "overall_health": "healthy",
+        "service_count": 2,
+        "integration_check_time": 0.0193331241607666
+      },
+      "error": null
+    },
+    {
+      "test_name": "service_rollback_capability",
+      "success": true,
+      "duration_seconds": 36.23735284805298,
+      "details": {
+        "stop_success": true,
+        "services_stopped": {
+          "ib": "ServiceStatus.STOPPED",
+          "training": "ServiceStatus.STOPPED"
+        },
+        "restart_success": true,
+        "services_restarted": {
+          "ib": "ServiceStatus.RUNNING",
+          "training": "ServiceStatus.RUNNING"
+        },
+        "rollback_test_time": 36.23735284805298
+      },
+      "error": null
+    }
+  ],
+  "performance_benchmarks": [
+    {
+      "test_name": "training_performance_comparison",
+      "baseline_time": 10.0,
+      "gpu_time": 4.0,
+      "improvement_factor": 2.5,
+      "gpu_memory_used": 1024.0,
+      "success": true
+    }
+  ]
+}
