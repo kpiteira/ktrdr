@@ -265,7 +265,7 @@ class StrategyOptimizer(StrategyOptimizerInterface):
     ) -> Dict[str, Any]:
         """Calculate specific parameter optimizations"""
         
-        optimizations = {
+        optimizations: Dict[str, Any] = {
             "parameter_adjustments": {},
             "confidence": 0.0,
             "reasoning": [],

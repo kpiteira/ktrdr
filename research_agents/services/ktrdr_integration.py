@@ -238,7 +238,7 @@ class KTRDRIntegrationService:
             raise KTRDRIntegrationError("Service not initialized")
         
         try:
-            async with self._session.get(self.health_endpoint) as response:
+            async with self._ensure_session_available().get(self.health_endpoint) as response:
                 if response.status == 200:
                     health_data = await response.json()
                     return {
@@ -283,7 +283,7 @@ class KTRDRIntegrationService:
         try:
             logger.info(f"Submitting training job: {config.strategy_name} {config.symbol} {config.timeframe}")
             
-            async with self._session.post(
+            async with self._ensure_session_available().post(
                 f"{self.training_endpoint}/submit",
                 json=training_payload
             ) as response:
@@ -322,7 +322,7 @@ class KTRDRIntegrationService:
             raise KTRDRIntegrationError("Service not initialized")
         
         try:
-            async with self._session.get(
+            async with self._ensure_session_available().get(
                 f"{self.training_endpoint}/{training_id}/status"
             ) as response:
                 
@@ -420,7 +420,7 @@ class KTRDRIntegrationService:
         try:
             logger.info(f"Submitting backtest job: strategy_name={config.strategy_name}, model_path={config.model_path}, symbol={config.symbol}")
             
-            async with self._session.post(
+            async with self._ensure_session_available().post(
                 f"{self.backtest_endpoint}/submit",
                 json=backtest_payload
             ) as response:
@@ -450,7 +450,7 @@ class KTRDRIntegrationService:
             raise KTRDRIntegrationError("Service not initialized")
         
         try:
-            async with self._session.get(
+            async with self._ensure_session_available().get(
                 f"{self.backtest_endpoint}/{backtest_id}/results"
             ) as response:
                 
@@ -529,7 +529,7 @@ class KTRDRIntegrationService:
             raise KTRDRIntegrationError("Service not initialized")
         
         try:
-            async with self._session.post(
+            async with self._ensure_session_available().post(
                 f"{self.training_endpoint}/{training_id}/cancel"
             ) as response:
                 
@@ -549,7 +549,7 @@ class KTRDRIntegrationService:
     async def _verify_api_connection(self) -> None:
         """Verify connection to KTRDR API"""
         try:
-            async with self._session.get(self.health_endpoint) as response:
+            async with self._ensure_session_available().get(self.health_endpoint) as response:
                 if response.status != 200:
                     raise ConnectionError(f"KTRDR API health check failed with status {response.status}")
                 
