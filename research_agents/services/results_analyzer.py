@@ -7,7 +7,6 @@ system to evaluate and compare different approaches.
 """
 
 import asyncio
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
@@ -16,9 +15,9 @@ from dataclasses import dataclass
 import statistics
 
 import numpy as np
-import logging
+from ktrdr import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AnalysisMetric(str, Enum):
@@ -114,14 +113,7 @@ class ResultsAnalyzer:
         self.target_annual_return = config.get("target_annual_return", 0.15)
         self.risk_free_rate = config.get("risk_free_rate", 0.02)
         
-        logger.info("Results analyzer initialized",
-                   weights={
-                       "return": self.return_weight,
-                       "risk": self.risk_weight,
-                       "consistency": self.consistency_weight,
-                       "efficiency": self.efficiency_weight,
-                       "robustness": self.robustness_weight
-                   })
+        logger.info(f"Results analyzer initialized with weights: return={self.return_weight}, risk={self.risk_weight}, consistency={self.consistency_weight}, efficiency={self.efficiency_weight}, robustness={self.robustness_weight}")
     
     async def analyze_experiment_results(
         self,
@@ -134,8 +126,7 @@ class ResultsAnalyzer:
         Perform comprehensive analysis of experiment results
         """
         try:
-            logger.info("Starting experiment analysis",
-                       experiment_id=str(experiment_id))
+            logger.info(f"Starting experiment analysis for experiment_id: {experiment_id}")
             
             # Extract performance data
             performance_metrics = await self._calculate_performance_metrics(
@@ -170,17 +161,12 @@ class ResultsAnalyzer:
                 analysis_timestamp=datetime.now(timezone.utc)
             )
             
-            logger.info("Experiment analysis completed",
-                       experiment_id=str(experiment_id),
-                       fitness_score=fitness_score,
-                       risk_profile=risk_profile.value)
+            logger.info(f"Experiment analysis completed for experiment_id: {experiment_id}, fitness_score: {fitness_score}, risk_profile: {risk_profile.value}")
             
             return result
             
         except Exception as e:
-            logger.error("Experiment analysis failed",
-                        experiment_id=str(experiment_id),
-                        error=str(e))
+            logger.error(f"Experiment analysis failed for experiment_id: {experiment_id}, error: {e}")
             raise
     
     async def _calculate_performance_metrics(

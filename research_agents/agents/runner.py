@@ -7,31 +7,24 @@ Supports different agent types and configurations.
 
 import asyncio
 import os
-import logging
 import signal
 import sys
 from typing import Optional
 
+from ktrdr import get_logger, configure_logging
 from .researcher import ResearcherAgent
 from .assistant import AssistantAgent
 from .research_agent_mvp import ResearchAgentMVP
 
-# Configure logging
-log_handlers = [logging.StreamHandler(sys.stdout)]
-
-# Add file handler if log directory exists
+# Configure KTRDR logging system
 log_file_path = os.getenv("AGENT_LOG_FILE", "/app/logs/agent.log")
 log_dir = os.path.dirname(log_file_path)
 if log_dir and os.path.exists(log_dir):
-    log_handlers.append(logging.FileHandler(log_file_path, mode='a'))
+    configure_logging(log_dir=log_dir)
+else:
+    configure_logging()  # Use default logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=log_handlers
-)
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AgentRunner:

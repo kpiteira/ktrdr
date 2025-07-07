@@ -7,17 +7,17 @@ from training dynamics to final backtest results.
 
 import asyncio
 import json
-import logging
 import aiohttp
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from ktrdr import get_logger
 from .base import BaseResearchAgent
 from ..services.interfaces import KTRDRService
 from ..services.ktrdr_service import HTTPKTRDRService, NullKTRDRService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AssistantAgent(BaseResearchAgent):
@@ -55,30 +55,15 @@ class AssistantAgent(BaseResearchAgent):
         self.active_experiments: Dict[UUID, Dict[str, Any]] = {}
         self.experiment_queue: List[UUID] = []
         
-        # HTTP session for KTRDR API calls
-        self.http_session: Optional[aiohttp.ClientSession] = None
     
     async def _initialize_agent(self) -> None:
         """Initialize assistant-specific functionality"""
-        # Create HTTP session for KTRDR API
-        connector = aiohttp.TCPConnector(limit=10)
-        timeout = aiohttp.ClientTimeout(total=300)  # 5 minutes
-        
-        headers = {}
-        if self.ktrdr_api_key:
-            headers["Authorization"] = f"Bearer {self.ktrdr_api_key}"
-        
-        self.http_session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout,
-            headers=headers
-        )
-        
-        # Test KTRDR API connectivity
-        await self._test_ktrdr_connectivity()
+        # Verify KTRDR service is available
+        if not self.ktrdr_service:
+            raise RuntimeError("No KTRDR service available")
         
         await self.log_activity("Assistant agent initialized", {
-            "ktrdr_api_url": self.ktrdr_api_url,
+            "ktrdr_service": type(self.ktrdr_service).__name__,
             "max_concurrent_experiments": self.max_concurrent_experiments
         })
     
@@ -109,23 +94,7 @@ class AssistantAgent(BaseResearchAgent):
         for exp_id in list(self.active_experiments.keys()):
             await self._cancel_experiment(exp_id)
         
-        # Close HTTP session
-        if self.http_session:
-            await self.http_session.close()
-        
         await self.log_activity("Assistant agent shutting down")
-    
-    async def _test_ktrdr_connectivity(self) -> None:
-        """Test connectivity to KTRDR API"""
-        try:
-            async with self.http_session.get(f"{self.ktrdr_api_url}/health") as response:
-                if response.status == 200:
-                    await self.log_activity("KTRDR API connectivity confirmed")
-                else:
-                    raise Exception(f"KTRDR API health check failed: {response.status}")
-        except Exception as e:
-            self.logger.warning(f"KTRDR API connectivity test failed: {e}")
-            # Don't fail initialization, just log the warning
     
     async def _check_experiment_queue(self) -> None:
         """Check for new experiments to execute"""
@@ -538,9 +507,13 @@ class AssistantAgent(BaseResearchAgent):
             self.status = "error"
             self.logger.error(f"Experiment execution failed: {e}")
             
-            # Re-raise as AgentError
-            from .base import AgentError
-            raise AgentError(f"Experiment execution failed: {e}") from e
+            # Re-raise as ProcessingError
+            from ktrdr.errors import ProcessingError
+            raise ProcessingError(
+                "Experiment execution failed",
+                error_code="EXPERIMENT_EXECUTION_FAILED",
+                details={"original_error": str(e)}
+            ) from e
     
     async def monitor_training(self, training_id: str) -> Dict[str, Any]:
         """Monitor the status of a training session"""

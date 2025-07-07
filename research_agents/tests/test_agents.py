@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from typing import Dict, Any
 
-from research_agents.agents.base import BaseResearchAgent, AgentError
+from research_agents.agents.base import BaseResearchAgent
+from ktrdr.errors import ProcessingError
 from research_agents.agents.researcher import ResearcherAgent
 from research_agents.agents.assistant import AssistantAgent
 from research_agents.services.database import ResearchDatabaseService, DatabaseConfig
@@ -213,7 +214,7 @@ class TestBaseResearchAgent:
         mock_agent.mock_error = test_error
         
         # Run agent (should handle error gracefully)
-        with pytest.raises(AgentError):
+        with pytest.raises(ProcessingError):
             await mock_agent.run()
             
     @pytest.mark.asyncio
@@ -276,77 +277,82 @@ class TestResearcherAgent:
     """Test suite for ResearcherAgent"""
     
     @pytest.fixture
-    def mock_researcher_agent(self):
-        """Create mock researcher agent"""
-        # Create agent without OpenAI API key to avoid real API calls
-        agent = ResearcherAgent("researcher-001")
-        agent.db = AsyncMock()
-        agent.openai_client = AsyncMock()  # Mock the OpenAI client
-        agent.llm_client = AsyncMock()  # Alias for tests
+    def clean_researcher_agent(self, mock_llm_service, clean_mock_database):
+        """Create researcher agent with clean dependency injection"""
+        agent = ResearcherAgent(
+            agent_id="researcher-001",
+            llm_service=mock_llm_service,
+            database_url=None  # Uses null database service
+        )
+        # Override with mock database for testing
+        agent.db = clean_mock_database
         return agent
     
     @pytest.mark.asyncio
-    async def test_researcher_initialization(self, mock_researcher_agent: ResearcherAgent):
+    async def test_researcher_initialization(self, clean_researcher_agent: ResearcherAgent):
         """Test researcher agent initialization"""
-        assert mock_researcher_agent.agent_id == "researcher-001"
-        assert mock_researcher_agent.agent_type == "researcher"
-        assert mock_researcher_agent.status == "idle"
+        assert clean_researcher_agent.agent_id == "researcher-001"
+        assert clean_researcher_agent.agent_type == "researcher"
+        assert clean_researcher_agent.status == "idle"
         
     @pytest.mark.asyncio
-    async def test_researcher_hypothesis_generation(self, mock_researcher_agent: ResearcherAgent):
+    async def test_researcher_hypothesis_generation(self, clean_researcher_agent: ResearcherAgent, mock_llm_service):
         """Test hypothesis generation"""
-        # Mock LLM response
-        mock_researcher_agent.llm_client.generate_hypothesis.return_value = {
+        # Set up mock LLM response using clean service interface
+        mock_llm_service.set_response("generate_hypothesis", {
             "hypothesis": "Test hypothesis",
             "rationale": "Test rationale",
             "confidence": 0.8
-        }
+        })
         
-        await mock_researcher_agent.initialize()
+        await clean_researcher_agent.initialize()
         
         # Generate hypothesis
-        hypothesis = await mock_researcher_agent.generate_hypothesis()
+        hypothesis = await clean_researcher_agent.generate_hypothesis()
         
         assert hypothesis["hypothesis"] == "Test hypothesis"
         assert hypothesis["rationale"] == "Test rationale"
         assert hypothesis["confidence"] == 0.8
         
-    @pytest.mark.asyncio
-    async def test_researcher_knowledge_search(self, mock_researcher_agent: ResearcherAgent):
-        """Test knowledge search functionality"""
-        # Mock database search results
-        mock_researcher_agent.db.search_knowledge_by_tags.return_value = [
-            {
-                "title": "Test Knowledge",
-                "content": "Test content",
-                "tags": ["test", "knowledge"],
-                "quality_score": 0.9
-            }
-        ]
+        # Verify service was called correctly
+        mock_llm_service.assert_called_once("generate_hypothesis")
         
-        await mock_researcher_agent.initialize()
+    @pytest.mark.asyncio
+    async def test_researcher_knowledge_search(self, clean_researcher_agent: ResearcherAgent, clean_mock_database):
+        """Test knowledge search functionality"""
+        # Add test knowledge entries to mock database
+        from uuid import uuid4
+        entry_id = await clean_mock_database.add_knowledge_entry(
+            content_type="insight",
+            title="Test Knowledge",
+            content="Test content", 
+            tags=["test", "knowledge"],
+            quality_score=0.9
+        )
+        
+        await clean_researcher_agent.initialize()
         
         # Search knowledge
-        results = await mock_researcher_agent.search_knowledge(["test", "knowledge"])
+        results = await clean_researcher_agent.search_knowledge(["test", "knowledge"])
         
         assert len(results) == 1
         assert results[0]["title"] == "Test Knowledge"
         assert results[0]["quality_score"] == 0.9
         
     @pytest.mark.asyncio
-    async def test_researcher_experiment_design(self, mock_researcher_agent: ResearcherAgent):
+    async def test_researcher_experiment_design(self, clean_researcher_agent: ResearcherAgent):
         """Test experiment design"""
-        # Mock hypothesis
+        # Test hypothesis
         hypothesis = {
             "hypothesis": "Test hypothesis",
             "rationale": "Test rationale",
             "confidence": 0.8
         }
         
-        await mock_researcher_agent.initialize()
+        await clean_researcher_agent.initialize()
         
         # Design experiment
-        experiment_design = await mock_researcher_agent.design_experiment(hypothesis)
+        experiment_design = await clean_researcher_agent.design_experiment(hypothesis)
         
         assert "experiment_name" in experiment_design
         assert "configuration" in experiment_design
@@ -358,31 +364,34 @@ class TestAssistantAgent:
     """Test suite for AssistantAgent"""
     
     @pytest.fixture
-    def mock_assistant_agent(self):
-        """Create mock assistant agent"""
-        # Create agent without real KTRDR client
-        agent = AssistantAgent("assistant-001")
-        agent.db = AsyncMock()
-        agent.ktrdr_client = AsyncMock()
+    def clean_assistant_agent(self, mock_ktrdr_service, clean_mock_database):
+        """Create assistant agent with clean dependency injection"""
+        agent = AssistantAgent(
+            agent_id="assistant-001",
+            ktrdr_service=mock_ktrdr_service,
+            database_url=None  # Uses null database service
+        )
+        # Override with mock database for testing
+        agent.db = clean_mock_database
         return agent
     
     @pytest.mark.asyncio
-    async def test_assistant_initialization(self, mock_assistant_agent: AssistantAgent):
+    async def test_assistant_initialization(self, clean_assistant_agent: AssistantAgent):
         """Test assistant agent initialization"""
-        assert mock_assistant_agent.agent_id == "assistant-001"
-        assert mock_assistant_agent.agent_type == "assistant"
-        assert mock_assistant_agent.status == "idle"
+        assert clean_assistant_agent.agent_id == "assistant-001"
+        assert clean_assistant_agent.agent_type == "assistant"
+        assert clean_assistant_agent.status == "idle"
         
     @pytest.mark.asyncio
-    async def test_assistant_experiment_execution(self, mock_assistant_agent: AssistantAgent):
+    async def test_assistant_experiment_execution(self, clean_assistant_agent: AssistantAgent, mock_ktrdr_service):
         """Test experiment execution"""
-        # Mock KTRDR client response
-        mock_assistant_agent.ktrdr_client.start_training.return_value = {
+        # Set up mock KTRDR service response using clean interface
+        mock_ktrdr_service.set_response("start_training", {
             "training_id": "test-training-001",
             "status": "started"
-        }
+        })
         
-        await mock_assistant_agent.initialize()
+        await clean_assistant_agent.initialize()
         
         # Execute experiment
         experiment_config = {
@@ -390,36 +399,39 @@ class TestAssistantAgent:
             "parameters": {"epochs": 10, "learning_rate": 0.001}
         }
         
-        result = await mock_assistant_agent.execute_experiment(experiment_config)
+        result = await clean_assistant_agent.execute_experiment(experiment_config)
         
         assert result["training_id"] == "test-training-001"
         assert result["status"] == "started"
         
+        # Verify service was called correctly
+        mock_ktrdr_service.assert_called_once("start_training")
+        
     @pytest.mark.asyncio
-    async def test_assistant_training_monitoring(self, mock_assistant_agent: AssistantAgent):
+    async def test_assistant_training_monitoring(self, clean_assistant_agent: AssistantAgent, mock_ktrdr_service):
         """Test training monitoring"""
-        # Mock training status
-        mock_assistant_agent.ktrdr_client.get_training_status.return_value = {
+        # Set up mock training status using clean interface
+        mock_ktrdr_service.set_response("get_training_status", {
             "training_id": "test-training-001",
             "status": "running",
             "progress": 0.5,
             "current_epoch": 5,
             "total_epochs": 10
-        }
+        })
         
-        await mock_assistant_agent.initialize()
+        await clean_assistant_agent.initialize()
         
         # Monitor training
-        status = await mock_assistant_agent.monitor_training("test-training-001")
+        status = await clean_assistant_agent.monitor_training("test-training-001")
         
         assert status["training_id"] == "test-training-001"
         assert status["status"] == "running"
         assert status["progress"] == 0.5
         
     @pytest.mark.asyncio
-    async def test_assistant_result_analysis(self, mock_assistant_agent: AssistantAgent):
+    async def test_assistant_result_analysis(self, clean_assistant_agent: AssistantAgent):
         """Test result analysis"""
-        # Mock training results
+        # Test training results
         training_results = {
             "fitness_score": 0.85,
             "profit_factor": 1.25,
@@ -429,10 +441,10 @@ class TestAssistantAgent:
             "win_rate": 0.62
         }
         
-        await mock_assistant_agent.initialize()
+        await clean_assistant_agent.initialize()
         
         # Analyze results
-        analysis = await mock_assistant_agent.analyze_results(training_results)
+        analysis = await clean_assistant_agent.analyze_results(training_results)
         
         assert "fitness_score" in analysis
         assert "performance_metrics" in analysis
@@ -440,9 +452,9 @@ class TestAssistantAgent:
         assert analysis["fitness_score"] == 0.85
         
     @pytest.mark.asyncio
-    async def test_assistant_knowledge_extraction(self, mock_assistant_agent: AssistantAgent):
+    async def test_assistant_knowledge_extraction(self, clean_assistant_agent: AssistantAgent):
         """Test knowledge extraction from results"""
-        # Mock experiment results
+        # Test experiment results
         experiment_results = {
             "fitness_score": 0.85,
             "profit_factor": 1.25,
@@ -456,10 +468,10 @@ class TestAssistantAgent:
             }
         }
         
-        await mock_assistant_agent.initialize()
+        await clean_assistant_agent.initialize()
         
         # Extract knowledge
-        knowledge = await mock_assistant_agent.extract_knowledge(experiment_results)
+        knowledge = await clean_assistant_agent.extract_knowledge(experiment_results)
         
         assert "insights" in knowledge
         assert "patterns" in knowledge
@@ -467,21 +479,21 @@ class TestAssistantAgent:
         assert knowledge["quality_score"] > 0
         
     @pytest.mark.asyncio
-    async def test_assistant_error_handling(self, mock_assistant_agent: AssistantAgent):
+    async def test_assistant_error_handling(self, clean_assistant_agent: AssistantAgent, mock_ktrdr_service):
         """Test assistant error handling"""
-        # Mock KTRDR client error
-        mock_assistant_agent.ktrdr_client.start_training.side_effect = Exception("Training failed")
+        # Set up mock KTRDR service to raise error using clean interface
+        mock_ktrdr_service.set_error("start_training", Exception("Training failed"))
         
-        await mock_assistant_agent.initialize()
+        await clean_assistant_agent.initialize()
         
         # Execute experiment (should handle error)
         experiment_config = {"strategy_type": "test_strategy"}
         
-        with pytest.raises(AgentError):
-            await mock_assistant_agent.execute_experiment(experiment_config)
+        with pytest.raises(ProcessingError):
+            await clean_assistant_agent.execute_experiment(experiment_config)
             
         # Verify error was logged and agent status updated
-        assert mock_assistant_agent.status == "error"
+        assert clean_assistant_agent.status == "error"
 
 
 class TestAgentIntegration:

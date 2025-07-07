@@ -8,7 +8,6 @@ and comprehensive logging.
 
 import asyncio
 import json
-import logging
 from typing import Dict, List, Optional, Any, Union
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
@@ -16,10 +15,10 @@ from dataclasses import dataclass
 from enum import Enum
 
 import aiohttp
-import logging
 from pydantic import BaseModel, Field
+from ktrdr import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TrainingStatus(str, Enum):

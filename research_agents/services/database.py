@@ -6,7 +6,6 @@ and performance optimization for the research laboratory system.
 """
 
 import asyncio
-import logging
 import json
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -18,7 +17,16 @@ from asyncpg import Connection, Pool
 import numpy as np
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
+from ktrdr import get_logger
+from ktrdr.errors import (
+    DataError,
+    ConnectionError as KtrdrConnectionError,
+    ProcessingError,
+    retry_with_backoff,
+    RetryConfig
+)
+
+logger = get_logger(__name__)
 
 
 class DatabaseConfig(BaseModel):
@@ -38,19 +46,10 @@ class DatabaseConfig(BaseModel):
     })
 
 
-class DatabaseError(Exception):
-    """Base exception for database operations"""
-    pass
-
-
-class ConnectionError(DatabaseError):
-    """Connection-related database errors"""
-    pass
-
-
-class QueryError(DatabaseError):
-    """Query execution errors"""
-    pass
+# Use KTRDR's error hierarchy instead of custom exceptions
+# DatabaseError -> DataError
+# ConnectionError -> KtrdrConnectionError 
+# QueryError -> ProcessingError
 
 
 class ResearchDatabaseService:
@@ -86,7 +85,11 @@ class ResearchDatabaseService:
                     
         except Exception as e:
             logger.error(f"Failed to initialize database pool: {e}")
-            raise ConnectionError(f"Database initialization failed: {e}") from e
+            raise KtrdrConnectionError(
+                "Database initialization failed",
+                error_code="DB_INIT_FAILED",
+                details={"original_error": str(e)}
+            ) from e
     
     async def close(self) -> None:
         """Close database connection pool"""
@@ -106,7 +109,11 @@ class ResearchDatabaseService:
                 yield connection
         except Exception as e:
             logger.error(f"Database connection error: {e}")
-            raise ConnectionError(f"Failed to acquire database connection: {e}") from e
+            raise KtrdrConnectionError(
+                "Failed to acquire database connection",
+                error_code="DB_CONNECTION_FAILED",
+                details={"original_error": str(e)}
+            ) from e
     
     async def execute_query(
         self, 
@@ -141,7 +148,11 @@ class ResearchDatabaseService:
                     
         except Exception as e:
             logger.error(f"Query execution failed: {query[:100]}... Error: {e}")
-            raise QueryError(f"Query failed: {e}") from e
+            raise ProcessingError(
+                "Database query execution failed",
+                error_code="DB_QUERY_FAILED",
+                details={"query_preview": query[:100], "original_error": str(e)}
+            ) from e
     
     # ========================================================================
     # AGENT STATE OPERATIONS

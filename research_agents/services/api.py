@@ -6,7 +6,6 @@ and agent coordination in the autonomous research laboratory.
 """
 
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -18,10 +17,11 @@ from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from ktrdr import get_logger
 
 from .database import ResearchDatabaseService, create_database_service, DatabaseConfig
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ============================================================================

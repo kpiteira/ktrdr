@@ -7,17 +7,16 @@ based on accumulated knowledge and innovative thinking.
 
 import asyncio
 import json
-import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from typing import Optional
+from ktrdr import get_logger
 from .base import BaseResearchAgent
 from ..services.interfaces import LLMService
 from ..services.llm_service import OpenAILLMService, NullLLMService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ResearcherAgent(BaseResearchAgent):

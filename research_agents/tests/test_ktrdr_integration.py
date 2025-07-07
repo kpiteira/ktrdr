@@ -24,7 +24,7 @@ from research_agents.services.ktrdr_integration import (
     KTRDRIntegrationError,
     TrainingError,
     BacktestError,
-    ConnectionError as KTRDRConnectionError
+    ConnectionError as KtrdrConnectionError
 )
 
 
@@ -186,7 +186,7 @@ class TestServiceInitialization:
         
         # Patch the ClientSession creation
         with patch('aiohttp.ClientSession', return_value=mock_session):
-            with pytest.raises(KTRDRConnectionError):
+            with pytest.raises(KtrdrConnectionError):
                 await integration_service.initialize()
             
             assert not integration_service._is_initialized
@@ -202,7 +202,7 @@ class TestServiceInitialization:
         
         # Patch the ClientSession creation
         with patch('aiohttp.ClientSession', return_value=mock_session):
-            with pytest.raises(KTRDRConnectionError) as exc_info:
+            with pytest.raises(KtrdrConnectionError) as exc_info:
                 await integration_service.initialize()
             
             assert "Failed to connect to KTRDR API" in str(exc_info.value)
@@ -402,7 +402,7 @@ class TestTrainingOperations:
         # Mock network error
         mock_session.post = MagicMock(side_effect=aiohttp.ClientError("Connection timeout"))
         
-        with pytest.raises(KTRDRConnectionError) as exc_info:
+        with pytest.raises(KtrdrConnectionError) as exc_info:
             await integration_service.submit_training(sample_training_config)
         
         assert "Failed to connect to KTRDR API" in str(exc_info.value)

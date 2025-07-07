@@ -5,31 +5,28 @@ Provides common functionality for all AI agents in the research laboratory.
 """
 
 import asyncio
-import logging
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from ktrdr import get_logger
+from ktrdr.errors import (
+    ProcessingError,
+    DataError,
+    retry_with_backoff,
+    RetryConfig
+)
 from ..services.database import ResearchDatabaseService, create_database_service
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class AgentError(Exception):
-    """Base exception for agent operations"""
-    pass
-
-
-class AgentInitializationError(AgentError):
-    """Agent initialization errors"""
-    pass
-
-
-class AgentExecutionError(AgentError):
-    """Agent execution errors"""
-    pass
+# Use KTRDR's error hierarchy instead of custom exceptions
+# AgentError -> ProcessingError
+# AgentInitializationError -> ProcessingError with specific error code
+# AgentExecutionError -> ProcessingError with specific error code
 
 
 class BaseResearchAgent(ABC):
@@ -76,7 +73,7 @@ class BaseResearchAgent(ABC):
         self._background_tasks: set = set()
         
         # Configure logging
-        self.logger = logging.getLogger(f"{__name__}.{agent_type}.{agent_id}")
+        self.logger = get_logger(f"{__name__}.{agent_type}.{agent_id}")
     
     @property
     def db_service(self) -> Optional[ResearchDatabaseService]:
@@ -128,7 +125,11 @@ class BaseResearchAgent(ABC):
             
         except Exception as e:
             self.logger.error(f"Agent initialization failed: {e}")
-            raise AgentInitializationError(f"Failed to initialize agent: {e}") from e
+            raise ProcessingError(
+                "Agent initialization failed",
+                error_code="AGENT_INIT_FAILED",
+                details={"agent_id": self.agent_id, "agent_type": self.agent_type, "original_error": str(e)}
+            ) from e
     
     async def shutdown(self) -> None:
         """Shutdown the agent gracefully"""
@@ -182,14 +183,22 @@ class BaseResearchAgent(ABC):
                     if self._error_count >= self._max_errors:
                         self.logger.error(f"Agent stopping due to too many errors ({self._max_errors})")
                         self.is_running = False
-                        raise AgentExecutionError(f"Agent failed after {self._max_errors} errors: {e}") from e
+                        raise ProcessingError(
+                            f"Agent failed after {self._max_errors} consecutive errors",
+                            error_code="AGENT_MAX_ERRORS_EXCEEDED",
+                            details={"agent_id": self.agent_id, "error_count": self._error_count, "max_errors": self._max_errors, "last_error": str(e)}
+                        ) from e
                     
                     # Brief pause before retrying
                     await asyncio.sleep(5)
             
         except Exception as e:
             self.logger.error(f"Fatal error in agent run loop: {e}")
-            raise AgentExecutionError(f"Agent execution failed: {e}") from e
+            raise ProcessingError(
+                "Agent execution failed",
+                error_code="AGENT_EXECUTION_FAILED",
+                details={"agent_id": self.agent_id, "original_error": str(e)}
+            ) from e
         finally:
             await self.shutdown()
     

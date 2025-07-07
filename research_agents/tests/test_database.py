@@ -11,9 +11,9 @@ from typing import Dict, Any, List, Optional
 from research_agents.services.database import (
     ResearchDatabaseService,
     DatabaseConfig,
-    DatabaseError,
     create_database_service
 )
+from ktrdr.errors import DataError
 
 
 class TestResearchDatabaseService:
@@ -72,7 +72,7 @@ class TestResearchDatabaseService:
         )
         
         # Attempt to create duplicate should fail
-        with pytest.raises(DatabaseError, match="already exists"):
+        with pytest.raises(DataError, match="already exists"):
             await clean_database.create_session(
                 session_name=session_name,
                 description="Duplicate session"
@@ -373,7 +373,7 @@ class TestResearchDatabaseService:
         assert non_existent_experiment is None
         
         # Test updating non-existent agent
-        with pytest.raises(DatabaseError):
+        with pytest.raises(DataError):
             await clean_database.update_agent_state(
                 agent_id="non-existent-agent",
                 status="active"

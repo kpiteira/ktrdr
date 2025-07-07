@@ -5,13 +5,19 @@ Provides HTTP-based and null object implementations of the KTRDR service interfa
 """
 
 from typing import Optional, Dict, Any
-import logging
 import aiohttp
 from datetime import datetime
 
-from .interfaces import KTRDRService, KTRDRServiceError
+from ktrdr import get_logger
+from ktrdr.errors import (
+    ProcessingError, 
+    ConnectionError as KtrdrConnectionError,
+    retry_with_backoff,
+    RetryConfig
+)
+from .interfaces import KTRDRService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HTTPKTRDRService(KTRDRService):
@@ -65,14 +71,26 @@ class HTTPKTRDRService(KTRDRService):
                     return result
                 else:
                     error_text = await response.text()
-                    raise KTRDRServiceError(f"Training start failed: {response.status} - {error_text}")
+                    raise ProcessingError(
+                        "KTRDR training start failed",
+                        error_code="KTRDR_TRAINING_START_FAILED",
+                        details={"status_code": response.status, "error_text": error_text}
+                    )
                     
         except aiohttp.ClientError as e:
             logger.error(f"HTTP error starting KTRDR training: {e}")
-            raise KTRDRServiceError(f"Network error starting training: {e}") from e
+            raise KtrdrConnectionError(
+                "Network error starting KTRDR training",
+                error_code="KTRDR_NETWORK_ERROR",
+                details={"api_url": self.api_url, "original_error": str(e)}
+            ) from e
         except Exception as e:
             logger.error(f"Unexpected error starting KTRDR training: {e}")
-            raise KTRDRServiceError(f"Failed to start training: {e}") from e
+            raise ProcessingError(
+                "Failed to start KTRDR training",
+                error_code="KTRDR_TRAINING_START_ERROR",
+                details={"original_error": str(e)}
+            ) from e
     
     async def get_training_status(self, job_id: str) -> Dict[str, Any]:
         """Get training job status via HTTP API"""
@@ -84,10 +102,18 @@ class HTTPKTRDRService(KTRDRService):
                 if response.status == 200:
                     return await response.json()
                 elif response.status == 404:
-                    raise KTRDRServiceError(f"Training job not found: {job_id}")
+                    raise ProcessingError(
+                        "KTRDR training job not found",
+                        error_code="KTRDR_JOB_NOT_FOUND",
+                        details={"job_id": job_id}
+                    )
                 else:
                     error_text = await response.text()
-                    raise KTRDRServiceError(f"Status check failed: {response.status} - {error_text}")
+                    raise ProcessingError(
+                        "KTRDR training status check failed",
+                        error_code="KTRDR_STATUS_CHECK_FAILED",
+                        details={"job_id": job_id, "status_code": response.status, "error_text": error_text}
+                    )
                     
         except aiohttp.ClientError as e:
             logger.error(f"HTTP error getting training status: {e}")
@@ -97,7 +123,7 @@ class HTTPKTRDRService(KTRDRService):
                 "status": "unknown",
                 "error": str(e)
             }
-        except KTRDRServiceError:
+        except ProcessingError:
             raise
         except Exception as e:
             logger.error(f"Unexpected error getting training status: {e}")
@@ -117,19 +143,35 @@ class HTTPKTRDRService(KTRDRService):
                 if response.status == 200:
                     return await response.json()
                 elif response.status == 404:
-                    raise KTRDRServiceError(f"Training results not found: {job_id}")
+                    raise ProcessingError(
+                        "KTRDR training results not found",
+                        error_code="KTRDR_RESULTS_NOT_FOUND",
+                        details={"job_id": job_id}
+                    )
                 else:
                     error_text = await response.text()
-                    raise KTRDRServiceError(f"Results retrieval failed: {response.status} - {error_text}")
+                    raise ProcessingError(
+                        "KTRDR results retrieval failed",
+                        error_code="KTRDR_RESULTS_RETRIEVAL_FAILED",
+                        details={"job_id": job_id, "status_code": response.status, "error_text": error_text}
+                    )
                     
         except aiohttp.ClientError as e:
             logger.error(f"HTTP error getting training results: {e}")
-            raise KTRDRServiceError(f"Network error getting results: {e}") from e
-        except KTRDRServiceError:
+            raise KtrdrConnectionError(
+                "Network error getting KTRDR results",
+                error_code="KTRDR_NETWORK_ERROR",
+                details={"job_id": job_id, "api_url": self.api_url, "original_error": str(e)}
+            ) from e
+        except ProcessingError:
             raise
         except Exception as e:
             logger.error(f"Unexpected error getting training results: {e}")
-            raise KTRDRServiceError(f"Failed to get results: {e}") from e
+            raise ProcessingError(
+                "Failed to get KTRDR training results",
+                error_code="KTRDR_RESULTS_ERROR",
+                details={"job_id": job_id, "original_error": str(e)}
+            ) from e
     
     async def stop_training(self, job_id: str) -> None:
         """Stop a training job via HTTP API"""

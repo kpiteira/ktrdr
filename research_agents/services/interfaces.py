@@ -93,11 +93,6 @@ class KTRDRService(ABC):
         pass
 
 
-class LLMServiceError(Exception):
-    """Exception for LLM service operations"""
-    pass
-
-
-class KTRDRServiceError(Exception):
-    """Exception for KTRDR service operations"""
-    pass
+# Use KTRDR's error hierarchy instead of custom exceptions
+# LLMServiceError -> ProcessingError with LLM_SERVICE error code
+# KTRDRServiceError -> ProcessingError with KTRDR_SERVICE error code

@@ -7,14 +7,13 @@ research workflows from hypothesis generation to results analysis.
 """
 
 import asyncio
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 from enum import Enum
 from dataclasses import dataclass
 
-import logging
+from ktrdr import get_logger
 
 from .base import BaseResearchAgent
 from .researcher import ResearcherAgent
@@ -27,7 +26,7 @@ from ..services.research_orchestrator import (
     ExperimentStatus
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ResearchPhase(str, Enum):

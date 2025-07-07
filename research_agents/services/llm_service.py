@@ -5,11 +5,12 @@ Provides OpenAI-based and null object implementations of the LLM service interfa
 """
 
 from typing import Optional, Dict, Any, List
-import logging
 
-from .interfaces import LLMService, LLMServiceError
+from ktrdr import get_logger
+from ktrdr.errors import ProcessingError, retry_with_backoff, RetryConfig
+from .interfaces import LLMService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class OpenAILLMService(LLMService):
@@ -31,7 +32,11 @@ class OpenAILLMService(LLMService):
     async def generate_hypothesis(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate a single hypothesis using OpenAI"""
         if not self.client:
-            raise LLMServiceError("OpenAI client not available - check API key and installation")
+            raise ProcessingError(
+                "OpenAI client not available - check API key and installation",
+                error_code="LLM_CLIENT_UNAVAILABLE",
+                details={"model": self.model, "has_api_key": bool(self.api_key)}
+            )
         
         try:
             prompt = self._build_hypothesis_prompt(context)
@@ -56,12 +61,20 @@ class OpenAILLMService(LLMService):
             
         except Exception as e:
             logger.error(f"OpenAI hypothesis generation failed: {e}")
-            raise LLMServiceError(f"Failed to generate hypothesis: {e}") from e
+            raise ProcessingError(
+                "Failed to generate hypothesis",
+                error_code="LLM_GENERATION_FAILED",
+                details={"model": self.model, "original_error": str(e)}
+            ) from e
     
     async def generate_hypotheses(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate multiple hypotheses using OpenAI"""
         if not self.client:
-            raise LLMServiceError("OpenAI client not available - check API key and installation")
+            raise ProcessingError(
+                "OpenAI client not available - check API key and installation",
+                error_code="LLM_CLIENT_UNAVAILABLE",
+                details={"model": self.model, "has_api_key": bool(self.api_key)}
+            )
         
         try:
             prompt = self._build_hypotheses_prompt(context)
@@ -86,7 +99,11 @@ class OpenAILLMService(LLMService):
             
         except Exception as e:
             logger.error(f"OpenAI hypotheses generation failed: {e}")
-            raise LLMServiceError(f"Failed to generate hypotheses: {e}") from e
+            raise ProcessingError(
+                "Failed to generate hypotheses",
+                error_code="LLM_GENERATION_FAILED",
+                details={"model": self.model, "original_error": str(e)}
+            ) from e
     
     def _build_hypothesis_prompt(self, context: Dict[str, Any]) -> str:
         """Build prompt for single hypothesis generation"""

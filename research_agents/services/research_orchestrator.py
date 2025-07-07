@@ -6,7 +6,6 @@ managing the complete lifecycle from hypothesis to results analysis.
 """
 
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Union
@@ -15,11 +14,10 @@ from enum import Enum
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
-import logging
-
+from ktrdr import get_logger
 from .database import ResearchDatabaseService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ExperimentStatus(str, Enum):
