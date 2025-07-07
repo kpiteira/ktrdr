@@ -240,7 +240,7 @@ class ResearchOrchestrator:
     
     async def get_experiment_status(self, experiment_id: UUID) -> Dict[str, Any]:
         """Get current status of an experiment"""
-        experiment = await self.db_service.execute_query("""
+        experiment_result = await self.db_service.execute_query("""
             SELECT id, experiment_name, status, hypothesis, experiment_type,
                    configuration, created_at, started_at, completed_at,
                    results, error_info
@@ -248,14 +248,14 @@ class ResearchOrchestrator:
             WHERE id = $1
         """, experiment_id, fetch="one")
         
-        if not experiment:
+        if not experiment_result or not isinstance(experiment_result, dict):
             raise ExperimentExecutionError(f"Experiment {experiment_id} not found")
         
         # Add runtime information
         is_running = experiment_id in self._running_experiments
         
         return {
-            **dict(experiment),
+            **experiment_result,
             "is_running": is_running,
             "runtime_info": {
                 "total_experiments": self._total_experiments,
@@ -280,7 +280,7 @@ class ResearchOrchestrator:
         """
         
         conditions = []
-        params = []
+        params: List[Any] = []
         param_count = 0
         
         if session_id:
@@ -291,19 +291,27 @@ class ResearchOrchestrator:
         if status:
             param_count += 1
             conditions.append(f"status = ${param_count}")
-            params.append(status.value)
+            params.append(status.value if hasattr(status, 'value') else str(status))
         
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         
         query += f" ORDER BY created_at DESC LIMIT ${param_count + 1}"
+        # Type-safe append of limit
         params.append(limit)
         
-        experiments = await self.db_service.execute_query(query, *params, fetch="all")
+        experiments_result = await self.db_service.execute_query(query, *params, fetch="all")
+        
+        # Type-safe conversion to list
+        if not isinstance(experiments_result, list):
+            experiments = [] if experiments_result is None else [experiments_result] if isinstance(experiments_result, dict) else []
+        else:
+            experiments = experiments_result
         
         # Add runtime status
         for exp in experiments:
-            exp["is_running"] = exp["id"] in self._running_experiments
+            if isinstance(exp, dict) and "id" in exp:
+                exp["is_running"] = exp["id"] in self._running_experiments
         
         return experiments
     
@@ -439,12 +447,14 @@ class ResearchOrchestrator:
     
     async def _get_experiment_config(self, experiment_id: UUID) -> Optional[Dict[str, Any]]:
         """Get experiment configuration from database"""
-        return await self.db_service.execute_query("""
+        result = await self.db_service.execute_query("""
             SELECT id, session_id, experiment_name, hypothesis, experiment_type,
                    configuration, status, created_at
             FROM research.experiments 
             WHERE id = $1
         """, experiment_id, fetch="one")
+        # Type-safe conversion: fetch="one" returns Dict or None, but union includes List
+        return result if isinstance(result, dict) else None
     
     async def _update_experiment_status(
         self,
@@ -606,16 +616,24 @@ class ResearchOrchestrator:
     
     async def _recover_interrupted_experiments(self) -> None:
         """Recover experiments that were interrupted during shutdown"""
-        interrupted = await self.db_service.execute_query("""
+        interrupted_result = await self.db_service.execute_query("""
             SELECT id, experiment_name 
             FROM research.experiments 
             WHERE status IN ('initializing', 'running', 'analyzing')
         """, fetch="all")
         
+        # Type-safe conversion to list
+        if not isinstance(interrupted_result, list):
+            interrupted = [] if interrupted_result is None else [interrupted_result] if isinstance(interrupted_result, dict) else []
+        else:
+            interrupted = interrupted_result
+        
         if interrupted:
             logger.info(f"Recovering {len(interrupted)} interrupted experiments")
             
             for exp in interrupted:
+                if not isinstance(exp, dict):
+                    continue  # Skip invalid entries
                 await self.db_service.execute_query("""
                     UPDATE research.experiments 
                     SET status = 'failed', 
