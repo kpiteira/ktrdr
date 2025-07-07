@@ -11,7 +11,7 @@ from uuid import uuid4
 
 # Import test dependencies
 try:
-    import asyncpg
+    import asyncpg  # type: ignore[import-untyped]
     from fastapi.testclient import TestClient
     from httpx import AsyncClient
 except ImportError:
@@ -69,7 +69,7 @@ async def test_database() -> AsyncGenerator[ResearchDatabaseService, None]:
 
 
 @pytest_asyncio.fixture
-async def clean_database(test_database: ResearchDatabaseService) -> ResearchDatabaseService:
+async def clean_database(test_database: ResearchDatabaseService) -> AsyncGenerator[ResearchDatabaseService, None]:
     """
     Provide a clean database state for each test.
     

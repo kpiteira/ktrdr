@@ -50,8 +50,8 @@ def test_import_results_analyzer():
     assert analyzer is not None
 
 
-def test_import_research_orchestrator():
-    """Test that research orchestrator can be imported"""
+def test_import_agent_research_orchestrator():
+    """Test that agent research orchestrator can be imported"""
     from research_agents.agents.research_orchestrator import (
         ResearchOrchestrator,
         create_research_orchestrator

@@ -814,7 +814,7 @@ class TestErrorHandlingAndEdgeCases:
         
         for operation, arg in operations:
             with pytest.raises(KTRDRIntegrationError) as exc_info:
-                await operation(arg)
+                await operation(arg)  # type: ignore[operator]
             assert "not initialized" in str(exc_info.value)
     
     @pytest.mark.asyncio

@@ -371,7 +371,10 @@ class TestResearchAPI:
         assert entry_info["title"] == knowledge_data["title"]
         assert entry_info["content"] == knowledge_data["content"]
         assert entry_info["quality_score"] == knowledge_data["quality_score"]
-        assert set(entry_info["keywords"]) == set(knowledge_data["keywords"])
+        from typing import cast, List
+        entry_keywords = cast(List, entry_info.get("keywords", []))
+        knowledge_keywords = cast(List, knowledge_data.get("keywords", []))
+        assert set(entry_keywords) == set(knowledge_keywords)
         
     @pytest.mark.asyncio
     async def test_search_knowledge_endpoint(self, async_test_client: AsyncClient):
@@ -476,7 +479,7 @@ class TestResearchAPI:
     async def test_api_error_handling(self, async_test_client: AsyncClient):
         """Test API error handling"""
         # Test invalid JSON
-        response = await async_test_client.post("/sessions", data="invalid json")
+        response = await async_test_client.post("/sessions", content="invalid json", headers={"Content-Type": "application/json"})
         assert response.status_code == 422
         
         # Test missing required fields

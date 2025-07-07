@@ -57,7 +57,10 @@ class OpenAILLMService(LLMService):
                 max_tokens=1000
             )
             
-            return self._parse_hypothesis_response(response.choices[0].message.content)
+            content = response.choices[0].message.content
+            if content is None:
+                raise ProcessingError("LLM returned empty content", error_code="LLM_EMPTY_RESPONSE")
+            return self._parse_hypothesis_response(content)
             
         except Exception as e:
             logger.error(f"OpenAI hypothesis generation failed: {e}")
@@ -95,7 +98,10 @@ class OpenAILLMService(LLMService):
                 max_tokens=2000
             )
             
-            return self._parse_hypotheses_response(response.choices[0].message.content)
+            content = response.choices[0].message.content
+            if content is None:
+                raise ProcessingError("LLM returned empty content", error_code="LLM_EMPTY_RESPONSE")
+            return self._parse_hypotheses_response(content)
             
         except Exception as e:
             logger.error(f"OpenAI hypotheses generation failed: {e}")

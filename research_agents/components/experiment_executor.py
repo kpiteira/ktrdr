@@ -82,9 +82,13 @@ class ExperimentExecutor(ExperimentExecutorInterface):
                 self.running_experiments[config.experiment_id]["training_job_id"] = training_result.get("job_id")
                 
                 # Monitor experiment to completion
+                job_id = training_result.get("job_id")
+                if job_id is None:
+                    raise ProcessingError("Training job ID is missing from result", error_code="MISSING_JOB_ID")
+                
                 result = await self._monitor_experiment_to_completion(
                     config.experiment_id,
-                    training_result.get("job_id"),
+                    job_id,
                     config.timeout_hours
                 )
                 

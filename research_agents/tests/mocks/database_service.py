@@ -519,16 +519,16 @@ class MockDatabaseService(ResearchDatabaseService):
         elif "SELECT id, session_name, description, status, started_at" in query and fetch == "one":
             session_id = args[0] if args else None
             if session_id:
-                session = self.sessions.get(session_id)
-                if session:
+                found_session: Optional[Dict[str, Any]] = self.sessions.get(session_id)
+                if found_session:
                     return {
-                        "id": session["id"],
-                        "session_name": session["session_name"],
-                        "description": session["description"],
-                        "status": session["status"],
-                        "started_at": session["started_at"],
-                        "strategic_goals": session["strategic_goals"],
-                        "priority_areas": session["priority_areas"]
+                        "id": found_session["id"],
+                        "session_name": found_session["session_name"],
+                        "description": found_session["description"],
+                        "status": found_session["status"],
+                        "started_at": found_session["started_at"],
+                        "strategic_goals": found_session["strategic_goals"],
+                        "priority_areas": found_session["priority_areas"]
                     }
             return None
         

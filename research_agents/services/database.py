@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 from asyncpg import Connection, Pool
 import numpy as np
 from pydantic import BaseModel, Field
