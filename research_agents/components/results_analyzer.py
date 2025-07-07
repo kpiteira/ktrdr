@@ -96,14 +96,14 @@ class ResultsAnalyzer(ResultsAnalyzerInterface):
             # Convert to component AnalysisReport format
             return AnalysisReport(
                 experiment_id=result.experiment_id,
-                fitness_score=analysis_result["fitness_score"],
-                risk_profile=analysis_result["risk_profile"],
-                performance_metrics=analysis_result["performance_metrics"],
-                insights=analysis_result.get("insights", []),
-                recommendations=analysis_result.get("recommendations", []),
-                quality_indicators=analysis_result.get("quality_indicators", {}),
+                fitness_score=analysis_result.fitness_score,
+                risk_profile=analysis_result.risk_profile.value if hasattr(analysis_result.risk_profile, 'value') else str(analysis_result.risk_profile),
+                performance_metrics=analysis_result.performance_metrics.__dict__ if hasattr(analysis_result.performance_metrics, '__dict__') else {},
+                insights=analysis_result.insights,
+                recommendations=analysis_result.recommendations,
+                quality_indicators={},  # Not available in AnalysisResult
                 metadata={
-                    "analysis_timestamp": analysis_result.get("analysis_timestamp"),
+                    "analysis_timestamp": analysis_result.analysis_timestamp.isoformat() if analysis_result.analysis_timestamp else None,
                     "analyzer_version": "component_v1.0",
                     "context": {
                         "session_id": str(context.session_id),
@@ -132,18 +132,38 @@ class ResultsAnalyzer(ResultsAnalyzerInterface):
         """Calculate fitness score from performance metrics"""
         
         try:
-            # Convert metrics to PerformanceMetrics if needed
-            if not isinstance(metrics, dict):
-                logger.warning("Metrics is not a dictionary, returning 0.0")
-                return 0.0
+            # Convert dict metrics to PerformanceMetrics object if needed
+            if isinstance(metrics, dict):
+                # Create PerformanceMetrics from dict
+                from ..services.results_analyzer import PerformanceMetrics
+                perf_metrics = PerformanceMetrics(
+                    total_return=metrics.get("total_return", 0.0),
+                    annualized_return=metrics.get("annualized_return", 0.0),
+                    volatility=metrics.get("volatility", 0.0),
+                    sharpe_ratio=metrics.get("sharpe_ratio", 0.0),
+                    sortino_ratio=metrics.get("sortino_ratio", 0.0),
+                    max_drawdown=metrics.get("max_drawdown", 0.0),
+                    calmar_ratio=metrics.get("calmar_ratio", 0.0),
+                    profit_factor=metrics.get("profit_factor", 0.0),
+                    win_rate=metrics.get("win_rate", 0.0),
+                    total_trades=int(metrics.get("total_trades", 0)),
+                    avg_trade_return=metrics.get("avg_trade_return", 0.0),
+                    var_95=metrics.get("var_95", 0.0),
+                    skewness=metrics.get("skewness", 0.0),
+                    kurtosis=metrics.get("kurtosis", 0.0),
+                    trade_frequency=metrics.get("trade_frequency", 0.0)
+                )
+            else:
+                perf_metrics = metrics
             
             # Use the analyzer service to calculate fitness
-            # This may require calling a method that calculates fitness from metrics
             fitness_components = await self.analyzer._calculate_fitness_components(
-                metrics, {}
+                perf_metrics, {}
             )
             
-            return fitness_components.get("composite_score", 0.0)
+            # Calculate overall fitness score
+            fitness_score = await self.analyzer._calculate_overall_fitness(fitness_components)
+            return fitness_score
             
         except Exception as e:
             logger.error(f"Failed to calculate fitness score: {e}")
@@ -181,14 +201,22 @@ class ResultsAnalyzer(ResultsAnalyzerInterface):
                         "error": result.error_message
                     })
             
-            # Sort by fitness score (descending)
-            sorted_results = sorted(scored_results, key=lambda x: x["fitness_score"], reverse=True)
+            # Sort by fitness score (descending) with safe type conversion
+            def safe_float(val: Any) -> float:
+                if val is None:
+                    return 0.0
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    return 0.0
+            
+            sorted_results = sorted(scored_results, key=lambda x: safe_float(x["fitness_score"]), reverse=True)
             
             # Generate comparison insights
             completed_results = [r for r in scored_results if r["status"] == "completed"]
             
             if completed_results:
-                fitness_scores = [r["fitness_score"] for r in completed_results]
+                fitness_scores = [safe_float(r["fitness_score"]) for r in completed_results]
                 
                 comparison = {
                     "total_experiments": len(results),
@@ -218,9 +246,11 @@ class ResultsAnalyzer(ResultsAnalyzerInterface):
             # Import numpy locally to avoid issues
             try:
                 import numpy as np
+                has_numpy = True
             except ImportError:
                 # Fallback if numpy not available
-                np = None
+                np = None  # type: ignore[assignment]
+                has_numpy = False
             
             raise ProcessingError(
                 "Results comparison failed", 

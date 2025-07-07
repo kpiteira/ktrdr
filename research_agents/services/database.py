@@ -368,7 +368,8 @@ class ResearchDatabaseService:
         ORDER BY e.created_at ASC
         LIMIT $1
         """
-        return await self.execute_query(query, limit, fetch="all")
+        result = await self.execute_query(query, limit, fetch="all")
+        return result if isinstance(result, list) else []
     
     async def get_experiments_by_session(
         self, 
@@ -384,7 +385,8 @@ class ResearchDatabaseService:
             WHERE e.session_id = $1 AND e.status = $2
             ORDER BY e.created_at DESC
             """
-            return await self.execute_query(query, session_id, status_filter, fetch="all")
+            result = await self.execute_query(query, session_id, status_filter, fetch="all")
+            return result if isinstance(result, list) else []
         else:
             query = """
             SELECT e.*, a.agent_id as assigned_agent_name
@@ -393,7 +395,8 @@ class ResearchDatabaseService:
             WHERE e.session_id = $1
             ORDER BY e.created_at DESC
             """
-            return await self.execute_query(query, session_id, fetch="all")
+            result = await self.execute_query(query, session_id, fetch="all")
+            return result if isinstance(result, list) else []
     
     # ========================================================================
     # KNOWLEDGE BASE OPERATIONS
@@ -434,7 +437,13 @@ class ResearchDatabaseService:
             keywords or [], tags or [], source_experiment_id, source_agent_id,
             quality_score, embedding_vector, fetch="val"
         )
-        return result
+        # Return the UUID from the insert result
+        if isinstance(result, list) and result:
+            return result[0] if isinstance(result[0], UUID) else UUID(str(result[0]))
+        elif result:
+            return result if isinstance(result, UUID) else UUID(str(result))
+        else:
+            return entry_id  # Fallback to the original entry_id
     
     async def search_knowledge_by_similarity(
         self,
@@ -457,10 +466,11 @@ class ResearchDatabaseService:
             ORDER BY kb.embedding <=> $1::vector
             LIMIT $4
             """
-            return await self.execute_query(
+            result = await self.execute_query(
                 query, embedding_vector, content_type_filter, 
                 similarity_threshold, limit, fetch="all"
             )
+            return result if isinstance(result, list) else []
         else:
             query = """
             SELECT kb.*, (1 - (kb.embedding <=> $1::vector)) as similarity_score
@@ -470,9 +480,10 @@ class ResearchDatabaseService:
             ORDER BY kb.embedding <=> $1::vector
             LIMIT $3
             """
-            return await self.execute_query(
+            result = await self.execute_query(
                 query, embedding_vector, similarity_threshold, limit, fetch="all"
             )
+            return result if isinstance(result, list) else []
     
     async def search_knowledge_by_keywords(
         self,
@@ -489,9 +500,10 @@ class ResearchDatabaseService:
             ORDER BY created_at DESC
             LIMIT $3
             """
-            return await self.execute_query(
+            result = await self.execute_query(
                 query, content_type_filter, keywords, limit, fetch="all"
             )
+            return result if isinstance(result, list) else []
         else:
             query = """
             SELECT * FROM research.knowledge_base
@@ -499,7 +511,8 @@ class ResearchDatabaseService:
             ORDER BY created_at DESC
             LIMIT $2
             """
-            return await self.execute_query(query, keywords, limit, fetch="all")
+            result = await self.execute_query(query, keywords, limit, fetch="all")
+            return result if isinstance(result, list) else []
     
     async def search_knowledge_by_tags(
         self,
@@ -520,7 +533,8 @@ class ResearchDatabaseService:
         WHERE source_experiment_id = $1
         ORDER BY created_at DESC
         """
-        return await self.execute_query(query, source_experiment_id, fetch="all")
+        result = await self.execute_query(query, source_experiment_id, fetch="all")
+        return result if isinstance(result, list) else []
     
     # ========================================================================
     # SESSION OPERATIONS
@@ -536,7 +550,8 @@ class ResearchDatabaseService:
         ORDER BY s.started_at DESC
         LIMIT 1
         """
-        return await self.execute_query(query, fetch="one")
+        result = await self.execute_query(query, fetch="one")
+        return result if isinstance(result, dict) else (result[0] if isinstance(result, list) and result else None)
     
     async def create_session(
         self,
@@ -562,7 +577,13 @@ class ResearchDatabaseService:
             json.dumps(strategic_goals or []), json.dumps(priority_areas or []), coordinator_id,
             fetch="val"
         )
-        return result
+        # Return the UUID from the insert result
+        if isinstance(result, list) and result:
+            return result[0] if isinstance(result[0], UUID) else UUID(str(result[0]))
+        elif result:
+            return result if isinstance(result, UUID) else UUID(str(result))
+        else:
+            return session_id  # Fallback to the original session_id
     
     # ========================================================================
     # ANALYTICS AND REPORTING
@@ -593,7 +614,8 @@ class ResearchDatabaseService:
         else:
             result = await self.execute_query(base_query, fetch="one")
         
-        return result
+        # Ensure we return a dict for statistics
+        return result if isinstance(result, dict) else (result[0] if isinstance(result, list) and result else {})
     
     async def get_knowledge_base_statistics(self) -> Dict[str, Any]:
         """Get knowledge base statistics"""
@@ -606,13 +628,15 @@ class ResearchDatabaseService:
             COUNT(CASE WHEN embedding IS NOT NULL THEN 1 END) as entries_with_embeddings
         FROM research.knowledge_base
         """
-        return await self.execute_query(query, fetch="one")
+        result = await self.execute_query(query, fetch="one")
+        return result if isinstance(result, dict) else (result[0] if isinstance(result, list) and result else {})
     
     async def health_check(self) -> Dict[str, Any]:
         """Perform database health check"""
         try:
             # Test basic connectivity
-            result = await self.execute_query("SELECT NOW() as current_time", fetch="one")
+            query_result = await self.execute_query("SELECT NOW() as current_time", fetch="one")
+            result = query_result if isinstance(query_result, dict) else (query_result[0] if isinstance(query_result, list) and query_result else {})
             
             # Test pool status
             pool_info = {
@@ -624,7 +648,7 @@ class ResearchDatabaseService:
             
             return {
                 "status": "healthy",
-                "current_time": result["current_time"],
+                "current_time": result.get("current_time"),
                 "pool_info": pool_info,
                 "database": self.config.database,
                 "host": self.config.host
