@@ -192,8 +192,13 @@ class KTRDRIntegrationService:
         self._session: Optional[aiohttp.ClientSession] = None
         self._is_initialized = False
         
-        logger.info("KTRDR integration service initialized",
-                   api_base_url=ktrdr_api_base_url)
+        logger.info(f"KTRDR integration service initialized with api_base_url={ktrdr_api_base_url}")
+    
+    def _ensure_session_available(self) -> aiohttp.ClientSession:
+        """Ensure session is available and return it"""
+        if not self._session:
+            raise KTRDRIntegrationError("Service not initialized - no active session")
+        return self._session
     
     async def initialize(self) -> None:
         """Initialize the integration service"""
@@ -364,9 +369,7 @@ class KTRDRIntegrationService:
         if not self._is_initialized:
             raise KTRDRIntegrationError("Service not initialized")
         
-        logger.info("Waiting for training completion",
-                   training_id=training_id,
-                   max_wait_minutes=max_wait_minutes)
+        logger.info(f"Waiting for training completion: training_id={training_id}, max_wait_minutes={max_wait_minutes}")
         
         start_time = datetime.now(timezone.utc)
         max_wait_seconds = max_wait_minutes * 60
@@ -381,10 +384,7 @@ class KTRDRIntegrationService:
             results = await self.get_training_status(training_id)
             
             if results.status == TrainingStatus.COMPLETED:
-                logger.info("Training completed successfully",
-                           training_id=training_id,
-                           final_loss=results.final_loss,
-                           training_time_minutes=results.training_time_minutes)
+                logger.info(f"Training completed successfully: training_id={training_id}, final_loss={results.final_loss}, training_time_minutes={results.training_time_minutes}")
                 return results
             
             elif results.status == TrainingStatus.FAILED:
@@ -418,10 +418,7 @@ class KTRDRIntegrationService:
         }
         
         try:
-            logger.info("Submitting backtest job",
-                       strategy_name=config.strategy_name,
-                       model_path=config.model_path,
-                       symbol=config.symbol)
+            logger.info(f"Submitting backtest job: strategy_name={config.strategy_name}, model_path={config.model_path}, symbol={config.symbol}")
             
             async with self._session.post(
                 f"{self.backtest_endpoint}/submit",
@@ -432,9 +429,7 @@ class KTRDRIntegrationService:
                     result = await response.json()
                     backtest_id = result["backtest_id"]
                     
-                    logger.info("Backtest job submitted successfully",
-                               backtest_id=backtest_id,
-                               strategy_name=config.strategy_name)
+                    logger.info(f"Backtest job submitted successfully: backtest_id={backtest_id}, strategy_name={config.strategy_name}")
                     
                     return backtest_id
                 
@@ -506,9 +501,7 @@ class KTRDRIntegrationService:
         if not self._is_initialized:
             raise KTRDRIntegrationError("Service not initialized")
         
-        logger.info("Waiting for backtest completion",
-                   backtest_id=backtest_id,
-                   max_wait_minutes=max_wait_minutes)
+        logger.info(f"Waiting for backtest completion: backtest_id={backtest_id}, max_wait_minutes={max_wait_minutes}")
         
         start_time = datetime.now(timezone.utc)
         max_wait_seconds = max_wait_minutes * 60
@@ -521,10 +514,7 @@ class KTRDRIntegrationService:
             results = await self.get_backtest_results(backtest_id)
             
             if results.status == BacktestStatus.COMPLETED:
-                logger.info("Backtest completed successfully",
-                           backtest_id=backtest_id,
-                           total_trades=results.total_trades,
-                           profit_factor=results.profit_factor)
+                logger.info(f"Backtest completed successfully: backtest_id={backtest_id}, total_trades={results.total_trades}, profit_factor={results.profit_factor}")
                 return results
             
             elif results.status == BacktestStatus.FAILED:

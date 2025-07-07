@@ -8,7 +8,7 @@ and agent coordination in the autonomous research laboratory.
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, AsyncGenerator
 from uuid import UUID
 from enum import Enum
 
@@ -168,7 +168,7 @@ class CompletionRequest(BaseModel):
 # ============================================================================
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan management"""
     import os
     
@@ -235,7 +235,13 @@ def create_app() -> FastAPI:
 
 async def get_database() -> ResearchDatabaseService:
     """Get database service dependency"""
-    return app.state.db
+    if not hasattr(app.state, 'db'):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service not initialized"
+        )
+    db: ResearchDatabaseService = app.state.db
+    return db
 
 
 # ============================================================================
@@ -243,7 +249,7 @@ async def get_database() -> ResearchDatabaseService:
 # ============================================================================
 
 @app.get("/")
-async def root():
+async def root() -> Dict[str, Any]:
     """Root endpoint"""
     return {
         "message": "KTRDR Research Agents API",
@@ -254,7 +260,7 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check(db: ResearchDatabaseService = Depends(get_database)):
+async def health_check(db: ResearchDatabaseService = Depends(get_database)) -> HealthResponse:
     """Health check endpoint"""
     try:
         db_health = await db.health_check()
@@ -273,7 +279,7 @@ async def health_check(db: ResearchDatabaseService = Depends(get_database)):
 
 
 @app.get("/agents/status")
-async def get_agents_status(db: ResearchDatabaseService = Depends(get_database)):
+async def get_agents_status(db: ResearchDatabaseService = Depends(get_database)) -> Dict[str, Any]:
     """Get status of all agents"""
     try:
         agents = await db.get_active_agents()
@@ -310,7 +316,7 @@ async def create_experiment(
     experiment: ExperimentRequest,
     background_tasks: BackgroundTasks,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> Dict[str, Any]:
     """Create a new experiment"""
     try:
         # Get active session if session_id not provided
@@ -335,6 +341,12 @@ async def create_experiment(
         
         # Get created experiment details
         experiment_data = await db.get_experiment(experiment_id)
+        
+        if not experiment_data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve created experiment"
+            )
         
         # Add background task to notify coordinator (if implemented)
         background_tasks.add_task(notify_coordinator_new_experiment, experiment_id)
@@ -365,7 +377,7 @@ async def create_experiment(
 async def get_experiment(
     experiment_id: UUID,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> ExperimentResponse:
     """Get experiment by ID"""
     try:
         experiment = await db.get_experiment(experiment_id)
@@ -393,7 +405,7 @@ async def list_experiments(
     status_filter: Optional[str] = None,
     limit: int = 20,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> List[ExperimentResponse]:
     """List experiments with optional filtering"""
     try:
         if session_id:
@@ -426,7 +438,7 @@ async def update_experiment_status(
     experiment_id: UUID,
     status_update: StatusUpdateRequest,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> Dict[str, str]:
     """Update experiment status"""
     try:
         await db.update_experiment_status(experiment_id, status_update.status)
@@ -446,7 +458,7 @@ async def complete_experiment(
     experiment_id: UUID,
     completion: CompletionRequest,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> Dict[str, str]:
     """Complete an experiment with results"""
     try:
         await db.update_experiment_status(
@@ -470,7 +482,7 @@ async def complete_experiment(
 async def get_experiment_queue(
     limit: int = 10,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> List[ExperimentResponse]:
     """Get queued experiments ready for processing"""
     try:
         experiments = await db.get_queued_experiments(limit)
@@ -492,7 +504,7 @@ async def get_experiment_queue(
 async def create_knowledge_entry(
     knowledge: KnowledgeRequest,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> Dict[str, Any]:
     """Create a new knowledge base entry"""
     try:
         entry_id = await db.add_knowledge_entry(
@@ -525,7 +537,7 @@ async def search_knowledge_by_query(
     content_type: Optional[str] = None,
     limit: int = 10,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> List[KnowledgeEntry]:
     """Search knowledge base by tags or content type"""
     try:
         if tags:
@@ -537,11 +549,12 @@ async def search_knowledge_by_query(
             )
         else:
             # Return recent entries if no search criteria
-            results = await db.execute_query(
+            query_result = await db.execute_query(
                 "SELECT * FROM research.knowledge_base ORDER BY created_at DESC LIMIT $1",
                 limit,
                 fetch="all"
             )
+            results = query_result if isinstance(query_result, list) else []
         
         # Parse JSON fields for each result
         processed_results = []
@@ -582,7 +595,7 @@ async def search_knowledge_by_query(
 async def search_knowledge(
     search_request: KnowledgeSearchRequest,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> List[KnowledgeEntry]:
     """Search knowledge base"""
     try:
         if search_request.search_type == "semantic":
@@ -612,14 +625,20 @@ async def search_knowledge(
 async def get_knowledge_entry(
     entry_id: UUID,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> KnowledgeEntry:
     """Get knowledge entry by ID"""
     try:
-        entry = await db.execute_query(
+        query_result = await db.execute_query(
             "SELECT * FROM research.knowledge_base WHERE id = $1",
             entry_id,
             fetch="one"
         )
+        
+        # Handle the case where query returns different types
+        if isinstance(query_result, list):
+            entry = query_result[0] if query_result else None
+        else:
+            entry = query_result
         
         if not entry:
             raise HTTPException(
@@ -664,7 +683,7 @@ async def get_knowledge_entry(
 async def get_experiment_knowledge(
     experiment_id: UUID,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> List[KnowledgeEntry]:
     """Get knowledge entries generated from a specific experiment"""
     try:
         entries = await db.get_knowledge_by_source(experiment_id)
@@ -686,7 +705,7 @@ async def get_experiment_knowledge(
 async def create_session(
     session: SessionRequest,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> SessionResponse:
     """Create a new research session"""
     try:
         # Check if session name already exists
@@ -710,11 +729,23 @@ async def create_session(
         )
         
         # Get created session details
-        created_session = await db.execute_query(
+        query_result = await db.execute_query(
             "SELECT id, session_name, description, status, started_at, strategic_goals, priority_areas FROM research.sessions WHERE id = $1",
             session_id,
             fetch="one"
         )
+        
+        # Handle the case where query returns different types
+        if isinstance(query_result, list):
+            created_session = query_result[0] if query_result else None
+        else:
+            created_session = query_result
+        
+        if not created_session:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve created session"
+            )
         
         return SessionResponse(
             session_id=created_session["id"],
@@ -740,14 +771,20 @@ async def create_session(
 async def get_session(
     session_id: UUID,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> SessionResponse:
     """Get session by ID"""
     try:
-        session = await db.execute_query(
+        query_result = await db.execute_query(
             "SELECT id, session_name, description, status, started_at, strategic_goals, priority_areas FROM research.sessions WHERE id = $1",
             session_id,
             fetch="one"
         )
+        
+        # Handle the case where query returns different types
+        if isinstance(query_result, list):
+            session = query_result[0] if query_result else None
+        else:
+            session = query_result
         
         if not session:
             raise HTTPException(
@@ -779,14 +816,17 @@ async def get_session(
 async def list_sessions(
     limit: int = 20,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> List[SessionResponse]:
     """List all sessions"""
     try:
-        sessions = await db.execute_query(
+        query_result = await db.execute_query(
             "SELECT id, session_name, description, status, started_at, strategic_goals, priority_areas FROM research.sessions ORDER BY started_at DESC LIMIT $1",
             limit,
             fetch="all"
         )
+        
+        # Ensure sessions is a list
+        sessions = query_result if isinstance(query_result, list) else []
         
         return [
             SessionResponse(
@@ -815,7 +855,7 @@ async def list_experiments_by_session(
     status_filter: Optional[str] = None,
     limit: int = 20,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> List[ExperimentResponse]:
     """List experiments by session"""
     try:
         experiments = await db.get_experiments_by_session(session_id, status_filter)
@@ -835,7 +875,7 @@ async def list_experiments_by_session(
 async def get_session_statistics(
     session_id: UUID,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> SessionStatistics:
     """Get session statistics"""
     try:
         stats = await db.get_experiment_statistics(session_id)
@@ -862,7 +902,7 @@ async def get_session_statistics(
 
 
 @app.get("/session/active")
-async def get_active_session(db: ResearchDatabaseService = Depends(get_database)):
+async def get_active_session(db: ResearchDatabaseService = Depends(get_database)) -> Dict[str, Any]:
     """Get currently active research session"""
     try:
         session = await db.get_active_session()
@@ -888,7 +928,7 @@ async def get_active_session(db: ResearchDatabaseService = Depends(get_database)
 async def get_experiment_analytics(
     session_id: Optional[UUID] = None,
     db: ResearchDatabaseService = Depends(get_database)
-):
+) -> SessionStatistics:
     """Get experiment analytics and statistics"""
     try:
         stats = await db.get_experiment_statistics(session_id)
@@ -903,7 +943,7 @@ async def get_experiment_analytics(
 
 
 @app.get("/analytics/knowledge")
-async def get_knowledge_analytics(db: ResearchDatabaseService = Depends(get_database)):
+async def get_knowledge_analytics(db: ResearchDatabaseService = Depends(get_database)) -> Dict[str, Any]:
     """Get knowledge base analytics"""
     try:
         stats = await db.get_knowledge_base_statistics()
@@ -921,7 +961,7 @@ async def get_knowledge_analytics(db: ResearchDatabaseService = Depends(get_data
 # BACKGROUND TASKS
 # ============================================================================
 
-async def notify_coordinator_new_experiment(experiment_id: UUID):
+async def notify_coordinator_new_experiment(experiment_id: UUID) -> None:
     """Background task to notify coordinator of new experiment"""
     try:
         # TODO: Implement coordinator notification
@@ -937,7 +977,7 @@ async def notify_coordinator_new_experiment(experiment_id: UUID):
 # ============================================================================
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Any, exc: Exception) -> JSONResponse:
     """Global exception handler"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
@@ -950,7 +990,7 @@ async def global_exception_handler(request, exc):
 # DEVELOPMENT SERVER
 # ============================================================================
 
-def run_dev_server():
+def run_dev_server() -> None:
     """Run development server"""
     uvicorn.run(
         "research_agents.services.api:app",

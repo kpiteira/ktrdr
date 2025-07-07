@@ -9,7 +9,7 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import aiohttp
 import json
 
@@ -29,7 +29,7 @@ from research_agents.services.ktrdr_integration import (
 
 
 @pytest.fixture
-def integration_service():
+def integration_service() -> KTRDRIntegrationService:
     """Create KTRDR integration service instance"""
     return KTRDRIntegrationService(
         ktrdr_api_base_url="http://test-api:8000",
@@ -40,7 +40,7 @@ def integration_service():
 
 
 @pytest.fixture
-def sample_training_config():
+def sample_training_config() -> TrainingConfig:
     """Create sample training configuration"""
     return TrainingConfig(
         strategy_name="TestStrategy",
@@ -58,7 +58,7 @@ def sample_training_config():
 
 
 @pytest.fixture
-def sample_backtest_config():
+def sample_backtest_config() -> BacktestConfig:
     """Create sample backtest configuration"""
     return BacktestConfig(
         strategy_name="TestStrategy",
@@ -77,14 +77,14 @@ def sample_backtest_config():
 
 
 @pytest.fixture
-def mock_session():
+def mock_session() -> AsyncMock:
     """Create mock aiohttp ClientSession"""
     session = AsyncMock(spec=aiohttp.ClientSession)
     session.close = AsyncMock()
     return session
 
 
-def create_mock_response(status_code: int, json_data: dict = None, text_data: str = None):
+def create_mock_response(status_code: int, json_data: Optional[Dict[str, Any]] = None, text_data: Optional[str] = None) -> AsyncMock:
     """Helper function to create proper async response mocks"""
     mock_response = AsyncMock()
     mock_response.status = status_code
@@ -97,22 +97,22 @@ def create_mock_response(status_code: int, json_data: dict = None, text_data: st
 
 class MockAsyncContextManager:
     """Mock async context manager for aiohttp responses"""
-    def __init__(self, response):
+    def __init__(self, response: AsyncMock) -> None:
         self.response = response
     
-    async def __aenter__(self):
+    async def __aenter__(self) -> AsyncMock:
         return self.response
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         return None
 
 
-def create_mock_context_manager(response):
+def create_mock_context_manager(response: AsyncMock) -> MockAsyncContextManager:
     """Helper function to create proper async context manager for aiohttp responses"""
     return MockAsyncContextManager(response)
 
 
-def setup_mock_session_with_response(mock_session, method: str, status_code: int, json_data: dict = None, text_data: str = None):
+def setup_mock_session_with_response(mock_session: AsyncMock, method: str, status_code: int, json_data: Optional[Dict[str, Any]] = None, text_data: Optional[str] = None) -> None:
     """Helper to set up mock session with proper async context manager for HTTP methods"""
     mock_response = create_mock_response(status_code, json_data, text_data)
     mock_context_manager = create_mock_context_manager(mock_response)
@@ -120,13 +120,12 @@ def setup_mock_session_with_response(mock_session, method: str, status_code: int
     # Set up the HTTP method mock (get, post, put, delete)
     method_mock = MagicMock(return_value=mock_context_manager)
     setattr(mock_session, method, method_mock)
-    return mock_response
 
 
 class TestServiceInitialization:
     """Test service initialization and configuration"""
     
-    def test_initialization_with_defaults(self):
+    def test_initialization_with_defaults(self) -> None:
         """Test service initialization with default parameters"""
         service = KTRDRIntegrationService()
         
@@ -140,7 +139,7 @@ class TestServiceInitialization:
         assert not service._is_initialized
         assert service._session is None
     
-    def test_initialization_with_custom_params(self):
+    def test_initialization_with_custom_params(self) -> None:
         """Test service initialization with custom parameters"""
         service = KTRDRIntegrationService(
             ktrdr_api_base_url="https://custom-api:9000/",  # With trailing slash
@@ -156,7 +155,7 @@ class TestServiceInitialization:
         assert service.training_endpoint == "https://custom-api:9000/api/training"
     
     @pytest.mark.asyncio
-    async def test_initialize_success(self, integration_service):
+    async def test_initialize_success(self, integration_service: KTRDRIntegrationService) -> None:
         """Test successful service initialization"""
         # Mock the session directly
         mock_session = AsyncMock()
@@ -176,7 +175,7 @@ class TestServiceInitialization:
             mock_session.get.assert_called_once_with(integration_service.health_endpoint)
     
     @pytest.mark.asyncio
-    async def test_initialize_health_check_failure(self, integration_service):
+    async def test_initialize_health_check_failure(self, integration_service: KTRDRIntegrationService) -> None:
         """Test initialization failure due to health check"""
         # Mock the session directly
         mock_session = AsyncMock()
@@ -192,7 +191,7 @@ class TestServiceInitialization:
             assert not integration_service._is_initialized
     
     @pytest.mark.asyncio
-    async def test_initialize_network_error(self, integration_service):
+    async def test_initialize_network_error(self, integration_service: KTRDRIntegrationService) -> None:
         """Test initialization failure due to network error"""
         # Mock the session directly
         mock_session = AsyncMock()
@@ -209,7 +208,7 @@ class TestServiceInitialization:
             assert not integration_service._is_initialized
     
     @pytest.mark.asyncio
-    async def test_double_initialization(self, integration_service):
+    async def test_double_initialization(self, integration_service: KTRDRIntegrationService) -> None:
         """Test that double initialization is handled gracefully"""
         mock_session = AsyncMock()
         
@@ -226,7 +225,7 @@ class TestServiceInitialization:
             assert integration_service._is_initialized
     
     @pytest.mark.asyncio
-    async def test_close_service(self, integration_service):
+    async def test_close_service(self, integration_service: KTRDRIntegrationService) -> None:
         """Test service closure"""
         # Mock session
         mock_session = AsyncMock()
@@ -245,7 +244,7 @@ class TestHealthCheck:
     """Test health check functionality"""
     
     @pytest.mark.asyncio
-    async def test_health_check_success(self, integration_service):
+    async def test_health_check_success(self, integration_service: KTRDRIntegrationService) -> None:
         """Test successful health check"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -262,7 +261,7 @@ class TestHealthCheck:
         assert health["integration_service"] == "operational"
     
     @pytest.mark.asyncio
-    async def test_health_check_unhealthy_response(self, integration_service):
+    async def test_health_check_unhealthy_response(self, integration_service: KTRDRIntegrationService) -> None:
         """Test health check with unhealthy API response"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -279,7 +278,7 @@ class TestHealthCheck:
         assert health["integration_service"] == "degraded"
     
     @pytest.mark.asyncio
-    async def test_health_check_network_error(self, integration_service):
+    async def test_health_check_network_error(self, integration_service: KTRDRIntegrationService) -> None:
         """Test health check with network error"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -296,7 +295,7 @@ class TestHealthCheck:
         assert health["integration_service"] == "error"
     
     @pytest.mark.asyncio
-    async def test_health_check_not_initialized(self, integration_service):
+    async def test_health_check_not_initialized(self, integration_service: KTRDRIntegrationService) -> None:
         """Test health check when service not initialized"""
         with pytest.raises(KTRDRIntegrationError) as exc_info:
             await integration_service.health_check()
@@ -308,7 +307,7 @@ class TestTrainingOperations:
     """Test training-related operations"""
     
     @pytest.mark.asyncio
-    async def test_submit_training_success(self, integration_service, sample_training_config):
+    async def test_submit_training_success(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig) -> None:
         """Test successful training submission"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -338,7 +337,7 @@ class TestTrainingOperations:
         assert payload['architecture'] == sample_training_config.architecture
     
     @pytest.mark.asyncio
-    async def test_submit_training_validation_error(self, integration_service, sample_training_config):
+    async def test_submit_training_validation_error(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig) -> None:
         """Test training submission with validation error"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -357,7 +356,7 @@ class TestTrainingOperations:
         assert "Invalid configuration" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_submit_training_bad_request(self, integration_service, sample_training_config):
+    async def test_submit_training_bad_request(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig) -> None:
         """Test training submission with bad request"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -375,7 +374,7 @@ class TestTrainingOperations:
         assert "Invalid training configuration" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_submit_training_server_error(self, integration_service, sample_training_config):
+    async def test_submit_training_server_error(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig) -> None:
         """Test training submission with server error"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -393,7 +392,7 @@ class TestTrainingOperations:
         assert "Training submission failed with status 500" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_submit_training_network_error(self, integration_service, sample_training_config):
+    async def test_submit_training_network_error(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig) -> None:
         """Test training submission with network error"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -408,7 +407,7 @@ class TestTrainingOperations:
         assert "Failed to connect to KTRDR API" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_submit_training_not_initialized(self, integration_service, sample_training_config):
+    async def test_submit_training_not_initialized(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig) -> None:
         """Test training submission when service not initialized"""
         with pytest.raises(KTRDRIntegrationError) as exc_info:
             await integration_service.submit_training(sample_training_config)
@@ -416,7 +415,7 @@ class TestTrainingOperations:
         assert "not initialized" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_get_training_status_success(self, integration_service):
+    async def test_get_training_status_success(self, integration_service: KTRDRIntegrationService) -> None:
         """Test successful training status retrieval"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -462,7 +461,7 @@ class TestTrainingOperations:
         )
     
     @pytest.mark.asyncio
-    async def test_get_training_status_not_found(self, integration_service):
+    async def test_get_training_status_not_found(self, integration_service: KTRDRIntegrationService) -> None:
         """Test training status retrieval for non-existent training"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -481,7 +480,7 @@ class TestTrainingOperations:
         assert f"Training job {training_id} not found" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_wait_for_training_completion_success(self, integration_service):
+    async def test_wait_for_training_completion_success(self, integration_service: KTRDRIntegrationService) -> None:
         """Test waiting for training completion"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -515,7 +514,7 @@ class TestTrainingOperations:
         assert mock_session.get.call_count == 3  # Three status checks
     
     @pytest.mark.asyncio
-    async def test_wait_for_training_completion_failure(self, integration_service):
+    async def test_wait_for_training_completion_failure(self, integration_service: KTRDRIntegrationService) -> None:
         """Test waiting for training that fails"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -539,7 +538,7 @@ class TestTrainingOperations:
         assert "Training diverged" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_wait_for_training_completion_timeout(self, integration_service):
+    async def test_wait_for_training_completion_timeout(self, integration_service: KTRDRIntegrationService) -> None:
         """Test waiting for training with timeout"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -575,7 +574,7 @@ class TestTrainingOperations:
         assert "exceeded maximum wait time" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_cancel_training_success(self, integration_service):
+    async def test_cancel_training_success(self, integration_service: KTRDRIntegrationService) -> None:
         """Test successful training cancellation"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -596,7 +595,7 @@ class TestTrainingOperations:
         )
     
     @pytest.mark.asyncio
-    async def test_cancel_training_not_found(self, integration_service):
+    async def test_cancel_training_not_found(self, integration_service: KTRDRIntegrationService) -> None:
         """Test cancelling non-existent training"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -619,7 +618,7 @@ class TestBacktestingOperations:
     """Test backtesting-related operations"""
     
     @pytest.mark.asyncio
-    async def test_submit_backtest_success(self, integration_service, sample_backtest_config):
+    async def test_submit_backtest_success(self, integration_service: KTRDRIntegrationService, sample_backtest_config: BacktestConfig) -> None:
         """Test successful backtest submission"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -649,7 +648,7 @@ class TestBacktestingOperations:
         assert payload['initial_capital'] == sample_backtest_config.initial_capital
     
     @pytest.mark.asyncio
-    async def test_submit_backtest_bad_request(self, integration_service, sample_backtest_config):
+    async def test_submit_backtest_bad_request(self, integration_service: KTRDRIntegrationService, sample_backtest_config: BacktestConfig) -> None:
         """Test backtest submission with bad request"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -667,7 +666,7 @@ class TestBacktestingOperations:
         assert "Invalid backtest configuration" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_get_backtest_results_success(self, integration_service):
+    async def test_get_backtest_results_success(self, integration_service: KTRDRIntegrationService) -> None:
         """Test successful backtest results retrieval"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -721,7 +720,7 @@ class TestBacktestingOperations:
         )
     
     @pytest.mark.asyncio
-    async def test_get_backtest_results_not_found(self, integration_service):
+    async def test_get_backtest_results_not_found(self, integration_service: KTRDRIntegrationService) -> None:
         """Test backtest results retrieval for non-existent backtest"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -740,7 +739,7 @@ class TestBacktestingOperations:
         assert f"Backtest job {backtest_id} not found" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_wait_for_backtest_completion_success(self, integration_service):
+    async def test_wait_for_backtest_completion_success(self, integration_service: KTRDRIntegrationService) -> None:
         """Test waiting for backtest completion"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -773,7 +772,7 @@ class TestBacktestingOperations:
         assert mock_session.get.call_count == 2  # Two status checks
     
     @pytest.mark.asyncio
-    async def test_wait_for_backtest_completion_failure(self, integration_service):
+    async def test_wait_for_backtest_completion_failure(self, integration_service: KTRDRIntegrationService) -> None:
         """Test waiting for backtest that fails"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -801,7 +800,7 @@ class TestErrorHandlingAndEdgeCases:
     """Test error handling and edge case scenarios"""
     
     @pytest.mark.asyncio
-    async def test_service_operations_not_initialized(self, integration_service, sample_training_config, sample_backtest_config):
+    async def test_service_operations_not_initialized(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig, sample_backtest_config: BacktestConfig) -> None:
         """Test that all operations require initialization"""
         operations = [
             (integration_service.submit_training, sample_training_config),
@@ -819,7 +818,7 @@ class TestErrorHandlingAndEdgeCases:
             assert "not initialized" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_unexpected_api_errors(self, integration_service, sample_training_config):
+    async def test_unexpected_api_errors(self, integration_service: KTRDRIntegrationService, sample_training_config: TrainingConfig) -> None:
         """Test handling of unexpected API errors"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -834,7 +833,7 @@ class TestErrorHandlingAndEdgeCases:
         assert "Training submission failed" in str(exc_info.value)
     
     @pytest.mark.asyncio
-    async def test_malformed_api_responses(self, integration_service):
+    async def test_malformed_api_responses(self, integration_service: KTRDRIntegrationService) -> None:
         """Test handling of malformed API responses"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -861,7 +860,7 @@ class TestErrorHandlingAndEdgeCases:
         assert result.final_loss == float('inf')
     
     @pytest.mark.asyncio
-    async def test_json_decode_errors(self, integration_service):
+    async def test_json_decode_errors(self, integration_service: KTRDRIntegrationService) -> None:
         """Test handling of JSON decode errors"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -881,7 +880,7 @@ class TestErrorHandlingAndEdgeCases:
 class TestPerformanceAndConfiguration:
     """Test performance characteristics and configuration"""
     
-    def test_endpoint_url_construction(self):
+    def test_endpoint_url_construction(self) -> None:
         """Test proper URL construction for different base URLs"""
         test_cases = [
             ("http://localhost:8000", "http://localhost:8000/api/training"),
@@ -894,7 +893,7 @@ class TestPerformanceAndConfiguration:
             service = KTRDRIntegrationService(ktrdr_api_base_url=base_url)
             assert service.training_endpoint == expected_training_endpoint
     
-    def test_configuration_validation(self):
+    def test_configuration_validation(self) -> None:
         """Test configuration parameter validation"""
         # Test timeout validation
         service = KTRDRIntegrationService(timeout_seconds=0)
@@ -905,7 +904,7 @@ class TestPerformanceAndConfiguration:
         assert service.max_retries == 0  # Should accept 0
     
     @pytest.mark.asyncio
-    async def test_concurrent_requests(self, integration_service):
+    async def test_concurrent_requests(self, integration_service: KTRDRIntegrationService) -> None:
         """Test handling of concurrent API requests"""
         mock_session = AsyncMock()
         integration_service._session = mock_session
@@ -937,7 +936,7 @@ class TestFactoryFunction:
     """Test factory function for creating service instances"""
     
     @pytest.mark.asyncio
-    async def test_create_ktrdr_integration_service_defaults(self):
+    async def test_create_ktrdr_integration_service_defaults(self) -> None:
         """Test factory function with default parameters"""
         with patch('research_agents.services.ktrdr_integration.KTRDRIntegrationService.initialize') as mock_init:
             from research_agents.services.ktrdr_integration import create_ktrdr_integration_service
@@ -951,7 +950,7 @@ class TestFactoryFunction:
             mock_init.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_create_ktrdr_integration_service_custom(self):
+    async def test_create_ktrdr_integration_service_custom(self) -> None:
         """Test factory function with custom parameters"""
         with patch('research_agents.services.ktrdr_integration.KTRDRIntegrationService.initialize') as mock_init:
             from research_agents.services.ktrdr_integration import create_ktrdr_integration_service
