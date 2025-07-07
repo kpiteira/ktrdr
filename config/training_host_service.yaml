@@ -1,0 +1,30 @@
+# Training Host Service Configuration
+# Configuration for GPU-accelerated training host service integration
+
+training_host:
+  # Enable/disable training host service integration
+  # Set to true to use GPU acceleration via host service
+  # Set to false to fall back to Docker-based training
+  enabled: false  # Default to disabled for safety
+  
+  # Host service connection settings
+  base_url: "http://localhost:5002"
+  timeout: 30.0  # Request timeout in seconds
+  
+  # Health monitoring
+  health_check_interval: 10.0  # Seconds between health checks
+  
+  # Retry configuration
+  max_retries: 3  # Maximum retry attempts for failed requests
+  retry_delay: 1.0  # Delay between retries in seconds
+  
+  # Progress monitoring
+  progress_poll_interval: 2.0  # Seconds between progress polls
+  
+  # Session management
+  session_timeout: 3600.0  # Maximum session duration in seconds (1 hour)
+
+# Environment variable overrides:
+# KTRDR_TRAINING_HOST_ENABLED=true
+# KTRDR_TRAINING_HOST_BASE_URL=http://host.docker.internal:5002
+# KTRDR_TRAINING_HOST_TIMEOUT=60.0

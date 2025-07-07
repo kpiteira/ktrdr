@@ -1,0 +1,47 @@
+[Unit]
+Description=KTRDR Host Services Manager
+Documentation=https://github.com/ktrdr2/ktrdr
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=__USER_NAME__
+Group=__USER_GROUP__
+WorkingDirectory=__PROJECT_ROOT__
+
+# Environment variables
+Environment=PYTHONPATH=__PROJECT_ROOT__
+Environment=KTRDR_LOG_LEVEL=INFO
+Environment=KTRDR_SERVICE_AUTO_START=true
+
+# Service execution
+ExecStart=__PROJECT_ROOT__/services/management/systemd/systemd_service_wrapper.sh
+ExecStop=/bin/bash -c 'cd __PROJECT_ROOT__ && python3 services/management/service_manager.py stop'
+ExecReload=/bin/bash -c 'cd __PROJECT_ROOT__ && python3 services/management/service_manager.py restart'
+
+# Restart policy
+Restart=on-failure
+RestartSec=30
+StartLimitInterval=300
+StartLimitBurst=3
+
+# Resource limits
+LimitNOFILE=1024
+LimitNPROC=256
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ktrdr-host-services
+
+# Timeout settings
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

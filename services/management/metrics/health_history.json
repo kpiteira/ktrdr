@@ -1,0 +1,805 @@
+[
+  {
+    "timestamp": "2025-07-06T22:20:52.733066",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:20:52.730244",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 6.403923034667969,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:20:52.733005",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.313924789428711,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-06T22:20:58.835148",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:20:58.832382",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 5.262136459350586,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:20:58.834893",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.0957717895507812,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-06T22:23:52.910110",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:23:52.906798",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.930973052978516,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:23:52.909301",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.135110855102539,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-06T22:23:53.011119",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:23:53.008700",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 5.400180816650391,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:23:53.011008",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.0459423065185547,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-06T22:24:27.015022",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:24:27.008877",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 5.117893218994141,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:24:27.014472",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.3911724090576172,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-06T22:26:17.040992",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:26:17.037420",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 5.315065383911133,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:26:17.040007",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.0399818420410156,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-06T22:26:17.145756",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:26:17.143082",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.75311279296875,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:26:17.145632",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.2269020080566406,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-06T22:26:51.221540",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-06T22:26:51.218159",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 5.036115646362305,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-06T22:26:51.221160",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.1832714080810547,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T06:57:41.504968",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T06:57:41.503566",
+        "service_name": "ib-host",
+        "status": "failed",
+        "port": 5001,
+        "response_time_ms": 5.035877227783203,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": null,
+        "custom_metrics": {},
+        "error": "HTTPConnectionPool(host='localhost', port=5001): Max retries exceeded with url: /health (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x1069ffa10>: Failed to establish a new connection: [Errno 61] Connection refused'))"
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T06:57:41.504662",
+        "service_name": "training-host",
+        "status": "failed",
+        "port": 5002,
+        "response_time_ms": 0.9510517120361328,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": null,
+        "custom_metrics": {},
+        "error": "HTTPConnectionPool(host='localhost', port=5002): Max retries exceeded with url: /health (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x106a3f110>: Failed to establish a new connection: [Errno 61] Connection refused'))"
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T07:02:34.662150",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:02:34.655954",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 14.800071716308594,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:02:34.661121",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 2.2668838500976562,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T07:02:34.762916",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:02:34.760092",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.655122756958008,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:02:34.762768",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.1410713195800781,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T07:03:08.723205",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:03:08.720434",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 5.0830841064453125,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:03:08.722839",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.1818408966064453,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T07:05:21.993060",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:05:21.989571",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.771947860717773,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:05:21.992168",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.1849403381347656,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T07:05:22.096971",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:05:22.094279",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.870891571044922,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:05:22.096826",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.1529922485351562,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T07:05:56.094332",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:05:56.091390",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.670143127441406,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:05:56.093977",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.1701583862304688,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  }
+]

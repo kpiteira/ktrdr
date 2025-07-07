@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identity and metadata -->
+    <key>Label</key>
+    <string>com.ktrdr.host-services</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PROJECT_ROOT__/services/management/launchd/launchd_service_wrapper.sh</string>
+    </array>
+    
+    <!-- Working directory and environment -->
+    <key>WorkingDirectory</key>
+    <string>__PROJECT_ROOT__</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>__PROJECT_ROOT__</string>
+        <key>KTRDR_LOG_LEVEL</key>
+        <string>INFO</string>
+        <key>KTRDR_SERVICE_AUTO_START</key>
+        <string>true</string>
+    </dict>
+    
+    <!-- Service behavior -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    
+    <!-- Restart policy -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    
+    <!-- Logging configuration -->
+    <key>StandardOutPath</key>
+    <string>__PROJECT_ROOT__/logs/ktrdr-host-services.out.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>__PROJECT_ROOT__/logs/ktrdr-host-services.err.log</string>
+    
+    <!-- Resource limits -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>1024</integer>
+        <key>NumberOfProcesses</key>
+        <integer>256</integer>
+    </dict>
+    
+    <!-- Security and isolation -->
+    <key>UserName</key>
+    <string>__USER_NAME__</string>
+    
+    <!-- Service dependencies and timing -->
+    <key>StartInterval</key>
+    <integer>0</integer>
+    
+    <!-- Only start if network is available -->
+    <key>LaunchOnlyOnce</key>
+    <false/>
+    
+    <!-- Process monitoring -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+    
+    <!-- Additional metadata -->
+    <key>ServiceDescription</key>
+    <string>KTRDR Host Services Manager - Manages IB and Training Host Services</string>
+</dict>
+</plist>
