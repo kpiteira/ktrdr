@@ -17,15 +17,15 @@ class MockLLMService(LLMService):
         self.call_count = 0
         self.errors: Dict[str, Exception] = {}
     
-    def set_response(self, method: str, response: Any):
+    def set_response(self, method: str, response: Any) -> None:
         """Set predefined response for a method"""
         self.responses[method] = response
     
-    def set_error(self, method: str, error: Exception):
+    def set_error(self, method: str, error: Exception) -> None:
         """Set error to raise for a method"""
         self.errors[method] = error
     
-    def clear_history(self):
+    def clear_history(self) -> None:
         """Clear call history"""
         self.call_history.clear()
         self.call_count = 0
@@ -94,7 +94,7 @@ class MockLLMService(LLMService):
             }
         ]
     
-    def assert_called_with(self, method: str, expected_context: Dict[str, Any]):
+    def assert_called_with(self, method: str, expected_context: Dict[str, Any]) -> None:
         """Assert method was called with expected context"""
         calls = [call for call in self.call_history if call["method"] == method]
         assert len(calls) > 0, f"Method {method} was not called"
@@ -102,12 +102,12 @@ class MockLLMService(LLMService):
         latest_call = calls[-1]
         assert latest_call["context"] == expected_context, f"Method {method} called with wrong context"
     
-    def assert_called_once(self, method: str):
+    def assert_called_once(self, method: str) -> None:
         """Assert method was called exactly once"""
         calls = [call for call in self.call_history if call["method"] == method]
         assert len(calls) == 1, f"Method {method} was called {len(calls)} times, expected 1"
     
-    def assert_not_called(self, method: str):
+    def assert_not_called(self, method: str) -> None:
         """Assert method was not called"""
         calls = [call for call in self.call_history if call["method"] == method]
         assert len(calls) == 0, f"Method {method} was called {len(calls)} times, expected 0"

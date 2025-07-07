@@ -14,14 +14,14 @@ Responsibilities:
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, cast
 from uuid import UUID, uuid4
 
 from ktrdr import get_logger
 from ktrdr.errors import ProcessingError
 
 from .base import BaseResearchAgent
-from .research_agent_mvp import (
+from ..types import (
     ResearchPhase, 
     ResearchStrategy, 
     ResearchCycle, 
@@ -33,6 +33,7 @@ from ..components.experiment_executor import ExperimentExecutor
 from ..components.results_analyzer import ResultsAnalyzer
 from ..components.knowledge_integrator import KnowledgeIntegrator
 from ..components.strategy_optimizer import StrategyOptimizer
+from ..config import ResearchOrchestratorConfig
 
 logger = get_logger(__name__)
 
@@ -59,9 +60,13 @@ class ResearchOrchestrator(BaseResearchAgent):
         results_analyzer: ResultsAnalyzer,
         knowledge_integrator: KnowledgeIntegrator,
         strategy_optimizer: StrategyOptimizer,
+        orchestrator_config: Optional[ResearchOrchestratorConfig] = None,
         **config
     ):
         super().__init__(agent_id, "research_orchestrator", **config)
+        
+        # Configuration with defaults
+        self.orchestrator_config = orchestrator_config or ResearchOrchestratorConfig()
         
         # Injected components (Dependency Injection)
         self.hypothesis_generator = hypothesis_generator
@@ -75,12 +80,6 @@ class ResearchOrchestrator(BaseResearchAgent):
         self.current_cycle: Optional[ResearchCycle] = None
         self.current_strategy: ResearchStrategy = ResearchStrategy.EXPLORATORY
         self.research_progress: Optional[ResearchProgress] = None
-        
-        # Configuration
-        self.hypothesis_batch_size = config.get("hypothesis_batch_size", 5)
-        self.max_concurrent_experiments = config.get("max_concurrent_experiments", 2)
-        self.fitness_threshold = config.get("fitness_threshold", 0.6)
-        self.cycle_timeout_hours = config.get("cycle_timeout_hours", 4)
         
         logger.info(f"Research orchestrator initialized with {len(self._get_component_names())} components")
     
@@ -98,7 +97,7 @@ class ResearchOrchestrator(BaseResearchAgent):
         self,
         research_goal: str,
         strategy: ResearchStrategy = ResearchStrategy.EXPLORATORY,
-        max_cycles: int = 10,
+        max_cycles: Optional[int] = None,
         session_config: Optional[Dict[str, Any]] = None
     ) -> UUID:
         """Start a new research session"""
@@ -152,6 +151,9 @@ class ResearchOrchestrator(BaseResearchAgent):
         try:
             # Create new research cycle
             cycle_id = uuid4()
+            if not self.current_session_id:
+                raise ProcessingError("No active session for cycle creation", error_code="NO_SESSION")
+            
             self.current_cycle = ResearchCycle(
                 cycle_id=cycle_id,
                 session_id=self.current_session_id,
@@ -195,6 +197,12 @@ class ResearchOrchestrator(BaseResearchAgent):
     def _create_research_context(self) -> ResearchContext:
         """Create research context for components"""
         
+        if not self.current_session_id:
+            raise ProcessingError("No active session", error_code="NO_SESSION")
+        
+        if not self.current_cycle:
+            raise ProcessingError("No active cycle", error_code="NO_CYCLE")
+        
         return ResearchContext(
             session_id=self.current_session_id,
             cycle_id=self.current_cycle.cycle_id,
@@ -204,6 +212,11 @@ class ResearchOrchestrator(BaseResearchAgent):
             progress=self._get_progress_dict(),
             config=self.config
         )
+    
+    def _ensure_cycle_active(self) -> None:
+        """Ensure there is an active cycle, raise error if not"""
+        if not self.current_cycle:
+            raise ProcessingError("No active research cycle", error_code="NO_ACTIVE_CYCLE")
     
     def _get_progress_dict(self) -> Dict[str, Any]:
         """Convert research progress to dictionary"""
@@ -226,6 +239,9 @@ class ResearchOrchestrator(BaseResearchAgent):
     async def _phase_hypothesis_generation(self, context: ResearchContext) -> None:
         """Phase 1: Generate research hypotheses using component"""
         
+        self._ensure_cycle_active()
+        assert self.current_cycle is not None  # Type checker assistance
+        
         self.current_cycle.phase = ResearchPhase.HYPOTHESIS_GENERATION
         context.current_phase = ResearchPhase.HYPOTHESIS_GENERATION
         
@@ -238,9 +254,11 @@ class ResearchOrchestrator(BaseResearchAgent):
             )
             context.knowledge_cache["recent_insights"] = recent_knowledge
             
-            # Generate hypotheses using component
+            # Generate hypotheses using component  
+            # Use default batch size from hypothesis generator config or fall back to orchestrator config
+            batch_size = getattr(self.hypothesis_generator, 'config', {}).get('default_batch_size', 5)
             hypotheses = await self.hypothesis_generator.generate_hypotheses(
-                context, count=self.hypothesis_batch_size
+                context, count=batch_size
             )
             
             # Store hypotheses in cycle (convert to dict format for compatibility)
@@ -258,7 +276,24 @@ class ResearchOrchestrator(BaseResearchAgent):
                 for h in hypotheses
             ]
             
-            context.hypotheses = hypotheses
+            # Store hypotheses in context as dictionary format for compatibility
+            if not hasattr(context, 'hypotheses'):
+                context.hypotheses = []
+            # Convert hypotheses to dict format to match context type expectations
+            hypothesis_dicts = [
+                {
+                    "hypothesis_id": str(h.hypothesis_id),
+                    "content": h.content,
+                    "confidence": h.confidence,
+                    "experiment_type": h.experiment_type,
+                    "expected_outcome": h.expected_outcome,
+                    "rationale": h.rationale,
+                    "parameters": h.parameters,
+                    "metadata": h.metadata
+                }
+                for h in hypotheses
+            ]
+            context.hypotheses.extend(hypothesis_dicts)
             
             logger.info(f"Generated {len(hypotheses)} hypotheses for cycle {self.current_cycle.cycle_id}")
             
@@ -268,6 +303,9 @@ class ResearchOrchestrator(BaseResearchAgent):
     
     async def _phase_experiment_design(self, context: ResearchContext) -> None:
         """Phase 2: Design experiments from hypotheses"""
+        
+        self._ensure_cycle_active()
+        assert self.current_cycle is not None  # Type checker assistance
         
         self.current_cycle.phase = ResearchPhase.EXPERIMENT_DESIGN
         context.current_phase = ResearchPhase.EXPERIMENT_DESIGN
@@ -291,7 +329,7 @@ class ResearchOrchestrator(BaseResearchAgent):
                     hypothesis_id=UUID(hypothesis_dict["hypothesis_id"]),
                     experiment_type=hypothesis_dict["experiment_type"],
                     parameters=hypothesis_dict["parameters"],
-                    timeout_hours=self.cycle_timeout_hours,
+                    timeout_hours=self.orchestrator_config.experiment_execution_timeout // 3600,  # Convert seconds to hours
                     priority="normal",
                     metadata={
                         "cycle_id": str(self.current_cycle.cycle_id),
@@ -302,7 +340,10 @@ class ResearchOrchestrator(BaseResearchAgent):
                 experiment_configs.append(config)
             
             self.current_cycle.experiments = experiment_ids
-            context.experiments = experiment_ids
+            # Store experiment IDs in context with proper typing
+            if not hasattr(context, 'experiments'):
+                context.experiments = []
+            context.experiments.extend(experiment_ids)
             
             # Store configs for execution phase
             context.knowledge_cache["experiment_configs"] = experiment_configs
@@ -315,6 +356,9 @@ class ResearchOrchestrator(BaseResearchAgent):
     
     async def _phase_experiment_execution(self, context: ResearchContext) -> None:
         """Phase 3: Execute experiments using component"""
+        
+        self._ensure_cycle_active()
+        assert self.current_cycle is not None  # Type checker assistance
         
         self.current_cycle.phase = ResearchPhase.EXPERIMENT_EXECUTION
         context.current_phase = ResearchPhase.EXPERIMENT_EXECUTION
@@ -336,7 +380,7 @@ class ResearchOrchestrator(BaseResearchAgent):
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Process results
-            experiment_results = []
+            experiment_results: List[Any] = []
             successful_experiments = 0
             
             for i, result in enumerate(results):
@@ -344,12 +388,16 @@ class ResearchOrchestrator(BaseResearchAgent):
                     logger.error(f"Experiment {i} failed with exception: {result}")
                 else:
                     experiment_results.append(result)
-                    if result.status == "completed" and result.fitness_score > 0:
+                    # Type-safe attribute access
+                    if (hasattr(result, 'status') and hasattr(result, 'fitness_score') and 
+                        result.status == "completed" and result.fitness_score > 0):
                         successful_experiments += 1
                         self.current_cycle.fitness_scores.append(result.fitness_score)
             
-            # Store results for analysis phase
-            context.results = experiment_results
+            # Store results for analysis phase with proper typing
+            if not hasattr(context, 'results'):
+                context.results = []
+            context.results.extend(experiment_results)
             
             logger.info(f"Experiment execution completed: {successful_experiments}/{len(experiment_configs)} successful")
             
@@ -360,26 +408,33 @@ class ResearchOrchestrator(BaseResearchAgent):
     async def _phase_results_analysis(self, context: ResearchContext) -> None:
         """Phase 4: Analyze results using component"""
         
+        self._ensure_cycle_active()
+        assert self.current_cycle is not None  # Type checker assistance
+        
         self.current_cycle.phase = ResearchPhase.RESULTS_ANALYSIS
         context.current_phase = ResearchPhase.RESULTS_ANALYSIS
         
         logger.info(f"Phase 4: Results analysis for cycle {self.current_cycle.cycle_id}")
         
         try:
-            experiment_results = context.results
+            experiment_results = getattr(context, 'results', [])
             analysis_reports = []
             
             # Analyze each experiment result
             for result in experiment_results:
-                analysis = await self.results_analyzer.analyze_results(result, context)
-                analysis_reports.append(analysis)
-                
-                # Extract insights
-                self.current_cycle.insights.extend(analysis.insights)
-                
-                # Update fitness scores if not already included
-                if result.fitness_score > 0 and result.fitness_score not in self.current_cycle.fitness_scores:
-                    self.current_cycle.fitness_scores.append(result.fitness_score)
+                # Type-safe conversion for analysis
+                if hasattr(result, '__dict__'):  # Check if it's an object with attributes
+                    analysis = await self.results_analyzer.analyze_results(result, context)
+                    analysis_reports.append(analysis)
+                    
+                    # Extract insights
+                    if hasattr(analysis, 'insights'):
+                        self.current_cycle.insights.extend(analysis.insights)
+                    
+                    # Update fitness scores if not already included
+                    if (hasattr(result, 'fitness_score') and result.fitness_score > 0 and 
+                        result.fitness_score not in self.current_cycle.fitness_scores):
+                        self.current_cycle.fitness_scores.append(result.fitness_score)
             
             # Store analysis reports
             context.knowledge_cache["analysis_reports"] = analysis_reports
@@ -392,6 +447,9 @@ class ResearchOrchestrator(BaseResearchAgent):
     
     async def _phase_knowledge_integration(self, context: ResearchContext) -> None:
         """Phase 5: Integrate knowledge using component"""
+        
+        self._ensure_cycle_active()
+        assert self.current_cycle is not None  # Type checker assistance
         
         self.current_cycle.phase = ResearchPhase.KNOWLEDGE_INTEGRATION
         context.current_phase = ResearchPhase.KNOWLEDGE_INTEGRATION
@@ -413,6 +471,9 @@ class ResearchOrchestrator(BaseResearchAgent):
     async def _phase_strategy_optimization(self, context: ResearchContext) -> None:
         """Phase 6: Optimize strategy using component"""
         
+        self._ensure_cycle_active()
+        assert self.current_cycle is not None  # Type checker assistance
+        
         self.current_cycle.phase = ResearchPhase.STRATEGY_OPTIMIZATION
         context.current_phase = ResearchPhase.STRATEGY_OPTIMIZATION
         
@@ -422,11 +483,11 @@ class ResearchOrchestrator(BaseResearchAgent):
             # Calculate cycle performance
             cycle_performance = 0.0
             if self.current_cycle.fitness_scores:
-                cycle_performance = sum(self.current_cycle.fitness_scores) / len(self.current_cycle.fitness_scores)
+                cycle_performance = float(sum(self.current_cycle.fitness_scores)) / float(len(self.current_cycle.fitness_scores))
             
             performance = {
                 "cycle_fitness": cycle_performance,
-                "success_rate": len(self.current_cycle.fitness_scores) / max(len(self.current_cycle.experiments), 1),
+                "success_rate": float(len(self.current_cycle.fitness_scores)) / float(max(len(self.current_cycle.experiments), 1)),
                 "experiment_count": len(self.current_cycle.experiments)
             }
             
@@ -461,7 +522,9 @@ class ResearchOrchestrator(BaseResearchAgent):
         
         # Calculate success rate
         if self.current_cycle.experiments:
-            successful_experiments = len([score for score in self.current_cycle.fitness_scores if score > self.fitness_threshold])
+            # Use fitness threshold from strategy optimizer config if available
+            fitness_threshold = getattr(self.strategy_optimizer, 'config', {}).get('fitness_threshold', 0.6)
+            successful_experiments = len([score for score in self.current_cycle.fitness_scores if score > fitness_threshold])
             self.current_cycle.success_rate = successful_experiments / len(self.current_cycle.experiments)
         else:
             self.current_cycle.success_rate = 0.0
@@ -505,7 +568,7 @@ class ResearchOrchestrator(BaseResearchAgent):
     async def get_research_status(self) -> Dict[str, Any]:
         """Get comprehensive research status"""
         
-        status = {
+        status: Dict[str, Any] = {
             "agent_id": self.agent_id,
             "agent_type": self.agent_type,
             "session_id": str(self.current_session_id) if self.current_session_id else None,
@@ -515,7 +578,7 @@ class ResearchOrchestrator(BaseResearchAgent):
         }
         
         if self.current_cycle:
-            status["current_cycle"] = {
+            current_cycle_status: Dict[str, Any] = {
                 "cycle_id": str(self.current_cycle.cycle_id),
                 "phase": self.current_cycle.phase,
                 "started_at": self.current_cycle.started_at.isoformat(),
@@ -525,33 +588,69 @@ class ResearchOrchestrator(BaseResearchAgent):
                 "fitness_scores": self.current_cycle.fitness_scores,
                 "success_rate": self.current_cycle.success_rate
             }
+            status["current_cycle"] = current_cycle_status
         
         if self.research_progress:
-            status["progress"] = self._get_progress_dict()
+            progress_data: Dict[str, Any] = self._get_progress_dict()
+            status["progress"] = progress_data
         
         return status
+    
+    async def _initialize_agent(self) -> None:
+        """Initialize the research orchestrator"""
+        logger.info(f"Initializing research orchestrator {self.agent_id}")
+        # Any orchestrator-specific initialization can go here
+        
+    async def _cleanup_agent(self) -> None:
+        """Clean up the research orchestrator"""
+        logger.info(f"Cleaning up research orchestrator {self.agent_id}")
+        # Clean up any running experiments through the experiment executor
+        if hasattr(self.experiment_executor, 'running_experiments') and self.experiment_executor.running_experiments:
+            for exp_id in list(self.experiment_executor.running_experiments.keys()):
+                await self.experiment_executor.cancel_experiment(exp_id)
 
 
 async def create_research_orchestrator(
     agent_id: str,
-    llm_service,
-    ktrdr_service,
-    database_service,
-    **config
+    llm_service: Any,
+    ktrdr_service: Any,
+    database_service: Any,
+    orchestrator_config: Optional[ResearchOrchestratorConfig] = None,
+    **config: Any
 ) -> ResearchOrchestrator:
     """Factory function to create a fully configured ResearchOrchestrator"""
     
-    # Create components with dependency injection
+    # Use provided config or create default
+    if not orchestrator_config:
+        orchestrator_config = ResearchOrchestratorConfig()
+    
+    # Import component configs  
+    from ..config import (
+        HypothesisGeneratorConfig,
+        ExperimentExecutorConfig,
+        ResultsAnalyzerConfig,
+        KnowledgeIntegratorConfig,
+        StrategyOptimizerConfig
+    )
+    
+    # Create component configs from environment or defaults
+    hypothesis_config = HypothesisGeneratorConfig()
+    executor_config = ExperimentExecutorConfig()
+    analyzer_config = ResultsAnalyzerConfig()
+    integrator_config = KnowledgeIntegratorConfig()
+    optimizer_config = StrategyOptimizerConfig()
+    
+    # Create components with configuration
     hypothesis_generator = HypothesisGenerator(
         llm_service=llm_service,
-        exploration_ratio=config.get("exploration_ratio", 0.3),
-        min_confidence_threshold=config.get("min_confidence_threshold", 0.6)
+        exploration_ratio=hypothesis_config.exploration_ratio,
+        min_confidence_threshold=hypothesis_config.min_confidence_threshold,
+        max_batch_size=hypothesis_config.max_batch_size
     )
     
     experiment_executor = ExperimentExecutor(
         ktrdr_service=ktrdr_service,
-        max_concurrent_experiments=config.get("max_concurrent_experiments", 2),
-        default_timeout_hours=config.get("cycle_timeout_hours", 4)
+        config=executor_config
     )
     
     # Create results analyzer (using existing service)
@@ -561,12 +660,14 @@ async def create_research_orchestrator(
     
     knowledge_integrator = KnowledgeIntegrator(
         database_service=database_service,
-        min_quality_threshold=config.get("min_quality_threshold", 0.3)
+        min_quality_threshold=integrator_config.min_quality_threshold,
+        max_search_results=50,  # Default value
+        pattern_min_frequency=integrator_config.min_pattern_frequency
     )
     
     strategy_optimizer = StrategyOptimizer(
-        fitness_threshold=config.get("fitness_threshold", 0.6),
-        min_cycles_for_adaptation=config.get("min_cycles_for_adaptation", 3)
+        fitness_threshold=optimizer_config.fitness_threshold,
+        min_cycles_for_adaptation=optimizer_config.min_cycles_for_adaptation
     )
     
     # Create orchestrator with injected components
@@ -577,6 +678,7 @@ async def create_research_orchestrator(
         results_analyzer=results_analyzer,
         knowledge_integrator=knowledge_integrator,
         strategy_optimizer=strategy_optimizer,
+        orchestrator_config=orchestrator_config,
         **config
     )
     

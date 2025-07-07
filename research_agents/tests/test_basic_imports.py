@@ -50,15 +50,19 @@ def test_import_results_analyzer():
     assert analyzer is not None
 
 
-def test_import_research_agent_mvp():
-    """Test that research agent MVP can be imported"""
-    from research_agents.agents.research_agent_mvp import (
-        ResearchAgentMVP,
+def test_import_research_orchestrator():
+    """Test that research orchestrator can be imported"""
+    from research_agents.agents.research_orchestrator import (
+        ResearchOrchestrator,
+        create_research_orchestrator
+    )
+    from research_agents.types import (
         ResearchPhase,
         ResearchStrategy
     )
     
-    assert ResearchAgentMVP is not None
+    assert ResearchOrchestrator is not None
+    assert create_research_orchestrator is not None
     assert ResearchPhase.IDLE == "idle"
     assert ResearchStrategy.EXPLORATORY == "exploratory"
 

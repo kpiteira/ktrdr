@@ -166,7 +166,9 @@ class ResearchDatabaseService:
         FROM research.agent_states 
         WHERE agent_id = $1
         """
-        return await self.execute_query(query, agent_id, fetch="one")
+        result = await self.execute_query(query, agent_id, fetch="one")
+        # execute_query with fetch="one" returns Dict[str, Any] or None
+        return result if isinstance(result, dict) else None
     
     async def update_agent_heartbeat(self, agent_id: str) -> None:
         """Update agent's last heartbeat timestamp"""
@@ -261,7 +263,9 @@ class ResearchDatabaseService:
         WHERE status IN ('idle', 'active', 'processing')
         ORDER BY agent_type, last_heartbeat DESC
         """
-        return await self.execute_query(query, fetch="all")
+        result = await self.execute_query(query, fetch="all")
+        # execute_query with fetch="all" returns List[Dict[str, Any]] or None
+        return result if isinstance(result, list) else []
     
     # ========================================================================
     # EXPERIMENT OPERATIONS
@@ -290,7 +294,13 @@ class ResearchDatabaseService:
             query, experiment_id, session_id, experiment_name, hypothesis,
             experiment_type, json.dumps(configuration), assigned_agent_id, fetch="val"
         )
-        return result
+        # execute_query with fetch="val" returns the actual value
+        if isinstance(result, UUID):
+            return result
+        elif isinstance(result, str):
+            return UUID(result)
+        else:
+            raise DataError(f"Unexpected result type for experiment creation: {type(result)}")
     
     async def get_experiment(self, experiment_id: UUID) -> Optional[Dict[str, Any]]:
         """Get experiment by ID"""
@@ -301,7 +311,8 @@ class ResearchDatabaseService:
         LEFT JOIN research.agent_states a ON e.assigned_agent_id = a.id
         WHERE e.id = $1
         """
-        return await self.execute_query(query, experiment_id, fetch="one")
+        result = await self.execute_query(query, experiment_id, fetch="one")
+        return result if isinstance(result, dict) else None
     
     async def update_experiment_status(
         self,

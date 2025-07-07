@@ -9,7 +9,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import numpy as np
 
 from research_agents.services.results_analyzer import (
@@ -24,7 +24,7 @@ from research_agents.services.results_analyzer import (
 
 
 @pytest.fixture
-def analyzer_config():
+def analyzer_config() -> Dict[str, Any]:
     """Create analyzer configuration"""
     return {
         "return_weight": 0.25,
@@ -42,13 +42,13 @@ def analyzer_config():
 
 
 @pytest.fixture
-def results_analyzer(analyzer_config):
+def results_analyzer(analyzer_config: Dict[str, Any]) -> ResultsAnalyzer:
     """Create results analyzer instance"""
     return ResultsAnalyzer(**analyzer_config)
 
 
 @pytest.fixture
-def sample_training_results():
+def sample_training_results() -> Dict[str, Any]:
     """Create sample training results"""
     return {
         "training_id": "train-123",
@@ -62,7 +62,7 @@ def sample_training_results():
 
 
 @pytest.fixture
-def sample_backtesting_results():
+def sample_backtesting_results() -> Dict[str, Any]:
     """Create sample backtesting results"""
     return {
         "backtest_id": "backtest-456",
@@ -85,7 +85,7 @@ def sample_backtesting_results():
 
 
 @pytest.fixture
-def excellent_backtesting_results():
+def excellent_backtesting_results() -> Dict[str, Any]:
     """Create excellent backtesting results for testing high fitness scores"""
     return {
         "total_trades": 200,
@@ -107,7 +107,7 @@ def excellent_backtesting_results():
 
 
 @pytest.fixture
-def poor_backtesting_results():
+def poor_backtesting_results() -> Dict[str, Any]:
     """Create poor backtesting results for testing low fitness scores"""
     return {
         "total_trades": 30,  # Too few trades

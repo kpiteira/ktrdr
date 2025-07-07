@@ -14,7 +14,7 @@ from typing import Optional
 from ktrdr import get_logger, configure_logging
 from .researcher import ResearcherAgent
 from .assistant import AssistantAgent
-from .research_agent_mvp import ResearchAgentMVP
+from .research_orchestrator import create_research_orchestrator
 
 # Configure KTRDR logging system
 log_file_path = os.getenv("AGENT_LOG_FILE", "/app/logs/agent.log")
@@ -86,8 +86,19 @@ class AgentRunner:
                 ktrdr_service=ktrdr_service, 
                 **common_config
             )
-        elif agent_type == "research_mvp":
-            self.agent = ResearchAgentMVP(agent_id, **common_config)
+        elif agent_type == "research_mvp" or agent_type == "research_orchestrator":
+            # Create database service
+            from ..services.database import create_database_service
+            database_service = create_database_service(database_url)
+            
+            # Create research orchestrator with clean architecture
+            self.agent = await create_research_orchestrator(
+                agent_id=agent_id,
+                llm_service=llm_service,
+                ktrdr_service=ktrdr_service, 
+                database_service=database_service,
+                **common_config
+            )
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
         

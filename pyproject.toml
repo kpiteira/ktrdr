@@ -54,6 +54,7 @@ ktrdr = "ktrdr.cli:app"
 dev = [
     "asyncpg>=0.30.0",
     "httpx>=0.28.1",
+    "mypy>=1.16.0",
     "pytest>=8.3.5",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.2.1",

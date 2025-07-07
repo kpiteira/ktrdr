@@ -19,6 +19,7 @@ from ktrdr.errors import (
     RetryConfig
 )
 from ..services.database import ResearchDatabaseService, create_database_service
+from ..config import ResearchAgentConfig
 
 logger = get_logger(__name__)
 
@@ -46,12 +47,14 @@ class BaseResearchAgent(ABC):
         agent_id: str,
         agent_type: str,
         database_url: Optional[str] = None,
-        heartbeat_interval: int = 30,
+        agent_config: Optional[ResearchAgentConfig] = None,
         **config
     ):
+        # Configuration with defaults
+        self.agent_config = agent_config or ResearchAgentConfig()
+        
         self.agent_id = agent_id
         self.agent_type = agent_type
-        self.heartbeat_interval = heartbeat_interval
         self.config = config
         
         # Initialize state
@@ -62,7 +65,7 @@ class BaseResearchAgent(ABC):
         self.state_data = {}
         self.memory_context = {}
         self._error_count = 0
-        self._max_errors = config.get("max_errors", 3)  # Allow max 3 errors before stopping
+        self._max_errors = self.agent_config.max_consecutive_errors
         
         # Database service
         self.db: Optional[ResearchDatabaseService] = None
@@ -84,6 +87,11 @@ class BaseResearchAgent(ABC):
     def db_service(self, value: Optional[ResearchDatabaseService]) -> None:
         """Setter for db_service alias"""
         self.db = value
+    
+    def _ensure_db_available(self) -> None:
+        """Ensure database service is available"""
+        if not self.db:
+            raise ProcessingError("Database service not initialized", error_code="DB_NOT_INITIALIZED")
     
     @property
     def status(self) -> str:
@@ -171,8 +179,8 @@ class BaseResearchAgent(ABC):
                     # Execute agent-specific logic
                     await self._execute_cycle()
                     
-                    # Brief pause between cycles
-                    await asyncio.sleep(1)
+                    # Brief pause between cycles (configurable)
+                    await asyncio.sleep(self.agent_config.state_save_interval_seconds // 120)  # 1 second by default
                     
                 except Exception as e:
                     self._error_count += 1
@@ -189,8 +197,8 @@ class BaseResearchAgent(ABC):
                             details={"agent_id": self.agent_id, "error_count": self._error_count, "max_errors": self._max_errors, "last_error": str(e)}
                         ) from e
                     
-                    # Brief pause before retrying
-                    await asyncio.sleep(5)
+                    # Brief pause before retrying (configurable)
+                    await asyncio.sleep(self.agent_config.error_backoff_multiplier * 2.5)  # ~5 seconds by default
             
         except Exception as e:
             self.logger.error(f"Fatal error in agent run loop: {e}")
@@ -206,6 +214,8 @@ class BaseResearchAgent(ABC):
         """Register agent in the database"""
         """Returns True if existing state was loaded, False if new state was created"""
         try:
+            self._ensure_db_available()
+            
             # Check if agent already exists
             existing_agent = await self.db.get_agent_state(self.agent_id)
             
@@ -242,17 +252,19 @@ class BaseResearchAgent(ABC):
         while self.is_running:
             try:
                 await self.db.update_agent_heartbeat(self.agent_id)
-                await asyncio.sleep(self.heartbeat_interval)
+                await asyncio.sleep(self.agent_config.memory_cleanup_interval_seconds // 10)  # Use config-based heartbeat interval
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error(f"Heartbeat error: {e}")
-                await asyncio.sleep(self.heartbeat_interval)
+                await asyncio.sleep(self.agent_config.memory_cleanup_interval_seconds // 10)  # Use same interval on error
     
     async def _update_status(self, status: str, activity: Optional[str] = None) -> None:
         """Update agent status and activity"""
         try:
+            self._ensure_db_available()
+            
             if activity:
                 self.current_activity = activity
             
@@ -327,6 +339,7 @@ class BaseResearchAgent(ABC):
     
     async def _send_heartbeat(self) -> None:
         """Send heartbeat to database"""
+        self._ensure_db_available()
         await self.db.update_agent_heartbeat(self.agent_id)
     
     # ========================================================================

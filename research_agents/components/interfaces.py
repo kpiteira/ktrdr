@@ -15,26 +15,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..agents.research_agent_mvp import ResearchStrategy, ResearchPhase
+    from ..types import ResearchStrategy, ResearchPhase
 else:
     # Runtime fallbacks
-    from enum import Enum
-    
-    class ResearchStrategy(str, Enum):
-        EXPLORATORY = "exploratory"
-        FOCUSED = "focused"
-        OPTIMIZATION = "optimization"
-        VALIDATION = "validation"
-    
-    class ResearchPhase(str, Enum):
-        IDLE = "idle"
-        HYPOTHESIS_GENERATION = "hypothesis_generation"
-        EXPERIMENT_DESIGN = "experiment_design"
-        EXPERIMENT_EXECUTION = "experiment_execution"
-        RESULTS_ANALYSIS = "results_analysis"
-        KNOWLEDGE_INTEGRATION = "knowledge_integration"
-        STRATEGY_OPTIMIZATION = "strategy_optimization"
-        SESSION_COMPLETION = "session_completion"
+    from ..types import ResearchStrategy, ResearchPhase
 
 
 class ResearchContext:

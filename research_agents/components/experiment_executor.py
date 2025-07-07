@@ -26,6 +26,7 @@ from .interfaces import (
     ExperimentResult,
 )
 from ..services.interfaces import KTRDRService
+from ..config import ExperimentExecutorConfig
 
 logger = get_logger(__name__)
 
@@ -41,22 +42,18 @@ class ExperimentExecutor(ExperimentExecutorInterface):
     def __init__(
         self,
         ktrdr_service: KTRDRService,
-        max_concurrent_experiments: int = 2,
-        default_timeout_hours: int = 4,
-        max_retry_attempts: int = 3
+        config: Optional[ExperimentExecutorConfig] = None
     ):
         self.ktrdr_service = ktrdr_service
-        self.max_concurrent_experiments = max_concurrent_experiments
-        self.default_timeout_hours = default_timeout_hours
-        self.max_retry_attempts = max_retry_attempts
+        self.config = config or ExperimentExecutorConfig()
         
         # Semaphore for controlling concurrency
-        self.execution_semaphore = asyncio.Semaphore(max_concurrent_experiments)
+        self.execution_semaphore = asyncio.Semaphore(self.config.max_concurrent_experiments)
         
         # Track running experiments
         self.running_experiments: Dict[UUID, Dict[str, Any]] = {}
         
-        logger.info(f"Experiment executor initialized with max_concurrent={max_concurrent_experiments}, timeout={default_timeout_hours}h")
+        logger.info(f"Experiment executor initialized with max_concurrent={self.config.max_concurrent_experiments}, timeout={self.config.default_timeout_hours}h")
     
     async def execute_experiment(
         self,
@@ -219,7 +216,7 @@ class ExperimentExecutor(ExperimentExecutorInterface):
         
         start_time = datetime.now(timezone.utc)
         timeout_seconds = timeout_hours * 3600
-        check_interval = 30  # Check every 30 seconds
+        check_interval = self.config.progress_check_interval_seconds  # Use configurable check interval
         
         logger.info(f"Monitoring experiment {experiment_id} (job: {training_job_id}) with {timeout_hours}h timeout")
         

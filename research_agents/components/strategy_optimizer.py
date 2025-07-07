@@ -23,7 +23,7 @@ from .interfaces import (
     StrategyOptimizerInterface,
     ResearchContext,
 )
-from ..agents.research_agent_mvp import ResearchStrategy
+from ..types import ResearchStrategy
 
 logger = get_logger(__name__)
 
@@ -92,7 +92,7 @@ class StrategyOptimizer(StrategyOptimizerInterface):
                 perf_history.pop(0)
             
             # Calculate optimization recommendations
-            optimizations = {
+            optimizations: Dict[str, Any] = {
                 "parameter_adjustments": {},
                 "confidence": 0.0,
                 "reasoning": [],
@@ -434,7 +434,7 @@ class StrategyOptimizer(StrategyOptimizerInterface):
     ) -> Dict[str, Any]:
         """Generate general optimization recommendations"""
         
-        recommendations = {
+        recommendations: Dict[str, Any] = {
             "general_recommendations": [],
             "risk_adjustments": {},
             "efficiency_improvements": {}

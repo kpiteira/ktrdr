@@ -577,7 +577,7 @@ class ResultsAnalyzer:
         returns = [r.performance_metrics.total_return for r in results]
         sharpe_ratios = [r.performance_metrics.sharpe_ratio for r in results]
         
-        comparison = {
+        comparison: Dict[str, Any] = {
             "total_strategies": len(results),
             "best_strategy": {
                 "experiment_id": str(sorted_results[0].experiment_id),
