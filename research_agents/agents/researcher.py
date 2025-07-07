@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from ktrdr import get_logger
+from ktrdr.errors import ProcessingError
 from .base import BaseResearchAgent
 from ..services.interfaces import LLMService
 from ..services.llm_service import OpenAILLMService, NullLLMService
@@ -57,6 +58,8 @@ class ResearcherAgent(BaseResearchAgent):
     async def _initialize_agent(self) -> None:
         """Initialize researcher-specific functionality"""
         # Load current session information
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         active_session = await self.db.get_active_session()
         if active_session:
             self.current_session_id = active_session["id"]
@@ -66,6 +69,8 @@ class ResearcherAgent(BaseResearchAgent):
         
         # Load recent experiment history for context
         if self.current_session_id:
+            if self.db is None:
+                raise ProcessingError("Database service not initialized", error_code="NO_DB")
             self.recent_experiments = await self.db.get_experiments_by_session(
                 self.current_session_id
             )
@@ -85,6 +90,8 @@ class ResearcherAgent(BaseResearchAgent):
             if not self.current_session_id:
                 # No active session, wait and check again
                 await asyncio.sleep(30)
+                if self.db is None:
+                    raise ProcessingError("Database service not initialized", error_code="NO_DB")
                 active_session = await self.db.get_active_session()
                 if active_session:
                     self.current_session_id = active_session["id"]
@@ -94,6 +101,8 @@ class ResearcherAgent(BaseResearchAgent):
             await self._update_status("active", "Analyzing research opportunities")
             
             # Check if we need to generate new hypotheses
+            if self.db is None:
+                raise ProcessingError("Database service not initialized", error_code="NO_DB")
             queued_experiments = await self.db.get_queued_experiments(limit=10)
             
             if len(queued_experiments) < 3:  # Maintain experiment queue
@@ -242,6 +251,10 @@ class ResearcherAgent(BaseResearchAgent):
         }
         
         # Create experiment
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
+        if self.current_session_id is None:
+            raise ProcessingError("No active session for experiment creation", error_code="NO_SESSION")
         experiment_id = await self.db.create_experiment(
             session_id=self.current_session_id,
             experiment_name=hypothesis["name"],
@@ -258,6 +271,8 @@ class ResearcherAgent(BaseResearchAgent):
         if not self.current_session_id:
             return
         
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         completed_experiments = await self.db.get_experiments_by_session(
             self.current_session_id, "completed"
         )
@@ -281,6 +296,8 @@ class ResearcherAgent(BaseResearchAgent):
         insight_content = f"Analysis of {len(successful_experiments)} successful experiments shows that {most_common_type} strategies are performing well with average fitness score of {sum(exp.get('fitness_score', 0) for exp in successful_experiments) / len(successful_experiments):.3f}"
         
         # Add to knowledge base
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.add_knowledge_entry(
             content_type="insight",
             title=f"Success Pattern: {most_common_type} strategies",
@@ -302,6 +319,8 @@ class ResearcherAgent(BaseResearchAgent):
         self.knowledge_cache = {}
         
         for content_type in ["insight", "pattern", "success_factor", "failure_analysis"]:
+            if self.db is None:
+                raise ProcessingError("Database service not initialized", error_code="NO_DB")
             entries = await self.db.search_knowledge_by_keywords(
                 keywords=[content_type],
                 content_type_filter=content_type,
@@ -314,6 +333,8 @@ class ResearcherAgent(BaseResearchAgent):
         if not self.current_session_id:
             return []
         
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         session = await self.db.get_active_session()
         if session and session.get("strategic_goals"):
             return session["strategic_goals"]
@@ -337,6 +358,8 @@ class ResearcherAgent(BaseResearchAgent):
     
     async def _get_agent_uuid(self) -> Optional[UUID]:
         """Get agent UUID from database"""
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         agent_state = await self.db.get_agent_state(self.agent_id)
         return agent_state["id"] if agent_state else None
     
@@ -351,6 +374,8 @@ class ResearcherAgent(BaseResearchAgent):
     
     async def search_knowledge(self, tags: List[str], limit: int = 10) -> List[Dict[str, Any]]:
         """Search knowledge base by tags"""
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         return await self.db.search_knowledge_by_tags(tags, limit=limit)
     
     async def design_experiment(self, hypothesis: Dict[str, Any]) -> Dict[str, Any]:
@@ -381,7 +406,7 @@ class ResearcherAgent(BaseResearchAgent):
     
     def _get_default_parameters(self, experiment_type: str) -> Dict[str, Any]:
         """Get default parameters for different experiment types"""
-        parameter_templates = {
+        parameter_templates: Dict[str, Dict[str, Any]] = {
             "momentum_strategy": {
                 "lookback_period": 20,
                 "signal_threshold": 0.02,
@@ -402,4 +427,4 @@ class ResearcherAgent(BaseResearchAgent):
             }
         }
         
-        return parameter_templates.get(experiment_type, parameter_templates["momentum_strategy"])
+        return parameter_templates.get(experiment_type, parameter_templates["momentum_strategy"]) or parameter_templates["momentum_strategy"]
