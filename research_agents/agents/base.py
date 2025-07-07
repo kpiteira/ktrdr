@@ -62,8 +62,8 @@ class BaseResearchAgent(ABC):
         self._stop_requested = False
         self._status = "idle"
         self.current_activity = "Initializing"
-        self.state_data = {}
-        self.memory_context = {}
+        self.state_data: Dict[str, Any] = {}
+        self.memory_context: Dict[str, Any] = {}
         self._error_count = 0
         self._max_errors = self.agent_config.max_consecutive_errors
         
@@ -217,6 +217,8 @@ class BaseResearchAgent(ABC):
             self._ensure_db_available()
             
             # Check if agent already exists
+            if self.db is None:
+                raise ProcessingError("Database service not initialized", error_code="NO_DB")
             existing_agent = await self.db.get_agent_state(self.agent_id)
             
             if existing_agent:
@@ -230,6 +232,8 @@ class BaseResearchAgent(ABC):
                 return True
             else:
                 # Create new agent registration
+                if self.db is None:
+                    raise ProcessingError("Database service not initialized", error_code="NO_DB")
                 await self.db.create_agent_state(
                     self.agent_id, self.agent_type, "idle",
                     "Agent registered", self.state_data, self.memory_context
@@ -251,6 +255,8 @@ class BaseResearchAgent(ABC):
         """Heartbeat loop to update agent status"""
         while self.is_running:
             try:
+                if self.db is None:
+                    raise ProcessingError("Database service not initialized", error_code="NO_DB")
                 await self.db.update_agent_heartbeat(self.agent_id)
                 await asyncio.sleep(self.agent_config.memory_cleanup_interval_seconds // 10)  # Use config-based heartbeat interval
                 
@@ -268,6 +274,8 @@ class BaseResearchAgent(ABC):
             if activity:
                 self.current_activity = activity
             
+            if self.db is None:
+                raise ProcessingError("Database service not initialized", error_code="NO_DB")
             await self.db.update_agent_status(self.agent_id, status, activity)
             
         except Exception as e:
@@ -277,6 +285,8 @@ class BaseResearchAgent(ABC):
         """Update agent state data"""
         try:
             self.state_data.update(state_data)
+            if self.db is None:
+                raise ProcessingError("Database service not initialized", error_code="NO_DB")
             await self.db.update_agent_state_data(self.agent_id, self.state_data)
             
         except Exception as e:
@@ -298,6 +308,8 @@ class BaseResearchAgent(ABC):
     async def _persist_state(self) -> None:
         """Persist current agent state to database"""
         try:
+            if self.db is None:
+                raise ProcessingError("Database service not initialized", error_code="NO_DB")
             await self.db.update_agent_state(
                 self.agent_id, self.status, self.current_activity,
                 self.state_data, self.memory_context
@@ -340,6 +352,8 @@ class BaseResearchAgent(ABC):
     async def _send_heartbeat(self) -> None:
         """Send heartbeat to database"""
         self._ensure_db_available()
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.update_agent_heartbeat(self.agent_id)
     
     # ========================================================================
