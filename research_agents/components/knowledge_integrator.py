@@ -64,7 +64,7 @@ class KnowledgeIntegrator(KnowledgeIntegratorInterface):
         try:
             logger.info(f"Integrating {len(insights)} insights for session {context.session_id}")
             
-            integration_results = {
+            integration_results: Dict[str, Any] = {
                 "integrated_count": 0,
                 "rejected_count": 0,
                 "knowledge_entry_ids": [],
@@ -78,35 +78,39 @@ class KnowledgeIntegrator(KnowledgeIntegratorInterface):
                     
                     if quality_score < self.min_quality_threshold:
                         logger.warning(f"Rejecting insight {i} with quality score {quality_score} below threshold {self.min_quality_threshold}")
-                        integration_results["rejected_count"] += 1
+                        integration_results["rejected_count"] = integration_results.get("rejected_count", 0) + 1
                         continue
                     
                     # Create knowledge entry
-                    entry_id = await self.db_service.create_knowledge_entry(
+                    # Need to import UUID from uuid for proper conversion
+                    from uuid import UUID as UUIDType
+                    source_agent_uuid = UUIDType(context.agent_id) if isinstance(context.agent_id, str) else context.agent_id
+                    
+                    entry_id = await self.db_service.add_knowledge_entry(
+                        content_type="research_insight",  # Fixed parameter name
+                        title=f"Research Insight {i+1}",  # Required title
                         content=insight,
-                        knowledge_type="research_insight",
-                        source_experiment_id=context.experiments[0] if context.experiments else None,
-                        source_agent_id=context.agent_id,
+                        summary=insight[:200] + "..." if len(insight) > 200 else insight,  # Truncated summary
+                        keywords=[f"insight_{i}", "integration", "research"],  # Generated keywords
                         tags=self._generate_tags(insight, context),
-                        quality_score=quality_score,
-                        metadata={
-                            "session_id": str(context.session_id),
-                            "cycle_id": str(context.cycle_id),
-                            "strategy": context.strategy,
-                            "phase": context.current_phase,
-                            "integration_timestamp": datetime.now(timezone.utc).isoformat()
-                        }
+                        source_experiment_id=context.experiments[0] if context.experiments else None,
+                        source_agent_id=source_agent_uuid,
+                        quality_score=quality_score
                     )
                     
-                    integration_results["integrated_count"] += 1
+                    integration_results["integrated_count"] = integration_results.get("integrated_count", 0) + 1
+                    if "knowledge_entry_ids" not in integration_results:
+                        integration_results["knowledge_entry_ids"] = []
                     integration_results["knowledge_entry_ids"].append(entry_id)
+                    if "quality_scores" not in integration_results:
+                        integration_results["quality_scores"] = []
                     integration_results["quality_scores"].append(quality_score)
                     
                     logger.debug(f"Integrated insight {i} with quality score {quality_score}, entry_id: {entry_id}")
                     
                 except Exception as e:
                     logger.error(f"Failed to integrate insight {i}: {e}")
-                    integration_results["rejected_count"] += 1
+                    integration_results["rejected_count"] = integration_results.get("rejected_count", 0) + 1
             
             # Refresh knowledge cache after integration
             await self._refresh_cache()
@@ -138,11 +142,9 @@ class KnowledgeIntegrator(KnowledgeIntegratorInterface):
             logger.info(f"Searching knowledge base for: '{query}' (session: {context.session_id})")
             
             # Use database service to search knowledge entries
-            search_results = await self.db_service.search_knowledge_entries(
-                query=query,
-                limit=self.max_search_results,
-                min_quality_score=self.min_quality_threshold,
-                tags=[context.strategy] if context.strategy else None
+            search_results = await self.db_service.search_knowledge_by_keywords(
+                keywords=query.split(),  # Convert query to keyword list
+                limit=self.max_search_results
             )
             
             # Enhance results with relevance scoring
@@ -193,13 +195,15 @@ class KnowledgeIntegrator(KnowledgeIntegratorInterface):
                 logger.debug("Returning patterns from cache")
                 return self.knowledge_cache[cache_key]
             
-            # Query for high-quality knowledge entries
-            high_quality_entries = await self.db_service.get_knowledge_entries(
-                knowledge_type="research_insight",
-                min_quality_score=0.7,  # High quality threshold for patterns
-                tags=[context.strategy] if context.strategy else None,
-                limit=100
+            # Query for high-quality knowledge entries using execute_query
+            query_result = await self.db_service.execute_query(
+                "SELECT * FROM research.knowledge_base WHERE content_type = $1 AND quality_score >= $2 ORDER BY created_at DESC LIMIT $3",
+                "research_insight",
+                0.7,  # High quality threshold for patterns
+                100,
+                fetch="all"
             )
+            high_quality_entries = query_result if isinstance(query_result, list) else ([] if query_result is None else [query_result])
             
             # Analyze patterns in the entries
             patterns = self._extract_patterns(high_quality_entries, context)
@@ -340,7 +344,7 @@ class KnowledgeIntegrator(KnowledgeIntegratorInterface):
         # This is a simplified pattern extraction - can be made more sophisticated
         
         # Pattern 1: High-performing strategy types
-        strategy_performance = {}
+        strategy_performance: Dict[str, Any] = {}
         
         for entry in entries:
             metadata = entry.get("metadata", {})
@@ -366,7 +370,7 @@ class KnowledgeIntegrator(KnowledgeIntegratorInterface):
                 })
         
         # Pattern 2: Common keywords in high-quality insights
-        all_words = {}
+        all_words: Dict[str, int] = {}
         for entry in entries:
             if entry.get("quality_score", 0.0) > 0.8:
                 words = entry.get("content", "").lower().split()
