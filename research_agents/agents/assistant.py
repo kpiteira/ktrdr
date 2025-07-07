@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from ktrdr import get_logger
+from ktrdr.errors import ProcessingError
 from .base import BaseResearchAgent
 from ..services.interfaces import KTRDRService
 from ..services.ktrdr_service import HTTPKTRDRService, NullKTRDRService
@@ -102,6 +103,8 @@ class AssistantAgent(BaseResearchAgent):
             return  # Already at capacity
         
         # Get queued experiments
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         available_slots = self.max_concurrent_experiments - len(self.active_experiments)
         queued_experiments = await self.db.get_queued_experiments(limit=available_slots)
         
@@ -110,6 +113,8 @@ class AssistantAgent(BaseResearchAgent):
                 await self._start_experiment(experiment)
             except Exception as e:
                 self.logger.error(f"Failed to start experiment {experiment['id']}: {e}")
+                if self.db is None:
+                    raise ProcessingError("Database service not initialized", error_code="NO_DB")
                 await self.db.update_experiment_status(
                     experiment["id"], "failed", 
                     error_details={"error": str(e), "stage": "startup"}
@@ -125,6 +130,8 @@ class AssistantAgent(BaseResearchAgent):
         )
         
         # Update experiment status
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.update_experiment_status(experiment_id, "running")
         
         # Assign to this agent
@@ -135,6 +142,8 @@ class AssistantAgent(BaseResearchAgent):
         )
         WHERE id = $2
         """
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.execute_query(query, self.agent_id, experiment_id)
         
         # Add to active experiments
@@ -343,6 +352,8 @@ class AssistantAgent(BaseResearchAgent):
         fitness_score = await self._calculate_fitness_score(results)
         
         # Update experiment with results
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.update_experiment_status(
             experiment_id, "completed",
             results=results,
@@ -398,6 +409,8 @@ class AssistantAgent(BaseResearchAgent):
         # Create insight entry
         insight_content = f"Successful experiment '{experiment['experiment_name']}' with fitness score {results.get('fitness_score', 0):.3f}. Key factors: {results.get('key_success_factors', 'Training dynamics analysis')}"
         
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.add_knowledge_entry(
             content_type="success_factor",
             title=f"Success: {experiment['experiment_name']}",
@@ -424,6 +437,8 @@ class AssistantAgent(BaseResearchAgent):
         await self.log_activity(f"Experiment failed: {experiment_id} - {error_message}")
         
         # Update experiment status in database
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.update_experiment_status(
             experiment_id, "failed",
             error_details={
@@ -450,6 +465,8 @@ class AssistantAgent(BaseResearchAgent):
         if job_id:
             await self.ktrdr_service.stop_training(job_id)
         
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         await self.db.update_experiment_status(experiment_id, "aborted")
         del self.active_experiments[experiment_id]
         
@@ -491,6 +508,8 @@ class AssistantAgent(BaseResearchAgent):
     
     async def _get_agent_uuid(self) -> Optional[UUID]:
         """Get agent UUID from database"""
+        if self.db is None:
+            raise ProcessingError("Database service not initialized", error_code="NO_DB")
         agent_state = await self.db.get_agent_state(self.agent_id)
         return agent_state["id"] if agent_state else None
     
