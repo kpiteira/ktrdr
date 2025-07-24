@@ -42,6 +42,7 @@ dependencies = [
     "pillow>=11.3.0",
     "starlette>=0.47.2",
     "urllib3>=2.5.0",
+    "python-multipart>=0.0.18",
 ]
 
 [project.optional-dependencies]
