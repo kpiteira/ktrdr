@@ -340,12 +340,12 @@ async def _train_model_async(
                             current_epoch = training_metrics.get("epochs_trained", 0)
                         else:
                             # For running operations, parse epoch and bars from current_step
-                            current_step = progress_info.get("current_step", "")
+                            current_step = progress_info.get("current_step", "") if progress_info else ""
                             current_epoch = 0
                             bars_info = ""
                             
                             # Parse "Epoch: N, Bars: X/Y" format
-                            if "Epoch:" in current_step and "Bars:" in current_step:
+                            if current_step and "Epoch:" in current_step and "Bars:" in current_step:
                                 try:
                                     # Extract epoch number
                                     epoch_part = current_step.split("Epoch:")[1].split(",")[0].strip()
@@ -354,11 +354,11 @@ async def _train_model_async(
                                     # Extract bars part "X/Y"
                                     bars_part = current_step.split("Bars:")[1].strip()
                                     # Remove any trailing text like "(Val Acc: 0.123)"
-                                    if "(" in bars_part:
+                                    if bars_part and "(" in bars_part:
                                         bars_part = bars_part.split("(")[0].strip()
                                     
                                     # Parse current bars and total bars for this epoch
-                                    if "/" in bars_part:
+                                    if bars_part and "/" in bars_part:
                                         current_bars_str, total_bars_str = bars_part.split("/")
                                         current_bars = int(current_bars_str.replace(",", ""))
                                         total_bars_all_epochs = int(total_bars_str.replace(",", ""))
@@ -391,6 +391,17 @@ async def _train_model_async(
                         # Wait before next poll
                         await asyncio.sleep(3)
                         
+                    except KeyboardInterrupt:
+                        console.print(f"\n⚠️  [yellow]Training cancellation requested...[/yellow]")
+                        try:
+                            await api_client.cancel_operation(task_id, reason="User requested cancellation")
+                            console.print(f"✅ [green]Training cancelled successfully[/green]")
+                        except Exception as cancel_error:
+                            console.print(f"❌ [red]Failed to cancel training: {str(cancel_error)}[/red]")
+                        return
+                    except asyncio.CancelledError:
+                        console.print(f"\n⚠️  [yellow]Training monitoring cancelled[/yellow]")
+                        return
                     except Exception as e:
                         console.print(f"❌ [red]Error polling training status: {str(e)}[/red]")
                         return
