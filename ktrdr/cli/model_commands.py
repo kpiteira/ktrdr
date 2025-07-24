@@ -38,6 +38,37 @@ logger = get_logger(__name__)
 console = Console()
 error_console = Console(stderr=True)
 
+
+async def _wait_for_cancellation_completion(api_client, operation_id: str, console, timeout: int = 30):
+    """Wait for training cancellation to complete with timeout (IB pattern)."""
+    import time
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
+        try:
+            status_result = await api_client.get_operation_status(operation_id)
+            operation_data = status_result.get("data", {})
+            status = operation_data.get("status", "unknown")
+            
+            if status == "cancelled":
+                console.print("✅ [green]Training cancellation completed successfully[/green]")
+                return True
+            elif status in ["completed", "failed"]:
+                console.print(f"⚠️ [yellow]Training finished as '{status}' before cancellation could complete[/yellow]")
+                return True
+            
+            # Show progress while waiting
+            elapsed = int(time.time() - start_time)
+            console.print(f"⏳ Waiting for cancellation completion... ({elapsed}s/{timeout}s)")
+            await asyncio.sleep(2)
+            
+        except Exception as e:
+            console.print(f"[red]Error checking cancellation status: {e}[/red]")
+            break
+    
+    console.print(f"⚠️ [yellow]Cancellation timeout after {timeout}s - training may still be running[/yellow]")
+    return False
+
 # Create the CLI app for model commands
 models_app = typer.Typer(
     name="models",
@@ -245,50 +276,19 @@ async def _train_model_async(
         if detailed_analytics:
             console.print("   Analytics: [green]✅ Detailed analytics enabled[/green]")
 
-        # Determine if this is multi-symbol training
-        # Check strategy configuration for multi-symbol mode
-        strategy_config = None
-        try:
-            strategy_config, _ = strategy_loader.load_strategy_config(strategy_file)
-        except Exception:
-            pass
-        
-        # Multi-symbol training is determined by:
-        # 1. Strategy configuration explicitly sets multi_symbol mode, OR
-        # 2. Multiple symbols are specified
-        is_multi_symbol = False
-        if strategy_config and hasattr(strategy_config, 'training_data') and hasattr(strategy_config.training_data, 'symbols'):
-            from ktrdr.config.models import SymbolMode
-            is_multi_symbol = (strategy_config.training_data.symbols.mode == SymbolMode.MULTI_SYMBOL)
-        
-        # Fallback to symbol count if strategy config not available
-        if not is_multi_symbol:
-            is_multi_symbol = len(symbols) > 1
-
         # Start the training via API
         try:
             # Extract strategy name from file path (remove .yaml extension)
             strategy_name = Path(strategy_file).stem
             
-            if is_multi_symbol:
-                # Multi-symbol training
-                result = await api_client.start_multi_symbol_training(
-                    symbols=symbols,
-                    timeframes=timeframes,
-                    strategy_name=strategy_name,
-                    start_date=start_date,
-                    end_date=end_date,
-                    detailed_analytics=detailed_analytics,
-                )
-            else:
-                # Single symbol training (existing API)
-                result = await api_client.start_training(
-                    symbol=symbols[0],
-                    timeframes=timeframes,
-                    strategy_name=strategy_name,
-                    start_date=start_date,
-                    end_date=end_date,
-                    detailed_analytics=detailed_analytics,
+            # Always use single unified training API (handles 1-N symbols)
+            result = await api_client.start_training(
+                symbols=symbols,
+                timeframes=timeframes,
+                strategy_name=strategy_name,
+                start_date=start_date,
+                end_date=end_date,
+                detailed_analytics=detailed_analytics,
             )
             
             if "task_id" not in result:
@@ -302,12 +302,26 @@ async def _train_model_async(
             console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
             return
 
-        # Poll for progress with real API calls
+        # Poll for progress with proper signal handling (IB pattern)
         # Temporarily suppress httpx logging to keep progress display clean
         import logging
+        import signal
         httpx_logger = logging.getLogger("httpx")
         original_level = httpx_logger.level
         httpx_logger.setLevel(logging.WARNING)
+        
+        # Set up cancellation handling like IB operations
+        cancelled = False
+        loop = asyncio.get_running_loop()
+        
+        def signal_handler():
+            """Handle Ctrl+C for graceful training cancellation."""
+            nonlocal cancelled
+            cancelled = True
+            console.print("\n[yellow]🛑 Training cancellation requested... stopping training[/yellow]")
+        
+        # Register signal handler with the event loop
+        loop.add_signal_handler(signal.SIGINT, signal_handler)
         
         try:
             with Progress(
@@ -322,6 +336,24 @@ async def _train_model_async(
 
                 while True:
                     try:
+                        # Check for cancellation first (IB pattern)
+                        if cancelled:
+                            console.print("[yellow]🛑 Sending cancellation to training service...[/yellow]")
+                            try:
+                                cancel_response = await api_client.cancel_operation(
+                                    operation_id=task_id,
+                                    reason="User requested cancellation via CLI"
+                                )
+                                if cancel_response.get("success"):
+                                    console.print("✅ [yellow]Training cancellation sent successfully[/yellow]")
+                                    # Wait for cancellation to complete with timeout
+                                    await _wait_for_cancellation_completion(api_client, task_id, console)
+                                else:
+                                    console.print(f"[red]Training cancellation failed: {cancel_response}[/red]")
+                            except Exception as e:
+                                console.print(f"[red]Training cancel request failed: {str(e)}[/red]")
+                            return
+                        
                         # Get status from operations framework (unified pattern)
                         status_result = await api_client.get_operation_status(task_id)
                         operation_data = status_result.get("data", {})
@@ -387,18 +419,13 @@ async def _train_model_async(
                             error_msg = operation_data.get("error", "Unknown error")
                             console.print(f"❌ [red]Training failed: {error_msg}[/red]")
                             return
+                        elif status == "cancelled":
+                            console.print(f"✅ [yellow]Training cancelled successfully[/yellow]")
+                            return
                         
                         # Wait before next poll
                         await asyncio.sleep(3)
                         
-                    except KeyboardInterrupt:
-                        console.print(f"\n⚠️  [yellow]Training cancellation requested...[/yellow]")
-                        try:
-                            await api_client.cancel_operation(task_id, reason="User requested cancellation")
-                            console.print(f"✅ [green]Training cancelled successfully[/green]")
-                        except Exception as cancel_error:
-                            console.print(f"❌ [red]Failed to cancel training: {str(cancel_error)}[/red]")
-                        return
                     except asyncio.CancelledError:
                         console.print(f"\n⚠️  [yellow]Training monitoring cancelled[/yellow]")
                         return
@@ -406,7 +433,11 @@ async def _train_model_async(
                         console.print(f"❌ [red]Error polling training status: {str(e)}[/red]")
                         return
         finally:
-            # Restore original httpx logging level
+            # Remove signal handler and restore logging
+            try:
+                loop.remove_signal_handler(signal.SIGINT)
+            except (ValueError, OSError):
+                pass
             httpx_logger.setLevel(original_level)
 
         # Get real results from API

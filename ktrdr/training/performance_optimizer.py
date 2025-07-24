@@ -48,13 +48,21 @@ class PerformanceConfig:
     
     def __post_init__(self):
         """Validate and adjust configuration based on available hardware."""
-        # Adjust for GPU availability
-        if not torch.cuda.is_available():
+        # Adjust for GPU availability (CUDA or MPS)
+        cuda_available = torch.cuda.is_available()
+        mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+        
+        if not (cuda_available or mps_available):
             self.enable_mixed_precision = False
             self.enable_gpu_optimization = False
             self.use_multiple_gpus = False
             self.pin_memory = False
             logger.info("GPU not available - disabled GPU optimizations")
+        elif mps_available and not cuda_available:
+            # MPS specific adjustments
+            self.enable_mixed_precision = False  # MPS doesn't support mixed precision well
+            self.use_multiple_gpus = False  # MPS is single device
+            logger.info("Using MPS GPU - adjusted optimizations for Apple Silicon")
         
         # Adjust workers based on CPU count
         import os

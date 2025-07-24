@@ -121,12 +121,16 @@ class TrainingHostClient:
         """
         try:
             # Prepare request payload for host service
+            # Support both single symbol and multi-symbol configurations
+            symbols = config.get("symbols", [config.get("symbol")] if config.get("symbol") else ["AAPL"])
+            
             request_payload = {
                 "model_configuration": {
                     "strategy_config": config.get("strategy_config", {}),
-                    "symbol": config.get("symbol"),
+                    "symbols": symbols,  # Multi-symbol support
                     "timeframes": config.get("timeframes", []),
-                    "model_type": config.get("model_type", "mlp")
+                    "model_type": config.get("model_type", "mlp"),
+                    "multi_symbol": config.get("multi_symbol", len(symbols) > 1)
                 },
                 "training_configuration": {
                     "epochs": config.get("epochs", 100),
@@ -138,7 +142,7 @@ class TrainingHostClient:
                     "end_date": config.get("end_date")
                 },
                 "data_configuration": {
-                    "symbol": config.get("symbol"),
+                    "symbols": symbols,  # Multi-symbol support
                     "timeframes": config.get("timeframes", []),
                     "data_source": config.get("data_source", "local"),
                     "indicators": config.get("indicators", []),
@@ -337,7 +341,8 @@ class TrainingHostClient:
         epoch = progress.get("epoch", 0)
         total_epochs = progress.get("total_epochs", 1)
         batch = progress.get("batch", 0)
-        total_batches = progress.get("total_batches", 1) if total_batches > 0 else 1
+        total_batches = progress.get("total_batches", 1)
+        total_batches = total_batches if total_batches > 0 else 1
         
         # Calculate progress: epoch progress + within-epoch progress
         epoch_progress = (epoch / total_epochs) if total_epochs > 0 else 0

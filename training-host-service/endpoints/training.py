@@ -109,7 +109,7 @@ async def start_training(request: TrainingStartRequest):
             status="started",
             message=f"Training session {session_id} started successfully",
             gpu_allocated=gpu_allocated,
-            estimated_duration_minutes=request.training_config.get("estimated_duration_minutes")
+            estimated_duration_minutes=request.training_configuration.get("estimated_duration_minutes")
         )
         
     except Exception as e:

@@ -11,7 +11,11 @@ endpoints that the containerized backend can call.
 
 import sys
 import os
+import warnings
 from pathlib import Path
+
+# Suppress PyTorch distributed future warnings that are triggered by tensor introspection
+warnings.filterwarnings("ignore", message=".*torch.distributed.reduce_op.*", category=FutureWarning)
 
 # Add parent directory to path so we can import ktrdr modules
 parent_dir = Path(__file__).parent.parent
@@ -93,8 +97,20 @@ async def root():
     """Root endpoint with service info."""
     import torch
     
-    gpu_available = torch.cuda.is_available()
-    gpu_device_count = torch.cuda.device_count() if gpu_available else 0
+    # Check for both CUDA and Apple Silicon MPS
+    cuda_available = torch.cuda.is_available()
+    mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+    gpu_available = cuda_available or mps_available
+    
+    if cuda_available:
+        gpu_device_count = torch.cuda.device_count()
+        gpu_type = "CUDA"
+    elif mps_available:
+        gpu_device_count = 1  # MPS represents one unified GPU
+        gpu_type = "MPS (Apple Silicon)"
+    else:
+        gpu_device_count = 0
+        gpu_type = "None"
     
     return {
         "service": "Training Host Service",
@@ -102,7 +118,8 @@ async def root():
         "status": "running",
         "timestamp": datetime.utcnow().isoformat(),
         "gpu_available": gpu_available,
-        "gpu_device_count": gpu_device_count
+        "gpu_device_count": gpu_device_count,
+        "gpu_type": gpu_type
     }
 
 @app.get("/health")

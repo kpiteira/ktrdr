@@ -19,7 +19,7 @@ class HostServiceConfig(BaseModel):
     host: str = Field(default="127.0.0.1", description="Host to bind service to")
     port: int = Field(default=5002, description="Port to bind service to")
     log_level: str = Field(default="INFO", description="Logging level")
-    max_concurrent_sessions: int = Field(default=1, description="Maximum concurrent training sessions")
+    max_concurrent_sessions: int = Field(default=3, description="Maximum concurrent training sessions")
     session_timeout_minutes: int = Field(default=60, description="Training session timeout in minutes")
     
     class Config:
@@ -31,7 +31,7 @@ class TrainingHostServiceConfig(BaseModel):
     host_service: HostServiceConfig = Field(default_factory=HostServiceConfig)
     
     class Config:
-        extra = "forbid"
+        extra = "allow"  # Allow extra fields for flexibility
 
 # Configuration loader instance
 _config_loader = ConfigLoader()

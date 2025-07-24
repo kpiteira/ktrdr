@@ -86,22 +86,37 @@ class GPUMemoryManager:
         """
         self.config = config or GPUMemoryConfig()
         
-        # Check GPU availability
-        if not torch.cuda.is_available():
-            logger.warning("CUDA not available - GPU memory management disabled")
+        # Check GPU availability (CUDA or MPS)
+        self.cuda_available = torch.cuda.is_available()
+        self.mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+        
+        if not (self.cuda_available or self.mps_available):
+            logger.warning("Neither CUDA nor MPS available - GPU memory management disabled")
             self.enabled = False
             return
+        
+        if self.cuda_available:
+            self.device_type = "cuda"
+            logger.info("Using CUDA for GPU acceleration")
+        elif self.mps_available:
+            self.device_type = "mps"
+            logger.info("Using MPS (Apple Silicon) for GPU acceleration")
         
         self.enabled = True
         
         # Initialize device management
-        if device_ids is None:
-            self.device_ids = list(range(torch.cuda.device_count()))
-        else:
-            self.device_ids = device_ids
+        if self.device_type == "cuda":
+            if device_ids is None:
+                self.device_ids = list(range(torch.cuda.device_count()))
+            else:
+                self.device_ids = device_ids
+            self.num_devices = len(self.device_ids)
+        elif self.device_type == "mps":
+            # MPS represents one unified GPU device
+            self.device_ids = [0]  # MPS uses device 0
+            self.num_devices = 1
         
-        self.num_devices = len(self.device_ids)
-        logger.info(f"Managing {self.num_devices} GPU device(s): {self.device_ids}")
+        logger.info(f"Managing {self.num_devices} {self.device_type.upper()} device(s): {self.device_ids}")
         
         # Memory tracking
         self.snapshots: List[GPUMemorySnapshot] = []
@@ -122,14 +137,37 @@ class GPUMemoryManager:
         
         logger.info(f"GPUMemoryManager initialized: {self.config}")
     
+    def get_device(self, device_id: int = 0) -> torch.device:
+        """Get the appropriate torch device."""
+        if not self.enabled:
+            return torch.device("cpu")
+        
+        if self.device_type == "cuda":
+            return torch.device(f"cuda:{device_id}")
+        elif self.device_type == "mps":
+            return torch.device("mps")
+        else:
+            return torch.device("cpu")
+    
     def _setup_mixed_precision(self):
         """Setup mixed precision training."""
         try:
-            if self.config.loss_scale == "dynamic":
-                self.scaler = torch.cuda.amp.GradScaler()
+            if self.device_type == "cuda":
+                # Use CUDA-specific scaler
+                if self.config.loss_scale == "dynamic":
+                    self.scaler = torch.cuda.amp.GradScaler()
+                else:
+                    self.scaler = torch.cuda.amp.GradScaler(init_scale=float(self.config.loss_scale))
+                logger.info("CUDA mixed precision training enabled")
+            elif self.device_type == "mps":
+                # MPS doesn't support mixed precision well yet, disable it
+                logger.info("MPS mixed precision not supported - disabling")
+                self.config.enable_mixed_precision = False
+                return
             else:
-                self.scaler = torch.cuda.amp.GradScaler(init_scale=float(self.config.loss_scale))
-            logger.info("Mixed precision training enabled")
+                logger.info("Mixed precision not available for CPU")
+                self.config.enable_mixed_precision = False
+                return
         except Exception as e:
             logger.warning(f"Failed to setup mixed precision: {e}")
             self.config.enable_mixed_precision = False
@@ -137,12 +175,18 @@ class GPUMemoryManager:
     def _setup_memory_pools(self):
         """Setup memory pools for efficient allocation."""
         try:
-            # Set memory fraction for each device
-            for device_id in self.device_ids:
-                torch.cuda.set_per_process_memory_fraction(
-                    self.config.memory_fraction, device_id
-                )
-            logger.info(f"Memory pools configured with {self.config.memory_fraction:.1%} allocation")
+            if self.device_type == "cuda":
+                # Set memory fraction for each CUDA device
+                for device_id in self.device_ids:
+                    torch.cuda.set_per_process_memory_fraction(
+                        self.config.memory_fraction, device_id
+                    )
+                logger.info(f"CUDA memory pools configured with {self.config.memory_fraction:.1%} allocation")
+            elif self.device_type == "mps":
+                # MPS memory management is handled by the system
+                logger.info("MPS memory management handled by system")
+            else:
+                logger.info("Memory pools not applicable for CPU")
         except Exception as e:
             logger.warning(f"Failed to setup memory pools: {e}")
     
@@ -217,24 +261,36 @@ class GPUMemoryManager:
                 utilization_percent=0
             )
         
-        with torch.cuda.device(device_id):
-            # Basic memory info
-            allocated = torch.cuda.memory_allocated(device_id) / (1024**2)  # MB
-            reserved = torch.cuda.memory_reserved(device_id) / (1024**2)  # MB
+        if self.device_type == "cuda":
+            with torch.cuda.device(device_id):
+                # Basic memory info
+                allocated = torch.cuda.memory_allocated(device_id) / (1024**2)  # MB
+                reserved = torch.cuda.memory_reserved(device_id) / (1024**2)  # MB
+                
+                # Get total memory
+                try:
+                    total = torch.cuda.get_device_properties(device_id).total_memory / (1024**2)  # MB
+                except:
+                    total = 0
+        elif self.device_type == "mps":
+            # MPS memory tracking is limited
+            allocated = 0  # Cannot accurately track MPS memory usage
+            reserved = 0
+            total = 0  # MPS shares system memory
+        else:
+            # CPU
+            allocated = 0
+            reserved = 0
+            total = 0
             
-            # Get total memory
-            try:
-                total = torch.cuda.get_device_properties(device_id).total_memory / (1024**2)  # MB
-            except:
-                total = 0
-            
-            free = total - allocated if total > 0 else 0
-            utilization = (allocated / total * 100) if total > 0 else 0
-            
-            # Additional GPU stats (if available)
-            temperature = None
-            power_usage = None
-            
+        free = total - allocated if total > 0 else 0
+        utilization = (allocated / total * 100) if total > 0 else 0
+        
+        # Additional GPU stats (if available) - only for CUDA
+        temperature = None
+        power_usage = None
+        
+        if self.device_type == "cuda":
             try:
                 import pynvml
                 if not hasattr(self, '_nvml_initialized'):
@@ -283,15 +339,25 @@ class GPUMemoryManager:
         
         devices_to_clean = [device_id] if device_id is not None else self.device_ids
         
-        for dev_id in devices_to_clean:
-            with torch.cuda.device(dev_id):
-                # Clear cache
-                torch.cuda.empty_cache()
-                
-                # Force garbage collection
-                if self.config.aggressive_cleanup:
-                    gc.collect()
-                    torch.cuda.empty_cache()  # Clear again after GC
+        if self.device_type == "cuda":
+            for dev_id in devices_to_clean:
+                with torch.cuda.device(dev_id):
+                    # Clear cache
+                    torch.cuda.empty_cache()
+                    
+                    # Force garbage collection
+                    if self.config.aggressive_cleanup:
+                        gc.collect()
+                        torch.cuda.empty_cache()  # Clear again after GC
+        elif self.device_type == "mps":
+            # MPS cleanup - force garbage collection
+            if self.config.aggressive_cleanup:
+                gc.collect()
+                # MPS memory is managed by the system, no cache to clear
+        else:
+            # CPU cleanup
+            if self.config.aggressive_cleanup:
+                gc.collect()
         
         logger.debug(f"GPU memory cleanup completed for devices: {devices_to_clean}")
     

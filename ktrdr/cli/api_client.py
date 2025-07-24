@@ -436,7 +436,7 @@ class KtrdrApiClient:
 
     async def start_training(
         self,
-        symbol: str,
+        symbols: List[str],
         timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str] = None,
@@ -445,9 +445,9 @@ class KtrdrApiClient:
         detailed_analytics: bool = False,
         **kwargs  # Accept additional parameters for backward compatibility
     ) -> Dict[str, Any]:
-        """Start a training task."""
+        """Start a training task (supports 1-N symbols)."""
         payload = {
-            "symbol": symbol,
+            "symbols": symbols,
             "timeframes": timeframes,
             "strategy_name": strategy_name,
             "start_date": start_date,
@@ -467,43 +467,6 @@ class KtrdrApiClient:
             raise DataError(
                 message="Failed to start training",
                 error_code="API-StartTrainingError",
-                details={"response": response},
-            )
-        return response
-
-    async def start_multi_symbol_training(
-        self,
-        symbols: List[str],
-        timeframes: List[str],
-        strategy_name: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        task_id: Optional[str] = None,
-        detailed_analytics: bool = False,
-        **kwargs  # Accept additional parameters for backward compatibility
-    ) -> Dict[str, Any]:
-        """Start a multi-symbol training task."""
-        payload = {
-            "symbols": symbols,
-            "timeframes": timeframes,
-            "strategy_name": strategy_name,
-            "start_date": start_date,
-            "end_date": end_date,
-            "task_id": task_id,
-            "detailed_analytics": detailed_analytics,
-        }
-
-        response = await self._make_request(
-            "POST",
-            "/trainings/start-multi-symbol",
-            json_data=payload,
-            timeout=300.0,  # 5 minutes for training startup
-        )
-
-        if not response.get("success"):
-            raise DataError(
-                message="Failed to start multi-symbol training",
-                error_code="API-StartMultiSymbolTrainingError",
                 details={"response": response},
             )
         return response

@@ -42,7 +42,7 @@ class DataConfig:
     
     # Memory optimization
     use_shared_memory: bool = False  # Share memory between workers
-    pin_memory_device: str = "cuda"  # Device for pinned memory
+    pin_memory_device: str = "auto"  # Device for pinned memory (auto-detect)
     
     # Data augmentation
     enable_feature_noise: bool = False  # Add noise to features

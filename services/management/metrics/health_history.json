@@ -801,5 +801,104 @@
         "error": null
       }
     }
+  },
+  {
+    "timestamp": "2025-07-07T07:18:24.709070",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:18:24.704442",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 13.612985610961914,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:18:24.707940",
+        "service_name": "training-host",
+        "status": "failed",
+        "port": 5002,
+        "response_time_ms": 2.498149871826172,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": null,
+        "custom_metrics": {},
+        "error": "HTTPConnectionPool(host='localhost', port=5002): Max retries exceeded with url: /health (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x158f11040>: Failed to establish a new connection: [Errno 61] Connection refused'))"
+      }
+    }
+  },
+  {
+    "timestamp": "2025-07-07T07:18:39.811740",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-07-07T07:18:39.805855",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 2.031087875366211,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-07-07T07:18:39.811179",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 2.354145050048828,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "GPU not available or manager failed to initialize",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
   }
 ]

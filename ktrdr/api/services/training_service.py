@@ -67,7 +67,7 @@ class TrainingService(BaseService):
 
     async def start_training(
         self,
-        symbol: str,
+        symbols: List[str],
         timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str] = None,
@@ -78,7 +78,7 @@ class TrainingService(BaseService):
         """Start neural network training task."""
         # Simple delegation to training manager (no complex fallback logic)
         return await self._start_training_via_manager(
-            symbol=symbol,
+            symbols=symbols,
             timeframes=timeframes,
             strategy_name=strategy_name,
             start_date=start_date,
@@ -89,7 +89,7 @@ class TrainingService(BaseService):
     
     async def _start_training_via_manager(
         self,
-        symbol: str,
+        symbols: List[str],
         timeframes: List[str],
         strategy_name: str,
         start_date: Optional[str] = None,
@@ -130,9 +130,9 @@ class TrainingService(BaseService):
         
         training_config = strategy_config.get("model", {}).get("training", {})
         
-        # Create operation metadata
+        # Create operation metadata - use first symbol for compatibility, store all symbols in parameters
         metadata = OperationMetadata(
-            symbol=symbol,
+            symbol=symbols[0] if symbols else "MULTI",
             timeframe=timeframes[0] if timeframes else "1h",
             start_date=datetime.fromisoformat(start_date) if start_date else None,
             end_date=datetime.fromisoformat(end_date) if end_date else None,
@@ -140,8 +140,9 @@ class TrainingService(BaseService):
                 "strategy_name": strategy_name,
                 "strategy_path": str(strategy_path),
                 "training_type": strategy_config.get("model", {}).get("type", "mlp"),
-                "epochs": training_config.get("epochs", 100),
+                "symbols": symbols,
                 "timeframes": timeframes,
+                "epochs": training_config.get("epochs", 100),
                 "use_host_service": self.training_manager.is_using_host_service()
             },
         )
@@ -155,7 +156,7 @@ class TrainingService(BaseService):
         # Start training using TrainingManager
         task = asyncio.create_task(
             self._run_training_via_manager_async(
-                operation_id, strategy_path, [symbol], timeframes, start_date, end_date
+                operation_id, strategy_path, symbols, timeframes, start_date, end_date
             )
         )
 
@@ -165,8 +166,8 @@ class TrainingService(BaseService):
             "success": True,
             "task_id": operation_id,
             "status": "training_started",
-            "message": f"Neural network training started for {symbol} using {strategy_name} strategy",
-            "symbol": symbol,
+            "message": f"Neural network training started for {', '.join(symbols)} using {strategy_name} strategy",
+            "symbols": symbols,
             "timeframes": timeframes,
             "strategy_name": strategy_name,
             "estimated_duration_minutes": training_config.get("estimated_duration_minutes", 30),
@@ -217,17 +218,36 @@ class TrainingService(BaseService):
                 progress_callback=progress_callback
             )
             
-            # Update with completion
-            await self.operations_service.update_progress(
-                operation_id,
-                OperationProgress(
-                    percentage=100.0,
-                    current_step="Training completed successfully",
-                    completed=True
+            # Check if this is host service mode (returns session_id) or local mode (completes training)
+            if result and result.get("session_id"):
+                # Host service mode - store session_id for status polling
+                session_id = result["session_id"]
+                logger.info(f"Training started on host service with session {session_id}")
+                
+                # Store session_id in operation metadata for status polling
+                operation = await self.operations_service.get_operation(operation_id)
+                if operation and hasattr(operation.metadata, 'parameters'):
+                    operation.metadata.parameters["session_id"] = session_id
+                
+                # Update progress to indicate training started on host service
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=15.0,
+                        current_step=f"Training started on host service (session: {session_id})"
+                    )
                 )
-            )
-            
-            logger.info(f"Training completed successfully for operation {operation_id}")
+            else:
+                # Local mode - training completed
+                await self.operations_service.update_progress(
+                    operation_id,
+                    OperationProgress(
+                        percentage=100.0,
+                        current_step="Training completed successfully",
+                        completed=True
+                    )
+                )
+                logger.info(f"Local training completed successfully for operation {operation_id}")
             
         except Exception as e:
             # Update with error
@@ -241,351 +261,16 @@ class TrainingService(BaseService):
             )
             logger.error(f"Training failed for operation {operation_id}: {str(e)}")
 
-    async def start_multi_symbol_training(
-        self,
-        symbols: List[str],
-        timeframes: List[str],
-        strategy_name: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        task_id: Optional[str] = None,
-        detailed_analytics: bool = False,
-    ) -> Dict[str, Any]:
-        """Start multi-symbol neural network training task."""
-        # Simple delegation to the same manager-based method (no complex fallback logic)
-        return await self._start_training_via_manager_multi_symbol(
-            symbols=symbols,
-            timeframes=timeframes,
-            strategy_name=strategy_name,
-            start_date=start_date,
-            end_date=end_date,
-            task_id=task_id,
-            detailed_analytics=detailed_analytics
-        )
-
-    async def _start_training_via_manager_multi_symbol(
-        self,
-        symbols: List[str],
-        timeframes: List[str],
-        strategy_name: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        task_id: Optional[str] = None,
-        detailed_analytics: bool = False,
-    ) -> Dict[str, Any]:
-        """Start multi-symbol neural network training task using TrainingManager."""
-        # Validate strategy file exists
-        strategy_paths = [
-            Path(f"/app/strategies/{strategy_name}.yaml"),
-            Path(f"strategies/{strategy_name}.yaml"),
-        ]
-        
-        strategy_path = None
-        for path in strategy_paths:
-            if path.exists():
-                strategy_path = path
-                break
-        
-        if not strategy_path:
-            raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
-        
-        # Load and validate strategy config
-        with open(strategy_path, 'r') as f:
-            strategy_config = yaml.safe_load(f)
-        
-        validation_issues = _validate_strategy_config(strategy_config, strategy_name)
-        error_issues = [issue for issue in validation_issues if issue.severity == "error"]
-        
-        if error_issues:
-            error_messages = [f"{issue.category}: {issue.message}" for issue in error_issues]
-            raise ValidationError("Strategy validation failed:\n" + "\n".join(error_messages))
-        
-        if detailed_analytics:
-            strategy_config = self._apply_analytics_settings(strategy_config)
-        
-        training_config = strategy_config.get("model", {}).get("training", {})
-        
-        # Create operation metadata for multi-symbol
-        metadata = OperationMetadata(
-            symbol=symbols[0] if symbols else "MULTI",  # Use first symbol for compatibility
-            timeframe=timeframes[0] if timeframes else "1h",
-            start_date=datetime.fromisoformat(start_date) if start_date else None,
-            end_date=datetime.fromisoformat(end_date) if end_date else None,
-            parameters={
-                "strategy_name": strategy_name,
-                "strategy_path": str(strategy_path),
-                "training_type": "multi_symbol",
-                "symbols": symbols,
-                "timeframes": timeframes,
-                "epochs": training_config.get("epochs", 100),
-                "use_host_service": self.training_manager.is_using_host_service()
-            },
-        )
-
-        # Create operation
-        operation = await self.operations_service.create_operation(
-            operation_type=OperationType.TRAINING, metadata=metadata
-        )
-        operation_id = operation.operation_id
-
-        # Start training using TrainingManager
-        task = asyncio.create_task(
-            self._run_training_via_manager_async(
-                operation_id, strategy_path, symbols, timeframes, start_date, end_date
-            )
-        )
-
-        await self.operations_service.start_operation(operation_id, task)
-
-        return {
-            "success": True,
-            "task_id": operation_id,
-            "status": "training_started",
-            "message": f"Multi-symbol neural network training started for {', '.join(symbols)} using {strategy_name} strategy",
-            "symbols": symbols,
-            "timeframes": timeframes,
-            "strategy_name": strategy_name,
-            "estimated_duration_minutes": training_config.get("estimated_duration_minutes", 30),
-            "use_host_service": self.training_manager.is_using_host_service()
-        }
-    
-    async def _start_multi_symbol_training_with_host_service(
-        self,
-        symbols: List[str],
-        timeframes: List[str],
-        strategy_name: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        task_id: Optional[str] = None,
-        detailed_analytics: bool = False,
-    ) -> Dict[str, Any]:
-        """Start multi-symbol neural network training task using the training host service."""
-        logger.info(f"Starting multi-symbol training with host service: {symbols} on {timeframes}")
-        
-        # Load and validate strategy configuration
-        strategy_paths = [
-            Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
-            Path(f"strategies/{strategy_name}.yaml"),       # Local path
-        ]
-        
-        strategy_path = None
-        for path in strategy_paths:
-            if path.exists():
-                strategy_path = path
-                break
-        
-        if not strategy_path:
-            raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
-        
-        # Load strategy config
-        with open(strategy_path, 'r') as f:
-            strategy_config = yaml.safe_load(f)
-        
-        # Apply analytics settings if requested
-        if detailed_analytics:
-            strategy_config = self._apply_analytics_settings(strategy_config)
-        
-        # Validate the strategy configuration
-        _validate_strategy_config(strategy_config, strategy_name)
-        
-        # Extract training configuration
-        training_config = strategy_config.get("training", {})
-        
-        # Create operation for progress tracking
-        operation_id = task_id or str(uuid.uuid4())
-        
-        symbols_str = "_".join(symbols)  # Combined symbols for metadata
-        await self.operations_service.create_operation(
-            operation_id=operation_id,
-            operation_type=OperationType.TRAINING,
-            metadata=OperationMetadata(
-                symbol=symbols_str,
-                timeframes=timeframes,
-                strategy_name=strategy_name,
-                start_date=start_date,
-                end_date=end_date,
-                parameters={
-                    "symbols": symbols,
-                    "multi_symbol": True,
-                }
-            ),
-        )
-        
-        # Initialize progress
-        await self.operations_service.update_progress(
-            operation_id,
-            OperationProgress(
-                percentage=0.0, current_step="Initializing multi-symbol training host service"
-            ),
-        )
-        
-        # Get training host client
-        training_host_settings = get_training_host_settings()
-        host_client = get_training_host_client(training_host_settings.base_url)
-        
+    async def cancel_training_session(self, session_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """Cancel a training session via TrainingManager."""
         try:
-            # Check if host service is available
-            if not await host_client.is_available():
-                raise TrainingHostServiceError("Training host service is not available")
-            
-            # Prepare configuration for host service (multi-symbol)
-            host_config = {
-                "strategy_config": strategy_config,
-                "symbols": symbols,  # Multiple symbols instead of single symbol
-                "timeframes": timeframes,
-                "start_date": start_date,
-                "end_date": end_date,
-                "epochs": training_config.get("epochs", 100),
-                "validation_split": training_config.get("validation_split", 0.2),
-                "batch_size": training_config.get("batch_size", 32),
-                "learning_rate": training_config.get("learning_rate", 0.001),
-                "early_stopping": training_config.get("early_stopping", True),
-                "enable_gpu": True,
-                "mixed_precision": True,
-                "model_type": strategy_config.get("model", {}).get("type", "mlp"),
-                "multi_symbol": True,  # Flag for multi-symbol training
-            }
-            
-            # Update progress
-            await self.operations_service.update_progress(
-                operation_id,
-                OperationProgress(
-                    percentage=10.0, current_step=f"Starting multi-symbol training session on host service ({len(symbols)} symbols)"
-                ),
-            )
-            
-            # Start training session on host service
-            session_id = await host_client.start_training_session(host_config)
-            logger.info(f"Started multi-symbol training session {session_id} on host service")
-            
-            # Start background task to monitor progress
-            monitoring_task = asyncio.create_task(
-                self._monitor_host_service_training(
-                    operation_id, session_id, host_client, training_host_settings
-                )
-            )
-            logger.info(f"Started monitoring task for operation {operation_id}, session {session_id}")
-            
-            return {
-                "success": True,
-                "task_id": operation_id,
-                "status": "started",
-                "message": f"Multi-symbol training started successfully on host service (session: {session_id})",
-                "session_id": session_id,
-                "symbols": symbols,
-                "timeframes": timeframes,
-                "strategy_name": strategy_name,
-                "use_host_service": True,
-                "multi_symbol": True
-            }
-            
+            logger.info(f"Cancelling training session {session_id} (reason: {reason})")
+            result = await self.training_manager.stop_training(session_id)
+            logger.info(f"Training session {session_id} cancelled successfully")
+            return result
         except Exception as e:
-            # Update operation with error
-            await self.operations_service.update_progress(
-                operation_id,
-                OperationProgress(
-                    percentage=0.0, 
-                    current_step=f"Host service error: {str(e)}",
-                    error=str(e)
-                ),
-            )
-            raise TrainingHostServiceError(f"Training host service failed: {str(e)}")
-    
-    async def _start_multi_symbol_training_local(
-        self,
-        symbols: List[str],
-        timeframes: List[str],
-        strategy_name: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        task_id: Optional[str] = None,
-        detailed_analytics: bool = False,
-    ) -> Dict[str, Any]:
-        """Start multi-symbol neural network training task using local Docker training."""
-        # Validate strategy file exists - check both Docker and local paths
-        strategy_paths = [
-            Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
-            Path(f"strategies/{strategy_name}.yaml"),       # Local path
-        ]
-        
-        strategy_path = None
-        for path in strategy_paths:
-            if path.exists():
-                strategy_path = path
-                break
-        
-        if not strategy_path:
-            raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
-        
-        # Load strategy config to get training parameters
-        with open(strategy_path, 'r') as f:
-            strategy_config = yaml.safe_load(f)
-        
-        # Validate strategy configuration before training
-        validation_issues = _validate_strategy_config(strategy_config, strategy_name)
-        error_issues = [issue for issue in validation_issues if issue.severity == "error"]
-        
-        if error_issues:
-            # Format validation errors into clear message
-            error_messages = []
-            for issue in error_issues:
-                error_messages.append(f"{issue.category}: {issue.message}")
-            
-            validation_error = "Strategy validation failed:\n" + "\n".join(error_messages)
-            raise ValidationError(validation_error)
-        
-        training_config = strategy_config.get("model", {}).get("training", {})
-        
-        # Create operation metadata for multi-symbol training
-        symbols_str = "_".join(symbols)  # Combined symbols for metadata
-        metadata = OperationMetadata(
-            symbol=symbols_str,  # Use combined symbols string
-            timeframe=timeframes[0] if timeframes else "1h",  # Use first timeframe for metadata compatibility
-            start_date=datetime.fromisoformat(start_date) if start_date else None,
-            end_date=datetime.fromisoformat(end_date) if end_date else None,
-            parameters={
-                "strategy_name": strategy_name,
-                "strategy_path": str(strategy_path),
-                "training_type": "multi_symbol_" + strategy_config.get("model", {}).get("type", "mlp"),
-                "epochs": training_config.get("epochs", 100),
-                "symbols": symbols,  # Store all symbols in parameters
-                "timeframes": timeframes,  # Store all timeframes in parameters
-                "multi_symbol": True,  # Mark as multi-symbol training
-            },
-        )
-
-        # Create operation using operations service
-        operation = await self.operations_service.create_operation(
-            operation_type=OperationType.TRAINING, metadata=metadata
-        )
-        operation_id = operation.operation_id
-
-        # Start multi-symbol training in background
-        task = asyncio.create_task(
-            self._run_multi_symbol_training_async(
-                operation_id,
-                symbols,
-                timeframes,
-                strategy_name,
-                start_date,
-                end_date,
-                detailed_analytics,
-            )
-        )
-
-        # Register task with operations service for cancellation support
-        await self.operations_service.start_operation(operation_id, task)
-
-        return {
-            "success": True,
-            "task_id": operation_id,
-            "status": "training_started",
-            "message": f"Multi-symbol neural network training started for {symbols} using {strategy_name} strategy",
-            "symbols": symbols,
-            "timeframes": timeframes,
-            "strategy_name": strategy_name,
-            "estimated_duration_minutes": 45,  # Longer for multi-symbol
-        }
+            logger.error(f"Failed to cancel training session {session_id}: {str(e)}")
+            raise
 
     async def get_model_performance(self, task_id: str) -> Dict[str, Any]:
         """Get detailed performance metrics for completed training."""
@@ -1467,159 +1152,17 @@ class TrainingService(BaseService):
                 f"Multi-symbol training operation {operation_id} failed: {str(e)}", exc_info=True
             )
             await self.operations_service.fail_operation(operation_id, str(e))
-    
-    async def _monitor_host_service_training(
-        self,
-        operation_id: str,
-        session_id: str,
-        host_client,
-        training_host_settings: Dict[str, Any]
-    ):
-        """
-        Monitor training progress on the host service and update operations framework.
-        
-        This method polls the training host service status endpoint and converts
-        the response to operations framework format for CLI consumption.
-        """
-        logger.info(f"Starting host service monitoring for operation {operation_id}, session {session_id}")
-        
-        try:
-            last_percentage = 0.0
-            
-            while True:
-                try:
-                    # Poll host service status
-                    status_data = await host_client.get_training_status(session_id)
-                    
-                    host_status = status_data.get("status", "unknown")
-                    host_progress = status_data.get("progress", {})
-                    host_metrics = status_data.get("metrics", {})
-                    
-                    logger.info(f"[MONITOR] Session {session_id}: status={host_status}, progress={host_progress}, metrics={host_metrics}")
-                    
-                    # Convert host service progress to operations framework format
-                    if host_status == "running":
-                        # Extract progress information
-                        current_epoch = host_progress.get("epoch", 0)
-                        total_epochs = host_progress.get("total_epochs", 100)
-                        current_batch = host_progress.get("batch", 0)
-                        total_batches = host_progress.get("total_batches", 0)
-                        
-                        # Calculate percentage (20% to 90% range for training phase)
-                        if total_epochs > 0:
-                            epoch_progress = (current_epoch / total_epochs)
-                            if total_batches > 0 and current_batch > 0:
-                                # Add batch-level granularity within the epoch
-                                batch_progress = (current_batch / total_batches) / total_epochs
-                                epoch_progress += batch_progress
-                            
-                            percentage = 20.0 + (epoch_progress * 70.0)  # 20% to 90%
-                        else:
-                            percentage = host_progress.get("progress_percent", 0.0)
-                        
-                        # Ensure percentage doesn't go backwards or exceed limits
-                        percentage = max(percentage, last_percentage)
-                        percentage = min(percentage, 90.0)
-                        
-                        # Format current step with epoch and batch info
-                        current_step = f"Epoch: {current_epoch}, Batch: {current_batch}"
-                        if total_epochs > 0:
-                            current_step += f"/{total_epochs}"
-                        if total_batches > 0:
-                            current_step += f", Batches: {current_batch}/{total_batches}"
-                        
-                        # Add metrics if available
-                        if host_metrics:
-                            accuracy = host_metrics.get("accuracy", 0)
-                            loss = host_metrics.get("loss", 0)
-                            if accuracy > 0:
-                                current_step += f" (Acc: {accuracy:.3f})"
-                            if loss > 0:
-                                current_step += f" (Loss: {loss:.4f})"
-                        
-                        # Update operations framework
-                        logger.info(f"[MONITOR] Updating operation {operation_id}: {percentage:.1f}% - {current_step}")
-                        await self.operations_service.update_progress(
-                            operation_id,
-                            OperationProgress(
-                                percentage=percentage,
-                                current_step=current_step,
-                                items_processed=current_epoch,
-                                items_total=total_epochs,
-                            ),
-                        )
-                        
-                        last_percentage = percentage
-                        
-                    elif host_status == "completed":
-                        # Training completed successfully
-                        logger.info(f"Host service training completed for session {session_id}")
-                        
-                        # Final progress update
-                        await self.operations_service.update_progress(
-                            operation_id,
-                            OperationProgress(
-                                percentage=95.0,
-                                current_step="Processing training results from host service",
-                            ),
-                        )
-                        
-                        # Extract results and complete operation
-                        results_summary = {
-                            "session_id": session_id,
-                            "host_metrics": host_metrics,
-                            "training_completed": True,
-                            "host_service_used": True
-                        }
-                        
-                        await self.operations_service.complete_operation(
-                            operation_id, result_summary=results_summary
-                        )
-                        break
-                        
-                    elif host_status == "failed":
-                        # Training failed on host service
-                        error_msg = status_data.get("error", "Training failed on host service")
-                        logger.error(f"Host service training failed for session {session_id}: {error_msg}")
-                        
-                        await self.operations_service.fail_operation(operation_id, error_msg)
-                        break
-                        
-                    elif host_status == "stopped":
-                        # Training was stopped
-                        logger.info(f"Host service training stopped for session {session_id}")
-                        
-                        await self.operations_service.fail_operation(
-                            operation_id, "Training stopped on host service"
-                        )
-                        break
-                        
-                    else:
-                        # Unknown status, continue monitoring but log warning
-                        logger.warning(f"Unknown host service status: {host_status}")
-                    
-                    # Wait before next poll
-                    await asyncio.sleep(3)
-                    
-                except asyncio.CancelledError:
-                    logger.info(f"[MONITOR] Training monitoring cancelled for operation {operation_id}")
-                    # Don't update operations service on cancellation, let the CLI handle it
-                    break
-                except Exception as e:
-                    logger.error(f"[MONITOR] Error polling host service status: {str(e)}")
-                    
-                    # If we can't communicate with host service, fail the operation
-                    if "Connection" in str(e) or "timeout" in str(e).lower():
-                        await self.operations_service.fail_operation(
-                            operation_id, f"Lost connection to training host service: {str(e)}"
-                        )
-                        break
-                    
-                    # For other errors, wait and retry
-                    await asyncio.sleep(5)
-                    
-        except Exception as e:
-            logger.error(f"Host service monitoring failed for operation {operation_id}: {str(e)}")
-            await self.operations_service.fail_operation(
-                operation_id, f"Host service monitoring error: {str(e)}"
-            )
+
+
+# Global training service instance
+_training_service: Optional[TrainingService] = None
+
+
+def get_training_service() -> TrainingService:
+    """Get the global training service instance."""
+    global _training_service
+    if _training_service is None:
+        from ktrdr.api.services.operations_service import get_operations_service
+        operations_service = get_operations_service()
+        _training_service = TrainingService(operations_service=operations_service)
+    return _training_service

@@ -23,4 +23,4 @@ mkdir -p "$DIR/logs"
 
 # Run the service with logging
 cd "$DIR"
-python main.py 2>&1 | tee "logs/training-host-service.log"
+uv run python main.py 2>&1 | tee "logs/training-host-service.log"

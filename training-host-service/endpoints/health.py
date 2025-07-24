@@ -21,10 +21,24 @@ router = APIRouter(prefix="/health", tags=["health"])
 # Global GPU manager instance
 _gpu_manager: Optional[GPUMemoryManager] = None
 
+def is_gpu_available() -> tuple[bool, str]:
+    """Check for GPU availability (CUDA or MPS)."""
+    cuda_available = torch.cuda.is_available()
+    mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+    
+    if cuda_available:
+        return True, "CUDA"
+    elif mps_available:
+        return True, "MPS"
+    else:
+        return False, "None"
+
 async def get_gpu_manager() -> Optional[GPUMemoryManager]:
     """Get or create GPU memory manager instance."""
     global _gpu_manager
-    if _gpu_manager is None and torch.cuda.is_available():
+    gpu_available, gpu_type = is_gpu_available()
+    
+    if _gpu_manager is None and gpu_available:
         try:
             config = GPUMemoryConfig()
             _gpu_manager = GPUMemoryManager(config)
@@ -72,26 +86,59 @@ async def basic_health_check():
     try:
         current_time = datetime.utcnow()
         
-        # Check GPU availability
-        gpu_available = torch.cuda.is_available()
-        gpu_device_count = torch.cuda.device_count() if gpu_available else 0
+        # Check GPU availability (CUDA or MPS)
+        gpu_available, gpu_type = is_gpu_available()
+        
+        if gpu_type == "CUDA":
+            gpu_device_count = torch.cuda.device_count()
+        elif gpu_type == "MPS":
+            gpu_device_count = 1  # MPS represents one unified GPU
+        else:
+            gpu_device_count = 0
         
         gpu_status = {
             "available": gpu_available,
-            "device_count": gpu_device_count
+            "device_count": gpu_device_count,
+            "gpu_type": gpu_type
         }
         
         if gpu_available:
             try:
-                # Get basic GPU memory info
-                device = torch.cuda.current_device()
-                total_memory = torch.cuda.get_device_properties(device).total_memory
-                allocated_memory = torch.cuda.memory_allocated(device)
+                if gpu_type == "CUDA":
+                    # Get CUDA GPU memory info
+                    device = torch.cuda.current_device()
+                    total_memory = torch.cuda.get_device_properties(device).total_memory
+                    allocated_memory = torch.cuda.memory_allocated(device)
+                    device_name = torch.cuda.get_device_name(device)
+                elif gpu_type == "MPS":
+                    # For MPS, we can't get exact memory stats the same way
+                    # Use system info as approximation
+                    import subprocess
+                    try:
+                        result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], 
+                                              capture_output=True, text=True, timeout=5)
+                        if 'Apple M' in result.stdout:
+                            device_name = "Apple Silicon GPU (MPS)"
+                            # MPS doesn't provide direct memory queries like CUDA
+                            total_memory = 0  # Will be filled by system memory sharing
+                            allocated_memory = 0
+                        else:
+                            device_name = "Unknown MPS Device"
+                            total_memory = 0
+                            allocated_memory = 0
+                    except:
+                        device_name = "Apple Silicon GPU (MPS)"
+                        total_memory = 0
+                        allocated_memory = 0
+                else:
+                    total_memory = 0
+                    allocated_memory = 0
+                    device_name = "Unknown"
                 
                 gpu_status.update({
-                    "total_memory_mb": total_memory / (1024**2),
-                    "allocated_memory_mb": allocated_memory / (1024**2),
-                    "device_name": torch.cuda.get_device_name(device)
+                    "total_memory_mb": total_memory / (1024**2) if total_memory > 0 else 0,
+                    "allocated_memory_mb": allocated_memory / (1024**2) if allocated_memory > 0 else 0,
+                    "device_name": device_name
                 })
             except Exception as e:
                 logger.warning(f"Error getting GPU memory info: {str(e)}")
@@ -133,17 +180,30 @@ async def detailed_health_check():
     try:
         current_time = datetime.utcnow()
         
-        # GPU information
-        gpu_available = torch.cuda.is_available()
-        gpu_device_count = torch.cuda.device_count() if gpu_available else 0
+        # GPU information (CUDA or MPS)
+        gpu_available, gpu_type = is_gpu_available()
+        
+        if gpu_type == "CUDA":
+            gpu_device_count = torch.cuda.device_count()
+        elif gpu_type == "MPS":
+            gpu_device_count = 1  # MPS represents one unified GPU
+        else:
+            gpu_device_count = 0
+            
         gpu_memory_total_mb = 0.0
         gpu_memory_allocated_mb = 0.0
         
         if gpu_available:
             try:
-                device = torch.cuda.current_device()
-                gpu_memory_total_mb = torch.cuda.get_device_properties(device).total_memory / (1024**2)
-                gpu_memory_allocated_mb = torch.cuda.memory_allocated(device) / (1024**2)
+                if gpu_type == "CUDA":
+                    device = torch.cuda.current_device()
+                    gpu_memory_total_mb = torch.cuda.get_device_properties(device).total_memory / (1024**2)
+                    gpu_memory_allocated_mb = torch.cuda.memory_allocated(device) / (1024**2)
+                elif gpu_type == "MPS":
+                    # MPS shares system memory, so we can't get exact GPU memory
+                    # This is a limitation of MPS vs CUDA
+                    gpu_memory_total_mb = 0.0  # MPS uses shared memory
+                    gpu_memory_allocated_mb = 0.0
             except Exception as e:
                 logger.warning(f"Error getting detailed GPU info: {str(e)}")
         

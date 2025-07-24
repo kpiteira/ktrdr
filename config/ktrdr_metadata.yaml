@@ -47,6 +47,17 @@ logging:
   level: "INFO"
   format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
   
+# Training Host Service Configuration (GPU Acceleration)
+training_host:
+  enabled: true  # Enable by default for GPU acceleration
+  base_url: "http://localhost:5002"
+  timeout: 30.0
+  health_check_interval: 10.0
+  max_retries: 3
+  retry_delay: 1.0
+  progress_poll_interval: 2.0
+  session_timeout: 3600.0
+
 # Examples for Documentation
 examples:
   symbols: ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]

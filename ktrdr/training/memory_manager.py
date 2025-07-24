@@ -134,19 +134,24 @@ class MemoryManager:
         """Background monitoring loop."""
         while self.monitoring_active:
             try:
-                snapshot = self.capture_snapshot()
-                self.snapshots.append(snapshot)
-                
-                # Check for memory warnings
-                self._check_memory_warnings(snapshot)
-                
-                # Automatic cleanup if enabled
-                if self.budget.enable_auto_cleanup:
-                    self._auto_cleanup(snapshot)
-                
-                # Keep only recent snapshots to prevent memory bloat
-                if len(self.snapshots) > 1000:
-                    self.snapshots = self.snapshots[-500:]  # Keep last 500
+                # Suppress warnings during monitoring to avoid tensor warnings
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    
+                    snapshot = self.capture_snapshot()
+                    self.snapshots.append(snapshot)
+                    
+                    # Check for memory warnings
+                    self._check_memory_warnings(snapshot)
+                    
+                    # Automatic cleanup if enabled
+                    if self.budget.enable_auto_cleanup:
+                        self._auto_cleanup(snapshot)
+                    
+                    # Keep only recent snapshots to prevent memory bloat
+                    if len(self.snapshots) > 1000:
+                        self.snapshots = self.snapshots[-500:]  # Keep last 500
                 
                 time.sleep(self.budget.monitoring_interval_seconds)
                 
@@ -186,16 +191,30 @@ class MemoryManager:
         # Python object counting
         python_objects = len(gc.get_objects())
         
-        # Tensor analysis
+        # Tensor analysis (with warning suppression)
         tensors_count = 0
         largest_tensor_mb = 0.0
         
-        for obj in gc.get_objects():
-            if torch.is_tensor(obj):
-                tensors_count += 1
-                if obj.element_size() > 0:
-                    tensor_mb = obj.numel() * obj.element_size() / (1024**2)
-                    largest_tensor_mb = max(largest_tensor_mb, tensor_mb)
+        try:
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                
+                for obj in gc.get_objects():
+                    try:
+                        if torch.is_tensor(obj):
+                            tensors_count += 1
+                            # Safely get tensor size without triggering warnings
+                            if hasattr(obj, 'element_size') and hasattr(obj, 'numel'):
+                                if obj.element_size() > 0 and obj.numel() > 0:
+                                    tensor_mb = obj.numel() * obj.element_size() / (1024**2)
+                                    largest_tensor_mb = max(largest_tensor_mb, tensor_mb)
+                    except (RuntimeError, AttributeError):
+                        # Skip tensors that can't be safely inspected
+                        continue
+        except Exception:
+            # Fallback: skip tensor analysis if it causes issues
+            pass
         
         return MemorySnapshot(
             timestamp=timestamp,
@@ -291,23 +310,36 @@ class MemoryManager:
         tensors_before = 0
         tensors_after = 0
         
-        # Count tensors before cleanup
-        for obj in gc.get_objects():
-            if torch.is_tensor(obj):
-                tensors_before += 1
-        
-        # Force garbage collection multiple times for tensor cleanup
-        for _ in range(3):
-            gc.collect()
-        
-        # Count tensors after cleanup
-        for obj in gc.get_objects():
-            if torch.is_tensor(obj):
-                tensors_after += 1
-        
-        cleaned = tensors_before - tensors_after
-        if cleaned > 0:
-            logger.debug(f"Cleaned up {cleaned} unreferenced tensors")
+        try:
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                
+                # Count tensors before cleanup
+                for obj in gc.get_objects():
+                    try:
+                        if torch.is_tensor(obj):
+                            tensors_before += 1
+                    except (RuntimeError, AttributeError):
+                        continue
+                
+                # Force garbage collection multiple times for tensor cleanup
+                for _ in range(3):
+                    gc.collect()
+                
+                # Count tensors after cleanup
+                for obj in gc.get_objects():
+                    try:
+                        if torch.is_tensor(obj):
+                            tensors_after += 1
+                    except (RuntimeError, AttributeError):
+                        continue
+                
+                cleaned = tensors_before - tensors_after
+                if cleaned > 0:
+                    logger.debug(f"Cleaned up {cleaned} unreferenced tensors")
+        except Exception as e:
+            logger.debug(f"Tensor cleanup failed: {e}, skipping tensor counting")
     
     def get_memory_summary(self) -> Dict[str, Any]:
         """Get current memory usage summary."""

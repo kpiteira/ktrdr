@@ -54,6 +54,10 @@ services:
       # Set to true to enable host service mode, false for direct connection
       - USE_IB_HOST_SERVICE=${USE_IB_HOST_SERVICE:-false}
       - IB_HOST_SERVICE_URL=http://host.docker.internal:5001
+      # Training Host Service configuration (GPU Acceleration)
+      # Set to true to enable GPU training host service, false for Docker-only training
+      - USE_TRAINING_HOST_SERVICE=${USE_TRAINING_HOST_SERVICE:-false}
+      - TRAINING_HOST_SERVICE_URL=http://host.docker.internal:5002
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
