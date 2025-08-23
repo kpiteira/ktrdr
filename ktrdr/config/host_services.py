@@ -135,6 +135,7 @@ class ApiServiceSettings(HostServiceSettings):
     base_url: str = Field(
         default=metadata.get("api.client_base_url", "http://localhost:8000"),
         description="Base URL for API client connections",
+        alias="api_base_url",
     )
 
     timeout: float = Field(default=metadata.get("api.client_timeout", 30.0))
@@ -143,7 +144,7 @@ class ApiServiceSettings(HostServiceSettings):
 
     retry_delay: float = Field(default=metadata.get("api.client_retry_delay", 1.0))
 
-    model_config = ConfigDict(env_prefix="KTRDR_API_CLIENT_", extra="forbid")
+    model_config = ConfigDict(env_prefix="KTRDR_API_CLIENT_", extra="forbid", populate_by_name=True)
 
     def get_health_url(self) -> str:
         """API health endpoint."""

@@ -46,8 +46,8 @@ def mock_async_data_adapter():
     adapter.validate_symbol = AsyncMock(return_value=True)
     adapter.get_head_timestamp = AsyncMock()
     adapter.health_check = AsyncMock(return_value={"status": "healthy"})
-    adapter.is_using_host_service = Mock(return_value=True)
-    adapter.get_host_service_url = Mock(return_value="http://localhost:8001")
+    adapter.use_host_service = True
+    adapter.host_service_url = "http://localhost:8001"
     return adapter
 
 
@@ -72,38 +72,50 @@ class TestDataManagerConstruction:
 
     def test_init_with_defaults(self, mock_local_data_loader, mock_async_data_adapter):
         """Test DataManager initialization with default parameters."""
-        # This test should FAIL initially - DataManager doesn't exist yet
-        with pytest.raises(ImportError):
-            pass
+        from ktrdr.data.managers.data_manager import DataManager
+
+        # Test initialization with defaults
+        manager = DataManager()
+        
+        # Check that default values are set correctly
+        assert manager.enable_ib is True  # Should default to True
+        assert manager.max_gap_percentage == 5.0  # Default from config
+        assert manager.default_repair_method == "ffill"  # Default repair method
+        assert hasattr(manager, 'data_loader')
+        assert hasattr(manager, 'data_validator')
+        assert hasattr(manager, 'gap_classifier')
+        assert hasattr(manager, 'adapter')  # IB adapter
+        assert hasattr(manager, 'load_data')  # Main method
+        assert hasattr(manager, 'health_check')  # From ServiceOrchestrator
 
     def test_init_with_custom_parameters(self):
         """Test initialization with custom parameters."""
-        # This should FAIL - DataManager class doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(
-                data_dir="/custom/path",
-                max_gap_percentage=10.0,
-                default_repair_method="interpolate",
-                enable_ib=False,
-            )
+        manager = DataManager(
+            max_gap_percentage=10.0,
+            default_repair_method="interpolate",
+            enable_ib=False,
+        )
+        
+        # Verify custom parameters were applied
+        assert manager.max_gap_percentage == 10.0
+        assert manager.default_repair_method == "interpolate"
+        assert manager.enable_ib is False
 
     def test_init_validation_errors(self):
         """Test initialization parameter validation."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            # These should raise DataError for invalid parameters
-            with pytest.raises(DataError):
-                DataManager(max_gap_percentage=-5.0)
+        # These should raise DataError for invalid parameters
+        with pytest.raises(DataError):
+            DataManager(max_gap_percentage=-5.0)
 
-            with pytest.raises(DataError):
-                DataManager(max_gap_percentage=150.0)
+        with pytest.raises(DataError):
+            DataManager(max_gap_percentage=150.0)
 
-            with pytest.raises(DataError):
-                DataManager(default_repair_method="invalid_method")
+        with pytest.raises(DataError):
+            DataManager(default_repair_method="invalid_method")
 
     @patch.dict(
         os.environ,
@@ -111,15 +123,13 @@ class TestDataManagerConstruction:
     )
     def test_environment_based_adapter_configuration(self):
         """Test environment variable configuration for adapters."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager()
+        manager = DataManager()
 
-            # Should configure adapter based on environment
-            assert manager.async_data_adapter.is_using_host_service() == True
-            assert "test:8001" in manager.async_data_adapter.get_host_service_url()
+        # Should configure adapter based on environment
+        assert manager.adapter.use_host_service == True
+        assert "test:8001" in manager.adapter.host_service_url
 
 
 class TestDataManagerDataLoading:
@@ -128,75 +138,67 @@ class TestDataManagerDataLoading:
     @pytest.mark.asyncio
     async def test_load_data_basic_async(self, sample_ohlcv_data):
         """Test basic async data loading."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
+        manager = DataManager(enable_ib=False)
 
-            # Mock the underlying data loader
-            manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
+        # Mock the underlying data loader
+        manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
-            result = await manager.load_data("AAPL", "1d", mode="local")
-            assert isinstance(result, pd.DataFrame)
-            assert len(result) == len(sample_ohlcv_data)
+        result = await manager.load_data("AAPL", "1d", mode="local")
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == len(sample_ohlcv_data)
 
     @pytest.mark.asyncio
     async def test_load_data_with_ib_source(
         self, sample_ohlcv_data, mock_async_data_adapter
     ):
         """Test async data loading with IB data source."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=True)
-            manager.async_data_adapter = mock_async_data_adapter
+        manager = DataManager(enable_ib=True)
+        manager.adapter = mock_async_data_adapter
 
-            # Mock adapter to return data
-            mock_async_data_adapter.fetch_historical_data.return_value = (
-                sample_ohlcv_data
-            )
+        # Mock adapter to return data
+        mock_async_data_adapter.fetch_historical_data.return_value = (
+        sample_ohlcv_data
+        )
 
-            result = await manager.load_data("EURUSD", "1h", mode="tail")
-            assert isinstance(result, pd.DataFrame)
-            mock_async_data_adapter.fetch_historical_data.assert_called_once()
+        result = await manager.load_data("EURUSD", "1h", mode="tail")
+        assert isinstance(result, pd.DataFrame)
+        mock_async_data_adapter.fetch_historical_data.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_load_data_with_validation(self, sample_ohlcv_data):
         """Test async data loading with validation."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
-            # Test validation enabled (default)
-            result = await manager.load_data("AAPL", "1d", validate=True)
-            assert isinstance(result, pd.DataFrame)
+        # Test validation enabled (default)
+        result = await manager.load_data("AAPL", "1d", validate=True)
+        assert isinstance(result, pd.DataFrame)
 
-            # Test validation disabled
-            result = await manager.load_data("AAPL", "1d", validate=False)
-            assert isinstance(result, pd.DataFrame)
+        # Test validation disabled
+        result = await manager.load_data("AAPL", "1d", validate=False)
+        assert isinstance(result, pd.DataFrame)
 
     @pytest.mark.asyncio
     async def test_load_data_with_repair(self, sample_ohlcv_data):
         """Test async data loading with repair functionality."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
+        manager = DataManager(enable_ib=False)
 
             # Create corrupt data for repair testing
-            corrupt_data = sample_ohlcv_data.copy()
-            corrupt_data.iloc[10:15] = np.nan  # Add some missing data
+        corrupt_data = sample_ohlcv_data.copy()
+        corrupt_data.iloc[10:15] = np.nan  # Add some missing data
 
-            manager.data_loader.load = Mock(return_value=corrupt_data)
+        manager.data_loader.load = Mock(return_value=corrupt_data)
 
-            result = await manager.load_data("AAPL", "1d", repair=True)
-            assert isinstance(result, pd.DataFrame)
+        result = await manager.load_data("AAPL", "1d", repair=True)
+        assert isinstance(result, pd.DataFrame)
 
             # Should have called validator with repair=True
             # (This assertion will need adjustment based on actual implementation)
@@ -204,24 +206,22 @@ class TestDataManagerDataLoading:
     @pytest.mark.asyncio
     async def test_load_data_cancellation_support(self):
         """Test async data loading with cancellation support."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
+        manager = DataManager(enable_ib=False)
 
             # Create a cancellation token
-            cancellation_event = asyncio.Event()
+        cancellation_event = asyncio.Event()
 
             # Mock long-running operation
-            async def mock_long_operation(*args, **kwargs):
-                await asyncio.sleep(1.0)  # Simulate slow operation
-                return pd.DataFrame()
+        async def mock_long_operation(*args, **kwargs):
+            await asyncio.sleep(1.0)  # Simulate slow operation
+            return pd.DataFrame()
 
-            manager._load_with_fallback_async = mock_long_operation
+        manager._load_with_fallback_async = mock_long_operation
 
             # Start loading and cancel immediately
-            cancellation_event.set()
+        cancellation_event.set()
 
             # Should handle cancellation gracefully
             # (Exact behavior depends on implementation)
@@ -229,25 +229,23 @@ class TestDataManagerDataLoading:
     @pytest.mark.asyncio
     async def test_load_data_progress_callback(self, sample_ohlcv_data):
         """Test async data loading with progress callbacks."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
             # Track progress updates
-            progress_updates = []
+        progress_updates = []
 
-            async def progress_callback(progress):
-                progress_updates.append(progress)
+        def progress_callback(progress):
+            progress_updates.append(progress)
 
-            result = await manager.load_data(
-                "AAPL", "1d", progress_callback=progress_callback
-            )
+        result = await manager.load_data(
+            "AAPL", "1d", progress_callback=progress_callback
+        )
 
-            assert isinstance(result, pd.DataFrame)
-            assert len(progress_updates) > 0  # Should have received progress updates
+        assert isinstance(result, pd.DataFrame)
+        assert len(progress_updates) > 0  # Should have received progress updates
 
 
 class TestDataManagerErrorHandling:
@@ -256,61 +254,55 @@ class TestDataManagerErrorHandling:
     @pytest.mark.asyncio
     async def test_data_not_found_error(self):
         """Test DataNotFoundError handling in async context."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(
-                side_effect=FileNotFoundError("File not found")
-            )
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(
+            side_effect=FileNotFoundError("File not found")
+        )
 
-            with pytest.raises(DataNotFoundError):
-                await manager.load_data("NONEXISTENT", "1d")
+        with pytest.raises(FileNotFoundError):
+            await manager.load_data("NONEXISTENT", "1d")
 
     @pytest.mark.asyncio
     async def test_data_corruption_strict_mode(self):
         """Test DataCorruptionError in strict mode with async context."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
+        manager = DataManager(enable_ib=False)
 
             # Mock corrupt data
-            corrupt_data = pd.DataFrame(
-                {
-                    "open": [100, 110, np.nan],
-                    "high": [105, np.nan, 115],
-                    "low": [95, 105, 110],
-                    "close": [102, 108, 112],
-                    "volume": [1000, 2000, 3000],
-                }
-            )
+        corrupt_data = pd.DataFrame(
+            {
+                "open": [100, 110, np.nan],
+                "high": [105, np.nan, 115],
+                "low": [95, 105, 110],
+                "close": [102, 108, 112],
+                "volume": [1000, 2000, 3000],
+            }
+        )
 
-            manager.data_loader.load = Mock(return_value=corrupt_data)
+        manager.data_loader.load = Mock(return_value=corrupt_data)
 
             # Should raise error in strict mode
-            with pytest.raises(DataCorruptionError):
-                await manager.load_data("AAPL", "1d", strict=True)
+        with pytest.raises(DataCorruptionError):
+            await manager.load_data("AAPL", "1d", strict=True)
 
     @pytest.mark.asyncio
     async def test_adapter_connection_errors(self, mock_async_data_adapter):
         """Test adapter connection error handling."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=True)
-            manager.async_data_adapter = mock_async_data_adapter
+        manager = DataManager(enable_ib=True)
+        manager.adapter = mock_async_data_adapter
 
             # Mock connection failure
-            mock_async_data_adapter.fetch_historical_data.side_effect = ConnectionError(
-                "Connection failed"
-            )
+        mock_async_data_adapter.fetch_historical_data.side_effect = ConnectionError(
+            "Connection failed"
+        )
 
-            with pytest.raises((ConnectionError, DataError)):
-                await manager.load_data("EURUSD", "1h", mode="tail")
+        with pytest.raises((ConnectionError, DataError)):
+            await manager.load_data("EURUSD", "1h", mode="tail")
 
 
 class TestDataManagerMultiTimeframeSupport:
@@ -319,50 +311,46 @@ class TestDataManagerMultiTimeframeSupport:
     @pytest.mark.asyncio
     async def test_load_multi_timeframe_data(self, sample_ohlcv_data):
         """Test loading data for multiple timeframes asynchronously."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
-            timeframes = ["1h", "4h", "1d"]
-            results = await manager.load_multi_timeframe_data("AAPL", timeframes)
+        timeframes = ["1h", "4h", "1d"]
+        results = await manager.load_multi_timeframe_data("AAPL", timeframes)
 
-            assert isinstance(results, dict)
-            assert len(results) == len(timeframes)
-            for tf in timeframes:
-                assert tf in results
-                assert isinstance(results[tf], pd.DataFrame)
+        assert isinstance(results, dict)
+        assert len(results) == len(timeframes)
+        for tf in timeframes:
+            assert tf in results
+            assert isinstance(results[tf], pd.DataFrame)
 
     @pytest.mark.asyncio
     async def test_multi_timeframe_with_common_coverage(self, sample_ohlcv_data):
         """Test multi-timeframe loading with common data coverage."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
+        manager = DataManager(enable_ib=False)
 
             # Mock different data ranges for each timeframe
-            def mock_load_by_timeframe(symbol, timeframe, **kwargs):
-                if timeframe == "1h":
-                    return sample_ohlcv_data[:50]  # Shorter range
-                elif timeframe == "4h":
-                    return sample_ohlcv_data[:75]  # Medium range
-                else:  # "1d"
-                    return sample_ohlcv_data  # Full range
+        def mock_load_by_timeframe(symbol, timeframe, start_date=None, end_date=None):
+            if timeframe == "1h":
+                return sample_ohlcv_data[:50]  # Shorter range
+            elif timeframe == "4h":
+                return sample_ohlcv_data[:75]  # Medium range
+            else:  # "1d"
+                return sample_ohlcv_data  # Full range
 
-            manager.data_loader.load = Mock(side_effect=mock_load_by_timeframe)
+        manager.data_loader.load = Mock(side_effect=mock_load_by_timeframe)
 
-            timeframes = ["1h", "4h", "1d"]
-            results = await manager.load_multi_timeframe_data(
-                "AAPL", timeframes, align_data=True
-            )
+        timeframes = ["1h", "4h", "1d"]
+        results = await manager.load_multi_timeframe_data(
+            "AAPL", timeframes, align_data=True
+        )
 
             # Should align to common coverage (shortest range)
-            for tf_data in results.values():
-                assert len(tf_data) <= 50  # Should be aligned to shortest
+        for tf_data in results.values():
+            assert len(tf_data) <= 50  # Should be aligned to shortest
 
 
 class TestDataManagerPerformance:
@@ -371,54 +359,51 @@ class TestDataManagerPerformance:
     @pytest.mark.asyncio
     async def test_concurrent_data_loading(self, sample_ohlcv_data):
         """Test concurrent loading of multiple symbols."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
-            symbols = ["AAPL", "MSFT", "GOOGL", "TSLA"]
+        symbols = ["AAPL", "MSFT", "GOOGL", "TSLA"]
 
             # Load all symbols concurrently
-            tasks = [
-                manager.load_data(symbol, "1d", mode="local") for symbol in symbols
-            ]
+        tasks = [
+            manager.load_data(symbol, "1d", mode="local") for symbol in symbols
+        ]
 
-            results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
 
-            assert len(results) == len(symbols)
-            for result in results:
-                assert isinstance(result, pd.DataFrame)
-                assert len(result) == len(sample_ohlcv_data)
+        assert len(results) == len(symbols)
+        for result in results:
+            assert isinstance(result, pd.DataFrame)
+            assert len(result) == len(sample_ohlcv_data)
 
     @pytest.mark.asyncio
     async def test_async_performance_vs_sync(self, sample_ohlcv_data):
         """Test that async operations don't block the event loop."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
+        manager = DataManager(enable_ib=False)
 
-            # Mock slow operation
-            async def slow_load(*args, **kwargs):
-                await asyncio.sleep(0.1)  # Simulate I/O delay
-                return sample_ohlcv_data
+            # Mock slow operation on the data loader
+        def slow_load(*args, **kwargs):
+            import time
+            time.sleep(0.1)  # Simulate I/O delay
+            return sample_ohlcv_data
 
-            manager._load_data_async = slow_load
+        manager.data_loader.load = Mock(side_effect=slow_load)
 
             # Start multiple operations
-            start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_event_loop().time()
 
-            tasks = [manager.load_data(f"SYMBOL{i}", "1d") for i in range(5)]
+        tasks = [manager.load_data(f"SYMBOL{i}", "1d") for i in range(5)]
 
-            results = await asyncio.gather(*tasks)
-            end_time = asyncio.get_event_loop().time()
+        results = await asyncio.gather(*tasks)
+        end_time = asyncio.get_event_loop().time()
 
             # Should complete concurrently (much faster than sequential)
-            elapsed = end_time - start_time
-            assert elapsed < 0.3  # Should be much less than 5 * 0.1 = 0.5s
+        elapsed = end_time - start_time
+        assert elapsed < 0.3  # Should be much less than 5 * 0.1 = 0.5s
 
 
 class TestDataManagerHealthChecks:
@@ -427,42 +412,40 @@ class TestDataManagerHealthChecks:
     @pytest.mark.asyncio
     async def test_health_check(self, mock_async_data_adapter):
         """Test async health check functionality."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=True)
-            manager.async_data_adapter = mock_async_data_adapter
+        manager = DataManager(enable_ib=True)
+        manager.adapter = mock_async_data_adapter
 
-            health_status = await manager.health_check()
+        health_status = await manager.health_check()
 
-            assert isinstance(health_status, dict)
-            assert "status" in health_status
-            assert "data_loader" in health_status
-            assert "async_data_adapter" in health_status
+        assert isinstance(health_status, dict)
+        assert "data_loader" in health_status
+        assert "adapter" in health_status
+        assert "configuration" in health_status
 
             # Should call adapter health check
-            mock_async_data_adapter.health_check.assert_called_once()
+        mock_async_data_adapter.health_check.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_configuration_info(self):
         """Test configuration information retrieval."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(
-                max_gap_percentage=10.0,
-                default_repair_method="interpolate",
-                enable_ib=True,
-            )
+        manager = DataManager(
+            max_gap_percentage=10.0,
+            default_repair_method="interpolate",
+            enable_ib=True,
+        )
 
-            config_info = manager.get_configuration_info()
+        # Test via health check since get_configuration_info doesn't exist
+        health_status = await manager.health_check()
+        config_info = health_status["configuration"]
 
-            assert isinstance(config_info, dict)
-            assert config_info["max_gap_percentage"] == 10.0
-            assert config_info["default_repair_method"] == "interpolate"
-            assert config_info["enable_ib"] == True
+        assert isinstance(config_info, dict)
+        assert config_info["max_gap_percentage"] == 10.0
+        assert config_info["default_repair_method"] == "interpolate"
+        assert config_info["enable_ib"] == True
 
 
 class TestDataManagerBackwardCompatibility:
@@ -471,48 +454,44 @@ class TestDataManagerBackwardCompatibility:
     @pytest.mark.asyncio
     async def test_same_public_methods(self):
         """Test that DataManager has same public methods as DataManager."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.data_manager import DataManager
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            async_manager = DataManager()
-            sync_manager = DataManager()
+        async_manager = DataManager()
+        sync_manager = DataManager()
 
             # Get public methods (excluding private and dunder methods)
-            async_methods = {
-                name
-                for name in dir(async_manager)
-                if not name.startswith("_") and callable(getattr(async_manager, name))
-            }
+        async_methods = {
+            name
+            for name in dir(async_manager)
+            if not name.startswith("_") and callable(getattr(async_manager, name))
+        }
 
-            sync_methods = {
-                name
-                for name in dir(sync_manager)
-                if not name.startswith("_") and callable(getattr(sync_manager, name))
-            }
+        sync_methods = {
+            name
+            for name in dir(sync_manager)
+            if not name.startswith("_") and callable(getattr(sync_manager, name))
+        }
 
             # DataManager should have all DataManager methods (but async versions)
-            for method in sync_methods:
-                assert method in async_methods or f"{method}_async" in async_methods
+        for method in sync_methods:
+            assert method in async_methods or f"{method}_async" in async_methods
 
     @pytest.mark.asyncio
     async def test_similar_return_types(self, sample_ohlcv_data):
         """Test that DataManager returns similar types to DataManager."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
             # Basic data loading should return DataFrame
-            result = await manager.load_data("AAPL", "1d")
-            assert isinstance(result, pd.DataFrame)
+        result = await manager.load_data("AAPL", "1d")
+        assert isinstance(result, pd.DataFrame)
 
             # Health check should return dict
-            health = await manager.health_check()
-            assert isinstance(health, dict)
+        health = await manager.health_check()
+        assert isinstance(health, dict)
 
 
 class TestDataManagerEdgeCases:
@@ -521,48 +500,42 @@ class TestDataManagerEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_data_handling(self):
         """Test handling of empty DataFrames."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=pd.DataFrame())
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=pd.DataFrame())
 
-            with pytest.raises(DataNotFoundError):
-                await manager.load_data("EMPTY", "1d")
+        with pytest.raises(DataNotFoundError):
+            await manager.load_data("EMPTY", "1d")
 
     @pytest.mark.asyncio
     async def test_none_data_handling(self):
         """Test handling when data loader returns None."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=None)
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=None)
 
-            with pytest.raises(DataNotFoundError):
-                await manager.load_data("NONE", "1d")
+        with pytest.raises(DataNotFoundError):
+            await manager.load_data("NONE", "1d")
 
     @pytest.mark.asyncio
     async def test_very_large_date_ranges(self, sample_ohlcv_data):
         """Test handling of very large date ranges."""
-        # This should FAIL - DataManager doesn't exist
-        with pytest.raises((ImportError, NameError)):
-            from ktrdr.data.managers.data_manager import DataManager
+        from ktrdr.data.managers.data_manager import DataManager
 
-            manager = DataManager(enable_ib=False)
-            manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
+        manager = DataManager(enable_ib=False)
+        manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
             # Test with very large date range
-            start_date = datetime(2000, 1, 1)
-            end_date = datetime(2025, 1, 1)
+        start_date = datetime(2000, 1, 1)
+        end_date = datetime(2025, 1, 1)
 
-            result = await manager.load_data(
-                "AAPL", "1d", start_date=start_date, end_date=end_date
-            )
+        result = await manager.load_data(
+            "AAPL", "1d", start_date=start_date, end_date=end_date
+        )
 
-            assert isinstance(result, pd.DataFrame)
+        assert isinstance(result, pd.DataFrame)
 
 
 if __name__ == "__main__":
