@@ -158,7 +158,11 @@ def test_data_show_empty_data(runner, mock_api_client):
     """Test the data show command when data is empty but API call succeeds."""
     # Mock _make_request to return empty data (should be handled gracefully)
 
-    mock_api_client._make_request.return_value = {"dates": [], "ohlcv": [], "metadata": {}}
+    mock_api_client._make_request.return_value = {
+        "dates": [],
+        "ohlcv": [],
+        "metadata": {},
+    }
 
     result = runner.invoke(cli_app, ["data", "show", "AAPL"])
 
@@ -167,7 +171,7 @@ def test_data_show_empty_data(runner, mock_api_client):
     assert (
         "No cached data found" in result.stdout
         or "No data points available" in result.stdout
-        )
+    )
 
 
 def test_data_show_api_connection_error(runner):

@@ -67,15 +67,14 @@ class TestDataShowPerformanceBenchmarks:
         def run_command():
             with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
                 from unittest.mock import AsyncMock
+
                 mock_cli = AsyncMock()
                 mock_cli.__aenter__.return_value = mock_cli
                 mock_cli.__aexit__.return_value = None
                 mock_cli._make_request.return_value = mock_api_responses
                 mock_cli_class.return_value = mock_cli
 
-                result = runner.invoke(
-                    data_app, ["show", "AAPL", "--format", "json"]
-                )
+                result = runner.invoke(data_app, ["show", "AAPL", "--format", "json"])
                 assert result.exit_code == 0
 
         # Measure current performance
@@ -166,13 +165,17 @@ class TestModelsTrainPerformanceBenchmarks:
                     ["AAPL"],
                     ["1h"],
                 )
-                
+
                 with patch("ktrdr.cli.model_commands.AsyncCLIClient") as mock_cli_class:
                     from unittest.mock import AsyncMock
+
                     mock_cli = AsyncMock()
                     mock_cli.__aenter__.return_value = mock_cli
                     mock_cli.__aexit__.return_value = None
-                    mock_cli._make_request.return_value = {"task_id": "train_123", "status": "started"}
+                    mock_cli._make_request.return_value = {
+                        "task_id": "train_123",
+                        "status": "started",
+                    }
                     mock_cli_class.return_value = mock_cli
 
                     result = runner.invoke(

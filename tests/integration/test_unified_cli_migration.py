@@ -161,9 +161,7 @@ class TestAsyncCLIClientDataShowMigration:
             mock_cli = AsyncMock()
             mock_cli.__aenter__.return_value = mock_cli
             mock_cli.__aexit__.return_value = None
-            mock_cli._make_request.return_value = mock_api_responses[
-                "cached_data"
-            ]
+            mock_cli._make_request.return_value = mock_api_responses["cached_data"]
             mock_cli_class.return_value = mock_cli
 
             # Time the command execution
@@ -336,13 +334,16 @@ class TestAsyncCLIClientModelsTrainMigration:
                 ["AAPL"],
                 ["1h"],
             )
-            
+
             # Mock AsyncCLIClient
             with patch("ktrdr.cli.model_commands.AsyncCLIClient") as mock_cli_class:
                 mock_cli = AsyncMock()
                 mock_cli.__aenter__.return_value = mock_cli
                 mock_cli.__aexit__.return_value = None
-                mock_cli._make_request.return_value = {"task_id": "train_123", "status": "started"}
+                mock_cli._make_request.return_value = {
+                    "task_id": "train_123",
+                    "status": "started",
+                }
                 mock_cli_class.return_value = mock_cli
 
                 # Time the command execution (dry run)
