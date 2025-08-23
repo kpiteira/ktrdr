@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from ktrdr import get_logger
+from ktrdr.logging import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 
@@ -63,7 +63,7 @@ class MultiTimeframeIndicatorEngine:
     def get_supported_timeframes(self) -> list[str]:
         """
         Get list of supported timeframes.
-        
+
         Returns:
             List of supported timeframes
         """
@@ -204,7 +204,7 @@ class MultiTimeframeIndicatorEngine:
         }
 
     def compute_specific_indicator(
-        self, data: pd.DataFrame, timeframe: str, indicator_type: str, **kwargs
+        self, data: pd.DataFrame, timeframe: str, indicator_type: str, **kwargs: Any
     ) -> pd.DataFrame:
         """
         Compute a specific indicator for a timeframe with standardized naming.
@@ -297,8 +297,8 @@ class MultiTimeframeIndicatorEngine:
                     continue
 
                 # Align the data by timestamp (use latest available values)
-                primary_values = primary_data[primary_col].fillna(method="ffill")
-                secondary_values = secondary_data[secondary_col].fillna(method="ffill")
+                primary_values = primary_data[primary_col].ffill()
+                secondary_values = secondary_data[secondary_col].ffill()
 
                 # Perform the specified operation
                 if operation == "ratio":
@@ -332,7 +332,7 @@ class MultiTimeframeIndicatorEngine:
         Returns:
             Dictionary with validation results and recommendations
         """
-        validation_results = {
+        validation_results: dict[str, Any] = {
             "valid": True,
             "warnings": [],
             "errors": [],
@@ -401,7 +401,7 @@ class MultiTimeframeIndicatorEngine:
         redundant_pairs = []
         for tf, engine in self.engines.items():
             indicator_classes = [ind.__class__.__name__ for ind in engine.indicators]
-            class_counts = {}
+            class_counts: dict[str, int] = {}
             for cls in indicator_classes:
                 class_counts[cls] = class_counts.get(cls, 0) + 1
 

@@ -80,9 +80,9 @@ def sample_training_config():
 def sample_training_params(sample_training_config):
     """Sample training parameters."""
     return {
-        "symbol": "AAPL",
-        "timeframe": "1h",
-        "config": sample_training_config,
+        "symbols": ["AAPL"],
+        "timeframes": ["1h"],
+        "strategy_name": "neuro_mean_reversion",
         "start_date": "2024-01-01",
         "end_date": "2024-06-01",
     }
@@ -102,9 +102,9 @@ class TestTrainingService:
         assert result["task_id"] == "test_training_id"
         assert result["status"] == "training_started"
         assert "AAPL" in result["message"]
-        assert result["symbol"] == "AAPL"
-        assert result["timeframe"] == "1h"
-        assert result["config"] == sample_training_params["config"]
+        assert result["symbols"] == ["AAPL"]
+        assert result["timeframes"] == ["1h"]
+        assert result["strategy_name"] == sample_training_params["strategy_name"]
 
         # Verify operations service was called correctly
         mock_operations_service.create_operation.assert_called_once()
@@ -296,7 +296,7 @@ class TestTrainingService:
 
             assert result["success"] is True
             assert result["model_name"] == "test_model"
-            assert result["symbol"] == "AAPL"
+            assert result["symbols"] == ["AAPL"]
             assert result["test_date"] == "2024-01-01"
             assert "prediction" in result
             assert "signal" in result["prediction"]
