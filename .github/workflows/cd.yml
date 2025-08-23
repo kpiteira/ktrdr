@@ -164,13 +164,3 @@ jobs:
           # Check if the service is available
           curl --fail --max-time 10 http://${{ secrets.DEPLOY_HOST }}:8000/api/v1/health || exit 1
       
-      - name: Send deployment notification
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_CHANNEL: deployments
-          SLACK_TITLE: "KTRDR Deployment"
-          SLACK_MESSAGE: "🚀 Successfully deployed KTRDR to ${{ github.event.inputs.environment || 'production' }} environment"
-          SLACK_COLOR: ${{ job.status }}
-          SLACK_FOOTER: "View deployment: http://${{ secrets.DEPLOY_HOST }}:8000/api/docs"
-        if: ${{ success() && secrets.SLACK_WEBHOOK != '' }}
