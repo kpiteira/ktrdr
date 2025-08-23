@@ -120,7 +120,7 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
             logger.error(f"Service error: {str(e)}", exc_info=True)
         return
 
-    # Check for DataProvider exceptions and format them with ServiceErrorFormatter  
+    # Check for DataProvider exceptions and format them with ServiceErrorFormatter
     # Import here to avoid circular imports
     try:
         from ktrdr.data.external_data_interface import (
@@ -128,35 +128,37 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
             DataProviderConfigError,
             DataProviderRateLimitError,
         )
-        
+
         if isinstance(e, (DataProviderConnectionError, DataProviderConfigError)):
             # Convert DataProvider error to Service error for consistent handling
             # Map provider info to service context
-            provider = getattr(e, 'provider', 'unknown')
-            service_name = 'ib-host' if provider == 'IB' else provider.lower()
-            
+            provider = getattr(e, "provider", "unknown")
+            service_name = "ib-host" if provider == "IB" else provider.lower()
+
             # Create a mock service error with similar structure
             mock_service_error = ServiceConnectionError(
                 message=str(e),
-                error_code="DATA_PROVIDER_ERROR", 
+                error_code="DATA_PROVIDER_ERROR",
                 details={
                     "service": service_name,
                     "endpoint": "http://localhost:5001" if provider == "IB" else None,
                     "original_exception": str(e),
-                    "provider": provider
-                }
+                    "provider": provider,
+                },
             )
-            
+
             # Use ServiceErrorFormatter for consistent error display
-            formatted_error = ServiceErrorFormatter.format_service_error(mock_service_error)
-            
+            formatted_error = ServiceErrorFormatter.format_service_error(
+                mock_service_error
+            )
+
             error_console.print("[bold red]Service Error:[/bold red]")
             error_console.print(formatted_error)
 
             if verbose:
                 logger.error(f"Data provider error: {str(e)}", exc_info=True)
             return
-            
+
     except ImportError:
         # If DataProvider errors not available, continue with regular handling
         pass
