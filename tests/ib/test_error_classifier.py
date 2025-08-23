@@ -5,6 +5,7 @@ Tests the accurate classification of IB error codes based on official documentat
 """
 
 import unittest
+
 from ktrdr.ib.error_classifier import IbErrorClassifier, IbErrorType
 
 

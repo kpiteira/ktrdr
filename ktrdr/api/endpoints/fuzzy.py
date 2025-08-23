@@ -5,7 +5,7 @@ This module provides endpoints for accessing fuzzy logic functionality,
 including listing available fuzzy sets and fuzzifying indicator values.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 

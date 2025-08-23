@@ -8,7 +8,7 @@ IB data operations and other CLI tasks.
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 from rich.console import Console
 from rich.panel import Panel

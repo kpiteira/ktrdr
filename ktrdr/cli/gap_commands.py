@@ -7,7 +7,7 @@ Provides command-line interface for gap analysis and gap filler service manageme
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Optional
 
 import typer
 from tabulate import tabulate

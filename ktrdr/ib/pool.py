@@ -14,7 +14,7 @@ This design prioritizes simplicity and reliability over complex optimization.
 import asyncio
 import time
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Optional
 
 from ktrdr.logging import get_logger
 

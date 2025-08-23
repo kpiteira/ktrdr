@@ -142,7 +142,18 @@ class IbDataFetcher:
             logger.info(f"   ├─ Contract: {contract}")
             logger.info(f"   ├─ Duration: {duration}, Bar Size: {ib_bar_size}")
             logger.info(f"   ├─ What to Show: {what_to_show}, Use RTH: True")
+            logger.info("   ├─ Format Date: 1")
             logger.info(f"   └─ End DateTime: {end}")
+
+            # Enhanced debugging: log all parameters being sent to IB
+            logger.debug("🔧 IB API CALL PARAMETERS:")
+            logger.debug(f"   contract={contract}")
+            logger.debug(f"   endDateTime={end} (type: {type(end)})")
+            logger.debug(f"   durationStr={duration} (type: {type(duration)})")
+            logger.debug(f"   barSizeSetting={ib_bar_size} (type: {type(ib_bar_size)})")
+            logger.debug(f"   whatToShow={what_to_show} (type: {type(what_to_show)})")
+            logger.debug("   useRTH=True")
+            logger.debug("   formatDate=1")
 
             bars = ib.reqHistoricalData(
                 contract=contract,

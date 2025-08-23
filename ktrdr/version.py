@@ -7,7 +7,6 @@ which serves as the single source of truth.
 """
 
 from pathlib import Path
-from typing import Dict
 
 import tomli
 

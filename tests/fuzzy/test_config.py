@@ -5,13 +5,13 @@ Tests for the fuzzy logic configuration module.
 import pytest
 from pydantic import ValidationError
 
+from ktrdr.errors import ConfigurationError
 from ktrdr.fuzzy.config import (
     FuzzyConfig,
     FuzzyConfigLoader,
     FuzzySetConfig,
     TriangularMFConfig,
 )
-from ktrdr.errors import ConfigurationError
 
 
 class TestTriangularMFConfig:

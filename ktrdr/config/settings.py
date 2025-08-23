@@ -43,51 +43,13 @@ class LoggingSettings(BaseSettings):
     model_config = ConfigDict(env_prefix="KTRDR_LOGGING_")
 
 
-class TrainingHostSettings(BaseSettings):
-    """Training Host Service Settings."""
-
-    enabled: bool = Field(
-        default=metadata.get("training_host.enabled", False),
-        alias="USE_TRAINING_HOST_SERVICE",
-    )
-    base_url: str = Field(
-        default=metadata.get("training_host.base_url", "http://localhost:5002"),
-        alias="TRAINING_HOST_SERVICE_URL",
-    )
-    timeout: float = Field(default=metadata.get("training_host.timeout", 30.0))
-    health_check_interval: float = Field(
-        default=metadata.get("training_host.health_check_interval", 10.0)
-    )
-    max_retries: int = Field(default=metadata.get("training_host.max_retries", 3))
-    retry_delay: float = Field(default=metadata.get("training_host.retry_delay", 1.0))
-    progress_poll_interval: float = Field(
-        default=metadata.get("training_host.progress_poll_interval", 2.0)
-    )
-    session_timeout: float = Field(
-        default=metadata.get("training_host.session_timeout", 3600.0)
-    )
-
-    model_config = ConfigDict(env_prefix="KTRDR_TRAINING_HOST_")
-
-
-class CLISettings(BaseSettings):
-    """CLI Client Settings."""
-
-    api_base_url: str = Field(
-        default="http://localhost:8000/api/v1", description="Base URL for API client"
-    )
-    timeout: float = Field(default=30.0, description="Default timeout for API requests")
-    max_retries: int = Field(
-        default=3, description="Maximum retry attempts for failed requests"
-    )
-    retry_delay: float = Field(default=1.0, description="Delay between retry attempts")
-
-    model_config = ConfigDict(env_prefix="KTRDR_CLI_")
-
-    @property
-    def base_url(self) -> str:
-        """Get base URL (alias for api_base_url)."""
-        return self.api_base_url
+# Import the unified host service configuration system
+from .host_services import (
+    ApiServiceSettings,
+    TrainingHostServiceSettings,
+    get_api_service_settings,
+    get_training_host_service_settings,
+)
 
 
 # Cache settings to avoid repeated disk/env access
@@ -103,16 +65,19 @@ def get_logging_settings() -> LoggingSettings:
     return LoggingSettings()
 
 
-@lru_cache
-def get_training_host_settings() -> TrainingHostSettings:
-    """Get training host service settings with caching."""
-    return TrainingHostSettings()
+# Compatibility aliases for existing code
+TrainingHostSettings = TrainingHostServiceSettings
+CLISettings = ApiServiceSettings  # CLI uses API service settings for client connections
 
 
-@lru_cache
-def get_cli_settings() -> CLISettings:
-    """Get CLI client settings with caching."""
-    return CLISettings()
+def get_training_host_settings() -> TrainingHostServiceSettings:
+    """Get training host service settings with caching (compatibility alias)."""
+    return get_training_host_service_settings()
+
+
+def get_cli_settings() -> ApiServiceSettings:
+    """Get CLI client settings with caching (compatibility alias)."""
+    return get_api_service_settings()
 
 
 # Clear settings cache (for testing)
@@ -120,21 +85,28 @@ def clear_settings_cache() -> None:
     """Clear settings cache."""
     get_api_settings.cache_clear()
     get_logging_settings.cache_clear()
-    get_training_host_settings.cache_clear()
-    get_cli_settings.cache_clear()
+    get_training_host_service_settings.cache_clear()
+    get_api_service_settings.cache_clear()
 
 
 # Export IB config for convenience
 __all__ = [
     "APISettings",
     "LoggingSettings",
-    "TrainingHostSettings",
-    "CLISettings",
+    "TrainingHostServiceSettings",
+    "ApiServiceSettings",
+    "IbHostServiceSettings",
     "get_api_settings",
     "get_logging_settings",
+    "get_training_host_service_settings",
+    "get_api_service_settings",
+    "get_ib_host_service_settings",
+    "clear_settings_cache",
+    # Compatibility aliases
+    "TrainingHostSettings",
+    "CLISettings",
     "get_training_host_settings",
     "get_cli_settings",
-    "clear_settings_cache",
     "IbConfig",
     "get_ib_config",
 ]

@@ -3,8 +3,9 @@ Tests for IB Configuration
 """
 
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from ktrdr.config.ib_config import IbConfig, get_ib_config, reset_ib_config
 

@@ -7,7 +7,7 @@ indicator values for given data.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -339,7 +339,7 @@ class IndicatorService(BaseService):
 
             return dates, indicator_values, metadata
 
-        except (DataError, ConfigurationError, ProcessingError) as e:
+        except (DataError, ConfigurationError, ProcessingError):
             # Re-raise known error types
             raise
         except Exception as e:

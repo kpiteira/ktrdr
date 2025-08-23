@@ -7,7 +7,7 @@ This module contains the Renderer class for rendering charts to HTML.
 # Setup logging
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ktrdr.errors import ConfigurationError, DataError
 from ktrdr.visualization.template_manager import TemplateManager

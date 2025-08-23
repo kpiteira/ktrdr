@@ -8,7 +8,7 @@ automatically validated by the testing framework.
 """
 
 import logging
-from typing import Dict, Any, Type, List, Tuple, Optional, Callable
+from typing import Any, Dict, List, Type
 
 from ktrdr.indicators import BaseIndicator
 
@@ -84,25 +84,25 @@ def register_builtin_indicators():
     This function should be updated whenever a new indicator is added to the system.
     """
     from ktrdr.indicators import (
-        SimpleMovingAverage,
         ExponentialMovingAverage,
         RSIIndicator,
+        SimpleMovingAverage,
     )
-    from ktrdr.indicators.macd_indicator import MACDIndicator
-    from ktrdr.indicators.stochastic_indicator import StochasticIndicator
-    from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
+    from ktrdr.indicators.aroon_indicator import AroonIndicator
     from ktrdr.indicators.atr_indicator import ATRIndicator
-    from ktrdr.indicators.obv_indicator import OBVIndicator
     from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
     from ktrdr.indicators.cci_indicator import CCIIndicator
-    from ktrdr.indicators.momentum_indicator import MomentumIndicator
-    from ktrdr.indicators.roc_indicator import ROCIndicator
-    from ktrdr.indicators.vwap_indicator import VWAPIndicator
-    from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
     from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
-    from ktrdr.indicators.rvi_indicator import RVIIndicator
+    from ktrdr.indicators.macd_indicator import MACDIndicator
     from ktrdr.indicators.mfi_indicator import MFIIndicator
-    from ktrdr.indicators.aroon_indicator import AroonIndicator
+    from ktrdr.indicators.momentum_indicator import MomentumIndicator
+    from ktrdr.indicators.obv_indicator import OBVIndicator
+    from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
+    from ktrdr.indicators.roc_indicator import ROCIndicator
+    from ktrdr.indicators.rvi_indicator import RVIIndicator
+    from ktrdr.indicators.stochastic_indicator import StochasticIndicator
+    from ktrdr.indicators.vwap_indicator import VWAPIndicator
+    from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
 
     from .reference_datasets import REFERENCE_VALUES, TOLERANCES
 

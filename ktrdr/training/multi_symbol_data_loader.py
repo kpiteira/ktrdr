@@ -1,7 +1,5 @@
 """Multi-symbol data loader with balanced sampling for training."""
 
-from typing import List, Tuple
-
 import torch
 from torch.utils.data import DataLoader, Dataset
 

@@ -8,7 +8,7 @@ bridging the API endpoints with the core KTRDR data modules.
 import asyncio
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 

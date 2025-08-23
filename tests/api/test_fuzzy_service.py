@@ -4,15 +4,15 @@ Unit tests for FuzzyService.
 Tests the fuzzy service layer that adapts the core fuzzy logic modules for API use.
 """
 
-import pytest
-import pandas as pd
+from unittest.mock import MagicMock, patch
+
 import numpy as np
-from datetime import datetime
-from unittest.mock import patch, MagicMock
+import pandas as pd
+import pytest
 
 from ktrdr.api.services.fuzzy_service import FuzzyService
-from ktrdr.errors import ConfigurationError, ProcessingError, DataError
-from ktrdr.fuzzy.config import FuzzyConfig, FuzzyConfigLoader
+from ktrdr.errors import ConfigurationError, DataError, ProcessingError
+from ktrdr.fuzzy.config import FuzzyConfig
 
 
 @pytest.fixture

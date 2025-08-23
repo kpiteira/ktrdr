@@ -9,7 +9,7 @@ import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -285,7 +285,7 @@ class ResilientProcessor:
                     message="Processed after removing problematic indicator",
                 )
 
-            except Exception as e:
+            except Exception:
                 continue
 
         # If we get here, no single indicator removal worked

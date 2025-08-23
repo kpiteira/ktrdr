@@ -5,7 +5,7 @@ This module defines the base models used across the API for consistent
 request and response formats.
 """
 
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 

@@ -6,7 +6,7 @@ provides access to configuration values.
 """
 
 import os
-import pytest
+
 from ktrdr import metadata
 
 

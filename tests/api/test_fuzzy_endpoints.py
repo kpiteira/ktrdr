@@ -6,14 +6,14 @@ handle valid inputs appropriately, and return proper error responses
 for invalid inputs.
 """
 
-import pytest
-import json
 from datetime import datetime, timedelta
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
+
 from ktrdr.api.main import app
-from ktrdr.errors import ConfigurationError, ProcessingError, DataError
+from ktrdr.errors import ConfigurationError, DataError, ProcessingError
 
 
 @pytest.fixture

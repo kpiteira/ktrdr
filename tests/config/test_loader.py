@@ -5,14 +5,13 @@ This module tests the functionality of ConfigLoader for loading and validating Y
 """
 
 import os
-import pytest
 import tempfile
-from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
+
+import pytest
 
 from ktrdr.config.loader import ConfigLoader
 from ktrdr.errors import (
-    ConfigurationError,
     ConfigurationFileError,
     InvalidConfigurationError,
 )

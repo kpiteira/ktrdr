@@ -10,27 +10,25 @@ Complete system validation for GPU acceleration implementation including:
 - Rollback procedure validation
 """
 
-import os
+import asyncio
+import json
+import logging
 import sys
 import time
-import json
-import asyncio
-import httpx
-import subprocess
-import pytest
-from pathlib import Path
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import httpx
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from services.management.service_manager import ServiceManager
-from services.management.health_monitor import HealthMonitor
 from ktrdr.api.services.training_host_client import TrainingHostClient
+from services.management.health_monitor import HealthMonitor
+from services.management.service_manager import ServiceManager
 
 # Setup logging
 logging.basicConfig(
@@ -827,7 +825,7 @@ class Phase4Validator:
         print(f"⏱️  Total Duration: {report['total_duration_seconds']:.1f}s")
 
         # Category breakdown
-        print(f"\n📋 Category Breakdown:")
+        print("\n📋 Category Breakdown:")
         for category, stats in report["categories"].items():
             success_rate = (stats["passed"] / stats["total"]) * 100
             status = (
@@ -839,7 +837,7 @@ class Phase4Validator:
 
         # Performance benchmarks
         if report["performance_benchmarks"]:
-            print(f"\n🚀 Performance Benchmarks:")
+            print("\n🚀 Performance Benchmarks:")
             for bench in report["performance_benchmarks"]:
                 status = "✅" if bench["success"] else "❌"
                 print(
@@ -848,13 +846,13 @@ class Phase4Validator:
 
         # Overall status
         if summary["phase4_complete"]:
-            print(f"\n🎉 Phase 4 Validation: COMPLETE")
+            print("\n🎉 Phase 4 Validation: COMPLETE")
             print(
-                f"✅ GPU acceleration implementation validated and ready for production!"
+                "✅ GPU acceleration implementation validated and ready for production!"
             )
         else:
-            print(f"\n⚠️  Phase 4 Validation: INCOMPLETE")
-            print(f"❌ Some tests failed. Review failed tests and address issues.")
+            print("\n⚠️  Phase 4 Validation: INCOMPLETE")
+            print("❌ Some tests failed. Review failed tests and address issues.")
 
         print("=" * 80)
 

@@ -8,7 +8,7 @@ and converts it to our standardized trading hours format.
 import re
 from dataclasses import dataclass
 from datetime import time
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ktrdr.data.trading_hours import TradingHours, TradingSession
 from ktrdr.logging import get_logger

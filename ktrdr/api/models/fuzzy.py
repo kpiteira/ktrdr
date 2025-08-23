@@ -6,7 +6,7 @@ functions, rules, and fuzzy set configurations.
 """
 
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 

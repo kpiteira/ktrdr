@@ -5,16 +5,15 @@ Tests the training service that manages async neural network training operations
 and integrates with the OperationsService framework.
 """
 
-import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 from datetime import datetime, timezone
-from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
-from ktrdr.api.services.training_service import TrainingService
+import pytest
+
+from ktrdr.api.models.operations import OperationStatus, OperationType
 from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.models.operations import OperationType, OperationStatus
-from ktrdr.errors import ValidationError, DataError
+from ktrdr.api.services.training_service import TrainingService
+from ktrdr.errors import ValidationError
 
 
 @pytest.fixture
@@ -22,12 +21,10 @@ def mock_operations_service():
     """Create a mock OperationsService."""
     from ktrdr.api.models.operations import (
         OperationInfo,
-        OperationType,
-        OperationStatus,
         OperationMetadata,
         OperationProgress,
+        OperationType,
     )
-    from datetime import datetime, timezone
 
     mock = AsyncMock(spec=OperationsService)
 

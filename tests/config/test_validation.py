@@ -4,10 +4,11 @@ Tests for the input validation utilities.
 This module tests validation of user-provided parameters.
 """
 
-import pytest
+import tempfile
 from datetime import datetime
 from pathlib import Path
-import tempfile
+
+import pytest
 
 from ktrdr.config.validation import (
     InputValidator,

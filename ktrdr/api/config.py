@@ -5,7 +5,7 @@ This module defines the configuration for the KTRDR API, with support for
 environment variables and different deployment environments.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, field_validator

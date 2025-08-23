@@ -6,19 +6,16 @@ based on configuration settings.
 """
 
 import importlib
-from typing import Dict, List, Type, Union
+from typing import Union
 
 from ktrdr import get_logger
 from ktrdr.config.models import IndicatorConfig, IndicatorsConfig
 from ktrdr.errors import ConfigurationError
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
-from ktrdr.indicators.macd_indicator import MACDIndicator
-from ktrdr.indicators.rsi_indicator import RSIIndicator
 from ktrdr.indicators.ad_line import ADLineIndicator
 from ktrdr.indicators.adx_indicator import ADXIndicator
 from ktrdr.indicators.aroon_indicator import AroonIndicator
 from ktrdr.indicators.atr_indicator import ATRIndicator
+from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.bollinger_band_width_indicator import BollingerBandWidthIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 from ktrdr.indicators.cci_indicator import CCIIndicator
@@ -28,11 +25,14 @@ from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
 from ktrdr.indicators.fisher_transform import FisherTransformIndicator
 from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
 from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.macd_indicator import MACDIndicator
 from ktrdr.indicators.mfi_indicator import MFIIndicator
 from ktrdr.indicators.momentum_indicator import MomentumIndicator
 from ktrdr.indicators.obv_indicator import OBVIndicator
 from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
 from ktrdr.indicators.roc_indicator import ROCIndicator
+from ktrdr.indicators.rsi_indicator import RSIIndicator
 from ktrdr.indicators.rvi_indicator import RVIIndicator
 from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicator
 from ktrdr.indicators.stochastic_indicator import StochasticIndicator

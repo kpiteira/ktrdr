@@ -10,7 +10,7 @@ of a trend without regard to its direction. It consists of three lines:
 Author: KTRDR
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

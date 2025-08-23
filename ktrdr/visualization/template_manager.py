@@ -9,7 +9,6 @@ import json
 
 # Setup logging
 import logging
-from typing import Dict, List
 
 from ktrdr.errors import ConfigurationError
 

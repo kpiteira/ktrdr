@@ -8,14 +8,14 @@ import pytest
 from pydantic import ValidationError
 
 from ktrdr.api.models.errors import (
-    ErrorCode,
-    ValidationErrorItem,
-    ValidationErrorDetail,
     DataErrorDetail,
-    IndicatorErrorDetail,
-    FuzzyErrorDetail,
-    DetailedErrorResponse,
     DetailedApiResponse,
+    DetailedErrorResponse,
+    ErrorCode,
+    FuzzyErrorDetail,
+    IndicatorErrorDetail,
+    ValidationErrorDetail,
+    ValidationErrorItem,
 )
 
 

@@ -61,7 +61,9 @@ ktrdr = "ktrdr.cli:app"
 dev = [
     "asyncpg>=0.30.0",
     "bandit[toml]>=1.8.6",
+    "black>=25.1.0",
     "httpx>=0.28.1",
+    "mypy>=1.16.0",
     "pandas-stubs>=2.2.2.240807",
     "pip-audit>=2.9.0",
     "pytest>=8.3.5",
@@ -95,6 +97,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/**/*" = ["S101"]  # allow assert statements in tests
+# Pytest fixture protection - prevents ruff from removing imports that pytest needs
+"tests/visualization/test_*.py" = ["F401"]  # allow fixture imports that appear unused
+"tests/*/conftest.py" = ["F401"]  # allow fixture definitions that appear unused
+"tests/**/test_*.py" = ["F811"]  # allow fixture redefinitions in test files
 
 [tool.bandit]
 exclude_dirs = ["tests"]

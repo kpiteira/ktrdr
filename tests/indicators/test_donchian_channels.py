@@ -2,14 +2,12 @@
 Tests for Donchian Channels indicator.
 """
 
-import pytest
-import pandas as pd
 import numpy as np
-from unittest.mock import patch
+import pandas as pd
+import pytest
 
-from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
 from ktrdr.errors import DataError
-from tests.indicators.validation_utils import create_standard_test_data
+from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
 
 
 def create_sample_ohlcv_data(days=30, start_price=100):

@@ -6,11 +6,9 @@ They would have caught the runtime bug where acquire_ib_connection()
 was not properly awaited.
 """
 
-import pytest
 import subprocess
-import json
-import time
-from pathlib import Path
+
+import pytest
 
 
 @pytest.mark.real_ib
@@ -223,8 +221,8 @@ class TestRealCLICommands:
 
     def test_real_cli_concurrent_operations(self, clean_test_symbols):
         """Test concurrent CLI operations don't interfere."""
-        import threading
         import queue
+        import threading
 
         results = queue.Queue()
         symbols = clean_test_symbols[:2]  # AAPL, MSFT

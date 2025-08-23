@@ -5,17 +5,16 @@ These tests use reference datasets to validate the complete pipeline
 from market data through indicators to fuzzy outputs.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 import tempfile
-import yaml
 from pathlib import Path
-from typing import Dict, Any
 
-from ktrdr.services.fuzzy_pipeline_service import FuzzyPipelineService
-from ktrdr.data.data_manager import DataManager
+import numpy as np
+import pandas as pd
+import pytest
+import yaml
+
 from ktrdr.fuzzy.indicator_integration import IntegratedFuzzyResult
+from ktrdr.services.fuzzy_pipeline_service import FuzzyPipelineService
 
 
 class TestEnd2EndFuzzyIntegration:
@@ -404,7 +403,7 @@ class TestEnd2EndFuzzyIntegration:
                 rsi_fuzzy_keys = [
                     k
                     for k in fuzzy_values.keys()
-                    if f"rsi_" in k and f"_{timeframe}" in k
+                    if "rsi_" in k and f"_{timeframe}" in k
                 ]
 
                 if rsi_fuzzy_keys:

@@ -8,7 +8,7 @@ simplified IB architecture with dedicated threads and persistent event loops.
 import asyncio
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ktrdr import get_logger
 from ktrdr.api.models.ib import (

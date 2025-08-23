@@ -17,14 +17,11 @@ All tests in this file are disabled to prevent competing IB connections
 that could interfere with the backend's connection pool.
 """
 
-import pytest
-import pytest_asyncio
 import asyncio
 import time
-import threading
-import concurrent.futures
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any
+from datetime import datetime, timezone
+
+import pytest
 
 # DISABLED: Old IB architecture imports - tests are disabled
 # from ktrdr.data.ib_connection_pool import get_connection_pool, acquire_ib_connection
@@ -87,7 +84,7 @@ class TestPhase1SystematicValidationExhaustive:
         # At least some should succeed with real IB
         assert (
             successful_validations > 0
-        ), f"No successful validations out of 10 attempts"
+        ), "No successful validations out of 10 attempts"
         print(
             f"✅ Systematic validation: {successful_validations}/10 succeeded, {failed_validations}/10 failed gracefully"
         )
@@ -436,7 +433,7 @@ class TestPhase3ClientIdPreferenceExhaustive:
         assert "client_ids_in_use" in phase3
         assert "total_active_connections" in phase3
 
-        print(f"✅ Client ID preference system active")
+        print("✅ Client ID preference system active")
         print(f"✅ Current active connections: {phase3['total_active_connections']}")
 
         if phase3["client_ids_in_use"]:
@@ -824,7 +821,6 @@ class TestResilienceScoreValidationExhaustive:
     def test_resilience_timestamp_accuracy(self, real_ib_connection_test):
         """Test that resilience timestamps are accurate and recent."""
         import httpx
-        from datetime import datetime, timezone
 
         client = httpx.Client(base_url="http://localhost:8000", timeout=30.0)
 

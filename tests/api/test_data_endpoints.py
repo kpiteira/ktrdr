@@ -4,17 +4,19 @@ Unit tests for data-related API endpoints.
 Tests the data endpoints for handling data retrieval operations.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
-from ktrdr.errors import DataNotFoundError, DataError
+import pytest
+
+from ktrdr.errors import DataError, DataNotFoundError
 
 
 @pytest.fixture
 def client():
     """Create a test client for the FastAPI application."""
     from fastapi.testclient import TestClient
+
     from ktrdr.api.main import app
 
     return TestClient(app)

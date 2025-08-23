@@ -6,7 +6,7 @@ particularly focusing on triangular membership functions in Phase 1.
 """
 
 from pathlib import Path
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Literal, Optional, Union
 
 import yaml
 from pydantic import (

@@ -17,7 +17,7 @@ The MFI oscillates between 0 and 100, with values above 80 typically indicating
 overbought conditions and values below 20 indicating oversold conditions.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

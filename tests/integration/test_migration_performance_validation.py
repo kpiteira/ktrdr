@@ -4,11 +4,10 @@ This test suite validates that the migrated commands show measurable
 performance improvements while maintaining functional compatibility.
 """
 
-import asyncio
-import time
 import statistics
-from unittest.mock import Mock, AsyncMock, patch
+import time
 from contextlib import contextmanager
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from typer.testing import CliRunner

@@ -2,13 +2,13 @@
 Tests for the RSI indicator.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 
-from ktrdr.indicators import RSIIndicator
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.indicators import RSIIndicator
 
 
 # Create test data with known RSI values

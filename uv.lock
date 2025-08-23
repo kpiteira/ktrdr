@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -1221,7 +1221,9 @@ dev = [
 dev = [
     { name = "asyncpg" },
     { name = "bandit", extra = ["toml"] },
+    { name = "black" },
     { name = "httpx" },
+    { name = "mypy" },
     { name = "pandas-stubs", version = "2.2.2.240807", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pandas-stubs", version = "2.3.0.250703", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pip-audit" },
@@ -1279,7 +1281,9 @@ provides-extras = ["dev"]
 dev = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "bandit", extras = ["toml"], specifier = ">=1.8.6" },
+    { name = "black", specifier = ">=25.1.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "mypy", specifier = ">=1.16.0" },
     { name = "pandas-stubs", specifier = ">=2.2.2.240807" },
     { name = "pip-audit", specifier = ">=2.9.0" },
     { name = "pytest", specifier = ">=8.3.5" },

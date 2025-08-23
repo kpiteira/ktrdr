@@ -9,7 +9,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from re import Pattern
-from typing import Any, Dict, Optional, Set, Union
+from typing import Any, Optional, Union
 
 from ktrdr import get_logger
 from ktrdr.errors import ValidationError

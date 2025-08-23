@@ -5,10 +5,8 @@ This module provides standard reference datasets with known indicator values
 for validating indicator implementations against expected results.
 """
 
-import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Any, Optional
-from datetime import datetime, timedelta
+import pandas as pd
 
 from .validation_utils import create_standard_test_data
 
@@ -123,7 +121,6 @@ def create_reference_dataset_obv() -> pd.DataFrame:
     Returns:
         DataFrame with close and volume data for OBV
     """
-    import numpy as np
 
     # Use fixed seed for reproducible reference values
     np.random.seed(42)
@@ -438,7 +435,6 @@ def create_ichimoku_reference_dataset() -> pd.DataFrame:
     Ichimoku requires more data points due to the 52-period Senkou Span B calculation.
     This dataset provides 80 data points with realistic trending patterns.
     """
-    import numpy as np
 
     # Use fixed seed for reproducible reference values
     np.random.seed(42)
@@ -498,7 +494,6 @@ def create_rvi_reference_dataset():
     Returns:
         DataFrame with OHLC data optimized for RVI testing
     """
-    import numpy as np
 
     # Create 50 data points with realistic OHLC patterns
     np.random.seed(42)  # For reproducible results
@@ -568,7 +563,6 @@ def create_mfi_reference_dataset():
     Returns:
         DataFrame with OHLCV data optimized for MFI testing
     """
-    import numpy as np
 
     # Create 30 data points with realistic OHLCV patterns
     np.random.seed(42)  # For reproducible results
@@ -633,7 +627,6 @@ def create_aroon_reference_dataset():
     Returns:
         DataFrame with OHLC data optimized for Aroon testing
     """
-    import numpy as np
 
     # Create 25 data points with distinct trend patterns
     np.random.seed(42)  # For reproducible results

@@ -5,16 +5,15 @@ These tests validate that the refactored IB system works correctly end-to-end
 without complex mocking, focusing on real integration scenarios.
 """
 
-import pytest
-import asyncio
-from unittest.mock import patch, MagicMock
-import pandas as pd
-from datetime import datetime, timezone
+from unittest.mock import patch
 
-from ktrdr.data.data_manager import DataManager
+import pandas as pd
+import pytest
+
 from ktrdr.api.services.data_service import DataService
-from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.api.services.ib_service import IbService
+from ktrdr.data.data_manager import DataManager
+from ktrdr.data.ib_data_adapter import IbDataAdapter
 
 
 @pytest.fixture(scope="class")
@@ -286,7 +285,7 @@ class TestIbRefactorRegressionPrevention:
         config = await ib_service.get_config()
 
         # Verify types match what API expects
-        from ktrdr.api.models.ib import IbStatusResponse, IbHealthStatus, IbConfigInfo
+        from ktrdr.api.models.ib import IbConfigInfo, IbHealthStatus, IbStatusResponse
 
         assert isinstance(status, IbStatusResponse)
         assert isinstance(health, IbHealthStatus)
@@ -297,8 +296,8 @@ class TestIbRefactorRegressionPrevention:
         # Test key imports that should continue working
         try:
             from ktrdr.data import DataManager
-            from ktrdr.ib.pool_manager import get_shared_ib_pool
             from ktrdr.data.ib_data_adapter import IbDataAdapter
+            from ktrdr.ib.pool_manager import get_shared_ib_pool
 
             # Should not raise ImportError
             assert DataManager is not None

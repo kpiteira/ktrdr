@@ -2,18 +2,18 @@
 Tests for multi-timeframe fuzzy-indicator integration pipeline.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from typing import Dict, Any
 from unittest.mock import Mock, patch
 
+import numpy as np
+import pandas as pd
+import pytest
+
+from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.fuzzy.indicator_integration import (
-    MultiTimeframeFuzzyIndicatorPipeline,
     IntegratedFuzzyResult,
+    MultiTimeframeFuzzyIndicatorPipeline,
     create_integrated_pipeline,
 )
-from ktrdr.errors import ProcessingError, ConfigurationError
 
 
 class TestMultiTimeframeFuzzyIndicatorPipeline:

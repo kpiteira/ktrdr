@@ -5,7 +5,7 @@ import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch

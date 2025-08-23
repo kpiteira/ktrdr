@@ -2,16 +2,16 @@
 Configuration and fixtures for real E2E tests.
 """
 
-import pytest
-import pytest_asyncio
 import asyncio
 import time
-import httpx
 from pathlib import Path
-from typing import Generator
 
-from ktrdr.ib import IbConnectionPool
+import httpx
+import pytest
+import pytest_asyncio
+
 from ktrdr.config.ib_config import get_ib_config
+from ktrdr.ib import IbConnectionPool
 
 
 def pytest_configure(config):
@@ -201,7 +201,7 @@ class RealE2ETestHelper:
             return False
 
         # Check file has content (at least header)
-        with open(expected_file, "r") as f:
+        with open(expected_file) as f:
             content = f.read().strip()
             return len(content) > 0 and "timestamp" in content.lower()
 

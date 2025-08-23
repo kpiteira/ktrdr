@@ -2,15 +2,16 @@
 Tests for the BatchFuzzyCalculator class.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from ktrdr.fuzzy.batch_calculator import BatchFuzzyCalculator
-from ktrdr.fuzzy.engine import FuzzyEngine
-from ktrdr.fuzzy.config import FuzzyConfigLoader
+import numpy as np
+import pandas as pd
+import pytest
+
 from ktrdr.errors import ProcessingError
+from ktrdr.fuzzy.batch_calculator import BatchFuzzyCalculator
+from ktrdr.fuzzy.config import FuzzyConfigLoader
+from ktrdr.fuzzy.engine import FuzzyEngine
 
 
 @pytest.fixture

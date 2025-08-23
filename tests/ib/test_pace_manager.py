@@ -4,9 +4,10 @@ Unit tests for IB Pace Manager
 Tests the enforcement of official IB pacing rules.
 """
 
-import unittest
 import asyncio
 import time
+import unittest
+
 from ktrdr.ib.pace_manager import IbPaceManager, RequestInfo
 
 

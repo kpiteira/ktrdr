@@ -5,7 +5,7 @@ The Stochastic Oscillator is a momentum indicator that compares a security's clo
 to its price range over a given time period. It generates two lines: %K and %D.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

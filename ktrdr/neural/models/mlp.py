@@ -1,6 +1,6 @@
 """Multi-Layer Perceptron implementation for trading decisions."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pandas as pd
 import torch

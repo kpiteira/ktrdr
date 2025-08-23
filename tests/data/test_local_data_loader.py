@@ -4,13 +4,11 @@ Tests for the local data loader module.
 This module tests the functionality of LocalDataLoader for reading and writing OHLCV data.
 """
 
-import os
-import pytest
 import pandas as pd
-from pathlib import Path
+import pytest
 
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.errors import DataError, DataNotFoundError, DataFormatError
+from ktrdr.errors import DataError
 
 
 class TestLocalDataLoader:

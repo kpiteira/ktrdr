@@ -44,7 +44,7 @@ logger = get_logger(__name__)
 app = FastAPI(
     title="IB Connector Host Service",
     description="Direct IB Gateway connectivity service for KTRDR",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Add CORS middleware for Docker container communication
@@ -60,23 +60,28 @@ app.add_middleware(
 app.include_router(data_router)
 app.include_router(health_router)
 
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize service on startup."""
     logger.info("Starting IB Connector Host Service...")
-    logger.info(f"Service will listen on http://{service_config.host_service.host}:{service_config.host_service.port}")
+    logger.info(
+        f"Service will listen on http://{service_config.host_service.host}:{service_config.host_service.port}"
+    )
     logger.info("Available endpoints:")
     logger.info("  GET  /                     - Service info")
     logger.info("  GET  /health               - Basic health check")
-    logger.info("  GET  /health/detailed      - Detailed health check") 
+    logger.info("  GET  /health/detailed      - Detailed health check")
     logger.info("  POST /data/historical      - Fetch historical data")
     logger.info("  POST /data/validate        - Validate symbol")
     logger.info("  GET  /data/head-timestamp  - Get head timestamp")
 
-@app.on_event("shutdown") 
+
+@app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
     logger.info("Shutting down IB Connector Host Service...")
+
 
 @app.get("/")
 async def root():
@@ -85,8 +90,9 @@ async def root():
         "service": "IB Connector Host Service",
         "version": "1.0.0",
         "status": "running",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
+
 
 @app.get("/health")
 async def health_check():
@@ -95,8 +101,9 @@ async def health_check():
         "healthy": True,
         "service": "ib-connector",
         "timestamp": datetime.utcnow().isoformat(),
-        "status": "operational"
+        "status": "operational",
     }
+
 
 if __name__ == "__main__":
     # Run the service using configuration
@@ -105,5 +112,5 @@ if __name__ == "__main__":
         host=service_config.host_service.host,
         port=service_config.host_service.port,
         reload=True,
-        log_level=service_config.host_service.log_level.lower()
+        log_level=service_config.host_service.log_level.lower(),
     )

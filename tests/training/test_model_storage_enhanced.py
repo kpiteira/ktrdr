@@ -2,12 +2,12 @@
 Tests for enhanced ModelStorage with pure fuzzy support.
 """
 
-import pytest
-import torch
-import torch.nn as nn
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
+
+import pytest
+import torch.nn as nn
 from sklearn.preprocessing import StandardScaler
 
 from ktrdr.training.model_storage import ModelStorage

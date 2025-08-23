@@ -4,14 +4,15 @@ Unit tests for DataService.
 Tests the data service layer that adapts the core data modules for API use.
 """
 
-import pytest
-import pandas as pd
 import types
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
+import pytest
 
 from ktrdr.api.services.data_service import DataService
-from ktrdr.errors import DataNotFoundError, DataError
+from ktrdr.errors import DataError, DataNotFoundError
 
 
 @pytest.fixture
@@ -193,7 +194,7 @@ async def test_load_data_other_exception(mock_data_manager):
             )
 
             return result
-        except DataNotFoundError as e:
+        except DataNotFoundError:
             raise
         except Exception as e:
             raise DataError(

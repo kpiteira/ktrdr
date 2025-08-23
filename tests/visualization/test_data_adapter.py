@@ -2,13 +2,14 @@
 Tests for the DataAdapter class in the visualization module.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 
-from ktrdr.visualization.data_adapter import DataAdapter
+import numpy as np
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.visualization.data_adapter import DataAdapter
 
 
 class TestDataAdapter:

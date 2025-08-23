@@ -2,9 +2,8 @@
 Test the API config functionality.
 """
 
-import pytest
-from ktrdr.api.config import APIConfig
 from ktrdr import metadata  # Import the metadata module
+from ktrdr.api.config import APIConfig
 
 
 class TestAPIConfig:

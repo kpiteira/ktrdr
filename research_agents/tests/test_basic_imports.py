@@ -14,9 +14,9 @@ def test_import_research_orchestrator():
         ResearchOrchestrator,
         ExperimentConfig,
         ExperimentType,
-        ExperimentStatus
+        ExperimentStatus,
     )
-    
+
     assert ResearchOrchestrator is not None
     assert ExperimentType.NEURO_FUZZY_STRATEGY == "neuro_fuzzy_strategy"
     assert ExperimentStatus.PENDING == "pending"
@@ -27,9 +27,9 @@ def test_import_ktrdr_integration():
     from research_agents.services.ktrdr_integration import (
         KTRDRIntegrationService,
         TrainingConfig,
-        TrainingStatus
+        TrainingStatus,
     )
-    
+
     assert KTRDRIntegrationService is not None
     assert TrainingStatus.COMPLETED == "completed"
 
@@ -39,12 +39,12 @@ def test_import_results_analyzer():
     from research_agents.services.results_analyzer import (
         ResultsAnalyzer,
         RiskProfile,
-        create_results_analyzer
+        create_results_analyzer,
     )
-    
+
     assert ResultsAnalyzer is not None
     assert RiskProfile.CONSERVATIVE == "conservative"
-    
+
     # Test factory function
     analyzer = create_results_analyzer()
     assert analyzer is not None
@@ -55,9 +55,9 @@ def test_import_research_agent_mvp():
     from research_agents.agents.research_agent_mvp import (
         ResearchAgentMVP,
         ResearchPhase,
-        ResearchStrategy
+        ResearchStrategy,
     )
-    
+
     assert ResearchAgentMVP is not None
     assert ResearchPhase.IDLE == "idle"
     assert ResearchStrategy.EXPLORATORY == "exploratory"
@@ -65,8 +65,11 @@ def test_import_research_agent_mvp():
 
 def test_basic_config_creation():
     """Test basic configuration object creation"""
-    from research_agents.services.research_orchestrator import ExperimentConfig, ExperimentType
-    
+    from research_agents.services.research_orchestrator import (
+        ExperimentConfig,
+        ExperimentType,
+    )
+
     config = ExperimentConfig(
         experiment_name="Test",
         hypothesis="Test hypothesis",
@@ -74,9 +77,9 @@ def test_basic_config_creation():
         parameters={},
         data_requirements={},
         training_config={},
-        validation_config={}
+        validation_config={},
     )
-    
+
     assert config.experiment_name == "Test"
     assert config.experiment_type == ExperimentType.NEURO_FUZZY_STRATEGY
 
@@ -85,9 +88,9 @@ def test_basic_config_creation():
 async def test_basic_async_functionality():
     """Test basic async functionality works"""
     from research_agents.services.results_analyzer import ResultsAnalyzer
-    
+
     analyzer = ResultsAnalyzer()
-    
+
     # Test a simple async method
     skewness = await analyzer._calculate_skewness([0.1, 0.2, 0.1, -0.1, 0.0])
     assert isinstance(skewness, float)

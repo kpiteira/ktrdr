@@ -5,27 +5,24 @@ This module provides systematic testing of all implemented indicators against
 known reference values to ensure accuracy and consistency.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict, Any, List
 
-from ktrdr.indicators import SimpleMovingAverage, ExponentialMovingAverage, RSIIndicator
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
-
-from tests.indicators.validation_utils import (
-    validate_indicator_against_reference,
-    generate_indicator_report,
-    IndicatorValidationResult,
-)
+from ktrdr.indicators import ExponentialMovingAverage, RSIIndicator, SimpleMovingAverage
 from tests.indicators.reference_datasets import (
+    REFERENCE_VALUES,
+    TOLERANCES,
     create_reference_dataset_1,
     create_reference_dataset_2,
     create_reference_dataset_3,
     create_reference_dataset_4,
-    REFERENCE_VALUES,
-    TOLERANCES,
+)
+from tests.indicators.validation_utils import (
+    generate_indicator_report,
+    validate_indicator_against_reference,
 )
 
 # Setup logger
@@ -417,8 +414,8 @@ class TestAllIndicatorsValidation:
 
     def test_indicators_factory_integration(self):
         """Test that indicators can be created through factory and validated."""
-        from ktrdr.indicators import IndicatorFactory
         from ktrdr.config.models import IndicatorConfig
+        from ktrdr.indicators import IndicatorFactory
 
         # Create indicator configs
         configs = [

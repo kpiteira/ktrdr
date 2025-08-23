@@ -5,12 +5,12 @@ This module contains tests for the FuzzyEngine class that transforms
 indicator values into fuzzy membership degrees.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
 from ktrdr.errors import ConfigurationError, ProcessingError
-from ktrdr.fuzzy import FuzzyEngine, FuzzyConfig, TriangularMF
+from ktrdr.fuzzy import FuzzyConfig, FuzzyEngine
 
 
 class TestFuzzyEngine:

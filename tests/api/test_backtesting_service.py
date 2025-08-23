@@ -5,29 +5,30 @@ Tests the backtesting service that manages async backtest operations
 and integrates with the OperationsService framework.
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
-from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from ktrdr.api.models.operations import OperationStatus, OperationType
 from ktrdr.api.services.backtesting_service import BacktestingService
 from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.models.operations import OperationType, OperationStatus
-from ktrdr.errors import ValidationError, DataError
+from ktrdr.errors import DataError, ValidationError
 
 
 @pytest.fixture
 def mock_operations_service():
     """Create a mock OperationsService."""
+    from datetime import datetime, timezone
+
     from ktrdr.api.models.operations import (
         OperationInfo,
-        OperationType,
-        OperationStatus,
         OperationMetadata,
         OperationProgress,
+        OperationStatus,
+        OperationType,
     )
-    from datetime import datetime, timezone
 
     mock = AsyncMock(spec=OperationsService)
 

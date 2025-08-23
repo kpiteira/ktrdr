@@ -12,7 +12,7 @@ The adapter handles:
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ktrdr.logging import get_logger
 

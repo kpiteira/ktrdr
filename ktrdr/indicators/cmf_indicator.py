@@ -9,7 +9,7 @@ selling pressure.
 Author: KTRDR
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

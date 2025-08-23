@@ -2,11 +2,8 @@
 Tests for the GET /fuzzy/data endpoint.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import datetime
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock
+
 from fastapi.testclient import TestClient
 
 # Test setup will be handled by the test runner

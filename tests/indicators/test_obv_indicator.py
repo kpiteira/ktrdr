@@ -8,15 +8,12 @@ This module tests the OBV indicator implementation including:
 - Reference value validation
 """
 
-import pytest
 import pandas as pd
-import numpy as np
-from typing import Dict, Any
+import pytest
 
+from ktrdr.errors import DataError
 from ktrdr.indicators.obv_indicator import OBVIndicator
 from ktrdr.indicators.schemas import OBV_SCHEMA
-from ktrdr.errors import DataError
-from tests.indicators.validation_utils import create_standard_test_data
 
 
 class TestOBVIndicator:

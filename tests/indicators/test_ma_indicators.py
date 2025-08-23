@@ -2,13 +2,13 @@
 Tests for the Moving Average indicators (SMA, EMA).
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 
-from ktrdr.indicators import SimpleMovingAverage, ExponentialMovingAverage
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.indicators import ExponentialMovingAverage, SimpleMovingAverage
 
 
 # Create test data for moving averages

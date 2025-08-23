@@ -4,19 +4,16 @@ Tests for the indicator endpoints.
 This module contains tests for the indicator API endpoints functionality.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
 from ktrdr.api.main import app
-from ktrdr.api.services.indicator_service import IndicatorService
 from ktrdr.api.models.indicators import (
     IndicatorMetadata,
     IndicatorParameter,
     IndicatorType,
-    IndicatorConfig,
-    IndicatorCalculateRequest,
-    IndicatorCalculateResponse,
 )
 
 

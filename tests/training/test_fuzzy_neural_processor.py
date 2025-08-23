@@ -2,11 +2,12 @@
 Tests for the FuzzyNeuralProcessor.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-import torch
 from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
+import pytest
+import torch
 
 from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 

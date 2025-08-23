@@ -8,14 +8,13 @@ This module tests the ATR indicator implementation including:
 - Reference value validation
 """
 
-import pytest
-import pandas as pd
 import numpy as np
-from typing import Dict, Any
+import pandas as pd
+import pytest
 
+from ktrdr.errors import DataError
 from ktrdr.indicators.atr_indicator import ATRIndicator
 from ktrdr.indicators.schemas import ATR_SCHEMA
-from ktrdr.errors import DataError
 from tests.indicators.validation_utils import create_standard_test_data
 
 

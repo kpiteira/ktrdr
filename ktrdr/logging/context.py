@@ -10,7 +10,7 @@ import inspect
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, TypeVar, cast
+from typing import Any, Callable, Optional, TypeVar, cast
 
 # Type variables for function decorators
 F = TypeVar("F", bound=Callable[..., Any])

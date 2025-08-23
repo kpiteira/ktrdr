@@ -6,7 +6,7 @@ data with timeframe-specific fuzzy sets and configurations.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 

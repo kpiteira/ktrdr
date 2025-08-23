@@ -8,11 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from ktrdr.api.models.indicators import (
-    IndicatorType,
-    IndicatorParameter,
-    IndicatorMetadata,
-    IndicatorConfig,
     IndicatorCalculateRequest,
+    IndicatorConfig,
+    IndicatorMetadata,
+    IndicatorParameter,
+    IndicatorType,
 )
 
 

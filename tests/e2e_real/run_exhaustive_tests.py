@@ -17,15 +17,15 @@ Options:
     --report            Generate detailed test report
 """
 
-import sys
 import argparse
 import subprocess
+import sys
 import time
-import json
-import httpx
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List
+from pathlib import Path
+from typing import Any, Dict
+
+import httpx
 
 
 class ExhaustiveTestRunner:
@@ -310,7 +310,7 @@ class ExhaustiveTestRunner:
 """
 
             if stats.get("failed_tests"):
-                report += f"""
+                report += """
 ### Failed Tests
 """
                 for test in stats["failed_tests"]:

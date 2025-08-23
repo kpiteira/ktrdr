@@ -5,13 +5,13 @@ This module contains tests that verify the fuzzy logic system handles edge cases
 correctly and performs efficiently with large datasets.
 """
 
-import pytest
-import numpy as np
-import pandas as pd
 import time
 
-from ktrdr.fuzzy import FuzzyEngine, FuzzyConfig, TriangularMF
-from ktrdr.errors import ProcessingError, ConfigurationError
+import numpy as np
+import pandas as pd
+import pytest
+
+from ktrdr.fuzzy import FuzzyConfig, FuzzyEngine
 
 
 class TestFuzzyEdgeCases:

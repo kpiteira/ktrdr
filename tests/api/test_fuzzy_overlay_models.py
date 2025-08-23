@@ -3,14 +3,12 @@ Tests for fuzzy overlay API models.
 """
 
 import pytest
-from datetime import datetime
-from typing import Dict, List
 from pydantic import ValidationError
 
 from ktrdr.api.models.fuzzy import (
     FuzzyMembershipPoint,
-    FuzzySetMembership,
     FuzzyOverlayResponse,
+    FuzzySetMembership,
 )
 
 

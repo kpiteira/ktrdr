@@ -6,7 +6,7 @@ and connection management.
 """
 
 import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse

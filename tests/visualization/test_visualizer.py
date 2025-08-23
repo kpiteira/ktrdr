@@ -2,15 +2,14 @@
 Tests for the Visualizer class.
 """
 
-import pytest
-import pandas as pd
 from pathlib import Path
-import tempfile
-import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from ktrdr.visualization import Visualizer
+import pandas as pd
+import pytest
+
 from ktrdr.errors import ConfigurationError
+from ktrdr.visualization import Visualizer
 
 
 @pytest.fixture

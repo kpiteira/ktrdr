@@ -6,7 +6,7 @@ and implements the triangular membership function for Phase 1.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 import pandas as pd

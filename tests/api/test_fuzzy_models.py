@@ -8,14 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from ktrdr.api.models.fuzzy import (
-    MembershipFunctionType,
-    MembershipFunction,
-    FuzzyVariable,
     FuzzyRule,
     FuzzySystem,
-    FuzzyConfig,
-    FuzzyInput,
-    FuzzyOutput,
+    FuzzyVariable,
+    MembershipFunction,
+    MembershipFunctionType,
 )
 
 

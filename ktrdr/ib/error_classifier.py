@@ -11,7 +11,6 @@ and real-world usage patterns.
 """
 
 from enum import Enum
-from typing import Tuple
 
 from ktrdr.logging import get_logger
 

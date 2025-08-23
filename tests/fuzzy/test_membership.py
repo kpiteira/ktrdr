@@ -2,18 +2,17 @@
 Tests for fuzzy logic membership function implementations.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
+from ktrdr.errors import ConfigurationError
 from ktrdr.fuzzy.membership import (
-    MembershipFunction,
-    TriangularMF,
-    TrapezoidalMF,
     GaussianMF,
     MembershipFunctionFactory,
+    TrapezoidalMF,
+    TriangularMF,
 )
-from ktrdr.errors import ConfigurationError
 
 
 class TestTriangularMF:

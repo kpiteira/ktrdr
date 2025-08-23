@@ -2,20 +2,16 @@
 Tests for the IndicatorFactory class.
 """
 
-import os
 import pytest
-import pandas as pd
 import yaml
-from pathlib import Path
 
-from ktrdr.config.loader import ConfigLoader
 from ktrdr.config.models import IndicatorConfig, IndicatorsConfig
 from ktrdr.errors import ConfigurationError
 from ktrdr.indicators import (
+    ExponentialMovingAverage,
     IndicatorFactory,
     RSIIndicator,
     SimpleMovingAverage,
-    ExponentialMovingAverage,
 )
 
 
@@ -129,7 +125,7 @@ class TestIndicatorFactory:
         yaml_file.write_text(yaml_content)
 
         # Load the configuration
-        with open(yaml_file, "r") as f:
+        with open(yaml_file) as f:
             config_data = yaml.safe_load(f)
 
         indicators_config = IndicatorsConfig(**config_data)

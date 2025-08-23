@@ -54,40 +54,45 @@ graph TB
             ERR["Error Handling<br/>Custom exceptions"]
         end
         
+        subgraph "ServiceOrchestrator Foundation"
+            SO["ServiceOrchestrator<br/>Base class for all managers"]
+        end
+        
         subgraph "Unified Data Path"
             DS2["DataService<br/>Async ✅"]
-            DM2["AsyncDataManager<br/>Async ✅"]
-            DA2["AsyncDataAdapter<br/>extends AsyncHostService"]
+            DM2["DataManager<br/>extends ServiceOrchestrator"]
+            DA2["IbDataAdapter<br/>Async ✅ (existing)"]
         end
         
         subgraph "Unified Training Path"
             TS2["TrainingService<br/>Async ✅"]
-            TM2["TrainingManager<br/>Async ✅"]
-            TA2["TrainingAdapter<br/>extends AsyncHostService"]
+            TM2["TrainingManager<br/>extends ServiceOrchestrator"]
+            TA2["TrainingAdapter<br/>Async ✅ (existing)"]
         end
         
         CLI2 --> HTTP2 --> API2
         API2 --> DS2 --> DM2 --> DA2
         API2 --> TS2 --> TM2 --> TA2
         
-        DA2 -.-> AHS
-        TA2 -.-> AHS
-        AHS -.-> ERR
+        DM2 -.-> SO
+        TM2 -.-> SO
+        SO -.-> ERR
         
         style CLI2 fill:#ccffcc
         style DM2 fill:#ccffcc
         style DA2 fill:#ccffcc
         style TA2 fill:#ccffcc
-        style AHS fill:#cceeff
+        style SO fill:#e6f3ff
     end
 ```
 
 ### Component Roles and Deployment
 
-**Key Concept: Manager vs Adapter**
+**Key Concept: ServiceOrchestrator Pattern**
 
-- **Manager** = Business logic (runs in backend container)
-- **Adapter** = Communication interface (runs in backend container, talks to services)
+- **ServiceOrchestrator** = Base class providing environment-based configuration and common manager patterns
+- **Manager** = Business logic orchestrators (DataManager, TrainingManager) extending ServiceOrchestrator
+- **Adapter** = Communication interfaces (existing IbDataAdapter, TrainingAdapter)
 
 ```mermaid
 graph TB
@@ -106,18 +111,18 @@ graph TB
             TS["TrainingService"]
         end
         
-        subgraph "Manager Layer (Business Logic)"
-            DM["AsyncDataManager<br/>- Coordinates data operations<br/>- Handles caching/validation<br/>- Business rules"]
-            TM["TrainingManager<br/>- Coordinates training<br/>- Manages training state<br/>- Business rules"]
+        subgraph "Manager Layer (ServiceOrchestrators)"
+            DM["DataManager<br/>- Orchestrates data operations<br/>- Handles caching/validation<br/>- Extends ServiceOrchestrator"]
+            TM["TrainingManager<br/>- Orchestrates training<br/>- Manages training state<br/>- Extends ServiceOrchestrator"]
         end
         
         subgraph "Adapter Layer (Communication)"
-            DA["AsyncDataAdapter<br/>- Communicates with IB services<br/>- Protocol translation<br/>- Connection management"]
-            TA["TrainingAdapter<br/>- Communicates with training services<br/>- Protocol translation<br/>- Connection management"]
+            DA["IbDataAdapter<br/>- Communicates with IB services<br/>- Protocol translation<br/>- Connection management (existing)"]
+            TA["TrainingAdapter<br/>- Communicates with training services<br/>- Protocol translation<br/>- Connection management (existing)"]
         end
         
         subgraph "Foundation"
-            AHS["AsyncHostService<br/>Base class for adapters"]
+            SO["ServiceOrchestrator<br/>Base class for managers"]
         end
     end
     
@@ -137,8 +142,8 @@ graph TB
     API --> DS --> DM --> DA
     API --> TS --> TM --> TA
     
-    DA --> AHS
-    TA --> AHS
+    DM --> SO
+    TM --> SO
     
     %% Host service paths (recommended)
     DA -->|"HTTP calls<br/>USE_IB_HOST_SERVICE=true"| IB_HOST
@@ -164,23 +169,25 @@ graph TB
 
 | Component | Purpose | Runs Where | Responsibilities |
 |-----------|---------|------------|------------------|
-| **AsyncDataManager** | Business Logic | Backend Container | • Data validation and caching<br/>• Business rules (date ranges, symbols)<br/>• Coordinates multiple data sources<br/>• Error handling and retry logic |
-| **AsyncDataAdapter** | Communication | Backend Container | • HTTP calls to IB Host Service<br/>• Protocol translation (REST ↔ IB)<br/>• Connection management<br/>• Fallback to direct IB connections |
-| **TrainingManager** | Business Logic | Backend Container | • Training workflow coordination<br/>• Model lifecycle management<br/>• Training state and progress tracking<br/>• Resource allocation decisions |
-| **TrainingAdapter** | Communication | Backend Container | • HTTP calls to Training Host Service<br/>• Protocol translation (REST ↔ Training)<br/>• GPU resource communication<br/>• Fallback to local training |
+| **ServiceOrchestrator** | Base Class | Backend Container | • Environment-based configuration<br/>• Common manager patterns<br/>• Health check interface<br/>• Statistics and info methods |
+| **DataManager** | Business Orchestrator | Backend Container | • Data validation and caching<br/>• Business rules (date ranges, symbols)<br/>• Coordinates multiple data sources<br/>• Extends ServiceOrchestrator |
+| **IbDataAdapter** | Communication | Backend Container | • HTTP calls to IB Host Service<br/>• Protocol translation (REST ↔ IB)<br/>• Connection management<br/>• Direct IB connections (existing) |
+| **TrainingManager** | Business Orchestrator | Backend Container | • Training workflow coordination<br/>• Model lifecycle management<br/>• Training state tracking<br/>• Extends ServiceOrchestrator |
+| **TrainingAdapter** | Communication | Backend Container | • HTTP calls to Training Host Service<br/>• Protocol translation (REST ↔ Training)<br/>• GPU resource communication<br/>• Local training (existing) |
 
-**Why This Split?**
+**Why This Architecture?**
 
-- **Manager** = "What to do" (business logic, stays in your main application)
-- **Adapter** = "How to communicate" (protocol details, can be swapped out)
+- **ServiceOrchestrator** = Common patterns for all managers (configuration, health checks, statistics)
+- **Manager** = "What to do" (business orchestration, extends ServiceOrchestrator)  
+- **Adapter** = "How to communicate" (protocol details, existing implementations)
 
 **Example Flow:**
-1. `DataService.load_data()` → calls `AsyncDataManager.load_data()`
-2. `AsyncDataManager` validates symbol, checks cache, determines date range
-3. `AsyncDataManager` calls `AsyncDataAdapter.fetch_historical_data()`
-4. `AsyncDataAdapter` makes HTTP call to IB Host Service OR direct IB connection
-5. `AsyncDataAdapter` translates response back to standard DataFrame format
-6. `AsyncDataManager` caches result and applies business rules
+1. `DataService.load_data()` → calls `DataManager.load_data()`
+2. `DataManager` (extends ServiceOrchestrator) validates symbol, checks cache, determines date range
+3. `DataManager` calls `IbDataAdapter.fetch_historical_data()` (existing async method)
+4. `IbDataAdapter` makes HTTP call to IB Host Service OR direct IB connection
+5. `IbDataAdapter` translates response back to standard DataFrame format
+6. `DataManager` caches result and applies business rules
 7. `DataService` returns final result to API
 
 ## Recommended Unified Architecture
@@ -256,179 +263,100 @@ def show_data(...):
 
 Create a standard async service foundation that both data and training operations can use:
 
-**Standard Async Service Base:**
+**ServiceOrchestrator Base Class:**
 ```python
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
-import httpx
+from typing import Optional, Dict, Any, TypeVar
+import os
 
-class AsyncHostService(ABC):
-    """Base class for all host service integrations."""
-    
-    def __init__(
-        self, 
-        service_name: str,
-        use_host_service: bool = False,
-        host_service_url: Optional[str] = None,
-        timeout: float = 30.0
-    ):
-        self.service_name = service_name
-        self.use_host_service = use_host_service
-        self.host_service_url = host_service_url
-        self.timeout = timeout
-        self._client: Optional[httpx.AsyncClient] = None
-    
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client for host service communication."""
-        if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
-        return self._client
-    
-    async def _call_host_service_post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Standard POST call to host service."""
-        if not self.use_host_service:
-            raise RuntimeError(f"{self.service_name} host service not enabled")
-        
-        client = await self._get_client()
-        url = f"{self.host_service_url}{endpoint}"
-        
-        try:
-            response = await client.post(url, json=data)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            raise ServiceConnectionError(f"{self.service_name} host service request failed: {str(e)}")
-    
-    async def _call_host_service_get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Standard GET call to host service."""
-        if not self.use_host_service:
-            raise RuntimeError(f"{self.service_name} host service not enabled")
-        
-        client = await self._get_client()
-        url = f"{self.host_service_url}{endpoint}"
-        
-        try:
-            response = await client.get(url, params=params or {})
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            raise ServiceConnectionError(f"{self.service_name} host service request failed: {str(e)}")
-    
-    async def close(self):
-        """Clean up HTTP client resources."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-    
-    @abstractmethod
-    async def health_check(self) -> Dict[str, Any]:
-        """Check if the service is healthy and available."""
-        pass
-```
+T = TypeVar('T')  # For the adapter type
 
-### 4. Standardize Service Adapters
-
-Both data and training adapters should follow the same pattern:
-
-**Unified Data Adapter (Async):**
-```python
-class AsyncDataAdapter(AsyncHostService):
-    """Unified async data adapter for IB operations."""
-    
-    def __init__(self, use_host_service: bool = False, host_service_url: str = None):
-        super().__init__(
-            service_name="IB",
-            use_host_service=use_host_service,
-            host_service_url=host_service_url or "http://localhost:5001"
-        )
-        
-        # Initialize local components only if not using host service
-        if not use_host_service:
-            self.symbol_validator = IbSymbolValidator()
-            self.data_fetcher = IbDataFetcher()
-        else:
-            self.symbol_validator = None
-            self.data_fetcher = None
-    
-    async def fetch_historical_data(self, symbol: str, timeframe: str, **kwargs) -> pd.DataFrame:
-        """Fetch historical data using host service or local connection."""
-        if self.use_host_service:
-            # Use host service (recommended)
-            response = await self._call_host_service_post("/data/historical", {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                **kwargs
-            })
-            # Convert response to DataFrame
-            return pd.DataFrame(response["data"])
-        else:
-            # Local connection (fallback)
-            return await self.data_fetcher.fetch_data_async(symbol, timeframe, **kwargs)
-    
-    async def health_check(self) -> Dict[str, Any]:
-        """Check IB service health."""
-        if self.use_host_service:
-            return await self._call_host_service_get("/health")
-        else:
-            # Local health check
-            return {"status": "healthy", "mode": "local"}
-
-class AsyncTrainingAdapter(AsyncHostService):
-    """Unified async training adapter."""
-    
-    def __init__(self, use_host_service: bool = False, host_service_url: str = None):
-        super().__init__(
-            service_name="Training",
-            use_host_service=use_host_service,
-            host_service_url=host_service_url or "http://localhost:5002"
-        )
-        
-        # Initialize local trainer only if not using host service
-        if not use_host_service:
-            from .train_strategy import StrategyTrainer
-            self.local_trainer = StrategyTrainer()
-        else:
-            self.local_trainer = None
-    
-    async def start_training_session(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Start training using host service or local trainer."""
-        if self.use_host_service:
-            # Use host service (recommended)
-            return await self._call_host_service_post("/training/start", config)
-        else:
-            # Local training (fallback)
-            return await self.local_trainer.train_async(config)
-    
-    async def health_check(self) -> Dict[str, Any]:
-        """Check training service health."""
-        if self.use_host_service:
-            return await self._call_host_service_get("/health")
-        else:
-            return {"status": "healthy", "mode": "local"}
-```
-
-### 5. Make All Managers Consistently Async
-
-The DataManager should follow the same async pattern as TrainingManager:
-
-**Async Data Manager:**
-```python
-class AsyncDataManager:
-    """Async data manager following the same pattern as TrainingManager."""
+class ServiceOrchestrator(ABC):
+    """Base class for all service managers (Data, Training, Backtesting, etc.)."""
     
     def __init__(self):
-        self.data_adapter = self._initialize_data_adapter()
+        """Initialize manager with environment-based configuration."""
+        self.adapter = self._initialize_adapter()
     
-    def _initialize_data_adapter(self) -> AsyncDataAdapter:
-        """Initialize data adapter based on environment variables."""
+    @abstractmethod
+    def _initialize_adapter(self) -> T:
+        """Initialize the appropriate adapter based on environment variables."""
+        pass
+    
+    @abstractmethod
+    def _get_service_name(self) -> str:
+        """Get the service name for logging and configuration."""
+        pass
+    
+    @abstractmethod
+    def _get_default_host_url(self) -> str:
+        """Get the default host service URL."""
+        pass
+    
+    @abstractmethod
+    def _get_env_var_prefix(self) -> str:
+        """Get environment variable prefix (e.g., 'IB', 'TRAINING')."""
+        pass
+    
+    def is_using_host_service(self) -> bool:
+        """Check if manager is using host service."""
+        return getattr(self.adapter, 'use_host_service', False)
+    
+    def get_host_service_url(self) -> Optional[str]:
+        """Get host service URL if using host service."""
+        if self.is_using_host_service():
+            return getattr(self.adapter, 'host_service_url', None)
+        return None
+    
+    def get_configuration_info(self) -> Dict[str, Any]:
+        """Get current configuration information."""
+        prefix = self._get_env_var_prefix()
+        return {
+            "service": self._get_service_name(),
+            "mode": "host_service" if self.is_using_host_service() else "local",
+            "host_service_url": self.get_host_service_url(),
+            "environment_variables": {
+                f"USE_{prefix}_HOST_SERVICE": os.getenv(f"USE_{prefix}_HOST_SERVICE"),
+                f"{prefix}_HOST_SERVICE_URL": os.getenv(f"{prefix}_HOST_SERVICE_URL"),
+            },
+            "statistics": self.get_adapter_statistics(),
+        }
+    
+    def get_adapter_statistics(self) -> Dict[str, Any]:
+        """Get adapter usage statistics."""
+        if hasattr(self.adapter, 'get_statistics'):
+            return self.adapter.get_statistics()
+        return {"statistics": "not_available"}
+```
+
+### 4. Create Service Managers Using ServiceOrchestrator
+
+Both data and training managers should extend ServiceOrchestrator:
+
+**New Async DataManager:**
+```python
+class DataManager(ServiceOrchestrator):
+    """Async data manager following ServiceOrchestrator pattern."""
+    
+    def _initialize_adapter(self) -> IbDataAdapter:
+        """Initialize IB data adapter based on environment variables."""
         env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
         use_host_service = env_enabled in ("true", "1", "yes")
-        host_service_url = os.getenv("IB_HOST_SERVICE_URL", "http://localhost:5001")
+        host_service_url = os.getenv("IB_HOST_SERVICE_URL", self._get_default_host_url())
         
-        return AsyncDataAdapter(
+        return IbDataAdapter(
             use_host_service=use_host_service,
             host_service_url=host_service_url
         )
+    
+    def _get_service_name(self) -> str:
+        return "Data/IB"
+    
+    def _get_default_host_url(self) -> str:
+        return "http://localhost:8001"
+    
+    def _get_env_var_prefix(self) -> str:
+        return "IB"
     
     async def load_data(
         self, 
@@ -440,21 +368,79 @@ class AsyncDataManager:
     ) -> pd.DataFrame:
         """Load data asynchronously."""
         if source == "ib":
-            return await self.data_adapter.fetch_historical_data(
+            return await self.adapter.fetch_historical_data(
                 symbol=symbol,
                 timeframe=timeframe,
                 start_date=start_date,
                 end_date=end_date
             )
         elif source == "local":
-            # Local file loading (already async-safe)
+            # Local file loading (async-safe)
             return await self._load_local_data_async(symbol, timeframe, start_date, end_date)
         else:
             raise ValueError(f"Unknown data source: {source}")
     
-    async def get_health_status(self) -> Dict[str, Any]:
+    async def health_check(self) -> Dict[str, Any]:
         """Get health status of data services."""
-        return await self.data_adapter.health_check()
+        return await self.adapter.health_check()
+
+**TrainingManager Refactored:**
+```python
+class TrainingManager(ServiceOrchestrator):
+    """Training manager refactored to use ServiceOrchestrator pattern."""
+    
+    def _initialize_adapter(self) -> TrainingAdapter:
+        """Initialize training adapter based on environment variables."""
+        env_enabled = os.getenv("USE_TRAINING_HOST_SERVICE", "").lower()
+        use_host_service = env_enabled in ("true", "1", "yes")
+        host_service_url = os.getenv("TRAINING_HOST_SERVICE_URL", self._get_default_host_url())
+        
+        return TrainingAdapter(
+            use_host_service=use_host_service,
+            host_service_url=host_service_url
+        )
+    
+    def _get_service_name(self) -> str:
+        return "Training"
+    
+    def _get_default_host_url(self) -> str:
+        return "http://localhost:8002"
+    
+    def _get_env_var_prefix(self) -> str:
+        return "TRAINING"
+    
+    async def train_multi_symbol_strategy(
+        self,
+        strategy_config_path: str,
+        symbols: list[str],
+        # ... other params
+    ) -> dict[str, Any]:
+        """Train strategy using the adapter."""
+        return await self.adapter.train_multi_symbol_strategy(
+            strategy_config_path=strategy_config_path,
+            symbols=symbols,
+            # ... other params
+        )
+```
+
+### 5. Updated File Structure
+
+The ServiceOrchestrator pattern creates a clean, unified structure:
+
+```
+ktrdr/
+├── managers/
+│   ├── __init__.py              # ServiceOrchestrator base class
+│   ├── base.py                 # ServiceOrchestrator implementation
+├── data/
+│   ├── managers/
+│   │   ├── __init__.py
+│   │   ├── data_manager.py     # NEW async DataManager extends ServiceOrchestrator
+│   ├── ib_data_adapter.py      # EXISTING (already has async methods)
+│   ├── legacy_data_manager.py  # OLD sync DataManager (renamed)
+├── training/
+│   ├── training_manager.py     # REFACTORED to extend ServiceOrchestrator
+│   ├── training_adapter.py     # EXISTING (already async)
 ```
 
 ## Implementation Strategy
@@ -622,79 +608,78 @@ The result will be a **unified, maintainable, and high-performance** async archi
 
 **MUST follow this exact sequence:**
 
-1. **Error Handling Foundation** (Independent)
-   - Custom exceptions: `ServiceConnectionError`, `ServiceTimeoutError`, `ServiceConfigurationError`
-   - No dependencies - can be implemented anytime
+1. **ServiceOrchestrator Base Class** (Independent)
+   - Abstract base class for all service managers (Data, Training, etc.)
+   - Provides: environment-based configuration, common manager patterns
+   - No dependencies - can be implemented first
 
-2. **AsyncHostService Base Class** (Depends on: Error Handling)
-   - Abstract base class for all service communication
-   - Provides: `_call_host_service_post()`, `_call_host_service_get()`, `health_check()`
-   - Used by: AsyncDataAdapter, TrainingAdapter
-
-3. **AsyncDataAdapter** (Depends on: AsyncHostService)  
-   - Extends AsyncHostService
-   - Handles IB Host Service vs direct IB connection routing
-   - Must be implemented BEFORE AsyncDataManager
-
-4. **AsyncDataManager** (Depends on: AsyncDataAdapter)
-   - Business logic layer
-   - Uses AsyncDataAdapter for communication
+2. **DataManager** (Depends on: ServiceOrchestrator)
+   - NEW async DataManager extending ServiceOrchestrator
+   - Uses existing IbDataAdapter (which already has async methods)
    - Replaces synchronous DataManager
 
-5. **TrainingAdapter Refactor** (Depends on: AsyncHostService)
-   - Refactor existing TrainingAdapter to extend AsyncHostService
-   - Remove duplicate HTTP client code
+3. **TrainingManager Refactor** (Depends on: ServiceOrchestrator) 
+   - REFACTOR existing TrainingManager to extend ServiceOrchestrator
+   - Remove duplicate configuration code
+   - Uses existing TrainingAdapter
 
 ### File Locations and Naming
 
 ```
 ktrdr/
-├── exceptions/
-│   ├── __init__.py
-│   ├── service_exceptions.py          # ServiceConnectionError, etc.
-├── base/
-│   ├── __init__.py  
-│   ├── async_host_service.py          # AsyncHostService abstract base
+├── managers/
+│   ├── __init__.py              # Exports ServiceOrchestrator
+│   ├── base.py                 # ServiceOrchestrator abstract base class
 ├── data/
-│   ├── adapters/
-│   │   ├── __init__.py
-│   │   ├── async_data_adapter.py      # AsyncDataAdapter
 │   ├── managers/
 │   │   ├── __init__.py
-│   │   ├── async_data_manager.py      # AsyncDataManager
+│   │   ├── data_manager.py     # NEW DataManager extends ServiceOrchestrator
+│   ├── ib_data_adapter.py      # EXISTING (already has async methods)
+│   ├── legacy_data_manager.py  # RENAMED old sync DataManager
 ├── training/
-│   ├── adapters/
-│   │   ├── __init__.py
-│   │   ├── training_adapter.py        # Refactored TrainingAdapter
+│   ├── training_manager.py     # REFACTORED to extend ServiceOrchestrator
+│   ├── training_adapter.py     # EXISTING (already async)
 ```
 
 ### Component Interface Contracts
 
-**AsyncHostService (Abstract Base Class)**
+**ServiceOrchestrator (Abstract Base Class)**
 ```python
-class AsyncHostService(ABC):
-    def __init__(self, service_name: str, use_host_service: bool, host_service_url: str, timeout: float)
-    async def _call_host_service_post(self, endpoint: str, data: Dict) -> Dict
-    async def _call_host_service_get(self, endpoint: str, params: Dict) -> Dict
-    async def close(self) -> None
-    @abstractmethod
-    async def health_check(self) -> Dict[str, Any]
-```
-
-**AsyncDataAdapter Interface**
-```python
-class AsyncDataAdapter(AsyncHostService):
-    def __init__(self, use_host_service: bool, host_service_url: str)
-    async def fetch_historical_data(self, symbol: str, timeframe: str, **kwargs) -> pd.DataFrame
-    async def health_check(self) -> Dict[str, Any]
-```
-
-**AsyncDataManager Interface**  
-```python
-class AsyncDataManager:
+class ServiceOrchestrator(ABC):
     def __init__(self)
+    @abstractmethod
+    def _initialize_adapter(self) -> T
+    @abstractmethod 
+    def _get_service_name(self) -> str
+    @abstractmethod
+    def _get_default_host_url(self) -> str
+    @abstractmethod
+    def _get_env_var_prefix(self) -> str
+    def is_using_host_service(self) -> bool
+    def get_host_service_url(self) -> Optional[str]
+    def get_configuration_info(self) -> Dict[str, Any]
+    def get_adapter_statistics(self) -> Dict[str, Any]
+```
+
+**DataManager Interface**
+```python
+class DataManager(ServiceOrchestrator):
+    def _initialize_adapter(self) -> IbDataAdapter
+    def _get_service_name(self) -> str  # Returns "Data/IB"
+    def _get_default_host_url(self) -> str  # Returns "http://localhost:8001"
+    def _get_env_var_prefix(self) -> str  # Returns "IB"
     async def load_data(self, symbol: str, timeframe: str, start_date: str, end_date: str, source: str) -> pd.DataFrame
-    async def get_health_status(self) -> Dict[str, Any]
+    async def health_check(self) -> Dict[str, Any]
+```
+
+**TrainingManager Interface (Refactored)**
+```python
+class TrainingManager(ServiceOrchestrator):
+    def _initialize_adapter(self) -> TrainingAdapter
+    def _get_service_name(self) -> str  # Returns "Training"
+    def _get_default_host_url(self) -> str  # Returns "http://localhost:8002"
+    def _get_env_var_prefix(self) -> str  # Returns "TRAINING"
+    async def train_multi_symbol_strategy(...) -> Dict[str, Any]
 ```
 
 ### Environment Variables and Configuration

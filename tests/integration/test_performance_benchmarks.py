@@ -4,12 +4,11 @@ These tests establish performance baselines and validate improvements
 after migration to AsyncCLIClient pattern.
 """
 
-import time
 import asyncio
 import statistics
-from typing import List
-from unittest.mock import Mock, AsyncMock, patch
+import time
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
@@ -259,7 +258,7 @@ class TestConcurrentOperationPerformance:
                     tasks = []
                     for i in range(10):
                         task = cli._make_request(
-                            "GET", f"/api/data/cached", params={"symbol": f"SYMBOL{i}"}
+                            "GET", "/api/data/cached", params={"symbol": f"SYMBOL{i}"}
                         )
                         tasks.append(task)
 

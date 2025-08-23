@@ -5,7 +5,7 @@ Average True Range is a volatility indicator that measures the average of true r
 over a specified period. It helps traders assess the volatility of a security.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

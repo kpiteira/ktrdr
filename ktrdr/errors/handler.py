@@ -6,7 +6,7 @@ and utilities for generating user-friendly error messages.
 """
 
 import traceback
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, Union
 
 # Import the new logging system
 from ktrdr import get_logger

@@ -16,6 +16,7 @@ from ktrdr.cli.ib_diagnosis import (
     get_ib_recovery_suggestions,
     should_show_ib_diagnosis,
 )
+from ktrdr.config.host_services import get_api_base_url
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.errors.exceptions import (
     ServiceConfigurationError,
@@ -124,8 +125,8 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
     # Import here to avoid circular imports
     try:
         from ktrdr.data.external_data_interface import (
-            DataProviderConnectionError,
             DataProviderConfigError,
+            DataProviderConnectionError,
             DataProviderRateLimitError,
         )
 
@@ -241,7 +242,7 @@ def display_ib_connection_required_message() -> None:
     error_console.print(
         "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
     )
-    error_console.print("Make sure the API server is running at http://localhost:8000")
+    error_console.print(f"Make sure the API server is running at {get_api_base_url()}")
 
 
 def create_enhanced_exception_handler(verbose: bool = False, quiet: bool = False):

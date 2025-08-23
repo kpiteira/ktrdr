@@ -7,7 +7,7 @@ timeouts, retries, and response formatting.
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import httpx
 from rich.console import Console
@@ -17,6 +17,7 @@ from ktrdr.cli.ib_diagnosis import (
     format_ib_diagnostic_message,
     should_show_ib_diagnosis,
 )
+from ktrdr.config.host_services import get_api_base_url
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
 
@@ -36,7 +37,7 @@ class KtrdrApiClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        base_url: Optional[str] = None,
         timeout: float = 30.0,
         max_retries: int = 3,
         retry_delay: float = 1.0,
@@ -45,12 +46,12 @@ class KtrdrApiClient:
         Initialize the API client.
 
         Args:
-            base_url: Base URL of the KTRDR API server
+            base_url: Base URL of the KTRDR API server (defaults to configured URL)
             timeout: Default timeout in seconds for requests
             max_retries: Maximum number of retry attempts for failed requests
             retry_delay: Delay between retry attempts in seconds
         """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or get_api_base_url()).rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -759,7 +760,7 @@ _api_client: Optional[KtrdrApiClient] = None
 
 
 def get_api_client(
-    base_url: str = "http://localhost:8000",
+    base_url: Optional[str] = None,
     timeout: float = 30.0,
 ) -> KtrdrApiClient:
     """
@@ -778,7 +779,7 @@ def get_api_client(
     return _api_client
 
 
-async def check_api_connection(base_url: str = "http://localhost:8000") -> bool:
+async def check_api_connection(base_url: Optional[str] = None) -> bool:
     """
     Check if the API server is available.
 

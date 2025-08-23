@@ -5,7 +5,6 @@ Tests the training endpoints that start training operations and retrieve results
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from ktrdr.api.main import app

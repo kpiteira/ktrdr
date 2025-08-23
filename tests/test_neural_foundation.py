@@ -1,12 +1,10 @@
 """Tests for Phase 1: Neural Network Foundation."""
 
+import pandas as pd
 import pytest
 import torch
-import pandas as pd
-import numpy as np
-from datetime import datetime
 
-from ktrdr.decision import Signal, Position, TradingDecision, DecisionEngine
+from ktrdr.decision import DecisionEngine, Position, Signal, TradingDecision
 from ktrdr.neural import MLPTradingModel
 
 

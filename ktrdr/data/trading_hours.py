@@ -7,7 +7,7 @@ to enhance market hours detection and symbol validation.
 
 from dataclasses import dataclass
 from datetime import time
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pandas as pd
 

@@ -6,13 +6,11 @@ work correctly in the production environment. They test the complete stack
 including the refactored IB components.
 """
 
-import pytest
-import httpx
 import asyncio
 import time
-import json
-from typing import Dict, Any, List
-from datetime import datetime, timedelta
+
+import httpx
+import pytest
 
 # Test configuration
 API_BASE_URL = "http://localhost:8000/api/v1"

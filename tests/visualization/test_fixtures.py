@@ -5,9 +5,10 @@ This module contains reusable fixtures for the visualization tests,
 including sample data for different chart types and configurations.
 """
 
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
 import pytest
 
 
