@@ -369,11 +369,11 @@ class TestBacktestingService:
                 "trades": [],
                 "equity_curve": {"timestamps": [], "values": [], "drawdowns": []},
             }
-            
+
             # Create an async function that simulates progress and takes some time
             async def mock_run_with_progress():
                 # Simulate progress by updating the callback
-                if hasattr(mock_engine, 'progress_callback'):
+                if hasattr(mock_engine, "progress_callback"):
                     # Simulate multiple progress updates
                     mock_engine.progress_callback(100, 1000)  # 10% progress
                     await asyncio.sleep(0.1)  # Small delay
@@ -381,7 +381,7 @@ class TestBacktestingService:
                     await asyncio.sleep(0.1)  # Small delay
                     mock_engine.progress_callback(1000, 1000)  # 100% progress
                 return mock_results
-            
+
             # Mock engine.run to return the async function
             mock_engine.run.side_effect = mock_run_with_progress
 

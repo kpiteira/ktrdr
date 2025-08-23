@@ -105,7 +105,6 @@ class TestTrainingEndpoints:
         data = response.json()
         assert data["success"] is True
 
-
     @pytest.mark.api
     def test_get_model_performance_success(self, client, mock_training_service):
         """Test getting model performance for completed training."""
@@ -150,7 +149,9 @@ class TestTrainingEndpoints:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["strategy_name"] == "rsi_mean_reversion"  # Strategy name should be in response
+        assert (
+            data["strategy_name"] == "rsi_mean_reversion"
+        )  # Strategy name should be in response
         assert data["timeframes"] == ["1h"]  # Timeframes should be in response
 
     @pytest.mark.api

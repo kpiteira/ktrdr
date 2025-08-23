@@ -158,22 +158,23 @@ class DecisionOrchestrator:
         self.position_states: Dict[str, PositionState] = {}
         self.decision_history: List[TradingDecision] = []
         self.max_history = 100
-        
+
         # Feature caching for backtesting performance
         self.feature_cache = None
         if mode == "backtest":
             from ..backtesting.feature_cache import FeatureCache
+
             self.feature_cache = FeatureCache(self.strategy_config)
-            
+
     def prepare_feature_cache(self, historical_data: pd.DataFrame) -> None:
         """Pre-compute all features for backtesting performance.
-        
+
         Args:
             historical_data: Complete historical OHLCV data for backtesting
         """
         if self.feature_cache is None:
             return
-            
+
         logger.info("🚀 Preparing feature cache for backtesting...")
         self.feature_cache.compute_all_features(historical_data)
         logger.info("✅ Feature cache ready!")
@@ -209,19 +210,31 @@ class DecisionOrchestrator:
         # Step 1 & 2: Get indicators and fuzzy memberships (cached or computed)
         # FEATURE CACHE ENABLED: Fixed sliding window computation
         if self.feature_cache and self.feature_cache.is_ready():
-            current_timestamp = current_bar.name if hasattr(current_bar, 'name') else pd.Timestamp.now()
-            
+            current_timestamp = (
+                current_bar.name if hasattr(current_bar, "name") else pd.Timestamp.now()
+            )
+
             try:
                 # Use pre-computed cached features for fast lookup
-                mapped_indicators, fuzzy_values = self.feature_cache.get_features_for_timestamp(current_timestamp)
-                logger.debug(f"🚀 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Using cached features: {len(mapped_indicators)} indicators, {len(fuzzy_values)} fuzzy")
+                mapped_indicators, fuzzy_values = (
+                    self.feature_cache.get_features_for_timestamp(current_timestamp)
+                )
+                logger.debug(
+                    f"🚀 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Using cached features: {len(mapped_indicators)} indicators, {len(fuzzy_values)} fuzzy"
+                )
             except ValueError as e:
-                logger.debug(f"⚠️ Cache lookup failed: {e}, falling back to real-time computation")
+                logger.debug(
+                    f"⚠️ Cache lookup failed: {e}, falling back to real-time computation"
+                )
                 # Fall back to real-time computation
-                mapped_indicators, fuzzy_values = self._compute_features_realtime(historical_data, current_bar)
+                mapped_indicators, fuzzy_values = self._compute_features_realtime(
+                    historical_data, current_bar
+                )
         else:
             # Real-time computation (for non-backtest modes or when cache not ready)
-            mapped_indicators, fuzzy_values = self._compute_features_realtime(historical_data, current_bar)
+            mapped_indicators, fuzzy_values = self._compute_features_realtime(
+                historical_data, current_bar
+            )
 
         # Step 3: Prepare decision context
         context = self._prepare_context(
@@ -235,7 +248,9 @@ class DecisionOrchestrator:
 
         # Step 4: Load model if needed (for multi-symbol support)
         if not self.model:
-            logger.info(f"🤖 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Loading neural model for {symbol} {timeframe}")
+            logger.info(
+                f"🤖 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Loading neural model for {symbol} {timeframe}"
+            )
             self.model, self.model_metadata = self._load_model_for_symbol(
                 symbol, timeframe
             )
@@ -245,43 +260,59 @@ class DecisionOrchestrator:
             self.decision_engine.neural_model.feature_scaler = self.model_metadata.get(
                 "scaler"
             )
-            logger.info(f"🤖 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Model loaded successfully, is_trained: {self.decision_engine.neural_model.is_trained}")
+            logger.info(
+                f"🤖 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Model loaded successfully, is_trained: {self.decision_engine.neural_model.is_trained}"
+            )
         else:
-            logger.debug(f"🤖 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Using existing model, is_trained: {self.decision_engine.neural_model.is_trained}")
+            logger.debug(
+                f"🤖 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Using existing model, is_trained: {self.decision_engine.neural_model.is_trained}"
+            )
 
         # Step 5: Generate decision using the decision engine
-        logger.debug(f"🎯 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Calling decision engine with {len(context.fuzzy_memberships)} fuzzy features")
-        
+        logger.debug(
+            f"🎯 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Calling decision engine with {len(context.fuzzy_memberships)} fuzzy features"
+        )
+
         decision = self.decision_engine.generate_decision(
             current_data=current_bar,
             fuzzy_memberships=context.fuzzy_memberships,
             indicators=context.indicators,
         )
-        
-        logger.debug(f"🎯 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Decision engine returned: {decision.signal.value} (confidence: {decision.confidence:.4f})")
+
+        logger.debug(
+            f"🎯 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Decision engine returned: {decision.signal.value} (confidence: {decision.confidence:.4f})"
+        )
 
         # Step 6: Apply orchestrator-level logic
-        logger.debug(f"🎯 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Applying orchestrator logic to {decision.signal.value}")
-        
+        logger.debug(
+            f"🎯 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Applying orchestrator logic to {decision.signal.value}"
+        )
+
         final_decision = self._apply_orchestrator_logic(decision, context)
-        
+
         if final_decision.signal != decision.signal:
-            logger.info(f"🚫 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Orchestrator OVERRODE {decision.signal.value} → {final_decision.signal.value} (reason: {final_decision.reasoning.get('orchestrator_override', 'Unknown')})")
+            logger.info(
+                f"🚫 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Orchestrator OVERRODE {decision.signal.value} → {final_decision.signal.value} (reason: {final_decision.reasoning.get('orchestrator_override', 'Unknown')})"
+            )
         else:
-            logger.debug(f"✅ [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Orchestrator kept {final_decision.signal.value}")
+            logger.debug(
+                f"✅ [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Orchestrator kept {final_decision.signal.value}"
+            )
 
         # Step 7: Update state
         self._update_state(symbol, final_decision, context)
 
         return final_decision
 
-    def _compute_features_realtime(self, historical_data: pd.DataFrame, current_bar: pd.Series) -> Tuple[Dict[str, float], Dict[str, float]]:
+    def _compute_features_realtime(
+        self, historical_data: pd.DataFrame, current_bar: pd.Series
+    ) -> Tuple[Dict[str, float], Dict[str, float]]:
         """Compute features in real-time (original expensive method).
-        
+
         Args:
             historical_data: Historical bars including current
             current_bar: Current price bar
-            
+
         Returns:
             Tuple of (mapped_indicators, fuzzy_values) dictionaries
         """
@@ -291,20 +322,20 @@ class DecisionOrchestrator:
             # Convert dict configs to proper format using same mapping as training
             indicator_configs = self.strategy_config["indicators"]
             fixed_configs = []
-            
+
             # Use same mapping as training for consistency
             name_mapping = {
                 "bollinger_bands": "BollingerBands",
-                "keltner_channels": "KeltnerChannels", 
+                "keltner_channels": "KeltnerChannels",
                 "momentum": "Momentum",
                 "volume_sma": "SMA",
                 "atr": "ATR",
                 "rsi": "RSI",
                 "sma": "SMA",
                 "ema": "EMA",
-                "macd": "MACD"
+                "macd": "MACD",
             }
-            
+
             for config in indicator_configs:
                 if isinstance(config, dict) and "type" not in config:
                     config = config.copy()
@@ -313,7 +344,9 @@ class DecisionOrchestrator:
                         config["type"] = name_mapping[indicator_name]
                     else:
                         # Fallback: convert snake_case to PascalCase
-                        config["type"] = "".join(word.capitalize() for word in indicator_name.split("_"))
+                        config["type"] = "".join(
+                            word.capitalize() for word in indicator_name.split("_")
+                        )
                 fixed_configs.append(config)
 
             from ..indicators.indicator_engine import IndicatorEngine
@@ -356,8 +389,10 @@ class DecisionOrchestrator:
 
         # Step 2: Generate fuzzy memberships
         fuzzy_values = {}
-        logger.debug(f"🔀 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Generating fuzzy memberships for {len(mapped_indicators)} indicators")
-        
+        logger.debug(
+            f"🔀 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Generating fuzzy memberships for {len(mapped_indicators)} indicators"
+        )
+
         for indicator_name, indicator_value in mapped_indicators.items():
             if indicator_name in self.strategy_config["fuzzy_sets"]:
                 # Fuzzify this indicator
@@ -365,10 +400,14 @@ class DecisionOrchestrator:
                     indicator_name, indicator_value
                 )
                 fuzzy_values.update(membership_result)
-                logger.debug(f"🔀 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Fuzzified {indicator_name}={indicator_value:.4f} → {len(membership_result)} memberships")
-        
-        logger.debug(f"🔀 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Total fuzzy features: {len(fuzzy_values)}")
-        
+                logger.debug(
+                    f"🔀 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Fuzzified {indicator_name}={indicator_value:.4f} → {len(membership_result)} memberships"
+                )
+
+        logger.debug(
+            f"🔀 [{current_bar.name.strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Total fuzzy features: {len(fuzzy_values)}"
+        )
+
         return mapped_indicators, fuzzy_values
 
     def _initialize_fuzzy_engine(self) -> FuzzyEngine:

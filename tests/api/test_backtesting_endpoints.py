@@ -44,7 +44,7 @@ class TestBacktestingEndpoints:
     def test_start_backtest_with_default_capital(self, client):
         """Test starting backtest without specifying initial capital."""
         payload = {
-            "strategy_name": "test_strategy", 
+            "strategy_name": "test_strategy",
             "symbol": "MSFT",
             "timeframe": "4h",
             "start_date": "2024-01-01",
@@ -73,25 +73,25 @@ class TestBacktestingEndpoints:
 
         assert response.status_code == 422  # Validation error
 
-    @pytest.mark.api 
+    @pytest.mark.api
     def test_get_backtest_results_not_found(self, client):
         """Test getting results for non-existent backtest."""
         response = client.get("/api/v1/backtests/nonexistent_id/results")
-        
+
         assert response.status_code == 404
 
     @pytest.mark.api
     def test_get_backtest_trades_not_found(self, client):
         """Test getting trades for non-existent backtest."""
         response = client.get("/api/v1/backtests/nonexistent_id/trades")
-        
+
         assert response.status_code == 404
 
     @pytest.mark.api
     def test_get_equity_curve_not_found(self, client):
         """Test getting equity curve for non-existent backtest."""
         response = client.get("/api/v1/backtests/nonexistent_id/equity_curve")
-        
+
         assert response.status_code == 404
 
     @pytest.mark.api
@@ -99,7 +99,7 @@ class TestBacktestingEndpoints:
         """Test starting backtest with invalid date range."""
         payload = {
             "strategy_name": "test_strategy",
-            "symbol": "AAPL", 
+            "symbol": "AAPL",
             "timeframe": "1h",
             "start_date": "2024-06-01",  # Start after end
             "end_date": "2024-01-01",
@@ -117,7 +117,7 @@ class TestBacktestingEndpoints:
         payload = {
             "strategy_name": "test_strategy",
             "symbol": "AAPL",
-            "timeframe": "1h", 
+            "timeframe": "1h",
             "start_date": "2024-01-01",
             "end_date": "2024-06-01",
             "initial_capital": -1000.0,  # Negative capital
@@ -136,7 +136,7 @@ class TestBacktestingEndpoints:
             "symbol": "AAPL",
             "timeframe": "1m",
             "start_date": "2020-01-01",  # Long time range
-            "end_date": "2024-01-01", 
+            "end_date": "2024-01-01",
             "initial_capital": 1000000.0,  # Large capital
         }
 

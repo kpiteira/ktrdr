@@ -182,7 +182,7 @@ class DataManager:
                 from ktrdr.config.models import KtrdrConfig, IbHostServiceConfig
                 from pathlib import Path
                 import os
-                
+
                 config_loader = ConfigLoader()
                 config_path = Path("config/settings.yaml")
                 if config_path.exists():
@@ -191,7 +191,7 @@ class DataManager:
                 else:
                     # Use defaults if no config file
                     host_service_config = IbHostServiceConfig()
-                
+
                 # Check for environment override (for easy Docker toggle)
                 override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
                 if override_file:
@@ -201,8 +201,10 @@ class DataManager:
                         override_config = config_loader.load(override_path, KtrdrConfig)
                         if override_config.ib_host_service:
                             host_service_config = override_config.ib_host_service
-                            logger.info(f"Loaded IB host service override from {override_path}")
-                
+                            logger.info(
+                                f"Loaded IB host service override from {override_path}"
+                            )
+
                 # Environment variable override for enabled flag (quick toggle)
                 env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
                 if env_enabled in ("true", "1", "yes"):
@@ -213,20 +215,24 @@ class DataManager:
                         host_service_config.url = env_url
                 elif env_enabled in ("false", "0", "no"):
                     host_service_config.enabled = False
-                
+
                 # Initialize IbDataAdapter with host service configuration
                 self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter(
                     use_host_service=host_service_config.enabled,
-                    host_service_url=host_service_config.url
+                    host_service_url=host_service_config.url,
                 )
-                
+
                 if host_service_config.enabled:
-                    logger.info(f"IB integration enabled using host service at {host_service_config.url}")
+                    logger.info(
+                        f"IB integration enabled using host service at {host_service_config.url}"
+                    )
                 else:
                     logger.info("IB integration enabled (direct connection)")
-                    
+
             except Exception as e:
-                logger.warning(f"Failed to load host service config, using direct connection: {e}")
+                logger.warning(
+                    f"Failed to load host service config, using direct connection: {e}"
+                )
                 # Fallback to direct connection
                 self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter()
                 logger.info("IB integration enabled (direct connection - fallback)")
@@ -558,7 +564,9 @@ class DataManager:
         for i, timeframe in enumerate(timeframes):
             try:
                 # Check for cancellation
-                if cancellation_token and getattr(cancellation_token, "is_cancelled", False):
+                if cancellation_token and getattr(
+                    cancellation_token, "is_cancelled", False
+                ):
                     progress.is_cancelled = True
                     progress.current_step = "Cancelled by user"
                     if progress_callback:
@@ -628,23 +636,25 @@ class DataManager:
         # Step 1.5: Find common data coverage intersection across all loaded timeframes
         if len(timeframe_data) > 1:
             common_coverage = self._find_common_data_coverage(timeframe_data, symbol)
-            
+
             # If we have a meaningful data intersection, rescope all timeframes to it
             if common_coverage["is_sufficient"]:
                 logger.info(
                     f"📊 Found common data coverage: {common_coverage['start_date']} to {common_coverage['end_date']} "
                     f"({common_coverage['days']} days, {common_coverage['min_bars']} min bars across timeframes)"
                 )
-                
+
                 # Rescope all timeframes to the common coverage window
                 rescoped_data = {}
                 for tf, df in timeframe_data.items():
-                    rescoped_df = df.loc[common_coverage['start_date']:common_coverage['end_date']]
+                    rescoped_df = df.loc[
+                        common_coverage["start_date"] : common_coverage["end_date"]
+                    ]
                     rescoped_data[tf] = rescoped_df
                     logger.debug(f"  {tf}: {len(rescoped_df)} bars (was {len(df)})")
-                
+
                 timeframe_data = rescoped_data
-                
+
                 # Add a warning to surface to the user
                 coverage_warning = (
                     f"⚠️ Multi-timeframe training rescoped to common data coverage: "
@@ -653,7 +663,7 @@ class DataManager:
                 )
                 logger.warning(coverage_warning)
                 progress.warnings.append(coverage_warning)
-                
+
             else:
                 # Insufficient common coverage - this is a real problem
                 insufficient_msg = (
@@ -670,7 +680,7 @@ class DataManager:
                         "symbol": symbol,
                         "timeframes": list(timeframe_data.keys()),
                         "common_coverage": common_coverage,
-                        "recommendation": "Use longer date range or timeframes with better data availability"
+                        "recommendation": "Use longer date range or timeframes with better data availability",
                     },
                 )
 
@@ -741,23 +751,25 @@ class DataManager:
                 },
             ) from e
 
-    def _find_common_data_coverage(self, timeframe_data: Dict[str, pd.DataFrame], symbol: str) -> Dict[str, Any]:
+    def _find_common_data_coverage(
+        self, timeframe_data: Dict[str, pd.DataFrame], symbol: str
+    ) -> Dict[str, Any]:
         """
         Find the common data coverage intersection across all timeframes.
-        
+
         This method analyzes the date ranges of all loaded timeframes and identifies
         the largest common time window where all timeframes have data. It also
         validates that this window is sufficient for meaningful training.
-        
+
         Args:
             timeframe_data: Dictionary mapping timeframes to DataFrames
             symbol: Trading symbol (for logging/error context)
-            
+
         Returns:
             Dictionary with coverage analysis results:
             {
                 'start_date': pd.Timestamp,     # Common coverage start
-                'end_date': pd.Timestamp,       # Common coverage end  
+                'end_date': pd.Timestamp,       # Common coverage end
                 'days': int,                    # Number of days in common window
                 'min_bars': int,                # Minimum bars across all timeframes in window
                 'max_bars': int,                # Maximum bars across all timeframes in window
@@ -769,45 +781,49 @@ class DataManager:
             # Single timeframe case - no intersection needed
             tf, df = next(iter(timeframe_data.items()))
             return {
-                'start_date': df.index[0],
-                'end_date': df.index[-1],
-                'days': (df.index[-1] - df.index[0]).days,
-                'min_bars': len(df),
-                'max_bars': len(df),
-                'is_sufficient': len(df) >= 50,  # Minimum for MACD + training
-                'timeframe_details': {tf: {'bars': len(df), 'start': df.index[0], 'end': df.index[-1]}}
+                "start_date": df.index[0],
+                "end_date": df.index[-1],
+                "days": (df.index[-1] - df.index[0]).days,
+                "min_bars": len(df),
+                "max_bars": len(df),
+                "is_sufficient": len(df) >= 50,  # Minimum for MACD + training
+                "timeframe_details": {
+                    tf: {"bars": len(df), "start": df.index[0], "end": df.index[-1]}
+                },
             }
-        
+
         # Multi-timeframe case - find intersection
         timeframe_ranges = {}
-        
+
         for tf, df in timeframe_data.items():
             if df.empty:
-                logger.warning(f"Empty DataFrame for timeframe {tf}, skipping from coverage analysis")
+                logger.warning(
+                    f"Empty DataFrame for timeframe {tf}, skipping from coverage analysis"
+                )
                 continue
-                
+
             timeframe_ranges[tf] = {
-                'start': df.index[0],
-                'end': df.index[-1], 
-                'bars': len(df),
-                'df': df
+                "start": df.index[0],
+                "end": df.index[-1],
+                "bars": len(df),
+                "df": df,
             }
-        
+
         if not timeframe_ranges:
             return {
-                'start_date': None,
-                'end_date': None,
-                'days': 0,
-                'min_bars': 0,
-                'max_bars': 0,
-                'is_sufficient': False,
-                'timeframe_details': {}
+                "start_date": None,
+                "end_date": None,
+                "days": 0,
+                "min_bars": 0,
+                "max_bars": 0,
+                "is_sufficient": False,
+                "timeframe_details": {},
             }
-        
+
         # Find the intersection: latest start date and earliest end date
-        common_start = max(info['start'] for info in timeframe_ranges.values())
-        common_end = min(info['end'] for info in timeframe_ranges.values())
-        
+        common_start = max(info["start"] for info in timeframe_ranges.values())
+        common_end = min(info["end"] for info in timeframe_ranges.values())
+
         # Validate that we have a positive time window
         if common_start >= common_end:
             logger.warning(
@@ -815,52 +831,52 @@ class DataManager:
                 f"Start: {common_start}, End: {common_end}"
             )
             return {
-                'start_date': common_start,
-                'end_date': common_end,
-                'days': 0,
-                'min_bars': 0,
-                'max_bars': 0,
-                'is_sufficient': False,
-                'timeframe_details': timeframe_ranges
+                "start_date": common_start,
+                "end_date": common_end,
+                "days": 0,
+                "min_bars": 0,
+                "max_bars": 0,
+                "is_sufficient": False,
+                "timeframe_details": timeframe_ranges,
             }
-        
+
         # Calculate how many bars each timeframe has in the common window
         common_window_bars = {}
         for tf, info in timeframe_ranges.items():
             # Slice DataFrame to common window
-            common_slice = info['df'].loc[common_start:common_end]
+            common_slice = info["df"].loc[common_start:common_end]
             common_window_bars[tf] = len(common_slice)
-        
+
         min_bars = min(common_window_bars.values()) if common_window_bars else 0
         max_bars = max(common_window_bars.values()) if common_window_bars else 0
         days = (common_end - common_start).days
-        
+
         # Determine if coverage is sufficient
         # Need at least 50 bars for MACD calculation (26+9=35) plus some training data
         is_sufficient = min_bars >= 50 and days >= 7  # At least 1 week and 50 bars
-        
+
         logger.debug(
             f"Common coverage analysis for {symbol}: "
             f"{common_start.strftime('%Y-%m-%d')} to {common_end.strftime('%Y-%m-%d')} "
             f"({days} days, {min_bars}-{max_bars} bars)"
         )
-        
+
         return {
-            'start_date': common_start,
-            'end_date': common_end,
-            'days': days,
-            'min_bars': min_bars,
-            'max_bars': max_bars,
-            'is_sufficient': is_sufficient,
-            'timeframe_details': {
+            "start_date": common_start,
+            "end_date": common_end,
+            "days": days,
+            "min_bars": min_bars,
+            "max_bars": max_bars,
+            "is_sufficient": is_sufficient,
+            "timeframe_details": {
                 tf: {
-                    'original_bars': info['bars'],
-                    'common_bars': common_window_bars.get(tf, 0),
-                    'original_start': info['start'],
-                    'original_end': info['end']
+                    "original_bars": info["bars"],
+                    "common_bars": common_window_bars.get(tf, 0),
+                    "original_start": info["start"],
+                    "original_end": info["end"],
                 }
                 for tf, info in timeframe_ranges.items()
-            }
+            },
         }
 
     @log_entry_exit(logger=logger, log_args=True)
@@ -1248,7 +1264,7 @@ class DataManager:
 
         Attempts to fetch each segment individually, continuing with other segments
         if some fail. This ensures partial success rather than complete failure.
-        
+
         NEW: Saves progress every periodic_save_minutes to prevent data loss
         during long downloads if container restarts.
 
@@ -1270,13 +1286,14 @@ class DataManager:
             return successful_data, successful_count, len(segments)
 
         logger.info(f"Fetching {len(segments)} segments with failure resilience")
-        
+
         # Periodic save tracking
         import time
+
         last_save_time = time.time()
         save_interval_seconds = periodic_save_minutes * 60
         total_bars_saved = 0
-        
+
         logger.info(f"💾 Periodic saves enabled: every {periodic_save_minutes} minutes")
 
         for i, (segment_start, segment_end) in enumerate(segments):
@@ -1333,12 +1350,15 @@ class DataManager:
                         completed_segment_progress = ((i + 1) / len(segments)) * 86.0
                         progress.percentage = 10.0 + completed_segment_progress
                         progress_callback(progress)
-                    
+
                     # 💾 PERIODIC SAVE: Check if it's time to save progress
                     current_time = time.time()
                     time_since_last_save = current_time - last_save_time
-                    
-                    if time_since_last_save >= save_interval_seconds or i == len(segments) - 1:
+
+                    if (
+                        time_since_last_save >= save_interval_seconds
+                        or i == len(segments) - 1
+                    ):
                         # Time to save! Merge accumulated data and save to CSV
                         try:
                             if successful_data:
@@ -1347,12 +1367,12 @@ class DataManager:
                                 )
                                 total_bars_saved += bars_to_save
                                 last_save_time = current_time
-                                
+
                                 logger.info(
                                     f"💾 Progress saved: {bars_to_save:,} new bars "
                                     f"({total_bars_saved:,} total) after {time_since_last_save/60:.1f} minutes"
                                 )
-                                
+
                                 # Update progress to show save occurred
                                 if progress and progress_callback:
                                     progress.current_step = f"✅ Saved {total_bars_saved:,} bars to CSV (segment {i+1}/{len(segments)})"
@@ -1366,7 +1386,9 @@ class DataManager:
 
             except asyncio.CancelledError:
                 # Cancellation detected - stop processing immediately
-                logger.info(f"🛑 Segment fetching cancelled at segment {i+1}/{len(segments)}")
+                logger.info(
+                    f"🛑 Segment fetching cancelled at segment {i+1}/{len(segments)}"
+                )
                 break
             except Exception as e:
                 failed_count += 1
@@ -1376,18 +1398,26 @@ class DataManager:
 
         # Check if operation was cancelled during segment fetching
         was_cancelled = False
-        if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
+        if (
+            cancellation_token
+            and hasattr(cancellation_token, "is_set")
+            and cancellation_token.is_set()
+        ):
             was_cancelled = True
-            logger.info(f"🛑 Segment fetching cancelled after {successful_count} successful segments")
+            logger.info(
+                f"🛑 Segment fetching cancelled after {successful_count} successful segments"
+            )
         else:
             logger.info(
                 f"Segment fetching complete: {successful_count} successful, {failed_count} failed"
             )
-        
+
         # If cancelled, raise CancelledError to stop the entire data loading operation
         if was_cancelled:
-            raise asyncio.CancelledError(f"Data loading cancelled during segment {successful_count + 1}")
-            
+            raise asyncio.CancelledError(
+                f"Data loading cancelled during segment {successful_count + 1}"
+            )
+
         return successful_data, successful_count, failed_count
 
     def _save_periodic_progress(
@@ -1399,38 +1429,44 @@ class DataManager:
     ) -> int:
         """
         Save accumulated data progress to CSV file.
-        
+
         This merges the new data with any existing data and saves to CSV,
         allowing downloads to resume from where they left off.
-        
+
         Args:
             successful_data: List of DataFrames with newly fetched data
             symbol: Trading symbol
             timeframe: Data timeframe
             previous_bars_saved: Number of bars saved in previous saves (for counting)
-        
+
         Returns:
             Number of new bars saved in this operation
         """
         if not successful_data:
             return 0
-        
+
         try:
             # Merge newly fetched segments into single DataFrame
             new_data = pd.concat(successful_data, ignore_index=False).sort_index()
-            new_data = new_data[~new_data.index.duplicated(keep='first')]
-            
+            new_data = new_data[~new_data.index.duplicated(keep="first")]
+
             # Load existing data if it exists
             try:
                 existing_data = self.data_loader.load(symbol, timeframe)
                 if existing_data is not None and not existing_data.empty:
                     # Merge new data with existing data
-                    combined_data = pd.concat([existing_data, new_data], ignore_index=False)
+                    combined_data = pd.concat(
+                        [existing_data, new_data], ignore_index=False
+                    )
                     combined_data = combined_data.sort_index()
-                    combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
-                    
+                    combined_data = combined_data[
+                        ~combined_data.index.duplicated(keep="last")
+                    ]
+
                     # Count only truly new bars (not in existing data)
-                    new_bars_count = len(new_data[~new_data.index.isin(existing_data.index)])
+                    new_bars_count = len(
+                        new_data[~new_data.index.isin(existing_data.index)]
+                    )
                 else:
                     combined_data = new_data
                     new_bars_count = len(new_data)
@@ -1438,12 +1474,12 @@ class DataManager:
                 # No existing data - this is all new
                 combined_data = new_data
                 new_bars_count = len(new_data)
-            
+
             # Save the combined data
             self.data_loader.save(combined_data, symbol, timeframe)
-            
+
             return new_bars_count
-            
+
         except Exception as e:
             logger.error(f"Failed to save periodic progress: {e}")
             raise
@@ -1476,7 +1512,11 @@ class DataManager:
 
         try:
             # Check for cancellation before expensive operation
-            if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
+            if (
+                cancellation_token
+                and hasattr(cancellation_token, "is_set")
+                and cancellation_token.is_set()
+            ):
                 logger.info(f"🛑 Cancellation detected before IB fetch for {symbol}")
                 return None
 
@@ -1484,7 +1524,7 @@ class DataManager:
             async def fetch_with_cancellation_polling():
                 """Fetch with periodic cancellation checks."""
                 import concurrent.futures
-                
+
                 # Start the IB fetch in a separate task
                 fetch_task = asyncio.create_task(
                     self.external_provider.fetch_historical_data(
@@ -1495,29 +1535,37 @@ class DataManager:
                         instrument_type=None,  # Auto-detect
                     )
                 )
-                
+
                 # Poll for cancellation every 0.5 seconds
                 while not fetch_task.done():
                     # Check cancellation token from worker thread
-                    if cancellation_token and hasattr(cancellation_token, 'is_set') and cancellation_token.is_set():
-                        logger.info(f"🛑 Cancelling IB fetch for {symbol} during operation")
+                    if (
+                        cancellation_token
+                        and hasattr(cancellation_token, "is_set")
+                        and cancellation_token.is_set()
+                    ):
+                        logger.info(
+                            f"🛑 Cancelling IB fetch for {symbol} during operation"
+                        )
                         fetch_task.cancel()
                         try:
                             await fetch_task
                         except asyncio.CancelledError:
                             pass
-                        raise asyncio.CancelledError("Operation cancelled during IB fetch")
-                    
-                    # Wait up to 0.5 seconds for fetch completion  
+                        raise asyncio.CancelledError(
+                            "Operation cancelled during IB fetch"
+                        )
+
+                    # Wait up to 0.5 seconds for fetch completion
                     try:
                         await asyncio.wait_for(asyncio.shield(fetch_task), timeout=0.5)
                         break
                     except asyncio.TimeoutError:
                         # Continue checking for cancellation
                         continue
-                
+
                 return await fetch_task
-                
+
             # Run with cancellation polling
             return asyncio.run(fetch_with_cancellation_polling())
 
@@ -1802,16 +1850,22 @@ class DataManager:
                 # Use head timestamp if available, otherwise fall back to IB limits
                 if cached_head_timestamp:
                     requested_start = self._normalize_timezone(cached_head_timestamp)
-                    logger.info(f"📅 Using head timestamp for default start: {requested_start}")
+                    logger.info(
+                        f"📅 Using head timestamp for default start: {requested_start}"
+                    )
                 else:
                     # Fallback: go back as far as IB allows for this timeframe
                     from ktrdr.config.ib_limits import IbLimitsRegistry
+
                     max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
                     requested_start = pd.Timestamp.now(tz="UTC") - max_duration
-                    logger.info(f"📅 Using IB duration limit for default start: {requested_start}")
+                    logger.info(
+                        f"📅 Using IB duration limit for default start: {requested_start}"
+                    )
             else:
                 # Other modes: use IB limits
                 from ktrdr.config.ib_limits import IbLimitsRegistry
+
                 max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
                 requested_start = pd.Timestamp.now(tz="UTC") - max_duration
         else:

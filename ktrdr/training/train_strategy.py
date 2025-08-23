@@ -21,6 +21,7 @@ from ..logging import get_logger
 
 logger = get_logger(__name__)
 
+
 class StrategyTrainer:
     """Coordinate the complete training pipeline from data to trained model."""
 
@@ -79,14 +80,16 @@ class StrategyTrainer:
                 symbol, timeframes, start_date, end_date, data_mode
             )
             all_symbols_data[symbol] = symbol_data
-            
+
             # Print data summary for this symbol
             if len(timeframes) == 1:
                 data_count = len(list(symbol_data.values())[0])
                 print(f"    {symbol}: {data_count} bars")
             else:
                 total_bars = sum(len(df) for df in symbol_data.values())
-                print(f"    {symbol}: {total_bars} total bars across {len(timeframes)} timeframes")
+                print(
+                    f"    {symbol}: {total_bars} total bars across {len(timeframes)} timeframes"
+                )
 
         # Step 2: Calculate indicators for all symbols
         print("\n2. Calculating technical indicators for all symbols...")
@@ -124,9 +127,13 @@ class StrategyTrainer:
             all_symbols_feature_names[symbol] = symbol_feature_names
 
         # Validate that all symbols have the same feature structure
-        feature_counts = [features.shape[1] for features in all_symbols_features.values()]
+        feature_counts = [
+            features.shape[1] for features in all_symbols_features.values()
+        ]
         if not all(count == feature_counts[0] for count in feature_counts):
-            raise ValueError(f"Feature count mismatch across symbols: {dict(zip(symbols, feature_counts))}")
+            raise ValueError(
+                f"Feature count mismatch across symbols: {dict(zip(symbols, feature_counts))}"
+            )
 
         # Step 5: Generate labels for all symbols
         print("\n5. Generating training labels for all symbols...")
@@ -140,21 +147,33 @@ class StrategyTrainer:
 
         # Step 6: Combine all symbols' data with balanced sampling
         print("\n6. Combining multi-symbol data with balanced sampling...")
-        combined_features, combined_labels, symbol_indices = self._combine_multi_symbol_data(
-            all_symbols_features, all_symbols_labels, symbols
+        combined_features, combined_labels, symbol_indices = (
+            self._combine_multi_symbol_data(
+                all_symbols_features, all_symbols_labels, symbols
+            )
         )
-        
+
         print(f"Combined dataset: {len(combined_features)} total samples")
-        symbol_counts = {symbol: (symbol_indices == i).sum() for i, symbol in enumerate(symbols)}
+        symbol_counts = {
+            symbol: (symbol_indices == i).sum() for i, symbol in enumerate(symbols)
+        }
         for symbol, count in symbol_counts.items():
-            print(f"  {symbol}: {count} samples ({count/len(combined_features)*100:.1f}%)")
+            print(
+                f"  {symbol}: {count} samples ({count/len(combined_features)*100:.1f}%)"
+            )
 
         # Step 7: Prepare training datasets (including symbol indices)
         print("\n7. Preparing training datasets...")
         train_data, val_data, test_data = self._split_multi_symbol_data(
-            combined_features, combined_labels, symbol_indices, validation_split, config["training"]["data_split"]
+            combined_features,
+            combined_labels,
+            symbol_indices,
+            validation_split,
+            config["training"]["data_split"],
         )
-        print(f"Data splits - Train: {len(train_data[0])}, Val: {len(val_data[0])}, Test: {len(test_data[0]) if test_data else 0}")
+        print(
+            f"Data splits - Train: {len(train_data[0])}, Val: {len(val_data[0])}, Test: {len(test_data[0]) if test_data else 0}"
+        )
 
         # Step 8: Create model with symbol embeddings
         print("\n8. Creating multi-symbol neural network...")
@@ -172,17 +191,21 @@ class StrategyTrainer:
         print("\n10. Evaluating multi-symbol model...")
         test_metrics = self._evaluate_model(model, test_data)
         if test_data is not None:
-            print(f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}")
+            print(
+                f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}"
+            )
 
         # Step 11: Calculate per-symbol performance
         print("\n11. Calculating per-symbol performance...")
         # For multi-symbol training, val_data already contains symbol indices as third element
-        val_features, val_labels, val_symbol_indices = val_data  # Unpack all three elements
+        val_features, val_labels, val_symbol_indices = (
+            val_data  # Unpack all three elements
+        )
         val_features_labels = (val_features, val_labels)  # Create tuple for evaluation
         per_symbol_metrics = self._evaluate_per_symbol_performance(
             model, val_features_labels, val_symbol_indices, symbols
         )
-        
+
         # Step 12: Calculate feature importance
         print("\n12. Calculating feature importance...")
         # Use the feature names from the first symbol (they should all be the same)
@@ -196,7 +219,9 @@ class StrategyTrainer:
         model_config = config.copy()
         model_config["model"]["input_size"] = combined_features.shape[1]
         model_config["model"]["num_symbols"] = len(symbols)
-        model_config["model"]["symbol_embedding_dim"] = config["model"].get("symbol_embedding_dim", 16)
+        model_config["model"]["symbol_embedding_dim"] = config["model"].get(
+            "symbol_embedding_dim", 16
+        )
 
         # For multi-symbol models, use a composite identifier
         symbols_str = "_".join(symbols)
@@ -219,8 +244,10 @@ class StrategyTrainer:
         model_info = {}
         if model is not None:
             total_params = sum(p.numel() for p in model.parameters())
-            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            
+            trainable_params = sum(
+                p.numel() for p in model.parameters() if p.requires_grad
+            )
+
             model_info = {
                 "model_size_bytes": int(total_params * 4),
                 "parameters_count": int(total_params),
@@ -277,7 +304,9 @@ class StrategyTrainer:
         if len(timeframes) == 1:
             print(f"Starting training for {symbol} {timeframes[0]} strategy...")
         else:
-            print(f"Starting multi-timeframe training for {symbol} {timeframes} strategy...")
+            print(
+                f"Starting multi-timeframe training for {symbol} {timeframes} strategy..."
+            )
 
         # Load strategy configuration
         config = self._load_strategy_config(strategy_config_path)
@@ -291,21 +320,23 @@ class StrategyTrainer:
         price_data = self._load_price_data(
             symbol, timeframes, start_date, end_date, data_mode
         )
-        
+
         # Print data loading summary
         if len(timeframes) == 1:
             data_count = len(list(price_data.values())[0])
             print(f"Loaded {data_count} bars of data for {timeframes[0]}")
         else:
             total_data = sum(len(df) for df in price_data.values())
-            print(f"Loaded {total_data} total bars across {len(timeframes)} timeframes:")
+            print(
+                f"Loaded {total_data} total bars across {len(timeframes)} timeframes:"
+            )
             for tf, df in price_data.items():
                 print(f"  {tf}: {len(df)} bars")
 
         # Step 2: Calculate indicators
         print("\n2. Calculating technical indicators...")
         indicators = self._calculate_indicators(price_data, config["indicators"])
-        
+
         # Check for critical NaN values that could break training
         if isinstance(indicators, dict):
             # Multi-timeframe case: check each timeframe
@@ -317,10 +348,12 @@ class StrategyTrainer:
         else:
             # Single timeframe case: direct DataFrame
             indicators_nan_count = indicators.isna().sum().sum()
-        
+
         if indicators_nan_count > 0:
-            print(f"⚠️ Warning: {indicators_nan_count} NaN values in indicators - will be filled with 0")
-        
+            print(
+                f"⚠️ Warning: {indicators_nan_count} NaN values in indicators - will be filled with 0"
+            )
+
         print(f"Calculated {len(config['indicators'])} indicators")
 
         # Step 3: Generate fuzzy memberships
@@ -330,7 +363,7 @@ class StrategyTrainer:
 
         # Step 4: Engineer features
         print("\n4. Engineering features...")
-        
+
         # Check for critical NaN values in fuzzy data
         if isinstance(fuzzy_data, dict):
             # Multi-timeframe case: check each timeframe
@@ -342,27 +375,31 @@ class StrategyTrainer:
         else:
             # Single timeframe case: direct DataFrame
             fuzzy_nan_count = fuzzy_data.isna().sum().sum()
-        
+
         if fuzzy_nan_count > 0:
             print(f"⚠️ Warning: {fuzzy_nan_count} NaN values in fuzzy data")
-        
+
         features, feature_names, feature_scaler = self._engineer_features(
             fuzzy_data,
             indicators,
             price_data,
             config.get("model", {}).get("features", {}),
         )
-        
+
         # Validate final features
-        if hasattr(features, 'isna'):  # pandas DataFrame
+        if hasattr(features, "isna"):  # pandas DataFrame
             features_nan_count = features.isna().sum().sum()
         else:  # numpy array or tensor
-            features_nan_count = np.isnan(features).sum() if hasattr(features, 'shape') else 0
-        
+            features_nan_count = (
+                np.isnan(features).sum() if hasattr(features, "shape") else 0
+            )
+
         if features_nan_count > 0:
-            print(f"❌ Error: {features_nan_count} NaN values detected in final features")
+            print(
+                f"❌ Error: {features_nan_count} NaN values detected in final features"
+            )
             raise ValueError("Features contain NaN values that would break training")
-        
+
         print(
             f"Created {features.shape[1]} features from {len(feature_names)} components"
         )
@@ -381,17 +418,19 @@ class StrategyTrainer:
         train_data, val_data, test_data = self._split_data(
             features, labels, validation_split, config["training"]["data_split"]
         )
-        print(f"Data splits - Train: {len(train_data[0])}, Val: {len(val_data[0])}, Test: {len(test_data[0]) if test_data else 0}")
+        print(
+            f"Data splits - Train: {len(train_data[0])}, Val: {len(val_data[0])}, Test: {len(test_data[0]) if test_data else 0}"
+        )
 
         # Step 7: Create and train neural network
         print("\n7. Training neural network...")
-        
+
         # Final validation before training
         if np.isnan(train_data[0]).any() or np.isnan(train_data[1]).any():
             raise ValueError("Training data contains NaN values")
         if np.isinf(train_data[0]).any():
             raise ValueError("Training data contains infinite values")
-        
+
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
             model, train_data, val_data, config, symbol, timeframes, progress_callback
@@ -401,7 +440,9 @@ class StrategyTrainer:
         print("\n8. Evaluating model...")
         test_metrics = self._evaluate_model(model, test_data)
         if test_data is not None:
-            print(f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}")
+            print(
+                f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}"
+            )
         else:
             print("No test data available - returning zero metrics")
 
@@ -438,10 +479,14 @@ class StrategyTrainer:
         model_info = {}
         if model is not None:
             total_params = sum(p.numel() for p in model.parameters())
-            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            
+            trainable_params = sum(
+                p.numel() for p in model.parameters() if p.requires_grad
+            )
+
             model_info = {
-                "model_size_bytes": int(total_params * 4),  # Assume float32 = 4 bytes per param
+                "model_size_bytes": int(
+                    total_params * 4
+                ),  # Assume float32 = 4 bytes per param
                 "parameters_count": int(total_params),
                 "trainable_parameters": int(trainable_params),
                 "architecture": f"mlp_{'_'.join(map(str, config['model']['architecture']['hidden_layers']))}",
@@ -508,13 +553,13 @@ class StrategyTrainer:
         if len(timeframes) == 1:
             timeframe = timeframes[0]
             data = self.data_manager.load_data(symbol, timeframe, mode=data_mode)
-            
+
             # Filter by date range if possible
             if hasattr(data.index, "to_pydatetime"):
                 data = self._filter_data_by_date_range(data, start_date, end_date)
-            
+
             return {timeframe: data}
-        
+
         # Multi-timeframe case - use first timeframe (highest frequency) as base
         base_timeframe = timeframes[0]  # Always use first timeframe as base
         multi_data = self.data_manager.load_multi_timeframe_data(
@@ -523,7 +568,7 @@ class StrategyTrainer:
             start_date=start_date,
             end_date=end_date,
             base_timeframe=base_timeframe,
-            mode=data_mode
+            mode=data_mode,
         )
 
         # Validate multi-timeframe loading success
@@ -534,16 +579,20 @@ class StrategyTrainer:
                 f"⚠️ Multi-timeframe loading partial success: {len(multi_data)}/{len(timeframes)} timeframes loaded. "
                 f"Missing: {missing_tfs}, Available: {available_tfs}"
             )
-            
+
             # Continue with available timeframes but warn user
             if len(multi_data) == 0:
                 raise ValueError(f"No timeframes successfully loaded for {symbol}")
         else:
-            logger.info(f"✅ Multi-timeframe data loaded successfully: {', '.join(multi_data.keys())}")
+            logger.info(
+                f"✅ Multi-timeframe data loaded successfully: {', '.join(multi_data.keys())}"
+            )
 
         return multi_data
 
-    def _filter_data_by_date_range(self, data: pd.DataFrame, start_date: str, end_date: str) -> pd.DataFrame:
+    def _filter_data_by_date_range(
+        self, data: pd.DataFrame, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """Helper method to filter data by date range."""
         # Convert dates to timezone-aware if the data index is timezone-aware
         start = pd.to_datetime(start_date)
@@ -559,7 +608,9 @@ class StrategyTrainer:
         return data.loc[start:end]
 
     def _calculate_indicators(
-        self, price_data: Dict[str, pd.DataFrame], indicator_configs: List[Dict[str, Any]]
+        self,
+        price_data: Dict[str, pd.DataFrame],
+        indicator_configs: List[Dict[str, Any]],
     ) -> Dict[str, pd.DataFrame]:
         """Calculate technical indicators with multi-timeframe support.
 
@@ -573,9 +624,11 @@ class StrategyTrainer:
         # Handle single timeframe case (backward compatibility)
         if len(price_data) == 1:
             timeframe, data = next(iter(price_data.items()))
-            indicators = self._calculate_indicators_single_timeframe(data, indicator_configs)
+            indicators = self._calculate_indicators_single_timeframe(
+                data, indicator_configs
+            )
             return {timeframe: indicators}
-        
+
         # Multi-timeframe case
         return self._calculate_indicators_multi_timeframe(price_data, indicator_configs)
 
@@ -585,20 +638,20 @@ class StrategyTrainer:
         """Calculate indicators for a single timeframe (original implementation)."""
         # Fix indicator configs to add 'type' field if missing
         fixed_configs = []
-        
+
         # Mapping from strategy names to registry names
         name_mapping = {
             "bollinger_bands": "BollingerBands",
-            "keltner_channels": "KeltnerChannels", 
+            "keltner_channels": "KeltnerChannels",
             "momentum": "Momentum",
             "volume_sma": "SMA",  # Use SMA for volume_sma for now
             "atr": "ATR",
             "rsi": "RSI",
             "sma": "SMA",
             "ema": "EMA",
-            "macd": "MACD"
+            "macd": "MACD",
         }
-        
+
         for config in indicator_configs:
             if isinstance(config, dict) and "type" not in config:
                 # Infer type from name using proper mapping
@@ -608,7 +661,9 @@ class StrategyTrainer:
                     config["type"] = name_mapping[indicator_name]
                 else:
                     # Fallback: convert snake_case to PascalCase
-                    config["type"] = "".join(word.capitalize() for word in indicator_name.split("_"))
+                    config["type"] = "".join(
+                        word.capitalize() for word in indicator_name.split("_")
+                    )
             fixed_configs.append(config)
 
         # Initialize indicator engine with configs
@@ -659,25 +714,26 @@ class StrategyTrainer:
                     if indicator_type != "MACD":
                         break
 
-
         # Final safety check: replace any inf values with NaN, then fill NaN with 0
         # This prevents overflow from propagating to feature scaling
         mapped_results = mapped_results.replace([np.inf, -np.inf], np.nan)
         mapped_results = mapped_results.fillna(0.0)
-        
+
         return mapped_results
 
     def _calculate_indicators_multi_timeframe(
-        self, price_data: Dict[str, pd.DataFrame], indicator_configs: List[Dict[str, Any]]
+        self,
+        price_data: Dict[str, pd.DataFrame],
+        indicator_configs: List[Dict[str, Any]],
     ) -> Dict[str, pd.DataFrame]:
         """Calculate indicators for multiple timeframes using the new multi-timeframe method."""
         # Fix indicator configs to add 'type' field if missing (same as single timeframe)
         fixed_configs = []
-        
+
         # Mapping from strategy names to registry names
         name_mapping = {
             "bollinger_bands": "BollingerBands",
-            "keltner_channels": "KeltnerChannels", 
+            "keltner_channels": "KeltnerChannels",
             "momentum": "Momentum",
             "volume_sma": "SMA",  # Use SMA for volume_sma for now
             "sma": "SMA",
@@ -685,7 +741,7 @@ class StrategyTrainer:
             "rsi": "RSI",
             "macd": "MACD",
         }
-        
+
         for config in indicator_configs:
             if isinstance(config, dict) and "type" not in config:
                 # Infer type from name using proper mapping
@@ -695,16 +751,20 @@ class StrategyTrainer:
                     config["type"] = name_mapping[indicator_name]
                 else:
                     # Fallback: convert snake_case to PascalCase
-                    config["type"] = "".join(word.capitalize() for word in indicator_name.split("_"))
+                    config["type"] = "".join(
+                        word.capitalize() for word in indicator_name.split("_")
+                    )
             fixed_configs.append(config)
 
         # Initialize indicator engine with configs and use multi-timeframe method
         self.indicator_engine = IndicatorEngine(indicators=fixed_configs)
-        indicator_results = self.indicator_engine.apply_multi_timeframe(price_data, fixed_configs)
+        indicator_results = self.indicator_engine.apply_multi_timeframe(
+            price_data, fixed_configs
+        )
 
         # Map results for each timeframe (similar to single timeframe but for each TF)
         mapped_results = {}
-        
+
         for timeframe, tf_indicators in indicator_results.items():
             tf_price_data = price_data[timeframe]
             mapped_tf_results = pd.DataFrame(index=tf_indicators.index)
@@ -771,9 +831,11 @@ class StrategyTrainer:
             self.fuzzy_engine = FuzzyEngine(fuzzy_config)
 
         # Handle single timeframe case (backward compatibility)
-        if len(indicators) == 1 and isinstance(list(indicators.values())[0], pd.DataFrame):
+        if len(indicators) == 1 and isinstance(
+            list(indicators.values())[0], pd.DataFrame
+        ):
             timeframe, tf_indicators = next(iter(indicators.items()))
-            
+
             # Process each indicator (original single-timeframe logic)
             fuzzy_results = {}
             for indicator_name, indicator_data in tf_indicators.items():
@@ -787,7 +849,9 @@ class StrategyTrainer:
             return {timeframe: pd.DataFrame(fuzzy_results, index=tf_indicators.index)}
 
         # Multi-timeframe case - use the new multi-timeframe method
-        return self.fuzzy_engine.generate_multi_timeframe_memberships(indicators, fuzzy_configs)
+        return self.fuzzy_engine.generate_multi_timeframe_memberships(
+            indicators, fuzzy_configs
+        )
 
     def _engineer_features(
         self,
@@ -809,13 +873,13 @@ class StrategyTrainer:
         """
         # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
         processor = FuzzyNeuralProcessor(feature_config)
-        
+
         # Handle single timeframe case (backward compatibility)
         if len(fuzzy_data) == 1:
             timeframe, tf_fuzzy_data = next(iter(fuzzy_data.items()))
             features, feature_names = processor.prepare_input(tf_fuzzy_data)
             return features, feature_names, None  # No scaler needed for fuzzy values
-        
+
         # Multi-timeframe case - use the new multi-timeframe method
         features, feature_names = processor.prepare_multi_timeframe_input(fuzzy_data)
         return features, feature_names, None  # No scaler needed for fuzzy values
@@ -845,9 +909,13 @@ class StrategyTrainer:
             timeframe_list = sorted(price_data.keys())
             # Convert to frequency-based order (highest frequency first)
             frequency_order = self._sort_timeframes_by_frequency(timeframe_list)
-            base_timeframe = frequency_order[0]  # Use highest frequency (same as features)
+            base_timeframe = frequency_order[
+                0
+            ]  # Use highest frequency (same as features)
             tf_price_data = price_data[base_timeframe]
-            print(f"Generating labels from base timeframe {base_timeframe} (out of {frequency_order}) - matching features")
+            print(
+                f"Generating labels from base timeframe {base_timeframe} (out of {frequency_order}) - matching features"
+            )
 
         labeler = ZigZagLabeler(
             threshold=label_config["zigzag_threshold"],
@@ -979,29 +1047,36 @@ class StrategyTrainer:
         """
         # Extract training config and merge with full config for analytics access
         training_config = config["model"]["training"].copy()
-        
+
         # Add metadata for analytics
         config_with_metadata = config.copy()
-        
+
         # Check if this is multi-symbol training
         # Can be determined by symbol count OR by data structure (having symbol indices)
-        is_multi_symbol = (isinstance(symbol_or_symbols, list) and len(symbol_or_symbols) > 1) or \
-                         (len(train_data) == 3 and len(val_data) == 3)
-        
+        is_multi_symbol = (
+            isinstance(symbol_or_symbols, list) and len(symbol_or_symbols) > 1
+        ) or (len(train_data) == 3 and len(val_data) == 3)
+
         if is_multi_symbol:
             # Multi-symbol case
             config_with_metadata["symbols"] = symbol_or_symbols
-            config_with_metadata["symbol"] = "_".join(symbol_or_symbols)  # For legacy compatibility
+            config_with_metadata["symbol"] = "_".join(
+                symbol_or_symbols
+            )  # For legacy compatibility
         else:
             # Single symbol case
-            symbol = symbol_or_symbols if isinstance(symbol_or_symbols, str) else symbol_or_symbols[0]
+            symbol = (
+                symbol_or_symbols
+                if isinstance(symbol_or_symbols, str)
+                else symbol_or_symbols[0]
+            )
             config_with_metadata["symbol"] = symbol
-            
+
         config_with_metadata["timeframes"] = timeframes
         training_config["full_config"] = config_with_metadata
-        
+
         trainer = ModelTrainer(training_config, progress_callback=progress_callback)
-        
+
         if is_multi_symbol:
             # Multi-symbol training with symbol indices
             return trainer.train_multi_symbol(
@@ -1064,9 +1139,11 @@ class StrategyTrainer:
 
             # Calculate precision, recall, and f1_score using weighted average
             # This handles multi-class classification properly
-            precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
-            recall = recall_score(y_true, y_pred, average='weighted', zero_division=0)
-            f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+            precision = precision_score(
+                y_true, y_pred, average="weighted", zero_division=0
+            )
+            recall = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+            f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
 
         return {
             "test_accuracy": accuracy,
@@ -1096,73 +1173,78 @@ class StrategyTrainer:
         """
         import torch.nn.functional as F
         from sklearn.metrics import accuracy_score
-        
+
         model.eval()
         device = next(model.parameters()).device
-        
+
         # Get baseline accuracy
         with torch.no_grad():
             X_val = X_val.to(device)
             y_val = y_val.to(device)
             outputs = model(X_val)
             predictions = torch.argmax(outputs, dim=1)
-            baseline_accuracy = accuracy_score(y_val.cpu().numpy(), predictions.cpu().numpy())
-        
+            baseline_accuracy = accuracy_score(
+                y_val.cpu().numpy(), predictions.cpu().numpy()
+            )
+
         importance_scores = {}
-        
+
         # Permutation importance for each feature
         for i, feature_name in enumerate(feature_names):
             # Create a copy and shuffle the i-th feature
             X_permuted = X_val.clone()
             idx = torch.randperm(X_permuted.size(0))
             X_permuted[:, i] = X_permuted[idx, i]
-            
+
             # Calculate accuracy with permuted feature
             with torch.no_grad():
                 outputs = model(X_permuted)
                 predictions = torch.argmax(outputs, dim=1)
-                permuted_accuracy = accuracy_score(y_val.cpu().numpy(), predictions.cpu().numpy())
-            
+                permuted_accuracy = accuracy_score(
+                    y_val.cpu().numpy(), predictions.cpu().numpy()
+                )
+
             # Importance is the drop in accuracy
             importance_scores[feature_name] = baseline_accuracy - permuted_accuracy
-        
+
         return importance_scores
 
     def _sort_timeframes_by_frequency(self, timeframes: List[str]) -> List[str]:
         """
         Sort timeframes by frequency (highest frequency first).
-        
+
         This ensures proper temporal alignment where the highest frequency
         timeframe drives the neural network input resolution.
-        
+
         Args:
             timeframes: List of timeframe strings (e.g., ['1h', '1d', '4h'])
-            
+
         Returns:
             List of timeframes sorted by frequency (highest first)
-            
+
         Example:
-            ['1h', '1d'] → ['1h', '1d']  # 1h is higher frequency 
+            ['1h', '1d'] → ['1h', '1d']  # 1h is higher frequency
             ['1d', '4h', '1h'] → ['1h', '4h', '1d']  # 1h > 4h > 1d
         """
+
         def timeframe_to_minutes(tf: str) -> int:
             """Convert timeframe string to minutes for comparison."""
             tf = tf.lower().strip()
-            if tf.endswith('m'):
+            if tf.endswith("m"):
                 return int(tf[:-1])
-            elif tf.endswith('h'):
+            elif tf.endswith("h"):
                 return int(tf[:-1]) * 60
-            elif tf.endswith('d'):
+            elif tf.endswith("d"):
                 return int(tf[:-1]) * 60 * 24
-            elif tf.endswith('w'):
+            elif tf.endswith("w"):
                 return int(tf[:-1]) * 60 * 24 * 7
             else:
                 # Default to hours if no suffix
                 return int(tf) * 60
-        
+
         # Sort by minutes (ascending = highest frequency first)
         sorted_timeframes = sorted(timeframes, key=timeframe_to_minutes)
-        
+
         return sorted_timeframes
 
     def _combine_multi_symbol_data(
@@ -1183,16 +1265,16 @@ class StrategyTrainer:
         """
         # Find the minimum number of samples across all symbols for balanced sampling
         min_samples = min(len(features) for features in all_symbols_features.values())
-        
+
         # Collect balanced samples from each symbol
         combined_features_list = []
         combined_labels_list = []
         symbol_indices_list = []
-        
+
         for symbol_idx, symbol in enumerate(symbols):
             symbol_features = all_symbols_features[symbol]
             symbol_labels = all_symbols_labels[symbol]
-            
+
             # Sample uniformly from the symbol's data
             if len(symbol_features) > min_samples:
                 # Randomly sample min_samples from this symbol
@@ -1203,22 +1285,24 @@ class StrategyTrainer:
                 # Use all available samples
                 sampled_features = symbol_features
                 sampled_labels = symbol_labels
-            
+
             combined_features_list.append(sampled_features)
             combined_labels_list.append(sampled_labels)
-            symbol_indices_list.append(torch.full((len(sampled_features),), symbol_idx, dtype=torch.long))
-        
+            symbol_indices_list.append(
+                torch.full((len(sampled_features),), symbol_idx, dtype=torch.long)
+            )
+
         # Combine all symbols' data
         combined_features = torch.cat(combined_features_list, dim=0)
         combined_labels = torch.cat(combined_labels_list, dim=0)
         symbol_indices = torch.cat(symbol_indices_list, dim=0)
-        
+
         # Shuffle the combined data to mix symbols
         perm = torch.randperm(len(combined_features))
         combined_features = combined_features[perm]
         combined_labels = combined_labels[perm]
         symbol_indices = symbol_indices[perm]
-        
+
         return combined_features, combined_labels, symbol_indices
 
     def _create_multi_symbol_model(
@@ -1235,19 +1319,24 @@ class StrategyTrainer:
             Neural network model with symbol embeddings
         """
         model_type = model_config.get("type", "mlp").lower()
-        
+
         if model_type == "mlp":
             # Add symbol embedding configuration
             model_config_with_embeddings = model_config.copy()
             model_config_with_embeddings["num_symbols"] = num_symbols
-            model_config_with_embeddings["symbol_embedding_dim"] = model_config.get("symbol_embedding_dim", 16)
-            
+            model_config_with_embeddings["symbol_embedding_dim"] = model_config.get(
+                "symbol_embedding_dim", 16
+            )
+
             from ..neural.models.mlp import MultiSymbolMLPTradingModel
+
             model = MultiSymbolMLPTradingModel(model_config_with_embeddings)
             model.model = model.build_model(input_size)
             return model.model
         else:
-            raise ValueError(f"Unknown model type for multi-symbol training: {model_type}")
+            raise ValueError(
+                f"Unknown model type for multi-symbol training: {model_type}"
+            )
 
     def _evaluate_per_symbol_performance(
         self,
@@ -1269,20 +1358,22 @@ class StrategyTrainer:
         """
         model.eval()
         per_symbol_metrics = {}
-        
+
         with torch.no_grad():
             # Handle both 2-element (single-symbol) and 3-element (multi-symbol) tuples
             if len(val_data) == 3:
-                X_val, y_val, _ = val_data  # Ignore symbol_indices since passed separately
+                X_val, y_val, _ = (
+                    val_data  # Ignore symbol_indices since passed separately
+                )
             else:
                 X_val, y_val = val_data
             outputs = model(X_val)
             _, predicted = torch.max(outputs, 1)
-            
+
             for symbol_idx, symbol in enumerate(symbols):
                 # Get indices for this symbol
                 symbol_mask = symbol_indices == symbol_idx
-                
+
                 if symbol_mask.sum() == 0:
                     # No samples for this symbol in validation set
                     per_symbol_metrics[symbol] = {
@@ -1293,24 +1384,29 @@ class StrategyTrainer:
                         "sample_count": 0,
                     }
                     continue
-                
+
                 # Get predictions and labels for this symbol
                 symbol_predicted = predicted[symbol_mask]
                 symbol_labels = y_val[symbol_mask]
-                
+
                 # Calculate accuracy
                 accuracy = (symbol_predicted == symbol_labels).float().mean().item()
-                
+
                 # Convert to numpy for sklearn metrics
                 y_true = symbol_labels.cpu().numpy()
                 y_pred = symbol_predicted.cpu().numpy()
-                
+
                 # Calculate precision, recall, and f1_score
                 from sklearn.metrics import precision_score, recall_score, f1_score
-                precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
-                recall = recall_score(y_true, y_pred, average='weighted', zero_division=0)
-                f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
-                
+
+                precision = precision_score(
+                    y_true, y_pred, average="weighted", zero_division=0
+                )
+                recall = recall_score(
+                    y_true, y_pred, average="weighted", zero_division=0
+                )
+                f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+
                 per_symbol_metrics[symbol] = {
                     "accuracy": accuracy,
                     "precision": precision,
@@ -1318,7 +1414,7 @@ class StrategyTrainer:
                     "f1_score": f1,
                     "sample_count": int(symbol_mask.sum()),
                 }
-        
+
         return per_symbol_metrics
 
     def _split_multi_symbol_data(
@@ -1355,9 +1451,9 @@ class StrategyTrainer:
 
         # Split data chronologically (important for time series)
         train_data = (
-            features[:train_size], 
-            labels[:train_size], 
-            symbol_indices[:train_size]
+            features[:train_size],
+            labels[:train_size],
+            symbol_indices[:train_size],
         )
         val_data = (
             features[train_size : train_size + val_size],

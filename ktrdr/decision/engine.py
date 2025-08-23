@@ -73,40 +73,51 @@ class DecisionEngine:
             timestamp = current_data.name
         else:
             timestamp = pd.Timestamp(current_data.name)
-            
+
         # Get timestamp for logging
-        timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M')
-        
-        logger.debug(f"🌎 [{timestamp_str}] DecisionEngine.generate_decision called with {len(fuzzy_memberships)} fuzzy features")
-        
+        timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M")
+
+        logger.debug(
+            f"🌎 [{timestamp_str}] DecisionEngine.generate_decision called with {len(fuzzy_memberships)} fuzzy features"
+        )
+
         if self.neural_model is None:
             logger.error(f"🚨 [{timestamp_str}] Neural model not initialized!")
             raise ValueError("Neural model not initialized")
 
         if not self.neural_model.is_trained:
-            logger.error(f"🚨 [{timestamp_str}] Neural model not trained! is_trained={self.neural_model.is_trained}")
+            logger.error(
+                f"🚨 [{timestamp_str}] Neural model not trained! is_trained={self.neural_model.is_trained}"
+            )
             raise ValueError("Neural model not trained")
-        
+
         logger.debug(f"✅ [{timestamp_str}] Neural model ready, preparing features...")
 
         # Prepare features for neural network
-        logger.debug(f"🛠️ [{timestamp_str}] Preparing features from {len(fuzzy_memberships)} fuzzy + {len(indicators)} indicators...")
-        logger.debug(f"🔍 [{timestamp_str}] Fuzzy features available: {list(fuzzy_memberships.keys())}")
-        
+        logger.debug(
+            f"🛠️ [{timestamp_str}] Preparing features from {len(fuzzy_memberships)} fuzzy + {len(indicators)} indicators..."
+        )
+        logger.debug(
+            f"🔍 [{timestamp_str}] Fuzzy features available: {list(fuzzy_memberships.keys())}"
+        )
+
         try:
             features = self._prepare_decision_features(
                 fuzzy_memberships, indicators, current_data
             )
-            logger.debug(f"✅ [{timestamp_str}] Features prepared: shape={features.shape}, mean={features.mean():.4f}, std={features.std():.4f}")
+            logger.debug(
+                f"✅ [{timestamp_str}] Features prepared: shape={features.shape}, mean={features.mean():.4f}, std={features.std():.4f}"
+            )
         except Exception as e:
             # Check if this is a warm-up period error (normal and expected)
-            is_warmup_error = (
-                "No fuzzy membership features found" in str(e) or
-                "likely warm-up period" in str(e)
-            )
-            
+            is_warmup_error = "No fuzzy membership features found" in str(
+                e
+            ) or "likely warm-up period" in str(e)
+
             if is_warmup_error:
-                logger.debug(f"🔄 [{timestamp_str}] Feature preparation failed (warm-up period): {e}")
+                logger.debug(
+                    f"🔄 [{timestamp_str}] Feature preparation failed (warm-up period): {e}"
+                )
             else:
                 logger.error(f"🚨 [{timestamp_str}] Feature preparation failed: {e}")
             raise
@@ -119,15 +130,19 @@ class DecisionEngine:
         # Timestamp already normalized above
 
         # Apply position awareness and filters
-        logger.debug(f"🚫 [{timestamp_str}] Applying position logic - Raw signal: {raw_signal.value}, Confidence: {confidence:.4f}, Current position: {self.current_position.value}")
-        
+        logger.debug(
+            f"🚫 [{timestamp_str}] Applying position logic - Raw signal: {raw_signal.value}, Confidence: {confidence:.4f}, Current position: {self.current_position.value}"
+        )
+
         final_signal = self._apply_position_logic(raw_signal, confidence, timestamp)
-        
+
         if final_signal != raw_signal:
             # logger.info(f"🚫 [{timestamp_str}] Position logic OVERRODE {raw_signal.value} → {final_signal.value}")  # Commented for performance
             pass
         else:
-            logger.debug(f"✅ [{timestamp_str}] Position logic kept {final_signal.value}")
+            logger.debug(
+                f"✅ [{timestamp_str}] Position logic kept {final_signal.value}"
+            )
 
         # Create decision object
         decision = TradingDecision(

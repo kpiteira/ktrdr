@@ -1062,10 +1062,16 @@ class IbSymbolValidator:
                     }
                     json.dumps(test_data)
                 except Exception as debug_e:
-                    logger.error(f"JSON serialization failed for symbol {symbol}: {debug_e}")
-                    logger.error(f"Trading hours type: {type(contract_info.trading_hours)}")
-                    if hasattr(contract_info.trading_hours, '__dict__'):
-                        logger.error(f"Trading hours content: {contract_info.trading_hours.__dict__}")
+                    logger.error(
+                        f"JSON serialization failed for symbol {symbol}: {debug_e}"
+                    )
+                    logger.error(
+                        f"Trading hours type: {type(contract_info.trading_hours)}"
+                    )
+                    if hasattr(contract_info.trading_hours, "__dict__"):
+                        logger.error(
+                            f"Trading hours content: {contract_info.trading_hours.__dict__}"
+                        )
                     break
 
     def get_cache_stats(self) -> Dict[str, int]:

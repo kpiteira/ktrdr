@@ -146,7 +146,9 @@ async def get_backtesting_service() -> BacktestingService:
     """Get backtesting service instance (singleton)."""
     global _backtesting_service
     if _backtesting_service is None:
-        _backtesting_service = BacktestingService(operations_service=get_operations_service())
+        _backtesting_service = BacktestingService(
+            operations_service=get_operations_service()
+        )
     return _backtesting_service
 
 

@@ -1,10 +1,12 @@
 """Training system for neuro-fuzzy strategies."""
 
 from .zigzag_labeler import ZigZagLabeler, ZigZagConfig
+
 # FeatureEngineer removed - using pure fuzzy processing
 from .model_trainer import ModelTrainer, TrainingMetrics, EarlyStopping
 from .model_storage import ModelStorage
 from .train_strategy import StrategyTrainer
+
 # Multi-timeframe label generator temporarily disabled while updating for pure fuzzy
 # from .multi_timeframe_label_generator import (
 #     MultiTimeframeLabelGenerator,

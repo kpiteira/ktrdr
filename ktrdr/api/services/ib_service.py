@@ -96,7 +96,7 @@ class IbService:
         from datetime import datetime, timezone
         from pathlib import Path
         import os
-        
+
         # Load host service configuration to determine connection method
         try:
 
@@ -109,7 +109,7 @@ class IbService:
                     host_service_config = main_config.ib_host_service
                 else:
                     host_service_config = IbHostServiceConfig()
-                    
+
                 # Check environment variable override (same logic as DataManager)
                 env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
                 if env_enabled in ("true", "1", "yes"):
@@ -120,9 +120,11 @@ class IbService:
                         host_service_config.url = env_url
                 elif env_enabled in ("false", "0", "no"):
                     host_service_config.enabled = False
-                    
-                logger.info(f"🔍 IB status check: host_service.enabled={host_service_config.enabled}, url={host_service_config.url}")
-                    
+
+                logger.info(
+                    f"🔍 IB status check: host_service.enabled={host_service_config.enabled}, url={host_service_config.url}"
+                )
+
             except Exception as e:
                 logger.warning(f"Failed to load host service config: {e}")
                 host_service_config = IbHostServiceConfig()
@@ -130,24 +132,26 @@ class IbService:
             if host_service_config.enabled:
                 # Use host service for status
                 ib_config = get_ib_config()
-                
+
                 # Create IbDataAdapter in host service mode
                 adapter = IbDataAdapter(
                     host=ib_config.host,
                     port=ib_config.port,
                     use_host_service=True,
-                    host_service_url=host_service_config.url
+                    host_service_url=host_service_config.url,
                 )
-                
+
                 # Get health check from host service
                 health = await adapter.health_check()
-                
+
                 # Convert health check to IbStatusResponse format
                 ib_available = health.get("healthy", False)
                 connected = health.get("connected", False)
-                
-                logger.info(f"🔍 IB status via host service: healthy={ib_available}, connected={connected}")
-                
+
+                logger.info(
+                    f"🔍 IB status via host service: healthy={ib_available}, connected={connected}"
+                )
+
                 # Create response based on host service health
                 return IbStatusResponse(
                     connection=ConnectionInfo(
@@ -155,7 +159,9 @@ class IbService:
                         host=host_service_config.url,
                         port=5001,  # Host service port
                         client_id=0,
-                        connection_time=datetime.now(timezone.utc) if connected else None,
+                        connection_time=(
+                            datetime.now(timezone.utc) if connected else None
+                        ),
                     ),
                     connection_metrics=ConnectionMetrics(
                         total_connections=1 if connected else 0,
@@ -165,7 +171,9 @@ class IbService:
                         uptime_seconds=None,
                     ),
                     data_metrics=DataFetchMetrics(
-                        total_requests=health.get("provider_info", {}).get("requests_made", 0),
+                        total_requests=health.get("provider_info", {}).get(
+                            "requests_made", 0
+                        ),
                         successful_requests=0,
                         failed_requests=health.get("error_count", 0),
                         total_bars_fetched=0,
@@ -181,7 +189,9 @@ class IbService:
                 pool_stats = pool.get_pool_stats()
                 ib_available = pool_stats["total_connections"] >= 0  # Pool exists
 
-                logger.info("🔍 IB status via direct connection - checking connection pool")
+                logger.info(
+                    "🔍 IB status via direct connection - checking connection pool"
+                )
 
         except Exception as e:
             logger.warning(f"IB status check failed: {e}")
@@ -647,13 +657,13 @@ class IbService:
 
             # Get IB connection config for fallback
             ib_config = get_ib_config()
-            
+
             # Initialize adapter with appropriate mode
             adapter = IbDataAdapter(
                 host=ib_config.host,
                 port=ib_config.port,
                 use_host_service=host_service_config.enabled,
-                host_service_url=host_service_config.url
+                host_service_url=host_service_config.url,
             )
 
             # Validate symbol using new architecture

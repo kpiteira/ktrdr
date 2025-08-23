@@ -1,4 +1,4 @@
-"""UnifiedAsyncCLI base class for connection reuse and performance optimization."""
+"""AsyncCLIClient base class for connection reuse and performance optimization."""
 
 import asyncio
 import logging
@@ -11,8 +11,8 @@ from ..config.settings import get_cli_settings
 logger = logging.getLogger(__name__)
 
 
-class UnifiedAsyncCLIError(Exception):
-    """Exception raised by UnifiedAsyncCLI."""
+class AsyncCLIClientError(Exception):
+    """Exception raised by AsyncCLIClient."""
 
     def __init__(
         self,
@@ -26,9 +26,9 @@ class UnifiedAsyncCLIError(Exception):
         super().__init__(message)
 
 
-class UnifiedAsyncCLI:
+class AsyncCLIClient:
     """
-    UnifiedAsyncCLI base class for eliminating per-command event loop and HTTP client creation overhead.
+    AsyncCLIClient base class for eliminating per-command event loop and HTTP client creation overhead.
 
     This class provides:
     - Single HTTP client instance reused across commands
@@ -46,7 +46,7 @@ class UnifiedAsyncCLI:
         retry_delay: Optional[float] = None,
     ):
         """
-        Initialize the UnifiedAsyncCLI.
+        Initialize the AsyncCLIClient.
 
         Args:
             base_url: Base URL of the API server (uses config default if None)
@@ -68,16 +68,16 @@ class UnifiedAsyncCLI:
         )
         self._http_client: Optional[httpx.AsyncClient] = None
 
-    async def __aenter__(self) -> "UnifiedAsyncCLI":
+    async def __aenter__(self) -> "AsyncCLIClient":
         """Async context manager entry - initialize HTTP client."""
         if self._http_client is not None:
-            raise UnifiedAsyncCLIError(
-                "UnifiedAsyncCLI is already initialized",
+            raise AsyncCLIClientError(
+                "AsyncCLIClient is already initialized",
                 error_code="CLI-AlreadyInitialized",
             )
 
         self._http_client = httpx.AsyncClient(timeout=self.timeout)
-        logger.debug("UnifiedAsyncCLI HTTP client initialized")
+        logger.debug("AsyncCLIClient HTTP client initialized")
         return self
 
     async def __aexit__(
@@ -89,7 +89,7 @@ class UnifiedAsyncCLI:
         """Async context manager exit - cleanup HTTP client."""
         if self._http_client is not None:
             await self._http_client.aclose()
-            logger.debug("UnifiedAsyncCLI HTTP client closed")
+            logger.debug("AsyncCLIClient HTTP client closed")
         return False  # Don't suppress exceptions
 
     async def _make_request(
@@ -116,11 +116,11 @@ class UnifiedAsyncCLI:
             Parsed JSON response as dictionary
 
         Raises:
-            UnifiedAsyncCLIError: For various error conditions
+            AsyncCLIClientError: For various error conditions
         """
         if self._http_client is None:
-            raise UnifiedAsyncCLIError(
-                "UnifiedAsyncCLI is not properly initialized. Use async context manager.",
+            raise AsyncCLIClientError(
+                "AsyncCLIClient is not properly initialized. Use async context manager.",
                 error_code="CLI-NotInitialized",
             )
 
@@ -145,7 +145,7 @@ class UnifiedAsyncCLI:
                     try:
                         return response.json()  # type: ignore[no-any-return]
                     except Exception as e:
-                        raise UnifiedAsyncCLIError(
+                        raise AsyncCLIClientError(
                             "Invalid JSON response from API",
                             error_code="CLI-InvalidResponse",
                             details={
@@ -163,7 +163,7 @@ class UnifiedAsyncCLI:
                     except Exception:
                         error_detail = {"message": response.text}
 
-                    raise UnifiedAsyncCLIError(
+                    raise AsyncCLIClientError(
                         f"API request failed: {error_detail.get('message', 'Unknown error')}",
                         error_code=f"CLI-{response.status_code}",
                         details={
@@ -183,7 +183,7 @@ class UnifiedAsyncCLI:
                         except Exception:
                             error_detail = {"message": response.text}
 
-                        raise UnifiedAsyncCLIError(
+                        raise AsyncCLIClientError(
                             error_msg,
                             error_code=f"CLI-ServerError-{response.status_code}",
                             details={
@@ -203,7 +203,7 @@ class UnifiedAsyncCLI:
 
             except httpx.ConnectError as e:
                 if attempt == max_attempts - 1:
-                    raise UnifiedAsyncCLIError(
+                    raise AsyncCLIClientError(
                         "Could not connect to API server",
                         error_code="CLI-ConnectionError",
                         details={
@@ -222,7 +222,7 @@ class UnifiedAsyncCLI:
 
             except httpx.TimeoutException as e:
                 if attempt == max_attempts - 1:
-                    raise UnifiedAsyncCLIError(
+                    raise AsyncCLIClientError(
                         f"Request timed out after {request_timeout}s",
                         error_code="CLI-TimeoutError",
                         details={
@@ -238,11 +238,11 @@ class UnifiedAsyncCLI:
                     await asyncio.sleep(self.retry_delay)
                     continue
 
-            except UnifiedAsyncCLIError:
+            except AsyncCLIClientError:
                 # Re-raise our own exceptions without wrapping
                 raise
             except Exception as e:
-                raise UnifiedAsyncCLIError(
+                raise AsyncCLIClientError(
                     f"Unexpected error making API request: {str(e)}",
                     error_code="CLI-UnexpectedError",
                     details={
@@ -253,7 +253,7 @@ class UnifiedAsyncCLI:
                 ) from e
 
         # Should never reach here due to the loop structure, but needed for type checking
-        raise UnifiedAsyncCLIError(
+        raise AsyncCLIClientError(
             "Unexpected code path reached",
             error_code="CLI-InternalError",
             details={"url": url},

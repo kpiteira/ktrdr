@@ -38,6 +38,7 @@ from ktrdr.api.endpoints.gap_analysis import router as gap_analysis_router
 from ktrdr.api.endpoints.training import router as training_router
 from ktrdr.api.endpoints.models import router as models_router
 from ktrdr.api.endpoints.operations import router as operations_router
+
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # from ktrdr.api.endpoints.multi_timeframe_decisions import (
 #     router as multi_timeframe_decisions_router,

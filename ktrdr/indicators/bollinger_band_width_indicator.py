@@ -23,7 +23,7 @@ class BollingerBandWidthIndicator(BaseIndicator):
     This indicator calculates the width of Bollinger Bands relative to the middle band:
     Width = (Upper Band - Lower Band) / Middle Band
 
-    The result is a normalized measure of volatility that can be compared across 
+    The result is a normalized measure of volatility that can be compared across
     different price levels and timeframes.
 
     **Interpretation:**
@@ -104,10 +104,10 @@ class BollingerBandWidthIndicator(BaseIndicator):
         bb_indicator = BollingerBandsIndicator(
             period=period, multiplier=multiplier, source=source
         )
-        
+
         # Calculate Bollinger Bands
         bb_data = bb_indicator.compute(data)
-        
+
         # Extract bands
         upper_band = bb_data["upper"]
         middle_band = bb_data["middle"]
@@ -117,7 +117,7 @@ class BollingerBandWidthIndicator(BaseIndicator):
         bb_width = np.where(
             np.abs(middle_band) > 1e-10,  # Avoid tiny denominators
             (upper_band - lower_band) / middle_band,
-            0.0  # Default width when middle is ~0
+            0.0,  # Default width when middle is ~0
         )
 
         # Create result Series

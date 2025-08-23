@@ -174,17 +174,23 @@ class PositionManager:
 
             # CORRECT CALCULATION: Total portfolio value = cash + current position market value
             total_value = self.current_capital + position_market_value
-            
+
             # DEBUG: Log portfolio calculation details
-            logger.debug(f"Portfolio value calculation: Cash=${self.current_capital:,.2f} + "
-                        f"Position(${position_market_value:,.2f}) = ${total_value:,.2f}")
-            
+            logger.debug(
+                f"Portfolio value calculation: Cash=${self.current_capital:,.2f} + "
+                f"Position(${position_market_value:,.2f}) = ${total_value:,.2f}"
+            )
+
             # Check for impossible values
             if total_value < 0:
-                logger.error(f"IMPOSSIBLE: Negative portfolio value ${total_value:,.2f}")
+                logger.error(
+                    f"IMPOSSIBLE: Negative portfolio value ${total_value:,.2f}"
+                )
             if total_value > self.initial_capital * 100:  # 10000% gain
-                logger.warning(f"SUSPICIOUS: Portfolio value ${total_value:,.2f} is {(total_value/self.initial_capital)*100:.0f}% of initial capital")
-            
+                logger.warning(
+                    f"SUSPICIOUS: Portfolio value ${total_value:,.2f} is {(total_value/self.initial_capital)*100:.0f}% of initial capital"
+                )
+
             return total_value
         return self.current_capital
 
@@ -286,7 +292,9 @@ class PositionManager:
 
         # Check if we still have enough capital
         if total_cost > self.available_capital:
-            logger.warning(f"Insufficient capital: Need ${total_cost:,.2f}, have ${self.available_capital:,.2f}")
+            logger.warning(
+                f"Insufficient capital: Need ${total_cost:,.2f}, have ${self.available_capital:,.2f}"
+            )
             # Recalculate with reduced quantity
             max_trade_value = self.available_capital / (1 + self.commission)
             quantity = int(max_trade_value / execution_price)
@@ -297,19 +305,27 @@ class PositionManager:
             trade_value = execution_price * quantity
             commission_cost = trade_value * self.commission
             total_cost = trade_value + commission_cost
-            logger.info(f"Reduced quantity to {quantity} shares, new cost: ${total_cost:,.2f}")
+            logger.info(
+                f"Reduced quantity to {quantity} shares, new cost: ${total_cost:,.2f}"
+            )
 
         # Update capital
-        logger.debug(f"BUY: Deducting ${total_cost:,.2f} from capital. Before: ${self.current_capital:,.2f}")
+        logger.debug(
+            f"BUY: Deducting ${total_cost:,.2f} from capital. Before: ${self.current_capital:,.2f}"
+        )
         self.current_capital -= total_cost
         logger.debug(f"BUY: Capital after trade: ${self.current_capital:,.2f}")
-        
+
         # Sanity check for negative capital
         if self.current_capital < 0:
-            logger.error(f"CRITICAL: Negative capital after BUY: ${self.current_capital:,.2f}")
+            logger.error(
+                f"CRITICAL: Negative capital after BUY: ${self.current_capital:,.2f}"
+            )
 
         # Log trade entry details with timestamp
-        logger.info(f"Position opened: BUY {quantity} shares at ${execution_price:.2f} on {timestamp.strftime('%Y-%m-%d %H:%M')}, Cost: ${total_cost:,.2f}")
+        logger.info(
+            f"Position opened: BUY {quantity} shares at ${execution_price:.2f} on {timestamp.strftime('%Y-%m-%d %H:%M')}, Cost: ${total_cost:,.2f}"
+        )
 
         # Create position
         self.current_position = Position(
@@ -381,12 +397,16 @@ class PositionManager:
         net_pnl = gross_pnl - commission_cost
 
         # Update capital
-        logger.debug(f"SELL: Adding ${net_proceeds:,.2f} to capital. Before: ${self.current_capital:,.2f}")
+        logger.debug(
+            f"SELL: Adding ${net_proceeds:,.2f} to capital. Before: ${self.current_capital:,.2f}"
+        )
         self.current_capital += net_proceeds
         logger.debug(f"SELL: Capital after trade: ${self.current_capital:,.2f}")
-        
+
         # Log trade completion details with timestamp
-        logger.info(f"Position closed: SELL {self.current_position.quantity} shares at ${execution_price:.2f} on {timestamp.strftime('%Y-%m-%d %H:%M')}, P&L: ${net_pnl:,.2f}")
+        logger.info(
+            f"Position closed: SELL {self.current_position.quantity} shares at ${execution_price:.2f} on {timestamp.strftime('%Y-%m-%d %H:%M')}, P&L: ${net_pnl:,.2f}"
+        )
 
         # Create trade record
         trade = Trade(

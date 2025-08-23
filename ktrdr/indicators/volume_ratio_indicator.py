@@ -2,7 +2,7 @@
 Volume Ratio indicator implementation.
 
 Volume Ratio compares current volume to the simple moving average of volume
-over a specified period. This indicator helps identify periods of above or 
+over a specified period. This indicator helps identify periods of above or
 below average trading activity.
 """
 
@@ -19,11 +19,11 @@ class VolumeRatioIndicator(BaseIndicator):
     """
     Volume Ratio technical indicator.
 
-    This indicator calculates the ratio of current volume to the simple moving 
+    This indicator calculates the ratio of current volume to the simple moving
     average of volume over a specified period:
     Ratio = Current Volume / Volume SMA
 
-    The result is a normalized measure that helps identify volume spikes and 
+    The result is a normalized measure that helps identify volume spikes and
     periods of unusual trading activity.
 
     **Interpretation:**
@@ -79,7 +79,10 @@ class VolumeRatioIndicator(BaseIndicator):
             raise DataError(
                 message="Volume column 'volume' not found in data",
                 error_code="DATA-MissingColumn",
-                details={"required_column": "volume", "available_columns": list(data.columns)},
+                details={
+                    "required_column": "volume",
+                    "available_columns": list(data.columns),
+                },
             )
 
         # Check for sufficient data
@@ -98,7 +101,7 @@ class VolumeRatioIndicator(BaseIndicator):
         volume_ratio = np.where(
             np.abs(volume_sma) > 1e-10,  # Avoid tiny denominators
             volume / volume_sma,
-            1.0  # Default ratio when SMA is ~0
+            1.0,  # Default ratio when SMA is ~0
         )
 
         # Create result Series

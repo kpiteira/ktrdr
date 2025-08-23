@@ -250,7 +250,7 @@ class TimeframeSynchronizer:
     ) -> Tuple[Dict[str, pd.DataFrame], SynchronizationStats]:
         """
         Validate and prepare multiple timeframes without destroying timeframe integrity.
-        
+
         This method does NOT expand or synchronize raw data to a common timeline.
         Each timeframe maintains its native temporal resolution for proper indicator calculation.
         Temporal alignment happens later in the FuzzyNeuralProcessor for neural network input.

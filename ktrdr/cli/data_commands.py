@@ -28,6 +28,7 @@ from rich.progress import (
 )
 
 from ktrdr.cli.api_client import get_api_client, check_api_connection
+from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import ValidationError, DataError
 from ktrdr.logging import get_logger
@@ -85,6 +86,7 @@ def show_data(
 
     This command retrieves and displays data that has been previously loaded
     and cached locally. It's fast since it doesn't trigger any external API calls.
+    Uses AsyncCLIClient for improved performance through connection reuse.
 
     Examples:
         ktrdr data show AAPL
@@ -99,9 +101,9 @@ def show_data(
         timeframe = InputValidator.validate_string(
             timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
         )
-        rows = InputValidator.validate_numeric(rows, min_value=1, max_value=1000)
+        rows = int(InputValidator.validate_numeric(rows, min_value=1, max_value=1000))
 
-        # Run async operation
+        # Run async operation with improved performance
         asyncio.run(
             _show_data_async(
                 symbol,
@@ -132,114 +134,138 @@ async def _show_data_async(
     output_format: str,
     verbose: bool,
 ):
-    """Async implementation of show-data command."""
+    """Async implementation of show-data command using AsyncCLIClient."""
     try:
-        # Check API connection
-        if not await check_api_connection():
-            display_ib_connection_required_message()
-            sys.exit(1)
+        # Use AsyncCLIClient for connection reuse and performance
+        async with AsyncCLIClient() as cli:
+            if verbose:
+                console.print(f"🔍 Retrieving cached data for {symbol} ({timeframe})")
 
-        api_client = get_api_client()
-
-        if verbose:
-            console.print(f"🔍 Retrieving cached data for {symbol} ({timeframe})")
-
-        # Get cached data via API
-        data = await api_client.get_cached_data(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            trading_hours_only=trading_hours_only,
-            include_extended=include_extended,
-        )
-
-        # Check if we got data
-        if not data or not data.get("dates"):
-            console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
-            if start_date or end_date:
-                console.print(
-                    "💡 Try adjusting the date range or loading data first with 'ktrdr data load'"
-                )
-            else:
-                console.print("💡 Try loading data first with 'ktrdr data load'")
-            return
-
-        # Convert API response back to DataFrame for display
-        dates = data["dates"]
-        ohlcv = data["ohlcv"]
-        metadata = data.get("metadata", {})
-
-        if not dates or not ohlcv:
-            console.print(f"ℹ️  No data points available for {symbol} ({timeframe})")
-            return
-
-        # Create DataFrame from API response
-        df = pd.DataFrame(
-            ohlcv,
-            columns=["Open", "High", "Low", "Close", "Volume"],
-            index=pd.to_datetime(dates),
-        )
-
-        # Limit rows for display
-        display_df = df.tail(rows) if len(df) > rows else df
-
-        # Format output
-        if output_format == "json":
-            result = {
+            # Build query parameters
+            params = {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "total_rows": len(df),
-                "displayed_rows": len(display_df),
-                "metadata": metadata,
-                "data": display_df.reset_index().to_dict("records"),
             }
-            print(json.dumps(result, indent=2, default=str))
 
-        elif output_format == "csv":
-            print(display_df.to_csv())
-
-        else:  # table format
-            console.print(f"\n📊 [bold]{symbol} ({timeframe}) - Cached Data[/bold]")
-            console.print(f"Total rows: {len(df)} | Showing: {len(display_df)}")
-
-            if metadata:
-                date_range = (
-                    f"{metadata.get('start', 'N/A')} to {metadata.get('end', 'N/A')}"
-                )
-                console.print(f"Date range: {date_range}")
-
+            if start_date:
+                params["start_date"] = start_date
+            if end_date:
+                params["end_date"] = end_date
             if trading_hours_only:
-                console.print("🕐 Filtered to trading hours only")
-                if include_extended:
-                    console.print("  (including extended hours)")
+                params["trading_hours_only"] = "true"
+            if include_extended:
+                params["include_extended"] = "true"
 
-            console.print()
+            # Get cached data via async API call
+            try:
+                data = await cli._make_request("GET", "/api/data/cached", params=params)
+            except AsyncCLIClientError as e:
+                if e.error_code == "CLI-ConnectionError":
+                    display_ib_connection_required_message()
+                    sys.exit(1)
+                elif e.error_code.startswith("CLI-404"):
+                    console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
+                    if start_date or end_date:
+                        console.print(
+                            "💡 Try adjusting the date range or loading data first with 'ktrdr data load'"
+                        )
+                    else:
+                        console.print(
+                            "💡 Try loading data first with 'ktrdr data load'"
+                        )
+                    return
+                else:
+                    raise
 
-            # Create rich table
-            table = Table()
-            table.add_column("Date", style="cyan")
-            table.add_column("Open", style="green", justify="right")
-            table.add_column("High", style="bright_green", justify="right")
-            table.add_column("Low", style="red", justify="right")
-            table.add_column("Close", style="bright_red", justify="right")
-            table.add_column("Volume", style="blue", justify="right")
+            # Check if we got data
+            if not data or not data.get("dates"):
+                console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
+                if start_date or end_date:
+                    console.print(
+                        "💡 Try adjusting the date range or loading data first with 'ktrdr data load'"
+                    )
+                else:
+                    console.print("💡 Try loading data first with 'ktrdr data load'")
+                return
 
-            for date, row in display_df.iterrows():
-                table.add_row(
-                    date.strftime("%Y-%m-%d %H:%M:%S"),
-                    f"{row['Open']:.4f}",
-                    f"{row['High']:.4f}",
-                    f"{row['Low']:.4f}",
-                    f"{row['Close']:.4f}",
-                    f"{int(row['Volume']):,}",
+            # Convert API response back to DataFrame for display
+            dates = data["dates"]
+            ohlcv = data["ohlcv"]
+            metadata = data.get("metadata", {})
+
+            if not dates or not ohlcv:
+                console.print(f"ℹ️  No data points available for {symbol} ({timeframe})")
+                return
+
+            # Create DataFrame from API response
+            df = pd.DataFrame(
+                ohlcv,
+                columns=["Open", "High", "Low", "Close", "Volume"],
+                index=pd.to_datetime(dates),
+            )
+
+            # Limit rows for display
+            display_df = df.tail(rows) if len(df) > rows else df
+
+            # Format output
+            if output_format == "json":
+                result = {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "total_rows": len(df),
+                    "displayed_rows": len(display_df),
+                    "metadata": metadata,
+                    "data": display_df.reset_index().to_dict("records"),
+                }
+                print(json.dumps(result, indent=2, default=str))
+
+            elif output_format == "csv":
+                print(display_df.to_csv())
+
+            else:  # table format
+                console.print(f"\n📊 [bold]{symbol} ({timeframe}) - Cached Data[/bold]")
+                console.print(f"Total rows: {len(df)} | Showing: {len(display_df)}")
+
+                if metadata:
+                    date_range = f"{metadata.get('start', 'N/A')} to {metadata.get('end', 'N/A')}"
+                    console.print(f"Date range: {date_range}")
+
+                if trading_hours_only:
+                    console.print("🕐 Filtered to trading hours only")
+                    if include_extended:
+                        console.print("  (including extended hours)")
+
+                console.print()
+
+                # Create rich table
+                table = Table()
+                table.add_column("Date", style="cyan")
+                table.add_column("Open", style="green", justify="right")
+                table.add_column("High", style="bright_green", justify="right")
+                table.add_column("Low", style="red", justify="right")
+                table.add_column("Close", style="bright_red", justify="right")
+                table.add_column("Volume", style="blue", justify="right")
+
+                for date, row in display_df.iterrows():
+                    table.add_row(
+                        date.strftime("%Y-%m-%d %H:%M:%S"),
+                        f"{row['Open']:.4f}",
+                        f"{row['High']:.4f}",
+                        f"{row['Low']:.4f}",
+                        f"{row['Close']:.4f}",
+                        f"{int(row['Volume']):,}",
+                    )
+
+                console.print(table)
+
+            if verbose:
+                console.print(
+                    f"✅ Retrieved {len(df)} data points from cache via AsyncCLIClient"
                 )
 
-            console.print(table)
-
-        if verbose:
-            console.print(f"✅ Retrieved {len(df)} data points from cache")
-
+    except AsyncCLIClientError:
+        # Re-raise CLI errors without wrapping
+        raise
     except Exception as e:
         raise DataError(
             message=f"Failed to show data for {symbol} ({timeframe})",
@@ -278,7 +304,9 @@ def load_data(
     ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output"),
     periodic_save_minutes: float = typer.Option(
-        2.0, "--save-interval", help="Save progress every N minutes during long downloads (default: 2.0)"
+        2.0,
+        "--save-interval",
+        help="Save progress every N minutes during long downloads (default: 2.0)",
     ),
 ):
     """
@@ -394,12 +422,13 @@ async def _load_data_async(
 
         # Set up async signal handling
         import signal
+
         cancelled = False
         operation_id = None
-        
+
         # Set up signal handler using asyncio
         loop = asyncio.get_running_loop()
-        
+
         def signal_handler():
             """Handle Ctrl+C for graceful cancellation."""
             nonlocal cancelled
@@ -409,9 +438,12 @@ async def _load_data_async(
             )
             # Debug output
             import sys
-            sys.stderr.write("\n[DEBUG] Async signal handler called, cancelled flag set to True\n")
+
+            sys.stderr.write(
+                "\n[DEBUG] Async signal handler called, cancelled flag set to True\n"
+            )
             sys.stderr.flush()
-        
+
         # Register signal handler with the event loop
         loop.add_signal_handler(signal.SIGINT, signal_handler)
 
@@ -469,20 +501,28 @@ async def _load_data_async(
                         try:
                             # Check for cancellation and send cancel request immediately
                             if cancelled:
-                                console.print("[yellow]🛑 Sending cancellation to server...[/yellow]")
+                                console.print(
+                                    "[yellow]🛑 Sending cancellation to server...[/yellow]"
+                                )
                                 try:
                                     cancel_response = await api_client.cancel_operation(
                                         operation_id=operation_id,
                                         reason="User requested cancellation via CLI",
                                     )
                                     if cancel_response.get("success"):
-                                        console.print("✅ [yellow]Cancellation sent successfully[/yellow]")
+                                        console.print(
+                                            "✅ [yellow]Cancellation sent successfully[/yellow]"
+                                        )
                                     else:
-                                        console.print(f"[red]Cancel failed: {cancel_response}[/red]")
+                                        console.print(
+                                            f"[red]Cancel failed: {cancel_response}[/red]"
+                                        )
                                 except Exception as e:
-                                    console.print(f"[red]Cancel request failed: {str(e)}[/red]")
+                                    console.print(
+                                        f"[red]Cancel request failed: {str(e)}[/red]"
+                                    )
                                 break  # Exit the polling loop
-                            
+
                             status_response = await api_client.get_operation_status(
                                 operation_id
                             )
@@ -563,14 +603,18 @@ async def _load_data_async(
                                 )
                                 if not quiet:
                                     if cancel_response.get("success"):
-                                        console.print("✅ Cancellation sent successfully")
+                                        console.print(
+                                            "✅ Cancellation sent successfully"
+                                        )
                                     else:
-                                        console.print(f"Cancel failed: {cancel_response}")
+                                        console.print(
+                                            f"Cancel failed: {cancel_response}"
+                                        )
                             except Exception as e:
                                 if not quiet:
                                     console.print(f"Cancel request failed: {str(e)}")
                             break  # Exit the polling loop
-                        
+
                         status_response = await api_client.get_operation_status(
                             operation_id
                         )

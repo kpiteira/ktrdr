@@ -321,7 +321,7 @@ class FuzzyEngine:
     def generate_multi_timeframe_memberships(
         self,
         multi_timeframe_indicators: Dict[str, pd.DataFrame],
-        fuzzy_sets_config: Optional[Dict[str, Dict]] = None
+        fuzzy_sets_config: Optional[Dict[str, Dict]] = None,
     ) -> Dict[str, pd.DataFrame]:
         """
         Generate fuzzy membership values for indicators across multiple timeframes.
@@ -357,14 +357,20 @@ class FuzzyEngine:
             raise ConfigurationError(
                 "No timeframe data provided for multi-timeframe fuzzy processing",
                 error_code="MTFUZZ-NoTimeframes",
-                details={"timeframes_provided": list(multi_timeframe_indicators.keys())},
+                details={
+                    "timeframes_provided": list(multi_timeframe_indicators.keys())
+                },
             )
 
         # Use provided fuzzy config or current engine configuration
         if fuzzy_sets_config is not None:
             # Create temporary engine with the provided configuration
-            from ktrdr.fuzzy.config import FuzzyConfig, FuzzySetConfig, MembershipFunctionConfig
-            
+            from ktrdr.fuzzy.config import (
+                FuzzyConfig,
+                FuzzySetConfig,
+                MembershipFunctionConfig,
+            )
+
             # Convert config dict to FuzzyConfig objects if needed
             if isinstance(fuzzy_sets_config, dict):
                 try:
@@ -372,26 +378,36 @@ class FuzzyEngine:
                     available_indicators = set()
                     for tf_data in multi_timeframe_indicators.values():
                         available_indicators.update(tf_data.columns)
-                    
-                    logger.debug(f"Available indicators in multi-timeframe data: {available_indicators}")
-                    logger.debug(f"Fuzzy sets config keys: {list(fuzzy_sets_config.keys())}")
-                    
+
+                    logger.debug(
+                        f"Available indicators in multi-timeframe data: {available_indicators}"
+                    )
+                    logger.debug(
+                        f"Fuzzy sets config keys: {list(fuzzy_sets_config.keys())}"
+                    )
+
                     # Filter fuzzy config to only include indicators that are available
                     filtered_fuzzy_config = {}
                     for indicator, sets_config in fuzzy_sets_config.items():
                         # Check if the base indicator name is in available indicators
                         # or if any column starts with the indicator name
                         matching_indicators = [
-                            col for col in available_indicators 
-                            if col == indicator or col.lower().startswith(indicator.lower())
+                            col
+                            for col in available_indicators
+                            if col == indicator
+                            or col.lower().startswith(indicator.lower())
                         ]
-                        
+
                         if matching_indicators:
-                            logger.debug(f"Found matches for {indicator}: {matching_indicators}")
+                            logger.debug(
+                                f"Found matches for {indicator}: {matching_indicators}"
+                            )
                             filtered_fuzzy_config[indicator] = sets_config
                         else:
-                            logger.warning(f"No matching indicators found for fuzzy set '{indicator}'")
-                    
+                            logger.warning(
+                                f"No matching indicators found for fuzzy set '{indicator}'"
+                            )
+
                     # Only proceed if we have at least one matched fuzzy set
                     if not filtered_fuzzy_config:
                         raise ConfigurationError(
@@ -401,14 +417,17 @@ class FuzzyEngine:
                             error_code="MTFUZZ-NoMatches",
                             details={
                                 "available_indicators": list(available_indicators),
-                                "fuzzy_sets_requested": list(fuzzy_sets_config.keys())
+                                "fuzzy_sets_requested": list(fuzzy_sets_config.keys()),
                             },
                         )
-                    
+
                     # Use FuzzyConfigLoader to properly process the filtered config
                     from ktrdr.fuzzy.config import FuzzyConfigLoader
-                    temp_config = FuzzyConfigLoader.load_from_dict(filtered_fuzzy_config)
-                    
+
+                    temp_config = FuzzyConfigLoader.load_from_dict(
+                        filtered_fuzzy_config
+                    )
+
                     processing_engine = FuzzyEngine(temp_config)
                 except Exception as e:
                     raise ConfigurationError(
@@ -443,7 +462,9 @@ class FuzzyEngine:
 
                 # Validate timeframe data
                 if indicators_data is None or indicators_data.empty:
-                    logger.warning(f"Empty indicator data for timeframe {timeframe}, skipping")
+                    logger.warning(
+                        f"Empty indicator data for timeframe {timeframe}, skipping"
+                    )
                     processing_errors[timeframe] = "Empty indicator data"
                     continue
 
@@ -452,45 +473,65 @@ class FuzzyEngine:
 
                 for indicator_col in indicators_data.columns:
                     # Skip non-indicator columns (OHLCV data)
-                    if indicator_col.lower() in ['open', 'high', 'low', 'close', 'volume']:
+                    if indicator_col.lower() in [
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "volume",
+                    ]:
                         continue
 
                     # Extract base indicator name (remove suffix like "_14" from "rsi_14")
                     base_indicator = self._extract_base_indicator_name(indicator_col)
-                    
+
                     # Check if this indicator has fuzzy configuration
                     if base_indicator in processing_engine._membership_functions:
                         try:
                             # Get indicator values
                             indicator_values = indicators_data[indicator_col]
-                            
+
                             # Generate fuzzy memberships using existing fuzzify method
-                            fuzzy_result = processing_engine.fuzzify(base_indicator, indicator_values)
-                            
+                            fuzzy_result = processing_engine.fuzzify(
+                                base_indicator, indicator_values
+                            )
+
                             # Add timeframe prefix to column names and store results
                             if isinstance(fuzzy_result, pd.DataFrame):
                                 for col in fuzzy_result.columns:
                                     # Add timeframe prefix: "rsi_low" -> "15m_rsi_low"
                                     prefixed_col = f"{timeframe}_{col}"
-                                    timeframe_fuzzy_data[prefixed_col] = fuzzy_result[col]
-                            
-                            logger.debug(f"Generated fuzzy memberships for {base_indicator} in {timeframe}")
-                            
+                                    timeframe_fuzzy_data[prefixed_col] = fuzzy_result[
+                                        col
+                                    ]
+
+                            logger.debug(
+                                f"Generated fuzzy memberships for {base_indicator} in {timeframe}"
+                            )
+
                         except Exception as e:
-                            logger.warning(f"Failed to process indicator {indicator_col} in {timeframe}: {str(e)}")
+                            logger.warning(
+                                f"Failed to process indicator {indicator_col} in {timeframe}: {str(e)}"
+                            )
                             continue
                     else:
-                        logger.debug(f"No fuzzy configuration for indicator {base_indicator}, skipping")
+                        logger.debug(
+                            f"No fuzzy configuration for indicator {base_indicator}, skipping"
+                        )
 
                 # Create DataFrame with fuzzy membership results
                 if timeframe_fuzzy_data:
-                    results[timeframe] = pd.DataFrame(timeframe_fuzzy_data, index=indicators_data.index)
+                    results[timeframe] = pd.DataFrame(
+                        timeframe_fuzzy_data, index=indicators_data.index
+                    )
                     logger.debug(
                         f"Successfully generated {len(timeframe_fuzzy_data)} fuzzy features "
                         f"for {timeframe} ({len(results[timeframe])} rows)"
                     )
                 else:
-                    logger.warning(f"No fuzzy features generated for timeframe {timeframe}")
+                    logger.warning(
+                        f"No fuzzy features generated for timeframe {timeframe}"
+                    )
                     processing_errors[timeframe] = "No fuzzy features generated"
 
             except Exception as e:
@@ -532,33 +573,33 @@ class FuzzyEngine:
     def _extract_base_indicator_name(self, indicator_col: str) -> str:
         """
         Extract base indicator name from column name.
-        
+
         Examples:
             "rsi_14" -> "rsi"
             "macd" -> "macd"
             "sma_20" -> "sma"
-            
+
         Args:
             indicator_col: Full indicator column name
-            
+
         Returns:
             Base indicator name
         """
         # Common indicator patterns
-        common_indicators = ['rsi', 'macd', 'sma', 'ema', 'bb', 'stoch', 'cci', 'atr']
-        
+        common_indicators = ["rsi", "macd", "sma", "ema", "bb", "stoch", "cci", "atr"]
+
         # Check if the column starts with any known indicator
         for indicator in common_indicators:
             if indicator_col.lower().startswith(indicator.lower()):
                 return indicator.lower()
-        
+
         # Fallback: use the part before the first underscore or number
         base_name = indicator_col.lower()
-        
+
         # Remove trailing numbers and underscores (e.g., "rsi_14" -> "rsi")
         for i, char in enumerate(base_name):
-            if char.isdigit() or char == '_':
+            if char.isdigit() or char == "_":
                 base_name = base_name[:i]
                 break
-        
+
         return base_name if base_name else indicator_col.lower()

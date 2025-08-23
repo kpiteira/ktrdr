@@ -11,7 +11,10 @@ from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
 from ktrdr.api.services.training_service import TrainingService
-from ktrdr.api.services.operations_service import get_operations_service, OperationsService
+from ktrdr.api.services.operations_service import (
+    get_operations_service,
+    OperationsService,
+)
 from ktrdr.errors import ValidationError, DataError
 
 logger = get_logger(__name__)
@@ -52,31 +55,29 @@ class TrainingRequest(BaseModel):
         """Validate that symbols list is not empty and contains valid symbols."""
         if not v or len(v) == 0:
             raise ValueError("At least one symbol must be specified")
-        
+
         valid_symbols = []
         for symbol in v:
             if not symbol or not symbol.strip():
                 raise ValueError("Symbol cannot be empty")
             valid_symbols.append(symbol.strip())
-        
+
         return valid_symbols
-    
+
     @field_validator("timeframes")
     @classmethod
     def validate_timeframes(cls, v: List[str]) -> List[str]:
         """Validate that timeframes list is not empty and contains valid timeframes."""
         if not v or len(v) == 0:
             raise ValueError("At least one timeframe must be specified")
-        
+
         valid_timeframes = []
         for timeframe in v:
             if not timeframe or not timeframe.strip():
                 raise ValueError("Timeframe cannot be empty")
             valid_timeframes.append(timeframe.strip())
-        
+
         return valid_timeframes
-
-
 
 
 class TrainingStartResponse(BaseModel):
@@ -90,8 +91,6 @@ class TrainingStartResponse(BaseModel):
     timeframes: List[str]
     strategy_name: str
     estimated_duration_minutes: Optional[int] = None
-
-
 
 
 class CurrentMetrics(BaseModel):
@@ -215,8 +214,6 @@ async def start_training(
     except Exception as e:
         logger.error(f"Failed to start training: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to start training")
-
-
 
 
 @router.get("/{task_id}/performance", response_model=PerformanceResponse)

@@ -69,7 +69,7 @@ class ModelStorage:
         # Determine model type (Phase 4 of feature engineering removal)
         is_pure_fuzzy = scaler is None
         model_version = "pure_fuzzy_v1" if is_pure_fuzzy else "mixed_features_v1"
-        
+
         # Save feature information with enhanced metadata
         if is_pure_fuzzy:
             # Pure fuzzy model - enhanced metadata
@@ -81,11 +81,11 @@ class ModelStorage:
                 "feature_count": len(feature_names),
                 "temporal_config": {
                     "lookback_periods": feature_config.get("lookback_periods", 0),
-                    "enabled": feature_config.get("lookback_periods", 0) > 0
+                    "enabled": feature_config.get("lookback_periods", 0) > 0,
                 },
                 "scaling_info": {
                     "requires_scaling": False,
-                    "reason": "fuzzy_values_already_normalized"
+                    "reason": "fuzzy_values_already_normalized",
                 },
                 "feature_importance": feature_importance or {},
             }
@@ -98,11 +98,11 @@ class ModelStorage:
                 "feature_count": len(feature_names),
                 "scaling_info": {
                     "requires_scaling": True,
-                    "scaler_type": type(scaler).__name__ if scaler else None
+                    "scaler_type": type(scaler).__name__ if scaler else None,
                 },
                 "feature_importance": feature_importance or {},
             }
-        
+
         with open(model_dir / "features.json", "w") as f:
             json.dump(feature_info, f, indent=2)
 
@@ -132,8 +132,8 @@ class ModelStorage:
             "feature_engineering": {
                 "removed": is_pure_fuzzy,
                 "scaler_required": not is_pure_fuzzy,
-                "fuzzy_only": is_pure_fuzzy
-            }
+                "fuzzy_only": is_pure_fuzzy,
+            },
         }
         with open(model_dir / "metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
@@ -215,7 +215,10 @@ class ModelStorage:
         # Determine model architecture type
         model_version = metadata.get("model_version", "legacy")
         architecture_type = metadata.get("architecture_type", "unknown")
-        is_pure_fuzzy = architecture_type == "pure_fuzzy" or features.get("feature_type") == "pure_fuzzy"
+        is_pure_fuzzy = (
+            architecture_type == "pure_fuzzy"
+            or features.get("feature_type") == "pure_fuzzy"
+        )
 
         return {
             "model": model,

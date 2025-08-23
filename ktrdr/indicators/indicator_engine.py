@@ -149,7 +149,7 @@ class IndicatorEngine:
     def apply_multi_timeframe(
         self,
         multi_timeframe_ohlcv: Dict[str, pd.DataFrame],
-        indicator_configs: Optional[List[Dict]] = None
+        indicator_configs: Optional[List[Dict]] = None,
     ) -> Dict[str, pd.DataFrame]:
         """
         Apply indicators across multiple timeframes using the same configuration.
@@ -218,11 +218,15 @@ class IndicatorEngine:
         # Process each timeframe
         for timeframe, ohlcv_data in multi_timeframe_ohlcv.items():
             try:
-                logger.debug(f"Processing {len(processing_engine.indicators)} indicators for timeframe: {timeframe}")
+                logger.debug(
+                    f"Processing {len(processing_engine.indicators)} indicators for timeframe: {timeframe}"
+                )
 
                 # Validate timeframe data
                 if ohlcv_data is None or ohlcv_data.empty:
-                    logger.warning(f"Empty OHLCV data for timeframe {timeframe}, skipping")
+                    logger.warning(
+                        f"Empty OHLCV data for timeframe {timeframe}, skipping"
+                    )
                     processing_errors[timeframe] = "Empty OHLCV data"
                     continue
 
@@ -237,7 +241,9 @@ class IndicatorEngine:
                 )
 
             except Exception as e:
-                error_msg = f"Failed to process indicators for timeframe {timeframe}: {str(e)}"
+                error_msg = (
+                    f"Failed to process indicators for timeframe {timeframe}: {str(e)}"
+                )
                 logger.error(error_msg)
                 processing_errors[timeframe] = str(e)
 

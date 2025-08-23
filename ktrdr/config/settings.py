@@ -44,14 +44,26 @@ class LoggingSettings(BaseSettings):
 class TrainingHostSettings(BaseSettings):
     """Training Host Service Settings."""
 
-    enabled: bool = Field(default=metadata.get("training_host.enabled", False), alias="USE_TRAINING_HOST_SERVICE")
-    base_url: str = Field(default=metadata.get("training_host.base_url", "http://localhost:5002"), alias="TRAINING_HOST_SERVICE_URL")
+    enabled: bool = Field(
+        default=metadata.get("training_host.enabled", False),
+        alias="USE_TRAINING_HOST_SERVICE",
+    )
+    base_url: str = Field(
+        default=metadata.get("training_host.base_url", "http://localhost:5002"),
+        alias="TRAINING_HOST_SERVICE_URL",
+    )
     timeout: float = Field(default=metadata.get("training_host.timeout", 30.0))
-    health_check_interval: float = Field(default=metadata.get("training_host.health_check_interval", 10.0))
+    health_check_interval: float = Field(
+        default=metadata.get("training_host.health_check_interval", 10.0)
+    )
     max_retries: int = Field(default=metadata.get("training_host.max_retries", 3))
     retry_delay: float = Field(default=metadata.get("training_host.retry_delay", 1.0))
-    progress_poll_interval: float = Field(default=metadata.get("training_host.progress_poll_interval", 2.0))
-    session_timeout: float = Field(default=metadata.get("training_host.session_timeout", 3600.0))
+    progress_poll_interval: float = Field(
+        default=metadata.get("training_host.progress_poll_interval", 2.0)
+    )
+    session_timeout: float = Field(
+        default=metadata.get("training_host.session_timeout", 3600.0)
+    )
 
     model_config = ConfigDict(env_prefix="KTRDR_TRAINING_HOST_")
 
@@ -59,9 +71,13 @@ class TrainingHostSettings(BaseSettings):
 class CLISettings(BaseSettings):
     """CLI Client Settings."""
 
-    api_base_url: str = Field(default="http://localhost:8000", description="Base URL for API client")
+    api_base_url: str = Field(
+        default="http://localhost:8000", description="Base URL for API client"
+    )
     timeout: float = Field(default=30.0, description="Default timeout for API requests")
-    max_retries: int = Field(default=3, description="Maximum retry attempts for failed requests")
+    max_retries: int = Field(
+        default=3, description="Maximum retry attempts for failed requests"
+    )
     retry_delay: float = Field(default=1.0, description="Delay between retry attempts")
 
     model_config = ConfigDict(env_prefix="KTRDR_CLI_")

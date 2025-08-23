@@ -1,5 +1,5 @@
 """
-Unified API client for KTRDR CLI commands.
+Centralized API client for KTRDR CLI commands.
 
 This module provides a centralized HTTP client for all CLI commands to interact
 with the KTRDR API server. It handles common concerns like error handling,
@@ -27,7 +27,7 @@ error_console = Console(stderr=True)
 
 class KtrdrApiClient:
     """
-    Unified API client for KTRDR CLI commands.
+    Centralized API client for KTRDR CLI commands.
 
     Provides a consistent interface for all CLI commands to interact with the
     KTRDR API server, including standardized error handling, timeouts, and
@@ -443,7 +443,7 @@ class KtrdrApiClient:
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
         detailed_analytics: bool = False,
-        **kwargs  # Accept additional parameters for backward compatibility
+        **kwargs,  # Accept additional parameters for backward compatibility
     ) -> Dict[str, Any]:
         """Start a training task (supports 1-N symbols)."""
         payload = {

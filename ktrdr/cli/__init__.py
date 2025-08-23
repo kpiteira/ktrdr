@@ -13,6 +13,7 @@ from ktrdr.cli.ib_commands import ib_app
 from ktrdr.cli.model_commands import models_app
 from ktrdr.cli.strategy_commands import strategies_app
 from ktrdr.cli.fuzzy_commands import fuzzy_app
+
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # from ktrdr.cli.multi_timeframe_commands import multi_timeframe_app
 
@@ -35,7 +36,7 @@ cli_app.add_typer(fuzzy_app, name="fuzzy", help="Fuzzy logic operations commands
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # cli_app.add_typer(
 #     multi_timeframe_app,
-#     name="multi-timeframe", 
+#     name="multi-timeframe",
 #     help="Multi-timeframe trading decision commands",
 # )
 

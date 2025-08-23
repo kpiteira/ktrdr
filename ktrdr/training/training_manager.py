@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 class TrainingManager:
     """
     Manager for training operations with automatic host service routing.
-    
+
     This manager mirrors the DataManager pattern for IB integration, providing
     a clean interface for training operations while handling the complexity of
     routing between local training and training host service.
@@ -31,7 +31,7 @@ class TrainingManager:
 
     def __init__(self):
         """Initialize training manager with environment-based configuration."""
-        
+
         # Simple environment variable handling (mirror IB pattern exactly)
         self.training_adapter = self._initialize_training_adapter()
 
@@ -40,35 +40,40 @@ class TrainingManager:
         try:
             # Environment variable override for enabled flag (quick toggle)
             env_enabled = os.getenv("USE_TRAINING_HOST_SERVICE", "").lower()
-            
+
             if env_enabled in ("true", "1", "yes"):
                 use_host_service = True
                 # Use environment URL if provided
-                host_service_url = os.getenv("TRAINING_HOST_SERVICE_URL", "http://localhost:5002")
-                
-                logger.info(f"Training integration enabled using host service at {host_service_url}")
-                
+                host_service_url = os.getenv(
+                    "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
+                )
+
+                logger.info(
+                    f"Training integration enabled using host service at {host_service_url}"
+                )
+
             elif env_enabled in ("false", "0", "no"):
                 use_host_service = False
                 host_service_url = None
-                
+
                 logger.info("Training integration enabled (local training)")
-                
+
             else:
                 # Default to local training if not explicitly set
                 use_host_service = False
                 host_service_url = None
-                
+
                 logger.info("Training integration enabled (local training - default)")
-            
+
             # Initialize TrainingAdapter with configuration
             return TrainingAdapter(
-                use_host_service=use_host_service,
-                host_service_url=host_service_url
+                use_host_service=use_host_service, host_service_url=host_service_url
             )
-            
+
         except Exception as e:
-            logger.warning(f"Failed to load training host service config, using local training: {e}")
+            logger.warning(
+                f"Failed to load training host service config, using local training: {e}"
+            )
             # Fallback to local training
             return TrainingAdapter(use_host_service=False)
 
@@ -107,16 +112,16 @@ class TrainingManager:
             end_date=end_date,
             validation_split=validation_split,
             data_mode=data_mode,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
         )
 
     async def get_training_status(self, session_id: str) -> Dict[str, Any]:
         """
         Get status of a training session (host service only).
-        
+
         Args:
             session_id: Training session ID
-            
+
         Returns:
             Training status information
         """
@@ -125,10 +130,10 @@ class TrainingManager:
     async def stop_training(self, session_id: str) -> Dict[str, Any]:
         """
         Stop a training session (host service only).
-        
+
         Args:
             session_id: Training session ID
-            
+
         Returns:
             Stop operation result
         """
@@ -155,7 +160,7 @@ class TrainingManager:
             "host_service_url": self.get_host_service_url(),
             "environment_variables": {
                 "USE_TRAINING_HOST_SERVICE": os.getenv("USE_TRAINING_HOST_SERVICE"),
-                "TRAINING_HOST_SERVICE_URL": os.getenv("TRAINING_HOST_SERVICE_URL")
+                "TRAINING_HOST_SERVICE_URL": os.getenv("TRAINING_HOST_SERVICE_URL"),
             },
-            "statistics": self.get_adapter_statistics()
+            "statistics": self.get_adapter_statistics(),
         }

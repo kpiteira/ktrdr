@@ -94,8 +94,6 @@ class TestZigZagLabeler:
         assert len(fitness_labels) == len(price_data)
 
 
-
-
 class TestModelTrainer:
     """Test neural network training functionality."""
 
