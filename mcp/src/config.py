@@ -1,4 +1,5 @@
 """Configuration for MCP server"""
+
 import os
 from pathlib import Path
 import structlog
@@ -20,17 +21,16 @@ KTRDR_API_KEY = os.getenv("KTRDR_API_KEY", "")
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
 
 # Storage Configuration
-EXPERIMENT_DB_PATH = os.getenv(
-    "EXPERIMENT_DB_PATH", 
-    str(MCP_DIR / "experiments.db")
-)
+EXPERIMENT_DB_PATH = os.getenv("EXPERIMENT_DB_PATH", str(MCP_DIR / "experiments.db"))
 
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+
 def get_config(key: str, default=None):
     """Get configuration value from environment or default"""
     return os.getenv(key, default)
+
 
 def setup_logging():
     """Configure structured logging"""
@@ -44,7 +44,7 @@ def setup_logging():
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer()
+            structlog.processors.JSONRenderer(),
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),

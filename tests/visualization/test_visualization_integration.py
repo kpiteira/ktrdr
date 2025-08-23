@@ -15,10 +15,10 @@ from ktrdr.visualization import (
 
 # Import test fixtures
 from tests.visualization.test_fixtures import (
-    sample_price_data,
-    sample_indicators,
     histogram_data,
     multiple_series_data,
+    sample_indicators,
+    sample_price_data,
 )
 
 

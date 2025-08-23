@@ -15,7 +15,9 @@ import warnings
 from pathlib import Path
 
 # Suppress PyTorch distributed future warnings that are triggered by tensor introspection
-warnings.filterwarnings("ignore", message=".*torch.distributed.reduce_op.*", category=FutureWarning)
+warnings.filterwarnings(
+    "ignore", message=".*torch.distributed.reduce_op.*", category=FutureWarning
+)
 
 # Add parent directory to path so we can import ktrdr modules
 parent_dir = Path(__file__).parent.parent
@@ -48,7 +50,7 @@ logger = get_logger(__name__)
 app = FastAPI(
     title="Training Host Service",
     description="GPU-accelerated training service for KTRDR",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Add CORS middleware for Docker container communication
@@ -64,44 +66,50 @@ app.add_middleware(
 app.include_router(training_router)
 app.include_router(health_router)
 
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize service on startup."""
     logger.info("Starting Training Host Service...")
-    logger.info(f"Service will listen on http://{service_config.host_service.host}:{service_config.host_service.port}")
+    logger.info(
+        f"Service will listen on http://{service_config.host_service.host}:{service_config.host_service.port}"
+    )
     logger.info("Available endpoints:")
     logger.info("  GET  /                     - Service info")
     logger.info("  GET  /health               - Basic health check")
-    logger.info("  GET  /health/detailed      - Detailed health check") 
+    logger.info("  GET  /health/detailed      - Detailed health check")
     logger.info("  POST /training/start       - Start training session")
     logger.info("  POST /training/stop        - Stop training session")
     logger.info("  GET  /training/status      - Get training status")
     logger.info("  POST /training/evaluate    - Evaluate model")
 
-@app.on_event("shutdown") 
+
+@app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
     logger.info("Shutting down Training Host Service...")
-    
+
     # Cleanup training service
     try:
         from services.training_service import get_training_service
+
         service = get_training_service()
         await service.shutdown()
         logger.info("Training service shutdown completed")
     except Exception as e:
         logger.error(f"Error during training service shutdown: {str(e)}")
 
+
 @app.get("/")
 async def root():
     """Root endpoint with service info."""
     import torch
-    
+
     # Check for both CUDA and Apple Silicon MPS
     cuda_available = torch.cuda.is_available()
-    mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+    mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
     gpu_available = cuda_available or mps_available
-    
+
     if cuda_available:
         gpu_device_count = torch.cuda.device_count()
         gpu_type = "CUDA"
@@ -111,7 +119,7 @@ async def root():
     else:
         gpu_device_count = 0
         gpu_type = "None"
-    
+
     return {
         "service": "Training Host Service",
         "version": "1.0.0",
@@ -119,8 +127,9 @@ async def root():
         "timestamp": datetime.utcnow().isoformat(),
         "gpu_available": gpu_available,
         "gpu_device_count": gpu_device_count,
-        "gpu_type": gpu_type
+        "gpu_type": gpu_type,
     }
+
 
 @app.get("/health")
 async def health_check():
@@ -129,8 +138,9 @@ async def health_check():
         "healthy": True,
         "service": "training-host",
         "timestamp": datetime.utcnow().isoformat(),
-        "status": "operational"
+        "status": "operational",
     }
+
 
 if __name__ == "__main__":
     # Run the service using configuration
@@ -139,5 +149,5 @@ if __name__ == "__main__":
         host=service_config.host_service.host,
         port=service_config.host_service.port,
         reload=True,
-        log_level=service_config.host_service.log_level.lower()
+        log_level=service_config.host_service.log_level.lower(),
     )

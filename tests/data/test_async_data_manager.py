@@ -76,17 +76,17 @@ class TestDataManagerConstruction:
 
         # Test initialization with defaults
         manager = DataManager()
-        
+
         # Check that default values are set correctly
         assert manager.enable_ib is True  # Should default to True
         assert manager.max_gap_percentage == 5.0  # Default from config
         assert manager.default_repair_method == "ffill"  # Default repair method
-        assert hasattr(manager, 'data_loader')
-        assert hasattr(manager, 'data_validator')
-        assert hasattr(manager, 'gap_classifier')
-        assert hasattr(manager, 'adapter')  # IB adapter
-        assert hasattr(manager, 'load_data')  # Main method
-        assert hasattr(manager, 'health_check')  # From ServiceOrchestrator
+        assert hasattr(manager, "data_loader")
+        assert hasattr(manager, "data_validator")
+        assert hasattr(manager, "gap_classifier")
+        assert hasattr(manager, "adapter")  # IB adapter
+        assert hasattr(manager, "load_data")  # Main method
+        assert hasattr(manager, "health_check")  # From ServiceOrchestrator
 
     def test_init_with_custom_parameters(self):
         """Test initialization with custom parameters."""
@@ -97,7 +97,7 @@ class TestDataManagerConstruction:
             default_repair_method="interpolate",
             enable_ib=False,
         )
-        
+
         # Verify custom parameters were applied
         assert manager.max_gap_percentage == 10.0
         assert manager.default_repair_method == "interpolate"
@@ -160,9 +160,7 @@ class TestDataManagerDataLoading:
         manager.adapter = mock_async_data_adapter
 
         # Mock adapter to return data
-        mock_async_data_adapter.fetch_historical_data.return_value = (
-        sample_ohlcv_data
-        )
+        mock_async_data_adapter.fetch_historical_data.return_value = sample_ohlcv_data
 
         result = await manager.load_data("EURUSD", "1h", mode="tail")
         assert isinstance(result, pd.DataFrame)
@@ -191,7 +189,7 @@ class TestDataManagerDataLoading:
 
         manager = DataManager(enable_ib=False)
 
-            # Create corrupt data for repair testing
+        # Create corrupt data for repair testing
         corrupt_data = sample_ohlcv_data.copy()
         corrupt_data.iloc[10:15] = np.nan  # Add some missing data
 
@@ -200,8 +198,8 @@ class TestDataManagerDataLoading:
         result = await manager.load_data("AAPL", "1d", repair=True)
         assert isinstance(result, pd.DataFrame)
 
-            # Should have called validator with repair=True
-            # (This assertion will need adjustment based on actual implementation)
+        # Should have called validator with repair=True
+        # (This assertion will need adjustment based on actual implementation)
 
     @pytest.mark.asyncio
     async def test_load_data_cancellation_support(self):
@@ -210,21 +208,21 @@ class TestDataManagerDataLoading:
 
         manager = DataManager(enable_ib=False)
 
-            # Create a cancellation token
+        # Create a cancellation token
         cancellation_event = asyncio.Event()
 
-            # Mock long-running operation
+        # Mock long-running operation
         async def mock_long_operation(*args, **kwargs):
             await asyncio.sleep(1.0)  # Simulate slow operation
             return pd.DataFrame()
 
         manager._load_with_fallback_async = mock_long_operation
 
-            # Start loading and cancel immediately
+        # Start loading and cancel immediately
         cancellation_event.set()
 
-            # Should handle cancellation gracefully
-            # (Exact behavior depends on implementation)
+        # Should handle cancellation gracefully
+        # (Exact behavior depends on implementation)
 
     @pytest.mark.asyncio
     async def test_load_data_progress_callback(self, sample_ohlcv_data):
@@ -234,7 +232,7 @@ class TestDataManagerDataLoading:
         manager = DataManager(enable_ib=False)
         manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
-            # Track progress updates
+        # Track progress updates
         progress_updates = []
 
         def progress_callback(progress):
@@ -257,9 +255,7 @@ class TestDataManagerErrorHandling:
         from ktrdr.data.managers.data_manager import DataManager
 
         manager = DataManager(enable_ib=False)
-        manager.data_loader.load = Mock(
-            side_effect=FileNotFoundError("File not found")
-        )
+        manager.data_loader.load = Mock(side_effect=FileNotFoundError("File not found"))
 
         with pytest.raises(FileNotFoundError):
             await manager.load_data("NONEXISTENT", "1d")
@@ -271,7 +267,7 @@ class TestDataManagerErrorHandling:
 
         manager = DataManager(enable_ib=False)
 
-            # Mock corrupt data
+        # Mock corrupt data
         corrupt_data = pd.DataFrame(
             {
                 "open": [100, 110, np.nan],
@@ -284,7 +280,7 @@ class TestDataManagerErrorHandling:
 
         manager.data_loader.load = Mock(return_value=corrupt_data)
 
-            # Should raise error in strict mode
+        # Should raise error in strict mode
         with pytest.raises(DataCorruptionError):
             await manager.load_data("AAPL", "1d", strict=True)
 
@@ -296,7 +292,7 @@ class TestDataManagerErrorHandling:
         manager = DataManager(enable_ib=True)
         manager.adapter = mock_async_data_adapter
 
-            # Mock connection failure
+        # Mock connection failure
         mock_async_data_adapter.fetch_historical_data.side_effect = ConnectionError(
             "Connection failed"
         )
@@ -332,7 +328,7 @@ class TestDataManagerMultiTimeframeSupport:
 
         manager = DataManager(enable_ib=False)
 
-            # Mock different data ranges for each timeframe
+        # Mock different data ranges for each timeframe
         def mock_load_by_timeframe(symbol, timeframe, start_date=None, end_date=None):
             if timeframe == "1h":
                 return sample_ohlcv_data[:50]  # Shorter range
@@ -348,7 +344,7 @@ class TestDataManagerMultiTimeframeSupport:
             "AAPL", timeframes, align_data=True
         )
 
-            # Should align to common coverage (shortest range)
+        # Should align to common coverage (shortest range)
         for tf_data in results.values():
             assert len(tf_data) <= 50  # Should be aligned to shortest
 
@@ -366,10 +362,8 @@ class TestDataManagerPerformance:
 
         symbols = ["AAPL", "MSFT", "GOOGL", "TSLA"]
 
-            # Load all symbols concurrently
-        tasks = [
-            manager.load_data(symbol, "1d", mode="local") for symbol in symbols
-        ]
+        # Load all symbols concurrently
+        tasks = [manager.load_data(symbol, "1d", mode="local") for symbol in symbols]
 
         results = await asyncio.gather(*tasks)
 
@@ -385,15 +379,16 @@ class TestDataManagerPerformance:
 
         manager = DataManager(enable_ib=False)
 
-            # Mock slow operation on the data loader
+        # Mock slow operation on the data loader
         def slow_load(*args, **kwargs):
             import time
+
             time.sleep(0.1)  # Simulate I/O delay
             return sample_ohlcv_data
 
         manager.data_loader.load = Mock(side_effect=slow_load)
 
-            # Start multiple operations
+        # Start multiple operations
         start_time = asyncio.get_event_loop().time()
 
         tasks = [manager.load_data(f"SYMBOL{i}", "1d") for i in range(5)]
@@ -401,7 +396,7 @@ class TestDataManagerPerformance:
         results = await asyncio.gather(*tasks)
         end_time = asyncio.get_event_loop().time()
 
-            # Should complete concurrently (much faster than sequential)
+        # Should complete concurrently (much faster than sequential)
         elapsed = end_time - start_time
         assert elapsed < 0.3  # Should be much less than 5 * 0.1 = 0.5s
 
@@ -424,7 +419,7 @@ class TestDataManagerHealthChecks:
         assert "adapter" in health_status
         assert "configuration" in health_status
 
-            # Should call adapter health check
+        # Should call adapter health check
         mock_async_data_adapter.health_check.assert_called_once()
 
     @pytest.mark.asyncio
@@ -460,7 +455,7 @@ class TestDataManagerBackwardCompatibility:
         async_manager = DataManager()
         sync_manager = DataManager()
 
-            # Get public methods (excluding private and dunder methods)
+        # Get public methods (excluding private and dunder methods)
         async_methods = {
             name
             for name in dir(async_manager)
@@ -473,7 +468,7 @@ class TestDataManagerBackwardCompatibility:
             if not name.startswith("_") and callable(getattr(sync_manager, name))
         }
 
-            # DataManager should have all DataManager methods (but async versions)
+        # DataManager should have all DataManager methods (but async versions)
         for method in sync_methods:
             assert method in async_methods or f"{method}_async" in async_methods
 
@@ -485,11 +480,11 @@ class TestDataManagerBackwardCompatibility:
         manager = DataManager(enable_ib=False)
         manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
-            # Basic data loading should return DataFrame
+        # Basic data loading should return DataFrame
         result = await manager.load_data("AAPL", "1d")
         assert isinstance(result, pd.DataFrame)
 
-            # Health check should return dict
+        # Health check should return dict
         health = await manager.health_check()
         assert isinstance(health, dict)
 
@@ -527,7 +522,7 @@ class TestDataManagerEdgeCases:
         manager = DataManager(enable_ib=False)
         manager.data_loader.load = Mock(return_value=sample_ohlcv_data)
 
-            # Test with very large date range
+        # Test with very large date range
         start_date = datetime(2000, 1, 1)
         end_date = datetime(2025, 1, 1)
 

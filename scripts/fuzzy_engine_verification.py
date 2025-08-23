@@ -18,7 +18,7 @@ fuzzy_config_dict = {
     "rsi": {
         "low": {"type": "triangular", "parameters": [0.0, 30.0, 50.0]},
         "medium": {"type": "triangular", "parameters": [30.0, 50.0, 70.0]},
-        "high": {"type": "triangular", "parameters": [50.0, 70.0, 100.0]}
+        "high": {"type": "triangular", "parameters": [50.0, 70.0, 100.0]},
     }
 }
 
@@ -46,25 +46,25 @@ print(membership_degrees)
 try:
     output_dir = Path("output")
     output_dir.mkdir(exist_ok=True)
-    
+
     plt.figure(figsize=(10, 6))
-    
+
     # Plot membership degrees for each fuzzy set
     plt.plot(rsi_values, membership_degrees["rsi_low"], label="Low")
     plt.plot(rsi_values, membership_degrees["rsi_medium"], label="Medium")
     plt.plot(rsi_values, membership_degrees["rsi_high"], label="High")
-    
+
     plt.xlabel("RSI Value")
     plt.ylabel("Membership Degree")
     plt.title("RSI Fuzzy Membership Functions")
     plt.legend()
     plt.grid(True)
-    
+
     # Save the plot
     output_path = output_dir / "fuzzy_engine_verification.png"
     plt.savefig(output_path)
     print(f"\nPlot saved to: {output_path}")
-    
+
     # Show the plot if run interactively
     plt.show()
 except Exception as e:

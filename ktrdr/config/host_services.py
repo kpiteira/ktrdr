@@ -144,7 +144,9 @@ class ApiServiceSettings(HostServiceSettings):
 
     retry_delay: float = Field(default=metadata.get("api.client_retry_delay", 1.0))
 
-    model_config = ConfigDict(env_prefix="KTRDR_API_CLIENT_", extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        env_prefix="KTRDR_API_CLIENT_", extra="forbid", populate_by_name=True
+    )
 
     def get_health_url(self) -> str:
         """API health endpoint."""

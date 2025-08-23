@@ -15,10 +15,10 @@ import pytest
 from ktrdr.errors import DataError
 from ktrdr.visualization.data_adapter import DataAdapter
 from tests.visualization.test_fixtures import (
-    sample_price_data,
-    sample_indicators,
-    histogram_data,
     edge_case_data,
+    histogram_data,
+    sample_indicators,
+    sample_price_data,
 )
 
 # Import test fixtures

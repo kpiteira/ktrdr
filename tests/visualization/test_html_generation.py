@@ -16,9 +16,9 @@ from ktrdr.visualization.template_manager import TemplateManager
 
 # Import test fixtures
 from tests.visualization.test_fixtures import (
-    sample_price_data,
-    sample_indicators,
     histogram_data,
+    sample_indicators,
+    sample_price_data,
 )
 
 
