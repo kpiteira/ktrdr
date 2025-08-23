@@ -11,13 +11,10 @@ from typing import Dict, List, Type, Union
 from ktrdr import get_logger
 from ktrdr.config.models import IndicatorConfig, IndicatorsConfig
 from ktrdr.errors import ConfigurationError
-from ktrdr.indicators import (
-    BaseIndicator,
-    ExponentialMovingAverage,
-    MACDIndicator,
-    RSIIndicator,
-    SimpleMovingAverage,
-)
+from ktrdr.indicators.base_indicator import BaseIndicator
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.macd_indicator import MACDIndicator
+from ktrdr.indicators.rsi_indicator import RSIIndicator
 from ktrdr.indicators.ad_line import ADLineIndicator
 from ktrdr.indicators.adx_indicator import ADXIndicator
 from ktrdr.indicators.aroon_indicator import AroonIndicator

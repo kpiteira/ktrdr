@@ -174,9 +174,7 @@ def test_model_signals(
                 console.print("   • Retraining with different parameters")
                 console.print("   • Adjusting fuzzy membership functions")
             else:
-                console.print(
-                    "\n✅ [green]Model is generating trading signals[/green]"
-                )
+                console.print("\n✅ [green]Model is generating trading signals[/green]")
 
         # Check for specific issues
         if orchestrator.model is None:

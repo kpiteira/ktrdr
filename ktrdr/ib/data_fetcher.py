@@ -163,9 +163,7 @@ class IbDataFetcher:
                     f"   └─ Last bar: {bars[-1].date} ({bars[-1].open}-{bars[-1].close})"
                 )
             else:
-                logger.warning(
-                    "❌ IB RESPONSE: No data available for requested period"
-                )
+                logger.warning("❌ IB RESPONSE: No data available for requested period")
 
         except Exception as e:
             logger.error(f"IB reqHistoricalData failed: {e}")

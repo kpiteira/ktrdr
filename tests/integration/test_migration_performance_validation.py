@@ -127,7 +127,7 @@ class TestMigrationPerformanceValidation:
                 )
 
                 with patch("ktrdr.cli.model_commands.AsyncCLIClient") as mock_cli_class:
-                    mock_cli = Mock()
+                    mock_cli = AsyncMock()
                     mock_cli.__aenter__.return_value = mock_cli
                     mock_cli.__aexit__.return_value = None
                     mock_cli._make_request.return_value = mock_response

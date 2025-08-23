@@ -76,7 +76,7 @@ def show_data_async(
         timeframe = InputValidator.validate_string(
             timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
         )
-        rows = InputValidator.validate_numeric(rows, min_value=1, max_value=1000)
+        rows = int(InputValidator.validate_numeric(rows, min_value=1, max_value=1000))
 
         # Use AsyncCLIClient for improved performance
         import asyncio
@@ -135,7 +135,7 @@ async def _show_data_async_impl(
 
             # Get cached data via async API call
             try:
-                data = await cli._make_request("GET", "/api/data/cached", params=params)
+                data = await cli._make_request("GET", "/data/cached", params=params)
             except AsyncCLIClientError as e:
                 if e.error_code == "CLI-ConnectionError":
                     console.print(
@@ -230,7 +230,11 @@ async def _show_data_async_impl(
 
                 for date, row in display_df.iterrows():
                     table.add_row(
-                        date.strftime("%Y-%m-%d %H:%M:%S"),
+                        (
+                            str(date.strftime("%Y-%m-%d %H:%M:%S"))
+                            if hasattr(date, "strftime")
+                            else str(date)
+                        ),
                         f"{row['Open']:.4f}",
                         f"{row['High']:.4f}",
                         f"{row['Low']:.4f}",

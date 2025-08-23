@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from ktrdr.errors import DataError
-from ktrdr.indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import DISTANCE_FROM_MA_SCHEMA
 

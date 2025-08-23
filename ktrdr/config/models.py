@@ -53,13 +53,13 @@ class LoggingConfig(BaseModel):
 class SecurityConfig(BaseModel):
     """Configuration settings for security features."""
 
-    credential_providers: list[str] = Field(
+    credential_providers: List[str] = Field(
         default_factory=list, description="List of credential providers to initialize"
     )
     validate_user_input: bool = Field(
         True, description="Whether to validate user-provided parameters"
     )
-    sensitive_file_patterns: list[str] = Field(
+    sensitive_file_patterns: List[str] = Field(
         default_factory=lambda: ["*.key", "*.pem", "*.env", "*_credentials*"],
         description="Patterns for files that should be protected",
     )
@@ -262,7 +262,7 @@ class SymbolConfiguration(BaseModel):
     symbol: Optional[str] = Field(None, description="Single symbol for legacy mode")
 
     # For multi-symbol mode
-    list: Optional[list[str]] = Field(None, description="Explicit list of symbols")
+    list: Optional[List[str]] = Field(None, description="Explicit list of symbols")
     selection_criteria: Optional[SymbolSelectionCriteria] = Field(
         None, description="Automatic symbol selection criteria"
     )
@@ -278,8 +278,8 @@ class SymbolConfiguration(BaseModel):
     @field_validator("list")
     @classmethod
     def validate_multi_mode_symbols(
-        cls, v: Optional[builtins.list[str]], info
-    ) -> Optional[builtins.list[str]]:
+        cls, v: Optional[List[str]], info
+    ) -> Optional[List[str]]:
         if hasattr(info, "data") and info.data.get("mode") == SymbolMode.MULTI_SYMBOL:
             if not v and not info.data.get("selection_criteria"):
                 raise ValueError(
@@ -301,7 +301,7 @@ class TimeframeConfiguration(BaseModel):
     )
 
     # For multi-timeframe mode
-    list: Optional[list[str]] = Field(
+    list: Optional[List[str]] = Field(
         None, description="List of timeframes for features"
     )
     base_timeframe: Optional[str] = Field(
@@ -319,8 +319,8 @@ class TimeframeConfiguration(BaseModel):
     @field_validator("list")
     @classmethod
     def validate_multi_mode_timeframes(
-        cls, v: Optional[builtins.list[str]], info
-    ) -> Optional[builtins.list[str]]:
+        cls, v: Optional[List[str]], info
+    ) -> Optional[List[str]]:
         if (
             hasattr(info, "data")
             and info.data.get("mode") == TimeframeMode.MULTI_TIMEFRAME
@@ -377,10 +377,10 @@ class TrainingDataConfiguration(BaseModel):
 class TargetSymbolRestrictions(BaseModel):
     """Restrictions for target symbol deployment."""
 
-    asset_classes: Optional[list[str]] = Field(
+    asset_classes: Optional[List[str]] = Field(
         None, description="Allowed asset classes"
     )
-    excluded_symbols: Optional[list[str]] = Field(
+    excluded_symbols: Optional[List[str]] = Field(
         None, description="Explicitly excluded symbols"
     )
     min_liquidity_tier: Optional[str] = Field(
@@ -401,7 +401,7 @@ class TargetTimeframeConfiguration(BaseModel):
     """Configuration for deployment target timeframes."""
 
     mode: TimeframeMode = Field(..., description="Target timeframe mode")
-    supported: Optional[list[str]] = Field(
+    supported: Optional[List[str]] = Field(
         None, description="Supported timeframes (subset of training)"
     )
     timeframe: Optional[str] = Field(None, description="Single timeframe for legacy")
@@ -409,8 +409,8 @@ class TargetTimeframeConfiguration(BaseModel):
     @field_validator("supported")
     @classmethod
     def validate_supported_timeframes(
-        cls, v: Optional[list[str]], info
-    ) -> Optional[list[str]]:
+        cls, v: Optional[List[str]], info
+    ) -> Optional[List[str]]:
         if (
             hasattr(info, "data")
             and info.data.get("mode") == TimeframeMode.MULTI_TIMEFRAME

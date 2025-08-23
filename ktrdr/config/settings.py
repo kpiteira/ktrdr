@@ -74,7 +74,7 @@ class CLISettings(BaseSettings):
     """CLI Client Settings."""
 
     api_base_url: str = Field(
-        default="http://localhost:8000", description="Base URL for API client"
+        default="http://localhost:8000/api/v1", description="Base URL for API client"
     )
     timeout: float = Field(default=30.0, description="Default timeout for API requests")
     max_retries: int = Field(

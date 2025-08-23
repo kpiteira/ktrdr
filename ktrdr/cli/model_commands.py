@@ -50,7 +50,7 @@ async def _wait_for_cancellation_completion(
     while time.time() - start_time < timeout:
         try:
             status_result = await cli._make_request(
-                "GET", f"/api/operations/{operation_id}/status"
+                "GET", f"/operations/{operation_id}/status"
             )
             operation_data = status_result.get("data", {})
             status = operation_data.get("status", "unknown")
@@ -319,7 +319,7 @@ async def _train_model_async(
                 # Use training API with improved connection reuse
                 result = await cli._make_request(
                     "POST",
-                    "/api/training/start",
+                    "/trainings/start",
                     json_data={
                         "symbols": symbols,
                         "timeframes": timeframes,
@@ -388,7 +388,7 @@ async def _train_model_async(
                             try:
                                 cancel_response = await cli._make_request(
                                     "POST",
-                                    f"/api/operations/{task_id}/cancel",
+                                    f"/operations/{task_id}/cancel",
                                     json_data={
                                         "reason": "User requested cancellation via CLI"
                                     },
@@ -413,7 +413,7 @@ async def _train_model_async(
 
                         # Get status from operations framework using AsyncCLIClient
                         status_result = await cli._make_request(
-                            "GET", f"/api/operations/{task_id}/status"
+                            "GET", f"/operations/{task_id}/status"
                         )
                         operation_data = status_result.get("data", {})
 
@@ -546,7 +546,7 @@ async def _train_model_async(
             # Get real results from API using AsyncCLIClient
             try:
                 performance_result = await cli._make_request(
-                    "GET", f"/api/training/{task_id}/performance"
+                    "GET", f"/trainings/{task_id}/performance"
                 )
                 training_metrics = performance_result.get("training_metrics", {})
                 test_metrics = performance_result.get("test_metrics", {})

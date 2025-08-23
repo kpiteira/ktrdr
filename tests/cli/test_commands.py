@@ -5,14 +5,13 @@ This module tests the hierarchical CLI commands functionality that uses
 API client for data operations.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pandas as pd
 import pytest
 from typer.testing import CliRunner
-from unittest.mock import patch, MagicMock
-import pandas as pd
-import json
 
 from ktrdr.cli import cli_app
-from ktrdr.errors import DataError
 
 
 @pytest.fixture
@@ -70,18 +69,17 @@ def mock_api_client():
         yield mock_client
 
 
-def test_data_show_basic(runner, mock_api_client, sample_api_response):
+def test_data_show_basic(runner, sample_api_response):
     """Test the basic functionality of the data show command."""
-    # Mock the async get_cached_data method to return just the data portion
-    # (since get_cached_data returns response.get("data", {}), not the full response)
-    import asyncio
 
-    async def mock_get_cached_data(*args, **kwargs):
-        return sample_api_response["data"]
+    with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+        # Set up AsyncCLIClient mock
+        mock_cli = AsyncMock()
+        mock_cli.__aenter__.return_value = mock_cli
+        mock_cli.__aexit__.return_value = None
+        mock_cli._make_request.return_value = sample_api_response["data"]
+        mock_cli_class.return_value = mock_cli
 
-    mock_api_client.get_cached_data = mock_get_cached_data
-
-    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "AAPL"])
 
         # Check for successful execution
@@ -95,7 +93,6 @@ def test_data_show_basic(runner, mock_api_client, sample_api_response):
 
 def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
     """Test the data show command with custom number of rows."""
-    import asyncio
 
     async def mock_get_cached_data(*args, **kwargs):
         return sample_api_response["data"]
@@ -111,7 +108,6 @@ def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
 
 def test_data_show_with_timeframe(runner, mock_api_client, sample_api_response):
     """Test the data show command with timeframe option."""
-    import asyncio
 
     async def mock_get_cached_data(*args, **kwargs):
         return sample_api_response["data"]
@@ -124,16 +120,17 @@ def test_data_show_with_timeframe(runner, mock_api_client, sample_api_response):
         assert result.exit_code == 0
 
 
-def test_data_show_json_format(runner, mock_api_client, sample_api_response):
+def test_data_show_json_format(runner, sample_api_response):
     """Test the data show command with JSON output format."""
-    import asyncio
 
-    async def mock_get_cached_data(*args, **kwargs):
-        return sample_api_response["data"]
+    with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+        # Set up AsyncCLIClient mock
+        mock_cli = AsyncMock()
+        mock_cli.__aenter__.return_value = mock_cli
+        mock_cli.__aexit__.return_value = None
+        mock_cli._make_request.return_value = sample_api_response["data"]
+        mock_cli_class.return_value = mock_cli
 
-    mock_api_client.get_cached_data = mock_get_cached_data
-
-    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "AAPL", "--format", "json"])
 
         assert result.exit_code == 0
@@ -141,30 +138,31 @@ def test_data_show_json_format(runner, mock_api_client, sample_api_response):
         assert "{" in result.stdout or "json" in result.stdout.lower()
 
 
-def test_data_show_no_data(runner, mock_api_client):
+def test_data_show_no_data(runner):
     """Test the data show command when no data is found."""
-    # Mock get_cached_data to raise DataError (which is what happens when API returns success: False)
-    from ktrdr.errors import DataError
+    from ktrdr.cli.async_cli_client import AsyncCLIClientError
 
-    async def mock_get_cached_data(*args, **kwargs):
-        raise DataError(
-            message="Failed to get cached data for XYZ (1d)",
-            error_code="API-GetCachedDataError",
+    with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+        # Set up AsyncCLIClient mock to raise 404 error
+        mock_cli = AsyncMock()
+        mock_cli.__aenter__.return_value = mock_cli
+        mock_cli.__aexit__.return_value = None
+        mock_cli._make_request.side_effect = AsyncCLIClientError(
+            "API request failed: Not Found",
+            error_code="CLI-404",
         )
+        mock_cli_class.return_value = mock_cli
 
-    mock_api_client.get_cached_data = mock_get_cached_data
-
-    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
         result = runner.invoke(cli_app, ["data", "show", "XYZ"])
 
-        # Should handle gracefully with error handling
-        assert result.exit_code != 0  # Should exit with error due to DataError
+        # Should handle gracefully - AsyncCLIClient shows friendly message and exits normally
+        assert result.exit_code == 0  # New AsyncCLIClient handles 404 gracefully
+        assert "No cached data found" in result.stdout
 
 
 def test_data_show_empty_data(runner, mock_api_client):
     """Test the data show command when data is empty but API call succeeds."""
     # Mock get_cached_data to return empty data (should be handled gracefully)
-    import asyncio
 
     async def mock_get_cached_data(*args, **kwargs):
         return {"dates": [], "ohlcv": [], "metadata": {}}
@@ -184,11 +182,26 @@ def test_data_show_empty_data(runner, mock_api_client):
 
 def test_data_show_api_connection_error(runner):
     """Test the data show command when API connection fails."""
-    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=False):
+    from ktrdr.cli.async_cli_client import AsyncCLIClientError
+
+    with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+        # Set up AsyncCLIClient mock to raise connection error
+        mock_cli = AsyncMock()
+        mock_cli.__aenter__.return_value = mock_cli
+        mock_cli.__aexit__.return_value = None
+        mock_cli._make_request.side_effect = AsyncCLIClientError(
+            "Could not connect to API server",
+            error_code="CLI-ConnectionError",
+        )
+        mock_cli_class.return_value = mock_cli
+
         result = runner.invoke(cli_app, ["data", "show", "AAPL"])
 
-        # Should exit with error when API is not available
-        assert result.exit_code != 0
+        # Should exit with error when connection fails
+        assert (
+            result.exit_code == 1
+        )  # AsyncCLIClient exits with code 1 for connection errors
+        assert "Could not connect" in (result.stderr or "")
 
 
 def test_data_show_help(runner):

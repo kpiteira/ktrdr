@@ -154,7 +154,7 @@ class TestTrainingService:
                 "f1_score": 0.90,
             },
             "model_info": {
-                "model_size_mb": 15.2,
+                "model_size_bytes": 15952435,  # ~15.2 MB in bytes
                 "parameters_count": 142500,
                 "architecture": "mlp_64_32_16",
             },
@@ -171,7 +171,7 @@ class TestTrainingService:
         assert performance["status"] == "completed"
         assert performance["training_metrics"]["final_train_accuracy"] == 0.94
         assert performance["test_metrics"]["test_accuracy"] == 0.90
-        assert performance["model_info"]["model_size_mb"] == 15.2
+        assert performance["model_info"]["model_size_bytes"] == 15952435
 
     @pytest.mark.asyncio
     async def test_get_model_performance_not_completed(

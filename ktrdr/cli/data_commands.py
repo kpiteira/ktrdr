@@ -149,7 +149,7 @@ async def _show_data_async(
 
             # Get cached data via async API call
             try:
-                data = await cli._make_request("GET", "/api/data/cached", params=params)
+                data = await cli._make_request("GET", "/data/cached", params=params)
             except AsyncCLIClientError as e:
                 if e.error_code == "CLI-ConnectionError":
                     display_ib_connection_required_message()

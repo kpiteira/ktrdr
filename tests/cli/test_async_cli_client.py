@@ -1,10 +1,10 @@
 """Tests for AsyncCLIClient base class."""
 
 import asyncio
-import pytest
-import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any, Optional
+
+import httpx
+import pytest
 
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.config.settings import CLISettings

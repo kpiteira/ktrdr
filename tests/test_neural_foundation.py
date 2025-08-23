@@ -92,9 +92,9 @@ class TestMLPModel:
         output = nn_model(dummy_input)
 
         assert output.shape == (1, 3)  # 3 classes: BUY, HOLD, SELL
-        assert torch.allclose(
-            output.sum(), torch.tensor(1.0), atol=1e-6
-        )  # Softmax sums to 1
+        # Model outputs raw logits (not softmax) - check they are finite and reasonable
+        assert torch.isfinite(output).all(), "Model outputs should be finite"
+        assert output.abs().max() < 10.0, "Logits should be in reasonable range"
 
     def test_feature_preparation(self):
         """Test feature preparation from fuzzy and indicator data."""

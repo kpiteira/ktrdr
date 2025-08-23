@@ -9,7 +9,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -49,7 +49,7 @@ async def _wait_for_cancellation_completion_async(
     while time.time() - start_time < timeout:
         try:
             status_result = await cli._make_request(
-                "GET", f"/api/operations/{operation_id}"
+                "GET", f"/operations/{operation_id}"
             )
             operation_data = status_result.get("data", {})
             status = operation_data.get("status", "unknown")
@@ -153,7 +153,7 @@ def train_model_async(
             )
         except Exception as e:
             console.print(f"[red]❌ Error loading strategy config: {e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
 
         # Use strategy config or CLI overrides
         final_symbols = [symbol] if symbol else config_symbols
@@ -311,7 +311,7 @@ async def _train_model_async_impl(
                 # Use async training API with improved performance
                 result = await cli._make_request(
                     "POST",
-                    "/api/training/start",
+                    "/trainings/start",
                     json_data={
                         "symbols": symbols,
                         "timeframes": timeframes,
@@ -330,12 +330,18 @@ async def _train_model_async_impl(
 
                 task_id = result["task_id"]
                 console.print(f"✅ Training started with ID: [bold]{task_id}[/bold]")
+                console.print("[dim]🔧 About to start polling setup...[/dim]")
 
             except AsyncCLIClientError as e:
                 console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
+                console.print(
+                    "[yellow]🔍 AsyncCLIClientError caught - this is causing premature return![/yellow]"
+                )
+                console.print(f"[yellow]Error code: {e.error_code}[/yellow]")
+                console.print(f"[yellow]Error details: {e.details}[/yellow]")
                 return
 
-            # Poll for progress with proper signal handling
+            # Poll for progress with proper signal handling and comprehensive error handling
             # Temporarily suppress httpx logging to keep progress display clean
             import logging
 
@@ -343,7 +349,7 @@ async def _train_model_async_impl(
             original_level = httpx_logger.level
             httpx_logger.setLevel(logging.WARNING)
 
-            # Set up cancellation handling
+            # Set up cancellation handling with error protection
             cancelled = False
             loop = asyncio.get_running_loop()
 
@@ -355,10 +361,22 @@ async def _train_model_async_impl(
                     "\n[yellow]🛑 Training cancellation requested... stopping training[/yellow]"
                 )
 
-            # Register signal handler with the event loop
-            loop.add_signal_handler(signal.SIGINT, signal_handler)
-
+            # Register signal handler with the event loop - catch any exceptions
             try:
+                loop.add_signal_handler(signal.SIGINT, signal_handler)
+                console.print("[dim]🔧 Signal handler registered successfully[/dim]")
+            except Exception as e:
+                console.print(
+                    f"[yellow]⚠️ Could not register signal handler: {e}[/yellow]"
+                )
+                console.print(
+                    "[yellow]Training will continue without Ctrl+C handling[/yellow]"
+                )
+
+            # Wrap the entire polling section to catch any exceptions that might cause premature exit
+            try:
+                console.print("[dim]🔧 Starting progress monitoring...[/dim]")
+                console.print("[dim]🔧 Creating Progress bar...[/dim]")
                 with Progress(
                     SpinnerColumn(),
                     TextColumn("[progress.description]{task.description}"),
@@ -379,7 +397,7 @@ async def _train_model_async_impl(
                                 try:
                                     cancel_response = await cli._make_request(
                                         "POST",
-                                        f"/api/operations/{task_id}/cancel",
+                                        f"/operations/{task_id}/cancel",
                                         json_data={
                                             "reason": "User requested cancellation via CLI"
                                         },
@@ -400,12 +418,14 @@ async def _train_model_async_impl(
                                     console.print(
                                         f"[red]Training cancel request failed: {str(e)}[/red]"
                                     )
-                                return
+                                break
 
                             # Get status from operations framework via AsyncCLIClient
-                            status_result = await cli._make_request(
-                                "GET", f"/api/operations/{task_id}"
-                            )
+                            # Use a fresh client for each status check to avoid lifecycle issues
+                            async with AsyncCLIClient() as status_cli:
+                                status_result = await status_cli._make_request(
+                                    "GET", f"/operations/{task_id}"
+                                )
                             operation_data = status_result.get("data", {})
 
                             status = operation_data.get("status", "unknown")
@@ -526,12 +546,34 @@ async def _train_model_async_impl(
                             console.print(
                                 "\n⚠️  [yellow]Training monitoring cancelled[/yellow]"
                             )
-                            return
+                            break
                         except Exception as e:
                             console.print(
                                 f"❌ [red]Error polling training status: {str(e)}[/red]"
                             )
-                            return
+                            console.print(
+                                f"[yellow]Exception type: {type(e).__name__}[/yellow]"
+                            )
+                            if hasattr(e, "details"):
+                                console.print(
+                                    f"[yellow]Error details: {e.details}[/yellow]"
+                                )
+                            break
+
+                # If we reach here without breaking due to completion/failure, mark as success
+                console.print("[dim]✅ Polling completed successfully[/dim]")
+
+            except Exception as polling_error:
+                # Catch any exception that might cause the entire function to exit prematurely
+                console.print(
+                    f"❌ [red]Critical error in polling setup: {type(polling_error).__name__}: {polling_error}[/red]"
+                )
+                console.print(
+                    "[yellow]This error caused the AsyncCLIClient context to close prematurely[/yellow]"
+                )
+                import traceback
+
+                console.print(f"[dim]Traceback: {traceback.format_exc()}[/dim]")
             finally:
                 # Remove signal handler and restore logging
                 try:
@@ -540,59 +582,74 @@ async def _train_model_async_impl(
                     pass
                 httpx_logger.setLevel(original_level)
 
-            # Get real results from API via AsyncCLIClient
-            try:
-                performance_result = await cli._make_request(
-                    "GET", f"/api/training/{task_id}/performance"
-                )
-                training_metrics = performance_result.get("training_metrics", {})
-                test_metrics = performance_result.get("test_metrics", {})
-                model_info = performance_result.get("model_info", {})
+                # Get real results from API via fresh AsyncCLIClient for resilience
+                try:
+                    async with AsyncCLIClient() as results_cli:
+                        performance_result = await results_cli._make_request(
+                            "GET", f"/trainings/{task_id}/performance"
+                        )
+                    training_metrics = performance_result.get("training_metrics", {})
+                    test_metrics = performance_result.get("test_metrics", {})
+                    model_info = performance_result.get("model_info", {})
 
-                # Display real results
-                console.print("📊 [bold green]Training Results:[/bold green]")
-                console.print(
-                    f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0)*100:.1f}%"
-                )
-                console.print(
-                    f"📊 Precision: {test_metrics.get('precision', 0)*100:.1f}%"
-                )
-                console.print(f"📊 Recall: {test_metrics.get('recall', 0)*100:.1f}%")
-                console.print(
-                    f"📊 F1 Score: {test_metrics.get('f1_score', 0)*100:.1f}%"
-                )
-                console.print(
-                    f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0)*100:.1f}%"
-                )
-                console.print(
-                    f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}"
-                )
-                console.print(
-                    f"⏱️  Training time: {training_metrics.get('training_time_minutes', 0):.1f} minutes"
-                )
-
-                # Format model size from bytes
-                model_size_bytes = model_info.get("model_size_bytes", 0)
-                if model_size_bytes == 0:
-                    console.print("💾 Model size: 0 bytes")
-                elif model_size_bytes < 1024:
-                    console.print(f"💾 Model size: {model_size_bytes} bytes")
-                elif model_size_bytes < 1024 * 1024:
-                    console.print(f"💾 Model size: {model_size_bytes / 1024:.1f} KB")
-                else:
+                    # Display real results
+                    console.print("📊 [bold green]Training Results:[/bold green]")
                     console.print(
-                        f"💾 Model size: {model_size_bytes / (1024 * 1024):.1f} MB"
+                        f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0)*100:.1f}%"
+                    )
+                    console.print(
+                        f"📊 Precision: {test_metrics.get('precision', 0)*100:.1f}%"
+                    )
+                    console.print(
+                        f"📊 Recall: {test_metrics.get('recall', 0)*100:.1f}%"
+                    )
+                    console.print(
+                        f"📊 F1 Score: {test_metrics.get('f1_score', 0)*100:.1f}%"
+                    )
+                    console.print(
+                        f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0)*100:.1f}%"
+                    )
+                    console.print(
+                        f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}"
+                    )
+                    console.print(
+                        f"⏱️  Training time: {training_metrics.get('training_time_minutes', 0):.1f} minutes"
                     )
 
-            except Exception as e:
-                console.print(
-                    f"❌ [red]Error retrieving training results: {str(e)}[/red]"
-                )
-                console.print(
-                    "✅ [green]Training completed, but unable to fetch detailed results[/green]"
-                )
+                    # Format model size from bytes
+                    model_size_bytes = model_info.get("model_size_bytes", 0)
+                    if model_size_bytes == 0:
+                        console.print("💾 Model size: 0 bytes")
+                    elif model_size_bytes < 1024:
+                        console.print(f"💾 Model size: {model_size_bytes} bytes")
+                    elif model_size_bytes < 1024 * 1024:
+                        console.print(
+                            f"💾 Model size: {model_size_bytes / 1024:.1f} KB"
+                        )
+                    else:
+                        console.print(
+                            f"💾 Model size: {model_size_bytes / (1024 * 1024):.1f} MB"
+                        )
 
-            console.print("💾 Model training completed via AsyncCLIClient")
+                except Exception as e:
+                    console.print(
+                        f"❌ [red]Error retrieving training results: {str(e)}[/red]"
+                    )
+                    console.print(
+                        "✅ [green]Training completed, but unable to fetch detailed results[/green]"
+                    )
+
+                console.print("💾 Model training completed via AsyncCLIClient")
+
+            # Debug: Check if we're still within the context
+            if cli._http_client is not None and not cli._http_client.is_closed:
+                console.print(
+                    "✅ [green]Main AsyncCLIClient context is still active[/green]"
+                )
+            else:
+                console.print(
+                    "❌ [red]Main AsyncCLIClient context was closed unexpectedly[/red]"
+                )
 
     except AsyncCLIClientError:
         # Re-raise CLI errors without wrapping

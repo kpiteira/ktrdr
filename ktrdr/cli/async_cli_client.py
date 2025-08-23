@@ -76,7 +76,11 @@ class AsyncCLIClient:
                 error_code="CLI-AlreadyInitialized",
             )
 
-        self._http_client = httpx.AsyncClient(timeout=self.timeout)
+        self._http_client = httpx.AsyncClient(
+            timeout=self.timeout,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            transport=httpx.AsyncHTTPTransport(retries=0),
+        )
         logger.debug("AsyncCLIClient HTTP client initialized")
         return self
 
@@ -87,6 +91,10 @@ class AsyncCLIClient:
         exc_tb: Optional[Any],
     ) -> Optional[bool]:
         """Async context manager exit - cleanup HTTP client."""
+        if exc_type is not None:
+            logger.warning(
+                f"AsyncCLIClient exiting due to exception: {exc_type.__name__}: {exc_val}"
+            )
         if self._http_client is not None:
             await self._http_client.aclose()
             logger.debug("AsyncCLIClient HTTP client closed")
@@ -242,6 +250,13 @@ class AsyncCLIClient:
                 # Re-raise our own exceptions without wrapping
                 raise
             except Exception as e:
+                logger.error(
+                    f"Unexpected error in _make_request: {type(e).__name__}: {e}"
+                )
+                if "closed" in str(e):
+                    logger.error(
+                        f"Client closed error details: client={self._http_client}, is_closed={getattr(self._http_client, 'is_closed', 'unknown')}"
+                    )
                 raise AsyncCLIClientError(
                     f"Unexpected error making API request: {str(e)}",
                     error_code="CLI-UnexpectedError",
