@@ -16,10 +16,11 @@ The DataManager extends ServiceOrchestrator to provide:
 import asyncio
 import os
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Union, Protocol
+from typing import Any, Dict, List, Optional, Protocol, Union
 
 import pandas as pd
 
+from ktrdr.config.host_services import get_ib_host_url
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.gap_classifier import GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
@@ -197,7 +198,7 @@ class DataManager(ServiceOrchestrator):
 
     def _get_default_host_url(self) -> str:
         """Get the default host service URL."""
-        return "http://localhost:8001"
+        return get_ib_host_url()
 
     def _get_env_var_prefix(self) -> str:
         """Get environment variable prefix."""
