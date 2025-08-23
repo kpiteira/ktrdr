@@ -298,7 +298,9 @@ class TimeframeSynchronizer:
         non_reference_count = len(data_dict) - 1  # Exclude reference timeframe
         stats = SynchronizationStats(
             total_timeframes=len(data_dict),
-            successfully_aligned=max(0, non_reference_count),  # Only count non-reference timeframes
+            successfully_aligned=max(
+                0, non_reference_count
+            ),  # Only count non-reference timeframes
             failed_alignments=0,  # No alignment failures since we don't align
             reference_timeframe=reference_timeframe,
             reference_periods=len(data_dict[reference_timeframe]),
@@ -578,7 +580,7 @@ def align_timeframes_to_lowest(
     # Get reference data
     reference_data = data_dict[reference_timeframe]
     aligned_data = {reference_timeframe: reference_data}  # Reference stays unchanged
-    
+
     # Align all other timeframes to reference
     for timeframe, data in data_dict.items():
         if timeframe != reference_timeframe:

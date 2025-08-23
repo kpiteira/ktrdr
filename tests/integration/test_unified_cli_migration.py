@@ -58,18 +58,18 @@ class TestAsyncCLIClientDataShowMigration:
 
             # Run command
             result = runner.invoke(
-                    data_app,
-                    [
-                        "show",
-                        "AAPL",
-                        "--timeframe",
-                        "1h",
-                        "--rows",
-                        "3",
-                        "--format",
-                        "json",
-                    ],
-                )
+                data_app,
+                [
+                    "show",
+                    "AAPL",
+                    "--timeframe",
+                    "1h",
+                    "--rows",
+                    "3",
+                    "--format",
+                    "json",
+                ],
+            )
 
             # Verify command succeeds
             assert result.exit_code == 0, f"Command failed: {result.output}"

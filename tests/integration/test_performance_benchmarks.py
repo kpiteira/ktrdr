@@ -8,7 +8,7 @@ import time
 import asyncio
 import statistics
 from typing import List
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, AsyncMock, patch
 from contextlib import contextmanager
 
 import pytest
@@ -65,17 +65,18 @@ class TestDataShowPerformanceBenchmarks:
         runner = CliRunner()
 
         def run_command():
-            with patch("ktrdr.cli.data_commands.check_api_connection") as mock_check:
-                with patch("ktrdr.cli.data_commands.get_api_client") as mock_get_client:
-                    mock_check.return_value = True
-                    mock_client = Mock()
-                    mock_client.get_cached_data.return_value = mock_api_responses
-                    mock_get_client.return_value = mock_client
+            with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+                from unittest.mock import AsyncMock
+                mock_cli = AsyncMock()
+                mock_cli.__aenter__.return_value = mock_cli
+                mock_cli.__aexit__.return_value = None
+                mock_cli._make_request.return_value = mock_api_responses
+                mock_cli_class.return_value = mock_cli
 
-                    result = runner.invoke(
-                        data_app, ["show", "AAPL", "--format", "json"]
-                    )
-                    assert result.exit_code == 0
+                result = runner.invoke(
+                    data_app, ["show", "AAPL", "--format", "json"]
+                )
+                assert result.exit_code == 0
 
         # Measure current performance
         stats = PerformanceBenchmarker.run_multiple_measurements(run_command)
@@ -165,20 +166,28 @@ class TestModelsTrainPerformanceBenchmarks:
                     ["AAPL"],
                     ["1h"],
                 )
+                
+                with patch("ktrdr.cli.model_commands.AsyncCLIClient") as mock_cli_class:
+                    from unittest.mock import AsyncMock
+                    mock_cli = AsyncMock()
+                    mock_cli.__aenter__.return_value = mock_cli
+                    mock_cli.__aexit__.return_value = None
+                    mock_cli._make_request.return_value = {"task_id": "train_123", "status": "started"}
+                    mock_cli_class.return_value = mock_cli
 
-                result = runner.invoke(
-                    models_app,
-                    [
-                        "train",
-                        mock_strategy_file,
-                        "--start-date",
-                        "2024-01-01",
-                        "--end-date",
-                        "2024-01-31",
-                        "--dry-run",
-                    ],
-                )
-                assert result.exit_code == 0
+                    result = runner.invoke(
+                        models_app,
+                        [
+                            "train",
+                            mock_strategy_file,
+                            "--start-date",
+                            "2024-01-01",
+                            "--end-date",
+                            "2024-01-31",
+                            "--dry-run",
+                        ],
+                    )
+                    assert result.exit_code == 0
 
         # Measure current performance
         stats = PerformanceBenchmarker.run_multiple_measurements(run_command)

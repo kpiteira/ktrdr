@@ -345,9 +345,16 @@ class TestTrainingService:
     ):
         """Test the async training execution flow."""
         with (
-            patch("pathlib.Path.exists", return_value=True),  # Mock strategy file exists
-            patch("builtins.open", mock_open(read_data="model:\n  training:\n    epochs: 100")),
-            patch("yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}),
+            patch(
+                "pathlib.Path.exists", return_value=True
+            ),  # Mock strategy file exists
+            patch(
+                "builtins.open",
+                mock_open(read_data="model:\n  training:\n    epochs: 100"),
+            ),
+            patch(
+                "yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}
+            ),
             patch("tempfile.NamedTemporaryFile") as mock_temp_file,
             patch("yaml.dump"),
             patch("pathlib.Path.unlink"),
@@ -394,9 +401,16 @@ class TestTrainingService:
     ):
         """Test handling of training failures."""
         with (
-            patch("pathlib.Path.exists", return_value=True),  # Mock strategy file exists
-            patch("builtins.open", mock_open(read_data="model:\n  training:\n    epochs: 100")),
-            patch("yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}),
+            patch(
+                "pathlib.Path.exists", return_value=True
+            ),  # Mock strategy file exists
+            patch(
+                "builtins.open",
+                mock_open(read_data="model:\n  training:\n    epochs: 100"),
+            ),
+            patch(
+                "yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}
+            ),
             patch("tempfile.NamedTemporaryFile"),
             patch("yaml.dump"),
             patch("pathlib.Path.unlink"),

@@ -62,11 +62,13 @@ def sample_api_response():
 
 @pytest.fixture
 def mock_api_client():
-    """Mock the API client for testing."""
-    with patch("ktrdr.cli.data_commands.get_api_client") as mock_get_client:
-        mock_client = MagicMock()
-        mock_get_client.return_value = mock_client
-        yield mock_client
+    """Mock the AsyncCLIClient for testing."""
+    with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+        mock_cli = AsyncMock()
+        mock_cli.__aenter__.return_value = mock_cli
+        mock_cli.__aexit__.return_value = None
+        mock_cli_class.return_value = mock_cli
+        yield mock_cli
 
 
 def test_data_show_basic(runner, sample_api_response):
@@ -94,30 +96,22 @@ def test_data_show_basic(runner, sample_api_response):
 def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
     """Test the data show command with custom number of rows."""
 
-    async def mock_get_cached_data(*args, **kwargs):
-        return sample_api_response["data"]
+    mock_api_client._make_request.return_value = sample_api_response["data"]
 
-    mock_api_client.get_cached_data = mock_get_cached_data
+    result = runner.invoke(cli_app, ["data", "show", "AAPL", "--rows", "2"])
 
-    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
-        result = runner.invoke(cli_app, ["data", "show", "AAPL", "--rows", "2"])
-
-        assert result.exit_code == 0
-        assert "AAPL" in result.stdout
+    assert result.exit_code == 0
+    assert "AAPL" in result.stdout
 
 
 def test_data_show_with_timeframe(runner, mock_api_client, sample_api_response):
     """Test the data show command with timeframe option."""
 
-    async def mock_get_cached_data(*args, **kwargs):
-        return sample_api_response["data"]
+    mock_api_client._make_request.return_value = sample_api_response["data"]
 
-    mock_api_client.get_cached_data = mock_get_cached_data
+    result = runner.invoke(cli_app, ["data", "show", "AAPL", "--timeframe", "1h"])
 
-    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
-        result = runner.invoke(cli_app, ["data", "show", "AAPL", "--timeframe", "1h"])
-
-        assert result.exit_code == 0
+    assert result.exit_code == 0
 
 
 def test_data_show_json_format(runner, sample_api_response):
@@ -162,21 +156,17 @@ def test_data_show_no_data(runner):
 
 def test_data_show_empty_data(runner, mock_api_client):
     """Test the data show command when data is empty but API call succeeds."""
-    # Mock get_cached_data to return empty data (should be handled gracefully)
+    # Mock _make_request to return empty data (should be handled gracefully)
 
-    async def mock_get_cached_data(*args, **kwargs):
-        return {"dates": [], "ohlcv": [], "metadata": {}}
+    mock_api_client._make_request.return_value = {"dates": [], "ohlcv": [], "metadata": {}}
 
-    mock_api_client.get_cached_data = mock_get_cached_data
+    result = runner.invoke(cli_app, ["data", "show", "AAPL"])
 
-    with patch("ktrdr.cli.data_commands.check_api_connection", return_value=True):
-        result = runner.invoke(cli_app, ["data", "show", "AAPL"])
-
-        # Should exit successfully but show no data message
-        assert result.exit_code == 0
-        assert (
-            "No cached data found" in result.stdout
-            or "No data points available" in result.stdout
+    # Should exit successfully but show no data message
+    assert result.exit_code == 0
+    assert (
+        "No cached data found" in result.stdout
+        or "No data points available" in result.stdout
         )
 
 
