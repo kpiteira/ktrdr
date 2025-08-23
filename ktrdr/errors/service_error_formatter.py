@@ -325,13 +325,13 @@ class ServiceErrorFormatter:
         errors = []
 
         # Check IB Host Service configuration
-        ib_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
-        if ib_enabled and ib_enabled not in ["", "true", "false"]:
+        ib_enabled = os.getenv("USE_IB_HOST_SERVICE")
+        if ib_enabled is not None and ib_enabled.lower() not in ["true", "false"]:
             errors.append(
                 f"Invalid configuration: USE_IB_HOST_SERVICE must be 'true' or 'false', got '{ib_enabled}'"
             )
 
-        if ib_enabled == "true":
+        if ib_enabled and ib_enabled.lower() == "true":
             ib_url = os.getenv("IB_HOST_SERVICE_URL")
             if not ib_url:
                 errors.append(
@@ -340,13 +340,16 @@ class ServiceErrorFormatter:
                 )
 
         # Check Training Host Service configuration
-        training_enabled = os.getenv("USE_TRAINING_HOST_SERVICE", "").lower()
-        if training_enabled and training_enabled not in ["", "true", "false"]:
+        training_enabled = os.getenv("USE_TRAINING_HOST_SERVICE")
+        if training_enabled is not None and training_enabled.lower() not in [
+            "true",
+            "false",
+        ]:
             errors.append(
                 f"Invalid configuration: USE_TRAINING_HOST_SERVICE must be 'true' or 'false', got '{training_enabled}'"
             )
 
-        if training_enabled == "true":
+        if training_enabled and training_enabled.lower() == "true":
             training_url = os.getenv("TRAINING_HOST_SERVICE_URL")
             if not training_url:
                 errors.append(

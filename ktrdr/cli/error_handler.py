@@ -131,19 +131,26 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
 
         if isinstance(e, (DataProviderConnectionError, DataProviderConfigError)):
             # Convert DataProvider error to Service error for consistent handling
-            # Map provider info to service context
-            provider = getattr(e, "provider", "unknown")
-            service_name = "ib-host" if provider == "IB" else provider.lower()
+            # Map provider info to service context with proper validation
+            if hasattr(e, "provider"):
+                provider = e.provider
+                service_name = "ib-host" if provider == "IB" else provider.lower()
+            else:
+                logger.warning(
+                    "DataProvider error is missing 'provider' attribute; cannot map to service name."
+                )
+                provider = None
+                service_name = None
 
             # Create a mock service error with similar structure
             mock_service_error = ServiceConnectionError(
                 message=str(e),
                 error_code="DATA_PROVIDER_ERROR",
                 details={
-                    "service": service_name,
+                    "service": service_name if service_name else "unknown",
                     "endpoint": "http://localhost:5001" if provider == "IB" else None,
                     "original_exception": str(e),
-                    "provider": provider,
+                    "provider": provider if provider else "unknown",
                 },
             )
 
