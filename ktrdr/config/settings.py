@@ -56,6 +56,22 @@ class TrainingHostSettings(BaseSettings):
     model_config = ConfigDict(env_prefix="KTRDR_TRAINING_HOST_")
 
 
+class CLISettings(BaseSettings):
+    """CLI Client Settings."""
+
+    api_base_url: str = Field(default="http://localhost:8000", description="Base URL for API client")
+    timeout: float = Field(default=30.0, description="Default timeout for API requests")
+    max_retries: int = Field(default=3, description="Maximum retry attempts for failed requests")
+    retry_delay: float = Field(default=1.0, description="Delay between retry attempts")
+
+    model_config = ConfigDict(env_prefix="KTRDR_CLI_")
+
+    @property
+    def base_url(self) -> str:
+        """Get base URL (alias for api_base_url)."""
+        return self.api_base_url
+
+
 # Cache settings to avoid repeated disk/env access
 @lru_cache()
 def get_api_settings() -> APISettings:
@@ -75,12 +91,19 @@ def get_training_host_settings() -> TrainingHostSettings:
     return TrainingHostSettings()
 
 
+@lru_cache()
+def get_cli_settings() -> CLISettings:
+    """Get CLI client settings with caching."""
+    return CLISettings()
+
+
 # Clear settings cache (for testing)
 def clear_settings_cache() -> None:
     """Clear settings cache."""
     get_api_settings.cache_clear()
     get_logging_settings.cache_clear()
     get_training_host_settings.cache_clear()
+    get_cli_settings.cache_clear()
 
 
 # Export IB config for convenience
@@ -88,9 +111,11 @@ __all__ = [
     "APISettings",
     "LoggingSettings",
     "TrainingHostSettings",
+    "CLISettings",
     "get_api_settings",
     "get_logging_settings",
     "get_training_host_settings",
+    "get_cli_settings",
     "clear_settings_cache",
     "IbConfig",
     "get_ib_config",

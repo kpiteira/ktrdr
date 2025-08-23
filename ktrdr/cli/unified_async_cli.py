@@ -1,9 +1,12 @@
 """UnifiedAsyncCLI base class for connection reuse and performance optimization."""
 
 import asyncio
-import httpx
-from typing import Dict, Any, Optional
 import logging
+from typing import Any, Optional
+
+import httpx
+
+from ..config.settings import get_cli_settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +18,7 @@ class UnifiedAsyncCLIError(Exception):
         self,
         message: str,
         error_code: str = "CLI-Error",
-        details: Optional[Dict[str, Any]] = None,
+        details: Optional[dict[str, Any]] = None,
     ):
         self.message = message
         self.error_code = error_code
@@ -37,27 +40,35 @@ class UnifiedAsyncCLI:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
-        timeout: float = 30.0,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
+        base_url: Optional[str] = None,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
     ):
         """
         Initialize the UnifiedAsyncCLI.
 
         Args:
-            base_url: Base URL of the API server
-            timeout: Default timeout in seconds for requests
-            max_retries: Maximum number of retry attempts for failed requests
-            retry_delay: Delay between retry attempts in seconds
+            base_url: Base URL of the API server (uses config default if None)
+            timeout: Default timeout in seconds for requests (uses config default if None)
+            max_retries: Maximum number of retry attempts for failed requests (uses config default if None)
+            retry_delay: Delay between retry attempts in seconds (uses config default if None)
         """
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
+        # Load configuration
+        cli_settings = get_cli_settings()
+
+        # Use provided values or fall back to configuration
+        self.base_url = (base_url or cli_settings.base_url).rstrip("/")
+        self.timeout = timeout if timeout is not None else cli_settings.timeout
+        self.max_retries = (
+            max_retries if max_retries is not None else cli_settings.max_retries
+        )
+        self.retry_delay = (
+            retry_delay if retry_delay is not None else cli_settings.retry_delay
+        )
         self._http_client: Optional[httpx.AsyncClient] = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "UnifiedAsyncCLI":
         """Async context manager entry - initialize HTTP client."""
         if self._http_client is not None:
             raise UnifiedAsyncCLIError(
@@ -85,11 +96,11 @@ class UnifiedAsyncCLI:
         self,
         method: str,
         endpoint: str,
-        json_data: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
+        json_data: Optional[dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: Optional[float] = None,
         retries: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Make an HTTP request with error handling and retries.
 
@@ -132,7 +143,7 @@ class UnifiedAsyncCLI:
                 if 200 <= response.status_code < 300:
                     # Success
                     try:
-                        return response.json()
+                        return response.json()  # type: ignore[no-any-return]
                     except Exception as e:
                         raise UnifiedAsyncCLIError(
                             "Invalid JSON response from API",

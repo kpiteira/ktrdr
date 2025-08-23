@@ -7,10 +7,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Dict, Any, Optional
 
 from ktrdr.cli.unified_async_cli import UnifiedAsyncCLI, UnifiedAsyncCLIError
+from ktrdr.config.settings import CLISettings
 
 
 class TestUnifiedAsyncCLI:
     """Test suite for UnifiedAsyncCLI base class."""
+
+    @pytest.fixture(autouse=True)
+    def mock_cli_settings(self):
+        """Mock CLI settings for all tests automatically."""
+        settings = CLISettings(
+            api_base_url="http://localhost:8000",
+            timeout=30.0,
+            max_retries=3,
+            retry_delay=0.1,  # Fast retries for tests
+        )
+        with patch('ktrdr.cli.unified_async_cli.get_cli_settings', return_value=settings):
+            yield settings
 
     @pytest.fixture
     def cli_config(self):
@@ -179,6 +192,54 @@ class TestUnifiedAsyncCLI:
             assert cli.timeout == custom_timeout
             assert cli.max_retries == custom_retries
             assert cli.base_url == "http://localhost:8000"
+
+    @pytest.mark.asyncio
+    async def test_configuration_defaults_from_settings(self):
+        """Test that configuration defaults come from settings when no overrides provided."""
+        # Create a custom settings mock for this test
+        custom_settings = CLISettings(
+            api_base_url="http://custom-api:9999",
+            timeout=45.0,
+            max_retries=5,
+            retry_delay=2.0,
+        )
+        
+        with patch('ktrdr.cli.unified_async_cli.get_cli_settings', return_value=custom_settings):
+            # Don't provide any overrides - should use settings defaults
+            cli = UnifiedAsyncCLI()
+            
+            assert cli.base_url == "http://custom-api:9999"
+            assert cli.timeout == 45.0
+            assert cli.max_retries == 5
+            assert cli.retry_delay == 2.0
+
+    @pytest.mark.asyncio
+    async def test_configuration_overrides(self):
+        """Test that explicit parameters override configuration defaults."""
+        # Create a custom settings mock
+        custom_settings = CLISettings(
+            api_base_url="http://config-api:8888",
+            timeout=60.0,
+            max_retries=10,
+            retry_delay=3.0,
+        )
+        
+        with patch('ktrdr.cli.unified_async_cli.get_cli_settings', return_value=custom_settings):
+            # Override some values explicitly
+            cli = UnifiedAsyncCLI(
+                base_url="http://override-api:7777",
+                timeout=15.0,
+                # max_retries not provided - should use config default
+                retry_delay=0.5,
+            )
+            
+            # Overridden values should be used
+            assert cli.base_url == "http://override-api:7777"
+            assert cli.timeout == 15.0
+            assert cli.retry_delay == 0.5
+            
+            # Non-overridden value should use config default
+            assert cli.max_retries == 10
 
     @pytest.mark.asyncio
     async def test_thread_safety(self, cli_config):
