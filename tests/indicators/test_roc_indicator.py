@@ -6,14 +6,14 @@ validating calculation accuracy, parameter handling, edge cases, and integration
 with the broader indicator framework.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from unittest.mock import patch
 
+import numpy as np
+import pandas as pd
+import pytest
+
+from ktrdr.errors import DataError
 from ktrdr.indicators.roc_indicator import ROCIndicator
 from ktrdr.indicators.schemas import ROC_SCHEMA
-from ktrdr.errors import DataError
 
 
 class TestROCIndicator:

@@ -5,20 +5,18 @@ This module tests the comprehensive parameter validation framework
 including type validation, range validation, and constraint validation.
 """
 
-import pytest
-import pandas as pd
-from typing import Dict, Any
 
+import pytest
+
+from ktrdr.errors import DataError
 from ktrdr.indicators.parameter_schema import (
-    ParameterSchema,
-    ParameterDefinition,
     ParameterConstraint,
+    ParameterDefinition,
     ParameterType,
-    less_than,
     greater_than,
+    less_than,
 )
 from ktrdr.indicators.schemas import MACD_SCHEMA, RSI_SCHEMA, SMA_SCHEMA
-from ktrdr.errors import DataError
 
 
 class TestParameterDefinition:

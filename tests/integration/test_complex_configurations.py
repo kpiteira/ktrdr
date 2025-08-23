@@ -1,9 +1,9 @@
 """Integration tests for complex multi-indicator configurations."""
 
-import pytest
-import pandas as pd
+
 import numpy as np
-from typing import Dict, List
+import pandas as pd
+import pytest
 
 from ktrdr.indicators.complex_configuration_handler import (
     ComplexConfigurationHandler,

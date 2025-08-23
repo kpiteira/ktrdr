@@ -8,14 +8,14 @@ This module tests the Williams %R indicator implementation including:
 - Reference value validation
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from typing import Dict, Any
 
-from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
-from ktrdr.indicators.schemas import WILLIAMS_R_SCHEMA
+import numpy as np
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.schemas import WILLIAMS_R_SCHEMA
+from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
 from tests.indicators.validation_utils import create_standard_test_data
 
 

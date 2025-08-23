@@ -4,14 +4,14 @@ Tests for the indicator service.
 This module contains tests for the indicator service functionality.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
-import pandas as pd
-from datetime import datetime
+from unittest.mock import MagicMock, PropertyMock, patch
 
-from ktrdr.api.services.indicator_service import IndicatorService
+import pandas as pd
+import pytest
+
 from ktrdr.api.models.indicators import IndicatorCalculateRequest, IndicatorConfig
-from ktrdr.errors import DataError, ConfigurationError, ProcessingError
+from ktrdr.api.services.indicator_service import IndicatorService
+from ktrdr.errors import ConfigurationError, DataError
 
 
 @pytest.fixture

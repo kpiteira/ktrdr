@@ -6,7 +6,7 @@ format compatible with TradingView's lightweight-charts library.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pandas as pd
 

@@ -6,23 +6,16 @@ ensuring that DataFrames are correctly transformed into the format
 required by lightweight-charts.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 import json
 
-from ktrdr.visualization.data_adapter import DataAdapter
+import numpy as np
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.visualization.data_adapter import DataAdapter
 
 # Import test fixtures
-from tests.visualization.test_fixtures import (
-    sample_price_data,
-    sample_indicators,
-    histogram_data,
-    multiple_series_data,
-    edge_case_data,
-)
 
 
 class TestDataTransformation:

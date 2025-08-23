@@ -5,10 +5,9 @@ These tests make actual HTTP requests to the API that trigger real IB operations
 They test the complete data flow from API request through IB interaction to response.
 """
 
-import pytest
 import asyncio
-import time
-import json
+
+import pytest
 
 
 @pytest.mark.real_ib
@@ -359,7 +358,6 @@ class TestRealAPIErrorScenarios:
         self, api_client, clean_test_symbols, real_ib_connection_test
     ):
         """Test concurrent API calls that use IB don't interfere."""
-        import asyncio
 
         symbols = clean_test_symbols[:2]  # AAPL, MSFT
 

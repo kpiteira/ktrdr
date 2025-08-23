@@ -4,19 +4,20 @@ Unit tests for IB Data Adapter
 Tests the adapter that bridges the data layer to the IB module.
 """
 
-import unittest
 import asyncio
-from datetime import datetime, timezone, timedelta
-from unittest.mock import Mock, patch, AsyncMock
+import unittest
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock, patch
+
 import pandas as pd
 
-from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.external_data_interface import (
     DataProviderConnectionError,
-    DataProviderRateLimitError,
     DataProviderDataError,
     DataProviderError,
+    DataProviderRateLimitError,
 )
+from ktrdr.data.ib_data_adapter import IbDataAdapter
 
 
 class TestIbDataAdapter(unittest.TestCase):

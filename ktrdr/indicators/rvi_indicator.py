@@ -15,7 +15,7 @@ The RVI oscillates around zero, with values above zero indicating bullish moment
 and values below zero indicating bearish momentum.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

@@ -4,9 +4,10 @@ Unit tests for trading hours functionality.
 
 import unittest
 from datetime import time
+
 import pandas as pd
 
-from ktrdr.data.trading_hours import TradingHoursManager, TradingHours, TradingSession
+from ktrdr.data.trading_hours import TradingHoursManager, TradingSession
 
 
 class TestTradingHours(unittest.TestCase):

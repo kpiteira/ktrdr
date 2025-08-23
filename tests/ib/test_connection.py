@@ -4,11 +4,12 @@ Unit tests for IB Connection
 Tests the dedicated thread connection management functionality.
 """
 
-import unittest
-import time
 import asyncio
-from unittest.mock import Mock, patch, MagicMock
-from ktrdr.ib.connection import IbConnection, ConnectionRequest
+import time
+import unittest
+from unittest.mock import Mock, patch
+
+from ktrdr.ib.connection import ConnectionRequest, IbConnection
 
 
 class TestIbConnection(unittest.TestCase):

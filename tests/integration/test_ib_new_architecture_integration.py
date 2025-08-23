@@ -9,16 +9,16 @@ These tests validate that the redesigned IB system works correctly:
 - Proper pacing enforcement
 """
 
-import pytest
 import asyncio
 import time
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any
+from datetime import datetime, timedelta, timezone
 
-from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
-from ktrdr.data.ib_data_adapter import IbDataAdapter
-from ktrdr.data.data_manager import DataManager
+import pytest
+
 from ktrdr.config.ib_config import get_ib_config
+from ktrdr.data.data_manager import DataManager
+from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
 
 
 @pytest.mark.integration

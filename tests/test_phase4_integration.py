@@ -6,11 +6,9 @@ Tests the actual implementation of GPU acceleration training host service
 to validate Phase 1-3 integration and functionality.
 """
 
-import asyncio
 import httpx
 import pytest
 import pytest_asyncio
-from typing import Dict, Any
 
 
 class TestPhase4Integration:

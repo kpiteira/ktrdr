@@ -8,7 +8,7 @@ identify trend direction and potential reversal points.
 Author: KTRDR
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

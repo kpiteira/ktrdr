@@ -5,14 +5,12 @@ This module contains tests for the hierarchical CLI indicators compute command
 that uses API client for indicator calculations.
 """
 
-import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-import pandas as pd
 from typer.testing import CliRunner
-from unittest.mock import patch, MagicMock
 
 from ktrdr.cli import cli_app
-from ktrdr.errors import DataError
 
 
 @pytest.fixture
@@ -65,7 +63,6 @@ def mock_api_client():
 def test_compute_indicator_basic(runner, mock_api_client, sample_api_response):
     """Test the basic functionality of the indicators compute command."""
     # Mock the async post method to return the API response directly
-    import asyncio
 
     async def mock_post(*args, **kwargs):
         return sample_api_response
@@ -87,7 +84,6 @@ def test_compute_indicator_basic(runner, mock_api_client, sample_api_response):
 
 def test_compute_indicator_with_period(runner, mock_api_client, sample_api_response):
     """Test the indicators compute command with custom period."""
-    import asyncio
 
     async def mock_post(*args, **kwargs):
         return sample_api_response
@@ -105,7 +101,6 @@ def test_compute_indicator_with_period(runner, mock_api_client, sample_api_respo
 
 def test_compute_indicator_with_timeframe(runner, mock_api_client, sample_api_response):
     """Test the indicators compute command with timeframe option."""
-    import asyncio
 
     async def mock_post(*args, **kwargs):
         return sample_api_response
@@ -123,7 +118,6 @@ def test_compute_indicator_with_timeframe(runner, mock_api_client, sample_api_re
 
 def test_compute_indicator_json_format(runner, mock_api_client, sample_api_response):
     """Test the indicators compute command with JSON output format."""
-    import asyncio
 
     async def mock_post(*args, **kwargs):
         return sample_api_response
@@ -145,7 +139,6 @@ def test_compute_indicator_different_types(
     runner, mock_api_client, sample_api_response
 ):
     """Test the indicators compute command with different indicator types."""
-    import asyncio
 
     async def mock_post(*args, **kwargs):
         return sample_api_response
@@ -171,7 +164,6 @@ def test_compute_indicator_api_error(runner, mock_api_client):
         "error": "Failed to compute indicator",
         "details": {"symbol": "INVALID", "indicator": "RSI"},
     }
-    import asyncio
 
     async def mock_post(*args, **kwargs):
         return error_response
@@ -234,7 +226,6 @@ def test_indicators_list_command(runner, mock_api_client):
             ]
         },
     }
-    import asyncio
 
     async def mock_get(*args, **kwargs):
         return list_response
@@ -251,7 +242,6 @@ def test_indicators_list_command(runner, mock_api_client):
 
 def test_compute_indicator_verbose(runner, mock_api_client, sample_api_response):
     """Test the indicators compute command with verbose output."""
-    import asyncio
 
     async def mock_post(*args, **kwargs):
         return sample_api_response

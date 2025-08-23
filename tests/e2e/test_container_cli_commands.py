@@ -5,14 +5,12 @@ These tests run CLI commands within the container environment to ensure
 all functionality works correctly with the refactored IB components.
 """
 
-import pytest
-import subprocess
-import json
-import time
 import re
-import os
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+import subprocess
+import time
+from typing import List, Optional
+
+import pytest
 
 
 # Check Docker availability at module level to avoid expensive fixture setup

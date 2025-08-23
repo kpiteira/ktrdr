@@ -8,7 +8,7 @@ extreme price movements and generating clearer buy/sell signals.
 Author: KTRDR
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 import pandas as pd

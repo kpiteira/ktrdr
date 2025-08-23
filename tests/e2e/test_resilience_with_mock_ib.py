@@ -5,13 +5,11 @@ These tests simulate various IB Gateway scenarios to properly test
 resilience behavior under realistic conditions.
 """
 
-import pytest
-import asyncio
 import socket
 import threading
 import time
-from typing import Dict, Any
-from unittest.mock import patch, MagicMock
+
+import pytest
 
 
 def check_api_available():

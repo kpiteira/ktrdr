@@ -11,7 +11,7 @@ The manager handles:
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ktrdr.logging import get_logger
 

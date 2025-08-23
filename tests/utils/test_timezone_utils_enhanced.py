@@ -2,11 +2,10 @@
 Unit tests for enhanced timezone utilities with trading hours integration.
 """
 
-import unittest
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, mock_open
+import unittest
+from unittest.mock import mock_open, patch
+
 import pandas as pd
 
 from ktrdr.utils.timezone_utils import TimestampManager

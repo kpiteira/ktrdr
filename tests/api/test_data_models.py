@@ -4,13 +4,13 @@ API data models tests.
 This module tests the data models for API requests and responses.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 from pydantic import ValidationError
 
 from ktrdr.api.models.data import (
     DataLoadRequest,
-    DataLoadResponse,
     OHLCVData,
     OHLCVPoint,
     SymbolInfo,

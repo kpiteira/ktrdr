@@ -8,7 +8,7 @@ for handling transient errors in network operations.
 import functools
 import random
 import time
-from typing import Any, Callable, List, Optional, Type, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, Union
 
 # Import the new logging system
 from ktrdr import get_logger

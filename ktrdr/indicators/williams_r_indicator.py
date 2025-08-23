@@ -5,7 +5,7 @@ Williams %R is a momentum indicator that measures overbought and oversold levels
 It is similar to the Stochastic Oscillator but is plotted upside-down on a scale of -100 to 0.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

@@ -9,7 +9,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict
+from typing import Any, Callable
 
 from ktrdr import get_logger
 

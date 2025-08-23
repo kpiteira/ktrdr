@@ -4,11 +4,10 @@ API middleware tests.
 This module tests the middleware components of the API.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi import FastAPI, Request, Response
-from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import Scope
 
 from ktrdr.api.middleware import RequestLoggingMiddleware, add_middleware

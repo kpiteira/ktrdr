@@ -2,13 +2,13 @@
 Tests for the BaseIndicator abstract class.
 """
 
-import pytest
-import pandas as pd
-from typing import Union
 
-from ktrdr.indicators import BaseIndicator
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
 from ktrdr.errors.exceptions import ValidationError
+from ktrdr.indicators import BaseIndicator
 
 
 class DummyIndicator(BaseIndicator):

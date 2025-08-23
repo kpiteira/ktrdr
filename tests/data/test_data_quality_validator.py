@@ -5,15 +5,16 @@ Tests comprehensive data quality validation that can be used by both
 IB and local data sources, consolidating validation logic.
 """
 
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
-from datetime import datetime, timedelta
 
 from ktrdr.data.data_quality_validator import (
-    DataQualityValidator,
     DataQualityIssue,
     DataQualityReport,
+    DataQualityValidator,
 )
 
 

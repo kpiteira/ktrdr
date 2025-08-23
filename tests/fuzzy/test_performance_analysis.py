@@ -2,23 +2,22 @@
 Tests for fuzzy performance analysis.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-import tempfile
 import json
+import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
+from ktrdr.fuzzy.indicator_integration import IntegratedFuzzyResult
+from ktrdr.fuzzy.multi_timeframe_engine import MultiTimeframeFuzzyResult
 from ktrdr.fuzzy.performance_analysis import (
+    BenchmarkResult,
     FuzzyPerformanceAnalyzer,
     PerformanceMetrics,
-    BenchmarkResult,
     create_performance_analyzer,
 )
 from ktrdr.services.fuzzy_pipeline_service import FuzzyPipelineService
-from ktrdr.fuzzy.indicator_integration import IntegratedFuzzyResult
-from ktrdr.fuzzy.multi_timeframe_engine import MultiTimeframeFuzzyResult
 
 
 class TestPerformanceMetrics:
@@ -454,7 +453,7 @@ class TestFuzzyPerformanceAnalyzer:
             assert output_file.exists()
 
             # Check that file contains valid JSON
-            with open(output_file, "r") as f:
+            with open(output_file) as f:
                 saved_report = json.load(f)
 
             assert (

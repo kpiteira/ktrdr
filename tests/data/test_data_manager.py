@@ -2,14 +2,12 @@
 Tests for the DataManager class.
 """
 
-import os
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from pathlib import Path
 
-from ktrdr.data import DataManager, DataCorruptionError, DataNotFoundError, DataError
+import numpy as np
+import pandas as pd
+import pytest
+
+from ktrdr.data import DataCorruptionError, DataError, DataManager, DataNotFoundError
 
 
 @pytest.fixture

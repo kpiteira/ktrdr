@@ -6,7 +6,7 @@ to the new multi-timeframe format introduced in Phase 5.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 

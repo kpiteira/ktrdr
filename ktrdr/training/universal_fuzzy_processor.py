@@ -4,7 +4,7 @@ This processor creates features that are independent of symbol scale, enabling
 true zero-shot generalization to unseen symbols.
 """
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd

@@ -7,7 +7,7 @@ bridging the API endpoints with the core backtesting engine.
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pandas as pd
 

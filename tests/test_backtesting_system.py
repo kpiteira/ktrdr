@@ -1,25 +1,23 @@
 """Tests for Phase 4: Backtesting System."""
 
-import pytest
-import pandas as pd
-import numpy as np
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
-from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
+import pytest
 
 from ktrdr.backtesting import (
+    BacktestConfig,
+    BacktestingEngine,
+    PerformanceMetrics,
+    PerformanceTracker,
     PositionManager,
     PositionStatus,
     Trade,
-    PerformanceTracker,
-    PerformanceMetrics,
-    BacktestingEngine,
-    BacktestConfig,
 )
 from ktrdr.decision.base import Signal
-from ktrdr.training import ModelStorage
-import torch
 
 
 class TestPositionManager:

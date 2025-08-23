@@ -13,15 +13,13 @@ The new architecture is tested by:
 All tests in this file are disabled to prevent conflicts.
 """
 
-import pytest
 import asyncio
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import Any, Dict
 
-from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
-from ktrdr.data.ib_data_adapter import IbDataAdapter
-from ktrdr.data.data_manager import DataManager
+import pytest
+
 from ktrdr.config.ib_config import get_ib_config
 
 
@@ -210,7 +208,7 @@ class TestIbNewArchitectureIntegration:
         try:
             is_valid = await validator.validate_symbol_async("INVALID_SYMBOL_12345")
             assert is_valid is False, "Invalid symbol should not validate"
-        except Exception as e:
+        except Exception:
             # Invalid symbols may raise exceptions, which is acceptable
             pass
 
@@ -619,7 +617,7 @@ class TestIbStressTesting:
 
         success_rate = len(successful_requests) / request_count
 
-        print(f"Stress test results:")
+        print("Stress test results:")
         print(f"  Total requests: {request_count}")
         print(f"  Successful: {len(successful_requests)}")
         print(f"  Failed: {len(failed_requests)}")

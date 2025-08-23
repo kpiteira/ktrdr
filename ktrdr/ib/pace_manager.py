@@ -21,7 +21,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 from ktrdr.logging import get_logger
 

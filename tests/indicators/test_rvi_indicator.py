@@ -5,13 +5,13 @@ This module provides comprehensive tests for the RVI indicator implementation,
 including mathematical accuracy, parameter validation, and edge case handling.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 
-from ktrdr.indicators.rvi_indicator import RVIIndicator
+import numpy as np
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.rvi_indicator import RVIIndicator
 
 
 class TestRVIIndicator:

@@ -7,12 +7,12 @@ This module tests the main FastAPI application functionality.
 # import pytest
 # from unittest.mock import patch, MagicMock
 # from fastapi import FastAPI, APIRouter, Request
-from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 
-from ktrdr.api.main import create_application
-from ktrdr.errors import DataError, ConnectionError, ConfigurationError, ProcessingError
 from ktrdr import metadata  # Import the metadata module
+from ktrdr.api.main import create_application
+from ktrdr.errors import ConfigurationError, ConnectionError, DataError, ProcessingError
 
 
 class TestMainApplication:

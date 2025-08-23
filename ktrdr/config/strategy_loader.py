@@ -1,7 +1,7 @@
 """Strategy configuration loading with support for both v1 (legacy) and v2 (multi-scope) formats."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import yaml
 from pydantic import ValidationError

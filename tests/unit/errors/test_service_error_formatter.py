@@ -5,16 +5,16 @@ This module tests the ServiceErrorFormatter that converts technical service
 exceptions into user-friendly, actionable error messages with troubleshooting steps.
 """
 
-import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
+from ktrdr.errors.exceptions import (
+    ServiceConfigurationError,
+    ServiceConnectionError,
+    ServiceTimeoutError,
+)
 
 # Import the service error formatter that we'll implement
 from ktrdr.errors.service_error_formatter import ServiceErrorFormatter
-from ktrdr.errors.exceptions import (
-    ServiceConnectionError,
-    ServiceTimeoutError,
-    ServiceConfigurationError,
-)
 
 
 class TestServiceErrorFormatter:

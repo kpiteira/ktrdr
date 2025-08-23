@@ -6,8 +6,8 @@ time series data to compute fuzzy membership values in bulk operations.
 """
 
 import time
-from functools import cache, lru_cache
-from typing import Dict, Optional, Tuple
+from functools import cache
+from typing import Optional
 
 import numpy as np
 import pandas as pd

@@ -6,7 +6,7 @@ and other sensitive information from environment variables.
 """
 
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 

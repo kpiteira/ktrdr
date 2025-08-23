@@ -5,7 +5,7 @@ This module implements the API endpoints for listing and managing trading strate
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException

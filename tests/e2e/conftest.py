@@ -5,11 +5,11 @@ This module provides shared fixtures and configuration for container-based
 end-to-end testing.
 """
 
-import pytest
 import subprocess
 import time
+
+import pytest
 import requests
-from typing import Generator
 
 
 def pytest_configure(config):

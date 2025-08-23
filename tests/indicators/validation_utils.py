@@ -7,13 +7,13 @@ This module provides utilities for:
 3. Generating comprehensive reports for validation failures
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, Any, List, Callable, Optional, Union, Tuple
 import logging
+from typing import Any, Dict, List, Tuple
 
-from ktrdr.indicators import BaseIndicator
+import pandas as pd
+
 from ktrdr.errors import DataError
+from ktrdr.indicators import BaseIndicator
 
 # Setup logger
 logger = logging.getLogger(__name__)

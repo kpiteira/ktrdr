@@ -5,12 +5,10 @@ These tests verify resilience behavior under various real-world scenarios,
 even without actual IB Gateway running.
 """
 
-import pytest
-import httpx
 import time
-import asyncio
-from typing import Dict, Any
-from unittest.mock import patch, AsyncMock
+
+import httpx
+import pytest
 
 
 def check_api_available():

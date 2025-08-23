@@ -6,15 +6,11 @@ to validate complete system resilience from user-facing interfaces down
 to the connection pool.
 """
 
-import pytest
-import httpx
-import subprocess
-import asyncio
-import time
-import json
-import threading
 import concurrent.futures
-from typing import Dict, Any, List
+import subprocess
+import time
+
+import pytest
 
 
 @pytest.mark.real_ib
@@ -465,7 +461,7 @@ class TestCLIResilienceUnderRealLoad:
         timeout_count = sum(1 for r in results if r.get("timeout", False))
         success_count = sum(1 for r in results if r.get("returncode") == 0)
 
-        print(f"✅ Concurrent CLI IB operations:")
+        print("✅ Concurrent CLI IB operations:")
         print(f"  Successful: {success_count}/4")
         print(f"  Timeouts: {timeout_count}/4 (acceptable)")
         print(f"  Async errors: {async_error_count}/4")
@@ -541,7 +537,7 @@ class TestCLIResilienceUnderRealLoad:
         async_error_count = sum(1 for r in results if r.get("has_async_error", False))
         avg_elapsed = sum(r["elapsed"] for r in results) / len(results)
 
-        print(f"✅ CLI memory stability over 10 iterations:")
+        print("✅ CLI memory stability over 10 iterations:")
         print(f"  Average time: {avg_elapsed:.2f}s")
         print(f"  Memory issues: {memory_issue_count}/10")
         print(f"  Async errors: {async_error_count}/10")
@@ -587,7 +583,7 @@ class TestFullSystemIntegrationResilience:
                 f"  Symbol discovery failed (IB unavailable): {discovery_data.get('error', {}).get('message')}"
             )
         else:
-            print(f"  Symbol discovery succeeded")
+            print("  Symbol discovery succeeded")
 
         # Step 2: Data retrieval
         print("✅ Step 2: Data retrieval")
@@ -609,7 +605,7 @@ class TestFullSystemIntegrationResilience:
             data_result = data_response.json()
             print(f"  Data retrieval: {data_result.get('success')}")
         else:
-            print(f"  Data retrieval failed with validation error (acceptable)")
+            print("  Data retrieval failed with validation error (acceptable)")
 
         # Step 3: System health check
         print("✅ Step 3: System health check")

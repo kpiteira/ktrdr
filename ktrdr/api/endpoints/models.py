@@ -5,7 +5,7 @@ This module implements the API endpoints for model management - saving, loading,
 and testing trained neural network models.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator

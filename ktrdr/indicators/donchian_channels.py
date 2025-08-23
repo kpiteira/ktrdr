@@ -8,7 +8,7 @@ volatility, support/resistance levels, and potential breakout points.
 Author: KTRDR
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

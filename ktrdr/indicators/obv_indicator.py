@@ -5,7 +5,7 @@ On-Balance Volume is a momentum indicator that uses volume flow to predict chang
 The theory behind OBV is that volume precedes price movement.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

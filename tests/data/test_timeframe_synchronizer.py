@@ -6,17 +6,16 @@ and related utilities, ensuring proper timeframe alignment, synchronization,
 and data validation across multiple timeframes.
 """
 
-import pytest
-import pandas as pd
+
 import numpy as np
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+import pandas as pd
+import pytest
 
 from ktrdr.data.timeframe_synchronizer import (
-    TimeframeSynchronizer,
-    TimeframeRelation,
     AlignmentResult,
     SynchronizationStats,
+    TimeframeRelation,
+    TimeframeSynchronizer,
     align_timeframes_to_lowest,
     calculate_multi_timeframe_periods,
     validate_timeframe_compatibility,

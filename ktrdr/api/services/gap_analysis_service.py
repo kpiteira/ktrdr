@@ -5,7 +5,7 @@ Provides comprehensive gap analysis functionality for the API layer.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pandas as pd
 

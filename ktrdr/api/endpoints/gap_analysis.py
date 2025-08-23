@@ -4,7 +4,7 @@ Gap Analysis API Endpoints
 Provides comprehensive gap analysis functionality with trading hours awareness.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 

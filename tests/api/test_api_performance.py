@@ -5,18 +5,17 @@ These tests measure response time and resource utilization
 for critical API operations to ensure they meet performance requirements.
 """
 
-import pytest
-import time
-import statistics
-import psutil
 import gc
-import json
+import statistics
+import time
 from contextlib import contextmanager
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, patch
+
+import psutil
+import pytest
 
 # Import required modules
 from ktrdr import get_logger
-from ktrdr.errors import ConfigurationError, ProcessingError, DataError
 
 # Configure logging
 logger = get_logger(__name__)
@@ -129,6 +128,7 @@ class PerformanceMetrics:
 def client():
     """Create a test client for the FastAPI application."""
     from fastapi.testclient import TestClient
+
     from ktrdr.api.main import app
 
     return TestClient(app)

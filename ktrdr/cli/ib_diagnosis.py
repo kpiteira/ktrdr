@@ -6,7 +6,7 @@ to give clear, actionable error messages that match the backend diagnosis.
 """
 
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 from ktrdr.logging import get_logger
 

@@ -2,16 +2,15 @@
 Tests for the enhanced FuzzyService with batch overlay functionality.
 """
 
-import pytest
-import pandas as pd
+from unittest.mock import AsyncMock, Mock, patch
+
 import numpy as np
-from datetime import datetime, timedelta
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
+import pandas as pd
+import pytest
 
 from ktrdr.api.services.fuzzy_service import FuzzyService
+from ktrdr.errors import ConfigurationError
 from ktrdr.fuzzy.config import FuzzyConfigLoader
-from ktrdr.errors import DataError, ConfigurationError, ProcessingError
 
 
 @pytest.fixture

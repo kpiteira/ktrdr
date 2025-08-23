@@ -7,7 +7,7 @@ fuzzifying indicator values.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -473,7 +473,7 @@ class FuzzyService(BaseService):
 
             return response
 
-        except (DataError, ConfigurationError) as e:
+        except (DataError, ConfigurationError):
             # Re-raise known error types
             raise
         except Exception as e:
@@ -689,7 +689,7 @@ class FuzzyService(BaseService):
 
             return response
 
-        except (DataError, ConfigurationError) as e:
+        except (DataError, ConfigurationError):
             # Re-raise known error types
             raise
         except Exception as e:

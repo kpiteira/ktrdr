@@ -13,13 +13,9 @@ and potentially breaking IB Gateway.
 ❌ UNSAFE: Direct module imports and instantiation
 """
 
-import pytest
 import asyncio
-import pandas as pd
-from pathlib import Path
-import tempfile
-import os
-import json
+
+import pytest
 
 
 @pytest.mark.real_ib

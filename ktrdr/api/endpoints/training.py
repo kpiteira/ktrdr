@@ -5,7 +5,7 @@ This module implements the API endpoints for neural network model training,
 using the existing CLI training functionality as the foundation.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator

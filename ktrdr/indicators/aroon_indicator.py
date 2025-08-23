@@ -18,7 +18,7 @@ The Aroon lines oscillate between 0 and 100:
 - Crossovers between the lines signal potential trend changes
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

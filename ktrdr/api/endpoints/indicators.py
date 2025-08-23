@@ -5,7 +5,7 @@ This module provides endpoints for accessing indicator functionality,
 including listing available indicators and calculating indicator values.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 

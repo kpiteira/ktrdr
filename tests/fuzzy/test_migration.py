@@ -2,17 +2,18 @@
 Tests for fuzzy configuration migration utilities.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
 import yaml
 
+from ktrdr.errors import ConfigurationError
 from ktrdr.fuzzy.migration import (
     FuzzyConfigMigrator,
-    migrate_fuzzy_config,
     check_config_compatibility,
+    migrate_fuzzy_config,
 )
-from ktrdr.errors import ConfigurationError
 
 
 class TestFuzzyConfigMigrator:
@@ -174,7 +175,7 @@ class TestFuzzyConfigMigrator:
             # Check output file exists and has correct content
             assert output_file.exists()
 
-            with open(output_file, "r") as f:
+            with open(output_file) as f:
                 migrated_config = yaml.safe_load(f)
 
             assert "timeframes" in migrated_config

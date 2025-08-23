@@ -2,21 +2,22 @@
 Tests for fuzzy pipeline service.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 import tempfile
-import yaml
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import numpy as np
+import pandas as pd
+import pytest
+import yaml
+
+from ktrdr.errors import ConfigurationError, ProcessingError
+from ktrdr.fuzzy.indicator_integration import IntegratedFuzzyResult
+from ktrdr.fuzzy.multi_timeframe_engine import MultiTimeframeFuzzyResult
 from ktrdr.services.fuzzy_pipeline_service import (
     FuzzyPipelineService,
     create_fuzzy_pipeline_service,
 )
-from ktrdr.fuzzy.indicator_integration import IntegratedFuzzyResult
-from ktrdr.fuzzy.multi_timeframe_engine import MultiTimeframeFuzzyResult
-from ktrdr.errors import ProcessingError, ConfigurationError
 
 
 class TestFuzzyPipelineService:

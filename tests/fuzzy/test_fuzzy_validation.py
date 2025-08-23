@@ -5,12 +5,11 @@ This module contains tests that verify the fuzzy logic system produces
 expected membership values for known indicator inputs.
 """
 
-import pytest
-import numpy as np
 import pandas as pd
+import pytest
 
-from ktrdr.fuzzy import FuzzyEngine, FuzzyConfig, TriangularMF
-from ktrdr.errors import ProcessingError, ConfigurationError
+from ktrdr.errors import ProcessingError
+from ktrdr.fuzzy import FuzzyConfig, FuzzyEngine
 
 
 class FuzzyValidationResult:

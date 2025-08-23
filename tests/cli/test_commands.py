@@ -5,7 +5,7 @@ This module tests the hierarchical CLI commands functionality that uses
 API client for data operations.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest

@@ -8,7 +8,7 @@ with a configurable data directory.
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import pandas as pd
 
@@ -316,7 +316,7 @@ class LocalDataLoader:
             # Validate the DataFrame structure (with more tolerance)
             try:
                 self._validate_dataframe(df)
-            except DataFormatError as e:
+            except DataFormatError:
                 # If validation fails due to missing columns but we have data,
                 # try to create minimal required columns with default values
                 if len(df) > 0:

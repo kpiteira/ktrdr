@@ -4,9 +4,10 @@ Unit tests for IB Connection Pool
 Tests the simplified connection pool functionality.
 """
 
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-import asyncio
-from unittest.mock import Mock, patch, AsyncMock
+
 from ktrdr.ib.pool import IbConnectionPool
 
 

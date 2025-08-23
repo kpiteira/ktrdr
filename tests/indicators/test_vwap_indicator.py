@@ -5,13 +5,13 @@ This module provides comprehensive tests for the VWAP indicator implementation,
 including mathematical accuracy, parameter validation, and edge case handling.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 
-from ktrdr.indicators.vwap_indicator import VWAPIndicator
+import numpy as np
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.vwap_indicator import VWAPIndicator
 
 
 class TestVWAPIndicator:

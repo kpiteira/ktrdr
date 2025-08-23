@@ -11,16 +11,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ktrdr.fuzzy.config import (
-    FuzzyConfig,
-    FuzzyConfigLoader,
-    MembershipFunctionConfig,
-    TriangularMFConfig,
-)
 from ktrdr.errors import (
     ConfigurationError,
     ConfigurationFileError,
-    InvalidConfigurationError,
+)
+from ktrdr.fuzzy.config import (
+    FuzzyConfig,
+    FuzzyConfigLoader,
 )
 
 

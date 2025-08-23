@@ -7,7 +7,7 @@ Provides endpoints to monitor:
 - Overall system health
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 

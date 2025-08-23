@@ -6,30 +6,27 @@ When new indicators are added to the system and registered properly, they will
 be automatically tested without requiring manual test case creation.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict, Any, Type, List, Callable
 
-from ktrdr.indicators import BaseIndicator
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
-
 from tests.indicators.indicator_registry import get_registered_indicators
-from tests.indicators.validation_utils import (
-    validate_indicator_against_reference,
-    generate_indicator_report,
-)
 from tests.indicators.reference_datasets import (
+    create_aroon_reference_dataset,
+    create_ichimoku_reference_dataset,
+    create_mfi_reference_dataset,
     create_reference_dataset_1,
     create_reference_dataset_2,
     create_reference_dataset_3,
     create_reference_dataset_4,
     create_reference_dataset_obv,
-    create_ichimoku_reference_dataset,
     create_rvi_reference_dataset,
-    create_mfi_reference_dataset,
-    create_aroon_reference_dataset,
+)
+from tests.indicators.validation_utils import (
+    generate_indicator_report,
+    validate_indicator_against_reference,
 )
 
 # Setup logger

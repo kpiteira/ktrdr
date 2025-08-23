@@ -9,7 +9,7 @@ stock price and volume flow.
 Author: KTRDR
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 

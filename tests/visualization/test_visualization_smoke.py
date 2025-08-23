@@ -5,18 +5,12 @@ This module contains smoke tests that verify basic functionality
 of the visualization components working together.
 """
 
-import os
+from datetime import datetime, timedelta
+
 import pandas as pd
 import pytest
-import tempfile
-from datetime import datetime, timedelta
-from pathlib import Path
 
 from ktrdr.visualization import Visualizer
-from ktrdr.visualization.data_adapter import DataAdapter
-from ktrdr.visualization.config_builder import ConfigBuilder
-from ktrdr.visualization.template_manager import TemplateManager
-from ktrdr.visualization.renderer import Renderer
 
 
 @pytest.fixture
@@ -81,7 +75,7 @@ class TestVisualizationSmoke:
 
         # Verify the file exists and has content
         assert saved_path.exists()
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             content = f.read()
             assert "Test Candlestick Chart" in content
             assert "LightweightCharts" in content
@@ -122,7 +116,7 @@ class TestVisualizationSmoke:
 
         # Verify the file exists and has content
         assert saved_path.exists()
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             content = f.read()
             assert "Chart with Indicator Overlay" in content
             assert "SMA 10" in content
@@ -157,7 +151,7 @@ class TestVisualizationSmoke:
 
         # Verify the file exists and has content
         assert saved_path.exists()
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             content = f.read()
             assert "Chart with Indicator Panel" in content
             assert "RSI" in content
@@ -184,7 +178,7 @@ class TestVisualizationSmoke:
 
         # Verify the file exists and has content
         assert saved_path.exists()
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             content = f.read()
             assert "Chart with Range Slider" in content
             assert "range_slider" in content

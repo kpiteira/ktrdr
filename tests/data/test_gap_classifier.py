@@ -2,13 +2,12 @@
 Tests for the enhanced gap classification system.
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
 import json
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
-from ktrdr.data.gap_classifier import GapClassifier, GapClassification, GapInfo
+import pytest
+
+from ktrdr.data.gap_classifier import GapClassification, GapClassifier, GapInfo
 
 
 class TestGapClassifier:

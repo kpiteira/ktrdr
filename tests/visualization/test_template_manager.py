@@ -2,11 +2,8 @@
 Tests for the TemplateManager class in the visualization module.
 """
 
-import pytest
-import re
 
 from ktrdr.visualization.template_manager import TemplateManager
-from ktrdr.errors import ConfigurationError
 
 
 class TestTemplateManager:

@@ -8,7 +8,7 @@ for ensuring consistent naming across different timeframes and indicators.
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 from ktrdr import get_logger
 

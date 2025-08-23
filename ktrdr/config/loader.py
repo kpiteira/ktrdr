@@ -7,7 +7,7 @@ YAML files using Pydantic models.
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+from typing import Any, Optional, TypeVar, Union
 
 import yaml
 from pydantic import BaseModel, ValidationError

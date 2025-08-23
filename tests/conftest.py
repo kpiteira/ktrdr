@@ -4,13 +4,12 @@ Global test fixtures for the KTRDR project.
 This module contains test fixtures that can be used across all test modules.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
-from pathlib import Path
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
+import numpy as np
+import pandas as pd
+import pytest
 
 """
 Configuration for tests to use mocked components and speedier settings.

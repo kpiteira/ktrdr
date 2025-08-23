@@ -7,7 +7,7 @@ This module tests the base models for the API responses.
 import pytest
 from pydantic import ValidationError
 
-from ktrdr.api.models.base import ErrorResponse, ApiResponse, PaginatedData
+from ktrdr.api.models.base import ApiResponse, ErrorResponse, PaginatedData
 
 
 class TestErrorResponse:

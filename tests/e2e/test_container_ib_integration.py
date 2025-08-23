@@ -5,11 +5,10 @@ These tests validate the IB refactoring works correctly in the actual
 container deployment environment.
 """
 
-import pytest
-import httpx
 import time
-from typing import Dict, Any
 
+import httpx
+import pytest
 
 # Test configuration
 API_BASE_URL = "http://localhost:8000/api/v1"
@@ -251,8 +250,8 @@ class TestContainerIbRefactorValidation:
 
     def test_concurrent_ib_operations(self, api_client):
         """Test concurrent IB operations don't interfere."""
-        import threading
         import queue
+        import threading
 
         results = queue.Queue()
 

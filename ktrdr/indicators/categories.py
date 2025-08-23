@@ -7,7 +7,6 @@ into logical groups that help traders understand their purpose and usage pattern
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
 
 
 class IndicatorCategory(str, Enum):

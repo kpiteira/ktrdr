@@ -5,28 +5,16 @@ This module contains tests that verify the integrated functionality
 of the visualization components working together.
 """
 
-import pytest
-import pandas as pd
-import os
-from pathlib import Path
-import tempfile
 
+import pandas as pd
+import pytest
+
+from ktrdr.errors import DataError
 from ktrdr.visualization import (
     Visualizer,
-    DataAdapter,
-    ConfigBuilder,
-    TemplateManager,
-    Renderer,
 )
-from ktrdr.errors import ConfigurationError, DataError
 
 # Import test fixtures
-from tests.visualization.test_fixtures import (
-    sample_price_data,
-    sample_indicators,
-    histogram_data,
-    multiple_series_data,
-)
 
 
 class TestVisualizationIntegration:
@@ -117,7 +105,7 @@ class TestVisualizationIntegration:
 
         # Verify file was created with content
         assert saved_path.exists()
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             html_content = f.read()
             assert "End-to-End Test" in html_content
             assert "LightweightCharts" in html_content
@@ -132,7 +120,7 @@ class TestVisualizationIntegration:
         visualizer.save(sample_chart, dark_output_path)
 
         # Read content
-        with open(dark_output_path, "r") as f:
+        with open(dark_output_path) as f:
             dark_content = f.read()
             assert "background-color: #151924" in dark_content
 
@@ -142,7 +130,7 @@ class TestVisualizationIntegration:
         visualizer.save(sample_chart, light_output_path)
 
         # Read content
-        with open(light_output_path, "r") as f:
+        with open(light_output_path) as f:
             light_content = f.read()
             assert "background-color: #ffffff" in light_content
 
@@ -177,7 +165,7 @@ class TestVisualizationIntegration:
         assert output_path.exists()
 
         # Check content for panel elements
-        with open(output_path, "r") as f:
+        with open(output_path) as f:
             content = f.read()
             assert "Multi-Panel Chart" in content
             assert "SMA 10" in content
@@ -220,7 +208,7 @@ class TestVisualizationIntegration:
         visualizer.save(chart, output_path)
 
         # Check content for overlay elements
-        with open(output_path, "r") as f:
+        with open(output_path) as f:
             content = f.read()
             assert "Multiple Overlays Test" in content
             assert "Bollinger Upper" in content

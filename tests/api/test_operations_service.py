@@ -5,21 +5,19 @@ Tests the core operations service that manages async operations for
 backtesting, training, and other long-running tasks.
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timezone
-from typing import Dict, Any
+from unittest.mock import AsyncMock, MagicMock
 
-from ktrdr.api.services.operations_service import OperationsService
+import pytest
+
 from ktrdr.api.models.operations import (
-    OperationType,
-    OperationStatus,
     OperationMetadata,
     OperationProgress,
-    OperationInfo,
+    OperationStatus,
+    OperationType,
 )
-from ktrdr.errors import ValidationError
+from ktrdr.api.services.operations_service import OperationsService
 
 
 @pytest.fixture

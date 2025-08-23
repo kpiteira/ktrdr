@@ -5,7 +5,7 @@ This module provides the IndicatorEngine class, which is responsible for
 applying indicators to OHLCV data based on configuration.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import pandas as pd
 

@@ -11,7 +11,7 @@ import inspect
 import logging
 import time
 import traceback
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
+from typing import Any, Callable, Optional, TypeVar, Union, cast
 
 from ktrdr.logging.config import get_logger
 

@@ -5,7 +5,7 @@ This module provides the FuzzyEngine class that transforms indicator values
 into fuzzy membership degrees according to configured membership functions.
 """
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd

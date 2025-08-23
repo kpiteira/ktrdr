@@ -1,19 +1,18 @@
 """Tests for Phase 2: Training System."""
 
-import pytest
-import torch
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import pytest
+import torch
+
 from ktrdr.training import (
-    ZigZagLabeler,
-    ModelTrainer,
     ModelStorage,
-    StrategyTrainer,
+    ModelTrainer,
+    ZigZagLabeler,
 )
 
 

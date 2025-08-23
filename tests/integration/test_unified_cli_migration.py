@@ -6,13 +6,9 @@ while providing performance improvements through connection reuse.
 Tests are designed to fail initially (TDD) and pass once migration is complete.
 """
 
-import asyncio
 import json
-import sys
 import time
-from pathlib import Path
-from typing import Any, Dict
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from typer.testing import CliRunner

@@ -7,7 +7,7 @@ with environment variable support and validation.
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ktrdr.logging import get_logger
 

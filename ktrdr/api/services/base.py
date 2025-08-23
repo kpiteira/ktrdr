@@ -8,7 +8,7 @@ with core KTRDR modules.
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, TypeVar
+from typing import Any, TypeVar
 
 # Type variable for generic service responses
 T = TypeVar("T")

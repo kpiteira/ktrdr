@@ -6,13 +6,13 @@ technical indicators across multiple timeframes with standardized column naming.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
-from ktrdr.logging import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.indicators.indicator_engine import IndicatorEngine
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 

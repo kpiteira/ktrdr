@@ -5,13 +5,11 @@ These tests validate the complete connection resilience implementation
 from Phases 1-6 of the connection resilience plan in a containerized environment.
 """
 
-import pytest
-import httpx
-import asyncio
 import time
-import json
-from typing import Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime
+
+import httpx
+import pytest
 
 # Test configuration
 API_BASE_URL = "http://localhost:8000/api/v1"

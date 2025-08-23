@@ -2,13 +2,14 @@
 Tests for the Distance from Moving Average indicator.
 """
 
-import pytest
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 
-from ktrdr.indicators.distance_from_ma_indicator import DistanceFromMAIndicator
+import numpy as np
+import pandas as pd
+import pytest
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.distance_from_ma_indicator import DistanceFromMAIndicator
 
 
 def create_test_data():

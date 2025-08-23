@@ -2,13 +2,12 @@
 Tests for the Renderer class in the visualization module.
 """
 
-import pytest
 from pathlib import Path
-import os
-import tempfile
 
-from ktrdr.visualization.renderer import Renderer
+import pytest
+
 from ktrdr.errors import ConfigurationError, DataError
+from ktrdr.visualization.renderer import Renderer
 
 
 class TestRenderer:
@@ -135,7 +134,7 @@ class TestRenderer:
         assert saved_path.exists()
 
         # Check the content of the file
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             content = f.read()
             assert content == html_content
 
@@ -164,7 +163,7 @@ class TestRenderer:
         )
 
         # Verify that the file was overwritten
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             content = f.read()
             assert content == "New content"
 

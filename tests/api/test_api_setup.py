@@ -7,9 +7,9 @@ This module tests the setup and initialization of the API application.
 import pytest
 from fastapi.testclient import TestClient
 
-from ktrdr.api.main import create_application
-from ktrdr.api.config import APIConfig
 from ktrdr import metadata  # Import the metadata module
+from ktrdr.api.config import APIConfig
+from ktrdr.api.main import create_application
 
 
 @pytest.fixture

@@ -29,7 +29,7 @@ import time
 from dataclasses import dataclass
 from datetime import timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 from ib_insync import Contract, Forex, Future, Stock
 

@@ -3,7 +3,6 @@ Logging management utilities for runtime control and monitoring.
 """
 
 import logging
-from typing import Dict, List
 
 from ktrdr.logging.config import (
     get_component_log_levels,

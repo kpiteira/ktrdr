@@ -5,7 +5,6 @@ This module contains tests for the ConfigBuilder class, which is responsible
 for generating chart configurations for different chart types and themes.
 """
 
-import pytest
 
 from ktrdr.visualization.config_builder import ConfigBuilder
 

@@ -8,7 +8,7 @@ operating with reduced functionality.
 
 import functools
 from enum import Enum, auto
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 # Import the new logging system
 from ktrdr import get_logger

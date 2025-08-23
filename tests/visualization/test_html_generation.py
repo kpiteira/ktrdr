@@ -6,23 +6,16 @@ generation functionality, ensuring that chart configurations and data
 are correctly rendered into valid HTML output.
 """
 
-import pytest
-import pandas as pd
-import re
-from pathlib import Path
 
-from ktrdr.visualization.template_manager import TemplateManager
-from ktrdr.visualization.renderer import Renderer
+import pytest
+
+from ktrdr.errors import ConfigurationError
 from ktrdr.visualization.config_builder import ConfigBuilder
 from ktrdr.visualization.data_adapter import DataAdapter
-from ktrdr.errors import ConfigurationError
+from ktrdr.visualization.renderer import Renderer
+from ktrdr.visualization.template_manager import TemplateManager
 
 # Import test fixtures
-from tests.visualization.test_fixtures import (
-    sample_price_data,
-    sample_indicators,
-    histogram_data,
-)
 
 
 class TestHtmlGeneration:
@@ -318,7 +311,7 @@ class TestHtmlGeneration:
 
         # Verify file exists and content matches
         assert saved_path.exists()
-        with open(saved_path, "r") as f:
+        with open(saved_path) as f:
             content = f.read()
             assert content == html
 
