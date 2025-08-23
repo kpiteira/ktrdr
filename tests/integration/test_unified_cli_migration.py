@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, AsyncMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -48,20 +48,16 @@ class TestAsyncCLIClientDataShowMigration:
         """Test that data show command produces identical output after migration."""
         runner = CliRunner()
 
-        # Mock API connection check and client
-        with patch("ktrdr.cli.data_commands.check_api_connection") as mock_check:
-            with patch("ktrdr.cli.data_commands.get_api_client") as mock_get_client:
-                mock_check.return_value = True
+        # Mock AsyncCLIClient for new async pattern
+        with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+            mock_cli = AsyncMock()
+            mock_cli.__aenter__.return_value = mock_cli
+            mock_cli.__aexit__.return_value = None
+            mock_cli._make_request.return_value = mock_api_responses["cached_data"]
+            mock_cli_class.return_value = mock_cli
 
-                # Mock API client with cached data response
-                mock_client = Mock()
-                mock_client.get_cached_data.return_value = mock_api_responses[
-                    "cached_data"
-                ]
-                mock_get_client.return_value = mock_client
-
-                # Run command
-                result = runner.invoke(
+            # Run command
+            result = runner.invoke(
                     data_app,
                     [
                         "show",
@@ -75,56 +71,55 @@ class TestAsyncCLIClientDataShowMigration:
                     ],
                 )
 
-                # Verify command succeeds
-                assert result.exit_code == 0, f"Command failed: {result.output}"
+            # Verify command succeeds
+            assert result.exit_code == 0, f"Command failed: {result.output}"
 
-                # Verify JSON output structure
-                try:
-                    output_data = json.loads(result.output)
-                    assert output_data["symbol"] == "AAPL"
-                    assert output_data["timeframe"] == "1h"
-                    assert output_data["displayed_rows"] == 3
-                    assert len(output_data["data"]) == 3
-                except json.JSONDecodeError:
-                    pytest.fail(f"Expected JSON output, got: {result.output}")
+            # Verify JSON output structure
+            try:
+                output_data = json.loads(result.output)
+                assert output_data["symbol"] == "AAPL"
+                assert output_data["timeframe"] == "1h"
+                assert output_data["displayed_rows"] == 3
+                assert len(output_data["data"]) == 3
+            except json.JSONDecodeError:
+                pytest.fail(f"Expected JSON output, got: {result.output}")
 
     def test_data_show_table_format_unchanged(self, mock_api_responses):
         """Test that table format output remains identical."""
         runner = CliRunner()
 
-        with patch("ktrdr.cli.data_commands.check_api_connection") as mock_check:
-            with patch("ktrdr.cli.data_commands.get_api_client") as mock_get_client:
-                mock_check.return_value = True
+        with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+            mock_cli = AsyncMock()
+            mock_cli.__aenter__.return_value = mock_cli
+            mock_cli.__aexit__.return_value = None
+            mock_cli._make_request.return_value = mock_api_responses["cached_data"]
+            mock_cli_class.return_value = mock_cli
 
-                mock_client = Mock()
-                mock_client.get_cached_data.return_value = mock_api_responses[
-                    "cached_data"
-                ]
-                mock_get_client.return_value = mock_client
+            result = runner.invoke(
+                data_app, ["show", "AAPL", "--timeframe", "1d", "--rows", "2"]
+            )
 
-                result = runner.invoke(
-                    data_app, ["show", "AAPL", "--timeframe", "1d", "--rows", "2"]
-                )
+            assert result.exit_code == 0
 
-                assert result.exit_code == 0
-
-                # Verify table elements are present
-                output = result.output
-                assert "AAPL (1d) - Cached Data" in output
-                assert "Date" in output
-                assert "Open" in output
-                assert "High" in output
-                assert "Low" in output
-                assert "Close" in output
-                assert "Volume" in output
+            # Verify table elements are present
+            output = result.output
+            assert "AAPL (1d) - Cached Data" in output
+            assert "Date" in output
+            assert "Open" in output
+            assert "High" in output
+            assert "Low" in output
+            assert "Close" in output
+            assert "Volume" in output
 
     def test_data_show_error_handling_preserved(self):
         """Test that error handling behavior is preserved."""
         runner = CliRunner()
 
-        with patch("ktrdr.cli.data_commands.check_api_connection") as mock_check:
-            # Simulate API connection failure
-            mock_check.return_value = False
+        # Test error handling - simulate connection failure with AsyncCLIClient
+        with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+            mock_cli = AsyncMock()
+            mock_cli.__aenter__.side_effect = Exception("Connection failed")
+            mock_cli_class.return_value = mock_cli
 
             result = runner.invoke(data_app, ["show", "AAPL"])
 

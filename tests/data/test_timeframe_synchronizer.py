@@ -247,9 +247,10 @@ class TestTimeframeSynchronizer:
         # Reference timeframe should be unchanged
         pd.testing.assert_frame_equal(synchronized_data["1h"], sample_1h_data)
 
-        # Other timeframes should have same index as reference
-        assert synchronized_data["4h"].index.equals(sample_1h_data.index)
-        assert synchronized_data["1d"].index.equals(sample_1h_data.index)
+        # Other timeframes should preserve their original indices (no alignment)
+        # This method preserves timeframe integrity - it does NOT align indices
+        pd.testing.assert_frame_equal(synchronized_data["4h"], sample_4h_data)
+        pd.testing.assert_frame_equal(synchronized_data["1d"], sample_1d_data)
 
         # Verify statistics
         assert isinstance(stats, SynchronizationStats)

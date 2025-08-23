@@ -69,7 +69,7 @@ class TestMigrationPerformanceValidation:
         unified_times = []
         for _ in range(3):
             with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
-                mock_cli = Mock()
+                mock_cli = AsyncMock()
                 mock_cli.__aenter__.return_value = mock_cli
                 mock_cli.__aexit__.return_value = None
                 mock_cli._make_request.return_value = mock_data
@@ -239,7 +239,7 @@ class TestMigrationPerformanceValidation:
         with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
             from ktrdr.cli.async_cli_client import AsyncCLIClientError
 
-            mock_cli = Mock()
+            mock_cli = AsyncMock()
             mock_cli.__aenter__.return_value = mock_cli
             mock_cli.__aexit__.return_value = None
             mock_cli._make_request.side_effect = AsyncCLIClientError(

@@ -7,7 +7,7 @@ and integrates with the OperationsService framework.
 
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -296,7 +296,7 @@ class TestTrainingService:
 
             assert result["success"] is True
             assert result["model_name"] == "test_model"
-            assert result["symbols"] == ["AAPL"]
+            assert result["symbol"] == "AAPL"
             assert result["test_date"] == "2024-01-01"
             assert "prediction" in result
             assert "signal" in result["prediction"]
@@ -345,6 +345,9 @@ class TestTrainingService:
     ):
         """Test the async training execution flow."""
         with (
+            patch("pathlib.Path.exists", return_value=True),  # Mock strategy file exists
+            patch("builtins.open", mock_open(read_data="model:\n  training:\n    epochs: 100")),
+            patch("yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}),
             patch("tempfile.NamedTemporaryFile") as mock_temp_file,
             patch("yaml.dump"),
             patch("pathlib.Path.unlink"),
@@ -370,8 +373,8 @@ class TestTrainingService:
             await training_service._run_training_async(
                 "test_operation_id",
                 "AAPL",
-                "1h",
-                sample_training_config,
+                ["1h"],  # timeframes is a list
+                "neuro_mean_reversion",  # use real strategy name
                 "2024-01-01",
                 "2024-06-01",
             )
@@ -391,6 +394,9 @@ class TestTrainingService:
     ):
         """Test handling of training failures."""
         with (
+            patch("pathlib.Path.exists", return_value=True),  # Mock strategy file exists
+            patch("builtins.open", mock_open(read_data="model:\n  training:\n    epochs: 100")),
+            patch("yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}),
             patch("tempfile.NamedTemporaryFile"),
             patch("yaml.dump"),
             patch("pathlib.Path.unlink"),
@@ -408,8 +414,8 @@ class TestTrainingService:
             await training_service._run_training_async(
                 "test_operation_id",
                 "AAPL",
-                "1h",
-                sample_training_config,
+                ["1h"],  # timeframes is a list
+                "neuro_mean_reversion",  # use real strategy name
                 "2024-01-01",
                 "2024-06-01",
             )
