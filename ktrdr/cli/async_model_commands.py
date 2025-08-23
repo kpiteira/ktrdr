@@ -41,8 +41,8 @@ async_models_app = typer.Typer(
 
 
 async def _wait_for_cancellation_completion_async(
-    cli: AsyncCLIClient, operation_id: str, console, timeout: int = 30
-):
+    cli: AsyncCLIClient, operation_id: str, console: Console, timeout: int = 30
+) -> bool:
     """Wait for training cancellation to complete with timeout using AsyncCLIClient."""
     start_time = time.time()
 
@@ -117,7 +117,7 @@ def train_model_async(
         "--detailed-analytics",
         help="Enable detailed training analytics with CSV/JSON export",
     ),
-):
+) -> None:
     """
     Train neural network models using strategy configurations with async architecture.
 
@@ -252,7 +252,7 @@ async def _train_model_async_impl(
     dry_run: bool,
     verbose: bool,
     detailed_analytics: bool,
-):
+) -> None:
     """Async implementation of train model command using AsyncCLIClient."""
     try:
         # Use AsyncCLIClient for connection reuse and performance
@@ -353,7 +353,7 @@ async def _train_model_async_impl(
             cancelled = False
             loop = asyncio.get_running_loop()
 
-            def signal_handler():
+            def signal_handler() -> None:
                 """Handle Ctrl+C for graceful training cancellation."""
                 nonlocal cancelled
                 cancelled = True

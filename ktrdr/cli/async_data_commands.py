@@ -55,7 +55,7 @@ def show_data_async(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Enable verbose output"
     ),
-):
+) -> None:
     """
     Display cached OHLCV data for a symbol and timeframe using async architecture.
 
@@ -110,7 +110,7 @@ async def _show_data_async_impl(
     include_extended: bool,
     output_format: str,
     verbose: bool,
-):
+) -> None:
     """Async implementation of show-data command using AsyncCLIClient."""
     try:
         # Use AsyncCLIClient for connection reuse and performance
@@ -264,7 +264,7 @@ def check_api_connection_async() -> bool:
     """Check API connection using AsyncCLIClient pattern."""
     import asyncio
 
-    async def _check():
+    async def _check() -> bool:
         try:
             async with AsyncCLIClient() as cli:
                 await cli._make_request("GET", "/health")
@@ -276,7 +276,7 @@ def check_api_connection_async() -> bool:
 
 
 # Helper function to display IB connection message
-def display_ib_connection_required_message():
+def display_ib_connection_required_message() -> None:
     """Display message when IB connection is required."""
     error_console.print(
         "[bold red]Error:[/bold red] Could not connect to KTRDR API server"
