@@ -157,28 +157,27 @@ class TestAsyncCLIClientDataShowMigration:
         """
         runner = CliRunner()
 
-        with patch("ktrdr.cli.data_commands.check_api_connection") as mock_check:
-            with patch("ktrdr.cli.data_commands.get_api_client") as mock_get_client:
-                mock_check.return_value = True
+        with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:
+            mock_cli = AsyncMock()
+            mock_cli.__aenter__.return_value = mock_cli
+            mock_cli.__aexit__.return_value = None
+            mock_cli._make_request.return_value = mock_api_responses[
+                "cached_data"
+            ]
+            mock_cli_class.return_value = mock_cli
 
-                mock_client = Mock()
-                mock_client.get_cached_data.return_value = mock_api_responses[
-                    "cached_data"
-                ]
-                mock_get_client.return_value = mock_client
+            # Time the command execution
+            start_time = time.time()
+            result = runner.invoke(data_app, ["show", "AAPL", "--format", "json"])
+            end_time = time.time()
 
-                # Time the command execution
-                start_time = time.time()
-                result = runner.invoke(data_app, ["show", "AAPL", "--format", "json"])
-                end_time = time.time()
+            duration = end_time - start_time
 
-                duration = end_time - start_time
+            assert result.exit_code == 0
 
-                assert result.exit_code == 0
-
-                # Store baseline for later comparison (this will be improved)
-                # Note: This is just for measurement, actual improvement test comes later
-                print(f"Baseline data show performance: {duration:.3f}s")
+            # Store baseline for later comparison (this will be improved)
+            # Note: This is just for measurement, actual improvement test comes later
+            print(f"Baseline data show performance: {duration:.3f}s")
 
 
 class TestAsyncCLIClientModelsTrainMigration:
@@ -245,43 +244,34 @@ class TestAsyncCLIClientModelsTrainMigration:
                 ["1h"],
             )
 
-            # Mock API connection and client
-            with patch("ktrdr.cli.model_commands.check_api_connection") as mock_check:
-                with patch(
-                    "ktrdr.cli.model_commands.get_api_client"
-                ) as mock_get_client:
-                    mock_check.return_value = True
+            # Mock AsyncCLIClient
+            with patch("ktrdr.cli.model_commands.AsyncCLIClient") as mock_cli_class:
+                mock_cli = AsyncMock()
+                mock_cli.__aenter__.return_value = mock_cli
+                mock_cli.__aexit__.return_value = None
+                mock_cli._make_request.return_value = mock_training_responses[
+                    "start_training"
+                ]
+                mock_cli_class.return_value = mock_cli
 
-                    mock_client = Mock()
-                    mock_client.start_training.return_value = mock_training_responses[
-                        "start_training"
-                    ]
-                    mock_client.get_operation_status.return_value = (
-                        mock_training_responses["operation_status"]
-                    )
-                    mock_client.get_training_performance.return_value = (
-                        mock_training_responses["training_performance"]
-                    )
-                    mock_get_client.return_value = mock_client
+                # Run dry-run to test functionality without actual training
+                result = runner.invoke(
+                    models_app,
+                    [
+                        "train",
+                        mock_strategy_file,
+                        "--start-date",
+                        "2024-01-01",
+                        "--end-date",
+                        "2024-01-31",
+                        "--dry-run",
+                    ],
+                )
 
-                    # Run dry-run to test functionality without actual training
-                    result = runner.invoke(
-                        models_app,
-                        [
-                            "train",
-                            mock_strategy_file,
-                            "--start-date",
-                            "2024-01-01",
-                            "--end-date",
-                            "2024-01-31",
-                            "--dry-run",
-                        ],
-                    )
-
-                    assert result.exit_code == 0
-                    assert "DRY RUN" in result.output
-                    assert "AAPL" in result.output
-                    assert "1h" in result.output
+                assert result.exit_code == 0
+                assert "DRY RUN" in result.output
+                assert "AAPL" in result.output
+                assert "1h" in result.output
 
     def test_models_train_error_handling_preserved(self, tmp_path):
         """Test that error handling behavior is preserved."""
@@ -346,29 +336,37 @@ class TestAsyncCLIClientModelsTrainMigration:
                 ["AAPL"],
                 ["1h"],
             )
+            
+            # Mock AsyncCLIClient
+            with patch("ktrdr.cli.model_commands.AsyncCLIClient") as mock_cli_class:
+                mock_cli = AsyncMock()
+                mock_cli.__aenter__.return_value = mock_cli
+                mock_cli.__aexit__.return_value = None
+                mock_cli._make_request.return_value = {"task_id": "train_123", "status": "started"}
+                mock_cli_class.return_value = mock_cli
 
-            # Time the command execution (dry run)
-            start_time = time.time()
-            result = runner.invoke(
-                models_app,
-                [
-                    "train",
-                    mock_strategy_file,
-                    "--start-date",
-                    "2024-01-01",
-                    "--end-date",
-                    "2024-01-31",
-                    "--dry-run",
-                ],
-            )
-            end_time = time.time()
+                # Time the command execution (dry run)
+                start_time = time.time()
+                result = runner.invoke(
+                    models_app,
+                    [
+                        "train",
+                        mock_strategy_file,
+                        "--start-date",
+                        "2024-01-01",
+                        "--end-date",
+                        "2024-01-31",
+                        "--dry-run",
+                    ],
+                )
+                end_time = time.time()
 
-            duration = end_time - start_time
+                duration = end_time - start_time
 
-            assert result.exit_code == 0
+                assert result.exit_code == 0
 
-            # Store baseline for comparison
-            print(f"Baseline models train performance: {duration:.3f}s")
+                # Store baseline for comparison
+                print(f"Baseline models train performance: {duration:.3f}s")
 
 
 class TestAsyncCLIClientPerformanceValidation:
