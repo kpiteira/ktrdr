@@ -48,7 +48,6 @@ coverage.xml
 # PyCharm
 .idea/
 *.iml
-*.iws
 
 # TypeScript / JavaScript
 frontend/node_modules/
@@ -105,3 +104,9 @@ config/*_secure.yaml
 **/.claude/settings.local.json
 data/symbol_discovery_cache.json
 ib-host-service/data/symbol_discovery_cache.json
+
+# Tools
+.bmad*/
+.claude/
+.serena/
+*.iws
