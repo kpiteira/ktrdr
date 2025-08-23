@@ -60,6 +60,15 @@ class MultiTimeframeIndicatorEngine:
             f"Initialized MultiTimeframeIndicatorEngine with {len(self.engines)} timeframes"
         )
 
+    def get_supported_timeframes(self) -> list[str]:
+        """
+        Get list of supported timeframes.
+        
+        Returns:
+            List of supported timeframes
+        """
+        return list(self.engines.keys())
+
     def apply_multi_timeframe(
         self, multi_timeframe_data: dict[str, pd.DataFrame]
     ) -> dict[str, pd.DataFrame]:

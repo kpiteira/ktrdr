@@ -110,8 +110,8 @@ def test_list_indicators_endpoint(client, mock_indicator_metadata):
         # Verify response
         assert response.status_code == 200
         assert response.json()["success"] is True
-        # Updated to expect 26 indicators (expanded set including newer indicators like DonchianChannels, KeltnerChannels, ADLine, CMF, ADX, SuperTrend, FisherTransform, etc.)
-        assert len(response.json()["data"]) == 26
+        # Updated to expect 30 indicators (expanded set including newer indicators like DonchianChannels, KeltnerChannels, ADLine, CMF, ADX, SuperTrend, FisherTransform, BollingerBandWidth, VolumeRatio, SqueezeIntensity, DistanceFromMA)
+        assert len(response.json()["data"]) == 30
         assert response.json()["data"][0]["id"] == "RSIIndicator"
 
 
