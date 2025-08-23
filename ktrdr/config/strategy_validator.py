@@ -1,14 +1,14 @@
 """Strategy configuration validation and upgrade utilities."""
 
-import yaml
-import json
-from typing import Dict, Any, List, Tuple, Optional, Union
-from pathlib import Path
-from dataclasses import dataclass, field
 from copy import deepcopy
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
+from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
 from ktrdr.config.strategy_loader import strategy_loader
-from ktrdr.config.models import StrategyConfigurationV2, LegacyStrategyConfiguration
 
 
 @dataclass
@@ -16,10 +16,10 @@ class ValidationResult:
     """Result of strategy validation."""
 
     is_valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    missing_sections: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    missing_sections: list[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
 
 
 class StrategyValidator:
@@ -291,7 +291,7 @@ class StrategyValidator:
 
         return result
 
-    def _validate_model_section(self, model_config: Dict[str, Any]) -> ValidationResult:
+    def _validate_model_section(self, model_config: dict[str, Any]) -> ValidationResult:
         """Validate model section."""
         result = ValidationResult(is_valid=True)
 
@@ -315,7 +315,7 @@ class StrategyValidator:
         return result
 
     def _validate_training_section(
-        self, training_config: Dict[str, Any]
+        self, training_config: dict[str, Any]
     ) -> ValidationResult:
         """Validate training section."""
         result = ValidationResult(is_valid=True)
@@ -334,7 +334,7 @@ class StrategyValidator:
         return result
 
     def _validate_decisions_section(
-        self, decisions_config: Dict[str, Any]
+        self, decisions_config: dict[str, Any]
     ) -> ValidationResult:
         """Validate decisions section."""
         result = ValidationResult(is_valid=True)
@@ -352,7 +352,7 @@ class StrategyValidator:
 
         return result
 
-    def _check_legacy_format(self, config: Dict[str, Any], result: ValidationResult):
+    def _check_legacy_format(self, config: dict[str, Any], result: ValidationResult):
         """Check for legacy format indicators."""
         # Check for old fuzzy set format
         if "fuzzy_sets" in config:
@@ -376,7 +376,7 @@ class StrategyValidator:
                     "Minimal model configuration detected - consider upgrading"
                 )
 
-    def _generate_suggestions(self, config: Dict[str, Any], result: ValidationResult):
+    def _generate_suggestions(self, config: dict[str, Any], result: ValidationResult):
         """Generate upgrade suggestions."""
         missing_optional = []
         for section in self.OPTIONAL_SECTIONS:
@@ -398,7 +398,7 @@ class StrategyValidator:
 
     def upgrade_strategy(
         self, config_path: str, output_path: Optional[str] = None
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """Upgrade a strategy configuration to neuro-fuzzy format.
 
         Args:
@@ -455,7 +455,7 @@ class StrategyValidator:
         except Exception as e:
             return False, f"Failed to save upgraded configuration: {e}"
 
-    def _merge_defaults(self, config_section: Dict[str, Any], defaults: Dict[str, Any]):
+    def _merge_defaults(self, config_section: dict[str, Any], defaults: dict[str, Any]):
         """Recursively merge defaults into configuration section."""
         for key, value in defaults.items():
             if key not in config_section:
@@ -463,7 +463,7 @@ class StrategyValidator:
             elif isinstance(value, dict) and isinstance(config_section[key], dict):
                 self._merge_defaults(config_section[key], value)
 
-    def _convert_fuzzy_sets(self, config: Dict[str, Any]):
+    def _convert_fuzzy_sets(self, config: dict[str, Any]):
         """Convert old fuzzy set format to simplified format."""
         if "fuzzy_sets" not in config:
             return

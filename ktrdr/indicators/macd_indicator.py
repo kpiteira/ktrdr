@@ -6,12 +6,10 @@ Divergence (MACD) indicator.
 """
 
 import pandas as pd
-import numpy as np
-from typing import Dict, Tuple
 
 from ktrdr import get_logger
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.errors import ConfigurationError, DataError
 from ktrdr.indicators.schemas import MACD_SCHEMA
 
 # Create module-level logger

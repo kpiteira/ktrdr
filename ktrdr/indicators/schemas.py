@@ -6,15 +6,14 @@ type definitions, constraints, and validation rules.
 """
 
 from typing import Dict
+
 from ktrdr.indicators.parameter_schema import (
-    ParameterSchema,
-    ParameterDefinition,
     ParameterConstraint,
+    ParameterDefinition,
+    ParameterSchema,
     ParameterType,
     less_than,
-    greater_than,
 )
-
 
 # RSI Parameter Schema
 RSI_SCHEMA = ParameterSchema(
@@ -652,7 +651,7 @@ def get_schema(indicator_name: str) -> ParameterSchema:
     return PARAMETER_SCHEMAS[indicator_name]
 
 
-def list_schemas() -> Dict[str, str]:
+def list_schemas() -> dict[str, str]:
     """
     List all available parameter schemas.
 

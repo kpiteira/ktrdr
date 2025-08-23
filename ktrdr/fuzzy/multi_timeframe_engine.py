@@ -5,23 +5,21 @@ This module extends the existing FuzzyEngine to handle multi-timeframe indicator
 data with timeframe-specific fuzzy sets and configurations.
 """
 
-from typing import Dict, List, Optional, Union, Any, Tuple
-import pandas as pd
-import numpy as np
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Union
+
+import pandas as pd
 
 from ktrdr import get_logger
-from ktrdr.errors import ConfigurationError, ProcessingError, DataValidationError
-from ktrdr.fuzzy.engine import FuzzyEngine
+from ktrdr.errors import ConfigurationError, DataValidationError, ProcessingError
 from ktrdr.fuzzy.config import (
     FuzzyConfig,
     FuzzySetConfig,
-    MembershipFunctionConfig,
-    TriangularMFConfig,
-    TrapezoidalMFConfig,
     GaussianMFConfig,
+    TrapezoidalMFConfig,
+    TriangularMFConfig,
 )
-from ktrdr.fuzzy.membership import MembershipFunction, TriangularMF
+from ktrdr.fuzzy.engine import FuzzyEngine
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -32,8 +30,8 @@ class TimeframeConfig:
     """Configuration for a specific timeframe's fuzzy logic processing."""
 
     timeframe: str
-    indicators: List[str]
-    fuzzy_sets: Dict[str, FuzzySetConfig]
+    indicators: list[str]
+    fuzzy_sets: dict[str, FuzzySetConfig]
     weight: float = 1.0
     enabled: bool = True
 
@@ -42,10 +40,10 @@ class TimeframeConfig:
 class MultiTimeframeFuzzyResult:
     """Result of multi-timeframe fuzzy processing."""
 
-    fuzzy_values: Dict[str, float]
-    timeframe_results: Dict[str, Dict[str, float]]
-    metadata: Dict[str, Any]
-    warnings: List[str]
+    fuzzy_values: dict[str, float]
+    timeframe_results: dict[str, dict[str, float]]
+    metadata: dict[str, Any]
+    warnings: list[str]
     processing_time: float
 
 
@@ -79,7 +77,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         ```
     """
 
-    def __init__(self, config: Union[FuzzyConfig, Dict[str, Any]]):
+    def __init__(self, config: Union[FuzzyConfig, dict[str, Any]]):
         """
         Initialize the MultiTimeframeFuzzyEngine.
 
@@ -157,7 +155,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         )
 
     def _validate_timeframe_config(
-        self, timeframe: str, config: Dict[str, Any]
+        self, timeframe: str, config: dict[str, Any]
     ) -> None:
         """
         Validate configuration for a specific timeframe.
@@ -200,7 +198,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                 details={"timeframe": timeframe, "fuzzy_sets": fuzzy_sets},
             )
 
-    def _build_timeframe_configs(self) -> Dict[str, TimeframeConfig]:
+    def _build_timeframe_configs(self) -> dict[str, TimeframeConfig]:
         """
         Build TimeframeConfig objects from the configuration.
 
@@ -280,8 +278,8 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
     def fuzzify_multi_timeframe(
         self,
-        indicator_data: Dict[str, Dict[str, float]],
-        timeframe_filter: Optional[List[str]] = None,
+        indicator_data: dict[str, dict[str, float]],
+        timeframe_filter: Optional[list[str]] = None,
     ) -> MultiTimeframeFuzzyResult:
         """
         Fuzzify indicators across multiple timeframes.
@@ -362,7 +360,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         return result
 
     def _validate_indicator_data(
-        self, indicator_data: Dict[str, Dict[str, float]]
+        self, indicator_data: dict[str, dict[str, float]]
     ) -> None:
         """
         Validate the input indicator data structure.
@@ -403,9 +401,9 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
     def _get_timeframes_to_process(
         self,
-        indicator_data: Dict[str, Dict[str, float]],
-        timeframe_filter: Optional[List[str]],
-    ) -> List[str]:
+        indicator_data: dict[str, dict[str, float]],
+        timeframe_filter: Optional[list[str]],
+    ) -> list[str]:
         """
         Determine which timeframes to process based on available data and config.
 
@@ -441,8 +439,8 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         return sorted(list(candidate_timeframes))
 
     def _process_timeframe(
-        self, timeframe: str, indicators: Dict[str, float]
-    ) -> Dict[str, float]:
+        self, timeframe: str, indicators: dict[str, float]
+    ) -> dict[str, float]:
         """
         Process fuzzy logic for a single timeframe.
 
@@ -520,7 +518,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
         return result
 
-    def get_timeframe_configurations(self) -> Dict[str, TimeframeConfig]:
+    def get_timeframe_configurations(self) -> dict[str, TimeframeConfig]:
         """
         Get all timeframe configurations.
 
@@ -529,7 +527,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         """
         return self._timeframe_configs.copy()
 
-    def get_supported_timeframes(self) -> List[str]:
+    def get_supported_timeframes(self) -> list[str]:
         """
         Get list of supported timeframes.
 
@@ -552,7 +550,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
 
 def create_multi_timeframe_fuzzy_engine(
-    config: Dict[str, Any],
+    config: dict[str, Any],
 ) -> MultiTimeframeFuzzyEngine:
     """
     Factory function to create a MultiTimeframeFuzzyEngine.

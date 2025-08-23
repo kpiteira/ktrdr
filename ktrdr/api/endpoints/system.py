@@ -7,15 +7,16 @@ Provides endpoints to monitor:
 - Overall system health
 """
 
-from typing import Dict, Any
+from typing import Any, Dict
+
 from fastapi import APIRouter, HTTPException
 
-from ktrdr.logging import get_logger
+from ktrdr import metadata
+from ktrdr.api.models.base import ApiResponse
 
 # Old architecture removed - using new ktrdr.ib module
 from ktrdr.data.ib_gap_filler import get_gap_filler
-from ktrdr.api.models.base import ApiResponse
-from ktrdr import metadata
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -24,7 +25,7 @@ router = APIRouter()
 
 
 @router.get("/ib-status")
-async def get_ib_status() -> Dict[str, Any]:
+async def get_ib_status() -> dict[str, Any]:
     """
     Get Interactive Brokers connection status.
 
@@ -63,7 +64,7 @@ async def get_ib_status() -> Dict[str, Any]:
 
 
 @router.get("/gap-filler-status")
-async def get_gap_filler_status() -> Dict[str, Any]:
+async def get_gap_filler_status() -> dict[str, Any]:
     """
     Get gap filling service status.
 
@@ -106,7 +107,7 @@ async def get_gap_filler_status() -> Dict[str, Any]:
 
 
 @router.get("/system-status")
-async def get_system_status() -> Dict[str, Any]:
+async def get_system_status() -> dict[str, Any]:
     """
     Get overall system status.
 
@@ -270,7 +271,7 @@ async def get_system_config() -> ApiResponse:
 
 
 @router.post("/gap-filler/force-scan")
-async def force_gap_scan() -> Dict[str, Any]:
+async def force_gap_scan() -> dict[str, Any]:
     """
     Force an immediate gap scan.
 

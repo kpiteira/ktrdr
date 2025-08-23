@@ -1,13 +1,14 @@
 """Core metrics collection utilities for training analytics."""
 
+from typing import Any, Dict, Optional
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
 from sklearn.metrics import precision_recall_fscore_support
-import logging
 
 from ktrdr import get_logger
+
 from .detailed_metrics import DetailedTrainingMetrics
 
 logger = get_logger(__name__)
@@ -18,10 +19,10 @@ class MetricsCollector:
 
     def __init__(self):
         """Initialize the metrics collector."""
-        self.previous_params: Optional[Dict[str, torch.Tensor]] = None
+        self.previous_params: Optional[dict[str, torch.Tensor]] = None
         self.class_names = ["BUY", "HOLD", "SELL"]
 
-    def collect_gradient_metrics(self, model: nn.Module) -> Dict[str, Any]:
+    def collect_gradient_metrics(self, model: nn.Module) -> dict[str, Any]:
         """Calculate gradient norms and related metrics.
 
         Args:
@@ -61,7 +62,7 @@ class MetricsCollector:
                 "layer_norms": {},
             }
 
-    def collect_parameter_metrics(self, model: nn.Module) -> Dict[str, Any]:
+    def collect_parameter_metrics(self, model: nn.Module) -> dict[str, Any]:
         """Calculate parameter change statistics between epochs.
 
         Args:
@@ -123,7 +124,7 @@ class MetricsCollector:
 
     def collect_class_metrics(
         self, y_true: torch.Tensor, y_pred: torch.Tensor
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Calculate class-wise precision, recall, and F1 scores.
 
         Args:
@@ -177,7 +178,7 @@ class MetricsCollector:
                 "class_supports": {name: 0 for name in self.class_names},
             }
 
-    def collect_prediction_metrics(self, model_outputs: torch.Tensor) -> Dict[str, Any]:
+    def collect_prediction_metrics(self, model_outputs: torch.Tensor) -> dict[str, Any]:
         """Calculate prediction confidence and entropy metrics.
 
         Args:
@@ -236,7 +237,7 @@ class MetricsCollector:
         self,
         current_metrics: DetailedTrainingMetrics,
         previous_metrics: Optional[DetailedTrainingMetrics],
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Calculate high-level learning quality indicators.
 
         Args:

@@ -1,14 +1,14 @@
 """GPU memory management for efficient multi-symbol, multi-timeframe training."""
 
-import torch
-import torch.nn as nn
 import gc
 import threading
 import time
-from typing import Dict, Any, Optional, List, Tuple, Union, Callable
-from dataclasses import dataclass, field
 from contextlib import contextmanager
-import psutil
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import torch
+import torch.nn as nn
 
 from ktrdr import get_logger
 
@@ -59,7 +59,7 @@ class GPUMemorySnapshot:
     temperature_celsius: Optional[float] = None
     power_usage_watts: Optional[float] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "timestamp": self.timestamp,
@@ -80,7 +80,7 @@ class GPUMemoryManager:
     def __init__(
         self,
         config: Optional[GPUMemoryConfig] = None,
-        device_ids: Optional[List[int]] = None,
+        device_ids: Optional[list[int]] = None,
     ):
         """Initialize GPU memory manager.
 
@@ -129,8 +129,8 @@ class GPUMemoryManager:
         )
 
         # Memory tracking
-        self.snapshots: List[GPUMemorySnapshot] = []
-        self.peak_memory_usage: Dict[int, float] = {}
+        self.snapshots: list[GPUMemorySnapshot] = []
+        self.peak_memory_usage: dict[int, float] = {}
 
         # Monitoring
         self.monitoring_thread: Optional[threading.Thread] = None
@@ -432,7 +432,7 @@ class GPUMemoryManager:
     def optimize_batch_size(
         self,
         model: nn.Module,
-        sample_batch: Tuple[torch.Tensor, ...],
+        sample_batch: tuple[torch.Tensor, ...],
         criterion: nn.Module,
         device_id: int = 0,
         max_batch_size: int = 512,
@@ -519,7 +519,7 @@ class GPUMemoryManager:
 
         return final_batch_size
 
-    def get_memory_summary(self) -> Dict[str, Any]:
+    def get_memory_summary(self) -> dict[str, Any]:
         """Get comprehensive GPU memory summary."""
         if not self.enabled:
             return {"gpu_available": False}
@@ -551,7 +551,7 @@ class GPUMemoryManager:
 
         return summary
 
-    def get_optimization_recommendations(self) -> List[str]:
+    def get_optimization_recommendations(self) -> list[str]:
         """Get GPU memory optimization recommendations."""
         if not self.enabled:
             return ["GPU not available - consider using CPU optimization strategies"]

@@ -1,18 +1,15 @@
 """Data loading and batch processing optimizations for KTRDR training."""
 
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, Sampler
-import numpy as np
-import pandas as pd
-from typing import Dict, Any, Optional, List, Tuple, Iterator, Union
-from dataclasses import dataclass
-import time
-import threading
 import queue
-from pathlib import Path
-import pickle
-import mmap
+import threading
+import time
+from collections.abc import Iterator
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 from ktrdr import get_logger
 
@@ -59,9 +56,9 @@ class EfficientMultiSymbolDataset(Dataset):
         feature_tensor: torch.Tensor,
         label_tensor: torch.Tensor,
         symbol_indices: torch.Tensor,
-        feature_names: List[str],
-        symbols: List[str],
-        timeframes: List[str],
+        feature_names: list[str],
+        symbols: list[str],
+        timeframes: list[str],
         config: Optional[DataConfig] = None,
     ):
         """Initialize efficient multi-symbol dataset.
@@ -137,7 +134,7 @@ class EfficientMultiSymbolDataset(Dataset):
         """Get dataset length."""
         return self.num_samples
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Get item by index.
 
         Args:
@@ -159,7 +156,7 @@ class EfficientMultiSymbolDataset(Dataset):
 
     def get_symbol_batch(
         self, symbol: str, batch_size: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Get a batch from a specific symbol.
 
         Args:
@@ -193,7 +190,7 @@ class EfficientMultiSymbolDataset(Dataset):
 
     def get_balanced_batch(
         self, batch_size: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Get a class-balanced batch.
 
         Args:
@@ -445,9 +442,9 @@ class DataLoadingOptimizer:
         feature_tensor: torch.Tensor,
         label_tensor: torch.Tensor,
         symbol_indices: torch.Tensor,
-        feature_names: List[str],
-        symbols: List[str],
-        timeframes: List[str],
+        feature_names: list[str],
+        symbols: list[str],
+        timeframes: list[str],
     ) -> EfficientMultiSymbolDataset:
         """Create optimized dataset.
 
@@ -520,7 +517,7 @@ class DataLoadingOptimizer:
         self,
         dataloader: Union[DataLoader, PrefetchingDataLoader],
         num_batches: int = 100,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Benchmark dataloader performance.
 
         Args:
@@ -579,7 +576,7 @@ class DataLoadingOptimizer:
 
     def get_data_statistics(
         self, dataset: EfficientMultiSymbolDataset
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get comprehensive dataset statistics.
 
         Args:

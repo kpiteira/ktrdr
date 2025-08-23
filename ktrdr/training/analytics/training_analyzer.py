@@ -1,16 +1,18 @@
 """Main training analytics system for KTRDR neural networks."""
 
 import json
-import yaml
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 import torch
 import torch.nn as nn
+import yaml
 
 from ktrdr import get_logger
+
 from .detailed_metrics import DetailedTrainingMetrics
 from .metrics_collector import MetricsCollector
 
@@ -20,7 +22,7 @@ logger = get_logger(__name__)
 class TrainingAnalyzer:
     """Main analytics collection and export system for training runs."""
 
-    def __init__(self, run_id: str, output_dir: Path, config: Dict[str, Any]):
+    def __init__(self, run_id: str, output_dir: Path, config: dict[str, Any]):
         """Initialize the training analyzer.
 
         Args:
@@ -36,8 +38,8 @@ class TrainingAnalyzer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize metrics storage
-        self.metrics_history: List[DetailedTrainingMetrics] = []
-        self.alerts: List[Dict[str, Any]] = []
+        self.metrics_history: list[DetailedTrainingMetrics] = []
+        self.alerts: list[dict[str, Any]] = []
 
         # Initialize metrics collector
         self.metrics_collector = MetricsCollector()
@@ -60,8 +62,8 @@ class TrainingAnalyzer:
         self,
         epoch: int,
         model: nn.Module,
-        train_metrics: Dict[str, float],
-        val_metrics: Dict[str, float],
+        train_metrics: dict[str, float],
+        val_metrics: dict[str, float],
         optimizer: torch.optim.Optimizer,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
@@ -190,7 +192,7 @@ class TrainingAnalyzer:
             self.metrics_history.append(basic_metrics)
             return basic_metrics
 
-    def check_alerts(self, metrics: DetailedTrainingMetrics) -> List[Dict[str, Any]]:
+    def check_alerts(self, metrics: DetailedTrainingMetrics) -> list[dict[str, Any]]:
         """Check for training issues and generate alerts.
 
         Args:
@@ -482,7 +484,7 @@ class TrainingAnalyzer:
             logger.error(f"Failed to export config: {e}")
             return None
 
-    def export_all(self) -> Dict[str, Optional[Path]]:
+    def export_all(self) -> dict[str, Optional[Path]]:
         """Export all analytics files.
 
         Returns:

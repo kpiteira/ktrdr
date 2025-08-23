@@ -5,16 +5,13 @@ This module contains the TemplateManager class for handling HTML and JavaScript
 templates used in the visualization module.
 """
 
-import os
-import re
 import json
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
-
-from ktrdr.errors import ConfigurationError
 
 # Setup logging
 import logging
+from typing import Dict, List
+
+from ktrdr.errors import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -334,8 +331,8 @@ class TemplateManager:
     @staticmethod
     def render_chart_html(
         title: str = "KTRDR Chart",
-        chart_configs: List[Dict] = None,
-        chart_data: Dict = None,
+        chart_configs: list[dict] = None,
+        chart_data: dict = None,
         theme: str = "dark",
         has_range_slider: bool = False,
     ) -> str:
@@ -614,8 +611,8 @@ class TemplateManager:
     def _generate_chart_script(
         chart_id: str,
         chart_type: str,
-        chart_config: Dict,
-        data: List[Dict],
+        chart_config: dict,
+        data: list[dict],
         is_range_slider: bool = False,
     ) -> str:
         """

@@ -8,13 +8,14 @@ extreme price movements and generating clearer buy/sell signals.
 Author: KTRDR
 """
 
-import pandas as pd
+from typing import Any, Dict
+
 import numpy as np
-from typing import Dict, Any, List, Optional, Union
+import pandas as pd
 
 from ktrdr import get_logger
-from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 
 logger = get_logger(__name__)
 
@@ -66,7 +67,7 @@ class FisherTransformIndicator(BaseIndicator):
             smoothing=smoothing,
         )
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate indicator parameters."""
         period = params.get("period", 10)
         smoothing = params.get("smoothing", 3)
@@ -307,7 +308,7 @@ class FisherTransformIndicator(BaseIndicator):
 
         return result
 
-    def get_analysis(self, data: pd.DataFrame) -> Dict[str, Any]:
+    def get_analysis(self, data: pd.DataFrame) -> dict[str, Any]:
         """
         Get comprehensive analysis of Fisher Transform.
 

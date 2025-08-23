@@ -5,14 +5,15 @@ This module implements the Parabolic SAR indicator, which is a trend-following
 indicator that provides potential stop-and-reverse points for trending markets.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
+import numpy as np
+import pandas as pd
+
 from ktrdr import get_logger
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import PARABOLIC_SAR_SCHEMA
-from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
 

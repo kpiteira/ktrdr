@@ -1,19 +1,19 @@
 """Decision orchestrator that coordinates the complete decision pipeline."""
 
-import yaml
-import pandas as pd
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from .base import Signal, Position, TradingDecision
-from .engine import DecisionEngine
-from ..data.data_manager import DataManager
-from ..indicators.indicator_engine import IndicatorEngine
-from ..fuzzy.engine import FuzzyEngine
-from ..fuzzy.config import FuzzyConfig, FuzzySetConfig, MembershipFunctionConfig
-from ..backtesting.model_loader import ModelLoader
+import pandas as pd
+import yaml
+
 from .. import get_logger
+from ..backtesting.model_loader import ModelLoader
+from ..data.data_manager import DataManager
+from ..fuzzy.engine import FuzzyEngine
+from ..indicators.indicator_engine import IndicatorEngine
+from .base import Position, Signal, TradingDecision
+from .engine import DecisionEngine
 
 logger = get_logger(__name__)
 
@@ -27,8 +27,8 @@ class DecisionContext:
     recent_bars: pd.DataFrame  # Lookback window
 
     # Calculated features
-    indicators: Dict[str, float]
-    fuzzy_memberships: Dict[str, float]
+    indicators: dict[str, float]
+    fuzzy_memberships: dict[str, float]
 
     # Position state
     current_position: Position
@@ -41,7 +41,7 @@ class DecisionContext:
     available_capital: float
 
     # Historical context
-    recent_decisions: List[TradingDecision]
+    recent_decisions: list[TradingDecision]
     last_signal_time: Optional[pd.Timestamp]
 
 
@@ -155,8 +155,8 @@ class DecisionOrchestrator:
         )
 
         # State management
-        self.position_states: Dict[str, PositionState] = {}
-        self.decision_history: List[TradingDecision] = []
+        self.position_states: dict[str, PositionState] = {}
+        self.decision_history: list[TradingDecision] = []
         self.max_history = 100
 
         # Feature caching for backtesting performance
@@ -185,7 +185,7 @@ class DecisionOrchestrator:
         timeframe: str,
         current_bar: pd.Series,
         historical_data: pd.DataFrame,
-        portfolio_state: Dict[str, Any],
+        portfolio_state: dict[str, Any],
     ) -> TradingDecision:
         """Main entry point for generating trading decisions.
 
@@ -306,7 +306,7 @@ class DecisionOrchestrator:
 
     def _compute_features_realtime(
         self, historical_data: pd.DataFrame, current_bar: pd.Series
-    ) -> Tuple[Dict[str, float], Dict[str, float]]:
+    ) -> tuple[dict[str, float], dict[str, float]]:
         """Compute features in real-time (original expensive method).
 
         Args:
@@ -428,7 +428,7 @@ class DecisionOrchestrator:
 
         return FuzzyEngine(fuzzy_config)
 
-    def _load_strategy_config(self, config_path: str) -> Dict[str, Any]:
+    def _load_strategy_config(self, config_path: str) -> dict[str, Any]:
         """Load strategy configuration from YAML file.
 
         Args:
@@ -507,9 +507,9 @@ class DecisionOrchestrator:
         symbol: str,
         current_bar: pd.Series,
         historical_data: pd.DataFrame,
-        indicators: Dict[str, float],
-        fuzzy_memberships: Dict[str, float],
-        portfolio_state: Dict[str, Any],
+        indicators: dict[str, float],
+        fuzzy_memberships: dict[str, float],
+        portfolio_state: dict[str, Any],
     ) -> DecisionContext:
         """Prepare complete context for decision making.
 
@@ -666,7 +666,7 @@ class DecisionOrchestrator:
 
     def get_decision_history(
         self, symbol: Optional[str] = None, limit: int = 20
-    ) -> List[TradingDecision]:
+    ) -> list[TradingDecision]:
         """Get recent decision history.
 
         Args:

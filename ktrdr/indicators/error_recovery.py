@@ -4,21 +4,21 @@ This module provides robust error handling and recovery strategies for
 multi-timeframe indicator pipelines.
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Tuple, Any, Callable, Union
+import time
+import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-import traceback
-import time
-from contextlib import contextmanager
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
 
 from ktrdr import get_logger
+from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.indicators.multi_timeframe_indicator_engine import (
     MultiTimeframeIndicatorEngine,
 )
-from ktrdr.indicators.indicator_engine import IndicatorEngine
-from ktrdr.errors import ProcessingError, ConfigurationError, DataError
 
 logger = get_logger(__name__)
 
@@ -43,7 +43,7 @@ class ErrorContext:
     error_type: str
     error_message: str
     timestamp: float
-    data_info: Dict[str, Any]
+    data_info: dict[str, Any]
     recovery_attempted: bool = False
     recovery_successful: bool = False
 
@@ -79,12 +79,12 @@ class ResilientProcessor:
         self.recovery_strategy = recovery_strategy
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self.error_history: List[ErrorContext] = []
+        self.error_history: list[ErrorContext] = []
         self.logger = get_logger(__name__)
 
     def process_with_recovery(
-        self, engine: MultiTimeframeIndicatorEngine, data: Dict[str, pd.DataFrame]
-    ) -> Tuple[Dict[str, pd.DataFrame], List[ErrorContext]]:
+        self, engine: MultiTimeframeIndicatorEngine, data: dict[str, pd.DataFrame]
+    ) -> tuple[dict[str, pd.DataFrame], list[ErrorContext]]:
         """
         Process data with error recovery.
 
@@ -378,7 +378,7 @@ class DataQualityChecker:
     def __init__(self):
         self.logger = get_logger(__name__)
 
-    def check_data_quality(self, data: Dict[str, pd.DataFrame]) -> Dict[str, List[str]]:
+    def check_data_quality(self, data: dict[str, pd.DataFrame]) -> dict[str, list[str]]:
         """
         Check data quality across timeframes.
 
@@ -467,11 +467,11 @@ class DataQualityChecker:
 
     def fix_data_quality_issues(
         self,
-        data: Dict[str, pd.DataFrame],
+        data: dict[str, pd.DataFrame],
         fix_nan: bool = True,
         fix_inf: bool = True,
         fix_ohlc: bool = True,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """
         Attempt to fix common data quality issues.
 
@@ -571,7 +571,7 @@ def error_recovery_context(
 def create_resilient_engine(
     base_engine: MultiTimeframeIndicatorEngine,
     recovery_strategy: RecoveryStrategy = RecoveryStrategy.SKIP_INDICATOR,
-) -> Tuple[ResilientProcessor, MultiTimeframeIndicatorEngine]:
+) -> tuple[ResilientProcessor, MultiTimeframeIndicatorEngine]:
     """
     Create a resilient processing setup.
 
@@ -588,11 +588,11 @@ def create_resilient_engine(
 
 def process_with_comprehensive_error_handling(
     engine: MultiTimeframeIndicatorEngine,
-    data: Dict[str, pd.DataFrame],
+    data: dict[str, pd.DataFrame],
     recovery_strategy: RecoveryStrategy = RecoveryStrategy.SKIP_INDICATOR,
     check_data_quality: bool = True,
     fix_data_issues: bool = True,
-) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Any]]:
+) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
     """
     Process data with comprehensive error handling and recovery.
 

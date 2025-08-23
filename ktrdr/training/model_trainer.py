@@ -1,16 +1,16 @@
 """Model training with PyTorch for neuro-fuzzy strategies."""
 
+import json
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-import numpy as np
-from typing import Dict, Any, Tuple, Optional, List
-from dataclasses import dataclass
-import time
-from pathlib import Path
-import json
-from datetime import datetime
 
 from .analytics import TrainingAnalyzer
 from .multi_symbol_data_loader import MultiSymbolDataLoader
@@ -90,7 +90,7 @@ class EarlyStopping:
 class ModelTrainer:
     """Handle PyTorch training loop with advanced features."""
 
-    def __init__(self, config: Dict[str, Any], progress_callback=None):
+    def __init__(self, config: dict[str, Any], progress_callback=None):
         """Initialize trainer.
 
         Args:
@@ -108,7 +108,7 @@ class ModelTrainer:
         else:
             self.device = torch.device("cpu")
             print("⚠️ Using CPU - GPU acceleration not available")
-        self.history: List[TrainingMetrics] = []
+        self.history: list[TrainingMetrics] = []
         self.best_model_state = None
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
@@ -153,7 +153,7 @@ class ModelTrainer:
         y_train: torch.Tensor,
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train the neural network model.
 
         Args:
@@ -502,11 +502,11 @@ class ModelTrainer:
         X_train: torch.Tensor,
         y_train: torch.Tensor,
         symbol_indices_train: torch.Tensor,
-        symbols: List[str],
+        symbols: list[str],
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
         symbol_indices_val: Optional[torch.Tensor] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train the multi-symbol neural network model with balanced sampling.
 
         Args:
@@ -868,7 +868,7 @@ class ModelTrainer:
         msg += f" (LR: {metrics.learning_rate:.6f}, Time: {metrics.duration:.2f}s)"
         print(msg)
 
-    def _create_training_summary(self) -> Dict[str, Any]:
+    def _create_training_summary(self) -> dict[str, Any]:
         """Create summary of training results.
 
         Returns:

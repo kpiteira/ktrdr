@@ -6,7 +6,8 @@ functions, rules, and fuzzy set configurations.
 """
 
 from enum import Enum
-from typing import Dict, List, Any, Optional, Union, Literal
+from typing import Dict, List, Optional, Union
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ktrdr.api.models.base import ApiResponse
@@ -36,7 +37,7 @@ class MembershipFunction(BaseModel):
 
     type: MembershipFunctionType = Field(..., description="Type of membership function")
     name: str = Field(..., description="Name of the membership function")
-    parameters: Dict[str, Union[float, List[float]]] = Field(
+    parameters: dict[str, Union[float, list[float]]] = Field(
         ..., description="Parameters for the function"
     )
 
@@ -147,14 +148,14 @@ class FuzzyVariable(BaseModel):
 
     name: str = Field(..., description="Name of the fuzzy variable")
     description: Optional[str] = Field(None, description="Description of the variable")
-    range: List[float] = Field(..., description="Range of possible values [min, max]")
-    membership_functions: List[MembershipFunction] = Field(
+    range: list[float] = Field(..., description="Range of possible values [min, max]")
+    membership_functions: list[MembershipFunction] = Field(
         ..., description="Membership functions for this variable"
     )
 
     @field_validator("range")
     @classmethod
-    def validate_range(cls, v: List[float]) -> List[float]:
+    def validate_range(cls, v: list[float]) -> list[float]:
         """Validate the range definition."""
         if len(v) != 2:
             raise ValueError("Range must be a list with 2 values [min, max]")
@@ -215,13 +216,13 @@ class FuzzySystem(BaseModel):
 
     name: str = Field(..., description="Name of the fuzzy system")
     description: Optional[str] = Field(None, description="Description of the system")
-    input_variables: List[FuzzyVariable] = Field(
+    input_variables: list[FuzzyVariable] = Field(
         ..., description="Input fuzzy variables"
     )
-    output_variables: List[FuzzyVariable] = Field(
+    output_variables: list[FuzzyVariable] = Field(
         ..., description="Output fuzzy variables"
     )
-    rules: List[FuzzyRule] = Field(..., description="Fuzzy rules")
+    rules: list[FuzzyRule] = Field(..., description="Fuzzy rules")
     defuzzification_method: str = Field(
         "centroid", description="Method used for defuzzification"
     )
@@ -309,7 +310,7 @@ class FuzzyOutput(BaseModel):
 
     variable_name: str = Field(..., description="Name of the output variable")
     value: float = Field(..., description="Crisp output value")
-    membership_degrees: Optional[Dict[str, float]] = Field(
+    membership_degrees: Optional[dict[str, float]] = Field(
         None, description="Membership degrees for each fuzzy set"
     )
 
@@ -325,13 +326,13 @@ class FuzzyEvaluateRequest(BaseModel):
     """
 
     config_id: str = Field(..., description="ID of the fuzzy configuration to use")
-    inputs: List[FuzzyInput] = Field(..., description="Input values for evaluation")
+    inputs: list[FuzzyInput] = Field(..., description="Input values for evaluation")
     return_membership_degrees: bool = Field(
         False, description="Whether to return membership degrees"
     )
 
 
-class FuzzyEvaluateResponse(ApiResponse[List[FuzzyOutput]]):
+class FuzzyEvaluateResponse(ApiResponse[list[FuzzyOutput]]):
     """Response model for fuzzy system evaluation."""
 
     pass
@@ -343,7 +344,7 @@ class FuzzyConfigResponse(ApiResponse[FuzzyConfig]):
     pass
 
 
-class FuzzyConfigsResponse(ApiResponse[List[FuzzyConfig]]):
+class FuzzyConfigsResponse(ApiResponse[list[FuzzyConfig]]):
     """Response model for listing available fuzzy configurations."""
 
     pass
@@ -385,7 +386,7 @@ class FuzzySetMembership(BaseModel):
     """
 
     set: str = Field(..., description="Name of the fuzzy set")
-    membership: List[FuzzyMembershipPoint] = Field(
+    membership: list[FuzzyMembershipPoint] = Field(
         ..., description="Time series of membership values"
     )
 
@@ -415,10 +416,10 @@ class FuzzyOverlayResponse(BaseModel):
 
     symbol: str = Field(..., description="Trading symbol")
     timeframe: str = Field(..., description="Data timeframe")
-    data: Dict[str, List[FuzzySetMembership]] = Field(
+    data: dict[str, list[FuzzySetMembership]] = Field(
         ..., description="Fuzzy overlay data by indicator"
     )
-    warnings: Optional[List[str]] = Field(
+    warnings: Optional[list[str]] = Field(
         None, description="Warning messages for invalid indicators"
     )
 

@@ -6,19 +6,19 @@ tools for the multi-timeframe fuzzy processing pipeline, including
 timing analysis, memory usage monitoring, and optimization recommendations.
 """
 
-import time
-import psutil
-import pandas as pd
-import numpy as np
-from typing import Dict, Any, List, Optional, Callable
-from dataclasses import dataclass, field
 import gc
-from pathlib import Path
 import json
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+import pandas as pd
+import psutil
 
 from ktrdr import get_logger
 from ktrdr.services.fuzzy_pipeline_service import FuzzyPipelineService
-from ktrdr.fuzzy.indicator_integration import IntegratedFuzzyResult
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -88,9 +88,9 @@ class BenchmarkResult:
 
     test_name: str
     metrics: PerformanceMetrics
-    configuration: Dict[str, Any]
-    recommendations: List[str] = field(default_factory=list)
-    raw_data: Dict[str, Any] = field(default_factory=dict)
+    configuration: dict[str, Any]
+    recommendations: list[str] = field(default_factory=list)
+    raw_data: dict[str, Any] = field(default_factory=dict)
 
 
 class FuzzyPerformanceAnalyzer:
@@ -109,19 +109,19 @@ class FuzzyPerformanceAnalyzer:
             enable_detailed_profiling: Enable detailed profiling (may impact performance)
         """
         self.enable_detailed_profiling = enable_detailed_profiling
-        self.benchmark_results: List[BenchmarkResult] = []
+        self.benchmark_results: list[BenchmarkResult] = []
 
         logger.info("Initialized FuzzyPerformanceAnalyzer")
 
     def benchmark_pipeline_performance(
         self,
         service: FuzzyPipelineService,
-        test_configurations: List[Dict[str, Any]],
+        test_configurations: list[dict[str, Any]],
         symbol: str = "AAPL",
         data_period_days: int = 30,
         warmup_runs: int = 1,
         benchmark_runs: int = 3,
-    ) -> List[BenchmarkResult]:
+    ) -> list[BenchmarkResult]:
         """
         Benchmark pipeline performance across different configurations.
 
@@ -215,9 +215,9 @@ class FuzzyPerformanceAnalyzer:
         self,
         service: FuzzyPipelineService,
         symbol: str,
-        indicator_config: Dict[str, Any],
-        fuzzy_config: Dict[str, Any],
-        timeframes: Optional[List[str]],
+        indicator_config: dict[str, Any],
+        fuzzy_config: dict[str, Any],
+        timeframes: Optional[list[str]],
         data_period_days: int,
     ) -> PerformanceMetrics:
         """Measure performance metrics for a single run."""
@@ -272,7 +272,7 @@ class FuzzyPerformanceAnalyzer:
         )
 
     def _average_metrics(
-        self, metrics_list: List[PerformanceMetrics]
+        self, metrics_list: list[PerformanceMetrics]
     ) -> PerformanceMetrics:
         """Average multiple performance metrics."""
         if not metrics_list:
@@ -295,8 +295,8 @@ class FuzzyPerformanceAnalyzer:
         )
 
     def _generate_recommendations(
-        self, metrics: PerformanceMetrics, config: Dict[str, Any]
-    ) -> List[str]:
+        self, metrics: PerformanceMetrics, config: dict[str, Any]
+    ) -> list[str]:
         """Generate optimization recommendations based on metrics."""
         recommendations = []
 
@@ -364,11 +364,11 @@ class FuzzyPerformanceAnalyzer:
     def analyze_scalability(
         self,
         service: FuzzyPipelineService,
-        indicator_config: Dict[str, Any],
-        fuzzy_config: Dict[str, Any],
-        data_sizes: List[int] = [10, 30, 90, 180, 365],
+        indicator_config: dict[str, Any],
+        fuzzy_config: dict[str, Any],
+        data_sizes: list[int] = [10, 30, 90, 180, 365],
         symbol: str = "AAPL",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze how performance scales with data size.
 
@@ -457,7 +457,7 @@ class FuzzyPerformanceAnalyzer:
 
     def _generate_scalability_recommendations(
         self, time_growth_rate: float, memory_growth_rate: float
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate recommendations based on scalability analysis."""
         recommendations = []
 
@@ -488,7 +488,7 @@ class FuzzyPerformanceAnalyzer:
 
     def generate_performance_report(
         self, output_file: Optional[Path] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate comprehensive performance report.
 
@@ -582,7 +582,7 @@ class FuzzyPerformanceAnalyzer:
 
         return report
 
-    def _summarize_config(self, config: Dict[str, Any]) -> str:
+    def _summarize_config(self, config: dict[str, Any]) -> str:
         """Create a brief summary of a configuration."""
         summary_parts = []
 

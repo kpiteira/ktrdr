@@ -6,19 +6,19 @@ and utilities for generating user-friendly error messages.
 """
 
 import traceback
-from typing import Dict, Any, Optional, Type, List, Callable, Union, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 # Import the new logging system
-from ktrdr import get_logger, log_error as log_exception
-
+from ktrdr import get_logger
+from ktrdr import log_error as log_exception
 from ktrdr.errors.exceptions import (
-    KtrdrError,
-    DataError,
-    ConnectionError,
     ConfigurationError,
+    ConnectionError,
+    DataError,
+    KtrdrError,
     ProcessingError,
-    SystemError,
     SecurityError,
+    SystemError,
 )
 
 # Type variable for error handler functions
@@ -127,7 +127,7 @@ class ErrorHandler:
         should_log_error: bool = True,
         raise_error: bool = True,
         logger=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Handle an error according to its type.
 
@@ -300,7 +300,7 @@ def get_error_code(error: Exception) -> str:
     return f"{prefix}-{specific_class}"
 
 
-def get_recovery_steps(error: Exception) -> List[str]:
+def get_recovery_steps(error: Exception) -> list[str]:
     """
     Get recovery steps for an error.
 

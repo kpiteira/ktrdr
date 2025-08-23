@@ -5,20 +5,17 @@ This module provides endpoints for accessing fuzzy logic functionality,
 including listing available fuzzy sets and fuzzifying indicator values.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ktrdr import get_logger
-from ktrdr.errors import DataError, ConfigurationError, ProcessingError
-from ktrdr.api.services.fuzzy_service import FuzzyService
+from ktrdr.api.dependencies import get_fuzzy_service
 from ktrdr.api.models.fuzzy import (
-    FuzzyConfigsResponse,
-    FuzzyConfigResponse,
-    FuzzyEvaluateRequest,
-    FuzzyEvaluateResponse,
     FuzzyOverlayResponse,
 )
-from ktrdr.api.dependencies import get_fuzzy_service
+from ktrdr.api.services.fuzzy_service import FuzzyService
+from ktrdr.errors import ConfigurationError, DataError, ProcessingError
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -29,7 +26,7 @@ router = APIRouter(prefix="/fuzzy", tags=["Fuzzy"])
 
 @router.get(
     "/indicators",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     summary="List available fuzzy indicators",
     description="""
     Returns a list of indicators that have fuzzy set configurations available, along with their 
@@ -38,7 +35,7 @@ router = APIRouter(prefix="/fuzzy", tags=["Fuzzy"])
 )
 async def list_fuzzy_indicators(
     fuzzy_service: FuzzyService = Depends(get_fuzzy_service),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     List all indicators available for fuzzy operations.
 
@@ -105,7 +102,7 @@ async def list_fuzzy_indicators(
 
 @router.get(
     "/sets/{indicator}",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     summary="Get fuzzy sets for indicator",
     description="""
     Returns detailed information about the fuzzy sets configured for a specific indicator,
@@ -115,7 +112,7 @@ async def list_fuzzy_indicators(
 )
 async def get_fuzzy_sets(
     indicator: str, fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get detailed information about fuzzy sets for a specific indicator.
 
@@ -211,7 +208,7 @@ async def get_fuzzy_sets(
 async def get_fuzzy_overlay_data(
     symbol: str = Query(..., description="Trading symbol (e.g., AAPL)"),
     timeframe: str = Query(..., description="Data timeframe (e.g., 1h, 1d)"),
-    indicators: Optional[List[str]] = Query(
+    indicators: Optional[list[str]] = Query(
         None,
         description="List of indicators (if omitted, returns all configured indicators)",
     ),
@@ -334,7 +331,7 @@ async def get_fuzzy_overlay_data(
 
 @router.post(
     "/evaluate",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     summary="Fuzzify indicator values",
     description="""
     Applies fuzzy membership functions to convert numeric indicator values into fuzzy membership degrees.
@@ -343,8 +340,8 @@ async def get_fuzzy_overlay_data(
     """,
 )
 async def fuzzify_values(
-    data: Dict[str, Any], fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
-) -> Dict[str, Any]:
+    data: dict[str, Any], fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
+) -> dict[str, Any]:
     """
     Apply fuzzy membership functions to indicator values.
 
@@ -460,7 +457,7 @@ async def fuzzify_values(
 
 @router.post(
     "/data",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     summary="Fuzzify indicator data",
     description="""
     Loads market data, calculates indicators, and applies fuzzy membership functions in a single operation.
@@ -469,8 +466,8 @@ async def fuzzify_values(
     """,
 )
 async def fuzzify_data(
-    data: Dict[str, Any], fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
-) -> Dict[str, Any]:
+    data: dict[str, Any], fuzzy_service: FuzzyService = Depends(get_fuzzy_service)
+) -> dict[str, Any]:
     """
     Load data, calculate indicators, and apply fuzzy membership functions.
 

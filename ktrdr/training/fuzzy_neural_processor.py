@@ -1,9 +1,10 @@
 """Pure fuzzy neural processing for feature engineering removal."""
 
-import pandas as pd
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
+import pandas as pd
 import torch
-from typing import Dict, List, Tuple, Optional, Any
 
 from ktrdr import get_logger
 
@@ -18,7 +19,7 @@ class FuzzyNeuralProcessor:
     temporal context, eliminating all raw feature engineering.
     """
 
-    def __init__(self, config: Dict[str, Any], disable_temporal: bool = False):
+    def __init__(self, config: dict[str, Any], disable_temporal: bool = False):
         """Initialize fuzzy neural processor.
 
         Args:
@@ -27,13 +28,13 @@ class FuzzyNeuralProcessor:
                              (used in backtesting when FeatureCache handles lag features)
         """
         self.config = config
-        self.feature_names: List[str] = []
+        self.feature_names: list[str] = []
         self.disable_temporal = disable_temporal
 
     def prepare_input(
         self,
         fuzzy_data: pd.DataFrame,
-    ) -> Tuple[torch.Tensor, List[str]]:
+    ) -> tuple[torch.Tensor, list[str]]:
         """Prepare pure fuzzy features for neural network training.
 
         Args:
@@ -90,9 +91,9 @@ class FuzzyNeuralProcessor:
 
     def prepare_multi_timeframe_input(
         self,
-        multi_timeframe_fuzzy: Dict[str, pd.DataFrame],
-        timeframe_order: Optional[List[str]] = None,
-    ) -> Tuple[torch.Tensor, List[str]]:
+        multi_timeframe_fuzzy: dict[str, pd.DataFrame],
+        timeframe_order: Optional[list[str]] = None,
+    ) -> tuple[torch.Tensor, list[str]]:
         """Prepare multi-timeframe fuzzy features for neural network training.
 
         This method extends the single-timeframe approach to handle multiple timeframes
@@ -249,10 +250,10 @@ class FuzzyNeuralProcessor:
 
     def _align_multi_timeframe_features(
         self,
-        timeframe_features: Dict[str, pd.DataFrame],
-        timeframe_feature_names: Dict[str, List[str]],
-        timeframe_order: List[str],
-    ) -> Tuple[torch.Tensor, List[str]]:
+        timeframe_features: dict[str, pd.DataFrame],
+        timeframe_feature_names: dict[str, list[str]],
+        timeframe_order: list[str],
+    ) -> tuple[torch.Tensor, list[str]]:
         """
         Align multi-timeframe fuzzy features for neural network input.
 
@@ -406,7 +407,7 @@ class FuzzyNeuralProcessor:
 
         return features_tensor, combined_feature_names
 
-    def _sort_timeframes_by_frequency(self, timeframes: List[str]) -> List[str]:
+    def _sort_timeframes_by_frequency(self, timeframes: list[str]) -> list[str]:
         """
         Sort timeframes by frequency (highest frequency first).
 
@@ -447,7 +448,7 @@ class FuzzyNeuralProcessor:
 
     def _extract_fuzzy_features(
         self, fuzzy_data: pd.DataFrame
-    ) -> Tuple[np.ndarray, List[str]]:
+    ) -> tuple[np.ndarray, list[str]]:
         """Extract fuzzy membership features.
 
         Args:
@@ -511,7 +512,7 @@ class FuzzyNeuralProcessor:
 
     def _extract_temporal_features(
         self, fuzzy_data: pd.DataFrame, lookback: int
-    ) -> Tuple[np.ndarray, List[str]]:
+    ) -> tuple[np.ndarray, list[str]]:
         """Extract temporal fuzzy features (lagged values).
 
         Args:
@@ -547,7 +548,7 @@ class FuzzyNeuralProcessor:
         return temporal_matrix, temporal_names
 
     def _validate_fuzzy_range(
-        self, feature_matrix: np.ndarray, feature_names: List[str]
+        self, feature_matrix: np.ndarray, feature_names: list[str]
     ) -> None:
         """Validate that fuzzy features are in expected 0-1 range.
 
@@ -607,7 +608,7 @@ class FuzzyNeuralProcessor:
 
         return base_features
 
-    def get_config_summary(self) -> Dict[str, Any]:
+    def get_config_summary(self) -> dict[str, Any]:
         """Get summary of processing configuration.
 
         Returns:

@@ -11,13 +11,10 @@ The adapter handles:
 - Progress forwarding and status management
 """
 
-import asyncio
-from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
-import json
+from typing import Any, Dict, List, Optional
 
 from ktrdr.logging import get_logger
-from ktrdr.errors import DataError, ConnectionError as KtrdrConnectionError
 
 # HTTP client for host service communication
 try:
@@ -100,8 +97,8 @@ class TrainingAdapter:
         self.last_request_time: Optional[datetime] = None
 
     async def _call_host_service_post(
-        self, endpoint: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, endpoint: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Make POST request to host service."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
@@ -123,8 +120,8 @@ class TrainingAdapter:
             )
 
     async def _call_host_service_get(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, endpoint: str, params: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """Make GET request to host service."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
@@ -148,14 +145,14 @@ class TrainingAdapter:
     async def train_multi_symbol_strategy(
         self,
         strategy_config_path: str,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         start_date: str,
         end_date: str,
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Train a multi-symbol strategy using local trainer or host service.
 
@@ -256,7 +253,7 @@ class TrainingAdapter:
                 f"Training failed: {str(e)}", provider="Training"
             )
 
-    async def get_training_status(self, session_id: str) -> Dict[str, Any]:
+    async def get_training_status(self, session_id: str) -> dict[str, Any]:
         """Get status of a training session (host service only)."""
         if not self.use_host_service:
             raise TrainingProviderError(
@@ -265,7 +262,7 @@ class TrainingAdapter:
 
         return await self._call_host_service_get(f"/training/status/{session_id}")
 
-    async def stop_training(self, session_id: str) -> Dict[str, Any]:
+    async def stop_training(self, session_id: str) -> dict[str, Any]:
         """Stop a training session (host service only)."""
         if not self.use_host_service:
             raise TrainingProviderError(
@@ -276,7 +273,7 @@ class TrainingAdapter:
             "/training/stop", {"session_id": session_id, "save_checkpoint": True}
         )
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get adapter usage statistics."""
         return {
             "requests_made": self.requests_made,

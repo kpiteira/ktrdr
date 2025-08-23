@@ -5,13 +5,13 @@ Williams %R is a momentum indicator that measures overbought and oversold levels
 It is similar to the Stochastic Oscillator but is plotted upside-down on a scale of -100 to 0.
 """
 
+from typing import Any, Dict
+
 import pandas as pd
-import numpy as np
-from typing import Dict, Any
 
 from ktrdr import get_logger
-from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import WILLIAMS_R_SCHEMA
 
 # Create module-level logger
@@ -53,7 +53,7 @@ class WilliamsRIndicator(BaseIndicator):
 
         logger.debug(f"Initialized Williams %R indicator with period={period}")
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Validate parameters for Williams %R indicator using schema-based validation.
 

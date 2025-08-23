@@ -1,14 +1,15 @@
 """Decision engine for generating trading signals from neural network outputs."""
 
-from typing import Dict, Any, Optional, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 import torch
-from pathlib import Path
 
-from .base import Signal, Position, TradingDecision
-from ..neural.models.mlp import MLPTradingModel
-from ..neural.models.base_model import BaseNeuralModel
 from .. import get_logger
+from ..neural.models.base_model import BaseNeuralModel
+from ..neural.models.mlp import MLPTradingModel
+from .base import Position, Signal, TradingDecision
 
 logger = get_logger(__name__)
 
@@ -17,7 +18,7 @@ class DecisionEngine:
     """Core decision generation logic with position awareness."""
 
     def __init__(
-        self, strategy_config: Dict[str, Any], model_path: Optional[str] = None
+        self, strategy_config: dict[str, Any], model_path: Optional[str] = None
     ):
         """Initialize the decision engine.
 
@@ -55,8 +56,8 @@ class DecisionEngine:
     def generate_decision(
         self,
         current_data: pd.Series,
-        fuzzy_memberships: Dict[str, float],
-        indicators: Dict[str, float],
+        fuzzy_memberships: dict[str, float],
+        indicators: dict[str, float],
     ) -> TradingDecision:
         """Generate trading decision from current market data.
 
@@ -166,8 +167,8 @@ class DecisionEngine:
 
     def _prepare_decision_features(
         self,
-        fuzzy_memberships: Dict[str, float],
-        indicators: Dict[str, float],
+        fuzzy_memberships: dict[str, float],
+        indicators: dict[str, float],
         current_data: pd.Series,
     ) -> torch.Tensor:
         """Prepare features for neural network from current data.
@@ -254,7 +255,7 @@ class DecisionEngine:
 
         return raw_signal
 
-    def _get_active_filters(self) -> List[str]:
+    def _get_active_filters(self) -> list[str]:
         """Get list of currently active filters.
 
         Returns:

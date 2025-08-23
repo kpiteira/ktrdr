@@ -7,9 +7,9 @@ with environment variable support and validation.
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 from ktrdr.logging import get_logger
-from ktrdr import metadata
 
 logger = get_logger(__name__)
 
@@ -40,7 +40,7 @@ class IbConfig:
     )
 
     # Data fetching settings
-    chunk_days: Dict[str, int] = field(
+    chunk_days: dict[str, int] = field(
         default_factory=lambda: {
             "1 secs": 0.02,  # 30 minutes
             "5 secs": 0.08,  # 2 hours
@@ -117,7 +117,7 @@ class IbConfig:
             f"(client_id={self.client_id}, readonly={self.readonly})"
         )
 
-    def get_connection_config(self) -> Dict[str, Any]:
+    def get_connection_config(self) -> dict[str, Any]:
         """Get connection configuration for IbConnectionManager."""
         return {
             "host": self.host,
@@ -149,7 +149,7 @@ class IbConfig:
         # Live trading ports: TWS=7496, IB Gateway=4001
         return self.port in [7496, 4001]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
         return {
             "host": self.host,
@@ -169,7 +169,7 @@ class IbConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "IbConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "IbConfig":
         """Create config from dictionary."""
         # Filter out non-init fields
         init_fields = {

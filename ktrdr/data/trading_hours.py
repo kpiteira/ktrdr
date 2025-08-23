@@ -5,9 +5,10 @@ This module provides comprehensive trading hours information for various exchang
 to enhance market hours detection and symbol validation.
 """
 
-from typing import Dict, List, Optional, Tuple, NamedTuple
 from dataclasses import dataclass
 from datetime import time
+from typing import Dict, List, Optional
+
 import pandas as pd
 
 from ktrdr.logging import get_logger
@@ -46,9 +47,9 @@ class TradingHours:
 
     timezone: str
     regular_hours: TradingSession
-    extended_hours: List[TradingSession]
-    trading_days: List[int]  # 0=Monday, 6=Sunday
-    holidays: List[str] = None  # ISO date strings
+    extended_hours: list[TradingSession]
+    trading_days: list[int]  # 0=Monday, 6=Sunday
+    holidays: list[str] = None  # ISO date strings
 
 
 class TradingHoursManager:
@@ -57,7 +58,7 @@ class TradingHoursManager:
     """
 
     # Comprehensive trading hours database
-    EXCHANGE_HOURS: Dict[str, TradingHours] = {
+    EXCHANGE_HOURS: dict[str, TradingHours] = {
         # US Stock Exchanges
         "NASDAQ": TradingHours(
             timezone="America/New_York",
@@ -135,7 +136,7 @@ class TradingHoursManager:
     }
 
     # Asset type specific overrides
-    ASSET_TYPE_HOURS: Dict[str, Dict[str, TradingHours]] = {
+    ASSET_TYPE_HOURS: dict[str, dict[str, TradingHours]] = {
         "CASH": {
             # Forex markets typically trade 24/5
             "default": TradingHours(
@@ -282,7 +283,7 @@ class TradingHoursManager:
         return "Closed"
 
     @classmethod
-    def to_dict(cls, hours: TradingHours) -> Dict:
+    def to_dict(cls, hours: TradingHours) -> dict:
         """
         Convert TradingHours to dictionary for JSON serialization.
 

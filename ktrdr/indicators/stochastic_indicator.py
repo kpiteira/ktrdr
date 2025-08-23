@@ -5,13 +5,13 @@ The Stochastic Oscillator is a momentum indicator that compares a security's clo
 to its price range over a given time period. It generates two lines: %K and %D.
 """
 
+from typing import Any, Dict
+
 import pandas as pd
-import numpy as np
-from typing import Dict, Any
 
 from ktrdr import get_logger
-from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import STOCHASTIC_SCHEMA
 
 # Create module-level logger
@@ -69,7 +69,7 @@ class StochasticIndicator(BaseIndicator):
             f"d_period={d_period}, smooth_k={smooth_k}"
         )
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Validate parameters for Stochastic indicator using schema-based validation.
 

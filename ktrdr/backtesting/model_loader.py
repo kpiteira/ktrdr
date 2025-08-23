@@ -1,11 +1,12 @@
 """Model loader for loading trained neural network models."""
 
-import torch
-from typing import Dict, Any, Tuple, Optional
 from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
-from ..training.model_storage import ModelStorage
+import torch
+
 from ..neural.models.mlp import MLPTradingModel
+from ..training.model_storage import ModelStorage
 
 
 class ModelLoader:
@@ -25,7 +26,7 @@ class ModelLoader:
         symbol: str,
         timeframe: str,
         version: Optional[str] = None,
-    ) -> Tuple[torch.nn.Module, Dict[str, Any]]:
+    ) -> tuple[torch.nn.Module, dict[str, Any]]:
         """Load a trained model with its configuration.
 
         Args:
@@ -84,7 +85,7 @@ class ModelLoader:
 
     def load_latest_model(
         self, strategy_name: str
-    ) -> Tuple[torch.nn.Module, Dict[str, Any]]:
+    ) -> tuple[torch.nn.Module, dict[str, Any]]:
         """Load the most recent model for a strategy.
 
         Args:

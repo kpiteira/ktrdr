@@ -1,16 +1,16 @@
 """Memory management and monitoring utilities for KTRDR training."""
 
 import gc
+import json
+import threading
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import psutil
 import torch
-import numpy as np
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, field
-from pathlib import Path
-import time
-import threading
-import json
-from datetime import datetime
 
 from ktrdr import get_logger
 
@@ -34,7 +34,7 @@ class MemorySnapshot:
     tensors_count: int = 0
     largest_tensor_mb: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "timestamp": self.timestamp,
@@ -90,7 +90,7 @@ class MemoryManager:
         self.output_dir = Path(output_dir) if output_dir else None
 
         # Memory monitoring
-        self.snapshots: List[MemorySnapshot] = []
+        self.snapshots: list[MemorySnapshot] = []
         self.monitoring_thread: Optional[threading.Thread] = None
         self.monitoring_active = False
 
@@ -377,7 +377,7 @@ class MemoryManager:
         except Exception as e:
             logger.debug(f"Tensor cleanup failed: {e}, skipping tensor counting")
 
-    def get_memory_summary(self) -> Dict[str, Any]:
+    def get_memory_summary(self) -> dict[str, Any]:
         """Get current memory usage summary."""
         snapshot = self.capture_snapshot()
 
@@ -394,7 +394,7 @@ class MemoryManager:
 
         return summary
 
-    def _get_recommendations(self, snapshot: MemorySnapshot) -> List[str]:
+    def _get_recommendations(self, snapshot: MemorySnapshot) -> list[str]:
         """Get memory optimization recommendations."""
         recommendations = []
 
@@ -468,7 +468,7 @@ class MemoryManager:
         logger.info(f"Memory log exported to: {file_path}")
         return file_path
 
-    def get_peak_usage(self) -> Dict[str, float]:
+    def get_peak_usage(self) -> dict[str, float]:
         """Get peak memory usage from monitoring history."""
         if not self.snapshots:
             return {}

@@ -57,7 +57,7 @@ def log_entry_exit(
             entry_msg = f"Entering {func_name}"
             if log_args and (args or kwargs):
                 # Format arguments for logging
-                arg_strs: List[str] = []
+                arg_strs: list[str] = []
 
                 # Add positional arguments
                 sig = inspect.signature(func)
@@ -246,7 +246,7 @@ def log_error(
     logger: Optional[logging.Logger] = None,
     level: int = logging.ERROR,
     include_traceback: bool = True,
-    extra: Optional[Dict[str, Any]] = None,
+    extra: Optional[dict[str, Any]] = None,
 ) -> None:
     """
     Log an exception or error message with consistent formatting.

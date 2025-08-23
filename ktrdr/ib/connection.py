@@ -15,20 +15,21 @@ This design solves the core issue where IB connections were dying silently becau
 async API contexts would destroy event loops and TCP transports when they ended.
 """
 
-import threading
 import asyncio
-import time
-import queue
 import concurrent.futures
-from typing import Any, Callable, Optional, Tuple
+import queue
+import threading
+import time
 from concurrent.futures import Future
 from dataclasses import dataclass
+from typing import Any, Callable, Optional
 
 from ib_insync import IB
 
 from ktrdr.logging import get_logger
 from ktrdr.logging.config import should_sample_log
-from .error_classifier import IbErrorClassifier, IbErrorType
+
+from .error_classifier import IbErrorClassifier
 
 logger = get_logger(__name__)
 

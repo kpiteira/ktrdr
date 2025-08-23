@@ -5,9 +5,8 @@ This module provides the RSIIndicator class which computes the RSI technical
 indicator, a momentum oscillator that measures the speed and change of price movements.
 """
 
-import pandas as pd
 import numpy as np
-from typing import Union, Optional
+import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError

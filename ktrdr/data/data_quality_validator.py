@@ -6,16 +6,13 @@ by both IB data fetching and local CSV data loading, consolidating and enhancing
 the validation logic previously scattered across different components.
 """
 
-import warnings
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any, Callable, Union
-import pandas as pd
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
+import pandas as pd
 
 from ktrdr.logging import get_logger
-from ktrdr.errors import DataError
 from ktrdr.utils.timezone_utils import TimestampManager
-from ktrdr.data.gap_classifier import GapClassifier, GapClassification
 
 logger = get_logger(__name__)
 
@@ -30,7 +27,7 @@ class DataQualityIssue:
         description: str,
         location: Optional[str] = None,
         corrected: bool = False,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ):
         """
         Initialize data quality issue.
@@ -51,7 +48,7 @@ class DataQualityIssue:
         self.metadata = metadata or {}
         self.timestamp = TimestampManager.now_utc()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for logging/reporting."""
         return {
             "issue_type": self.issue_type,
@@ -87,7 +84,7 @@ class DataQualityReport:
         self.timeframe = timeframe
         self.total_bars = total_bars
         self.validation_type = validation_type
-        self.issues: List[DataQualityIssue] = []
+        self.issues: list[DataQualityIssue] = []
         self.corrections_made = 0
         self.validation_time = TimestampManager.now_utc()
 
@@ -97,10 +94,10 @@ class DataQualityReport:
         if issue.corrected:
             self.corrections_made += 1
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get summary statistics for the report."""
-        issues_by_severity: Dict[str, int] = {}
-        issues_by_type: Dict[str, int] = {}
+        issues_by_severity: dict[str, int] = {}
+        issues_by_type: dict[str, int] = {}
 
         for issue in self.issues:
             # Count by severity
@@ -143,11 +140,11 @@ class DataQualityReport:
 
         return critical_count <= max_critical and high_count <= max_high
 
-    def get_issues_by_type(self, issue_type: str) -> List[DataQualityIssue]:
+    def get_issues_by_type(self, issue_type: str) -> list[DataQualityIssue]:
         """Get all issues of a specific type."""
         return [issue for issue in self.issues if issue.issue_type == issue_type]
 
-    def get_issues_by_severity(self, severity: str) -> List[DataQualityIssue]:
+    def get_issues_by_severity(self, severity: str) -> list[DataQualityIssue]:
         """Get all issues of a specific severity."""
         return [issue for issue in self.issues if issue.severity == severity]
 
@@ -180,7 +177,7 @@ class DataQualityValidator:
         symbol: str,
         timeframe: str,
         validation_type: str = "general",
-    ) -> Tuple[pd.DataFrame, DataQualityReport]:
+    ) -> tuple[pd.DataFrame, DataQualityReport]:
         """
         Perform comprehensive data quality validation.
 
@@ -544,7 +541,7 @@ class DataQualityValidator:
             return
 
         # Use the existing gap classifier for intelligent detection
-        from ktrdr.data.gap_classifier import GapClassifier, GapClassification
+        from ktrdr.data.gap_classifier import GapClassification, GapClassifier
 
         gap_classifier = GapClassifier()
 
@@ -896,7 +893,7 @@ class DataQualityValidator:
             )
             report.add_issue(issue)
 
-    def get_validation_statistics(self) -> Dict[str, Any]:
+    def get_validation_statistics(self) -> dict[str, Any]:
         """Get validation statistics."""
         return {
             "total_validations": self.validation_count,

@@ -1,13 +1,12 @@
 """Performance optimization utilities for KTRDR training."""
 
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-import time
-import numpy as np
-from typing import Dict, Any, Optional, List, Tuple, Union
-from dataclasses import dataclass, field
-from pathlib import Path
-import math
 
 from ktrdr import get_logger
 
@@ -83,18 +82,18 @@ class PerformanceConfig:
 class PerformanceMetrics:
     """Performance metrics tracking."""
 
-    training_time_per_epoch: List[float] = field(default_factory=list)
-    validation_time_per_epoch: List[float] = field(default_factory=list)
-    data_loading_time_per_epoch: List[float] = field(default_factory=list)
-    forward_pass_time: List[float] = field(default_factory=list)
-    backward_pass_time: List[float] = field(default_factory=list)
-    optimizer_step_time: List[float] = field(default_factory=list)
+    training_time_per_epoch: list[float] = field(default_factory=list)
+    validation_time_per_epoch: list[float] = field(default_factory=list)
+    data_loading_time_per_epoch: list[float] = field(default_factory=list)
+    forward_pass_time: list[float] = field(default_factory=list)
+    backward_pass_time: list[float] = field(default_factory=list)
+    optimizer_step_time: list[float] = field(default_factory=list)
 
-    batch_sizes_used: List[int] = field(default_factory=list)
-    samples_per_second: List[float] = field(default_factory=list)
+    batch_sizes_used: list[int] = field(default_factory=list)
+    samples_per_second: list[float] = field(default_factory=list)
 
-    memory_usage_peak_mb: List[float] = field(default_factory=list)
-    gpu_utilization_percent: List[float] = field(default_factory=list)
+    memory_usage_peak_mb: list[float] = field(default_factory=list)
+    gpu_utilization_percent: list[float] = field(default_factory=list)
 
     def add_epoch_metrics(
         self,
@@ -121,7 +120,7 @@ class PerformanceMetrics:
         self.memory_usage_peak_mb.append(memory_peak)
         self.gpu_utilization_percent.append(gpu_util)
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get performance summary statistics."""
         if not self.training_time_per_epoch:
             return {}
@@ -407,7 +406,7 @@ class PerformanceOptimizer:
         batch_target: torch.Tensor,
         criterion: nn.Module,
         optimizer: torch.optim.Optimizer,
-    ) -> Tuple[torch.Tensor, Dict[str, float]]:
+    ) -> tuple[torch.Tensor, dict[str, float]]:
         """Optimized training step.
 
         Args:
@@ -471,7 +470,7 @@ class PerformanceOptimizer:
 
         return loss, timings
 
-    def get_performance_summary(self) -> Dict[str, Any]:
+    def get_performance_summary(self) -> dict[str, Any]:
         """Get comprehensive performance summary."""
         summary = self.metrics.get_summary()
 
@@ -496,7 +495,7 @@ class PerformanceOptimizer:
 
         return summary
 
-    def get_optimization_recommendations(self) -> List[str]:
+    def get_optimization_recommendations(self) -> list[str]:
         """Get performance optimization recommendations."""
         recommendations = []
 

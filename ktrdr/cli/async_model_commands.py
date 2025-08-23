@@ -242,8 +242,8 @@ def train_model_async(
 
 async def _train_model_async_impl(
     strategy_file: str,
-    symbols: List[str],
-    timeframes: List[str],
+    symbols: list[str],
+    timeframes: list[str],
     start_date: str,
     end_date: str,
     models_dir: str,

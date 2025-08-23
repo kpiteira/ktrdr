@@ -6,14 +6,15 @@ and a moving average, providing a normalized measure of how far price has
 deviated from its trend.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
+import numpy as np
+import pandas as pd
+
+from ktrdr.errors import DataError
+from ktrdr.indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import DISTANCE_FROM_MA_SCHEMA
-from ktrdr.indicators import SimpleMovingAverage, ExponentialMovingAverage
-from ktrdr.errors import DataError
 
 
 class DistanceFromMAIndicator(BaseIndicator):

@@ -6,27 +6,23 @@ bridging the API endpoints with the core backtesting engine.
 """
 
 import asyncio
-import time
-import uuid
-from typing import Dict, Any, Optional, List
-from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
 from ktrdr import get_logger
-from ktrdr.api.services.base import BaseService
-from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.api.models.operations import (
-    OperationType,
     OperationMetadata,
     OperationProgress,
+    OperationType,
 )
-from ktrdr.backtesting.engine import BacktestingEngine
+from ktrdr.api.services.base import BaseService
+from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.backtesting.engine import BacktestConfig, BacktestingEngine
 from ktrdr.backtesting.model_loader import ModelLoader
-from ktrdr.backtesting.engine import BacktestConfig
 from ktrdr.data.data_manager import DataManager
 from ktrdr.errors import DataError, ValidationError
-from ktrdr.decision.base import Signal
 
 logger = get_logger(__name__)
 
@@ -43,7 +39,7 @@ class BacktestingService(BaseService):
             raise ValueError("OperationsService must be provided to BacktestingService")
         self.operations_service = operations_service
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the backtesting service.
 
@@ -69,7 +65,7 @@ class BacktestingService(BaseService):
         start_date: str,
         end_date: str,
         initial_capital: float = 100000.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Start a new backtest operation.
 
@@ -464,7 +460,7 @@ class BacktestingService(BaseService):
         logger.info(f"Real backtest completed successfully")
         return results
 
-    async def get_backtest_status(self, backtest_id: str) -> Dict[str, Any]:
+    async def get_backtest_status(self, backtest_id: str) -> dict[str, Any]:
         """
         Get the current status of a backtest.
 
@@ -499,7 +495,7 @@ class BacktestingService(BaseService):
             "error": operation.error_message,
         }
 
-    async def get_backtest_results(self, backtest_id: str) -> Dict[str, Any]:
+    async def get_backtest_results(self, backtest_id: str) -> dict[str, Any]:
         """
         Get the full results of a completed backtest.
 
@@ -575,7 +571,7 @@ class BacktestingService(BaseService):
             },
         }
 
-    async def get_backtest_trades(self, backtest_id: str) -> List[Dict[str, Any]]:
+    async def get_backtest_trades(self, backtest_id: str) -> list[dict[str, Any]]:
         """
         Get the list of trades from a backtest.
 
@@ -621,7 +617,7 @@ class BacktestingService(BaseService):
         logger.info(f"Returning {len(trades)} formatted trades")
         return trades
 
-    async def get_equity_curve(self, backtest_id: str) -> Dict[str, Any]:
+    async def get_equity_curve(self, backtest_id: str) -> dict[str, Any]:
         """
         Get the equity curve data from a backtest.
 

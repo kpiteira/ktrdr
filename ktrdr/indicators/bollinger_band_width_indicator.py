@@ -6,14 +6,15 @@ This indicator provides a measure of volatility - wider bands indicate higher vo
 narrower bands indicate lower volatility.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import BOLLINGER_BAND_WIDTH_SCHEMA
+import numpy as np
+import pandas as pd
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
+from ktrdr.indicators.schemas import BOLLINGER_BAND_WIDTH_SCHEMA
 
 
 class BollingerBandWidthIndicator(BaseIndicator):

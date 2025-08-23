@@ -9,17 +9,16 @@ This module contains all CLI commands related to fuzzy logic operations:
 
 import asyncio
 import sys
-import json
-from typing import Optional, List
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.api_client import get_api_client, check_api_connection
+from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.config.validation import InputValidator
-from ktrdr.errors import ValidationError, DataError
+from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
 
 # Setup logging and console

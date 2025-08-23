@@ -6,13 +6,14 @@ over a specified period. This indicator helps identify periods of above or
 below average trading activity.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
+import numpy as np
+import pandas as pd
+
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import VOLUME_RATIO_SCHEMA
-from ktrdr.errors import DataError
 
 
 class VolumeRatioIndicator(BaseIndicator):

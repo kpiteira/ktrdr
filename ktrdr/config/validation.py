@@ -6,9 +6,10 @@ to prevent security issues and ensure data integrity.
 """
 
 import re
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Pattern, Set, Union
 from datetime import datetime
+from pathlib import Path
+from re import Pattern
+from typing import Any, Dict, Optional, Set, Union
 
 from ktrdr import get_logger
 from ktrdr.errors import ValidationError
@@ -30,7 +31,7 @@ class InputValidator:
         min_length: int = 0,
         max_length: Optional[int] = None,
         pattern: Optional[Union[str, Pattern]] = None,
-        allowed_values: Optional[Set[str]] = None,
+        allowed_values: Optional[set[str]] = None,
     ) -> str:
         """
         Validate a string value against constraints.
@@ -94,7 +95,7 @@ class InputValidator:
         value: Union[int, float],
         min_value: Optional[Union[int, float]] = None,
         max_value: Optional[Union[int, float]] = None,
-        allowed_values: Optional[Set[Union[int, float]]] = None,
+        allowed_values: Optional[set[Union[int, float]]] = None,
     ) -> Union[int, float]:
         """
         Validate a numeric value against constraints.
@@ -263,7 +264,7 @@ def sanitize_parameter(name: str, value: Any) -> Any:
     return value
 
 
-def sanitize_parameters(params: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_parameters(params: dict[str, Any]) -> dict[str, Any]:
     """
     Sanitize a dictionary of parameters.
 

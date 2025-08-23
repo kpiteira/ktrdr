@@ -1,18 +1,18 @@
 """Training stability and recovery system for robust KTRDR training."""
 
-import torch
-import torch.nn as nn
-import numpy as np
-from pathlib import Path
-from typing import Dict, Any, Optional, List, Callable, Union, Tuple
+import hashlib
+import json
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
-import time
-import threading
-import pickle
-import hashlib
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import torch
+import torch.nn as nn
 
 from ktrdr import get_logger
 from ktrdr.training.error_handler import ErrorHandler, RecoveryAction
@@ -41,13 +41,13 @@ class CheckpointMetadata:
     model_hash: str
     optimizer_state_hash: str
     loss: float
-    metrics: Dict[str, float]
+    metrics: dict[str, float]
     training_status: TrainingStatus
-    model_config: Dict[str, Any]
-    training_config: Dict[str, Any]
-    data_config: Dict[str, Any] = field(default_factory=dict)
+    model_config: dict[str, Any]
+    training_config: dict[str, Any]
+    data_config: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "epoch": self.epoch,
@@ -78,7 +78,7 @@ class StabilityMetrics:
     recovery_time: float = 0.0
     instability_count: int = 0
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert to dictionary."""
         return {
             "loss_variance": self.loss_variance,
@@ -121,10 +121,10 @@ class TrainingStabilizer:
         self.error_handler = error_handler or ErrorHandler()
 
         # Training state tracking
-        self.checkpoints: List[CheckpointMetadata] = []
-        self.loss_history: List[float] = []
-        self.gradient_history: List[float] = []
-        self.stability_history: List[StabilityMetrics] = []
+        self.checkpoints: list[CheckpointMetadata] = []
+        self.loss_history: list[float] = []
+        self.gradient_history: list[float] = []
+        self.stability_history: list[StabilityMetrics] = []
 
         # Stability monitoring
         self.current_status = TrainingStatus.STABLE
@@ -147,9 +147,9 @@ class TrainingStabilizer:
         epoch: int,
         step: int,
         loss: float,
-        metrics: Dict[str, float],
-        model_config: Dict[str, Any],
-        training_config: Dict[str, Any],
+        metrics: dict[str, float],
+        model_config: dict[str, Any],
+        training_config: dict[str, Any],
         force: bool = False,
     ) -> Path:
         """Save training checkpoint.
@@ -255,7 +255,7 @@ class TrainingStabilizer:
                 logger.error(f"Failed to save checkpoint: {e}")
                 return None
 
-    def load_checkpoint(self, checkpoint_path: Path) -> Dict[str, Any]:
+    def load_checkpoint(self, checkpoint_path: Path) -> dict[str, Any]:
         """Load training checkpoint.
 
         Args:
@@ -300,7 +300,7 @@ class TrainingStabilizer:
         model: nn.Module,
         optimizer: torch.optim.Optimizer,
         checkpoint_path: Optional[Path] = None,
-    ) -> Tuple[int, int, Dict[str, Any]]:
+    ) -> tuple[int, int, dict[str, Any]]:
         """Resume training from checkpoint.
 
         Args:
@@ -471,7 +471,7 @@ class TrainingStabilizer:
                 f"Training status changed: {previous_status.value} → {self.current_status.value}"
             )
 
-    def get_recovery_recommendations(self) -> List[str]:
+    def get_recovery_recommendations(self) -> list[str]:
         """Get recommendations for training recovery."""
         recommendations = []
 
@@ -591,7 +591,7 @@ class TrainingStabilizer:
 
         return False
 
-    def _generate_state_hash(self, state_dict: Dict[str, Any]) -> str:
+    def _generate_state_hash(self, state_dict: dict[str, Any]) -> str:
         """Generate hash for state dict verification."""
         state_str = ""
         for key in sorted(state_dict.keys()):
@@ -607,9 +607,9 @@ class TrainingStabilizer:
                 # For non-tensor values, convert to string
                 state_str += f"{key}:{str(value)}"
 
-        return hashlib.md5(state_str.encode()).hexdigest()
+        return hashlib.sha256(state_str.encode()).hexdigest()
 
-    def _verify_checkpoint_integrity(self, checkpoint_data: Dict[str, Any]) -> bool:
+    def _verify_checkpoint_integrity(self, checkpoint_data: dict[str, Any]) -> bool:
         """Verify checkpoint integrity using hashes."""
         try:
             model_state = checkpoint_data["model_state_dict"]
@@ -667,7 +667,7 @@ class TrainingStabilizer:
         if len(self.checkpoints) > self.max_checkpoints:
             self.checkpoints = self.checkpoints[-self.max_checkpoints :]
 
-    def get_training_summary(self) -> Dict[str, Any]:
+    def get_training_summary(self) -> dict[str, Any]:
         """Get comprehensive training stability summary."""
         if not self.stability_history:
             return {

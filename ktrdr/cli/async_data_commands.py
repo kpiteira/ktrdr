@@ -7,18 +7,17 @@ base class for connection reuse and performance optimization.
 import json
 import sys
 from typing import Optional
-from pathlib import Path
 
-import typer
 import pandas as pd
+import typer
 from rich.console import Console
 from rich.table import Table
 
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
+from ktrdr.cli.error_handler import handle_cli_error
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
-from ktrdr.cli.error_handler import handle_cli_error
 
 # Setup logging and console
 logger = get_logger(__name__)

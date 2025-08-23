@@ -5,9 +5,11 @@ This module provides access to configuration settings with environment-specific
 overrides and environment variable support.
 """
 
-from pydantic import Field, ConfigDict
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from pydantic import ConfigDict, Field
+from pydantic_settings import BaseSettings
+
 from .. import metadata
 from .ib_config import IbConfig, get_ib_config
 

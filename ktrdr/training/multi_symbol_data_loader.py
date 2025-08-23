@@ -1,9 +1,9 @@
 """Multi-symbol data loader with balanced sampling for training."""
 
+from typing import List, Tuple
+
 import torch
-from torch.utils.data import Dataset, DataLoader
-from typing import Dict, List, Tuple
-import numpy as np
+from torch.utils.data import DataLoader, Dataset
 
 
 class MultiSymbolDataset(Dataset):
@@ -35,7 +35,7 @@ class MultiSymbolDataset(Dataset):
         """Return dataset size."""
         return len(self.features)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Get a single sample.
 
         Args:
@@ -54,7 +54,7 @@ class BalancedMultiSymbolBatchSampler:
         self,
         symbol_indices: torch.Tensor,
         batch_size: int,
-        symbols: List[str],
+        symbols: list[str],
         drop_last: bool = False,
     ):
         """Initialize balanced batch sampler.
@@ -126,7 +126,7 @@ class MultiSymbolDataLoader:
         features: torch.Tensor,
         labels: torch.Tensor,
         symbol_indices: torch.Tensor,
-        symbols: List[str],
+        symbols: list[str],
         batch_size: int = 32,
         shuffle: bool = True,
         drop_last: bool = False,

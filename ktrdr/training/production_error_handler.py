@@ -1,27 +1,28 @@
 """Production-grade error handling and monitoring for KTRDR training systems."""
 
-import os
-import sys
 import json
-import time
-import socket
-import psutil
-import threading
-import traceback
-from pathlib import Path
-from typing import Dict, Any, Optional, List, Callable, Union
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from enum import Enum
-from collections import deque
 import logging
 import logging.handlers
+import os
 import smtplib
-from email.mime.text import MIMEText
+import socket
+import sys
+import threading
+import time
+import traceback
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import psutil
 
 from ktrdr import get_logger
-from ktrdr.training.error_handler import ErrorHandler, ErrorContext, ErrorSeverity
+from ktrdr.training.error_handler import ErrorHandler
 
 logger = get_logger(__name__)
 
@@ -46,7 +47,7 @@ class AlertConfig:
     email_smtp_port: int = 587
     email_username: str = ""
     email_password: str = ""
-    email_recipients: List[str] = field(default_factory=list)
+    email_recipients: list[str] = field(default_factory=list)
 
     webhook_enabled: bool = False
     webhook_url: str = ""
@@ -75,7 +76,7 @@ class SystemHealth:
     uptime_seconds: float
     error_rate_per_hour: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "timestamp": self.timestamp,
@@ -100,12 +101,12 @@ class ProductionAlert:
     level: AlertLevel
     component: str
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
     system_health: Optional[SystemHealth]
     resolved: bool = False
     resolution_time: Optional[float] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "timestamp": self.timestamp,
@@ -157,7 +158,7 @@ class ProductionErrorHandler:
         self.error_count_history: deque = deque(maxlen=60)  # Last hour by minute
 
         # Rate limiting for alerts
-        self.alert_timestamps: Dict[str, deque] = {}
+        self.alert_timestamps: dict[str, deque] = {}
 
         # System monitoring
         self.monitoring_active = False
@@ -455,7 +456,7 @@ class ProductionErrorHandler:
         error: Exception,
         component: str,
         operation: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
         user_id: Optional[str] = None,
         request_id: Optional[str] = None,
     ):
@@ -531,7 +532,7 @@ class ProductionErrorHandler:
         level: AlertLevel,
         component: str,
         message: str,
-        details: Dict[str, Any],
+        details: dict[str, Any],
         system_health: Optional[SystemHealth] = None,
     ):
         """Send production alert through configured channels.
@@ -719,7 +720,7 @@ System Health:
         except Exception as e:
             logger.error(f"Failed to send webhook alert: {e}")
 
-    def get_production_status(self) -> Dict[str, Any]:
+    def get_production_status(self) -> dict[str, Any]:
         """Get comprehensive production system status."""
         current_health = self._capture_system_health()
 

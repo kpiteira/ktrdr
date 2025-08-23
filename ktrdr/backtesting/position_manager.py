@@ -1,13 +1,13 @@
 """Position management for backtesting system."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
-from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
-from ..decision.base import Signal
 from .. import get_logger
+from ..decision.base import Signal
 
 logger = get_logger(__name__)
 
@@ -87,7 +87,7 @@ class Trade:
     holding_period_hours: float
     max_favorable_excursion: float
     max_adverse_excursion: float
-    decision_metadata: Dict[str, Any] = field(default_factory=dict)
+    decision_metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def return_pct(self) -> float:
@@ -119,7 +119,7 @@ class PositionManager:
         self.slippage = slippage
 
         self.current_position: Optional[Position] = None
-        self.trade_history: List[Trade] = []
+        self.trade_history: list[Trade] = []
         self.next_trade_id = 1
 
     @property
@@ -230,7 +230,7 @@ class PositionManager:
         price: float,
         timestamp: pd.Timestamp,
         symbol: str = "UNKNOWN",
-        decision_metadata: Dict[str, Any] = None,
+        decision_metadata: dict[str, Any] = None,
     ) -> Optional[Trade]:
         """Execute a trading signal.
 
@@ -264,7 +264,7 @@ class PositionManager:
         price: float,
         timestamp: pd.Timestamp,
         symbol: str,
-        decision_metadata: Dict[str, Any],
+        decision_metadata: dict[str, Any],
     ) -> Optional[Trade]:
         """Execute a buy order.
 
@@ -365,7 +365,7 @@ class PositionManager:
         price: float,
         timestamp: pd.Timestamp,
         symbol: str,
-        decision_metadata: Dict[str, Any],
+        decision_metadata: dict[str, Any],
     ) -> Optional[Trade]:
         """Execute a sell order.
 
@@ -485,7 +485,7 @@ class PositionManager:
         if self.current_position:
             self.current_position.update(current_price, timestamp)
 
-    def get_trade_history(self) -> List[Trade]:
+    def get_trade_history(self) -> list[Trade]:
         """Get complete trade history.
 
         Returns:
@@ -493,7 +493,7 @@ class PositionManager:
         """
         return self.trade_history.copy()
 
-    def get_position_summary(self) -> Dict[str, Any]:
+    def get_position_summary(self) -> dict[str, Any]:
         """Get current position summary.
 
         Returns:

@@ -4,25 +4,24 @@ Gap Analysis Service
 Provides comprehensive gap analysis functionality for the API layer.
 """
 
-from typing import List, Dict, Optional, Any, Tuple
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
-from ktrdr.logging import get_logger
-from ktrdr.data.gap_classifier import GapClassifier, GapInfo, GapClassification
-from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.utils.timezone_utils import TimestampManager
-from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.api.models.gap_analysis import (
+    BatchGapAnalysisRequest,
+    BatchGapAnalysisResponse,
+    GapAnalysisMode,
     GapAnalysisRequest,
     GapAnalysisResponse,
     GapAnalysisSummary,
     GapInfoModel,
-    GapAnalysisMode,
-    BatchGapAnalysisRequest,
-    BatchGapAnalysisResponse,
 )
+from ktrdr.data.gap_classifier import GapClassification, GapClassifier, GapInfo
+from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.timeframe_constants import TimeframeConstants
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -226,7 +225,7 @@ class GapAnalysisService:
         end_date: datetime,
         symbol: str,
         timeframe: str,
-    ) -> List[GapInfo]:
+    ) -> list[GapInfo]:
         """Detect all gaps in the analysis period."""
         gaps = []
 
@@ -290,8 +289,8 @@ class GapAnalysisService:
         return gaps
 
     def _filter_gaps_by_mode(
-        self, gaps: List[GapInfo], mode: GapAnalysisMode, include_expected: bool
-    ) -> List[GapInfo]:
+        self, gaps: list[GapInfo], mode: GapAnalysisMode, include_expected: bool
+    ) -> list[GapInfo]:
         """Filter gaps based on analysis mode and include_expected setting."""
         if mode == GapAnalysisMode.NORMAL:
             return []  # Normal mode shows no individual gaps
@@ -319,11 +318,11 @@ class GapAnalysisService:
     def _calculate_summary_statistics(
         self,
         df: pd.DataFrame,
-        gaps: List[GapInfo],
+        gaps: list[GapInfo],
         start_date: datetime,
         end_date: datetime,
         timeframe: str,
-        trading_metadata: Optional[Dict],
+        trading_metadata: Optional[dict],
     ) -> GapAnalysisSummary:
         """Calculate summary statistics for gap analysis."""
         # Calculate expected number of bars
@@ -362,7 +361,7 @@ class GapAnalysisService:
         )
 
     def _count_trading_days(
-        self, start_date: datetime, end_date: datetime, trading_metadata: Optional[Dict]
+        self, start_date: datetime, end_date: datetime, trading_metadata: Optional[dict]
     ) -> int:
         """Count trading days in the period."""
         if not trading_metadata:
@@ -386,8 +385,8 @@ class GapAnalysisService:
         return trading_day_count
 
     def _generate_recommendations(
-        self, gaps: List[GapInfo], summary: GapAnalysisSummary
-    ) -> List[str]:
+        self, gaps: list[GapInfo], summary: GapAnalysisSummary
+    ) -> list[str]:
         """Generate actionable recommendations based on gap analysis."""
         recommendations = []
 
@@ -494,8 +493,8 @@ class GapAnalysisService:
         )
 
     def _calculate_batch_summary(
-        self, results: List[GapAnalysisResponse]
-    ) -> Dict[str, Any]:
+        self, results: list[GapAnalysisResponse]
+    ) -> dict[str, Any]:
         """Calculate aggregated statistics for batch analysis."""
         if not results:
             return {}

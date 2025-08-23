@@ -8,18 +8,17 @@ async operations across the KTRDR system.
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple, Any
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
-from ktrdr.logging import get_logger
-from ktrdr.errors import DataError
 from ktrdr.api.models.operations import (
     OperationInfo,
+    OperationMetadata,
+    OperationProgress,
     OperationStatus,
     OperationType,
-    OperationProgress,
-    OperationMetadata,
 )
+from ktrdr.errors import DataError
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,10 +34,10 @@ class OperationsService:
     def __init__(self):
         """Initialize the operations service."""
         # Global operation registry
-        self._operations: Dict[str, OperationInfo] = {}
+        self._operations: dict[str, OperationInfo] = {}
 
         # Operation tasks registry (for cancellation)
-        self._operation_tasks: Dict[str, asyncio.Task] = {}
+        self._operation_tasks: dict[str, asyncio.Task] = {}
 
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
@@ -140,8 +139,8 @@ class OperationsService:
         self,
         operation_id: str,
         progress: OperationProgress,
-        warnings: Optional[List[str]] = None,
-        errors: Optional[List[str]] = None,
+        warnings: Optional[list[str]] = None,
+        errors: Optional[list[str]] = None,
     ) -> None:
         """
         Update operation progress (lock-free for performance).
@@ -178,7 +177,7 @@ class OperationsService:
     async def complete_operation(
         self,
         operation_id: str,
-        result_summary: Optional[Dict[str, Any]] = None,
+        result_summary: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Mark an operation as completed.
@@ -237,7 +236,7 @@ class OperationsService:
         operation_id: str,
         reason: Optional[str] = None,
         force: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Cancel a running operation.
 
@@ -393,7 +392,7 @@ class OperationsService:
         limit: int = 100,
         offset: int = 0,
         active_only: bool = False,
-    ) -> Tuple[List[OperationInfo], int, int]:
+    ) -> tuple[list[OperationInfo], int, int]:
         """
         List operations with filtering.
 

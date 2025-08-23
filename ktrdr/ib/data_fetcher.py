@@ -14,13 +14,13 @@ Key Features:
 """
 
 import time
-from typing import Optional
 from datetime import datetime
-import pandas as pd
-from ib_insync import Stock, Forex, Contract
 
-from ktrdr.logging import get_logger
+import pandas as pd
+from ib_insync import Contract, Forex, Stock
+
 from ktrdr.ib.pool_manager import get_shared_ib_pool
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 

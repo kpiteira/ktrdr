@@ -1,19 +1,20 @@
 """Base neural network model interface for trading strategies."""
 
+import json
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
-from typing import Dict, Any, Tuple, Optional
-import pandas as pd
-import numpy as np
-from pathlib import Path
-import json
 
 
 class BaseNeuralModel(ABC):
     """Abstract base class for neural network models in trading strategies."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the model with configuration.
 
         Args:
@@ -57,8 +58,8 @@ class BaseNeuralModel(ABC):
         self,
         X: torch.Tensor,
         y: torch.Tensor,
-        validation_data: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Dict[str, Any]:
+        validation_data: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> dict[str, Any]:
         """Train the model with fuzzy features and labels.
 
         Args:
@@ -79,7 +80,7 @@ class BaseNeuralModel(ABC):
 
     def predict(
         self, features: torch.Tensor, market_timestamp: Optional[pd.Timestamp] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate trading decision with confidence scores.
 
         Args:

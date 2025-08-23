@@ -7,10 +7,9 @@ filtering out minor fluctuations based on a percentage threshold.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Optional
 
-from .base_indicator import BaseIndicator
 from ..errors import DataError
+from .base_indicator import BaseIndicator
 
 
 class ZigZagIndicator(BaseIndicator):

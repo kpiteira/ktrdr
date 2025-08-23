@@ -7,18 +7,18 @@ timeouts, retries, and response formatting.
 """
 
 import asyncio
+from typing import Any, Dict, List, Optional
+
 import httpx
-from typing import Optional, Dict, Any, List
-from datetime import datetime
 from rich.console import Console
 
-from ktrdr.logging import get_logger
-from ktrdr.errors import DataError, ValidationError
 from ktrdr.cli.ib_diagnosis import (
     detect_ib_issue_from_api_response,
     format_ib_diagnostic_message,
     should_show_ib_diagnosis,
 )
+from ktrdr.errors import DataError, ValidationError
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 console = Console()
@@ -56,8 +56,8 @@ class KtrdrApiClient:
         self.retry_delay = retry_delay
 
     def _enhance_error_with_ib_diagnosis(
-        self, response_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, response_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Enhance API response with IB diagnosis if applicable.
 
@@ -100,11 +100,11 @@ class KtrdrApiClient:
         self,
         method: str,
         endpoint: str,
-        json_data: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
+        json_data: Optional[dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: Optional[float] = None,
         retries: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Make an HTTP request with error handling and retries.
 
@@ -257,19 +257,19 @@ class KtrdrApiClient:
     async def get(
         self,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Make a GET request to the API."""
         return await self._make_request("GET", endpoint, params=params, timeout=timeout)
 
     async def post(
         self,
         endpoint: str,
-        json: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
+        json: Optional[dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Make a POST request to the API."""
         return await self._make_request(
             "POST", endpoint, json_data=json, params=params, timeout=timeout
@@ -278,10 +278,10 @@ class KtrdrApiClient:
     async def delete(
         self,
         endpoint: str,
-        json: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
+        json: Optional[dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
         timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Make a DELETE request to the API."""
         return await self._make_request(
             "DELETE", endpoint, json_data=json, params=params, timeout=timeout
@@ -291,7 +291,7 @@ class KtrdrApiClient:
     # Data Management Endpoints
     # =============================================================================
 
-    async def get_symbols(self) -> List[Dict[str, Any]]:
+    async def get_symbols(self) -> list[dict[str, Any]]:
         """Get list of available trading symbols."""
         response = await self._make_request("GET", "/symbols")
         if not response.get("success"):
@@ -302,7 +302,7 @@ class KtrdrApiClient:
             )
         return response.get("data", [])
 
-    async def get_timeframes(self) -> List[Dict[str, Any]]:
+    async def get_timeframes(self) -> list[dict[str, Any]]:
         """Get list of available timeframes."""
         response = await self._make_request("GET", "/timeframes")
         if not response.get("success"):
@@ -321,7 +321,7 @@ class KtrdrApiClient:
         end_date: Optional[str] = None,
         trading_hours_only: bool = False,
         include_extended: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get cached OHLCV data for visualization."""
         params = {}
         if start_date:
@@ -363,7 +363,7 @@ class KtrdrApiClient:
         async_mode: bool = False,
         timeout: Optional[float] = None,
         periodic_save_minutes: float = 2.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Load data via DataManager with IB integration."""
         payload = {
             "symbol": symbol,
@@ -405,7 +405,7 @@ class KtrdrApiClient:
         self,
         symbol: str,
         timeframe: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get available date range for a symbol and timeframe."""
         payload = {
             "symbol": symbol,
@@ -436,15 +436,15 @@ class KtrdrApiClient:
 
     async def start_training(
         self,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
         detailed_analytics: bool = False,
         **kwargs,  # Accept additional parameters for backward compatibility
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Start a training task (supports 1-N symbols)."""
         payload = {
             "symbols": symbols,
@@ -471,7 +471,7 @@ class KtrdrApiClient:
             )
         return response
 
-    async def get_training_performance(self, task_id: str) -> Dict[str, Any]:
+    async def get_training_performance(self, task_id: str) -> dict[str, Any]:
         """Get training performance metrics."""
         response = await self._make_request("GET", f"/trainings/{task_id}/performance")
         if not response.get("success"):
@@ -486,7 +486,7 @@ class KtrdrApiClient:
     # Models Endpoints
     # =============================================================================
 
-    async def list_models(self) -> List[Dict[str, Any]]:
+    async def list_models(self) -> list[dict[str, Any]]:
         """Get list of available models."""
         response = await self._make_request("GET", "/models")
         if not response.get("success"):
@@ -502,7 +502,7 @@ class KtrdrApiClient:
         task_id: str,
         model_name: str,
         description: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Save a trained model."""
         payload = {
             "task_id": task_id,
@@ -525,7 +525,7 @@ class KtrdrApiClient:
             )
         return response.get("data", {})
 
-    async def load_model(self, model_name: str) -> Dict[str, Any]:
+    async def load_model(self, model_name: str) -> dict[str, Any]:
         """Load a model for prediction."""
         response = await self._make_request(
             "POST",
@@ -548,7 +548,7 @@ class KtrdrApiClient:
         model_name: Optional[str] = None,
         test_date: Optional[str] = None,
         data_mode: str = "local",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Make predictions using a loaded model."""
         payload = {
             "symbol": symbol,
@@ -588,7 +588,7 @@ class KtrdrApiClient:
         start_date: str,
         end_date: str,
         initial_capital: float = 100000.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Start a new backtest operation."""
         payload = {
             "strategy_name": strategy_name,
@@ -614,7 +614,7 @@ class KtrdrApiClient:
             )
         return response
 
-    async def get_backtest_results(self, backtest_id: str) -> Dict[str, Any]:
+    async def get_backtest_results(self, backtest_id: str) -> dict[str, Any]:
         """Get the full results of a completed backtest."""
         response = await self._make_request("GET", f"/backtests/{backtest_id}/results")
         if not response.get("success"):
@@ -625,7 +625,7 @@ class KtrdrApiClient:
             )
         return response
 
-    async def get_backtest_trades(self, backtest_id: str) -> Dict[str, Any]:
+    async def get_backtest_trades(self, backtest_id: str) -> dict[str, Any]:
         """Get the list of trades from a backtest."""
         response = await self._make_request("GET", f"/backtests/{backtest_id}/trades")
         if not response.get("success"):
@@ -636,7 +636,7 @@ class KtrdrApiClient:
             )
         return response
 
-    async def get_equity_curve(self, backtest_id: str) -> Dict[str, Any]:
+    async def get_equity_curve(self, backtest_id: str) -> dict[str, Any]:
         """Get the equity curve data from a backtest."""
         response = await self._make_request(
             "GET", f"/backtests/{backtest_id}/equity_curve"
@@ -660,7 +660,7 @@ class KtrdrApiClient:
         limit: int = 100,
         offset: int = 0,
         active_only: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """List operations with optional filtering."""
         params = {
             "limit": limit,
@@ -681,7 +681,7 @@ class KtrdrApiClient:
             )
         return response
 
-    async def get_operation_status(self, operation_id: str) -> Dict[str, Any]:
+    async def get_operation_status(self, operation_id: str) -> dict[str, Any]:
         """Get detailed status for a specific operation."""
         response = await self._make_request("GET", f"/operations/{operation_id}")
         if not response.get("success"):
@@ -697,7 +697,7 @@ class KtrdrApiClient:
         operation_id: str,
         reason: Optional[str] = None,
         force: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Cancel a running operation."""
         payload = {}
         if reason:
@@ -720,7 +720,7 @@ class KtrdrApiClient:
             )
         return response
 
-    async def retry_operation(self, operation_id: str) -> Dict[str, Any]:
+    async def retry_operation(self, operation_id: str) -> dict[str, Any]:
         """Retry a failed operation."""
         response = await self._make_request("POST", f"/operations/{operation_id}/retry")
         if not response.get("success"):

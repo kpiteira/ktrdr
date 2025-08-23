@@ -5,15 +5,14 @@ This module provides the MultiTimeframeIndicatorEngine class, which computes
 technical indicators across multiple timeframes with standardized column naming.
 """
 
-from typing import Dict, List, Optional, Union, Any, Tuple
-import pandas as pd
 from dataclasses import dataclass
+from typing import Any, Dict, List
+
+import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
-from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.indicator_engine import IndicatorEngine
-from ktrdr.indicators.indicator_factory import IndicatorFactory
 
 logger = get_logger(__name__)
 
@@ -23,7 +22,7 @@ class TimeframeIndicatorConfig:
     """Configuration for indicators on a specific timeframe."""
 
     timeframe: str
-    indicators: List[Dict[str, Any]]
+    indicators: list[dict[str, Any]]
     enabled: bool = True
     weight: float = 1.0
 
@@ -42,7 +41,7 @@ class MultiTimeframeIndicatorEngine:
     - Examples: RSI_1h, SMA_20_4h, MACD_line_1d
     """
 
-    def __init__(self, timeframe_configs: List[TimeframeIndicatorConfig]):
+    def __init__(self, timeframe_configs: list[TimeframeIndicatorConfig]):
         """
         Initialize the MultiTimeframeIndicatorEngine.
 
@@ -50,7 +49,7 @@ class MultiTimeframeIndicatorEngine:
             timeframe_configs: List of timeframe-specific indicator configurations
         """
         self.timeframe_configs = timeframe_configs
-        self.engines: Dict[str, IndicatorEngine] = {}
+        self.engines: dict[str, IndicatorEngine] = {}
 
         # Initialize individual engines for each timeframe
         for config in timeframe_configs:
@@ -62,8 +61,8 @@ class MultiTimeframeIndicatorEngine:
         )
 
     def apply_multi_timeframe(
-        self, multi_timeframe_data: Dict[str, pd.DataFrame]
-    ) -> Dict[str, pd.DataFrame]:
+        self, multi_timeframe_data: dict[str, pd.DataFrame]
+    ) -> dict[str, pd.DataFrame]:
         """
         Apply indicators to multi-timeframe data with standardized naming.
 
@@ -123,7 +122,7 @@ class MultiTimeframeIndicatorEngine:
         return result
 
     def _standardize_column_names(
-        self, indicators_df: pd.DataFrame, timeframe: str, original_columns: List[str]
+        self, indicators_df: pd.DataFrame, timeframe: str, original_columns: list[str]
     ) -> pd.DataFrame:
         """
         Standardize column names with timeframe suffix.
@@ -157,7 +156,7 @@ class MultiTimeframeIndicatorEngine:
 
         return standardized_df
 
-    def get_indicator_columns(self, timeframe: str) -> List[str]:
+    def get_indicator_columns(self, timeframe: str) -> list[str]:
         """
         Get list of indicator column names for a specific timeframe.
 
@@ -183,7 +182,7 @@ class MultiTimeframeIndicatorEngine:
 
         return indicator_names
 
-    def get_all_indicator_columns(self) -> Dict[str, List[str]]:
+    def get_all_indicator_columns(self) -> dict[str, list[str]]:
         """
         Get all indicator column names for all timeframes.
 
@@ -245,8 +244,8 @@ class MultiTimeframeIndicatorEngine:
 
     def create_cross_timeframe_features(
         self,
-        multi_timeframe_indicators: Dict[str, pd.DataFrame],
-        feature_specs: Dict[str, Dict[str, Any]],
+        multi_timeframe_indicators: dict[str, pd.DataFrame],
+        feature_specs: dict[str, dict[str, Any]],
     ) -> pd.DataFrame:
         """
         Create cross-timeframe features by combining indicators from different timeframes.
@@ -317,7 +316,7 @@ class MultiTimeframeIndicatorEngine:
         else:
             return pd.DataFrame()
 
-    def validate_configuration(self) -> Dict[str, Any]:
+    def validate_configuration(self) -> dict[str, Any]:
         """
         Validate the multi-timeframe indicator configuration.
 
@@ -417,7 +416,7 @@ class MultiTimeframeIndicatorEngine:
 
 
 def create_multi_timeframe_engine_from_config(
-    config: Dict[str, Any],
+    config: dict[str, Any],
 ) -> MultiTimeframeIndicatorEngine:
     """
     Create MultiTimeframeIndicatorEngine from configuration dictionary.

@@ -1,14 +1,15 @@
 """Feature caching system for backtesting performance optimization."""
 
-import pandas as pd
-from typing import Dict, Any, Optional, Tuple
-from pathlib import Path
 import pickle
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
-from ..indicators.indicator_engine import IndicatorEngine
-from ..fuzzy.engine import FuzzyEngine
-from ..fuzzy.config import FuzzyConfigLoader
+import pandas as pd
+
 from .. import get_logger
+from ..fuzzy.config import FuzzyConfigLoader
+from ..fuzzy.engine import FuzzyEngine
+from ..indicators.indicator_engine import IndicatorEngine
 
 logger = get_logger(__name__)
 
@@ -16,7 +17,7 @@ logger = get_logger(__name__)
 class FeatureCache:
     """Pre-computes and caches indicators and fuzzy memberships for backtesting."""
 
-    def __init__(self, strategy_config: Dict[str, Any]):
+    def __init__(self, strategy_config: dict[str, Any]):
         """Initialize feature cache with strategy configuration.
 
         Args:
@@ -174,7 +175,7 @@ class FeatureCache:
 
     def get_features_for_timestamp(
         self, timestamp: pd.Timestamp
-    ) -> Tuple[Dict[str, float], Dict[str, float]]:
+    ) -> tuple[dict[str, float], dict[str, float]]:
         """Get pre-computed features for a specific timestamp.
 
         Args:

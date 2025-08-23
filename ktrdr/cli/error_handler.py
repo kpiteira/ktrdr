@@ -6,18 +6,18 @@ special support for IB Gateway diagnostic messages.
 """
 
 import sys
-from typing import Dict, Any, Optional
+from typing import Any, Dict
+
 from rich.console import Console
 
-from ktrdr.errors import DataError, ValidationError
-from ktrdr.logging import get_logger
 from ktrdr.cli.ib_diagnosis import (
+    IBProblemType,
     detect_ib_issue_from_api_response,
-    format_ib_diagnostic_message,
     get_ib_recovery_suggestions,
     should_show_ib_diagnosis,
-    IBProblemType,
 )
+from ktrdr.errors import DataError, ValidationError
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 error_console = Console(stderr=True)
@@ -73,7 +73,7 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
 
 
 def handle_api_response_error(
-    response: Dict[str, Any],
+    response: dict[str, Any],
     context: str = "operation",
     verbose: bool = False,
     quiet: bool = False,

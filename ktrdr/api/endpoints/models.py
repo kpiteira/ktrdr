@@ -5,13 +5,14 @@ This module implements the API endpoints for model management - saving, loading,
 and testing trained neural network models.
 """
 
-from typing import Dict, List, Optional, Any
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
 from ktrdr.api.services.training_service import TrainingService
-from ktrdr.errors import ValidationError, DataError
+from ktrdr.errors import ValidationError
 
 logger = get_logger(__name__)
 
@@ -54,7 +55,7 @@ class LoadModelResponse(BaseModel):
     success: bool
     model_name: str
     model_loaded: bool
-    model_info: Dict[str, Any]
+    model_info: dict[str, Any]
 
 
 class PredictionRequest(BaseModel):
@@ -99,7 +100,7 @@ class PredictionResponse(BaseModel):
     symbol: str
     test_date: str
     prediction: Prediction
-    input_features: Dict[str, float]
+    input_features: dict[str, float]
 
 
 class ModelSummary(BaseModel):
@@ -119,7 +120,7 @@ class ModelsListResponse(BaseModel):
     """Response model for models list."""
 
     success: bool
-    models: List[ModelSummary]
+    models: list[ModelSummary]
 
 
 # Dependency for training service (contains model management)

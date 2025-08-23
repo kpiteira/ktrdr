@@ -10,10 +10,11 @@ Core Principle:
 - Prevents timezone inconsistencies between data paths
 """
 
-from typing import Union, Optional, Dict
 from datetime import datetime
+from typing import Dict, Optional, Union
+
 import pandas as pd
-import pytz
+
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -402,7 +403,7 @@ class TimestampManager:
             return "Unknown"
 
     @staticmethod
-    def _get_symbol_trading_hours(symbol: str) -> Optional[Dict]:
+    def _get_symbol_trading_hours(symbol: str) -> Optional[dict]:
         """
         Get trading hours metadata for a symbol from the symbol cache.
 

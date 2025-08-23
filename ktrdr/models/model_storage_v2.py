@@ -1,23 +1,23 @@
 """Enhanced model storage system supporting multi-scope models and comprehensive metadata."""
 
 import json
+import pickle
 import shutil
-import torch
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Tuple
-import pickle
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import torch
 
 from ktrdr import get_logger
+from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
+from ktrdr.config.strategy_loader import strategy_loader
 from ktrdr.models.model_metadata import (
     ModelMetadata,
+    ModelMetadataManager,
     ModelScope,
     TrainingStatus,
-    ModelMetadataManager,
-    metadata_manager,
 )
-from ktrdr.config.models import StrategyConfigurationV2, LegacyStrategyConfiguration
-from ktrdr.config.strategy_loader import strategy_loader
 
 logger = get_logger(__name__)
 
@@ -79,8 +79,8 @@ class ModelStorageV2:
         model: torch.nn.Module,
         metadata: ModelMetadata,
         strategy_config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration],
-        training_metrics: Optional[Dict[str, Any]] = None,
-        feature_names: Optional[List[str]] = None,
+        training_metrics: Optional[dict[str, Any]] = None,
+        feature_names: Optional[list[str]] = None,
         scaler: Optional[Any] = None,
         model_version: Optional[int] = None,
         save_full_model: bool = True,
@@ -225,7 +225,7 @@ class ModelStorageV2:
         model_path: Union[str, Path],
         load_full_model: bool = True,
         device: str = "cpu",
-    ) -> Tuple[torch.nn.Module, ModelMetadata, Dict[str, Any]]:
+    ) -> tuple[torch.nn.Module, ModelMetadata, dict[str, Any]]:
         """
         Load model with metadata and artifacts.
 
@@ -334,8 +334,8 @@ class ModelStorageV2:
         self,
         strategy_name: Optional[str] = None,
         scope: Optional[ModelScope] = None,
-        compatible_with: Optional[Tuple[str, str]] = None,  # (symbol, timeframe)
-    ) -> List[Dict[str, Any]]:
+        compatible_with: Optional[tuple[str, str]] = None,  # (symbol, timeframe)
+    ) -> list[dict[str, Any]]:
         """
         List available models with filtering options.
 

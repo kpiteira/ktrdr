@@ -10,17 +10,17 @@ Provides async operations for data loading with:
 """
 
 import asyncio
-import time
 import uuid
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Callable, Any, Tuple
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
+
 import pandas as pd
 
-from ktrdr.logging import get_logger
-from ktrdr.errors import DataError
 from ktrdr.data.data_manager import DataManager
+from ktrdr.errors import DataError
+from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
@@ -45,7 +45,7 @@ class ProgressInfo:
     failed_segments: int = 0
     current_segment: Optional[str] = None
     bars_fetched: int = 0
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
     @property
     def progress_percentage(self) -> float:
@@ -120,8 +120,8 @@ class AsyncDataLoader:
             data_manager: DataManager instance (creates default if None)
         """
         self.data_manager = data_manager or DataManager(enable_ib=True)
-        self.jobs: Dict[str, DataLoadingJob] = {}
-        self.active_jobs: Dict[str, asyncio.Task] = {}
+        self.jobs: dict[str, DataLoadingJob] = {}
+        self.active_jobs: dict[str, asyncio.Task] = {}
 
         logger.info("AsyncDataLoader initialized")
 
@@ -368,7 +368,7 @@ class AsyncDataLoader:
             cancellation_token=job,  # Pass the job itself as cancellation token
         )
 
-    def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def get_job_status(self, job_id: str) -> Optional[dict[str, Any]]:
         """
         Get status of a job.
 
@@ -404,7 +404,7 @@ class AsyncDataLoader:
 
     def list_jobs(
         self, status_filter: Optional[JobStatus] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         List all jobs with optional status filter.
 

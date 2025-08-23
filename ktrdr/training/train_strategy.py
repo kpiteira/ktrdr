@@ -1,23 +1,22 @@
 """Strategy training orchestrator that coordinates the complete training pipeline."""
 
-import yaml
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 import pandas as pd
 import torch
-from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
-import numpy as np
-from sklearn.metrics import precision_score, recall_score, f1_score
+import yaml
+from sklearn.metrics import f1_score, precision_score, recall_score
 
-from .zigzag_labeler import ZigZagLabeler
-from .fuzzy_neural_processor import FuzzyNeuralProcessor
-from .model_trainer import ModelTrainer
-from .model_storage import ModelStorage
-from ..neural.models.mlp import MLPTradingModel
 from ..data.data_manager import DataManager
-from ..indicators.indicator_engine import IndicatorEngine
 from ..fuzzy.engine import FuzzyEngine
+from ..indicators.indicator_engine import IndicatorEngine
 from ..logging import get_logger
-
+from ..neural.models.mlp import MLPTradingModel
+from .fuzzy_neural_processor import FuzzyNeuralProcessor
+from .model_storage import ModelStorage
+from .model_trainer import ModelTrainer
+from .zigzag_labeler import ZigZagLabeler
 
 logger = get_logger(__name__)
 
@@ -39,14 +38,14 @@ class StrategyTrainer:
     def train_multi_symbol_strategy(
         self,
         strategy_config_path: str,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         start_date: str,
         end_date: str,
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train a neuro-fuzzy strategy on multiple symbols simultaneously.
 
         Args:
@@ -278,13 +277,13 @@ class StrategyTrainer:
         self,
         strategy_config_path: str,
         symbol: str,
-        timeframes: List[str],
+        timeframes: list[str],
         start_date: str,
         end_date: str,
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train a complete neuro-fuzzy strategy with multi-timeframe support.
 
         Args:
@@ -509,7 +508,7 @@ class StrategyTrainer:
             },
         }
 
-    def _load_strategy_config(self, config_path: str) -> Dict[str, Any]:
+    def _load_strategy_config(self, config_path: str) -> dict[str, Any]:
         """Load strategy configuration from YAML file.
 
         Args:
@@ -532,11 +531,11 @@ class StrategyTrainer:
     def _load_price_data(
         self,
         symbol: str,
-        timeframes: List[str],
+        timeframes: list[str],
         start_date: str,
         end_date: str,
         data_mode: str = "local",
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """Load price data for training with multi-timeframe support.
 
         Args:
@@ -609,9 +608,9 @@ class StrategyTrainer:
 
     def _calculate_indicators(
         self,
-        price_data: Dict[str, pd.DataFrame],
-        indicator_configs: List[Dict[str, Any]],
-    ) -> Dict[str, pd.DataFrame]:
+        price_data: dict[str, pd.DataFrame],
+        indicator_configs: list[dict[str, Any]],
+    ) -> dict[str, pd.DataFrame]:
         """Calculate technical indicators with multi-timeframe support.
 
         Args:
@@ -633,7 +632,7 @@ class StrategyTrainer:
         return self._calculate_indicators_multi_timeframe(price_data, indicator_configs)
 
     def _calculate_indicators_single_timeframe(
-        self, price_data: pd.DataFrame, indicator_configs: List[Dict[str, Any]]
+        self, price_data: pd.DataFrame, indicator_configs: list[dict[str, Any]]
     ) -> pd.DataFrame:
         """Calculate indicators for a single timeframe (original implementation)."""
         # Fix indicator configs to add 'type' field if missing
@@ -723,9 +722,9 @@ class StrategyTrainer:
 
     def _calculate_indicators_multi_timeframe(
         self,
-        price_data: Dict[str, pd.DataFrame],
-        indicator_configs: List[Dict[str, Any]],
-    ) -> Dict[str, pd.DataFrame]:
+        price_data: dict[str, pd.DataFrame],
+        indicator_configs: list[dict[str, Any]],
+    ) -> dict[str, pd.DataFrame]:
         """Calculate indicators for multiple timeframes using the new multi-timeframe method."""
         # Fix indicator configs to add 'type' field if missing (same as single timeframe)
         fixed_configs = []
@@ -810,8 +809,8 @@ class StrategyTrainer:
         return mapped_results
 
     def _generate_fuzzy_memberships(
-        self, indicators: Dict[str, pd.DataFrame], fuzzy_configs: Dict[str, Any]
-    ) -> Dict[str, pd.DataFrame]:
+        self, indicators: dict[str, pd.DataFrame], fuzzy_configs: dict[str, Any]
+    ) -> dict[str, pd.DataFrame]:
         """Generate fuzzy membership values with multi-timeframe support.
 
         Args:
@@ -855,11 +854,11 @@ class StrategyTrainer:
 
     def _engineer_features(
         self,
-        fuzzy_data: Dict[str, pd.DataFrame],
-        indicators: Dict[str, pd.DataFrame],
-        price_data: Dict[str, pd.DataFrame],
-        feature_config: Dict[str, Any],
-    ) -> Tuple[torch.Tensor, List[str], Any]:
+        fuzzy_data: dict[str, pd.DataFrame],
+        indicators: dict[str, pd.DataFrame],
+        price_data: dict[str, pd.DataFrame],
+        feature_config: dict[str, Any],
+    ) -> tuple[torch.Tensor, list[str], Any]:
         """Engineer features for neural network training using pure fuzzy approach with multi-timeframe support.
 
         Args:
@@ -885,7 +884,7 @@ class StrategyTrainer:
         return features, feature_names, None  # No scaler needed for fuzzy values
 
     def _generate_labels(
-        self, price_data: Dict[str, pd.DataFrame], label_config: Dict[str, Any]
+        self, price_data: dict[str, pd.DataFrame], label_config: dict[str, Any]
     ) -> torch.Tensor:
         """Generate training labels using ZigZag method with multi-timeframe support.
 
@@ -929,7 +928,7 @@ class StrategyTrainer:
         labels = labeler.generate_segment_labels(tf_price_data)
         return torch.LongTensor(labels.values)
 
-    def _get_label_distribution(self, labels: torch.Tensor) -> Dict[str, Any]:
+    def _get_label_distribution(self, labels: torch.Tensor) -> dict[str, Any]:
         """Get label distribution statistics.
 
         Args:
@@ -958,8 +957,8 @@ class StrategyTrainer:
         features: torch.Tensor,
         labels: torch.Tensor,
         validation_split: float,
-        split_config: Dict[str, float],
-    ) -> Tuple:
+        split_config: dict[str, float],
+    ) -> tuple:
         """Split data into train/validation/test sets.
 
         Args:
@@ -1001,7 +1000,7 @@ class StrategyTrainer:
         return train_data, val_data, test_data
 
     def _create_model(
-        self, model_config: Dict[str, Any], input_size: int
+        self, model_config: dict[str, Any], input_size: int
     ) -> torch.nn.Module:
         """Create neural network model.
 
@@ -1024,13 +1023,13 @@ class StrategyTrainer:
     def _train_model(
         self,
         model: torch.nn.Module,
-        train_data: Tuple,
-        val_data: Tuple,
-        config: Dict[str, Any],
+        train_data: tuple,
+        val_data: tuple,
+        config: dict[str, Any],
         symbol_or_symbols,  # Can be str (single) or List[str] (multi-symbol)
-        timeframes: List[str],
+        timeframes: list[str],
         progress_callback=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train the neural network model (supports both single and multi-symbol).
 
         Args:
@@ -1096,8 +1095,8 @@ class StrategyTrainer:
             )
 
     def _evaluate_model(
-        self, model: torch.nn.Module, test_data: Optional[Tuple]
-    ) -> Dict[str, Any]:
+        self, model: torch.nn.Module, test_data: Optional[tuple]
+    ) -> dict[str, Any]:
         """Evaluate model on test set.
 
         Args:
@@ -1158,8 +1157,8 @@ class StrategyTrainer:
         model: torch.nn.Module,
         X_val: torch.Tensor,
         y_val: torch.Tensor,
-        feature_names: List[str],
-    ) -> Dict[str, float]:
+        feature_names: list[str],
+    ) -> dict[str, float]:
         """Calculate feature importance scores using permutation importance.
 
         Args:
@@ -1171,7 +1170,6 @@ class StrategyTrainer:
         Returns:
             Feature importance dictionary
         """
-        import torch.nn.functional as F
         from sklearn.metrics import accuracy_score
 
         model.eval()
@@ -1209,7 +1207,7 @@ class StrategyTrainer:
 
         return importance_scores
 
-    def _sort_timeframes_by_frequency(self, timeframes: List[str]) -> List[str]:
+    def _sort_timeframes_by_frequency(self, timeframes: list[str]) -> list[str]:
         """
         Sort timeframes by frequency (highest frequency first).
 
@@ -1249,10 +1247,10 @@ class StrategyTrainer:
 
     def _combine_multi_symbol_data(
         self,
-        all_symbols_features: Dict[str, torch.Tensor],
-        all_symbols_labels: Dict[str, torch.Tensor],
-        symbols: List[str],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        all_symbols_features: dict[str, torch.Tensor],
+        all_symbols_labels: dict[str, torch.Tensor],
+        symbols: list[str],
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Combine features and labels from multiple symbols with balanced sampling.
 
         Args:
@@ -1306,7 +1304,7 @@ class StrategyTrainer:
         return combined_features, combined_labels, symbol_indices
 
     def _create_multi_symbol_model(
-        self, model_config: Dict[str, Any], input_size: int, num_symbols: int
+        self, model_config: dict[str, Any], input_size: int, num_symbols: int
     ) -> torch.nn.Module:
         """Create neural network model with symbol embeddings.
 
@@ -1341,10 +1339,10 @@ class StrategyTrainer:
     def _evaluate_per_symbol_performance(
         self,
         model: torch.nn.Module,
-        val_data: Tuple[torch.Tensor, torch.Tensor],
+        val_data: tuple[torch.Tensor, torch.Tensor],
         symbol_indices: torch.Tensor,
-        symbols: List[str],
-    ) -> Dict[str, Dict[str, float]]:
+        symbols: list[str],
+    ) -> dict[str, dict[str, float]]:
         """Evaluate model performance for each symbol separately.
 
         Args:
@@ -1397,7 +1395,7 @@ class StrategyTrainer:
                 y_pred = symbol_predicted.cpu().numpy()
 
                 # Calculate precision, recall, and f1_score
-                from sklearn.metrics import precision_score, recall_score, f1_score
+                from sklearn.metrics import f1_score, precision_score, recall_score
 
                 precision = precision_score(
                     y_true, y_pred, average="weighted", zero_division=0
@@ -1423,8 +1421,8 @@ class StrategyTrainer:
         labels: torch.Tensor,
         symbol_indices: torch.Tensor,
         validation_split: float,
-        split_config: Dict[str, float],
-    ) -> Tuple:
+        split_config: dict[str, float],
+    ) -> tuple:
         """Split multi-symbol data into train/validation/test sets including symbol indices.
 
         Args:

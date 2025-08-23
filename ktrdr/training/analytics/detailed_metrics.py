@@ -1,7 +1,7 @@
 """Enhanced training metrics for comprehensive analysis."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -24,23 +24,23 @@ class DetailedTrainingMetrics:
     # Gradient metrics for detecting vanishing/exploding gradients
     gradient_norm_avg: float = 0.0
     gradient_norm_max: float = 0.0
-    gradient_norms_by_layer: Dict[str, float] = field(default_factory=dict)
+    gradient_norms_by_layer: dict[str, float] = field(default_factory=dict)
 
     # Parameter metrics for tracking learning dynamics
     param_change_magnitude: float = 0.0
-    param_stats_by_layer: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    param_stats_by_layer: dict[str, dict[str, float]] = field(default_factory=dict)
 
     # Class-wise metrics for multi-class classification analysis
-    class_precisions: Dict[str, float] = field(default_factory=dict)
-    class_recalls: Dict[str, float] = field(default_factory=dict)
-    class_f1_scores: Dict[str, float] = field(default_factory=dict)
-    class_supports: Dict[str, int] = field(default_factory=dict)
+    class_precisions: dict[str, float] = field(default_factory=dict)
+    class_recalls: dict[str, float] = field(default_factory=dict)
+    class_f1_scores: dict[str, float] = field(default_factory=dict)
+    class_supports: dict[str, int] = field(default_factory=dict)
 
     # Prediction confidence metrics
     prediction_confidence_avg: float = 0.0
     prediction_entropy: float = 0.0
     high_confidence_predictions: float = 0.0
-    confidence_distribution: List[float] = field(default_factory=list)
+    confidence_distribution: list[float] = field(default_factory=list)
 
     # Learning quality indicators
     learning_signal_strength: str = "unknown"  # strong, medium, weak
@@ -53,7 +53,7 @@ class DetailedTrainingMetrics:
     total_samples_processed: int = 0
     early_stopping_triggered: bool = False
 
-    def to_csv_row(self) -> Dict[str, Any]:
+    def to_csv_row(self) -> dict[str, Any]:
         """Convert to flat dictionary for CSV export (LLM-friendly)."""
         return {
             "epoch": self.epoch,
@@ -82,7 +82,7 @@ class DetailedTrainingMetrics:
             "epoch_duration_seconds": self.duration,
         }
 
-    def to_json_dict(self) -> Dict[str, Any]:
+    def to_json_dict(self) -> dict[str, Any]:
         """Convert to comprehensive dictionary for JSON export."""
         return {
             "epoch": self.epoch,

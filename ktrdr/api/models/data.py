@@ -6,7 +6,8 @@ and response models for data loading operations.
 """
 
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Literal
+from typing import Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ktrdr.api.models.base import ApiResponse
@@ -60,20 +61,20 @@ class OHLCVData(BaseModel):
         metadata (Dict[str, Any]): Metadata about the data
     """
 
-    dates: List[str] = Field(..., description="List of date strings")
-    ohlcv: List[List[float]] = Field(
+    dates: list[str] = Field(..., description="List of date strings")
+    ohlcv: list[list[float]] = Field(
         ..., description="Array of OHLCV data [open, high, low, close, volume]"
     )
-    points: Optional[List[OHLCVPoint]] = Field(
+    points: Optional[list[OHLCVPoint]] = Field(
         None, description="Structured OHLCV data points"
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Metadata about the data"
     )
 
     @field_validator("ohlcv")
     @classmethod
-    def validate_ohlcv_format(cls, v: List[List[float]]) -> List[List[float]]:
+    def validate_ohlcv_format(cls, v: list[list[float]]) -> list[list[float]]:
         """Validate that OHLCV data has the correct format."""
         for point in v:
             if len(point) != 5:
@@ -126,11 +127,11 @@ class TradingHoursInfo(BaseModel):
     """
 
     timezone: str = Field(..., description="Exchange timezone")
-    regular_hours: Dict[str, Any] = Field(..., description="Regular trading session")
-    extended_hours: List[Dict[str, Any]] = Field(
+    regular_hours: dict[str, Any] = Field(..., description="Regular trading session")
+    extended_hours: list[dict[str, Any]] = Field(
         ..., description="Extended trading sessions"
     )
-    trading_days: List[int] = Field(
+    trading_days: list[int] = Field(
         ..., description="Days of week when trading occurs (0=Monday)"
     )
 
@@ -154,7 +155,7 @@ class SymbolInfo(BaseModel):
     type: str = Field(..., description="Instrument type (stock, forex, crypto, etc.)")
     exchange: str = Field(..., description="Exchange where the instrument is traded")
     currency: str = Field(..., description="Currency denomination")
-    available_timeframes: List[str] = Field(
+    available_timeframes: list[str] = Field(
         ..., description="Available timeframes for this symbol"
     )
     trading_hours: Optional[TradingHoursInfo] = Field(
@@ -177,13 +178,13 @@ class TimeframeInfo(BaseModel):
     description: str = Field(..., description="Description of the timeframe")
 
 
-class SymbolsResponse(ApiResponse[List[SymbolInfo]]):
+class SymbolsResponse(ApiResponse[list[SymbolInfo]]):
     """Response model for symbol list endpoint."""
 
     pass
 
 
-class TimeframesResponse(ApiResponse[List[TimeframeInfo]]):
+class TimeframesResponse(ApiResponse[list[TimeframeInfo]]):
     """Response model for timeframes list endpoint."""
 
     pass

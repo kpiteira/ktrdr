@@ -1,12 +1,13 @@
 """Model storage and versioning system."""
 
-import torch
 import json
-from pathlib import Path
-from typing import Dict, Any, Optional, List
-from datetime import datetime
-import shutil
 import pickle
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import torch
 
 
 class ModelStorage:
@@ -27,10 +28,10 @@ class ModelStorage:
         strategy_name: str,
         symbol: str,
         timeframe: str,
-        config: Dict[str, Any],
-        training_metrics: Dict[str, Any],
-        feature_names: List[str],
-        feature_importance: Optional[Dict[str, float]] = None,
+        config: dict[str, Any],
+        training_metrics: dict[str, Any],
+        feature_names: list[str],
+        feature_importance: Optional[dict[str, float]] = None,
         scaler: Optional[Any] = None,
     ) -> str:
         """Save a trained model with all metadata.
@@ -149,7 +150,7 @@ class ModelStorage:
         symbol: str,
         timeframe: str,
         version: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Load a saved model with all metadata.
 
         Args:
@@ -233,7 +234,7 @@ class ModelStorage:
             "is_pure_fuzzy": is_pure_fuzzy,
         }
 
-    def list_models(self, strategy_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_models(self, strategy_name: Optional[str] = None) -> list[dict[str, Any]]:
         """List all available models.
 
         Args:

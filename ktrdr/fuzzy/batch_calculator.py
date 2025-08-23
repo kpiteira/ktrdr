@@ -5,12 +5,12 @@ This module provides the BatchFuzzyCalculator class that efficiently processes
 time series data to compute fuzzy membership values in bulk operations.
 """
 
-from typing import Dict, List, Optional, Tuple, Union
 import time
 from functools import lru_cache
+from typing import Dict, Optional, Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import ProcessingError
@@ -67,7 +67,7 @@ class BatchFuzzyCalculator:
 
     def calculate_memberships(
         self, indicator_name: str, values_series: pd.Series
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """
         Calculate fuzzy membership values for a time series.
 
@@ -177,7 +177,7 @@ class BatchFuzzyCalculator:
 
     def _handle_nan_values(
         self, values_series: pd.Series
-    ) -> Tuple[pd.Series, pd.Series]:
+    ) -> tuple[pd.Series, pd.Series]:
         """
         Handle NaN values in the input series.
 
@@ -201,7 +201,7 @@ class BatchFuzzyCalculator:
 
     def _compute_memberships(
         self, indicator_name: str, clean_series: pd.Series
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """
         Perform the actual fuzzy membership calculation.
 
@@ -225,10 +225,10 @@ class BatchFuzzyCalculator:
 
     def _restore_result_format(
         self,
-        result: Dict[str, pd.Series],
+        result: dict[str, pd.Series],
         original_index: pd.Index,
         nan_mask: pd.Series,
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """
         Restore the result to match the original series format, including NaN handling.
 
@@ -260,7 +260,7 @@ class BatchFuzzyCalculator:
 
     def _create_empty_result(
         self, indicator_name: str, index: pd.Index
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """
         Create an empty result structure for empty input series.
 
@@ -297,7 +297,7 @@ class BatchFuzzyCalculator:
         return f"{indicator_name}:{values_hash}:{len(series)}"
 
     @lru_cache(maxsize=None)
-    def _get_cached_result(self, cache_key: str) -> Optional[Dict[str, pd.Series]]:
+    def _get_cached_result(self, cache_key: str) -> Optional[dict[str, pd.Series]]:
         """
         Get cached result if available.
 
@@ -310,7 +310,7 @@ class BatchFuzzyCalculator:
         # The lru_cache decorator handles the actual caching
         return None
 
-    def _cache_result(self, cache_key: str, result: Dict[str, pd.Series]) -> None:
+    def _cache_result(self, cache_key: str, result: dict[str, pd.Series]) -> None:
         """
         Cache the computed result.
 
@@ -331,7 +331,7 @@ class BatchFuzzyCalculator:
         self._cache_misses = 0
         logger.debug("Batch calculator cache cleared")
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """
         Get cache performance statistics.
 

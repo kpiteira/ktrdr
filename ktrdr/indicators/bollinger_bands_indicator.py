@@ -10,11 +10,13 @@ The indicator is commonly used to identify overbought/oversold conditions
 and potential breakout points.
 """
 
-import pandas as pd
 from typing import Union
+
+import pandas as pd
+
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import BOLLINGER_BANDS_SCHEMA
-from ktrdr.errors import DataError
 
 
 class BollingerBandsIndicator(BaseIndicator):

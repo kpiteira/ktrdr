@@ -4,17 +4,16 @@ Strategies endpoints for the KTRDR API.
 This module implements the API endpoints for listing and managing trading strategies.
 """
 
-from fastapi import APIRouter, HTTPException
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
+
 import yaml
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from ktrdr import get_logger
-from ktrdr.config.loader import ConfigLoader
-from ktrdr.training.model_storage import ModelStorage
-from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
 
@@ -39,10 +38,10 @@ class StrategyInfo(BaseModel):
     description: str
     symbol: str
     timeframe: str
-    indicators: List[Dict[str, Any]]
-    fuzzy_config: Dict[str, Any]
+    indicators: list[dict[str, Any]]
+    fuzzy_config: dict[str, Any]
     training_status: str  # 'untrained', 'training', 'trained', 'failed'
-    available_versions: List[int]
+    available_versions: list[int]
     latest_version: Optional[int] = None
     latest_training_date: Optional[str] = None
     latest_metrics: Optional[StrategyMetrics] = None
@@ -52,7 +51,7 @@ class StrategiesResponse(BaseModel):
     """Response model for strategies list."""
 
     success: bool = True
-    strategies: List[StrategyInfo]
+    strategies: list[StrategyInfo]
 
 
 class ValidationIssue(BaseModel):
@@ -61,7 +60,7 @@ class ValidationIssue(BaseModel):
     severity: str  # 'error', 'warning'
     category: str  # 'indicators', 'fuzzy_sets', 'structure', 'configuration'
     message: str
-    details: Optional[Dict[str, Any]] = None
+    details: Optional[dict[str, Any]] = None
 
 
 class StrategyValidationResponse(BaseModel):
@@ -70,8 +69,8 @@ class StrategyValidationResponse(BaseModel):
     success: bool
     valid: bool
     strategy_name: str
-    issues: List[ValidationIssue]
-    available_indicators: List[str]
+    issues: list[ValidationIssue]
+    available_indicators: list[str]
     message: str
 
 
@@ -237,8 +236,8 @@ async def get_strategy_details(
 
 
 def _validate_strategy_config(
-    config: Dict[str, Any], strategy_name: str
-) -> List[ValidationIssue]:
+    config: dict[str, Any], strategy_name: str
+) -> list[ValidationIssue]:
     """
     Validate a strategy configuration and return list of issues.
 

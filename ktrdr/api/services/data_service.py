@@ -6,22 +6,21 @@ bridging the API endpoints with the core KTRDR data modules.
 """
 
 import asyncio
-import logging
-from typing import Dict, List, Optional, Union, Any
-from datetime import datetime
-import pandas as pd
 import time
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
-from ktrdr import get_logger, log_entry_exit, log_performance, log_data_operation
-from ktrdr.data import DataManager
-from ktrdr.errors import DataError, DataNotFoundError, retry_with_backoff, RetryConfig
+import pandas as pd
+
+from ktrdr import get_logger, log_entry_exit, log_performance
+from ktrdr.api.models.operations import (
+    OperationMetadata,
+    OperationType,
+)
 from ktrdr.api.services.base import BaseService
 from ktrdr.api.services.operations_service import get_operations_service
-from ktrdr.api.models.operations import (
-    OperationType,
-    OperationMetadata,
-    OperationProgress,
-)
+from ktrdr.data import DataManager
+from ktrdr.errors import DataError, DataNotFoundError, RetryConfig, retry_with_backoff
 
 # Setup module-level logger
 logger = get_logger(__name__)
@@ -64,9 +63,9 @@ class DataService(BaseService):
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "local",
         include_metadata: bool = True,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         periodic_save_minutes: float = 2.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Load OHLCV data for a symbol and timeframe.
 
@@ -163,7 +162,7 @@ class DataService(BaseService):
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         periodic_save_minutes: float = 2.0,
     ) -> str:
         """
@@ -229,7 +228,7 @@ class DataService(BaseService):
         start_date: Optional[Union[str, datetime]],
         end_date: Optional[Union[str, datetime]],
         mode: str,
-        filters: Optional[Dict[str, Any]],
+        filters: Optional[dict[str, Any]],
         periodic_save_minutes: float,
     ) -> None:
         """
@@ -308,9 +307,9 @@ class DataService(BaseService):
         start_date: Optional[Union[str, datetime]],
         end_date: Optional[Union[str, datetime]],
         mode: str,
-        filters: Optional[Dict[str, Any]],
+        filters: Optional[dict[str, Any]],
         periodic_save_minutes: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run data loading with cancellation support and real progress updates.
 
@@ -319,8 +318,8 @@ class DataService(BaseService):
         """
         import concurrent.futures
         import threading
-        import time
-        from ktrdr.data.data_manager import DataLoadingProgress, ProgressCallback
+
+        from ktrdr.data.data_manager import DataLoadingProgress
 
         # Create cancellation event for worker thread
         cancel_event = threading.Event()
@@ -532,7 +531,7 @@ class DataService(BaseService):
         symbol: str,
         timeframe: str,
         include_metadata: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Convert pandas DataFrame to API response format.
 
@@ -575,7 +574,7 @@ class DataService(BaseService):
 
     @log_entry_exit(logger=logger)
     @log_performance(threshold_ms=100, logger=logger)
-    async def get_available_symbols(self) -> List[Dict[str, Any]]:
+    async def get_available_symbols(self) -> list[dict[str, Any]]:
         """
         Get list of available symbols with metadata.
 
@@ -656,7 +655,7 @@ class DataService(BaseService):
         )
         return result
 
-    def _get_symbols_metadata(self) -> Dict[str, Dict[str, Any]]:
+    def _get_symbols_metadata(self) -> dict[str, dict[str, Any]]:
         """
         Get symbol metadata from the symbol validation cache.
 
@@ -727,7 +726,6 @@ class DataService(BaseService):
             Filtered DataFrame
         """
         try:
-            from ktrdr.utils.timezone_utils import TimestampManager
             from ktrdr.data.trading_hours import TradingHoursManager
 
             # Get symbol metadata for trading hours
@@ -775,7 +773,7 @@ class DataService(BaseService):
             return df  # Return original data if filtering fails
 
     @log_entry_exit(logger=logger)
-    async def get_available_timeframes_for_symbol(self, symbol: str) -> List[str]:
+    async def get_available_timeframes_for_symbol(self, symbol: str) -> list[str]:
         """
         Get available timeframes for a specific symbol.
 
@@ -799,7 +797,7 @@ class DataService(BaseService):
         return timeframes
 
     @log_entry_exit(logger=logger)
-    async def get_available_timeframes(self) -> List[Dict[str, str]]:
+    async def get_available_timeframes(self) -> list[dict[str, str]]:
         """
         Get list of available timeframes with metadata.
 
@@ -837,7 +835,7 @@ class DataService(BaseService):
 
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
-    async def get_data_range(self, symbol: str, timeframe: str) -> Dict[str, Any]:
+    async def get_data_range(self, symbol: str, timeframe: str) -> dict[str, Any]:
         """
         Get the available date range for a symbol and timeframe.
 
@@ -905,7 +903,7 @@ class DataService(BaseService):
     def _filter_trading_hours(
         self,
         df: pd.DataFrame,
-        trading_hours: Dict[str, Any],
+        trading_hours: dict[str, Any],
         include_extended: bool = False,
     ) -> pd.DataFrame:
         """
@@ -1013,7 +1011,7 @@ class DataService(BaseService):
             # Return original data on error
             return df
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the data service.
 

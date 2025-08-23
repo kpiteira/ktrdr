@@ -5,15 +5,16 @@ This module provides the IndicatorEngine class, which is responsible for
 applying indicators to OHLCV data based on configuration.
 """
 
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Union
+
 import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.indicator_factory import IndicatorFactory
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.rsi_indicator import RSIIndicator
-from ktrdr.indicators.ma_indicators import SimpleMovingAverage, ExponentialMovingAverage
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -32,7 +33,7 @@ class IndicatorEngine:
     """
 
     def __init__(
-        self, indicators: Optional[Union[List[Dict], List[BaseIndicator]]] = None
+        self, indicators: Optional[Union[list[dict], list[BaseIndicator]]] = None
     ):
         """
         Initialize the IndicatorEngine with indicator configuration.
@@ -43,13 +44,13 @@ class IndicatorEngine:
                 indicator instances via IndicatorFactory. If indicator instances are
                 provided, they will be used directly.
         """
-        self.indicators: List[BaseIndicator] = []
+        self.indicators: list[BaseIndicator] = []
 
         if indicators:
             if isinstance(indicators[0], dict):
                 # Create indicators from config dictionaries
                 # Import here to avoid circular dependency
-                from ..config.models import IndicatorConfig, IndicatorsConfig
+                from ..config.models import IndicatorConfig
 
                 # Convert dict configs to IndicatorConfig objects
                 indicator_configs = []
@@ -148,9 +149,9 @@ class IndicatorEngine:
 
     def apply_multi_timeframe(
         self,
-        multi_timeframe_ohlcv: Dict[str, pd.DataFrame],
-        indicator_configs: Optional[List[Dict]] = None,
-    ) -> Dict[str, pd.DataFrame]:
+        multi_timeframe_ohlcv: dict[str, pd.DataFrame],
+        indicator_configs: Optional[list[dict]] = None,
+    ) -> dict[str, pd.DataFrame]:
         """
         Apply indicators across multiple timeframes using the same configuration.
 

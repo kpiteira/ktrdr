@@ -6,8 +6,9 @@ to ensure consistent timeouts and avoid connection conflicts.
 """
 
 from typing import Optional
-from ktrdr.ib.pool import IbConnectionPool
+
 from ktrdr.config.ib_config import get_ib_config
+from ktrdr.ib.pool import IbConnectionPool
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

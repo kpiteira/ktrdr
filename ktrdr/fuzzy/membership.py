@@ -11,8 +11,8 @@ from typing import List, Union
 import numpy as np
 import pandas as pd
 
-from ktrdr.errors import ConfigurationError
 from ktrdr import get_logger
+from ktrdr.errors import ConfigurationError
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -62,7 +62,7 @@ class TriangularMF(MembershipFunction):
     - If a = b = c, then μ(x) = 1 only at x = a = b = c, and 0 elsewhere
     """
 
-    def __init__(self, parameters: List[float]):
+    def __init__(self, parameters: list[float]):
         """
         Initialize a triangular membership function with parameters [a, b, c].
 
@@ -219,7 +219,7 @@ class TrapezoidalMF(MembershipFunction):
     - μ(x) = (d - x) / (d - c), if c < x < d
     """
 
-    def __init__(self, parameters: List[float]):
+    def __init__(self, parameters: list[float]):
         """
         Initialize a trapezoidal membership function with parameters [a, b, c, d].
 
@@ -365,7 +365,7 @@ class GaussianMF(MembershipFunction):
     μ(x) = exp(-0.5 * ((x - μ) / σ)²)
     """
 
-    def __init__(self, parameters: List[float]):
+    def __init__(self, parameters: list[float]):
         """
         Initialize a Gaussian membership function with parameters [μ, σ].
 
@@ -478,7 +478,7 @@ class MembershipFunctionFactory:
     """
 
     @staticmethod
-    def create(mf_type: str, parameters: List[float]) -> MembershipFunction:
+    def create(mf_type: str, parameters: list[float]) -> MembershipFunction:
         """
         Create a membership function instance based on type and parameters.
 
@@ -512,7 +512,7 @@ class MembershipFunctionFactory:
             )
 
     @staticmethod
-    def get_supported_types() -> List[str]:
+    def get_supported_types() -> list[str]:
         """
         Get list of supported membership function types.
 

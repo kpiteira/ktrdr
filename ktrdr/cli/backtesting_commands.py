@@ -1,19 +1,20 @@
 """Backtesting commands for the main CLI."""
 
 import asyncio
+import json
 import signal
-import typer
 from pathlib import Path
 from typing import Optional
+
+import typer
 from rich.console import Console
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
-    BarColumn,
     TextColumn,
     TimeElapsedColumn,
 )
-import json
 
 from ktrdr.cli.api_client import get_api_client
 

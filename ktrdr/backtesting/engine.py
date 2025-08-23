@@ -1,17 +1,16 @@
 """Backtesting engine for strategy evaluation."""
 
-from dataclasses import dataclass
-from typing import Dict, Any, Optional, List
-import pandas as pd
-from pathlib import Path
 import time
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-from .position_manager import PositionManager, Trade
-from .performance import PerformanceTracker, PerformanceMetrics
-from .model_loader import ModelLoader
-from ..decision.base import Signal
-from ..data.data_manager import DataManager
+import pandas as pd
+
 from .. import get_logger
+from ..data.data_manager import DataManager
+from ..decision.base import Signal
+from .performance import PerformanceMetrics, PerformanceTracker
+from .position_manager import PositionManager, Trade
 
 logger = get_logger(__name__)
 
@@ -41,14 +40,14 @@ class BacktestResults:
     symbol: str
     timeframe: str
     config: BacktestConfig
-    trades: List[Trade]
+    trades: list[Trade]
     metrics: PerformanceMetrics
     equity_curve: pd.DataFrame
     start_time: pd.Timestamp
     end_time: pd.Timestamp
     execution_time_seconds: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert results to dictionary."""
         return {
             "strategy_name": self.strategy_name,
@@ -293,7 +292,7 @@ class BacktestingEngine:
                     print(f"🚨 DECISION ERROR at {current_timestamp}: {e}")
 
                 # Create a HOLD decision if error occurs
-                from ..decision.base import TradingDecision, Position
+                from ..decision.base import Position, TradingDecision
 
                 decision = TradingDecision(
                     signal=Signal.HOLD,

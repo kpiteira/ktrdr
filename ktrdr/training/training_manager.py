@@ -11,10 +11,10 @@ The manager handles:
 """
 
 import os
-from typing import Dict, List, Optional, Any
-from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from ktrdr.logging import get_logger
+
 from .training_adapter import TrainingAdapter
 
 logger = get_logger(__name__)
@@ -80,14 +80,14 @@ class TrainingManager:
     async def train_multi_symbol_strategy(
         self,
         strategy_config_path: str,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         start_date: str,
         end_date: str,
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Train a multi-symbol strategy using the configured adapter.
 
@@ -115,7 +115,7 @@ class TrainingManager:
             progress_callback=progress_callback,
         )
 
-    async def get_training_status(self, session_id: str) -> Dict[str, Any]:
+    async def get_training_status(self, session_id: str) -> dict[str, Any]:
         """
         Get status of a training session (host service only).
 
@@ -127,7 +127,7 @@ class TrainingManager:
         """
         return await self.training_adapter.get_training_status(session_id)
 
-    async def stop_training(self, session_id: str) -> Dict[str, Any]:
+    async def stop_training(self, session_id: str) -> dict[str, Any]:
         """
         Stop a training session (host service only).
 
@@ -139,7 +139,7 @@ class TrainingManager:
         """
         return await self.training_adapter.stop_training(session_id)
 
-    def get_adapter_statistics(self) -> Dict[str, Any]:
+    def get_adapter_statistics(self) -> dict[str, Any]:
         """Get training adapter usage statistics."""
         return self.training_adapter.get_statistics()
 
@@ -153,7 +153,7 @@ class TrainingManager:
             return self.training_adapter.host_service_url
         return None
 
-    def get_configuration_info(self) -> Dict[str, Any]:
+    def get_configuration_info(self) -> dict[str, Any]:
         """Get current configuration information."""
         return {
             "mode": "host_service" if self.is_using_host_service() else "local",

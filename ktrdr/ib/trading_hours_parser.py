@@ -6,12 +6,12 @@ and converts it to our standardized trading hours format.
 """
 
 import re
-from datetime import datetime, time
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from datetime import time
+from typing import List, Optional, Tuple
 
-from ktrdr.logging import get_logger
 from ktrdr.data.trading_hours import TradingHours, TradingSession
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -124,7 +124,7 @@ class IBTradingHoursParser:
         return cls.TIMEZONE_MAPPING.get(ib_timezone, ib_timezone)
 
     @classmethod
-    def _parse_hours_string(cls, hours_string: str) -> List[Tuple[time, time]]:
+    def _parse_hours_string(cls, hours_string: str) -> list[tuple[time, time]]:
         """
         Parse IB hours string into list of (start_time, end_time) tuples.
 
@@ -192,7 +192,7 @@ class IBTradingHoursParser:
 
     @classmethod
     def _extract_regular_hours(
-        cls, sessions: List[Tuple[time, time]]
+        cls, sessions: list[tuple[time, time]]
     ) -> TradingSession:
         """
         Extract regular trading hours from liquid sessions.
@@ -211,9 +211,9 @@ class IBTradingHoursParser:
     @classmethod
     def _extract_extended_hours(
         cls,
-        all_sessions: List[Tuple[time, time]],
-        regular_sessions: List[Tuple[time, time]],
-    ) -> List[TradingSession]:
+        all_sessions: list[tuple[time, time]],
+        regular_sessions: list[tuple[time, time]],
+    ) -> list[TradingSession]:
         """
         Extract extended hours by comparing all sessions with liquid sessions.
         """
@@ -240,7 +240,7 @@ class IBTradingHoursParser:
         return extended
 
     @classmethod
-    def _extract_trading_days(cls, sessions: List[Tuple[time, time]]) -> List[int]:
+    def _extract_trading_days(cls, sessions: list[tuple[time, time]]) -> list[int]:
         """
         Extract trading days from sessions.
 

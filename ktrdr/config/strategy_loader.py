@@ -1,24 +1,25 @@
 """Strategy configuration loading with support for both v1 (legacy) and v2 (multi-scope) formats."""
 
-import yaml
 from pathlib import Path
-from typing import Union, Dict, Any, Tuple, Optional, List
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import yaml
 from pydantic import ValidationError
 
 from ktrdr import get_logger
 from ktrdr.config.models import (
-    StrategyConfigurationV2,
-    LegacyStrategyConfiguration,
-    StrategyScope,
-    SymbolMode,
-    TimeframeMode,
-    TargetSymbolMode,
-    SymbolConfiguration,
-    TimeframeConfiguration,
-    TrainingDataConfiguration,
-    TargetSymbolConfiguration,
-    TargetTimeframeConfiguration,
     DeploymentConfiguration,
+    LegacyStrategyConfiguration,
+    StrategyConfigurationV2,
+    StrategyScope,
+    SymbolConfiguration,
+    SymbolMode,
+    TargetSymbolConfiguration,
+    TargetSymbolMode,
+    TargetTimeframeConfiguration,
+    TimeframeConfiguration,
+    TimeframeMode,
+    TrainingDataConfiguration,
 )
 
 logger = get_logger(__name__)
@@ -29,7 +30,7 @@ class StrategyConfigurationLoader:
 
     def load_strategy_config(
         self, config_path: Union[str, Path]
-    ) -> Tuple[Union[StrategyConfigurationV2, LegacyStrategyConfiguration], bool]:
+    ) -> tuple[Union[StrategyConfigurationV2, LegacyStrategyConfiguration], bool]:
         """
         Load strategy configuration from YAML file.
 
@@ -86,7 +87,7 @@ class StrategyConfigurationLoader:
                     f"Legacy strategy validation failed for {config_path}: {e}"
                 ) from e
 
-    def _detect_v2_format(self, config: Dict[str, Any]) -> bool:
+    def _detect_v2_format(self, config: dict[str, Any]) -> bool:
         """
         Detect if configuration uses v2 format.
 
@@ -237,7 +238,7 @@ class StrategyConfigurationLoader:
 
         return v2_config
 
-    def _add_legacy_defaults(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _add_legacy_defaults(self, config: dict[str, Any]) -> dict[str, Any]:
         """
         Add sensible defaults for missing required fields in legacy strategies.
 
@@ -317,7 +318,7 @@ class StrategyConfigurationLoader:
 
     def extract_training_symbols_and_timeframes(
         self, config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration]
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         """
         Extract training symbols and timeframes from any config format.
 
@@ -375,7 +376,7 @@ class StrategyConfigurationLoader:
 
     def get_model_storage_path_components(
         self, config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration]
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Get model storage path components based on configuration.
 

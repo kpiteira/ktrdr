@@ -3,12 +3,13 @@ Logging management utilities for runtime control and monitoring.
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
+
 from ktrdr.logging.config import (
     get_component_log_levels,
-    set_component_log_level,
-    reset_sampling_state,
     reset_rate_limit_state,
+    reset_sampling_state,
+    set_component_log_level,
 )
 
 
@@ -76,7 +77,7 @@ class LogManager:
                 "Debug mode disabled - restored normal logging"
             )
 
-    def get_component_status(self) -> Dict[str, str]:
+    def get_component_status(self) -> dict[str, str]:
         """
         Get current logging status for all components.
 
@@ -89,7 +90,7 @@ class LogManager:
             for component, level in levels.items()
         }
 
-    def list_noisy_loggers(self, threshold: int = 10) -> List[str]:
+    def list_noisy_loggers(self, threshold: int = 10) -> list[str]:
         """
         Identify loggers that might be generating excessive output.
 
@@ -154,20 +155,9 @@ def disable_debug_mode() -> None:
     log_manager.set_debug_mode(False)
 
 
-def get_logging_status() -> Dict[str, str]:
+def get_logging_status() -> dict[str, str]:
     """Get current logging status for all components."""
     return log_manager.get_component_status()
 
 
 # Import debug utilities for easy access
-from ktrdr.logging.debug_utils import (
-    enable_ib_debug_mode,
-    disable_ib_debug_mode,
-    enable_api_debug_mode,
-    disable_api_debug_mode,
-    enable_full_debug_mode,
-    disable_full_debug_mode,
-    show_debug_status,
-    ib_debug_on,
-    ib_debug_off,
-)

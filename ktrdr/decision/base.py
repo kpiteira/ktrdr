@@ -1,8 +1,9 @@
 """Base classes and enums for trading decisions."""
 
-from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from enum import Enum
+from typing import Any, Dict
+
 import pandas as pd
 
 
@@ -29,7 +30,7 @@ class TradingDecision:
     signal: Signal
     confidence: float
     timestamp: pd.Timestamp
-    reasoning: Dict[str, Any]
+    reasoning: dict[str, Any]
     current_position: Position
 
     def __post_init__(self):

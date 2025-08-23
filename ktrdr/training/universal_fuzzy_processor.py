@@ -4,10 +4,11 @@ This processor creates features that are independent of symbol scale, enabling
 true zero-shot generalization to unseen symbols.
 """
 
-import torch
-import pandas as pd
+from typing import Any, Dict, Optional, Tuple
+
 import numpy as np
-from typing import Dict, Any, List, Tuple, Optional
+import pandas as pd
+import torch
 
 from .. import get_logger
 
@@ -21,7 +22,7 @@ class UniversalFuzzyNeuralProcessor:
     any symbol, asset class, or market without retraining.
     """
 
-    def __init__(self, feature_config: Dict[str, Any], disable_temporal: bool = False):
+    def __init__(self, feature_config: dict[str, Any], disable_temporal: bool = False):
         """Initialize universal processor.
 
         Args:
@@ -34,7 +35,7 @@ class UniversalFuzzyNeuralProcessor:
 
     def prepare_universal_input(
         self, fuzzy_data: pd.DataFrame, indicators: pd.DataFrame
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Create universal symbol-agnostic features.
 
         Args:
@@ -209,9 +210,9 @@ class UniversalFuzzyNeuralProcessor:
     def create_features(
         self,
         price_data: pd.DataFrame,
-        indicator_data: Dict[str, Any],
+        indicator_data: dict[str, Any],
         labels: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Create features for training (compatibility method).
 
         Args:

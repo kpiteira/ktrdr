@@ -7,45 +7,32 @@ and handling gaps or missing values in time series data.
 """
 
 import asyncio
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, Any, Set, Callable
-from datetime import datetime, timedelta, timezone
-import numpy as np
-import pandas as pd
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import pandas as pd
 
 # Import logging system
 from ktrdr import (
     get_logger,
     log_entry_exit,
     log_performance,
-    log_data_operation,
-    log_error,
-    with_context,
 )
-from ktrdr.utils.timezone_utils import TimestampManager
-
-from ktrdr.errors import (
-    DataError,
-    DataFormatError,
-    DataNotFoundError,
-    DataCorruptionError,
-    DataValidationError,
-    ErrorHandler,
-    retry_with_backoff,
-    fallback,
-    FallbackStrategy,
-    with_partial_results,
-)
-
-from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.external_data_interface import ExternalDataProvider
-from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.data_quality_validator import DataQualityValidator
-from ktrdr.data.gap_classifier import GapClassifier, GapClassification
+from ktrdr.data.external_data_interface import ExternalDataProvider
+from ktrdr.data.gap_classifier import GapClassification, GapClassifier
+from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.data.timeframe_synchronizer import TimeframeSynchronizer
+from ktrdr.errors import (
+    DataCorruptionError,
+    DataError,
+    DataNotFoundError,
+    DataValidationError,
+)
+from ktrdr.utils.timezone_utils import TimestampManager
 
 # Get module logger
 logger = get_logger(__name__)
@@ -76,8 +63,8 @@ class DataLoadingProgress:
     # Status tracking
     is_cancelled: bool = False
     error_message: Optional[str] = None
-    warnings: List[str] = None
-    errors: List[str] = None
+    warnings: list[str] = None
+    errors: list[str] = None
 
     def __post_init__(self):
         """Initialize lists if None."""
@@ -178,10 +165,11 @@ class DataManager:
         if enable_ib:
             # Load configuration to determine if host service should be used
             try:
-                from ktrdr.config.loader import ConfigLoader
-                from ktrdr.config.models import KtrdrConfig, IbHostServiceConfig
-                from pathlib import Path
                 import os
+                from pathlib import Path
+
+                from ktrdr.config.loader import ConfigLoader
+                from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
 
                 config_loader = ConfigLoader()
                 config_path = Path("config/settings.yaml")
@@ -490,7 +478,7 @@ class DataManager:
     def load_multi_timeframe_data(
         self,
         symbol: str,
-        timeframes: List[str],
+        timeframes: list[str],
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
         base_timeframe: str = "1h",
@@ -499,7 +487,7 @@ class DataManager:
         repair: bool = False,
         cancellation_token: Optional[Any] = None,
         progress_callback: Optional[ProgressCallback] = None,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """
         Load OHLCV data for multiple timeframes with temporal alignment.
 
@@ -752,8 +740,8 @@ class DataManager:
             ) from e
 
     def _find_common_data_coverage(
-        self, timeframe_data: Dict[str, pd.DataFrame], symbol: str
-    ) -> Dict[str, Any]:
+        self, timeframe_data: dict[str, pd.DataFrame], symbol: str
+    ) -> dict[str, Any]:
         """
         Find the common data coverage intersection across all timeframes.
 
@@ -970,7 +958,7 @@ class DataManager:
         timeframe: str,
         symbol: str,
         mode: str = "tail",
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> list[tuple[datetime, datetime]]:
         """
         Analyze gaps between existing data and requested range using intelligent gap classification.
 
@@ -1082,7 +1070,7 @@ class DataManager:
         range_start: datetime,
         range_end: datetime,
         timeframe: str,
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> list[tuple[datetime, datetime]]:
         """
         Find gaps within existing data (missing periods in the middle).
 
@@ -1196,9 +1184,9 @@ class DataManager:
 
     def _split_into_segments(
         self,
-        gaps: List[Tuple[datetime, datetime]],
+        gaps: list[tuple[datetime, datetime]],
         timeframe: str,
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> list[tuple[datetime, datetime]]:
         """
         Split large gaps into IB-compliant segments.
 
@@ -1253,12 +1241,12 @@ class DataManager:
         self,
         symbol: str,
         timeframe: str,
-        segments: List[Tuple[datetime, datetime]],
+        segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
         progress_callback: Optional[ProgressCallback] = None,
         progress: Optional[DataLoadingProgress] = None,
         periodic_save_minutes: float = 2.0,
-    ) -> Tuple[List[pd.DataFrame], int, int]:
+    ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Fetch multiple segments with failure resilience and periodic progress saves.
 
@@ -1422,7 +1410,7 @@ class DataManager:
 
     def _save_periodic_progress(
         self,
-        successful_data: List[pd.DataFrame],
+        successful_data: list[pd.DataFrame],
         symbol: str,
         timeframe: str,
         previous_bars_saved: int,
@@ -1523,7 +1511,6 @@ class DataManager:
             # Create a cancellable async wrapper that polls for cancellation
             async def fetch_with_cancellation_polling():
                 """Fetch with periodic cancellation checks."""
-                import concurrent.futures
 
                 # Start the IB fetch in a separate task
                 fetch_task = asyncio.create_task(
@@ -1630,7 +1617,7 @@ class DataManager:
         timeframe: str,
         start_date: datetime,
         end_date: datetime,
-    ) -> Tuple[bool, Optional[str], Optional[datetime]]:
+    ) -> tuple[bool, Optional[str], Optional[datetime]]:
         """
         Validate request date range against cached head timestamp data.
 
@@ -2269,7 +2256,7 @@ class DataManager:
     @log_entry_exit(logger=logger, log_args=True)
     def check_data_integrity(
         self, df: pd.DataFrame, timeframe: str, is_post_repair: bool = False
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Check for common data integrity issues using unified validator.
 
@@ -2323,7 +2310,7 @@ class DataManager:
     @log_entry_exit(logger=logger)
     def detect_gaps(
         self, df: pd.DataFrame, timeframe: str, gap_threshold: int = 1
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> list[tuple[datetime, datetime]]:
         """
         Detect significant gaps in time series data using intelligent gap classification.
 
@@ -2369,7 +2356,7 @@ class DataManager:
         self,
         df: pd.DataFrame,
         std_threshold: float = 2.5,
-        columns: Optional[List[str]] = None,
+        columns: Optional[list[str]] = None,
         post_repair_tolerance: float = 0.0,
         context_window: Optional[int] = None,
         log_outliers: bool = True,
@@ -2443,7 +2430,7 @@ class DataManager:
         self,
         df: pd.DataFrame,
         std_threshold: float = 2.5,
-        columns: Optional[List[str]] = None,
+        columns: Optional[list[str]] = None,
         context_window: Optional[int] = None,
         log_outliers: bool = True,
     ) -> int:
@@ -2580,7 +2567,7 @@ class DataManager:
         return df_repaired
 
     @log_entry_exit(logger=logger, log_args=True)
-    def get_data_summary(self, symbol: str, timeframe: str) -> Dict[str, Any]:
+    def get_data_summary(self, symbol: str, timeframe: str) -> dict[str, Any]:
         """
         Get a summary of available data for a symbol and timeframe.
 
@@ -2714,7 +2701,7 @@ class DataManager:
         target_timeframe: str,
         source_timeframe: Optional[str] = None,
         fill_gaps: bool = True,
-        agg_functions: Optional[Dict[str, str]] = None,
+        agg_functions: Optional[dict[str, str]] = None,
     ) -> pd.DataFrame:
         """
         Resample data to a different timeframe.

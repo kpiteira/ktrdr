@@ -6,9 +6,10 @@ access to all project metadata and configuration.
 """
 
 import os
-import yaml
 from pathlib import Path
 from typing import Any, Dict
+
+import yaml
 
 # Path to project root
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -21,7 +22,7 @@ ENV_PREFIX = "KTRDR_"
 
 
 # Load metadata from YAML
-def _load_metadata() -> Dict[str, Any]:
+def _load_metadata() -> dict[str, Any]:
     """Load metadata from the central metadata file."""
     with open(METADATA_FILE, "r") as f:
         return yaml.safe_load(f)
@@ -38,7 +39,7 @@ def get_environment() -> str:
 
 
 # Load environment-specific config
-def _load_environment_config(env: str) -> Dict[str, Any]:
+def _load_environment_config(env: str) -> dict[str, Any]:
     """Load environment-specific configuration."""
     env_file = PROJECT_ROOT / "config" / "environment" / f"{env}.yaml"
     if env_file.exists():
@@ -120,7 +121,7 @@ API_PREFIX = get("api.prefix")
 
 
 # Helper functions for specific contexts
-def get_fastapi_settings() -> Dict[str, Any]:
+def get_fastapi_settings() -> dict[str, Any]:
     """Get FastAPI application settings."""
     return {
         "title": API_TITLE,
@@ -132,7 +133,7 @@ def get_fastapi_settings() -> Dict[str, Any]:
     }
 
 
-def get_docker_labels() -> Dict[str, str]:
+def get_docker_labels() -> dict[str, str]:
     """Get Docker labels based on metadata."""
     return {
         "org.opencontainers.image.title": get("docker.labels.title", PROJECT_NAME),
@@ -151,7 +152,7 @@ def get_docker_labels() -> Dict[str, str]:
     }
 
 
-def get_api_examples() -> Dict[str, Any]:
+def get_api_examples() -> dict[str, Any]:
     """Get API examples for documentation."""
     return {
         "symbols": get("examples.symbols", []),

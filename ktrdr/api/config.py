@@ -5,10 +5,11 @@ This module defines the configuration for the KTRDR API, with support for
 environment variables and different deployment environments.
 """
 
-import os
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from typing import Any, Dict, List
+
 from dotenv import load_dotenv
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 from ktrdr import metadata  # Use the new metadata module instead of version
 
 # Load environment variables from .env file if it exists
@@ -58,16 +59,16 @@ class APIConfig(BaseModel):
     )
 
     # CORS configuration
-    cors_origins: List[str] = Field(
+    cors_origins: list[str] = Field(
         default=["*"], description="List of allowed origins for CORS"
     )
     cors_allow_credentials: bool = Field(
         default=True, description="Allow credentials for CORS requests"
     )
-    cors_allow_methods: List[str] = Field(
+    cors_allow_methods: list[str] = Field(
         default=["*"], description="List of allowed HTTP methods for CORS"
     )
-    cors_allow_headers: List[str] = Field(
+    cors_allow_headers: list[str] = Field(
         default=["*"], description="List of allowed HTTP headers for CORS"
     )
     cors_max_age: int = Field(
@@ -94,7 +95,7 @@ class APIConfig(BaseModel):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: Any) -> List[str]:
+    def parse_cors_origins(cls, v: Any) -> list[str]:
         """Parse CORS origins from string to list if provided as a string."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
@@ -102,7 +103,7 @@ class APIConfig(BaseModel):
 
     @field_validator("cors_allow_methods", mode="before")
     @classmethod
-    def parse_cors_methods(cls, v: Any) -> List[str]:
+    def parse_cors_methods(cls, v: Any) -> list[str]:
         """Parse CORS methods from string to list if provided as a string."""
         if isinstance(v, str):
             return [method.strip() for method in v.split(",") if method.strip()]
@@ -110,7 +111,7 @@ class APIConfig(BaseModel):
 
     @field_validator("cors_allow_headers", mode="before")
     @classmethod
-    def parse_cors_headers(cls, v: Any) -> List[str]:
+    def parse_cors_headers(cls, v: Any) -> list[str]:
         """Parse CORS headers from string to list if provided as a string."""
         if isinstance(v, str):
             return [header.strip() for header in v.split(",") if header.strip()]
@@ -136,7 +137,7 @@ class APIConfig(BaseModel):
 
     # For testing purposes, add a method to create a manually configured instance
     @classmethod
-    def from_env(cls, env_vars: Dict[str, str]) -> "APIConfig":
+    def from_env(cls, env_vars: dict[str, str]) -> "APIConfig":
         """
         Create a config instance with specific environment variables.
 

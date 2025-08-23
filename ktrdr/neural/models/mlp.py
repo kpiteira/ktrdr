@@ -1,11 +1,10 @@
 """Multi-Layer Perceptron implementation for trading decisions."""
 
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-import pandas as pd
-from typing import Dict, Any, List, Optional
 
 from .base_model import BaseNeuralModel
 
@@ -101,7 +100,7 @@ class MLPTradingModel(BaseNeuralModel):
 
     def train(
         self, X: torch.Tensor, y: torch.Tensor, validation_data: Optional[tuple] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train the MLP model.
 
         Args:
@@ -272,7 +271,7 @@ class MultiSymbolMLP(nn.Module):
         input_size: int,
         num_symbols: int,
         symbol_embedding_dim: int,
-        hidden_layers: List[int],
+        hidden_layers: list[int],
         dropout: float,
         activation_fn: type,
         num_classes: int = 3,

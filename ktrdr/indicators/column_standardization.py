@@ -6,9 +6,9 @@ for ensuring consistent naming across different timeframes and indicators.
 """
 
 import re
-from typing import List, Dict, Optional, Tuple, Set
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional, Set
 
 from ktrdr import get_logger
 
@@ -36,7 +36,7 @@ class ColumnInfo:
     column_type: ColumnType
     timeframe: Optional[str] = None
     indicator_type: Optional[str] = None
-    parameters: Optional[Dict] = None
+    parameters: Optional[dict] = None
 
 
 class ColumnStandardizer:
@@ -62,11 +62,11 @@ class ColumnStandardizer:
 
     def __init__(self):
         """Initialize the column standardizer."""
-        self.column_mapping: Dict[str, ColumnInfo] = {}
-        self.reverse_mapping: Dict[str, str] = {}
+        self.column_mapping: dict[str, ColumnInfo] = {}
+        self.reverse_mapping: dict[str, str] = {}
 
     def standardize_indicator_name(
-        self, indicator_name: str, timeframe: str, parameters: Optional[Dict] = None
+        self, indicator_name: str, timeframe: str, parameters: Optional[dict] = None
     ) -> str:
         """
         Create standardized name for an indicator column.
@@ -135,10 +135,10 @@ class ColumnStandardizer:
 
     def standardize_dataframe_columns(
         self,
-        columns: List[str],
+        columns: list[str],
         timeframe: str,
-        column_types: Optional[Dict[str, ColumnType]] = None,
-    ) -> Dict[str, str]:
+        column_types: Optional[dict[str, ColumnType]] = None,
+    ) -> dict[str, str]:
         """
         Create mapping of original to standardized column names.
 
@@ -307,7 +307,7 @@ class ColumnStandardizer:
         clean_name = self._clean_name(column_name)
         return self.standardize_signal_name(clean_name, timeframe)
 
-    def _parse_indicator_name(self, column_name: str) -> Optional[Dict]:
+    def _parse_indicator_name(self, column_name: str) -> Optional[dict]:
         """Parse an indicator column name to extract name and parameters."""
         # Common patterns for indicators with parameters
         patterns = [
@@ -356,8 +356,8 @@ class ColumnStandardizer:
         return info.original_name if info else None
 
     def filter_columns_by_type(
-        self, columns: List[str], column_type: ColumnType
-    ) -> List[str]:
+        self, columns: list[str], column_type: ColumnType
+    ) -> list[str]:
         """Filter columns by their type."""
         return [
             col
@@ -367,8 +367,8 @@ class ColumnStandardizer:
         ]
 
     def filter_columns_by_timeframe(
-        self, columns: List[str], timeframe: str
-    ) -> List[str]:
+        self, columns: list[str], timeframe: str
+    ) -> list[str]:
         """Filter columns by their timeframe."""
         return [
             col
@@ -377,7 +377,7 @@ class ColumnStandardizer:
             and self.column_mapping[col].timeframe == timeframe
         ]
 
-    def get_timeframes(self, columns: List[str]) -> Set[str]:
+    def get_timeframes(self, columns: list[str]) -> set[str]:
         """Get all timeframes present in the column list."""
         timeframes = set()
         for col in columns:
@@ -387,7 +387,7 @@ class ColumnStandardizer:
                     timeframes.add(tf)
         return timeframes
 
-    def validate_naming_consistency(self, columns: List[str]) -> Dict[str, List[str]]:
+    def validate_naming_consistency(self, columns: list[str]) -> dict[str, list[str]]:
         """
         Validate naming consistency across columns.
 
@@ -435,8 +435,8 @@ class ColumnStandardizer:
 
 
 def create_standardized_column_mapping(
-    multi_timeframe_data: Dict[str, List[str]],
-) -> Dict[str, Dict[str, str]]:
+    multi_timeframe_data: dict[str, list[str]],
+) -> dict[str, dict[str, str]]:
     """
     Create standardized column mappings for multi-timeframe data.
 

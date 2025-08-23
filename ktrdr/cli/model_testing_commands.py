@@ -1,14 +1,14 @@
 """Model testing commands for debugging trained models."""
 
-import typer
 from pathlib import Path
 from typing import Optional
+
+import typer
 from rich.console import Console
 from rich.table import Table
-import pandas as pd
 
-from ktrdr.decision.orchestrator import DecisionOrchestrator
 from ktrdr.data.data_manager import DataManager
+from ktrdr.decision.orchestrator import DecisionOrchestrator
 
 # Rich console for formatted output
 console = Console()

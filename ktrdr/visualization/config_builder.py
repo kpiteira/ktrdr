@@ -5,7 +5,7 @@ This module contains the ConfigBuilder class that provides methods to create
 chart configuration objects for the visualization module.
 """
 
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 
 class ConfigBuilder:
@@ -23,9 +23,9 @@ class ConfigBuilder:
         visible_time_scale: bool = True,
         handle_scale: bool = True,
         handle_scroll: bool = True,
-        time_scale_options: Optional[Dict[str, Any]] = None,
-        right_price_scale_options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        time_scale_options: Optional[dict[str, Any]] = None,
+        right_price_scale_options: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """
         Create basic chart options.
 
@@ -106,7 +106,7 @@ class ConfigBuilder:
     @staticmethod
     def create_price_chart_options(
         theme: str = "dark", height: int = 400, show_volume: bool = False, **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create options specifically for price charts.
 
@@ -141,7 +141,7 @@ class ConfigBuilder:
         handle_scale: bool = True,
         handle_scroll: bool = True,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create options specifically for indicator charts.
 
@@ -171,7 +171,7 @@ class ConfigBuilder:
     @staticmethod
     def create_range_slider_options(
         theme: str = "dark", height: int = 60, **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create options specifically for range sliders.
 
@@ -203,9 +203,9 @@ class ConfigBuilder:
         color: str = "#2962FF",
         line_width: float = 1.5,
         title: str = "",
-        price_format: Optional[Dict[str, Any]] = None,
+        price_format: Optional[dict[str, Any]] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create options for a chart series.
 
@@ -280,7 +280,7 @@ class ConfigBuilder:
         line_width: float = 1.5,
         title: str = "",
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create configuration for an overlay series.
 
@@ -311,9 +311,9 @@ class ConfigBuilder:
     def create_multi_panel_config(
         title: str = "Multi-Panel Chart",
         theme: str = "dark",
-        panels: List[Dict[str, Any]] = None,
+        panels: list[dict[str, Any]] = None,
         has_range_slider: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create configuration for a multi-panel chart.
 
@@ -346,7 +346,7 @@ class ConfigBuilder:
         color: str = "rgba(76, 175, 80, 0.2)",  # Semi-transparent green
         axis_label_visible: bool = True,
         target_chart_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a configuration for a highlight band.
 

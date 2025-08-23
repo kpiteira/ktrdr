@@ -12,24 +12,22 @@ The adapter handles:
 - Error translation from IB-specific to generic data errors
 """
 
-import asyncio
-from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
-import pandas as pd
-import json
+from typing import Any, Dict, List, Optional
 
-from ktrdr.logging import get_logger
-from ktrdr.errors import DataError, ConnectionError as KtrdrConnectionError
-from .external_data_interface import (
-    ExternalDataProvider,
-    DataProviderError,
-    DataProviderConnectionError,
-    DataProviderRateLimitError,
-    DataProviderDataError,
-)
+import pandas as pd
 
 # Import IB module components
 from ktrdr.ib import IbErrorClassifier, IbErrorType
+from ktrdr.logging import get_logger
+
+from .external_data_interface import (
+    DataProviderConnectionError,
+    DataProviderDataError,
+    DataProviderError,
+    DataProviderRateLimitError,
+    ExternalDataProvider,
+)
 
 # HTTP client for host service communication
 try:
@@ -84,7 +82,7 @@ class IbDataAdapter(ExternalDataProvider):
         # Initialize appropriate components based on mode
         if not use_host_service:
             # Direct IB connection mode (existing behavior)
-            from ktrdr.ib import IbSymbolValidator, IbDataFetcher, ValidationResult
+            from ktrdr.ib import IbDataFetcher, IbSymbolValidator
 
             self.symbol_validator = IbSymbolValidator(
                 component_name="data_adapter_validator"
@@ -107,8 +105,8 @@ class IbDataAdapter(ExternalDataProvider):
         self.last_request_time: Optional[datetime] = None
 
     async def _call_host_service_post(
-        self, endpoint: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, endpoint: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Make POST request to host service."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
@@ -130,8 +128,8 @@ class IbDataAdapter(ExternalDataProvider):
             )
 
     async def _call_host_service_get(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, endpoint: str, params: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """Make GET request to host service."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
@@ -152,7 +150,7 @@ class IbDataAdapter(ExternalDataProvider):
                 f"Host service communication error: {str(e)}", provider="IB"
             )
 
-    async def validate_and_get_metadata(self, symbol: str, timeframes: List[str]):
+    async def validate_and_get_metadata(self, symbol: str, timeframes: list[str]):
         """
         Validate symbol and get all metadata including head timestamps for timeframes.
 
@@ -182,7 +180,7 @@ class IbDataAdapter(ExternalDataProvider):
                     )
 
                 # Convert response to ValidationResult-like structure
-                from ktrdr.ib import ValidationResult, ContractInfo
+                from ktrdr.ib import ContractInfo, ValidationResult
 
                 contract_info = None
                 if response.get("contract_info"):
@@ -372,7 +370,7 @@ class IbDataAdapter(ExternalDataProvider):
                     )
 
                 # Convert response to ValidationResult-like structure
-                from ktrdr.ib import ValidationResult, ContractInfo
+                from ktrdr.ib import ContractInfo, ValidationResult
 
                 contract_info = None
                 if response.get("contract_info"):
@@ -490,15 +488,15 @@ class IbDataAdapter(ExternalDataProvider):
         # In a more sophisticated implementation, we would check market hours
         return datetime.now(timezone.utc)
 
-    async def get_supported_timeframes(self) -> List[str]:
+    async def get_supported_timeframes(self) -> list[str]:
         """Get list of supported timeframes for IB"""
         return ["1m", "5m", "15m", "30m", "1h", "2h", "3h", "4h", "1d", "1w", "1M"]
 
-    async def get_supported_instruments(self) -> List[str]:
+    async def get_supported_instruments(self) -> list[str]:
         """Get list of supported instrument types for IB"""
         return ["STK", "FOREX", "CRYPTO", "FUTURE", "OPTION", "INDEX"]
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check health of IB components or host service"""
         try:
             if self.use_host_service:
@@ -556,7 +554,7 @@ class IbDataAdapter(ExternalDataProvider):
                 "provider_info": {"error": str(e)},
             }
 
-    async def get_provider_info(self) -> Dict[str, Any]:
+    async def get_provider_info(self) -> dict[str, Any]:
         """Get information about the IB data provider"""
         return {
             "name": "Interactive Brokers",

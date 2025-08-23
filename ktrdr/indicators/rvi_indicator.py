@@ -15,13 +15,13 @@ The RVI oscillates around zero, with values above zero indicating bullish moment
 and values below zero indicating bearish momentum.
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, Any
+from typing import Any, Dict
 
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.errors import DataError
+import pandas as pd
+
 from ktrdr import get_logger
+from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 
 logger = get_logger(__name__)
 
@@ -56,7 +56,7 @@ class RVIIndicator(BaseIndicator):
             f"Initialized RVI indicator with period={period}, signal_period={signal_period}"
         )
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Validate RVI parameters.
 

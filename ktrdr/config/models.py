@@ -4,10 +4,12 @@ Pydantic models for configuration validation.
 This module defines the structure and validation rules for KTRDR configuration.
 """
 
-from pathlib import Path
-from typing import Optional, List, Any, Dict, Union, Literal
-from pydantic import BaseModel, Field, field_validator
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, field_validator
+import builtins
 
 
 class DataConfig(BaseModel):
@@ -51,13 +53,13 @@ class LoggingConfig(BaseModel):
 class SecurityConfig(BaseModel):
     """Configuration settings for security features."""
 
-    credential_providers: List[str] = Field(
+    credential_providers: list[str] = Field(
         default_factory=list, description="List of credential providers to initialize"
     )
     validate_user_input: bool = Field(
         True, description="Whether to validate user-provided parameters"
     )
-    sensitive_file_patterns: List[str] = Field(
+    sensitive_file_patterns: list[str] = Field(
         default_factory=lambda: ["*.key", "*.pem", "*.env", "*_credentials*"],
         description="Patterns for files that should be protected",
     )
@@ -77,7 +79,7 @@ class IndicatorConfig(BaseModel):
 
     type: str = Field(..., description="The type/class of indicator")
     name: Optional[str] = Field(None, description="Custom name for the indicator")
-    params: Dict[str, Any] = Field(
+    params: dict[str, Any] = Field(
         default_factory=dict, description="Parameters for indicator initialization"
     )
 
@@ -97,7 +99,7 @@ class TimeframeIndicatorConfig(BaseModel):
     timeframe: str = Field(
         ..., description="Timeframe identifier (e.g., '1h', '4h', '1d')"
     )
-    indicators: List[IndicatorConfig] = Field(
+    indicators: list[IndicatorConfig] = Field(
         default_factory=list,
         description="List of indicator configurations for this timeframe",
     )
@@ -158,11 +160,11 @@ class TimeframeIndicatorConfig(BaseModel):
 class MultiTimeframeIndicatorConfig(BaseModel):
     """Configuration for multi-timeframe indicators."""
 
-    timeframes: List[TimeframeIndicatorConfig] = Field(
+    timeframes: list[TimeframeIndicatorConfig] = Field(
         default_factory=list,
         description="List of timeframe-specific indicator configurations",
     )
-    cross_timeframe_features: Dict[str, Dict[str, Any]] = Field(
+    cross_timeframe_features: dict[str, dict[str, Any]] = Field(
         default_factory=dict, description="Cross-timeframe feature specifications"
     )
     column_standardization: bool = Field(
@@ -172,8 +174,8 @@ class MultiTimeframeIndicatorConfig(BaseModel):
     @field_validator("timeframes")
     @classmethod
     def validate_unique_timeframes(
-        cls, v: List[TimeframeIndicatorConfig]
-    ) -> List[TimeframeIndicatorConfig]:
+        cls, v: list[TimeframeIndicatorConfig]
+    ) -> list[TimeframeIndicatorConfig]:
         """Validate that timeframes are unique."""
         timeframes = [tf.timeframe for tf in v]
         if len(timeframes) != len(set(timeframes)):
@@ -185,7 +187,7 @@ class MultiTimeframeIndicatorConfig(BaseModel):
 class IndicatorsConfig(BaseModel):
     """Configuration for all indicators."""
 
-    indicators: List[IndicatorConfig] = Field(
+    indicators: list[IndicatorConfig] = Field(
         default_factory=list, description="List of indicator configurations"
     )
     multi_timeframe: Optional[MultiTimeframeIndicatorConfig] = Field(
@@ -230,21 +232,21 @@ class SymbolSelectionCriteria(BaseModel):
     asset_class: Optional[str] = Field(
         None, description="Asset class filter (forex, stocks, crypto)"
     )
-    volatility_range: Optional[List[float]] = Field(
+    volatility_range: Optional[list[float]] = Field(
         None, description="[min, max] volatility range"
     )
     liquidity_tier: Optional[str] = Field(
         None, description="Liquidity tier requirement"
     )
-    market_cap_range: Optional[List[float]] = Field(
+    market_cap_range: Optional[list[float]] = Field(
         None, description="Market cap range for stocks"
     )
 
     @field_validator("volatility_range")
     @classmethod
     def validate_volatility_range(
-        cls, v: Optional[List[float]]
-    ) -> Optional[List[float]]:
+        cls, v: Optional[list[float]]
+    ) -> Optional[list[float]]:
         if v is not None:
             if len(v) != 2 or v[0] >= v[1]:
                 raise ValueError("Volatility range must be [min, max] with min < max")
@@ -260,7 +262,7 @@ class SymbolConfiguration(BaseModel):
     symbol: Optional[str] = Field(None, description="Single symbol for legacy mode")
 
     # For multi-symbol mode
-    list: Optional[List[str]] = Field(None, description="Explicit list of symbols")
+    list: Optional[list[str]] = Field(None, description="Explicit list of symbols")
     selection_criteria: Optional[SymbolSelectionCriteria] = Field(
         None, description="Automatic symbol selection criteria"
     )
@@ -276,8 +278,8 @@ class SymbolConfiguration(BaseModel):
     @field_validator("list")
     @classmethod
     def validate_multi_mode_symbols(
-        cls, v: Optional[List[str]], info
-    ) -> Optional[List[str]]:
+        cls, v: Optional[builtins.list[str]], info
+    ) -> Optional[builtins.list[str]]:
         if hasattr(info, "data") and info.data.get("mode") == SymbolMode.MULTI_SYMBOL:
             if not v and not info.data.get("selection_criteria"):
                 raise ValueError(
@@ -299,7 +301,7 @@ class TimeframeConfiguration(BaseModel):
     )
 
     # For multi-timeframe mode
-    list: Optional[List[str]] = Field(
+    list: Optional[list[str]] = Field(
         None, description="List of timeframes for features"
     )
     base_timeframe: Optional[str] = Field(
@@ -317,8 +319,8 @@ class TimeframeConfiguration(BaseModel):
     @field_validator("list")
     @classmethod
     def validate_multi_mode_timeframes(
-        cls, v: Optional[List[str]], info
-    ) -> Optional[List[str]]:
+        cls, v: Optional[builtins.list[str]], info
+    ) -> Optional[builtins.list[str]]:
         if (
             hasattr(info, "data")
             and info.data.get("mode") == TimeframeMode.MULTI_TIMEFRAME
@@ -375,10 +377,10 @@ class TrainingDataConfiguration(BaseModel):
 class TargetSymbolRestrictions(BaseModel):
     """Restrictions for target symbol deployment."""
 
-    asset_classes: Optional[List[str]] = Field(
+    asset_classes: Optional[list[str]] = Field(
         None, description="Allowed asset classes"
     )
-    excluded_symbols: Optional[List[str]] = Field(
+    excluded_symbols: Optional[list[str]] = Field(
         None, description="Explicitly excluded symbols"
     )
     min_liquidity_tier: Optional[str] = Field(
@@ -399,7 +401,7 @@ class TargetTimeframeConfiguration(BaseModel):
     """Configuration for deployment target timeframes."""
 
     mode: TimeframeMode = Field(..., description="Target timeframe mode")
-    supported: Optional[List[str]] = Field(
+    supported: Optional[list[str]] = Field(
         None, description="Supported timeframes (subset of training)"
     )
     timeframe: Optional[str] = Field(None, description="Single timeframe for legacy")
@@ -407,8 +409,8 @@ class TargetTimeframeConfiguration(BaseModel):
     @field_validator("supported")
     @classmethod
     def validate_supported_timeframes(
-        cls, v: Optional[List[str]], info
-    ) -> Optional[List[str]]:
+        cls, v: Optional[list[str]], info
+    ) -> Optional[list[str]]:
         if (
             hasattr(info, "data")
             and info.data.get("mode") == TimeframeMode.MULTI_TIMEFRAME
@@ -449,24 +451,24 @@ class StrategyConfigurationV2(BaseModel):
     )
 
     # Existing sections (unchanged)
-    indicators: List[Dict[str, Any]] = Field(
+    indicators: list[dict[str, Any]] = Field(
         ..., description="Technical indicators configuration"
     )
-    fuzzy_sets: Dict[str, Any] = Field(
+    fuzzy_sets: dict[str, Any] = Field(
         ..., description="Fuzzy logic sets configuration"
     )
-    model: Dict[str, Any] = Field(..., description="Neural network configuration")
-    decisions: Dict[str, Any] = Field(..., description="Decision logic configuration")
-    training: Dict[str, Any] = Field(..., description="Training configuration")
+    model: dict[str, Any] = Field(..., description="Neural network configuration")
+    decisions: dict[str, Any] = Field(..., description="Decision logic configuration")
+    training: dict[str, Any] = Field(..., description="Training configuration")
 
     # Optional sections
-    orchestrator: Optional[Dict[str, Any]] = Field(
+    orchestrator: Optional[dict[str, Any]] = Field(
         None, description="Decision orchestrator settings"
     )
-    risk_management: Optional[Dict[str, Any]] = Field(
+    risk_management: Optional[dict[str, Any]] = Field(
         None, description="Risk management configuration"
     )
-    backtesting: Optional[Dict[str, Any]] = Field(
+    backtesting: Optional[dict[str, Any]] = Field(
         None, description="Backtesting configuration"
     )
 
@@ -487,29 +489,29 @@ class LegacyStrategyConfiguration(BaseModel):
     version: Optional[str] = Field(None, description="Strategy version")
 
     # Legacy data section (optional)
-    data: Optional[Dict[str, Any]] = Field(
+    data: Optional[dict[str, Any]] = Field(
         None, description="Legacy data configuration"
     )
 
     # Required sections
-    indicators: List[Dict[str, Any]] = Field(
+    indicators: list[dict[str, Any]] = Field(
         ..., description="Technical indicators configuration"
     )
-    fuzzy_sets: Dict[str, Any] = Field(
+    fuzzy_sets: dict[str, Any] = Field(
         ..., description="Fuzzy logic sets configuration"
     )
-    model: Dict[str, Any] = Field(..., description="Neural network configuration")
-    decisions: Dict[str, Any] = Field(..., description="Decision logic configuration")
-    training: Dict[str, Any] = Field(..., description="Training configuration")
+    model: dict[str, Any] = Field(..., description="Neural network configuration")
+    decisions: dict[str, Any] = Field(..., description="Decision logic configuration")
+    training: dict[str, Any] = Field(..., description="Training configuration")
 
     # Optional sections
-    orchestrator: Optional[Dict[str, Any]] = Field(
+    orchestrator: Optional[dict[str, Any]] = Field(
         None, description="Decision orchestrator settings"
     )
-    risk_management: Optional[Dict[str, Any]] = Field(
+    risk_management: Optional[dict[str, Any]] = Field(
         None, description="Risk management configuration"
     )
-    backtesting: Optional[Dict[str, Any]] = Field(
+    backtesting: Optional[dict[str, Any]] = Field(
         None, description="Backtesting configuration"
     )
 

@@ -1,11 +1,11 @@
 """Enhanced model metadata for multi-scope training and deployment."""
 
 import json
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Tuple
-from dataclasses import dataclass, field, asdict
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ktrdr import get_logger
 
@@ -33,12 +33,12 @@ class TrainingStatus(str, Enum):
 class TrainingDataInfo:
     """Information about training data used."""
 
-    symbols: List[str]
-    timeframes: List[str]
+    symbols: list[str]
+    timeframes: list[str]
     base_timeframe: Optional[str]
-    date_range: List[str]  # [start_date, end_date]
+    date_range: list[str]  # [start_date, end_date]
     total_samples: int
-    samples_per_symbol: Optional[Dict[str, int]] = None
+    samples_per_symbol: Optional[dict[str, int]] = None
     data_quality_score: Optional[float] = None
 
 
@@ -46,11 +46,11 @@ class TrainingDataInfo:
 class DeploymentCapabilities:
     """Model deployment capabilities and restrictions."""
 
-    symbol_restrictions: Optional[List[str]]  # None = universal
-    timeframe_restrictions: List[str]
-    asset_class_compatibility: List[str]
+    symbol_restrictions: Optional[list[str]]  # None = universal
+    timeframe_restrictions: list[str]
+    asset_class_compatibility: list[str]
     min_liquidity_tier: Optional[str] = None
-    geographic_restrictions: Optional[List[str]] = None
+    geographic_restrictions: Optional[list[str]] = None
 
 
 @dataclass
@@ -58,7 +58,7 @@ class FeatureArchitecture:
     """Model feature architecture details."""
 
     input_size: int
-    timeframe_features: Optional[Dict[str, int]] = None  # {timeframe: feature_count}
+    timeframe_features: Optional[dict[str, int]] = None  # {timeframe: feature_count}
     symbol_embedding_dim: Optional[int] = None
     attention_mechanism: bool = False
     feature_combination_method: str = "concatenation"
@@ -78,12 +78,12 @@ class PerformanceMetrics:
     overall_f1_score: float = 0.0
 
     # Per-symbol metrics
-    per_symbol_accuracy: Optional[Dict[str, float]] = None
-    per_symbol_precision: Optional[Dict[str, float]] = None
-    per_symbol_recall: Optional[Dict[str, float]] = None
+    per_symbol_accuracy: Optional[dict[str, float]] = None
+    per_symbol_precision: Optional[dict[str, float]] = None
+    per_symbol_recall: Optional[dict[str, float]] = None
 
     # Multi-timeframe metrics
-    per_timeframe_importance: Optional[Dict[str, float]] = None
+    per_timeframe_importance: Optional[dict[str, float]] = None
     attention_diversity_score: Optional[float] = None
 
     # Generalization metrics
@@ -106,7 +106,7 @@ class TrainingConfiguration:
     batch_size: int
     epochs_trained: int
     early_stopping_epoch: Optional[int] = None
-    regularization: Optional[Dict[str, Any]] = None
+    regularization: Optional[dict[str, Any]] = None
     data_augmentation: bool = False
     balanced_sampling: bool = False
 
@@ -118,8 +118,8 @@ class ModelCompatibility:
     min_python_version: str = "3.8"
     pytorch_version: str = "2.0.0"
     ktrdr_version: str = "1.0.0"
-    required_indicators: List[str] = field(default_factory=list)
-    required_fuzzy_sets: List[str] = field(default_factory=list)
+    required_indicators: list[str] = field(default_factory=list)
+    required_fuzzy_sets: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -190,12 +190,12 @@ class ModelMetadata:
                 optimizer="adam", learning_rate=0.001, batch_size=32, epochs_trained=0
             )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ModelMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> "ModelMetadata":
         """Create from dictionary (JSON deserialization)."""
 
         # Handle nested dataclasses
@@ -291,7 +291,7 @@ class ModelMetadata:
 
         return True
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get concise metadata summary."""
         return {
             "strategy": f"{self.strategy_name} v{self.strategy_version}",
@@ -309,7 +309,7 @@ class ModelMetadata:
             "created_at": self.created_at,
         }
 
-    def update_performance_metrics(self, metrics: Dict[str, Any]) -> None:
+    def update_performance_metrics(self, metrics: dict[str, Any]) -> None:
         """Update performance metrics from training results."""
         pm = self.performance_metrics
 
@@ -357,8 +357,8 @@ class ModelMetadataManager:
         strategy_version: str,
         model_version: int,
         scope: ModelScope,
-        training_symbols: List[str],
-        training_timeframes: List[str],
+        training_symbols: list[str],
+        training_timeframes: list[str],
         **kwargs,
     ) -> ModelMetadata:
         """Create new model metadata."""
@@ -387,7 +387,7 @@ class ModelMetadataManager:
 
     def find_compatible_models(
         self, symbol: str, timeframe: str, asset_class: str = None
-    ) -> List[Tuple[str, ModelMetadata]]:
+    ) -> list[tuple[str, ModelMetadata]]:
         """Find models compatible with trading target."""
 
         compatible_models = []
@@ -424,7 +424,7 @@ class ModelMetadataManager:
 
     def get_model_rankings(
         self, asset_class: str = None
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """Get model rankings by scope and performance."""
 
         rankings = {"universal": [], "symbol_group": [], "symbol_specific": []}

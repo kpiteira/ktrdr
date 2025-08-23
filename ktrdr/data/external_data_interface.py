@@ -10,8 +10,9 @@ and the specific external data source implementations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
 from ktrdr.logging import get_logger
@@ -126,7 +127,7 @@ class ExternalDataProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_supported_timeframes(self) -> List[str]:
+    async def get_supported_timeframes(self) -> list[str]:
         """
         Get list of supported timeframes.
 
@@ -136,7 +137,7 @@ class ExternalDataProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_supported_instruments(self) -> List[str]:
+    async def get_supported_instruments(self) -> list[str]:
         """
         Get list of supported instrument types.
 
@@ -146,7 +147,7 @@ class ExternalDataProvider(ABC):
         pass
 
     @abstractmethod
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Check the health and status of the data provider.
 
@@ -164,7 +165,7 @@ class ExternalDataProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_provider_info(self) -> Dict[str, Any]:
+    async def get_provider_info(self) -> dict[str, Any]:
         """
         Get information about the data provider.
 
@@ -184,7 +185,7 @@ class ExternalDataProvider(ABC):
 
     async def get_market_hours(
         self, symbol: str, date: datetime, instrument_type: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Get market hours for a symbol on a specific date.
 
@@ -209,7 +210,7 @@ class ExternalDataProvider(ABC):
 
     async def get_contract_details(
         self, symbol: str, instrument_type: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Get detailed contract information for a symbol.
 
@@ -236,7 +237,7 @@ class ExternalDataProvider(ABC):
 
     async def search_symbols(
         self, query: str, instrument_type: Optional[str] = None, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Search for symbols matching a query.
 

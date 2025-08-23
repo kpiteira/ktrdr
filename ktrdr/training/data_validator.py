@@ -1,13 +1,10 @@
 """Data validation and sanitization for robust KTRDR training."""
 
-import torch
-import numpy as np
-import pandas as pd
-from typing import Dict, Any, Optional, List, Tuple, Union, Set
 from dataclasses import dataclass, field
 from datetime import datetime
-import warnings
-import math
+from typing import Any, Dict, List, Optional, Tuple
+
+import torch
 
 from ktrdr import get_logger
 
@@ -38,11 +35,11 @@ class ValidationResult:
     passed: bool
     severity: str
     message: str
-    affected_indices: List[int] = field(default_factory=list)
+    affected_indices: list[int] = field(default_factory=list)
     suggested_fix: Optional[str] = None
     fixed_automatically: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "rule_name": self.rule_name,
@@ -61,8 +58,8 @@ class DataValidator:
 
     def __init__(self):
         """Initialize data validator with default rules."""
-        self.rules: Dict[str, ValidationRule] = {}
-        self.validation_history: List[Dict[str, Any]] = []
+        self.rules: dict[str, ValidationRule] = {}
+        self.validation_history: list[dict[str, Any]] = []
 
         # Setup default validation rules
         self._setup_default_rules()
@@ -204,8 +201,8 @@ class DataValidator:
             logger.debug(f"Enabled validation rule: {rule_name}")
 
     def validate_features(
-        self, features: torch.Tensor, feature_names: Optional[List[str]] = None
-    ) -> List[ValidationResult]:
+        self, features: torch.Tensor, feature_names: Optional[list[str]] = None
+    ) -> list[ValidationResult]:
         """Validate feature tensor.
 
         Args:
@@ -251,7 +248,7 @@ class DataValidator:
 
     def validate_labels(
         self, labels: torch.Tensor, num_classes: int = 3
-    ) -> List[ValidationResult]:
+    ) -> list[ValidationResult]:
         """Validate label tensor.
 
         Args:
@@ -286,8 +283,8 @@ class DataValidator:
         return results
 
     def validate_symbols(
-        self, symbol_indices: torch.Tensor, symbols: List[str]
-    ) -> List[ValidationResult]:
+        self, symbol_indices: torch.Tensor, symbols: list[str]
+    ) -> list[ValidationResult]:
         """Validate symbol indices.
 
         Args:
@@ -311,7 +308,7 @@ class DataValidator:
 
     def validate_tensor_consistency(
         self, *tensors: torch.Tensor
-    ) -> List[ValidationResult]:
+    ) -> list[ValidationResult]:
         """Validate consistency between multiple tensors.
 
         Args:
@@ -329,7 +326,7 @@ class DataValidator:
 
     def sanitize_features(
         self, features: torch.Tensor
-    ) -> Tuple[torch.Tensor, List[str]]:
+    ) -> tuple[torch.Tensor, list[str]]:
         """Sanitize features tensor by fixing common issues.
 
         Args:
@@ -371,7 +368,7 @@ class DataValidator:
 
     def sanitize_labels(
         self, labels: torch.Tensor, num_classes: int = 3
-    ) -> Tuple[torch.Tensor, List[str]]:
+    ) -> tuple[torch.Tensor, list[str]]:
         """Sanitize labels tensor.
 
         Args:
@@ -483,7 +480,7 @@ class DataValidator:
             )
 
     def _check_feature_variance(
-        self, features: torch.Tensor, feature_names: Optional[List[str]]
+        self, features: torch.Tensor, feature_names: Optional[list[str]]
     ) -> ValidationResult:
         """Check for low variance features."""
         feature_vars = torch.var(features, dim=0)
@@ -608,7 +605,7 @@ class DataValidator:
             )
 
     def _check_symbol_balance(
-        self, symbol_indices: torch.Tensor, symbols: List[str]
+        self, symbol_indices: torch.Tensor, symbols: list[str]
     ) -> ValidationResult:
         """Check symbol balance."""
         symbol_counts = torch.bincount(symbol_indices, minlength=len(symbols))
@@ -642,7 +639,7 @@ class DataValidator:
             )
 
     def _check_tensor_shape_consistency(
-        self, tensors: Tuple[torch.Tensor, ...]
+        self, tensors: tuple[torch.Tensor, ...]
     ) -> ValidationResult:
         """Check tensor shape consistency."""
         if len(tensors) < 2:
@@ -721,7 +718,7 @@ class DataValidator:
                 message=f"{tensor_name} size is reasonable: {tensor_size_mb:.1f}MB",
             )
 
-    def _check_timeframe_naming(self, feature_names: List[str]) -> ValidationResult:
+    def _check_timeframe_naming(self, feature_names: list[str]) -> ValidationResult:
         """Check timeframe feature naming conventions."""
         common_timeframes = [
             "1m",
@@ -774,10 +771,10 @@ class DataValidator:
         features: torch.Tensor,
         labels: torch.Tensor,
         symbol_indices: Optional[torch.Tensor] = None,
-        feature_names: Optional[List[str]] = None,
-        symbols: Optional[List[str]] = None,
+        feature_names: Optional[list[str]] = None,
+        symbols: Optional[list[str]] = None,
         auto_fix: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Perform comprehensive validation on all data.
 
         Args:
@@ -895,7 +892,7 @@ class DataValidator:
 
         return report
 
-    def _generate_recommendations(self, results: List[ValidationResult]) -> List[str]:
+    def _generate_recommendations(self, results: list[ValidationResult]) -> list[str]:
         """Generate actionable recommendations based on validation results."""
         recommendations = []
 

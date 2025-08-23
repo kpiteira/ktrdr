@@ -6,11 +6,10 @@ Provides a bridge between the Docker backend and the host-based training service
 """
 
 import asyncio
-import logging
-import httpx
-from typing import Dict, Any, Optional, List
-from datetime import datetime
 import time
+from typing import Any, Dict, List, Optional
+
+import httpx
 
 from ktrdr.logging import get_logger
 
@@ -86,7 +85,7 @@ class TrainingHostClient:
             logger.debug(f"Training host service not available: {str(e)}")
             return False
 
-    async def get_service_info(self) -> Dict[str, Any]:
+    async def get_service_info(self) -> dict[str, Any]:
         """
         Get training host service information.
 
@@ -107,7 +106,7 @@ class TrainingHostClient:
         except httpx.RequestError as e:
             raise TrainingHostServiceError(f"Connection error: {str(e)}")
 
-    async def start_training_session(self, config: Dict[str, Any]) -> str:
+    async def start_training_session(self, config: dict[str, Any]) -> str:
         """
         Start a training session on the host service.
 
@@ -179,7 +178,7 @@ class TrainingHostClient:
         except httpx.RequestError as e:
             raise TrainingHostServiceError(f"Connection error: {str(e)}")
 
-    async def get_training_status(self, session_id: str) -> Dict[str, Any]:
+    async def get_training_status(self, session_id: str) -> dict[str, Any]:
         """
         Get the status of a training session.
 
@@ -206,7 +205,7 @@ class TrainingHostClient:
 
     async def stop_training_session(
         self, session_id: str, save_checkpoint: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Stop a training session.
 
@@ -240,7 +239,7 @@ class TrainingHostClient:
         except httpx.RequestError as e:
             raise TrainingHostServiceError(f"Connection error: {str(e)}")
 
-    async def list_training_sessions(self) -> List[Dict[str, Any]]:
+    async def list_training_sessions(self) -> list[dict[str, Any]]:
         """
         List all training sessions on the host service.
 
@@ -263,7 +262,7 @@ class TrainingHostClient:
         except httpx.RequestError as e:
             raise TrainingHostServiceError(f"Connection error: {str(e)}")
 
-    async def cleanup_session(self, session_id: str) -> Dict[str, Any]:
+    async def cleanup_session(self, session_id: str) -> dict[str, Any]:
         """
         Clean up a completed training session.
 
@@ -297,7 +296,7 @@ class TrainingHostClient:
         poll_interval: float = 2.0,
         timeout: Optional[float] = None,
         progress_callback: Optional[callable] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Wait for a training session to complete, polling for status updates.
 
@@ -347,7 +346,7 @@ class TrainingHostClient:
                 )
                 await asyncio.sleep(poll_interval)
 
-    def map_to_operation_progress(self, status: Dict[str, Any]) -> Dict[str, Any]:
+    def map_to_operation_progress(self, status: dict[str, Any]) -> dict[str, Any]:
         """
         Map host service status to operation progress format.
 

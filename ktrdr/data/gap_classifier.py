@@ -9,19 +9,19 @@ Integrates with existing trading hours metadata from symbol_discovery_cache.json
 and the trading_hours.py infrastructure.
 """
 
-from enum import Enum
-from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime, timezone, timedelta, date
-from dataclasses import dataclass
 import json
-import pandas as pd
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from enum import Enum
 from pathlib import Path
+from typing import Dict, Optional
 
-from ktrdr.logging import get_logger
+import pandas as pd
+
 from ktrdr.data.local_data_loader import TimestampManager
-from ktrdr.utils.timezone_utils import TimestampManager
-from ktrdr.data.trading_hours import TradingHoursManager
 from ktrdr.data.timeframe_constants import TimeframeConstants
+from ktrdr.logging import get_logger
+from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
 
@@ -74,7 +74,7 @@ class GapClassifier:
             f"Initialized GapClassifier with {len(self.symbol_metadata)} symbols"
         )
 
-    def _load_symbol_metadata(self) -> Dict[str, Dict]:
+    def _load_symbol_metadata(self) -> dict[str, dict]:
         """Load symbol metadata from cache file."""
         try:
             cache_path = Path(self.symbol_cache_path)
@@ -205,7 +205,7 @@ class GapClassifier:
         return TimeframeConstants.is_intraday(timeframe)
 
     def _spans_weekend(
-        self, start_time: datetime, end_time: datetime, trading_hours: Dict
+        self, start_time: datetime, end_time: datetime, trading_hours: dict
     ) -> bool:
         """
         Check if gap spans a weekend period.
@@ -266,7 +266,7 @@ class GapClassifier:
             current += timedelta(days=1)
         return False
 
-    def _is_24_5_market(self, trading_hours: Dict) -> bool:
+    def _is_24_5_market(self, trading_hours: dict) -> bool:
         """
         Check if this is a 24/5 market (like forex).
 
@@ -299,7 +299,7 @@ class GapClassifier:
         return has_sunday and no_saturday and is_cross_midnight
 
     def _is_forex_weekend_gap(
-        self, start_local: pd.Timestamp, end_local: pd.Timestamp, regular_hours: Dict
+        self, start_local: pd.Timestamp, end_local: pd.Timestamp, regular_hours: dict
     ) -> bool:
         """
         Check if gap represents a forex weekend closure.
@@ -330,7 +330,7 @@ class GapClassifier:
         return False
 
     def _is_holiday_gap(
-        self, start_time: datetime, end_time: datetime, trading_hours: Dict
+        self, start_time: datetime, end_time: datetime, trading_hours: dict
     ) -> bool:
         """
         Check if gap represents a holiday period.
@@ -514,7 +514,7 @@ class GapClassifier:
         return date_obj == easter_monday
 
     def _is_outside_trading_hours(
-        self, start_time: datetime, end_time: datetime, trading_hours: Dict
+        self, start_time: datetime, end_time: datetime, trading_hours: dict
     ) -> bool:
         """
         Check if gap is outside trading hours for intraday timeframes.
@@ -654,7 +654,7 @@ class GapClassifier:
             return False
 
     def _is_adjacent_to_weekend_gap(
-        self, start_time: datetime, end_time: datetime, trading_hours: Dict
+        self, start_time: datetime, end_time: datetime, trading_hours: dict
     ) -> bool:
         """
         Check if gap is adjacent to weekend (likely holiday pattern).
@@ -902,7 +902,7 @@ class GapClassifier:
         else:
             return f"Gap of {duration_hours:.1f} hours{ib_note}"
 
-    def get_symbol_trading_hours(self, symbol: str) -> Optional[Dict]:
+    def get_symbol_trading_hours(self, symbol: str) -> Optional[dict]:
         """
         Get trading hours metadata for a symbol.
 

@@ -9,40 +9,31 @@ This module contains all CLI commands related to data operations:
 """
 
 import asyncio
-import signal
-import sys
 import json
+import sys
 from typing import Optional
-from pathlib import Path
 
-import typer
 import pandas as pd
+import typer
 from rich.console import Console
-from rich.table import Table
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
     TextColumn,
-    BarColumn,
     TimeElapsedColumn,
 )
+from rich.table import Table
 
-from ktrdr.cli.api_client import get_api_client, check_api_connection
+from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
-from ktrdr.config.validation import InputValidator
-from ktrdr.errors import ValidationError, DataError
-from ktrdr.logging import get_logger
-from ktrdr.cli.ib_diagnosis import (
-    detect_ib_issue_from_api_response,
-    format_ib_diagnostic_message,
-    get_ib_recovery_suggestions,
-    should_show_ib_diagnosis,
-)
 from ktrdr.cli.error_handler import (
-    handle_cli_error,
-    handle_api_response_error,
     display_ib_connection_required_message,
+    handle_cli_error,
 )
+from ktrdr.config.validation import InputValidator
+from ktrdr.errors import DataError, ValidationError
+from ktrdr.logging import get_logger
 
 # Setup logging and console
 logger = get_logger(__name__)

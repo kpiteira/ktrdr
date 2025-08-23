@@ -6,15 +6,16 @@ Keltner Channels. This composite indicator helps identify periods of low
 volatility that often precede significant price movements.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import SQUEEZE_INTENSITY_SCHEMA
+import numpy as np
+import pandas as pd
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+from ktrdr.indicators.schemas import SQUEEZE_INTENSITY_SCHEMA
 
 
 class SqueezeIntensityIndicator(BaseIndicator):

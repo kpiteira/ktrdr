@@ -5,32 +5,32 @@ Provides neural network training functionality for the API layer.
 """
 
 import asyncio
-import uuid
-import yaml
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from ktrdr import get_logger
-from ktrdr.api.services.base import BaseService
-from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.endpoints.strategies import _validate_strategy_config
 from ktrdr.api.models.operations import (
-    OperationType,
     OperationMetadata,
     OperationProgress,
+    OperationType,
 )
-from ktrdr.training.train_strategy import StrategyTrainer
-from ktrdr.training.model_storage import ModelStorage
+from ktrdr.api.services.base import BaseService
+from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.backtesting.model_loader import ModelLoader
-from ktrdr.errors import ValidationError, DataError
-from ktrdr.api.endpoints.strategies import _validate_strategy_config
+from ktrdr.errors import ValidationError
+from ktrdr.training.model_storage import ModelStorage
+from ktrdr.training.train_strategy import StrategyTrainer
 from ktrdr.training.training_manager import TrainingManager
 
 logger = get_logger(__name__)
 
 # In-memory storage for loaded models (in production, use proper model registry)
-_loaded_models: Dict[str, Any] = {}
+_loaded_models: dict[str, Any] = {}
 
 
 class TrainingService(BaseService):
@@ -47,7 +47,7 @@ class TrainingService(BaseService):
         self.training_manager = TrainingManager()
         logger.info("Training service initialized")
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the training service.
 
@@ -67,14 +67,14 @@ class TrainingService(BaseService):
 
     async def start_training(
         self,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
         detailed_analytics: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Start neural network training task."""
         # Simple delegation to training manager (no complex fallback logic)
         return await self._start_training_via_manager(
@@ -89,14 +89,14 @@ class TrainingService(BaseService):
 
     async def _start_training_via_manager(
         self,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
         detailed_analytics: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Start neural network training task using TrainingManager (host service or local)."""
         # Validate strategy file exists - check both Docker and local paths
         strategy_paths = [
@@ -197,15 +197,15 @@ class TrainingService(BaseService):
         self,
         operation_id: str,
         strategy_path: Path,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         start_date: Optional[str],
         end_date: Optional[str],
     ):
         """Run training via TrainingManager with progress updates."""
         try:
             # Create progress callback
-            async def progress_callback(progress: Dict[str, Any]):
+            async def progress_callback(progress: dict[str, Any]):
                 await self.operations_service.update_progress(
                     operation_id,
                     OperationProgress(
@@ -277,7 +277,7 @@ class TrainingService(BaseService):
 
     async def cancel_training_session(
         self, session_id: str, reason: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Cancel a training session via TrainingManager."""
         try:
             logger.info(f"Cancelling training session {session_id} (reason: {reason})")
@@ -288,7 +288,7 @@ class TrainingService(BaseService):
             logger.error(f"Failed to cancel training session {session_id}: {str(e)}")
             raise
 
-    async def get_model_performance(self, task_id: str) -> Dict[str, Any]:
+    async def get_model_performance(self, task_id: str) -> dict[str, Any]:
         """Get detailed performance metrics for completed training."""
         # Get operation info from operations service
         operation = await self.operations_service.get_operation(task_id)
@@ -346,7 +346,7 @@ class TrainingService(BaseService):
 
     async def save_trained_model(
         self, task_id: str, model_name: str, description: str = ""
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Save a trained model for later use."""
         # Verify training task exists and is completed
         operation = await self.operations_service.get_operation(task_id)
@@ -382,7 +382,7 @@ class TrainingService(BaseService):
             "model_size_mb": model_size_mb,
         }
 
-    async def load_trained_model(self, model_name: str) -> Dict[str, Any]:
+    async def load_trained_model(self, model_name: str) -> dict[str, Any]:
         """Load a previously saved neural network model."""
         # Check if model exists in storage
         all_models = self.model_storage.list_models()
@@ -432,7 +432,7 @@ class TrainingService(BaseService):
         symbol: str,
         timeframe: str = "1h",
         test_date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Test a loaded model's prediction capability."""
         # Check if model is loaded
         if model_name not in _loaded_models:
@@ -458,7 +458,7 @@ class TrainingService(BaseService):
             "input_features": {},  # Would be populated by real model prediction
         }
 
-    async def list_trained_models(self) -> Dict[str, Any]:
+    async def list_trained_models(self) -> dict[str, Any]:
         """List all available trained neural network models."""
         # Get all models from storage
         all_models = self.model_storage.list_models()
@@ -486,7 +486,7 @@ class TrainingService(BaseService):
         self,
         operation_id: str,
         symbol: str,
-        timeframes: List[str],
+        timeframes: list[str],
         strategy_name: str,
         start_date: Optional[str],
         end_date: Optional[str],
@@ -884,8 +884,8 @@ class TrainingService(BaseService):
     async def _run_multi_symbol_training_async(
         self,
         operation_id: str,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         strategy_name: str,
         start_date: Optional[str],
         end_date: Optional[str],

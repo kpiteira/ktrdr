@@ -5,15 +5,13 @@ This module provides functionality to transform pandas DataFrames into
 format compatible with TradingView's lightweight-charts library.
 """
 
-import json
 from datetime import datetime
-from typing import Dict, List, Optional, Union, Any
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
-import numpy as np
 
-from ktrdr.errors import DataError
 from ktrdr import get_logger
+from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
 
@@ -86,7 +84,7 @@ class DataAdapter:
         high_col: str = "high",
         low_col: str = "low",
         close_col: str = "close",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Transform OHLC data from DataFrame to lightweight-charts format.
 
@@ -183,7 +181,7 @@ class DataAdapter:
     @staticmethod
     def transform_line(
         df: pd.DataFrame, time_column: str = "date", value_column: str = "value"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Transform line series data from DataFrame to lightweight-charts format.
 
@@ -273,7 +271,7 @@ class DataAdapter:
         positive_color: str = "#26a69a",
         negative_color: str = "#ef5350",
         neutral_color: str = "#999999",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Transform histogram data from DataFrame to lightweight-charts format.
 

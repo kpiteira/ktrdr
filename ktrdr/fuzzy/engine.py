@@ -5,19 +5,16 @@ This module provides the FuzzyEngine class that transforms indicator values
 into fuzzy membership degrees according to configured membership functions.
 """
 
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, List, Optional, Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError, ProcessingError
-from ktrdr.fuzzy.config import FuzzyConfig, FuzzySetConfig, MembershipFunctionConfig
+from ktrdr.fuzzy.config import FuzzyConfig
 from ktrdr.fuzzy.membership import (
     MembershipFunction,
-    TriangularMF,
-    TrapezoidalMF,
-    GaussianMF,
     MembershipFunctionFactory,
 )
 
@@ -63,7 +60,7 @@ class FuzzyEngine:
         logger.debug("Initializing FuzzyEngine")
         self._config = config
         self._validate_config()
-        self._membership_functions: Dict[str, Dict[str, MembershipFunction]] = {}
+        self._membership_functions: dict[str, dict[str, MembershipFunction]] = {}
         self._initialize_membership_functions()
         logger.info(
             f"FuzzyEngine initialized with {len(self._membership_functions)} indicators"
@@ -135,7 +132,7 @@ class FuzzyEngine:
 
     def fuzzify(
         self, indicator: str, values: Union[float, pd.Series, np.ndarray]
-    ) -> Union[Dict[str, float], pd.DataFrame]:
+    ) -> Union[dict[str, float], pd.DataFrame]:
         """
         Fuzzify indicator values using the configured membership functions.
 
@@ -203,8 +200,8 @@ class FuzzyEngine:
         self,
         indicator: str,
         value: float,
-        membership_functions: Dict[str, MembershipFunction],
-    ) -> Dict[str, float]:
+        membership_functions: dict[str, MembershipFunction],
+    ) -> dict[str, float]:
         """
         Fuzzify a single indicator value.
 
@@ -229,7 +226,7 @@ class FuzzyEngine:
         self,
         indicator: str,
         values: pd.Series,
-        membership_functions: Dict[str, MembershipFunction],
+        membership_functions: dict[str, MembershipFunction],
     ) -> pd.DataFrame:
         """
         Fuzzify a series of indicator values.
@@ -267,7 +264,7 @@ class FuzzyEngine:
         """
         return f"{indicator}_{set_name}"
 
-    def get_available_indicators(self) -> List[str]:
+    def get_available_indicators(self) -> list[str]:
         """
         Get a list of available indicators in the configuration.
 
@@ -276,7 +273,7 @@ class FuzzyEngine:
         """
         return list(self._membership_functions.keys())
 
-    def get_fuzzy_sets(self, indicator: str) -> List[str]:
+    def get_fuzzy_sets(self, indicator: str) -> list[str]:
         """
         Get a list of fuzzy sets defined for an indicator.
 
@@ -302,7 +299,7 @@ class FuzzyEngine:
 
         return list(self._membership_functions[indicator].keys())
 
-    def get_output_names(self, indicator: str) -> List[str]:
+    def get_output_names(self, indicator: str) -> list[str]:
         """
         Get a list of output column names for an indicator.
 
@@ -320,9 +317,9 @@ class FuzzyEngine:
 
     def generate_multi_timeframe_memberships(
         self,
-        multi_timeframe_indicators: Dict[str, pd.DataFrame],
-        fuzzy_sets_config: Optional[Dict[str, Dict]] = None,
-    ) -> Dict[str, pd.DataFrame]:
+        multi_timeframe_indicators: dict[str, pd.DataFrame],
+        fuzzy_sets_config: Optional[dict[str, dict]] = None,
+    ) -> dict[str, pd.DataFrame]:
         """
         Generate fuzzy membership values for indicators across multiple timeframes.
 
@@ -365,11 +362,6 @@ class FuzzyEngine:
         # Use provided fuzzy config or current engine configuration
         if fuzzy_sets_config is not None:
             # Create temporary engine with the provided configuration
-            from ktrdr.fuzzy.config import (
-                FuzzyConfig,
-                FuzzySetConfig,
-                MembershipFunctionConfig,
-            )
 
             # Convert config dict to FuzzyConfig objects if needed
             if isinstance(fuzzy_sets_config, dict):

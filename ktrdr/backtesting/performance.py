@@ -1,14 +1,14 @@
 """Performance analytics for backtesting system."""
 
-from dataclasses import dataclass
-from typing import Dict, List, Any, Optional
-import pandas as pd
-import numpy as np
 import math
-from datetime import datetime
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
-from .position_manager import Trade, PositionStatus
+import numpy as np
+import pandas as pd
+
 from .. import get_logger
+from .position_manager import PositionStatus, Trade
 
 logger = get_logger(__name__)
 
@@ -71,7 +71,7 @@ class PerformanceMetrics:
     sortino_ratio: float
     recovery_factor: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary with JSON-safe float values."""
         return {
             "total_return": sanitize_float_for_json(self.total_return),
@@ -108,8 +108,8 @@ class PerformanceTracker:
 
     def __init__(self):
         """Initialize performance tracker."""
-        self.equity_curve: List[Dict[str, Any]] = []
-        self.daily_returns: List[float] = []
+        self.equity_curve: list[dict[str, Any]] = []
+        self.daily_returns: list[float] = []
         self.peak_equity = 0.0
         self.current_drawdown = 0.0
         self.max_drawdown = 0.0
@@ -179,7 +179,7 @@ class PerformanceTracker:
 
     def calculate_metrics(
         self,
-        trades: List[Trade],
+        trades: list[Trade],
         initial_capital: float,
         start_date: pd.Timestamp = None,
         end_date: pd.Timestamp = None,

@@ -10,11 +10,10 @@ This module handles the centralized logging configuration including:
 
 import logging
 import logging.handlers
-import os
-from pathlib import Path
 import sys
 import time
-from typing import Optional, Dict, Any, Union, Set
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
 # Global debug flag
 _DEBUG_MODE = False
@@ -126,7 +125,7 @@ def configure_logging(
     file_level: int = logging.DEBUG,
     max_file_size_mb: int = 10,
     backup_count: int = 5,
-    config: Optional[Dict[str, Any]] = None,
+    config: Optional[dict[str, Any]] = None,
 ) -> None:
     """
     Configure the central logging system with console and file outputs.
@@ -265,7 +264,7 @@ def set_component_log_level(component: str, level: int) -> None:
             logger.setLevel(level)
 
 
-def get_component_log_levels() -> Dict[str, int]:
+def get_component_log_levels() -> dict[str, int]:
     """
     Get current component log levels.
 

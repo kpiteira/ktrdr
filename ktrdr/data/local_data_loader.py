@@ -8,35 +8,31 @@ with a configurable data directory.
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 
 # Import the new logging system
 from ktrdr import (
     get_logger,
-    log_entry_exit,
-    log_performance,
     log_data_operation,
+    log_entry_exit,
     log_error,
+    log_performance,
     with_context,
 )
-from ktrdr.utils.timezone_utils import TimestampManager
-
 from ktrdr.config import ConfigLoader, InputValidator, sanitize_parameter
 from ktrdr.errors import (
     DataError,
     DataFormatError,
     DataNotFoundError,
-    DataCorruptionError,
     DataValidationError,
-    ErrorHandler,
-    retry_with_backoff,
-    fallback,
     FallbackStrategy,
-    with_partial_results,
     ValidationError,
+    fallback,
+    retry_with_backoff,
 )
+from ktrdr.utils.timezone_utils import TimestampManager
 
 # Get module logger
 logger = get_logger(__name__)
@@ -532,7 +528,7 @@ class LocalDataLoader:
 
     @fallback(strategy=FallbackStrategy.DEFAULT_VALUE, default_value=[], logger=logger)
     @log_entry_exit(logger=logger)
-    def get_available_data_files(self) -> List[Tuple[str, str]]:
+    def get_available_data_files(self) -> list[tuple[str, str]]:
         """
         Get a list of available data files in the data directory.
 
@@ -585,7 +581,7 @@ class LocalDataLoader:
     @log_performance(threshold_ms=100, logger=logger)
     def get_data_date_range(
         self, symbol: str, timeframe: str, file_format: Optional[str] = None
-    ) -> Optional[Tuple[datetime, datetime]]:
+    ) -> Optional[tuple[datetime, datetime]]:
         """
         Get the date range for a specific data file without loading the entire file.
 
