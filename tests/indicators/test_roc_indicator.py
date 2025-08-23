@@ -6,7 +6,6 @@ validating calculation accuracy, parameter handling, edge cases, and integration
 with the broader indicator framework.
 """
 
-
 import numpy as np
 import pandas as pd
 import pytest

@@ -5,7 +5,6 @@ This module provides comprehensive tests for the VWAP indicator implementation,
 including mathematical accuracy, parameter validation, and edge case handling.
 """
 
-
 import numpy as np
 import pandas as pd
 import pytest

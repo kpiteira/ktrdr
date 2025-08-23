@@ -6,7 +6,6 @@ generation functionality, ensuring that chart configurations and data
 are correctly rendered into valid HTML output.
 """
 
-
 import pytest
 
 from ktrdr.errors import ConfigurationError

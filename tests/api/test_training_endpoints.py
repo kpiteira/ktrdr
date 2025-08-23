@@ -4,7 +4,6 @@ Unit tests for Training API endpoints.
 Tests the training endpoints that start training operations and retrieve results.
 """
 
-
 import pytest
 from fastapi.testclient import TestClient
 

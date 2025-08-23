@@ -1,5 +1,3 @@
-
-
 def test_ktrdr_imports():
     """Test that basic KTRDR imports work."""
     try:

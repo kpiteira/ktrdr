@@ -5,7 +5,6 @@ This module contains tests that verify the integrated functionality
 of the visualization components working together.
 """
 
-
 import pandas as pd
 import pytest
 

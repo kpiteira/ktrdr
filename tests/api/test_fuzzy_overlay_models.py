@@ -2,7 +2,6 @@
 Tests for fuzzy overlay API models.
 """
 
-
 import pytest
 from pydantic import ValidationError
 

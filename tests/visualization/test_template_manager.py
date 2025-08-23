@@ -2,7 +2,6 @@
 Tests for the TemplateManager class in the visualization module.
 """
 
-
 from ktrdr.visualization.template_manager import TemplateManager
 
 

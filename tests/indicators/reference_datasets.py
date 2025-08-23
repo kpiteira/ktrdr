@@ -5,7 +5,6 @@ This module provides standard reference datasets with known indicator values
 for validating indicator implementations against expected results.
 """
 
-
 import numpy as np
 import pandas as pd
 

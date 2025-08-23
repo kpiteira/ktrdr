@@ -1,6 +1,5 @@
 """Tests for Phase 1: Neural Network Foundation."""
 
-
 import pandas as pd
 import pytest
 import torch

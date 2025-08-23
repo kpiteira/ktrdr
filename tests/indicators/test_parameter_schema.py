@@ -5,7 +5,6 @@ This module tests the comprehensive parameter validation framework
 including type validation, range validation, and constraint validation.
 """
 
-
 import pytest
 
 from ktrdr.errors import DataError

@@ -5,7 +5,6 @@ This module defines the parameter schemas for each indicator, including
 type definitions, constraints, and validation rules.
 """
 
-
 from ktrdr.indicators.parameter_schema import (
     ParameterConstraint,
     ParameterDefinition,

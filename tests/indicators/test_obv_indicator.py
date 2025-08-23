@@ -8,7 +8,6 @@ This module tests the OBV indicator implementation including:
 - Reference value validation
 """
 
-
 import pandas as pd
 import pytest
 

@@ -8,7 +8,6 @@ This module tests the Stochastic indicator implementation including:
 - Reference value validation
 """
 
-
 import numpy as np
 import pandas as pd
 import pytest

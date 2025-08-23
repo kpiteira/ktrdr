@@ -2,7 +2,6 @@
 Tests for the BaseIndicator abstract class.
 """
 
-
 import pandas as pd
 import pytest
 
