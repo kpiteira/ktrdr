@@ -607,7 +607,7 @@ class TrainingStabilizer:
                 # For non-tensor values, convert to string
                 state_str += f"{key}:{str(value)}"
 
-        return hashlib.sha256(state_str.encode()).hexdigest()
+        return hashlib.md5(state_str.encode()).hexdigest()  # nosec B324 - Used for data integrity, not cryptographic security
 
     def _verify_checkpoint_integrity(self, checkpoint_data: dict[str, Any]) -> bool:
         """Verify checkpoint integrity using hashes."""
