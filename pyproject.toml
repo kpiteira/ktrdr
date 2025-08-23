@@ -97,6 +97,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/**/*" = ["S101"]  # allow assert statements in tests
+# Pytest fixture protection - prevents ruff from removing imports that pytest needs
+"tests/visualization/test_*.py" = ["F401"]  # allow fixture imports that appear unused
+"tests/*/conftest.py" = ["F401"]  # allow fixture definitions that appear unused
+"tests/**/test_*.py" = ["F811"]  # allow fixture redefinitions in test files
 
 [tool.bandit]
 exclude_dirs = ["tests"]
