@@ -6,7 +6,7 @@ raised by various parts of the application, categorized according to
 the error classification in the architecture blueprint.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class KtrdrError(Exception):
@@ -277,5 +277,42 @@ class MaxRetriesExceededError(KtrdrError):
 
 class FallbackNotAvailableError(KtrdrError):
     """Exception raised when no fallback strategy is available."""
+
+    pass
+
+
+# --- Service-specific Connection Errors ---
+
+
+class ServiceConnectionError(ConnectionError):
+    """
+    Exception raised when connection to a service fails.
+
+    This exception is specifically for async service communication
+    failures such as IB Host Service or Training Host Service
+    connection issues.
+    """
+
+    pass
+
+
+class ServiceTimeoutError(ConnectionError):
+    """
+    Exception raised when a service request times out.
+
+    This exception is specifically for async service communication
+    timeouts during HTTP requests to host services.
+    """
+
+    pass
+
+
+class ServiceConfigurationError(ConfigurationError):
+    """
+    Exception raised when service configuration is invalid.
+
+    This exception is specifically for async service configuration
+    issues such as missing URLs or invalid service settings.
+    """
 
     pass

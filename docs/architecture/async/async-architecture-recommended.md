@@ -13,6 +13,176 @@ You currently have **two parallel architectures** that handle similar problems w
 
 The solution is **architectural unification** around your proven microservice pattern.
 
+## Architecture Overview
+
+### Current State vs Target State
+
+```mermaid
+graph TB
+    subgraph "CURRENT: Mixed Async/Sync Architecture"
+        CLI1["CLI Commands<br/>Sync + asyncio.run()"]
+        HTTP1["HTTP Client<br/>New per command"]
+        API1["FastAPI Endpoints<br/>Async ✅"]
+        
+        subgraph "Data Path - BROKEN"
+            DS1["DataService<br/>Async ✅"]
+            DM1["DataManager<br/>SYNC ❌"]
+            DA1["DataAdapter<br/>Mixed patterns"]
+        end
+        
+        subgraph "Training Path - BETTER"
+            TS1["TrainingService<br/>Async ✅"]
+            TM1["TrainingManager<br/>Async ✅"]
+            TA1["TrainingAdapter<br/>Async ✅"]
+        end
+        
+        CLI1 --> HTTP1 --> API1
+        API1 --> DS1 --> DM1 --> DA1
+        API1 --> TS1 --> TM1 --> TA1
+        
+        style DM1 fill:#ffcccc
+        style DA1 fill:#ffcccc
+    end
+    
+    subgraph "TARGET: Unified Async Architecture"
+        CLI2["AsyncCLIClient<br/>Connection reuse ✅"]
+        HTTP2["HTTP Client<br/>Persistent connection"]
+        API2["FastAPI Endpoints<br/>Async ✅"]
+        
+        subgraph "Foundation Layer"
+            AHS["AsyncHostService<br/>Base class"]
+            ERR["Error Handling<br/>Custom exceptions"]
+        end
+        
+        subgraph "Unified Data Path"
+            DS2["DataService<br/>Async ✅"]
+            DM2["AsyncDataManager<br/>Async ✅"]
+            DA2["AsyncDataAdapter<br/>extends AsyncHostService"]
+        end
+        
+        subgraph "Unified Training Path"
+            TS2["TrainingService<br/>Async ✅"]
+            TM2["TrainingManager<br/>Async ✅"]
+            TA2["TrainingAdapter<br/>extends AsyncHostService"]
+        end
+        
+        CLI2 --> HTTP2 --> API2
+        API2 --> DS2 --> DM2 --> DA2
+        API2 --> TS2 --> TM2 --> TA2
+        
+        DA2 -.-> AHS
+        TA2 -.-> AHS
+        AHS -.-> ERR
+        
+        style CLI2 fill:#ccffcc
+        style DM2 fill:#ccffcc
+        style DA2 fill:#ccffcc
+        style TA2 fill:#ccffcc
+        style AHS fill:#cceeff
+    end
+```
+
+### Component Roles and Deployment
+
+**Key Concept: Manager vs Adapter**
+
+- **Manager** = Business logic (runs in backend container)
+- **Adapter** = Communication interface (runs in backend container, talks to services)
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        CLI["KTRDR CLI Commands"]
+        WEB["Web Dashboard"]
+    end
+    
+    subgraph "Docker Backend Container"
+        subgraph "API Layer"
+            API["FastAPI Endpoints"]
+        end
+        
+        subgraph "Service Layer"
+            DS["DataService"]
+            TS["TrainingService"]
+        end
+        
+        subgraph "Manager Layer (Business Logic)"
+            DM["AsyncDataManager<br/>- Coordinates data operations<br/>- Handles caching/validation<br/>- Business rules"]
+            TM["TrainingManager<br/>- Coordinates training<br/>- Manages training state<br/>- Business rules"]
+        end
+        
+        subgraph "Adapter Layer (Communication)"
+            DA["AsyncDataAdapter<br/>- Communicates with IB services<br/>- Protocol translation<br/>- Connection management"]
+            TA["TrainingAdapter<br/>- Communicates with training services<br/>- Protocol translation<br/>- Connection management"]
+        end
+        
+        subgraph "Foundation"
+            AHS["AsyncHostService<br/>Base class for adapters"]
+        end
+    end
+    
+    subgraph "Optional Host Services (Separate Containers)"
+        IB_HOST["IB Host Service<br/>Port 8001<br/>Manages IB connections"]
+        TRAIN_HOST["Training Host Service<br/>Port 8002<br/>Manages GPU/training"]
+    end
+    
+    subgraph "External Systems"
+        IB_GW["IB Gateway<br/>TWS/Gateway"]
+        GPU["GPU Resources<br/>CUDA/Training"]
+    end
+    
+    CLI --> API
+    WEB --> API
+    
+    API --> DS --> DM --> DA
+    API --> TS --> TM --> TA
+    
+    DA --> AHS
+    TA --> AHS
+    
+    %% Host service paths (recommended)
+    DA -->|"HTTP calls<br/>USE_IB_HOST_SERVICE=true"| IB_HOST
+    TA -->|"HTTP calls<br/>USE_TRAINING_HOST_SERVICE=true"| TRAIN_HOST
+    
+    %% Direct connection fallback
+    DA -.->|"Direct connection<br/>USE_IB_HOST_SERVICE=false"| IB_GW
+    TA -.->|"Direct connection<br/>USE_TRAINING_HOST_SERVICE=false"| GPU
+    
+    %% Host services to external systems
+    IB_HOST --> IB_GW
+    TRAIN_HOST --> GPU
+    
+    style DM fill:#fff3e0
+    style TM fill:#fff3e0
+    style DA fill:#e3f2fd
+    style TA fill:#e3f2fd
+    style IB_HOST fill:#e1f5fe
+    style TRAIN_HOST fill:#e1f5fe
+```
+
+### Component Responsibilities Explained
+
+| Component | Purpose | Runs Where | Responsibilities |
+|-----------|---------|------------|------------------|
+| **AsyncDataManager** | Business Logic | Backend Container | • Data validation and caching<br/>• Business rules (date ranges, symbols)<br/>• Coordinates multiple data sources<br/>• Error handling and retry logic |
+| **AsyncDataAdapter** | Communication | Backend Container | • HTTP calls to IB Host Service<br/>• Protocol translation (REST ↔ IB)<br/>• Connection management<br/>• Fallback to direct IB connections |
+| **TrainingManager** | Business Logic | Backend Container | • Training workflow coordination<br/>• Model lifecycle management<br/>• Training state and progress tracking<br/>• Resource allocation decisions |
+| **TrainingAdapter** | Communication | Backend Container | • HTTP calls to Training Host Service<br/>• Protocol translation (REST ↔ Training)<br/>• GPU resource communication<br/>• Fallback to local training |
+
+**Why This Split?**
+
+- **Manager** = "What to do" (business logic, stays in your main application)
+- **Adapter** = "How to communicate" (protocol details, can be swapped out)
+
+**Example Flow:**
+1. `DataService.load_data()` → calls `AsyncDataManager.load_data()`
+2. `AsyncDataManager` validates symbol, checks cache, determines date range
+3. `AsyncDataManager` calls `AsyncDataAdapter.fetch_historical_data()`
+4. `AsyncDataAdapter` makes HTTP call to IB Host Service OR direct IB connection
+5. `AsyncDataAdapter` translates response back to standard DataFrame format
+6. `AsyncDataManager` caches result and applies business rules
+7. `DataService` returns final result to API
+
 ## Recommended Unified Architecture
 
 ### 1. Standardize on the Host Service Pattern
@@ -289,6 +459,61 @@ class AsyncDataManager:
 
 ## Implementation Strategy
 
+### Implementation Dependencies
+
+```mermaid
+graph TB
+    subgraph "Phase 1: Foundation (DONE ✅)"
+        P1A[AsyncCLIClient<br/>Base class]
+        P1B[CLI Command Migration<br/>data show, models train]
+        P1C[Performance Benchmarks<br/>50-70% improvement]
+    end
+    
+    subgraph "Phase 2: Service Foundation"
+        P2A[Error Handling System<br/>Custom exceptions]
+        P2B[AsyncHostService<br/>Abstract base class]
+        P2C[Integration Tests<br/>Foundation validation]
+    end
+    
+    subgraph "Phase 3: Data Layer Unification"
+        P3A[AsyncDataAdapter<br/>extends AsyncHostService]
+        P3B[AsyncDataManager<br/>uses AsyncDataAdapter]
+        P3C[DataService Integration<br/>async chain]
+    end
+    
+    subgraph "Phase 4: Service Standardization"
+        P4A[TrainingAdapter Refactor<br/>extends AsyncHostService]
+        P4B[Code Duplication Removal<br/>shared patterns]
+        P4C[Performance Optimization<br/>connection pooling]
+    end
+    
+    %% Dependencies within phases
+    P1A --> P1B --> P1C
+    P2A --> P2B --> P2C
+    P3A --> P3B --> P3C
+    P4A --> P4B --> P4C
+    
+    %% Dependencies between phases
+    P1C --> P2A
+    P2B --> P3A
+    P2C --> P3A
+    P3A --> P3B
+    P3C --> P4A
+    
+    %% Critical dependency paths
+    P2B -.->|provides base class| P3A
+    P2B -.->|provides base class| P4A
+    P2A -.->|provides exceptions| P2B
+    P3A -.->|required by| P3B
+    
+    style P1A fill:#ccffcc
+    style P1B fill:#ccffcc  
+    style P1C fill:#ccffcc
+    style P2B fill:#fff3e0
+    style P3A fill:#fff3e0
+    style P3B fill:#fff3e0
+```
+
 ### Phase 1: CLI Foundation (High Impact, Low Risk)
 
 **Week 1-2: Create Unified CLI Base**
@@ -388,3 +613,160 @@ Your Training Host Service already proves that the microservice async pattern wo
 This isn't about rewriting everything - it's about **standardizing on your successful patterns** and **eliminating the architectural inconsistencies** that create maintenance burden and performance problems.
 
 The result will be a **unified, maintainable, and high-performance** async architecture that leverages the best of both your current implementations while eliminating their individual weaknesses.
+
+---
+
+## LLM Implementation Guide
+
+### Component Implementation Order (Critical Dependencies)
+
+**MUST follow this exact sequence:**
+
+1. **Error Handling Foundation** (Independent)
+   - Custom exceptions: `ServiceConnectionError`, `ServiceTimeoutError`, `ServiceConfigurationError`
+   - No dependencies - can be implemented anytime
+
+2. **AsyncHostService Base Class** (Depends on: Error Handling)
+   - Abstract base class for all service communication
+   - Provides: `_call_host_service_post()`, `_call_host_service_get()`, `health_check()`
+   - Used by: AsyncDataAdapter, TrainingAdapter
+
+3. **AsyncDataAdapter** (Depends on: AsyncHostService)  
+   - Extends AsyncHostService
+   - Handles IB Host Service vs direct IB connection routing
+   - Must be implemented BEFORE AsyncDataManager
+
+4. **AsyncDataManager** (Depends on: AsyncDataAdapter)
+   - Business logic layer
+   - Uses AsyncDataAdapter for communication
+   - Replaces synchronous DataManager
+
+5. **TrainingAdapter Refactor** (Depends on: AsyncHostService)
+   - Refactor existing TrainingAdapter to extend AsyncHostService
+   - Remove duplicate HTTP client code
+
+### File Locations and Naming
+
+```
+ktrdr/
+├── exceptions/
+│   ├── __init__.py
+│   ├── service_exceptions.py          # ServiceConnectionError, etc.
+├── base/
+│   ├── __init__.py  
+│   ├── async_host_service.py          # AsyncHostService abstract base
+├── data/
+│   ├── adapters/
+│   │   ├── __init__.py
+│   │   ├── async_data_adapter.py      # AsyncDataAdapter
+│   ├── managers/
+│   │   ├── __init__.py
+│   │   ├── async_data_manager.py      # AsyncDataManager
+├── training/
+│   ├── adapters/
+│   │   ├── __init__.py
+│   │   ├── training_adapter.py        # Refactored TrainingAdapter
+```
+
+### Component Interface Contracts
+
+**AsyncHostService (Abstract Base Class)**
+```python
+class AsyncHostService(ABC):
+    def __init__(self, service_name: str, use_host_service: bool, host_service_url: str, timeout: float)
+    async def _call_host_service_post(self, endpoint: str, data: Dict) -> Dict
+    async def _call_host_service_get(self, endpoint: str, params: Dict) -> Dict
+    async def close(self) -> None
+    @abstractmethod
+    async def health_check(self) -> Dict[str, Any]
+```
+
+**AsyncDataAdapter Interface**
+```python
+class AsyncDataAdapter(AsyncHostService):
+    def __init__(self, use_host_service: bool, host_service_url: str)
+    async def fetch_historical_data(self, symbol: str, timeframe: str, **kwargs) -> pd.DataFrame
+    async def health_check(self) -> Dict[str, Any]
+```
+
+**AsyncDataManager Interface**  
+```python
+class AsyncDataManager:
+    def __init__(self)
+    async def load_data(self, symbol: str, timeframe: str, start_date: str, end_date: str, source: str) -> pd.DataFrame
+    async def get_health_status(self) -> Dict[str, Any]
+```
+
+### Environment Variables and Configuration
+
+| Variable | Purpose | Values | Default |
+|----------|---------|--------|---------|
+| `USE_IB_HOST_SERVICE` | Route IB calls to host service | `true`/`false` | `true` |
+| `IB_HOST_SERVICE_URL` | IB host service endpoint | URL | `http://localhost:8001` |
+| `USE_TRAINING_HOST_SERVICE` | Route training to host service | `true`/`false` | `true` |
+| `TRAINING_HOST_SERVICE_URL` | Training host service endpoint | URL | `http://localhost:8002` |
+
+### Error Handling Patterns
+
+**Service Communication Errors**
+```python
+# When host service unavailable
+raise ServiceConnectionError(f"{service_name} host service unavailable at {url}")
+
+# When timeout occurs  
+raise ServiceTimeoutError(f"{service_name} request timed out after {timeout}s")
+
+# When configuration invalid
+raise ServiceConfigurationError(f"Invalid {service_name} configuration: {details}")
+```
+
+### Testing Requirements
+
+**Each component MUST have:**
+- Unit tests with >95% coverage
+- Mock tests for external service calls
+- Integration tests with actual services
+- Error scenario testing
+- Performance benchmarks (where applicable)
+
+**Test file locations:**
+```
+tests/
+├── unit/
+│   ├── base/
+│   │   ├── test_async_host_service.py
+│   ├── data/
+│   │   ├── test_async_data_adapter.py
+│   │   ├── test_async_data_manager.py
+├── integration/
+│   ├── test_data_flow_integration.py
+│   ├── test_training_flow_integration.py
+```
+
+### Code Quality Gates
+
+**Every implementation MUST pass:**
+- `pytest` (all tests pass, >95% coverage)
+- `mypy --strict` (type checking)
+- `black ktrdr tests` (code formatting)
+- `ruff ktrdr` (linting)
+- Manual testing scenarios documented in tasks
+
+### Implementation Anti-Patterns (DO NOT DO)
+
+❌ **Don't implement AsyncDataManager before AsyncDataAdapter**
+❌ **Don't create new event loops in Manager/Adapter classes**  
+❌ **Don't add sync methods to async classes**
+❌ **Don't bypass AsyncHostService for HTTP calls**
+❌ **Don't hardcode URLs - use environment variables**
+❌ **Don't ignore error handling - use custom exceptions**
+
+### Success Validation
+
+**How to verify correct implementation:**
+1. All CLI commands work with same functionality
+2. Performance improvement measurable (50%+ faster)
+3. No sync/async mixing in call chains
+4. Host service and local modes both work
+5. Error messages are clear and actionable
+6. All tests pass and coverage >95%

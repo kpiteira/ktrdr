@@ -6,7 +6,7 @@ special support for IB Gateway diagnostic messages.
 """
 
 import sys
-from typing import Any, Dict
+from typing import Any, Optional
 
 from rich.console import Console
 
@@ -17,10 +17,51 @@ from ktrdr.cli.ib_diagnosis import (
     should_show_ib_diagnosis,
 )
 from ktrdr.errors import DataError, ValidationError
+from ktrdr.errors.exceptions import (
+    ServiceConfigurationError,
+    ServiceConnectionError,
+    ServiceTimeoutError,
+)
+from ktrdr.errors.service_error_formatter import ServiceErrorFormatter
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 error_console = Console(stderr=True)
+
+
+def _get_operation_context_from_exception(e: Exception) -> Optional[str]:
+    """
+    Extract operation context from service exception details.
+
+    Args:
+        e: Service exception with details
+
+    Returns:
+        Contextual description of the operation that failed, or None
+    """
+    if not hasattr(e, "details") or not e.details:
+        return None
+
+    details = e.details
+
+    # Check for specific operation types
+    operation = details.get("operation")
+    symbol = details.get("symbol")
+
+    if operation == "data_load" and symbol:
+        return f"Data loading failed for {symbol}"
+    elif operation == "data_show" and symbol:
+        return f"Data display failed for {symbol}"
+    elif operation == "model_train":
+        return "Model training failed"
+    elif operation == "validation" and symbol:
+        return f"Symbol validation failed for {symbol}"
+    elif symbol:
+        return f"Operation failed for {symbol}"
+    elif operation:
+        return f"Operation '{operation}' failed"
+
+    return None
 
 
 def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -> None:
@@ -58,6 +99,76 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
                             f"\n{get_ib_recovery_suggestions(problem_type)}"
                         )
                     return
+
+    # Check for service exceptions and format them with ServiceErrorFormatter
+    if isinstance(
+        e, (ServiceConnectionError, ServiceTimeoutError, ServiceConfigurationError)
+    ):
+        # Determine operation context from the exception details
+        operation_context = _get_operation_context_from_exception(e)
+
+        # Format the error with actionable troubleshooting steps
+        formatted_error = ServiceErrorFormatter.format_service_error(
+            e, operation_context
+        )
+
+        # Display formatted error with nice formatting
+        error_console.print("[bold red]Service Error:[/bold red]")
+        error_console.print(formatted_error)
+
+        if verbose:
+            logger.error(f"Service error: {str(e)}", exc_info=True)
+        return
+
+    # Check for DataProvider exceptions and format them with ServiceErrorFormatter
+    # Import here to avoid circular imports
+    try:
+        from ktrdr.data.external_data_interface import (
+            DataProviderConnectionError,
+            DataProviderConfigError,
+            DataProviderRateLimitError,
+        )
+
+        if isinstance(e, (DataProviderConnectionError, DataProviderConfigError)):
+            # Convert DataProvider error to Service error for consistent handling
+            # Map provider info to service context with proper validation
+            if hasattr(e, "provider"):
+                provider = e.provider
+                service_name = "ib-host" if provider == "IB" else provider.lower()
+            else:
+                logger.warning(
+                    "DataProvider error is missing 'provider' attribute; cannot map to service name."
+                )
+                provider = None
+                service_name = None
+
+            # Create a mock service error with similar structure
+            mock_service_error = ServiceConnectionError(
+                message=str(e),
+                error_code="DATA_PROVIDER_ERROR",
+                details={
+                    "service": service_name if service_name else "unknown",
+                    "endpoint": "http://localhost:5001" if provider == "IB" else None,
+                    "original_exception": str(e),
+                    "provider": provider if provider else "unknown",
+                },
+            )
+
+            # Use ServiceErrorFormatter for consistent error display
+            formatted_error = ServiceErrorFormatter.format_service_error(
+                mock_service_error
+            )
+
+            error_console.print("[bold red]Service Error:[/bold red]")
+            error_console.print(formatted_error)
+
+            if verbose:
+                logger.error(f"Data provider error: {str(e)}", exc_info=True)
+            return
+
+    except ImportError:
+        # If DataProvider errors not available, continue with regular handling
+        pass
 
     # Check for validation errors
     if isinstance(e, ValidationError):
