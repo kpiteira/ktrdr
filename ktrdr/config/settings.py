@@ -91,25 +91,25 @@ class CLISettings(BaseSettings):
 
 
 # Cache settings to avoid repeated disk/env access
-@lru_cache()
+@lru_cache
 def get_api_settings() -> APISettings:
     """Get API settings with caching."""
     return APISettings()
 
 
-@lru_cache()
+@lru_cache
 def get_logging_settings() -> LoggingSettings:
     """Get logging settings with caching."""
     return LoggingSettings()
 
 
-@lru_cache()
+@lru_cache
 def get_training_host_settings() -> TrainingHostSettings:
     """Get training host service settings with caching."""
     return TrainingHostSettings()
 
 
-@lru_cache()
+@lru_cache
 def get_cli_settings() -> CLISettings:
     """Get CLI client settings with caching."""
     return CLISettings()

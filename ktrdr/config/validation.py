@@ -76,7 +76,7 @@ class InputValidator:
 
             if not pattern.match(value):
                 raise ValidationError(
-                    message=f"String does not match required pattern",
+                    message="String does not match required pattern",
                     error_code="VAL-PatternMismatch",
                     details={"pattern": pattern.pattern},
                 )

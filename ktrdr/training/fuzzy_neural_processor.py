@@ -67,7 +67,7 @@ class FuzzyNeuralProcessor:
                 feature_names.extend(temporal_names)
         elif self.disable_temporal and lookback > 0:
             logger.debug(
-                f"Temporal feature generation disabled - assuming FeatureCache provides lag features"
+                "Temporal feature generation disabled - assuming FeatureCache provides lag features"
             )
 
         # Combine all features

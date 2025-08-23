@@ -339,7 +339,7 @@ async def _plot_chart_async(
         # This would call the visualization API endpoint
         # For now, show a placeholder message
         console.print(
-            f"⚠️  [yellow]Chart generation via API not yet implemented[/yellow]"
+            "⚠️  [yellow]Chart generation via API not yet implemented[/yellow]"
         )
         console.print(f"📋 Would generate chart for: {symbol} on {timeframe}")
 
@@ -350,7 +350,7 @@ async def _plot_chart_async(
             console.print(f"💾 Would save chart to: {output_file}")
 
         if show:
-            console.print(f"🌐 Would open chart in browser")
+            console.print("🌐 Would open chart in browser")
 
     except Exception as e:
         raise DataError(
@@ -473,7 +473,7 @@ async def _list_indicators_async(
                 print(json.dumps(result_data, indent=2))
             else:
                 # Table format
-                console.print(f"\n📊 [bold]Available Technical Indicators[/bold]")
+                console.print("\n📊 [bold]Available Technical Indicators[/bold]")
                 if category:
                     console.print(f"Category: {category}")
                 console.print(f"Total: {len(indicators)}")

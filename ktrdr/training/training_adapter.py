@@ -83,7 +83,7 @@ class TrainingAdapter:
             from .train_strategy import StrategyTrainer
 
             self.local_trainer = StrategyTrainer()
-            logger.info(f"TrainingAdapter initialized for local training")
+            logger.info("TrainingAdapter initialized for local training")
         else:
             # Host service mode
             self.local_trainer = None

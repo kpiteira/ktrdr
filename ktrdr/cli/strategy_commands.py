@@ -227,13 +227,13 @@ def list_strategies(
 
     console.print(table)
     console.print("\n" + "=" * 80)
-    console.print(f"📊 [bold]Summary:[/bold]")
+    console.print("📊 [bold]Summary:[/bold]")
     console.print(f"   [green]✅ Valid: {len(valid_strategies)}[/green]")
     console.print(f"   [red]❌ Invalid: {len(invalid_strategies)}[/red]")
     console.print(f"   Total: {len(strategy_files)}")
 
     if invalid_strategies:
-        console.print(f"\n[red]❌ Invalid strategies:[/red]")
+        console.print("\n[red]❌ Invalid strategies:[/red]")
         for strategy in invalid_strategies:
             console.print(f"   • {strategy}")
 
@@ -329,7 +329,7 @@ async def run_backtest_async(
             console.print(f"💰 Initial capital: ${initial_capital:,.2f}")
 
         if dry_run:
-            console.print(f"🔍 [yellow]DRY RUN - No backtest will be executed[/yellow]")
+            console.print("🔍 [yellow]DRY RUN - No backtest will be executed[/yellow]")
             console.print(f"📋 Would backtest: {symbol} on {timeframe}")
             console.print(f"📊 Strategy: {strategy_file}")
             console.print(f"💰 Capital: ${initial_capital:,.2f}")
@@ -337,8 +337,8 @@ async def run_backtest_async(
             return
 
         # Call the real backtesting API endpoint
-        console.print(f"🚀 [cyan]Starting backtest via API...[/cyan]")
-        console.print(f"📋 Backtest parameters:")
+        console.print("🚀 [cyan]Starting backtest via API...[/cyan]")
+        console.print("📋 Backtest parameters:")
         console.print(f"   Strategy: {strategy_file}")
         console.print(f"   Symbol: {symbol}")
         console.print(f"   Timeframe: {timeframe}")
@@ -405,7 +405,7 @@ async def run_backtest_async(
 
                         if status == "completed":
                             console.print(
-                                f"✅ [green]Backtest completed successfully![/green]"
+                                "✅ [green]Backtest completed successfully![/green]"
                             )
                             break
                         elif status == "failed":
@@ -431,14 +431,14 @@ async def run_backtest_async(
             results = await api_client.get_backtest_results(backtest_id)
 
             if results:
-                console.print(f"\n📊 [bold green]Backtest Results:[/bold green]")
+                console.print("\n📊 [bold green]Backtest Results:[/bold green]")
                 console.print(f"   Total Return: {results.get('total_return', 'N/A')}")
                 console.print(f"   Sharpe Ratio: {results.get('sharpe_ratio', 'N/A')}")
                 console.print(f"   Max Drawdown: {results.get('max_drawdown', 'N/A')}")
                 console.print(f"   Total Trades: {results.get('total_trades', 'N/A')}")
                 console.print(f"   Win Rate: {results.get('win_rate', 'N/A')}")
             else:
-                console.print(f"[yellow]⚠️  Results not yet available[/yellow]")
+                console.print("[yellow]⚠️  Results not yet available[/yellow]")
 
         except Exception as e:
             console.print(f"[yellow]⚠️  Could not retrieve results: {str(e)}[/yellow]")
@@ -506,7 +506,7 @@ def validate_all_cmd(
 
                 if fail_fast:
                     console.print(
-                        f"\n[red]💥 Stopping on first error (--fail-fast)[/red]"
+                        "\n[red]💥 Stopping on first error (--fail-fast)[/red]"
                     )
                     break
 
@@ -518,7 +518,7 @@ def validate_all_cmd(
                 )
 
             if fail_fast:
-                console.print(f"\n[red]💥 Stopping on first error (--fail-fast)[/red]")
+                console.print("\n[red]💥 Stopping on first error (--fail-fast)[/red]")
                 break
 
     # Summary
@@ -526,7 +526,7 @@ def validate_all_cmd(
     success_rate = (valid_count / total * 100) if total > 0 else 0
 
     console.print("\n" + "=" * 60)
-    console.print(f"[bold]📊 Validation Summary:[/bold]")
+    console.print("[bold]📊 Validation Summary:[/bold]")
     console.print(f"  Total files: {total}")
     console.print(f"  [green]✅ Valid: {valid_count}[/green]")
     console.print(f"  [red]❌ Invalid: {invalid_count}[/red]")
@@ -541,4 +541,4 @@ def validate_all_cmd(
 
         raise typer.Exit(1)
     else:
-        console.print(f"\n[green]🎉 All strategies are valid![/green]")
+        console.print("\n[green]🎉 All strategies are valid![/green]")

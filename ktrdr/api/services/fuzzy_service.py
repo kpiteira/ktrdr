@@ -738,7 +738,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No RSI column found in result")
+                        self.logger.warning("No RSI column found in result")
                         return None
 
                 elif indicator_name.lower() == "macd":
@@ -758,7 +758,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No MACD column found in result")
+                        self.logger.warning("No MACD column found in result")
                         return None
 
                 elif indicator_name.lower() == "ema":
@@ -774,7 +774,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No EMA column found in result")
+                        self.logger.warning("No EMA column found in result")
                         return None
 
                 elif indicator_name.lower() == "sma":
@@ -790,7 +790,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No SMA column found in result")
+                        self.logger.warning("No SMA column found in result")
                         return None
 
                 else:

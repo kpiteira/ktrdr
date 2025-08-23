@@ -172,10 +172,10 @@ class MetricsCollector:
         except Exception as e:
             logger.warning(f"Failed to collect class metrics: {e}")
             return {
-                "class_precisions": {name: 0.0 for name in self.class_names},
-                "class_recalls": {name: 0.0 for name in self.class_names},
-                "class_f1_scores": {name: 0.0 for name in self.class_names},
-                "class_supports": {name: 0 for name in self.class_names},
+                "class_precisions": dict.fromkeys(self.class_names, 0.0),
+                "class_recalls": dict.fromkeys(self.class_names, 0.0),
+                "class_f1_scores": dict.fromkeys(self.class_names, 0.0),
+                "class_supports": dict.fromkeys(self.class_names, 0),
             }
 
     def collect_prediction_metrics(self, model_outputs: torch.Tensor) -> dict[str, Any]:

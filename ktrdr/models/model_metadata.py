@@ -262,7 +262,7 @@ class ModelMetadata:
         if not metadata_file.exists():
             raise FileNotFoundError(f"Metadata file not found: {metadata_file}")
 
-        with open(metadata_file, "r") as f:
+        with open(metadata_file) as f:
             data = json.load(f)
 
         return cls.from_dict(data)

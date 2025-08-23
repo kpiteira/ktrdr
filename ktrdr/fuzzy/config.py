@@ -362,7 +362,7 @@ class FuzzyConfigLoader:
 
         # Load YAML file
         try:
-            with open(path, "r") as file:
+            with open(path) as file:
                 config_dict = yaml.safe_load(file)
 
             # Handle empty file case
@@ -378,7 +378,7 @@ class FuzzyConfigLoader:
             except Exception as e:
                 logger.error(f"Failed to validate fuzzy configuration: {e}")
                 raise InvalidConfigurationError(
-                    message=f"Fuzzy configuration validation failed",
+                    message="Fuzzy configuration validation failed",
                     error_code="CONFIG-FuzzyValidationFailed",
                     details={"validation_errors": str(e)},
                 ) from e
@@ -386,14 +386,14 @@ class FuzzyConfigLoader:
         except yaml.YAMLError as e:
             logger.error(f"Invalid YAML format in fuzzy configuration file: {e}")
             raise InvalidConfigurationError(
-                message=f"Invalid YAML format in fuzzy configuration file",
+                message="Invalid YAML format in fuzzy configuration file",
                 error_code="CONFIG-InvalidFuzzyYaml",
                 details={"yaml_error": str(e)},
             ) from e
         except Exception as e:
             logger.error(f"Error loading fuzzy configuration file: {e}")
             raise ConfigurationError(
-                message=f"Error loading fuzzy configuration file",
+                message="Error loading fuzzy configuration file",
                 error_code="CONFIG-FuzzyLoadError",
                 details={"error": str(e)},
             ) from e
@@ -444,7 +444,7 @@ class FuzzyConfigLoader:
 
         # Load strategy YAML file
         try:
-            with open(strategy_path, "r") as file:
+            with open(strategy_path) as file:
                 strategy_dict = yaml.safe_load(file)
 
             # Extract fuzzy_sets section from strategy file
@@ -462,14 +462,14 @@ class FuzzyConfigLoader:
         except yaml.YAMLError as e:
             logger.error(f"Invalid YAML format in strategy file: {e}")
             raise InvalidConfigurationError(
-                message=f"Invalid YAML format in strategy file",
+                message="Invalid YAML format in strategy file",
                 error_code="CONFIG-InvalidStrategyYaml",
                 details={"yaml_error": str(e)},
             ) from e
         except Exception as e:
             logger.error(f"Error loading strategy file: {e}")
             raise ConfigurationError(
-                message=f"Error loading strategy file",
+                message="Error loading strategy file",
                 error_code="CONFIG-StrategyLoadError",
                 details={"error": str(e)},
             ) from e
@@ -538,7 +538,7 @@ class FuzzyConfigLoader:
             strategy_config = self.load_strategy_fuzzy_config(strategy_name)
 
             # Merge configurations
-            logger.info(f"Merging default and strategy-specific fuzzy configurations")
+            logger.info("Merging default and strategy-specific fuzzy configurations")
             return self.merge_configs(default_config, strategy_config)
 
         except ConfigurationFileError:

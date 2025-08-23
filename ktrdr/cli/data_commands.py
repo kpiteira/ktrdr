@@ -774,7 +774,7 @@ async def _process_data_load_response(
 
             # Show additional metrics if available
             if verbose and data:
-                console.print(f"\n📊 [bold]Detailed metrics:[/bold]")
+                console.print("\n📊 [bold]Detailed metrics:[/bold]")
                 for key, value in data.items():
                     if key not in ["status", "fetched_bars", "execution_time_seconds"]:
                         console.print(f"   {key}: {value}")
@@ -803,7 +803,7 @@ async def _process_data_load_response(
         )
 
         if not quiet:
-            console.print(f"❌ [bold red]Data loading failed![/bold red]")
+            console.print("❌ [bold red]Data loading failed![/bold red]")
 
             if ib_diagnosis:
                 # Show IB diagnostic message for failures
@@ -823,7 +823,7 @@ async def _process_data_load_response(
                 console.print(f"🚨 Error: {error_msg}")
 
             if verbose and error_info and not ib_diagnosis:
-                console.print(f"\n🔍 [bold]Error details:[/bold]")
+                console.print("\n🔍 [bold]Error details:[/bold]")
                 for key, value in error_info.items():
                     if key != "ib_diagnosis":  # Skip IB diagnosis in raw details
                         console.print(f"   {key}: {value}")
@@ -927,7 +927,7 @@ async def _get_data_range_async(
             console.print(table)
 
         if verbose:
-            console.print(f"✅ Retrieved data range information")
+            console.print("✅ Retrieved data range information")
 
     except Exception as e:
         if "404" in str(e) or "not found" in str(e).lower():

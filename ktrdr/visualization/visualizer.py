@@ -94,7 +94,7 @@ class Visualizer:
             title = f"KTRDR Chart ({chart_type})"
 
         # Generate a unique ID for the chart
-        chart_id = f"main_chart"
+        chart_id = "main_chart"
 
         # Transform data based on chart type
         transformed_data = {}
@@ -744,5 +744,5 @@ class Visualizer:
             has_range_slider=has_range_slider,
         )
 
-        logger.info(f"Generated HTML content for interactive display")
+        logger.info("Generated HTML content for interactive display")
         return html_content

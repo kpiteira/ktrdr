@@ -164,7 +164,7 @@ class IbDataFetcher:
                 )
             else:
                 logger.warning(
-                    f"❌ IB RESPONSE: No data available for requested period"
+                    "❌ IB RESPONSE: No data available for requested period"
                 )
 
         except Exception as e:

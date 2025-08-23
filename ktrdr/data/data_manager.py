@@ -662,7 +662,7 @@ class DataManager:
                 )
                 logger.error(insufficient_msg)
                 raise DataError(
-                    f"Multi-timeframe training requires overlapping data across timeframes",
+                    "Multi-timeframe training requires overlapping data across timeframes",
                     error_code="MULTI_TF_INSUFFICIENT_COVERAGE",
                     details={
                         "symbol": symbol,
@@ -1025,7 +1025,7 @@ class DataManager:
             logger.debug(f"Found {len(internal_gaps)} internal gaps (mode: {mode})")
         elif mode in ["backfill", "full"]:
             logger.info(
-                f"🚀 BACKFILL MODE: Skipping micro-gap analysis to focus on large historical periods"
+                "🚀 BACKFILL MODE: Skipping micro-gap analysis to focus on large historical periods"
             )
 
         # Use intelligent gap classifier to filter out expected gaps
@@ -1778,7 +1778,7 @@ class DataManager:
         if progress_callback:
             progress_callback(progress)
 
-        logger.info(f"📋 STEP 0A: Symbol validation and metadata lookup")
+        logger.info("📋 STEP 0A: Symbol validation and metadata lookup")
         self._check_cancellation(cancellation_token, "symbol validation")
 
         validation_result = None
@@ -1882,7 +1882,7 @@ class DataManager:
         if progress_callback:
             progress_callback(progress)
 
-        logger.info(f"📅 STEP 0B: Validating request against head timestamp data")
+        logger.info("📅 STEP 0B: Validating request against head timestamp data")
         self._check_cancellation(cancellation_token, "head timestamp validation")
 
         # Use cached head timestamp from validation step if available
@@ -1912,7 +1912,7 @@ class DataManager:
                     )
                     requested_start = head_dt
 
-                logger.info(f"📅 Request range validated against head timestamp")
+                logger.info("📅 Request range validated against head timestamp")
 
             except Exception as e:
                 logger.warning(
@@ -1921,7 +1921,7 @@ class DataManager:
                 # Continue without validation if parsing fails
         else:
             # Fallback to old method if no cached head timestamp
-            logger.info(f"📅 No cached head timestamp, trying fallback method")
+            logger.info("📅 No cached head timestamp, trying fallback method")
             try:
                 has_head_timestamp = self._ensure_symbol_has_head_timestamp(
                     symbol, timeframe
@@ -1952,7 +1952,7 @@ class DataManager:
                     )
             except Exception as e:
                 logger.warning(f"📅 Fallback head timestamp validation failed: {e}")
-                logger.info(f"📅 Proceeding with original request range")
+                logger.info("📅 Proceeding with original request range")
 
         # Step 3: Load existing local data (ALL modes need this for gap analysis) (6%)
         progress.current_step = "Loading existing local data"
@@ -1972,7 +1972,7 @@ class DataManager:
                     f"✅ Found existing data: {len(existing_data)} bars ({existing_data.index.min()} to {existing_data.index.max()})"
                 )
             else:
-                logger.info(f"📭 No existing local data found")
+                logger.info("📭 No existing local data found")
         except Exception as e:
             logger.info(f"📭 No existing local data: {e}")
             existing_data = None
@@ -1996,13 +1996,13 @@ class DataManager:
                 f"🔍 GAP ANALYSIS: Existing data range = {existing_data.index.min()} to {existing_data.index.max()}"
             )
         else:
-            logger.debug(f"🔍 GAP ANALYSIS: No existing data found")
+            logger.debug("🔍 GAP ANALYSIS: No existing data found")
         gaps = self._analyze_gaps(
             existing_data, requested_start, requested_end, timeframe, symbol, mode
         )
 
         if not gaps:
-            logger.info(f"✅ No gaps found - existing data covers requested range!")
+            logger.info("✅ No gaps found - existing data covers requested range!")
             # Filter existing data to requested range if needed
             if existing_data is not None:
                 mask = (existing_data.index >= requested_start) & (
@@ -2032,7 +2032,7 @@ class DataManager:
         )
 
         if not segments:
-            logger.info(f"✅ No segments to fetch after filtering")
+            logger.info("✅ No segments to fetch after filtering")
             return existing_data
 
         # Step 4: Fetch segments via IB fetcher (handles connection issues internally)
@@ -2100,7 +2100,7 @@ class DataManager:
                         },
                     )
         else:
-            logger.info(f"ℹ️ IB fetching disabled - using existing data only")
+            logger.info("ℹ️ IB fetching disabled - using existing data only")
 
         # Step 5: Merge all data sources
         progress.current_step = "Merging data sources"
@@ -2119,7 +2119,7 @@ class DataManager:
         all_data_frames.extend(fetched_data_frames)
 
         if not all_data_frames:
-            logger.warning(f"❌ No data available from any source")
+            logger.warning("❌ No data available from any source")
             return None
 
         # Combine and sort all data

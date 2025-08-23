@@ -198,7 +198,7 @@ class APIConfig(BaseModel):
                     # Validate and set environment
                     if value.lower() not in ["development", "staging", "production"]:
                         raise ValueError(
-                            f"Environment must be one of ['development', 'staging', 'production']"
+                            "Environment must be one of ['development', 'staging', 'production']"
                         )
                     setattr(instance, attr_name, value.lower())
                 elif attr_name == "log_level":
@@ -211,7 +211,7 @@ class APIConfig(BaseModel):
                         "CRITICAL",
                     ]:
                         raise ValueError(
-                            f"Log level must be one of ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']"
+                            "Log level must be one of ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']"
                         )
                     setattr(instance, attr_name, value.upper())
                 else:

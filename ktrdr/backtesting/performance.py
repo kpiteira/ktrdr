@@ -294,7 +294,7 @@ class PerformanceTracker:
         max_drawdown_pct = self.max_drawdown  # Already as decimal 0-1
 
         # CRITICAL DEBUG: Check for corrupted values
-        logger.info(f"📊 Final metrics calculation:")
+        logger.info("📊 Final metrics calculation:")
         logger.info(f"   self.max_drawdown: {self.max_drawdown:.6f}")
         logger.info(f"   self.peak_equity: ${self.peak_equity:,.2f}")
         logger.info(f"   max_drawdown_abs: ${max_drawdown_abs:,.2f}")

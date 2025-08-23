@@ -409,7 +409,7 @@ class StrategyValidator:
             Tuple of (success, message)
         """
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = yaml.safe_load(f)
         except Exception as e:
             return False, f"Failed to load configuration: {e}"

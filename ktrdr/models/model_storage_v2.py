@@ -280,13 +280,13 @@ class ModelStorageV2:
         # Load strategy config
         config_path = model_path / "config.json"
         if config_path.exists():
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 artifacts["config"] = json.load(f)
 
         # Load feature names
         features_path = model_path / "features.json"
         if features_path.exists():
-            with open(features_path, "r") as f:
+            with open(features_path) as f:
                 artifacts["features"] = json.load(f)
 
         # Load scaler
@@ -298,7 +298,7 @@ class ModelStorageV2:
         # Load training metrics
         metrics_path = model_path / "metrics.json"
         if metrics_path.exists():
-            with open(metrics_path, "r") as f:
+            with open(metrics_path) as f:
                 artifacts["training_metrics"] = json.load(f)
 
         logger.info(

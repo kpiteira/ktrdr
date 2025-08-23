@@ -104,7 +104,7 @@ class ConfigLoader:
 
         # Load YAML file
         try:
-            with open(config_path, "r") as file:
+            with open(config_path) as file:
                 config_dict = yaml.safe_load(file)
 
             # Handle empty file case
@@ -217,7 +217,7 @@ class ConfigLoader:
                 return {}
 
             # Load YAML file without using a specific Pydantic model
-            with open(fuzzy_config_path, "r") as file:
+            with open(fuzzy_config_path) as file:
                 config_dict = yaml.safe_load(file)
 
             # Handle empty file case

@@ -123,7 +123,7 @@ class FuzzyConfigMigrator:
         # Default weights
         if timeframe_weights is None:
             weight_per_tf = 1.0 / len(timeframes)
-            timeframe_weights = {tf: weight_per_tf for tf in timeframes}
+            timeframe_weights = dict.fromkeys(timeframes, weight_per_tf)
 
         try:
             # Validate the input configuration
@@ -180,7 +180,7 @@ class FuzzyConfigMigrator:
 
         try:
             # Load the input file
-            with open(input_file, "r") as f:
+            with open(input_file) as f:
                 single_config = yaml.safe_load(f)
 
             # Migrate the configuration

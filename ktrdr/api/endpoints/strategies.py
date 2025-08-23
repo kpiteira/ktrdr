@@ -94,7 +94,7 @@ async def list_strategies() -> StrategiesResponse:
     for yaml_file in strategy_dir.glob("*.yaml"):
         try:
             # Load strategy configuration using existing loader
-            with open(yaml_file, "r") as f:
+            with open(yaml_file) as f:
                 config = yaml.safe_load(f)
 
             strategy_name = config.get("name", yaml_file.stem)
@@ -157,7 +157,7 @@ async def list_strategies() -> StrategiesResponse:
                             if metrics_file.exists():
                                 import json
 
-                                with open(metrics_file, "r") as f:
+                                with open(metrics_file) as f:
                                     metrics_data = json.load(f)
 
                                 # Extract test metrics
@@ -543,7 +543,7 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
                 status_code=404, detail=f"Strategy file not found: {strategy_name}.yaml"
             )
 
-        with open(strategy_file, "r") as f:
+        with open(strategy_file) as f:
             config = yaml.safe_load(f)
 
         # Validate the configuration
@@ -597,5 +597,5 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
                 )
             ],
             available_indicators=sorted(set(BUILT_IN_INDICATORS.keys())),
-            message=f"Validation failed due to system error",
+            message="Validation failed due to system error",
         )

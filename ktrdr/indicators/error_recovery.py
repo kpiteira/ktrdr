@@ -282,7 +282,7 @@ class ResilientProcessor:
                     data=result,
                     error_context=error_context,
                     recovery_action=f"removed_indicator_{i}",
-                    message=f"Processed after removing problematic indicator",
+                    message="Processed after removing problematic indicator",
                 )
 
             except Exception as e:

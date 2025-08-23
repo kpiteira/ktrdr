@@ -82,7 +82,7 @@ class GapClassifier:
                 logger.warning(f"Symbol cache not found at {cache_path}")
                 return {}
 
-            with open(cache_path, "r") as f:
+            with open(cache_path) as f:
                 data = json.load(f)
 
             # Extract cache.{symbol} structure

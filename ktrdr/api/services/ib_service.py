@@ -506,7 +506,7 @@ class IbService:
 
             return {
                 "success": True,
-                "message": f"IB connection pool cleaned up successfully",
+                "message": "IB connection pool cleaned up successfully",
                 "connections_closed": connections_closed,
                 "pool_stats_before": stats_before,
                 "pool_stats_after": stats_after,

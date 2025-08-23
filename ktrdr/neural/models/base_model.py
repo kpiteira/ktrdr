@@ -310,11 +310,11 @@ class BaseNeuralModel(ABC):
         load_dir = Path(path)
 
         # Load configuration
-        with open(load_dir / "config.json", "r") as f:
+        with open(load_dir / "config.json") as f:
             self.config = json.load(f)
 
         # Load metadata
-        with open(load_dir / "metadata.json", "r") as f:
+        with open(load_dir / "metadata.json") as f:
             metadata = json.load(f)
 
         self.is_trained = metadata["is_trained"]

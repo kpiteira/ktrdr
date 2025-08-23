@@ -130,7 +130,7 @@ async def _list_operations_async(
             return
 
         # Show summary
-        console.print(f"\n📋 [bold]Operations Summary[/bold]")
+        console.print("\n📋 [bold]Operations Summary[/bold]")
         console.print(f"Showing: {len(operations)} operations")
         console.print(f"Total: {total_count} | Active: {active_count}")
         console.print()
@@ -298,7 +298,7 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
         # Progress info
         progress = operation.get("progress", {})
         if progress:
-            console.print(f"\n📈 [bold]Progress Information[/bold]")
+            console.print("\n📈 [bold]Progress Information[/bold]")
             progress_table = Table()
             progress_table.add_column("Property", style="cyan")
             progress_table.add_column("Value", style="blue")
@@ -322,7 +322,7 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
         # Metadata
         metadata = operation.get("metadata", {})
         if metadata and verbose:
-            console.print(f"\n🏷️  [bold]Metadata[/bold]")
+            console.print("\n🏷️  [bold]Metadata[/bold]")
             metadata_table = Table()
             metadata_table.add_column("Property", style="cyan")
             metadata_table.add_column("Value", style="magenta")
@@ -335,11 +335,11 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
 
         # Error or result info
         if operation.get("error_message"):
-            console.print(f"\n❌ [bold red]Error Message[/bold red]")
+            console.print("\n❌ [bold red]Error Message[/bold red]")
             console.print(f"[red]{operation['error_message']}[/red]")
 
         if operation.get("result_summary") and verbose:
-            console.print(f"\n✅ [bold green]Result Summary[/bold green]")
+            console.print("\n✅ [bold green]Result Summary[/bold green]")
             result_table = Table()
             result_table.add_column("Property", style="cyan")
             result_table.add_column("Value", style="green")
@@ -350,7 +350,7 @@ async def _get_operation_status_async(operation_id: str, verbose: bool):
             console.print(result_table)
 
         if verbose:
-            console.print(f"\n✅ Retrieved operation status")
+            console.print("\n✅ Retrieved operation status")
 
     except Exception as e:
         raise DataError(
@@ -480,7 +480,7 @@ async def _cancel_operation_async(
             sys.exit(1)
 
         if verbose:
-            console.print(f"\n✅ Operation cancellation completed")
+            console.print("\n✅ Operation cancellation completed")
 
     except Exception as e:
         raise DataError(
@@ -563,7 +563,7 @@ async def _retry_operation_async(operation_id: str, verbose: bool):
 
         # Display results
         new_operation_id = new_operation.get("operation_id")
-        console.print(f"✅ [green]Successfully created retry operation[/green]")
+        console.print("✅ [green]Successfully created retry operation[/green]")
         console.print(f"Original: {operation_id}")
         console.print(f"New: {new_operation_id}")
         console.print(f"Status: {new_operation.get('status', 'N/A').upper()}")
@@ -573,7 +573,7 @@ async def _retry_operation_async(operation_id: str, verbose: bool):
         )
 
         if verbose:
-            console.print(f"\n✅ Operation retry completed")
+            console.print("\n✅ Operation retry completed")
 
     except Exception as e:
         raise DataError(

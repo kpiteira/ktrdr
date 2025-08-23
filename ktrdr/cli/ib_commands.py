@@ -137,15 +137,15 @@ async def _test_connection_async(
         # This would call the IB test API endpoint
         # For now, show a placeholder message
         console.print(
-            f"⚠️  [yellow]IB connection test via API not yet implemented[/yellow]"
+            "⚠️  [yellow]IB connection test via API not yet implemented[/yellow]"
         )
         console.print(f"📋 Would test connection with symbol: {symbol}")
         console.print(f"⏱️  Timeout: {timeout} seconds")
 
         # Simulate test results
-        console.print(f"✅ [green]IB Connection: OK[/green]")
-        console.print(f"✅ [green]Symbol Validation: OK[/green]")
-        console.print(f"✅ [green]Market Data: OK[/green]")
+        console.print("✅ [green]IB Connection: OK[/green]")
+        console.print("✅ [green]Symbol Validation: OK[/green]")
+        console.print("✅ [green]Market Data: OK[/green]")
 
     except Exception as e:
         raise DataError(
@@ -215,15 +215,15 @@ async def _cleanup_connections_async(
         # This would call the IB cleanup API endpoint
         # For now, show a placeholder message
         console.print(
-            f"⚠️  [yellow]IB connection cleanup via API not yet implemented[/yellow]"
+            "⚠️  [yellow]IB connection cleanup via API not yet implemented[/yellow]"
         )
         console.print(f"📋 Would cleanup with force: {force}")
         console.print(f"⏱️  Timeout: {timeout} seconds")
 
         # Simulate cleanup results
-        console.print(f"✅ [green]Connections closed: 2[/green]")
-        console.print(f"✅ [green]Resources cleaned: 5[/green]")
-        console.print(f"✅ [green]Connection pool reset: OK[/green]")
+        console.print("✅ [green]Connections closed: 2[/green]")
+        console.print("✅ [green]Resources cleaned: 5[/green]")
+        console.print("✅ [green]Connection pool reset: OK[/green]")
 
     except Exception as e:
         raise DataError(
@@ -293,7 +293,7 @@ async def _check_status_async(
             print(json.dumps(status_data, indent=2))
         else:
             # Table format
-            console.print(f"\n🔌 [bold]IB Connection Status[/bold]")
+            console.print("\n🔌 [bold]IB Connection Status[/bold]")
             console.print()
 
             table = Table()
@@ -313,7 +313,7 @@ async def _check_status_async(
             console.print(table)
 
         if verbose:
-            console.print(f"✅ Retrieved IB connection status")
+            console.print("✅ Retrieved IB connection status")
 
     except Exception as e:
         raise DataError(

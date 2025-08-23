@@ -51,7 +51,7 @@ class StrategyConfigurationLoader:
 
         # Load YAML content
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 raw_config = yaml.safe_load(f)
         except yaml.YAMLError as e:
             raise ValueError(f"Invalid YAML in {config_path}: {e}")
@@ -259,7 +259,7 @@ class StrategyConfigurationLoader:
                 "position_awareness": True,
                 "filters": {"min_signal_separation": 4, "volume_filter": False},
             }
-            logger.info(f"Added default decisions section to legacy strategy")
+            logger.info("Added default decisions section to legacy strategy")
 
         # Add default data section if missing
         if "data" not in config:
@@ -268,7 +268,7 @@ class StrategyConfigurationLoader:
                 "timeframes": ["1h"],  # Default single timeframe
                 "history_required": 200,
             }
-            logger.info(f"Added default data section to legacy strategy")
+            logger.info("Added default data section to legacy strategy")
 
         # Ensure required training fields exist
         if "training" not in config:

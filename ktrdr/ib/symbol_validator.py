@@ -396,7 +396,7 @@ class IbSymbolValidator:
                 if not details:
                     logger.debug(f"No contract details returned for: {contract}")
                     logger.debug(
-                        f"   This means IB has no security definition for this contract specification"
+                        "   This means IB has no security definition for this contract specification"
                     )
                     self.metrics["failed_validations"] += 1
                     return None
@@ -919,7 +919,7 @@ class IbSymbolValidator:
         """
         try:
             if self._cache_file.exists():
-                with open(self._cache_file, "r") as f:
+                with open(self._cache_file) as f:
                     cache_data = json.load(f)
 
                 # Convert loaded data back to ContractInfo objects

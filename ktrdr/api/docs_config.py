@@ -97,7 +97,7 @@ def load_docs_config(config_path: Optional[str] = None) -> DocsConfig:
 
     try:
         # Load the configuration file
-        with open(path, "r") as f:
+        with open(path) as f:
             config_data = yaml.safe_load(f)
 
         # Convert to Pydantic model

@@ -120,7 +120,7 @@ async def _run_backtest_async(
             raise typer.Exit(1)
 
         if verbose and not quiet:
-            console.print(f"📋 Configuration:")
+            console.print("📋 Configuration:")
             console.print(f"  Strategy: [blue]{strategy}[/blue]")
             console.print(f"  Symbol: [blue]{symbol}[/blue]")
             console.print(f"  Timeframe: [blue]{timeframe}[/blue]")
@@ -339,7 +339,7 @@ async def _run_backtest_async(
                     console.print(f"[cyan]📄 Results saved to: {output}[/cyan]")
 
                 # Print performance summary
-                console.print(f"\n[cyan]📊 Performance Summary:[/cyan]")
+                console.print("\n[cyan]📊 Performance Summary:[/cyan]")
                 console.print("=" * 50)
 
                 metrics = results_data.get("metrics", {})

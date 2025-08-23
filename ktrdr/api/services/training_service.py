@@ -114,7 +114,7 @@ class TrainingService(BaseService):
             raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
 
         # Load and validate strategy config
-        with open(strategy_path, "r") as f:
+        with open(strategy_path) as f:
             strategy_config = yaml.safe_load(f)
 
         validation_issues = _validate_strategy_config(strategy_config, strategy_name)
@@ -520,7 +520,7 @@ class TrainingService(BaseService):
                 raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
 
             # Load strategy config to get training parameters
-            with open(strategy_path, "r") as f:
+            with open(strategy_path) as f:
                 strategy_config = yaml.safe_load(f)
 
             training_config = strategy_config.get("model", {}).get("training", {})
@@ -722,7 +722,7 @@ class TrainingService(BaseService):
                         try:
                             # Read progress from shared file
                             if progress_file.exists():
-                                with open(progress_file, "r") as f:
+                                with open(progress_file) as f:
                                     current_progress = json.load(f)
 
                                 current_epoch = current_progress.get("current_epoch", 0)
@@ -909,7 +909,7 @@ class TrainingService(BaseService):
                 raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
 
             # Load strategy configuration
-            with open(strategy_path, "r") as f:
+            with open(strategy_path) as f:
                 strategy_config = yaml.safe_load(f)
 
             training_config = strategy_config.get("model", {}).get("training", {})
@@ -1133,7 +1133,7 @@ class TrainingService(BaseService):
                         try:
                             # Read progress from shared file
                             if progress_file.exists():
-                                with open(progress_file, "r") as f:
+                                with open(progress_file) as f:
                                     current_progress = json.load(f)
 
                                 current_epoch = current_progress.get("current_epoch", 0)

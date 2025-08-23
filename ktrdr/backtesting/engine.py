@@ -145,7 +145,7 @@ class BacktestingEngine:
             print(
                 f"✅ Loaded {len(data):,} bars from {data.index[0]} to {data.index[-1]}"
             )
-            print(f"🚀 Pre-computing features for backtesting performance...")
+            print("🚀 Pre-computing features for backtesting performance...")
 
         # PERFORMANCE OPTIMIZATION: Pre-compute all features for fast backtesting
         logger.info("🚀 Pre-computing indicators and fuzzy memberships...")
@@ -153,8 +153,8 @@ class BacktestingEngine:
         logger.info("✅ Feature cache ready - backtesting should be much faster!")
 
         if self.config.verbose:
-            print(f"✅ Feature cache prepared - backtesting optimized!")
-            print(f"🔧 Running simulation...")
+            print("✅ Feature cache prepared - backtesting optimized!")
+            print("🔧 Running simulation...")
             print(
                 f"🔍 DEBUG: Data range check - Start: {self.config.start_date}, End: {self.config.end_date}"
             )
@@ -219,7 +219,7 @@ class BacktestingEngine:
                     print(
                         f"🚨 INFINITE LOOP DETECTED: Processing {current_timestamp} repeatedly ({repeated_timestamp_count} times)"
                     )
-                    print(f"   Breaking to prevent infinite loop")
+                    print("   Breaking to prevent infinite loop")
                     break
             else:
                 repeated_timestamp_count = 0
@@ -607,8 +607,8 @@ class BacktestingEngine:
         if forced_trade:
             trades_executed += 1  # Count the forced closure
             if self.config.verbose:
-                print(f"\n🔒 FORCED POSITION CLOSURE:")
-                print(f"   Closed open position at end of backtest")
+                print("\n🔒 FORCED POSITION CLOSURE:")
+                print("   Closed open position at end of backtest")
                 print(
                     f"   Entry: ${forced_trade.entry_price:.2f} @ {forced_trade.entry_time}"
                 )
@@ -616,7 +616,7 @@ class BacktestingEngine:
                     f"   Exit: ${forced_trade.exit_price:.2f} @ {forced_trade.exit_time}"
                 )
                 print(f"   P&L: ${forced_trade.net_pnl:.2f}")
-                print(f"   This trade is included in performance calculations")
+                print("   This trade is included in performance calculations")
 
         # Generate final results
         execution_time = time.time() - execution_start
@@ -628,7 +628,7 @@ class BacktestingEngine:
 
             # Summary of orders vs trades for clarity
             completed_trades = len(self.position_manager.get_trade_history())
-            print(f"\n📋 EXECUTION SUMMARY:")
+            print("\n📋 EXECUTION SUMMARY:")
             print(
                 f"   Orders executed: {trades_executed} (individual BUY/SELL operations)"
             )
@@ -637,7 +637,7 @@ class BacktestingEngine:
             )
 
             # DEBUG: Print detailed signal analysis
-            print(f"\n🔍 SIGNAL ANALYSIS:")
+            print("\n🔍 SIGNAL ANALYSIS:")
             print(f"   Total bars in dataset: {len(data):,}")
             print(f"   Bars processed (after warm-up): {len(data) - 50:,}")
             print(f"   HOLD signals: {signal_counts['HOLD']:,}")
@@ -648,7 +648,7 @@ class BacktestingEngine:
             print(f"   Successful orders: {trades_executed}")
 
             if non_hold_signals:
-                print(f"\n📊 FIRST 5 NON-HOLD SIGNALS:")
+                print("\n📊 FIRST 5 NON-HOLD SIGNALS:")
                 for i, signal in enumerate(non_hold_signals[:5]):
                     print(
                         f"   {i+1}. {signal['timestamp']} | {signal['signal']} | "
@@ -656,14 +656,14 @@ class BacktestingEngine:
                     )
 
             if trade_attempts:
-                print(f"\n💼 ORDER EXECUTION ANALYSIS:")
+                print("\n💼 ORDER EXECUTION ANALYSIS:")
                 successful = sum(1 for t in trade_attempts if t["trade_executed"])
                 failed = len(trade_attempts) - successful
                 print(f"   Successful: {successful}")
                 print(f"   Failed: {failed}")
 
                 if failed > 0:
-                    print(f"\n❌ FAILED ORDER ATTEMPTS:")
+                    print("\n❌ FAILED ORDER ATTEMPTS:")
                     for i, attempt in enumerate(
                         [t for t in trade_attempts if not t["trade_executed"]][:5]
                     ):
@@ -783,7 +783,7 @@ class BacktestingEngine:
                     1 for d in decision_stats if d.signal.value == "SELL"
                 )
 
-                print(f"\n📈 Signal Distribution:")
+                print("\n📈 Signal Distribution:")
                 print(f"   HOLD signals: {hold_count}")
                 print(f"   BUY signals: {buy_signals}")
                 print(f"   SELL signals: {sell_signals}")
@@ -794,7 +794,7 @@ class BacktestingEngine:
                     )
                     print(f"   Average confidence: {avg_confidence:.3f}")
 
-            print(f"\n💡 Recommendations:")
+            print("\n💡 Recommendations:")
             print("   • Review model training performance and validation accuracy")
             print("   • Consider adjusting confidence thresholds in strategy config")
             print("   • Verify fuzzy membership function parameters")
@@ -809,7 +809,7 @@ class BacktestingEngine:
             return
 
         # Performance metrics (only show if trades were made)
-        print(f"💰 Performance Metrics:")
+        print("💰 Performance Metrics:")
         print(
             f"   Total Return: ${metrics.total_return:,.2f} ({metrics.total_return_pct*100:.2f}%)"
         )
@@ -820,7 +820,7 @@ class BacktestingEngine:
         )
         print(f"   Volatility: {metrics.volatility*100:.2f}%")
 
-        print(f"\n📈 Trade Statistics:")
+        print("\n📈 Trade Statistics:")
         print(f"   Total Trades: {metrics.total_trades}")
         print(
             f"   Win Rate: {metrics.win_rate*100:.1f}% ({metrics.winning_trades}/{metrics.total_trades})"
@@ -831,7 +831,7 @@ class BacktestingEngine:
             f"   Largest Win: ${metrics.largest_win:.2f} | Largest Loss: ${metrics.largest_loss:.2f}"
         )
 
-        print(f"\n⏱️  Execution:")
+        print("\n⏱️  Execution:")
         print(f"   Execution Time: {results.execution_time_seconds:.2f} seconds")
         print(f"   Data Points: {len(results.equity_curve):,}")
 

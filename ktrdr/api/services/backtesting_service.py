@@ -457,7 +457,7 @@ class BacktestingService(BaseService):
 
         # Get the real results from the proven engine
         results = await task
-        logger.info(f"Real backtest completed successfully")
+        logger.info("Real backtest completed successfully")
         return results
 
     async def get_backtest_status(self, backtest_id: str) -> dict[str, Any]:

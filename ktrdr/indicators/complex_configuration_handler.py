@@ -352,7 +352,7 @@ class ComplexConfigurationHandler:
         elif self.fallback_strategy == FallbackStrategy.PAD_DATA:
             # This would require modifying the data, not just the config
             self.logger.warning(
-                f"PAD_DATA strategy not implemented, using REDUCE_PERIOD"
+                "PAD_DATA strategy not implemented, using REDUCE_PERIOD"
             )
             return self._reduce_indicator_periods(indicator_config, available_points)
 

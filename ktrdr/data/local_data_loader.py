@@ -105,7 +105,7 @@ class LocalDataLoader:
             if not self.data_dir.exists():
                 logger.info(f"Creating data directory: {self.data_dir}")
                 self.data_dir.mkdir(parents=True)
-                logger.debug(f"Data directory created successfully")
+                logger.debug("Data directory created successfully")
             elif not self.data_dir.is_dir():
                 raise DataError(
                     message=f"Data path exists but is not a directory: {self.data_dir}",
@@ -266,7 +266,7 @@ class LocalDataLoader:
             # If df is empty or doesn't have a DatetimeIndex, try alternate approach
             if df.empty or not isinstance(df.index, pd.DatetimeIndex):
                 logger.warning(
-                    f"Standard loading approach failed, trying alternate method"
+                    "Standard loading approach failed, trying alternate method"
                 )
 
                 # Try again with explicit date column
@@ -295,7 +295,7 @@ class LocalDataLoader:
                     df.set_index(date_col, inplace=True)
                     logger.info(f"Successfully parsed date column: {date_col}")
                 else:
-                    logger.warning(f"No date column found, using default index")
+                    logger.warning("No date column found, using default index")
 
             # Handle cases where the index still isn't a DatetimeIndex
             if not isinstance(df.index, pd.DatetimeIndex):
@@ -606,7 +606,7 @@ class LocalDataLoader:
         try:
             # More efficient approach that doesn't scan the entire file
             # Read just the first row to get the start date
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 # Read the header line
                 header = f.readline().strip()
                 # Read the first data line

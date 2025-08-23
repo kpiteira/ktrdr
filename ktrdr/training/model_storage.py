@@ -191,19 +191,19 @@ class ModelStorage:
             model = model_state  # Return state dict for now
 
         # Load configuration
-        with open(model_dir / "config.json", "r") as f:
+        with open(model_dir / "config.json") as f:
             config = json.load(f)
 
         # Load metrics
-        with open(model_dir / "metrics.json", "r") as f:
+        with open(model_dir / "metrics.json") as f:
             metrics = json.load(f)
 
         # Load features
-        with open(model_dir / "features.json", "r") as f:
+        with open(model_dir / "features.json") as f:
             features = json.load(f)
 
         # Load metadata
-        with open(model_dir / "metadata.json", "r") as f:
+        with open(model_dir / "metadata.json") as f:
             metadata = json.load(f)
 
         # Load scaler if exists (backward compatibility + mixed feature models)
@@ -261,7 +261,7 @@ class ModelStorage:
 
                 metadata_path = model_dir / "metadata.json"
                 if metadata_path.exists():
-                    with open(metadata_path, "r") as f:
+                    with open(metadata_path) as f:
                         metadata = json.load(f)
 
                     models.append(

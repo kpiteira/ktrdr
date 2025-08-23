@@ -517,7 +517,7 @@ class StrategyTrainer:
         Returns:
             Strategy configuration dictionary
         """
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config = yaml.safe_load(f)
 
         # Validate required sections

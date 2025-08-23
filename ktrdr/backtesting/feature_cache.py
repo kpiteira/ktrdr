@@ -169,7 +169,7 @@ class FeatureCache:
         logger.debug("⏰ Pre-computing temporal fuzzy features...")
         self._add_temporal_features()
 
-        logger.debug(f"✅ Feature pre-computation complete!")
+        logger.debug("✅ Feature pre-computation complete!")
         logger.debug(f"   Indicators: {len(self.mapped_indicators_df.columns)} columns")
         logger.debug(f"   Fuzzy features: {len(self.fuzzy_df.columns)} columns")
 

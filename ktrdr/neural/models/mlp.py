@@ -84,7 +84,7 @@ class MLPTradingModel(BaseNeuralModel):
 
             logger = get_logger(__name__)
             logger.debug(
-                f"Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)"
+                "Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)"
             )
 
         # Use FuzzyNeuralProcessor for pure neuro-fuzzy models
@@ -248,7 +248,7 @@ class MultiSymbolMLPTradingModel(BaseNeuralModel):
 
             logger = get_logger(__name__)
             logger.debug(
-                f"Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)"
+                "Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)"
             )
 
         # Use FuzzyNeuralProcessor for pure neuro-fuzzy models

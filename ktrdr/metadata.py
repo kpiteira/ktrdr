@@ -24,7 +24,7 @@ ENV_PREFIX = "KTRDR_"
 # Load metadata from YAML
 def _load_metadata() -> dict[str, Any]:
     """Load metadata from the central metadata file."""
-    with open(METADATA_FILE, "r") as f:
+    with open(METADATA_FILE) as f:
         return yaml.safe_load(f)
 
 
@@ -43,7 +43,7 @@ def _load_environment_config(env: str) -> dict[str, Any]:
     """Load environment-specific configuration."""
     env_file = PROJECT_ROOT / "config" / "environment" / f"{env}.yaml"
     if env_file.exists():
-        with open(env_file, "r") as f:
+        with open(env_file) as f:
             return yaml.safe_load(f) or {}
     return {}
 

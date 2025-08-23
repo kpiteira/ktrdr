@@ -274,7 +274,7 @@ class IBTradingHoursParser:
                 liquid_hours=getattr(contract_details, "liquidHours", ""),
             )
 
-            logger.debug(f"Parsing IB trading hours:")
+            logger.debug("Parsing IB trading hours:")
             logger.debug(f"  Timezone: {ib_info.timezone_id}")
             logger.debug(f"  Trading hours: {ib_info.trading_hours}")
             logger.debug(f"  Liquid hours: {ib_info.liquid_hours}")

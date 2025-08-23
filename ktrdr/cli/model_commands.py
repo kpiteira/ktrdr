@@ -170,12 +170,12 @@ def train_model(
         # Validate we have symbols and timeframes
         if not final_symbols:
             console.print(
-                f"[red]❌ Error: No symbols specified in strategy config or CLI arguments[/red]"
+                "[red]❌ Error: No symbols specified in strategy config or CLI arguments[/red]"
             )
             raise typer.Exit(1)
         if not final_timeframes:
             console.print(
-                f"[red]❌ Error: No timeframes specified in strategy config or CLI arguments[/red]"
+                "[red]❌ Error: No timeframes specified in strategy config or CLI arguments[/red]"
             )
             raise typer.Exit(1)
 
@@ -185,17 +185,17 @@ def train_model(
 
         # Show what will be trained
         if len(final_symbols) > 1:
-            console.print(f"[green]✅ Multi-symbol training enabled:[/green]")
+            console.print("[green]✅ Multi-symbol training enabled:[/green]")
             console.print(f"   Symbols: {', '.join(final_symbols)}")
         else:
-            console.print(f"[blue]📊 Single-symbol training:[/blue]")
+            console.print("[blue]📊 Single-symbol training:[/blue]")
             console.print(f"   Symbol: {final_symbols[0]}")
 
         if len(final_timeframes) > 1:
-            console.print(f"[green]✅ Multi-timeframe training enabled:[/green]")
+            console.print("[green]✅ Multi-timeframe training enabled:[/green]")
             console.print(f"   Timeframes: {', '.join(final_timeframes)}")
         else:
-            console.print(f"[blue]📊 Single-timeframe training:[/blue]")
+            console.print("[blue]📊 Single-timeframe training:[/blue]")
             console.print(f"   Timeframe: {final_timeframes[0]}")
 
         # Validate all symbols
@@ -288,7 +288,7 @@ async def _train_model_async(
                 console.print(f"📅 Training period: {start_date} to {end_date}")
 
             if dry_run:
-                console.print(f"🔍 [yellow]DRY RUN - No model will be trained[/yellow]")
+                console.print("🔍 [yellow]DRY RUN - No model will be trained[/yellow]")
                 symbols_str = ", ".join(symbols)
                 timeframes_str = ", ".join(timeframes)
                 console.print(f"📋 Would train: {symbols_str} on {timeframes_str}")
@@ -297,8 +297,8 @@ async def _train_model_async(
                 return
 
             # Call the training API endpoint using AsyncCLIClient
-            console.print(f"🚀 [cyan]Starting model training via async API...[/cyan]")
-            console.print(f"📋 Training parameters:")
+            console.print("🚀 [cyan]Starting model training via async API...[/cyan]")
+            console.print("📋 Training parameters:")
             console.print(f"   Strategy: {strategy_file}")
             symbols_str = ", ".join(symbols)
             console.print(f"   Symbols: {symbols_str}")
@@ -509,7 +509,7 @@ async def _train_model_async(
 
                         if status == "completed":
                             console.print(
-                                f"✅ [green]Model training completed successfully![/green]"
+                                "✅ [green]Model training completed successfully![/green]"
                             )
                             break
                         elif status == "failed":
@@ -518,7 +518,7 @@ async def _train_model_async(
                             return
                         elif status == "cancelled":
                             console.print(
-                                f"✅ [yellow]Training cancelled successfully[/yellow]"
+                                "✅ [yellow]Training cancelled successfully[/yellow]"
                             )
                             return
 
@@ -527,7 +527,7 @@ async def _train_model_async(
 
                     except asyncio.CancelledError:
                         console.print(
-                            f"\n⚠️  [yellow]Training monitoring cancelled[/yellow]"
+                            "\n⚠️  [yellow]Training monitoring cancelled[/yellow]"
                         )
                         return
                     except Exception as e:
@@ -553,7 +553,7 @@ async def _train_model_async(
                 model_info = performance_result.get("model_info", {})
 
                 # Display real results
-                console.print(f"📊 [bold green]Training Results:[/bold green]")
+                console.print("📊 [bold green]Training Results:[/bold green]")
                 console.print(
                     f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0)*100:.1f}%"
                 )
@@ -577,7 +577,7 @@ async def _train_model_async(
                 # Format model size from bytes
                 model_size_bytes = model_info.get("model_size_bytes", 0)
                 if model_size_bytes == 0:
-                    console.print(f"💾 Model size: 0 bytes")
+                    console.print("💾 Model size: 0 bytes")
                 elif model_size_bytes < 1024:
                     console.print(f"💾 Model size: {model_size_bytes} bytes")
                 elif model_size_bytes < 1024 * 1024:
@@ -592,10 +592,10 @@ async def _train_model_async(
                     f"❌ [red]Error retrieving training results: {str(e)}[/red]"
                 )
                 console.print(
-                    f"✅ [green]Training completed, but unable to fetch detailed results[/green]"
+                    "✅ [green]Training completed, but unable to fetch detailed results[/green]"
                 )
 
-            console.print(f"💾 Model training completed via API")
+            console.print("💾 Model training completed via API")
 
     except AsyncCLIClientError:
         # Re-raise CLI errors without wrapping
@@ -713,7 +713,7 @@ async def _list_models_async(
             print(json.dumps(result, indent=2))
         else:
             # Table format
-            console.print(f"\n🧠 [bold]Available Models[/bold]")
+            console.print("\n🧠 [bold]Available Models[/bold]")
             console.print(f"Directory: {models_dir}")
             if pattern:
                 console.print(f"Pattern: {pattern}")
@@ -845,7 +845,7 @@ async def _test_model_async(
 
         # This would call the model testing API endpoint
         # For now, show a placeholder message
-        console.print(f"⚠️  [yellow]Model testing via API not yet implemented[/yellow]")
+        console.print("⚠️  [yellow]Model testing via API not yet implemented[/yellow]")
         console.print(f"📋 Would test model: {model_name}")
         console.print(f"📊 On data: {symbol} ({timeframe})")
 
@@ -862,7 +862,7 @@ async def _test_model_async(
             "predictions_count": 156,
         }
 
-        console.print(f"✅ [green]Model testing completed[/green]")
+        console.print("✅ [green]Model testing completed[/green]")
         console.print(f"📊 Accuracy: {results['accuracy']:.1%}")
         console.print(f"📊 Precision: {results['precision']:.1%}")
         console.print(f"📊 Predictions: {results['predictions_count']}")
@@ -980,7 +980,7 @@ async def _make_prediction_async(
         # This would call the prediction API endpoint
         # For now, show a placeholder message
         console.print(
-            f"⚠️  [yellow]Model prediction via API not yet implemented[/yellow]"
+            "⚠️  [yellow]Model prediction via API not yet implemented[/yellow]"
         )
         console.print(f"📋 Would predict for: {symbol} ({timeframe})")
 
@@ -1021,7 +1021,7 @@ async def _make_prediction_async(
             print(json.dumps(result, indent=2))
         else:
             # Table format
-            console.print(f"\n🔮 [bold]Model Predictions[/bold]")
+            console.print("\n🔮 [bold]Model Predictions[/bold]")
             console.print(f"Model: {model_name}")
             console.print(f"Symbol: {symbol} ({timeframe})")
             console.print(f"Confidence threshold: {confidence_threshold:.1%}")

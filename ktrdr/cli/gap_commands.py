@@ -450,7 +450,7 @@ def _print_gap_table(result, mode: str, include_expected: bool):
 
 def _print_batch_summary(result):
     """Print batch analysis summary."""
-    typer.echo(f"\nBatch Gap Analysis Summary")
+    typer.echo("\nBatch Gap Analysis Summary")
     typer.echo("=" * 40)
 
     # Request summary
@@ -490,7 +490,7 @@ def _print_batch_table(result):
 
     # Individual symbol results
     if result.results:
-        typer.echo(f"\nIndividual Symbol Results")
+        typer.echo("\nIndividual Symbol Results")
         typer.echo("=" * 35)
 
         symbol_data = []

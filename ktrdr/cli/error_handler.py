@@ -117,7 +117,7 @@ def handle_api_response_error(
         error_console.print(f"🚨 Error: {error_msg}")
 
         if verbose and error_info:
-            error_console.print(f"\n🔍 [bold]Error details:[/bold]")
+            error_console.print("\n🔍 [bold]Error details:[/bold]")
             for key, value in error_info.items():
                 if key != "ib_diagnosis":  # Skip IB diagnosis in raw details
                     error_console.print(f"   {key}: {value}")

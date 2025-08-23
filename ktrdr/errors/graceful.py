@@ -183,7 +183,7 @@ def with_partial_results(
                 if not args or not isinstance(args[0], (list, tuple)):
                     # If we can't identify the items, re-raise the original exception
                     log.error(
-                        f"Cannot apply partial results strategy: first argument is not a list"
+                        "Cannot apply partial results strategy: first argument is not a list"
                     )
                     raise
 

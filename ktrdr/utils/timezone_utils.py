@@ -433,7 +433,7 @@ class TimestampManager:
             cache_file = data_dir / "symbol_discovery_cache.json"
 
             if cache_file.exists():
-                with open(cache_file, "r") as f:
+                with open(cache_file) as f:
                     cache_data = json.load(f)
 
                 symbol_info = cache_data.get("cache", {}).get(symbol)
