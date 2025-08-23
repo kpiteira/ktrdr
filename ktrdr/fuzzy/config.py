@@ -5,26 +5,24 @@ This module defines Pydantic models for validating fuzzy logic configurations,
 particularly focusing on triangular membership functions in Phase 1.
 """
 
-import os
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Union, Any, Type, Annotated
+from typing import Annotated, Dict, List, Literal, Optional, Union
 
 import yaml
 from pydantic import (
     BaseModel,
     Field,
+    RootModel,
     field_validator,
     model_validator,
-    RootModel,
-    Discriminator,
 )
 
+from ktrdr import get_logger
 from ktrdr.errors import (
     ConfigurationError,
-    InvalidConfigurationError,
     ConfigurationFileError,
+    InvalidConfigurationError,
 )
-from ktrdr import get_logger
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -43,7 +41,7 @@ class TriangularMFConfig(BaseModel):
     """
 
     type: Literal["triangular"] = "triangular"
-    parameters: List[float] = Field(
+    parameters: list[float] = Field(
         ...,
         min_length=3,
         max_length=3,
@@ -52,7 +50,7 @@ class TriangularMFConfig(BaseModel):
 
     @field_validator("parameters")
     @classmethod
-    def validate_parameters(cls, parameters: List[float]) -> List[float]:
+    def validate_parameters(cls, parameters: list[float]) -> list[float]:
         """
         Validate triangular membership function parameters.
 
@@ -103,7 +101,7 @@ class TrapezoidalMFConfig(BaseModel):
     """
 
     type: Literal["trapezoidal"] = "trapezoidal"
-    parameters: List[float] = Field(
+    parameters: list[float] = Field(
         ...,
         min_length=4,
         max_length=4,
@@ -112,7 +110,7 @@ class TrapezoidalMFConfig(BaseModel):
 
     @field_validator("parameters")
     @classmethod
-    def validate_parameters(cls, parameters: List[float]) -> List[float]:
+    def validate_parameters(cls, parameters: list[float]) -> list[float]:
         """
         Validate trapezoidal membership function parameters.
 
@@ -159,7 +157,7 @@ class GaussianMFConfig(BaseModel):
     """
 
     type: Literal["gaussian"] = "gaussian"
-    parameters: List[float] = Field(
+    parameters: list[float] = Field(
         ...,
         min_length=2,
         max_length=2,
@@ -168,7 +166,7 @@ class GaussianMFConfig(BaseModel):
 
     @field_validator("parameters")
     @classmethod
-    def validate_parameters(cls, parameters: List[float]) -> List[float]:
+    def validate_parameters(cls, parameters: list[float]) -> list[float]:
         """
         Validate Gaussian membership function parameters.
 
@@ -210,7 +208,7 @@ MembershipFunctionConfig = Annotated[
 ]
 
 
-class FuzzySetConfigModel(RootModel[Dict[str, MembershipFunctionConfig]]):
+class FuzzySetConfigModel(RootModel[dict[str, MembershipFunctionConfig]]):
     """
     Configuration for a fuzzy set, which contains named membership functions.
 
@@ -247,7 +245,7 @@ class FuzzySetConfigModel(RootModel[Dict[str, MembershipFunctionConfig]]):
         return self
 
 
-class FuzzyConfigModel(RootModel[Dict[str, FuzzySetConfigModel]]):
+class FuzzyConfigModel(RootModel[dict[str, FuzzySetConfigModel]]):
     """
     Overall configuration for fuzzy logic, including multiple indicators
     and their associated fuzzy sets.
@@ -364,7 +362,7 @@ class FuzzyConfigLoader:
 
         # Load YAML file
         try:
-            with open(path, "r") as file:
+            with open(path) as file:
                 config_dict = yaml.safe_load(file)
 
             # Handle empty file case
@@ -380,7 +378,7 @@ class FuzzyConfigLoader:
             except Exception as e:
                 logger.error(f"Failed to validate fuzzy configuration: {e}")
                 raise InvalidConfigurationError(
-                    message=f"Fuzzy configuration validation failed",
+                    message="Fuzzy configuration validation failed",
                     error_code="CONFIG-FuzzyValidationFailed",
                     details={"validation_errors": str(e)},
                 ) from e
@@ -388,14 +386,14 @@ class FuzzyConfigLoader:
         except yaml.YAMLError as e:
             logger.error(f"Invalid YAML format in fuzzy configuration file: {e}")
             raise InvalidConfigurationError(
-                message=f"Invalid YAML format in fuzzy configuration file",
+                message="Invalid YAML format in fuzzy configuration file",
                 error_code="CONFIG-InvalidFuzzyYaml",
                 details={"yaml_error": str(e)},
             ) from e
         except Exception as e:
             logger.error(f"Error loading fuzzy configuration file: {e}")
             raise ConfigurationError(
-                message=f"Error loading fuzzy configuration file",
+                message="Error loading fuzzy configuration file",
                 error_code="CONFIG-FuzzyLoadError",
                 details={"error": str(e)},
             ) from e
@@ -446,7 +444,7 @@ class FuzzyConfigLoader:
 
         # Load strategy YAML file
         try:
-            with open(strategy_path, "r") as file:
+            with open(strategy_path) as file:
                 strategy_dict = yaml.safe_load(file)
 
             # Extract fuzzy_sets section from strategy file
@@ -464,14 +462,14 @@ class FuzzyConfigLoader:
         except yaml.YAMLError as e:
             logger.error(f"Invalid YAML format in strategy file: {e}")
             raise InvalidConfigurationError(
-                message=f"Invalid YAML format in strategy file",
+                message="Invalid YAML format in strategy file",
                 error_code="CONFIG-InvalidStrategyYaml",
                 details={"yaml_error": str(e)},
             ) from e
         except Exception as e:
             logger.error(f"Error loading strategy file: {e}")
             raise ConfigurationError(
-                message=f"Error loading strategy file",
+                message="Error loading strategy file",
                 error_code="CONFIG-StrategyLoadError",
                 details={"error": str(e)},
             ) from e
@@ -540,7 +538,7 @@ class FuzzyConfigLoader:
             strategy_config = self.load_strategy_fuzzy_config(strategy_name)
 
             # Merge configurations
-            logger.info(f"Merging default and strategy-specific fuzzy configurations")
+            logger.info("Merging default and strategy-specific fuzzy configurations")
             return self.merge_configs(default_config, strategy_config)
 
         except ConfigurationFileError:

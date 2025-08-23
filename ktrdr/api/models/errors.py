@@ -6,10 +6,11 @@ error reporting across all API endpoints.
 """
 
 from enum import Enum
-from typing import Dict, List, Any, Optional
+from typing import Any, List, Optional
+
 from pydantic import BaseModel, Field
 
-from ktrdr.api.models.base import ErrorResponse, ApiResponse
+from ktrdr.api.models.base import ApiResponse, ErrorResponse
 
 
 class ErrorCode(str, Enum):
@@ -73,7 +74,7 @@ class ValidationErrorDetail(BaseModel):
         errors (List[ValidationErrorItem]): List of validation errors
     """
 
-    errors: List[ValidationErrorItem] = Field(
+    errors: list[ValidationErrorItem] = Field(
         ..., description="List of validation errors"
     )
 

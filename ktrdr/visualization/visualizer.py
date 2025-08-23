@@ -5,18 +5,17 @@ This module contains the Visualizer class that provides a high-level API
 for creating and manipulating charts using the KTRDR visualization framework.
 """
 
-import os
+# Setup logging
+import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
+from typing import Any, Dict, List, Optional, Union
+
 import pandas as pd
 
 from ktrdr.errors import ConfigurationError
-from ktrdr.visualization.data_adapter import DataAdapter
 from ktrdr.visualization.config_builder import ConfigBuilder
+from ktrdr.visualization.data_adapter import DataAdapter
 from ktrdr.visualization.renderer import Renderer
-
-# Setup logging
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,7 @@ class Visualizer:
         title: Optional[str] = None,
         chart_type: str = "candlestick",
         height: int = 400,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a basic chart from a DataFrame.
 
@@ -95,7 +94,7 @@ class Visualizer:
             title = f"KTRDR Chart ({chart_type})"
 
         # Generate a unique ID for the chart
-        chart_id = f"main_chart"
+        chart_id = "main_chart"
 
         # Transform data based on chart type
         transformed_data = {}
@@ -162,14 +161,14 @@ class Visualizer:
 
     def add_indicator_overlay(
         self,
-        chart: Dict[str, Any],
+        chart: dict[str, Any],
         data: pd.DataFrame,
         column: str,
         color: str = "#2962FF",
         title: Optional[str] = None,
         line_width: float = 1.5,
         panel_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Add an indicator as an overlay on the price chart or a specific panel.
 
@@ -278,7 +277,7 @@ class Visualizer:
 
     def add_indicator_panel(
         self,
-        chart: Dict[str, Any],
+        chart: dict[str, Any],
         data: pd.DataFrame,
         column: str,
         panel_type: str = "line",
@@ -286,7 +285,7 @@ class Visualizer:
         color: str = "#9C27B0",
         title: Optional[str] = None,
         visible: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Add an indicator as a separate panel below the main chart.
 
@@ -407,8 +406,8 @@ class Visualizer:
         return chart
 
     def set_panel_visibility(
-        self, chart: Dict[str, Any], panel_id: str, visible: bool = True
-    ) -> Dict[str, Any]:
+        self, chart: dict[str, Any], panel_id: str, visible: bool = True
+    ) -> dict[str, Any]:
         """
         Set the visibility of an indicator panel.
 
@@ -458,8 +457,8 @@ class Visualizer:
         return chart
 
     def toggle_overlay_visibility(
-        self, chart: Dict[str, Any], overlay_id: str
-    ) -> Dict[str, Any]:
+        self, chart: dict[str, Any], overlay_id: str
+    ) -> dict[str, Any]:
         """
         Toggle the visibility of an indicator overlay.
 
@@ -503,8 +502,8 @@ class Visualizer:
         return chart
 
     def reorganize_panels(
-        self, chart: Dict[str, Any], order: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, chart: dict[str, Any], order: Optional[list[str]] = None
+    ) -> dict[str, Any]:
         """
         Reorganize indicator panels in the specified order.
 
@@ -578,8 +577,8 @@ class Visualizer:
         return chart
 
     def configure_range_slider(
-        self, chart: Dict[str, Any], height: int = 60, show: bool = True
-    ) -> Dict[str, Any]:
+        self, chart: dict[str, Any], height: int = 60, show: bool = True
+    ) -> dict[str, Any]:
         """
         Configure a range slider for the chart.
 
@@ -661,7 +660,7 @@ class Visualizer:
         return chart
 
     def save(
-        self, chart: Dict[str, Any], filename: Union[str, Path], overwrite: bool = False
+        self, chart: dict[str, Any], filename: Union[str, Path], overwrite: bool = False
     ) -> Path:
         """
         Save the chart to an HTML file.
@@ -706,7 +705,7 @@ class Visualizer:
         logger.info(f"Saved chart to: {output_path}")
         return output_path
 
-    def show(self, chart: Dict[str, Any]) -> str:
+    def show(self, chart: dict[str, Any]) -> str:
         """
         Generate HTML content for displaying the chart.
 
@@ -745,5 +744,5 @@ class Visualizer:
             has_range_slider=has_range_slider,
         )
 
-        logger.info(f"Generated HTML content for interactive display")
+        logger.info("Generated HTML content for interactive display")
         return html_content

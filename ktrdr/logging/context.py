@@ -33,7 +33,7 @@ class LogContext:
     user: Optional[str] = None
     module: Optional[str] = None
     function: Optional[str] = None
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 class ContextEnricher(logging.Filter):
@@ -114,7 +114,7 @@ logging.getLogger().addFilter(_context_enricher)
 def with_context(
     operation_name: Optional[str] = None,
     include_args: bool = False,
-    extra: Optional[Dict[str, Any]] = None,
+    extra: Optional[dict[str, Any]] = None,
 ) -> Callable[[F], F]:
     """
     Decorator to add function context to log entries within the function scope.

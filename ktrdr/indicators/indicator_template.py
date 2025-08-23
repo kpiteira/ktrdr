@@ -15,8 +15,6 @@ Your indicator will then automatically be tested by the testing framework.
 """
 
 import pandas as pd
-import numpy as np
-from typing import Union, Optional
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError

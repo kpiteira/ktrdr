@@ -11,17 +11,15 @@ The adapter handles:
 - Progress forwarding and status management
 """
 
-import asyncio
-from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
-import json
+from typing import Any, Dict, List, Optional
 
 from ktrdr.logging import get_logger
-from ktrdr.errors import DataError, ConnectionError as KtrdrConnectionError
 
 # HTTP client for host service communication
 try:
     import httpx
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
@@ -31,7 +29,7 @@ logger = get_logger(__name__)
 
 class TrainingProviderError(Exception):
     """Base exception for training provider errors."""
-    
+
     def __init__(self, message: str, provider: str = "Training"):
         self.message = message
         self.provider = provider
@@ -40,11 +38,13 @@ class TrainingProviderError(Exception):
 
 class TrainingProviderConnectionError(TrainingProviderError):
     """Exception for training provider connection errors."""
+
     pass
 
 
 class TrainingProviderDataError(TrainingProviderError):
     """Exception for training provider data errors."""
+
     pass
 
 
@@ -58,9 +58,7 @@ class TrainingAdapter:
     """
 
     def __init__(
-        self, 
-        use_host_service: bool = False,
-        host_service_url: Optional[str] = None
+        self, use_host_service: bool = False, host_service_url: Optional[str] = None
     ):
         """
         Initialize training adapter.
@@ -76,33 +74,37 @@ class TrainingAdapter:
         if use_host_service and not HTTPX_AVAILABLE:
             raise TrainingProviderError(
                 "httpx library required for host service mode but not available",
-                provider="Training"
+                provider="Training",
             )
 
         # Initialize appropriate components based on mode
         if not use_host_service:
             # Local training mode (existing behavior)
             from .train_strategy import StrategyTrainer
-            
+
             self.local_trainer = StrategyTrainer()
-            logger.info(f"TrainingAdapter initialized for local training")
+            logger.info("TrainingAdapter initialized for local training")
         else:
             # Host service mode
             self.local_trainer = None
-            logger.info(f"TrainingAdapter initialized for host service at {self.host_service_url}")
+            logger.info(
+                f"TrainingAdapter initialized for host service at {self.host_service_url}"
+            )
 
         # Statistics
         self.requests_made = 0
         self.errors_encountered = 0
         self.last_request_time: Optional[datetime] = None
 
-    async def _call_host_service_post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _call_host_service_post(
+        self, endpoint: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Make POST request to host service."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
-        
+
         url = f"{self.host_service_url}{endpoint}"
-        
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, json=data)
@@ -110,22 +112,22 @@ class TrainingAdapter:
                 return response.json()
         except httpx.HTTPError as e:
             raise TrainingProviderConnectionError(
-                f"Host service request failed: {str(e)}",
-                provider="Training"
+                f"Host service request failed: {str(e)}", provider="Training"
             )
         except Exception as e:
             raise TrainingProviderError(
-                f"Host service communication error: {str(e)}",
-                provider="Training"
+                f"Host service communication error: {str(e)}", provider="Training"
             )
 
-    async def _call_host_service_get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def _call_host_service_get(
+        self, endpoint: str, params: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """Make GET request to host service."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
-        
+
         url = f"{self.host_service_url}{endpoint}"
-        
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(url, params=params or {})
@@ -133,26 +135,24 @@ class TrainingAdapter:
                 return response.json()
         except httpx.HTTPError as e:
             raise TrainingProviderConnectionError(
-                f"Host service request failed: {str(e)}",
-                provider="Training"
+                f"Host service request failed: {str(e)}", provider="Training"
             )
         except Exception as e:
             raise TrainingProviderError(
-                f"Host service communication error: {str(e)}",
-                provider="Training"
+                f"Host service communication error: {str(e)}", provider="Training"
             )
 
     async def train_multi_symbol_strategy(
         self,
         strategy_config_path: str,
-        symbols: List[str],
-        timeframes: List[str],
+        symbols: list[str],
+        timeframes: list[str],
         start_date: str,
         end_date: str,
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Train a multi-symbol strategy using local trainer or host service.
 
@@ -176,56 +176,61 @@ class TrainingAdapter:
 
             if self.use_host_service:
                 # Use host service for training
-                logger.info(f"Starting training via host service for {symbols} on {timeframes}")
-                
-                response = await self._call_host_service_post("/training/start", {
-                    "model_configuration": {
-                        "strategy_config": strategy_config_path,
-                        "symbols": symbols,
-                        "timeframes": timeframes,
-                        "model_type": "mlp",
-                        "multi_symbol": len(symbols) > 1
+                logger.info(
+                    f"Starting training via host service for {symbols} on {timeframes}"
+                )
+
+                response = await self._call_host_service_post(
+                    "/training/start",
+                    {
+                        "model_configuration": {
+                            "strategy_config": strategy_config_path,
+                            "symbols": symbols,
+                            "timeframes": timeframes,
+                            "model_type": "mlp",
+                            "multi_symbol": len(symbols) > 1,
+                        },
+                        "training_configuration": {
+                            "validation_split": validation_split,
+                            "start_date": start_date,
+                            "end_date": end_date,
+                            "data_mode": data_mode,
+                        },
+                        "data_configuration": {
+                            "symbols": symbols,
+                            "timeframes": timeframes,
+                            "data_source": data_mode,
+                        },
+                        "gpu_configuration": {
+                            "enable_gpu": True,
+                            "memory_fraction": 0.8,
+                            "mixed_precision": True,
+                        },
                     },
-                    "training_configuration": {
-                        "validation_split": validation_split,
-                        "start_date": start_date,
-                        "end_date": end_date,
-                        "data_mode": data_mode
-                    },
-                    "data_configuration": {
-                        "symbols": symbols,
-                        "timeframes": timeframes,
-                        "data_source": data_mode
-                    },
-                    "gpu_configuration": {
-                        "enable_gpu": True,
-                        "memory_fraction": 0.8,
-                        "mixed_precision": True
-                    }
-                })
-                
+                )
+
                 if not response.get("session_id"):
                     raise TrainingProviderDataError(
                         f"Training start failed: {response.get('message', 'Unknown error')}",
-                        provider="Training"
+                        provider="Training",
                     )
-                
+
                 session_id = response["session_id"]
                 logger.info(f"Training session {session_id} started on host service")
-                
+
                 # Return immediately with session_id (no background polling - operations service will poll)
                 return {
                     "success": True,
                     "session_id": session_id,
                     "training_started": True,
                     "host_service_used": True,
-                    "message": f"Training session {session_id} started on host service"
+                    "message": f"Training session {session_id} started on host service",
                 }
-                
+
             else:
                 # Use local training (existing behavior)
                 logger.info(f"Starting local training for {symbols} on {timeframes}")
-                
+
                 return self.local_trainer.train_multi_symbol_strategy(
                     strategy_config_path=strategy_config_path,
                     symbols=symbols,
@@ -234,9 +239,9 @@ class TrainingAdapter:
                     end_date=end_date,
                     validation_split=validation_split,
                     data_mode=data_mode,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
                 )
-                
+
         except TrainingProviderError:
             # Re-raise provider errors
             self.errors_encountered += 1
@@ -245,34 +250,41 @@ class TrainingAdapter:
             # Wrap other exceptions
             self.errors_encountered += 1
             raise TrainingProviderError(
-                f"Training failed: {str(e)}",
-                provider="Training"
+                f"Training failed: {str(e)}", provider="Training"
             )
 
-
-    async def get_training_status(self, session_id: str) -> Dict[str, Any]:
+    async def get_training_status(self, session_id: str) -> dict[str, Any]:
         """Get status of a training session (host service only)."""
         if not self.use_host_service:
-            raise TrainingProviderError("Status checking only available for host service mode")
-        
+            raise TrainingProviderError(
+                "Status checking only available for host service mode"
+            )
+
         return await self._call_host_service_get(f"/training/status/{session_id}")
 
-    async def stop_training(self, session_id: str) -> Dict[str, Any]:
+    async def stop_training(self, session_id: str) -> dict[str, Any]:
         """Stop a training session (host service only)."""
         if not self.use_host_service:
-            raise TrainingProviderError("Training stopping only available for host service mode")
-        
-        return await self._call_host_service_post("/training/stop", {
-            "session_id": session_id,
-            "save_checkpoint": True
-        })
+            raise TrainingProviderError(
+                "Training stopping only available for host service mode"
+            )
 
-    def get_statistics(self) -> Dict[str, Any]:
+        return await self._call_host_service_post(
+            "/training/stop", {"session_id": session_id, "save_checkpoint": True}
+        )
+
+    def get_statistics(self) -> dict[str, Any]:
         """Get adapter usage statistics."""
         return {
             "requests_made": self.requests_made,
             "errors_encountered": self.errors_encountered,
-            "last_request_time": self.last_request_time.isoformat() if self.last_request_time else None,
-            "error_rate": self.errors_encountered / self.requests_made if self.requests_made > 0 else 0.0,
-            "mode": "host_service" if self.use_host_service else "local"
+            "last_request_time": (
+                self.last_request_time.isoformat() if self.last_request_time else None
+            ),
+            "error_rate": (
+                self.errors_encountered / self.requests_made
+                if self.requests_made > 0
+                else 0.0
+            ),
+            "mode": "host_service" if self.use_host_service else "local",
         }

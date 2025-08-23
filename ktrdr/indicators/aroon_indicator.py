@@ -18,13 +18,13 @@ The Aroon lines oscillate between 0 and 100:
 - Crossovers between the lines signal potential trend changes
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, Any
+from typing import Any, Dict
 
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.errors import DataError
+import pandas as pd
+
 from ktrdr import get_logger
+from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 
 logger = get_logger(__name__)
 
@@ -61,7 +61,7 @@ class AroonIndicator(BaseIndicator):
             f"Initialized Aroon indicator with period={period}, include_oscillator={include_oscillator}"
         )
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Validate Aroon parameters.
 

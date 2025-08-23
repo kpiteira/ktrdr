@@ -17,13 +17,13 @@ The MFI oscillates between 0 and 100, with values above 80 typically indicating
 overbought conditions and values below 20 indicating oversold conditions.
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, Any
+from typing import Any, Dict
 
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.errors import DataError
+import pandas as pd
+
 from ktrdr import get_logger
+from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 
 logger = get_logger(__name__)
 
@@ -54,7 +54,7 @@ class MFIIndicator(BaseIndicator):
 
         logger.debug(f"Initialized MFI indicator with period={period}")
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Validate MFI parameters.
 

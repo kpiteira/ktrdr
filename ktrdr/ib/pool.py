@@ -13,10 +13,11 @@ This design prioritizes simplicity and reliability over complex optimization.
 
 import asyncio
 import time
-from typing import List, Optional
 from contextlib import asynccontextmanager
+from typing import List, Optional
 
 from ktrdr.logging import get_logger
+
 from .connection import IbConnection
 from .error_classifier import IbErrorClassifier, IbErrorType
 
@@ -54,7 +55,7 @@ class IbConnectionPool:
         self.max_connections = max_connections
 
         # Connection management
-        self.connections: List[IbConnection] = []
+        self.connections: list[IbConnection] = []
         self.lock = asyncio.Lock()
 
         # Client ID management (simple sequential approach)
@@ -373,7 +374,7 @@ class IbConnectionPool:
             "port": self.port,
         }
 
-    def get_connection_stats(self) -> List[dict]:
+    def get_connection_stats(self) -> list[dict]:
         """
         Get statistics for all connections in the pool.
 

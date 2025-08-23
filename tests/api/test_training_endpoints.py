@@ -32,7 +32,7 @@ class TestTrainingEndpoints:
     def test_start_training_success(self, client, mock_training_service):
         """Test starting a training operation successfully."""
         payload = {
-            "symbol": "AAPL",
+            "symbols": ["AAPL"],
             "timeframes": ["1h"],
             "strategy_name": "rsi_mean_reversion",
             "start_date": "2024-01-01",
@@ -46,7 +46,7 @@ class TestTrainingEndpoints:
         assert data["success"] is True
         assert data["task_id"].startswith("op_training_")  # Dynamic ID
         assert data["status"] == "training_started"
-        assert data["symbol"] == "AAPL"
+        assert data["symbols"] == ["AAPL"]
         assert data["timeframes"] == ["1h"]
         assert "estimated_duration_minutes" in data
 
@@ -58,7 +58,7 @@ class TestTrainingEndpoints:
     def test_start_training_with_optional_params(self, client, mock_training_service):
         """Test starting training with optional parameters."""
         payload = {
-            "symbol": "MSFT",
+            "symbols": ["MSFT"],
             "timeframes": ["1d"],
             "strategy_name": "rsi_mean_reversion",
             "task_id": "custom_task_id",
@@ -71,7 +71,7 @@ class TestTrainingEndpoints:
         assert data["success"] is True
         assert data["task_id"].startswith("op_training_")  # Dynamic ID generated
         assert data["status"] == "training_started"
-        assert data["symbol"] == "MSFT"
+        assert data["symbols"] == ["MSFT"]
         assert data["timeframes"] == ["1d"]
 
     @pytest.mark.api
@@ -92,7 +92,7 @@ class TestTrainingEndpoints:
         """Test handling service errors during training start."""
         # Test with a symbol that should work but will demonstrate error handling
         payload = {
-            "symbol": "AAPL",  # Use valid symbol to avoid validation errors
+            "symbols": ["AAPL"],  # Use valid symbol to avoid validation errors
             "timeframes": ["1h"],
             "strategy_name": "rsi_mean_reversion",
         }
@@ -104,7 +104,6 @@ class TestTrainingEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-
 
     @pytest.mark.api
     def test_get_model_performance_success(self, client, mock_training_service):
@@ -141,7 +140,7 @@ class TestTrainingEndpoints:
         """Test that training configuration uses proper defaults."""
         # Minimal payload - should use defaults for most config
         payload = {
-            "symbol": "AAPL",
+            "symbols": ["AAPL"],
             "timeframes": ["1h"],
             "strategy_name": "rsi_mean_reversion",
         }
@@ -150,14 +149,16 @@ class TestTrainingEndpoints:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["strategy_name"] == "rsi_mean_reversion"  # Strategy name should be in response
+        assert (
+            data["strategy_name"] == "rsi_mean_reversion"
+        )  # Strategy name should be in response
         assert data["timeframes"] == ["1h"]  # Timeframes should be in response
 
     @pytest.mark.api
     def test_training_large_config(self, client, mock_training_service):
         """Test training with large/complex configuration."""
         payload = {
-            "symbol": "AAPL",
+            "symbols": ["AAPL"],
             "timeframes": ["1m"],
             "strategy_name": "rsi_mean_reversion",
             "start_date": "2020-01-01",  # Long training period
@@ -190,7 +191,7 @@ class TestTrainingEndpoints:
     def test_training_with_custom_task_id(self, client, mock_training_service):
         """Test starting training with custom task ID."""
         payload = {
-            "symbol": "AAPL",
+            "symbols": ["AAPL"],
             "timeframes": ["1h"],
             "strategy_name": "rsi_mean_reversion",
             "task_id": "my_custom_training_id",
@@ -207,7 +208,7 @@ class TestTrainingEndpoints:
     def test_training_with_multiple_timeframes(self, client, mock_training_service):
         """Test training with multiple timeframes."""
         payload = {
-            "symbol": "AAPL",
+            "symbols": ["AAPL"],
             "timeframes": ["1h", "1d"],
             "strategy_name": "rsi_mean_reversion",
         }
@@ -224,7 +225,7 @@ class TestTrainingEndpoints:
     def test_training_with_empty_timeframes(self, client, mock_training_service):
         """Test training with empty timeframes list."""
         payload = {
-            "symbol": "AAPL",
+            "symbols": ["AAPL"],
             "timeframes": [],  # Empty list should be invalid
             "strategy_name": "rsi_mean_reversion",
         }

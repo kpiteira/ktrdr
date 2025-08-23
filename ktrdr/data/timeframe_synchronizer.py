@@ -13,15 +13,15 @@ Key Features:
 - Data quality validation across timeframes
 """
 
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Optional, Tuple, Union, Any
-from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, List, Optional, Tuple
 
-from ktrdr import get_logger, log_entry_exit, log_performance, with_context
-from ktrdr.errors import DataError, DataValidationError
+import numpy as np
+import pandas as pd
+
+from ktrdr import get_logger
+from ktrdr.errors import DataValidationError
 from ktrdr.utils.timezone_utils import TimestampManager
 
 # Get module logger
@@ -246,11 +246,11 @@ class TimeframeSynchronizer:
         return result
 
     def synchronize_multiple_timeframes(
-        self, data_dict: Dict[str, pd.DataFrame], reference_timeframe: str
-    ) -> Tuple[Dict[str, pd.DataFrame], SynchronizationStats]:
+        self, data_dict: dict[str, pd.DataFrame], reference_timeframe: str
+    ) -> tuple[dict[str, pd.DataFrame], SynchronizationStats]:
         """
         Validate and prepare multiple timeframes without destroying timeframe integrity.
-        
+
         This method does NOT expand or synchronize raw data to a common timeline.
         Each timeframe maintains its native temporal resolution for proper indicator calculation.
         Temporal alignment happens later in the FuzzyNeuralProcessor for neural network input.
@@ -294,9 +294,13 @@ class TimeframeSynchronizer:
 
         # Create statistics (no actual alignment performed)
         processing_time = time.time() - start_time
+        # successfully_aligned should be the number of non-reference timeframes (since we don't align)
+        non_reference_count = len(data_dict) - 1  # Exclude reference timeframe
         stats = SynchronizationStats(
             total_timeframes=len(data_dict),
-            successfully_aligned=len(validated_data),  # All validated timeframes
+            successfully_aligned=max(
+                0, non_reference_count
+            ),  # Only count non-reference timeframes
             failed_alignments=0,  # No alignment failures since we don't align
             reference_timeframe=reference_timeframe,
             reference_periods=len(data_dict[reference_timeframe]),
@@ -344,8 +348,8 @@ class TimeframeSynchronizer:
         return interpolated_data
 
     def validate_temporal_consistency(
-        self, data_dict: Dict[str, pd.DataFrame], tolerance_minutes: int = 1
-    ) -> Dict[str, bool]:
+        self, data_dict: dict[str, pd.DataFrame], tolerance_minutes: int = 1
+    ) -> dict[str, bool]:
         """
         Validate temporal consistency across timeframes.
 
@@ -476,7 +480,7 @@ class TimeframeSynchronizer:
         return max(0.0, min(1.0, quality_score))
 
     @staticmethod
-    def get_optimal_reference_timeframe(timeframes: List[str]) -> str:
+    def get_optimal_reference_timeframe(timeframes: list[str]) -> str:
         """
         Get the optimal reference timeframe for synchronization.
 
@@ -517,8 +521,8 @@ class TimeframeSynchronizer:
 
     @staticmethod
     def estimate_memory_usage(
-        data_dict: Dict[str, pd.DataFrame], target_timeframe: str
-    ) -> Dict[str, float]:
+        data_dict: dict[str, pd.DataFrame], target_timeframe: str
+    ) -> dict[str, float]:
         """
         Estimate memory usage for synchronization operation.
 
@@ -557,8 +561,8 @@ class TimeframeSynchronizer:
 
 # Utility functions for common operations
 def align_timeframes_to_lowest(
-    data_dict: Dict[str, pd.DataFrame],
-) -> Tuple[Dict[str, pd.DataFrame], str]:
+    data_dict: dict[str, pd.DataFrame],
+) -> tuple[dict[str, pd.DataFrame], str]:
     """
     Align all timeframes to the lowest (most granular) timeframe.
 
@@ -573,16 +577,24 @@ def align_timeframes_to_lowest(
         list(data_dict.keys())
     )
 
-    aligned_data, _ = synchronizer.synchronize_multiple_timeframes(
-        data_dict, reference_timeframe
-    )
+    # Get reference data
+    reference_data = data_dict[reference_timeframe]
+    aligned_data = {reference_timeframe: reference_data}  # Reference stays unchanged
+
+    # Align all other timeframes to reference
+    for timeframe, data in data_dict.items():
+        if timeframe != reference_timeframe:
+            alignment_result = synchronizer.forward_fill_alignment(
+                data, reference_data, timeframe, reference_timeframe
+            )
+            aligned_data[timeframe] = alignment_result.aligned_data
 
     return aligned_data, reference_timeframe
 
 
 def calculate_multi_timeframe_periods(
-    primary_timeframe: str, auxiliary_timeframes: List[str], primary_periods: int
-) -> Dict[str, int]:
+    primary_timeframe: str, auxiliary_timeframes: list[str], primary_periods: int
+) -> dict[str, int]:
     """
     Calculate required periods for all auxiliary timeframes.
 
@@ -604,7 +616,7 @@ def calculate_multi_timeframe_periods(
     return periods_dict
 
 
-def validate_timeframe_compatibility(timeframes: List[str]) -> List[str]:
+def validate_timeframe_compatibility(timeframes: list[str]) -> list[str]:
     """
     Validate and filter compatible timeframes.
 

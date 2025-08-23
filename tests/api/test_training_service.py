@@ -7,7 +7,7 @@ and integrates with the OperationsService framework.
 
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -80,9 +80,9 @@ def sample_training_config():
 def sample_training_params(sample_training_config):
     """Sample training parameters."""
     return {
-        "symbol": "AAPL",
-        "timeframe": "1h",
-        "config": sample_training_config,
+        "symbols": ["AAPL"],
+        "timeframes": ["1h"],
+        "strategy_name": "neuro_mean_reversion",
         "start_date": "2024-01-01",
         "end_date": "2024-06-01",
     }
@@ -102,9 +102,9 @@ class TestTrainingService:
         assert result["task_id"] == "test_training_id"
         assert result["status"] == "training_started"
         assert "AAPL" in result["message"]
-        assert result["symbol"] == "AAPL"
-        assert result["timeframe"] == "1h"
-        assert result["config"] == sample_training_params["config"]
+        assert result["symbols"] == ["AAPL"]
+        assert result["timeframes"] == ["1h"]
+        assert result["strategy_name"] == sample_training_params["strategy_name"]
 
         # Verify operations service was called correctly
         mock_operations_service.create_operation.assert_called_once()
@@ -154,7 +154,7 @@ class TestTrainingService:
                 "f1_score": 0.90,
             },
             "model_info": {
-                "model_size_mb": 15.2,
+                "model_size_bytes": 15952435,  # ~15.2 MB in bytes
                 "parameters_count": 142500,
                 "architecture": "mlp_64_32_16",
             },
@@ -171,7 +171,7 @@ class TestTrainingService:
         assert performance["status"] == "completed"
         assert performance["training_metrics"]["final_train_accuracy"] == 0.94
         assert performance["test_metrics"]["test_accuracy"] == 0.90
-        assert performance["model_info"]["model_size_mb"] == 15.2
+        assert performance["model_info"]["model_size_bytes"] == 15952435
 
     @pytest.mark.asyncio
     async def test_get_model_performance_not_completed(
@@ -345,6 +345,16 @@ class TestTrainingService:
     ):
         """Test the async training execution flow."""
         with (
+            patch(
+                "pathlib.Path.exists", return_value=True
+            ),  # Mock strategy file exists
+            patch(
+                "builtins.open",
+                mock_open(read_data="model:\n  training:\n    epochs: 100"),
+            ),
+            patch(
+                "yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}
+            ),
             patch("tempfile.NamedTemporaryFile") as mock_temp_file,
             patch("yaml.dump"),
             patch("pathlib.Path.unlink"),
@@ -370,8 +380,8 @@ class TestTrainingService:
             await training_service._run_training_async(
                 "test_operation_id",
                 "AAPL",
-                "1h",
-                sample_training_config,
+                ["1h"],  # timeframes is a list
+                "neuro_mean_reversion",  # use real strategy name
                 "2024-01-01",
                 "2024-06-01",
             )
@@ -391,6 +401,16 @@ class TestTrainingService:
     ):
         """Test handling of training failures."""
         with (
+            patch(
+                "pathlib.Path.exists", return_value=True
+            ),  # Mock strategy file exists
+            patch(
+                "builtins.open",
+                mock_open(read_data="model:\n  training:\n    epochs: 100"),
+            ),
+            patch(
+                "yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}
+            ),
             patch("tempfile.NamedTemporaryFile"),
             patch("yaml.dump"),
             patch("pathlib.Path.unlink"),
@@ -408,8 +428,8 @@ class TestTrainingService:
             await training_service._run_training_async(
                 "test_operation_id",
                 "AAPL",
-                "1h",
-                sample_training_config,
+                ["1h"],  # timeframes is a list
+                "neuro_mean_reversion",  # use real strategy name
                 "2024-01-01",
                 "2024-06-01",
             )

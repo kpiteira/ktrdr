@@ -1,12 +1,13 @@
 """Model storage and versioning system."""
 
-import torch
 import json
-from pathlib import Path
-from typing import Dict, Any, Optional, List
-from datetime import datetime
-import shutil
 import pickle
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import torch
 
 
 class ModelStorage:
@@ -27,10 +28,10 @@ class ModelStorage:
         strategy_name: str,
         symbol: str,
         timeframe: str,
-        config: Dict[str, Any],
-        training_metrics: Dict[str, Any],
-        feature_names: List[str],
-        feature_importance: Optional[Dict[str, float]] = None,
+        config: dict[str, Any],
+        training_metrics: dict[str, Any],
+        feature_names: list[str],
+        feature_importance: Optional[dict[str, float]] = None,
         scaler: Optional[Any] = None,
     ) -> str:
         """Save a trained model with all metadata.
@@ -69,7 +70,7 @@ class ModelStorage:
         # Determine model type (Phase 4 of feature engineering removal)
         is_pure_fuzzy = scaler is None
         model_version = "pure_fuzzy_v1" if is_pure_fuzzy else "mixed_features_v1"
-        
+
         # Save feature information with enhanced metadata
         if is_pure_fuzzy:
             # Pure fuzzy model - enhanced metadata
@@ -81,11 +82,11 @@ class ModelStorage:
                 "feature_count": len(feature_names),
                 "temporal_config": {
                     "lookback_periods": feature_config.get("lookback_periods", 0),
-                    "enabled": feature_config.get("lookback_periods", 0) > 0
+                    "enabled": feature_config.get("lookback_periods", 0) > 0,
                 },
                 "scaling_info": {
                     "requires_scaling": False,
-                    "reason": "fuzzy_values_already_normalized"
+                    "reason": "fuzzy_values_already_normalized",
                 },
                 "feature_importance": feature_importance or {},
             }
@@ -98,11 +99,11 @@ class ModelStorage:
                 "feature_count": len(feature_names),
                 "scaling_info": {
                     "requires_scaling": True,
-                    "scaler_type": type(scaler).__name__ if scaler else None
+                    "scaler_type": type(scaler).__name__ if scaler else None,
                 },
                 "feature_importance": feature_importance or {},
             }
-        
+
         with open(model_dir / "features.json", "w") as f:
             json.dump(feature_info, f, indent=2)
 
@@ -132,8 +133,8 @@ class ModelStorage:
             "feature_engineering": {
                 "removed": is_pure_fuzzy,
                 "scaler_required": not is_pure_fuzzy,
-                "fuzzy_only": is_pure_fuzzy
-            }
+                "fuzzy_only": is_pure_fuzzy,
+            },
         }
         with open(model_dir / "metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
@@ -149,7 +150,7 @@ class ModelStorage:
         symbol: str,
         timeframe: str,
         version: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Load a saved model with all metadata.
 
         Args:
@@ -190,19 +191,19 @@ class ModelStorage:
             model = model_state  # Return state dict for now
 
         # Load configuration
-        with open(model_dir / "config.json", "r") as f:
+        with open(model_dir / "config.json") as f:
             config = json.load(f)
 
         # Load metrics
-        with open(model_dir / "metrics.json", "r") as f:
+        with open(model_dir / "metrics.json") as f:
             metrics = json.load(f)
 
         # Load features
-        with open(model_dir / "features.json", "r") as f:
+        with open(model_dir / "features.json") as f:
             features = json.load(f)
 
         # Load metadata
-        with open(model_dir / "metadata.json", "r") as f:
+        with open(model_dir / "metadata.json") as f:
             metadata = json.load(f)
 
         # Load scaler if exists (backward compatibility + mixed feature models)
@@ -215,7 +216,10 @@ class ModelStorage:
         # Determine model architecture type
         model_version = metadata.get("model_version", "legacy")
         architecture_type = metadata.get("architecture_type", "unknown")
-        is_pure_fuzzy = architecture_type == "pure_fuzzy" or features.get("feature_type") == "pure_fuzzy"
+        is_pure_fuzzy = (
+            architecture_type == "pure_fuzzy"
+            or features.get("feature_type") == "pure_fuzzy"
+        )
 
         return {
             "model": model,
@@ -230,7 +234,7 @@ class ModelStorage:
             "is_pure_fuzzy": is_pure_fuzzy,
         }
 
-    def list_models(self, strategy_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_models(self, strategy_name: Optional[str] = None) -> list[dict[str, Any]]:
         """List all available models.
 
         Args:
@@ -257,7 +261,7 @@ class ModelStorage:
 
                 metadata_path = model_dir / "metadata.json"
                 if metadata_path.exists():
-                    with open(metadata_path, "r") as f:
+                    with open(metadata_path) as f:
                         metadata = json.load(f)
 
                     models.append(

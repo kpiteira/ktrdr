@@ -5,6 +5,7 @@ This module defines the main API router with versioned endpoints.
 """
 
 from fastapi import APIRouter, Depends
+
 from ktrdr.api.config import APIConfig
 from ktrdr.api.dependencies import get_api_config
 
@@ -25,19 +26,19 @@ async def health_check(config: APIConfig = Depends(get_api_config)):
 
 
 # Import and include other endpoint routers
-from ktrdr.api.endpoints.data import router as data_router
-from ktrdr.api.endpoints.indicators import router as indicators_router
-from ktrdr.api.endpoints.fuzzy import router as fuzzy_router
-from ktrdr.api.endpoints.ib import router as ib_router
-
 # Temporarily disabled: System endpoints need updating for new architecture
 # from ktrdr.api.endpoints.system import router as system_router
 from ktrdr.api.endpoints.backtesting import router as backtesting_router
-from ktrdr.api.endpoints.strategies import router as strategies_router
+from ktrdr.api.endpoints.data import router as data_router
+from ktrdr.api.endpoints.fuzzy import router as fuzzy_router
 from ktrdr.api.endpoints.gap_analysis import router as gap_analysis_router
-from ktrdr.api.endpoints.training import router as training_router
+from ktrdr.api.endpoints.ib import router as ib_router
+from ktrdr.api.endpoints.indicators import router as indicators_router
 from ktrdr.api.endpoints.models import router as models_router
 from ktrdr.api.endpoints.operations import router as operations_router
+from ktrdr.api.endpoints.strategies import router as strategies_router
+from ktrdr.api.endpoints.training import router as training_router
+
 # Temporarily disabled while updating multi-timeframe for pure fuzzy
 # from ktrdr.api.endpoints.multi_timeframe_decisions import (
 #     router as multi_timeframe_decisions_router,

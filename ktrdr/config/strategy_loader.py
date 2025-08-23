@@ -1,24 +1,25 @@
 """Strategy configuration loading with support for both v1 (legacy) and v2 (multi-scope) formats."""
 
-import yaml
 from pathlib import Path
-from typing import Union, Dict, Any, Tuple, Optional, List
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import yaml
 from pydantic import ValidationError
 
 from ktrdr import get_logger
 from ktrdr.config.models import (
-    StrategyConfigurationV2,
-    LegacyStrategyConfiguration,
-    StrategyScope,
-    SymbolMode,
-    TimeframeMode,
-    TargetSymbolMode,
-    SymbolConfiguration,
-    TimeframeConfiguration,
-    TrainingDataConfiguration,
-    TargetSymbolConfiguration,
-    TargetTimeframeConfiguration,
     DeploymentConfiguration,
+    LegacyStrategyConfiguration,
+    StrategyConfigurationV2,
+    StrategyScope,
+    SymbolConfiguration,
+    SymbolMode,
+    TargetSymbolConfiguration,
+    TargetSymbolMode,
+    TargetTimeframeConfiguration,
+    TimeframeConfiguration,
+    TimeframeMode,
+    TrainingDataConfiguration,
 )
 
 logger = get_logger(__name__)
@@ -29,7 +30,7 @@ class StrategyConfigurationLoader:
 
     def load_strategy_config(
         self, config_path: Union[str, Path]
-    ) -> Tuple[Union[StrategyConfigurationV2, LegacyStrategyConfiguration], bool]:
+    ) -> tuple[Union[StrategyConfigurationV2, LegacyStrategyConfiguration], bool]:
         """
         Load strategy configuration from YAML file.
 
@@ -50,24 +51,30 @@ class StrategyConfigurationLoader:
 
         # Load YAML content
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 raw_config = yaml.safe_load(f)
         except yaml.YAMLError as e:
             raise ValueError(f"Invalid YAML in {config_path}: {e}")
 
         if not isinstance(raw_config, dict):
-            raise ValueError(f"Strategy configuration must be a dictionary: {config_path}")
+            raise ValueError(
+                f"Strategy configuration must be a dictionary: {config_path}"
+            )
 
         # Detect format and validate
         is_v2_format = self._detect_v2_format(raw_config)
 
         if is_v2_format:
-            logger.info(f"Loading v2 multi-scope strategy configuration: {config_path.name}")
+            logger.info(
+                f"Loading v2 multi-scope strategy configuration: {config_path.name}"
+            )
             try:
                 config = StrategyConfigurationV2(**raw_config)
                 return config, True
             except ValidationError as e:
-                raise ValueError(f"V2 strategy validation failed for {config_path}: {e}") from e
+                raise ValueError(
+                    f"V2 strategy validation failed for {config_path}: {e}"
+                ) from e
         else:
             logger.info(f"Loading v1 legacy strategy configuration: {config_path.name}")
             try:
@@ -76,9 +83,11 @@ class StrategyConfigurationLoader:
                 config = LegacyStrategyConfiguration(**raw_config)
                 return config, False
             except ValidationError as e:
-                raise ValueError(f"Legacy strategy validation failed for {config_path}: {e}") from e
+                raise ValueError(
+                    f"Legacy strategy validation failed for {config_path}: {e}"
+                ) from e
 
-    def _detect_v2_format(self, config: Dict[str, Any]) -> bool:
+    def _detect_v2_format(self, config: dict[str, Any]) -> bool:
         """
         Detect if configuration uses v2 format.
 
@@ -105,9 +114,9 @@ class StrategyConfigurationLoader:
         return has_v2_fields or has_v2_structure
 
     def migrate_v1_to_v2(
-        self, 
+        self,
         legacy_config: LegacyStrategyConfiguration,
-        output_path: Optional[Union[str, Path]] = None
+        output_path: Optional[Union[str, Path]] = None,
     ) -> StrategyConfigurationV2:
         """
         Migrate v1 legacy configuration to v2 format.
@@ -128,40 +137,43 @@ class StrategyConfigurationLoader:
 
         # Determine strategy scope
         if len(legacy_symbols) > 1 or len(legacy_timeframes) > 1:
-            scope = StrategyScope.SYMBOL_GROUP  # Multi-symbol/timeframe suggests group scope
+            scope = (
+                StrategyScope.SYMBOL_GROUP
+            )  # Multi-symbol/timeframe suggests group scope
         else:
-            scope = StrategyScope.SYMBOL_SPECIFIC  # Single symbol/timeframe is legacy specific
+            scope = (
+                StrategyScope.SYMBOL_SPECIFIC
+            )  # Single symbol/timeframe is legacy specific
 
         # Create symbol configuration
         if len(legacy_symbols) <= 1:
             symbol_config = SymbolConfiguration(
                 mode=SymbolMode.SINGLE,
-                symbol=legacy_symbols[0] if legacy_symbols else "PLACEHOLDER"
+                symbol=legacy_symbols[0] if legacy_symbols else "PLACEHOLDER",
             )
         else:
             symbol_config = SymbolConfiguration(
-                mode=SymbolMode.MULTI_SYMBOL,
-                list=legacy_symbols
+                mode=SymbolMode.MULTI_SYMBOL, list=legacy_symbols
             )
 
         # Create timeframe configuration
         if len(legacy_timeframes) <= 1:
             timeframe_config = TimeframeConfiguration(
                 mode=TimeframeMode.SINGLE,
-                timeframe=legacy_timeframes[0] if legacy_timeframes else "1h"
+                timeframe=legacy_timeframes[0] if legacy_timeframes else "1h",
             )
         else:
             timeframe_config = TimeframeConfiguration(
                 mode=TimeframeMode.MULTI_TIMEFRAME,
                 list=legacy_timeframes,
-                base_timeframe=legacy_timeframes[0]  # Use first as base
+                base_timeframe=legacy_timeframes[0],  # Use first as base
             )
 
         # Create training data configuration
         training_data_config = TrainingDataConfiguration(
             symbols=symbol_config,
             timeframes=timeframe_config,
-            history_required=data_section.get("history_required", 200)
+            history_required=data_section.get("history_required", 200),
         )
 
         # Create deployment configuration
@@ -176,19 +188,31 @@ class StrategyConfigurationLoader:
 
         target_timeframes = TargetTimeframeConfiguration(
             mode=timeframe_config.mode,
-            supported=timeframe_config.list if timeframe_config.mode == TimeframeMode.MULTI_TIMEFRAME else None,
-            timeframe=timeframe_config.timeframe if timeframe_config.mode == TimeframeMode.SINGLE else None
+            supported=(
+                timeframe_config.list
+                if timeframe_config.mode == TimeframeMode.MULTI_TIMEFRAME
+                else None
+            ),
+            timeframe=(
+                timeframe_config.timeframe
+                if timeframe_config.mode == TimeframeMode.SINGLE
+                else None
+            ),
         )
 
         deployment_config = DeploymentConfiguration(
-            target_symbols=target_symbols,
-            target_timeframes=target_timeframes
+            target_symbols=target_symbols, target_timeframes=target_timeframes
         )
 
         # Create v2 configuration
         v2_config = StrategyConfigurationV2(
-            name=f"{legacy_config.name}_multi" if scope != StrategyScope.SYMBOL_SPECIFIC else legacy_config.name,
-            description=legacy_config.description or f"Migrated from v1: {legacy_config.name}",
+            name=(
+                f"{legacy_config.name}_multi"
+                if scope != StrategyScope.SYMBOL_SPECIFIC
+                else legacy_config.name
+            ),
+            description=legacy_config.description
+            or f"Migrated from v1: {legacy_config.name}",
             version=f"{legacy_config.version or '1.0'}_v2",
             scope=scope,
             training_data=training_data_config,
@@ -200,59 +224,56 @@ class StrategyConfigurationLoader:
             training=legacy_config.training,
             orchestrator=legacy_config.orchestrator,
             risk_management=legacy_config.risk_management,
-            backtesting=legacy_config.backtesting
+            backtesting=legacy_config.backtesting,
         )
 
         # Save migrated config if output path provided
         if output_path:
             output_path = Path(output_path)
-            with open(output_path, 'w') as f:
+            with open(output_path, "w") as f:
                 # Convert to dict for YAML serialization with enum value extraction
-                config_dict = v2_config.model_dump(exclude_unset=True, mode='json')
+                config_dict = v2_config.model_dump(exclude_unset=True, mode="json")
                 yaml.dump(config_dict, f, default_flow_style=False, indent=2)
             logger.info(f"Migrated configuration saved to: {output_path}")
 
         return v2_config
 
-    def _add_legacy_defaults(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _add_legacy_defaults(self, config: dict[str, Any]) -> dict[str, Any]:
         """
         Add sensible defaults for missing required fields in legacy strategies.
-        
+
         Args:
             config: Raw configuration dictionary
-            
+
         Returns:
             Configuration with missing required fields filled with defaults
         """
         # Create a copy to avoid modifying the original
         config = config.copy()
-        
+
         # Add default decisions section if missing
         if "decisions" not in config:
             config["decisions"] = {
                 "output_format": "classification",
                 "confidence_threshold": 0.6,
                 "position_awareness": True,
-                "filters": {
-                    "min_signal_separation": 4,
-                    "volume_filter": False
-                }
+                "filters": {"min_signal_separation": 4, "volume_filter": False},
             }
-            logger.info(f"Added default decisions section to legacy strategy")
-        
-        # Add default data section if missing 
+            logger.info("Added default decisions section to legacy strategy")
+
+        # Add default data section if missing
         if "data" not in config:
             config["data"] = {
                 "symbols": ["AAPL"],  # Default single symbol
                 "timeframes": ["1h"],  # Default single timeframe
-                "history_required": 200
+                "history_required": 200,
             }
-            logger.info(f"Added default data section to legacy strategy")
-            
+            logger.info("Added default data section to legacy strategy")
+
         # Ensure required training fields exist
         if "training" not in config:
             config["training"] = {}
-            
+
         training = config["training"]
         if "method" not in training:
             training["method"] = "supervised"
@@ -260,15 +281,11 @@ class StrategyConfigurationLoader:
             training["labels"] = {
                 "source": "zigzag",
                 "zigzag_threshold": 0.03,
-                "label_lookahead": 20
+                "label_lookahead": 20,
             }
         if "data_split" not in training:
-            training["data_split"] = {
-                "train": 0.7,
-                "validation": 0.15,
-                "test": 0.15
-            }
-            
+            training["data_split"] = {"train": 0.7, "validation": 0.15, "test": 0.15}
+
         # Ensure model section has required fields
         if "model" in config:
             model = config["model"]
@@ -279,14 +296,14 @@ class StrategyConfigurationLoader:
                     "hidden_layers": [50, 25],
                     "activation": "relu",
                     "output_activation": "softmax",
-                    "dropout": 0.2
+                    "dropout": 0.2,
                 }
             if "training" not in model:
                 model["training"] = {
                     "learning_rate": 0.001,
                     "batch_size": 32,
                     "epochs": 100,
-                    "optimizer": "adam"
+                    "optimizer": "adam",
                 }
             if "features" not in model:
                 model["features"] = {
@@ -294,14 +311,14 @@ class StrategyConfigurationLoader:
                     "include_volume_context": False,
                     "include_raw_indicators": False,
                     "lookback_periods": 2,
-                    "scale_features": False
+                    "scale_features": False,
                 }
-        
+
         return config
 
     def extract_training_symbols_and_timeframes(
         self, config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration]
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         """
         Extract training symbols and timeframes from any config format.
 
@@ -322,7 +339,9 @@ class StrategyConfigurationLoader:
                 symbols = symbols_config.list or []
 
             if timeframes_config.mode == TimeframeMode.SINGLE:
-                timeframes = [timeframes_config.timeframe] if timeframes_config.timeframe else []
+                timeframes = (
+                    [timeframes_config.timeframe] if timeframes_config.timeframe else []
+                )
             else:
                 timeframes = timeframes_config.list or []
 
@@ -331,7 +350,7 @@ class StrategyConfigurationLoader:
             data_section = config.data or {}
             symbols = data_section.get("symbols", [])
             timeframes = data_section.get("timeframes", [])
-            
+
             # Ensure they're lists
             if isinstance(symbols, str):
                 symbols = [symbols]
@@ -340,7 +359,9 @@ class StrategyConfigurationLoader:
 
         return symbols, timeframes
 
-    def is_multi_scope_strategy(self, config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration]) -> bool:
+    def is_multi_scope_strategy(
+        self, config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration]
+    ) -> bool:
         """
         Check if strategy is multi-scope (supports multiple symbols/timeframes).
 
@@ -355,7 +376,7 @@ class StrategyConfigurationLoader:
 
     def get_model_storage_path_components(
         self, config: Union[StrategyConfigurationV2, LegacyStrategyConfiguration]
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         Get model storage path components based on configuration.
 
@@ -368,7 +389,7 @@ class StrategyConfigurationLoader:
         if isinstance(config, StrategyConfigurationV2):
             # V2 format: scope-based naming
             strategy_dir = config.name
-            
+
             if config.scope == StrategyScope.UNIVERSAL:
                 model_id = "universal"
             elif config.scope == StrategyScope.SYMBOL_GROUP:
@@ -388,7 +409,9 @@ class StrategyConfigurationLoader:
                     model_id = "symbol_group"
             else:
                 # Symbol specific - use legacy format
-                symbols, timeframes = self.extract_training_symbols_and_timeframes(config)
+                symbols, timeframes = self.extract_training_symbols_and_timeframes(
+                    config
+                )
                 symbol = symbols[0] if symbols else "unknown"
                 timeframe = timeframes[0] if timeframes else "1h"
                 model_id = f"{symbol.lower()}_{timeframe}"

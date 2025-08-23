@@ -4,20 +4,19 @@ This module provides optimized processing methods for large datasets and
 high-frequency scenarios.
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Union, Callable, Any
-from dataclasses import dataclass
-from functools import lru_cache
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
+from dataclasses import dataclass
+from functools import lru_cache
+from typing import Any, Dict, Optional
+
+import pandas as pd
 
 from ktrdr import get_logger
+from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.indicators.multi_timeframe_indicator_engine import (
     MultiTimeframeIndicatorEngine,
 )
-from ktrdr.indicators.indicator_engine import IndicatorEngine
 
 logger = get_logger(__name__)
 
@@ -108,8 +107,8 @@ class ChunkedProcessor:
             return pd.DataFrame()
 
     def process_multi_timeframe_chunked(
-        self, data: Dict[str, pd.DataFrame], engine: MultiTimeframeIndicatorEngine
-    ) -> Dict[str, pd.DataFrame]:
+        self, data: dict[str, pd.DataFrame], engine: MultiTimeframeIndicatorEngine
+    ) -> dict[str, pd.DataFrame]:
         """
         Process multi-timeframe data using chunked processing.
 
@@ -176,8 +175,8 @@ class ParallelProcessor:
             raise
 
     def process_multi_timeframe_parallel(
-        self, data: Dict[str, pd.DataFrame], engine: MultiTimeframeIndicatorEngine
-    ) -> Dict[str, pd.DataFrame]:
+        self, data: dict[str, pd.DataFrame], engine: MultiTimeframeIndicatorEngine
+    ) -> dict[str, pd.DataFrame]:
         """
         Process multiple timeframes in parallel.
 
@@ -245,13 +244,13 @@ class IncrementalProcessor:
             lookback_window: Number of historical rows to maintain for indicator computation
         """
         self.lookback_window = lookback_window
-        self.cached_data: Dict[str, pd.DataFrame] = {}
-        self.cached_results: Dict[str, pd.DataFrame] = {}
+        self.cached_data: dict[str, pd.DataFrame] = {}
+        self.cached_results: dict[str, pd.DataFrame] = {}
         self.logger = get_logger(__name__)
 
     def update_incremental(
-        self, new_data: Dict[str, pd.DataFrame], engine: MultiTimeframeIndicatorEngine
-    ) -> Dict[str, pd.DataFrame]:
+        self, new_data: dict[str, pd.DataFrame], engine: MultiTimeframeIndicatorEngine
+    ) -> dict[str, pd.DataFrame]:
         """
         Process incremental data updates efficiently.
 
@@ -350,10 +349,10 @@ class OptimizedMultiTimeframeEngine:
 
     def apply_multi_timeframe_optimized(
         self,
-        data: Dict[str, pd.DataFrame],
+        data: dict[str, pd.DataFrame],
         force_chunking: bool = False,
         force_parallel: bool = False,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """
         Apply indicators with automatic optimization selection.
 
@@ -408,8 +407,8 @@ class OptimizedMultiTimeframeEngine:
         return results
 
     def _process_chunked_parallel(
-        self, data: Dict[str, pd.DataFrame]
-    ) -> Dict[str, pd.DataFrame]:
+        self, data: dict[str, pd.DataFrame]
+    ) -> dict[str, pd.DataFrame]:
         """Process data using both chunking and parallel processing."""
 
         # Process each timeframe in parallel, using chunking within each timeframe
@@ -448,8 +447,8 @@ class OptimizedMultiTimeframeEngine:
         return results
 
     def apply_incremental(
-        self, new_data: Dict[str, pd.DataFrame]
-    ) -> Dict[str, pd.DataFrame]:
+        self, new_data: dict[str, pd.DataFrame]
+    ) -> dict[str, pd.DataFrame]:
         """
         Apply indicators to incremental data updates.
 
@@ -461,7 +460,7 @@ class OptimizedMultiTimeframeEngine:
         """
         return self.incremental_processor.update_incremental(new_data, self.base_engine)
 
-    def get_performance_metrics(self) -> Dict[str, Any]:
+    def get_performance_metrics(self) -> dict[str, Any]:
         """Get performance metrics and recommendations."""
         metrics = {
             "optimizations_enabled": {

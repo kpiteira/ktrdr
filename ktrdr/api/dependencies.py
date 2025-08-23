@@ -6,15 +6,16 @@ These dependencies are used to provide services and configuration to API endpoin
 """
 
 from typing import Annotated
+
 from fastapi import Depends
 
 from ktrdr.api.config import APIConfig
 from ktrdr.api.services.data_service import DataService
-from ktrdr.api.services.indicator_service import IndicatorService
 from ktrdr.api.services.fuzzy_service import FuzzyService
+from ktrdr.api.services.indicator_service import IndicatorService
 from ktrdr.api.services.operations_service import (
-    get_operations_service,
     OperationsService,
+    get_operations_service,
 )
 from ktrdr.data.data_manager import DataManager
 

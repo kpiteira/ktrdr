@@ -1,16 +1,16 @@
 """Model training with PyTorch for neuro-fuzzy strategies."""
 
+import json
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-import numpy as np
-from typing import Dict, Any, Tuple, Optional, List
-from dataclasses import dataclass
-import time
-from pathlib import Path
-import json
-from datetime import datetime
 
 from .analytics import TrainingAnalyzer
 from .multi_symbol_data_loader import MultiSymbolDataLoader
@@ -90,7 +90,7 @@ class EarlyStopping:
 class ModelTrainer:
     """Handle PyTorch training loop with advanced features."""
 
-    def __init__(self, config: Dict[str, Any], progress_callback=None):
+    def __init__(self, config: dict[str, Any], progress_callback=None):
         """Initialize trainer.
 
         Args:
@@ -102,20 +102,25 @@ class ModelTrainer:
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
             print(f"🚀 Using CUDA GPU: {torch.cuda.get_device_name(0)}")
-        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             self.device = torch.device("mps")
             print("🚀 Using Apple Silicon GPU (MPS)")
         else:
             self.device = torch.device("cpu")
             print("⚠️ Using CPU - GPU acceleration not available")
-        self.history: List[TrainingMetrics] = []
+        self.history: list[TrainingMetrics] = []
         self.best_model_state = None
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
-        
+
         # Analytics setup - check both direct config and full_config
         full_config = config.get("full_config", config)
-        self.analytics_enabled = full_config.get("model", {}).get("training", {}).get("analytics", {}).get("enabled", False)
+        self.analytics_enabled = (
+            full_config.get("model", {})
+            .get("training", {})
+            .get("analytics", {})
+            .get("enabled", False)
+        )
         self.analyzer: Optional[TrainingAnalyzer] = None
         if self.analytics_enabled:
             self._setup_analytics(full_config)
@@ -124,18 +129,18 @@ class ModelTrainer:
         """Setup analytics system for detailed training monitoring."""
         try:
             # Generate unique run ID
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            symbol = full_config.get('symbol', 'unknown')
-            strategy = full_config.get('name', 'unknown')
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            symbol = full_config.get("symbol", "unknown")
+            strategy = full_config.get("name", "unknown")
             run_id = f"{symbol}_{strategy}_{timestamp}"
-            
+
             # Create analytics directory
             analytics_dir = Path("training_analytics/runs") / run_id
-            
+
             # Initialize analyzer
             self.analyzer = TrainingAnalyzer(run_id, analytics_dir, full_config)
             print(f"🔍 Analytics enabled - Run ID: {run_id}")
-            
+
         except Exception as e:
             print(f"⚠️ Failed to setup analytics: {e}")
             self.analytics_enabled = False
@@ -148,7 +153,7 @@ class ModelTrainer:
         y_train: torch.Tensor,
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train the neural network model.
 
         Args:
@@ -220,23 +225,39 @@ class ModelTrainer:
             for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
                 # DEBUG: Check for NaN in first batch of first epoch
                 if epoch == 0 and batch_idx == 0:
-                    print(f"🔍 DEBUG: First batch - X contains NaN: {torch.isnan(batch_X).any()}")
-                    print(f"🔍 DEBUG: First batch - y contains NaN: {torch.isnan(batch_y).any()}")
-                    print(f"🔍 DEBUG: First batch - X shape: {batch_X.shape}, y shape: {batch_y.shape}")
-                    print(f"🔍 DEBUG: First batch - X min/max: {batch_X.min():.6f}/{batch_X.max():.6f}")
-                    print(f"🔍 DEBUG: First batch - X contains inf: {torch.isinf(batch_X).any()}")
-                    print(f"🔍 DEBUG: First batch - y unique values: {torch.unique(batch_y)}")
-                
+                    print(
+                        f"🔍 DEBUG: First batch - X contains NaN: {torch.isnan(batch_X).any()}"
+                    )
+                    print(
+                        f"🔍 DEBUG: First batch - y contains NaN: {torch.isnan(batch_y).any()}"
+                    )
+                    print(
+                        f"🔍 DEBUG: First batch - X shape: {batch_X.shape}, y shape: {batch_y.shape}"
+                    )
+                    print(
+                        f"🔍 DEBUG: First batch - X min/max: {batch_X.min():.6f}/{batch_X.max():.6f}"
+                    )
+                    print(
+                        f"🔍 DEBUG: First batch - X contains inf: {torch.isinf(batch_X).any()}"
+                    )
+                    print(
+                        f"🔍 DEBUG: First batch - y unique values: {torch.unique(batch_y)}"
+                    )
+
                 # Forward pass
                 outputs = model(batch_X)
-                
+
                 # DEBUG: Check outputs and loss
                 if epoch == 0 and batch_idx == 0:
-                    print(f"🔍 DEBUG: Model outputs contains NaN: {torch.isnan(outputs).any()}")
-                    print(f"🔍 DEBUG: Model outputs min/max: {outputs.min():.6f}/{outputs.max():.6f}")
-                
+                    print(
+                        f"🔍 DEBUG: Model outputs contains NaN: {torch.isnan(outputs).any()}"
+                    )
+                    print(
+                        f"🔍 DEBUG: Model outputs min/max: {outputs.min():.6f}/{outputs.max():.6f}"
+                    )
+
                 loss = criterion(outputs, batch_y)
-                
+
                 # DEBUG: Check loss immediately after calculation
                 if epoch == 0 and batch_idx == 0:
                     print(f"🔍 DEBUG: Loss value: {loss.item():.6f}")
@@ -271,35 +292,37 @@ class ModelTrainer:
                 _, predicted = torch.max(outputs.data, 1)
                 train_total += batch_y.size(0)
                 train_correct += (predicted == batch_y).sum().item()
-                
+
                 # Batch-level progress callback (every 10 batches to avoid spam)
                 if self.progress_callback and batch_idx % 10 == 0:
                     try:
                         completed_batches = epoch * total_batches_per_epoch + batch_idx
                         current_train_loss = train_loss / max(train_total, 1)
                         current_train_acc = train_correct / max(train_total, 1)
-                        
+
                         # Calculate bars processed (market data points)
                         bars_processed_this_epoch = batch_idx * batch_size
-                        total_bars_processed = epoch * total_bars + bars_processed_this_epoch
-                        
+                        total_bars_processed = (
+                            epoch * total_bars + bars_processed_this_epoch
+                        )
+
                         # Create batch-level metrics
                         batch_metrics = {
-                            'epoch': epoch,
-                            'total_epochs': epochs,
-                            'batch': batch_idx,
-                            'total_batches_per_epoch': total_batches_per_epoch,
-                            'completed_batches': completed_batches,
-                            'total_batches': total_batches,
-                            'bars_processed_this_epoch': bars_processed_this_epoch,
-                            'total_bars_processed': total_bars_processed,
-                            'total_bars': total_bars,
-                            'total_bars_all_epochs': total_bars_all_epochs,
-                            'train_loss': current_train_loss,
-                            'train_accuracy': current_train_acc,
-                            'progress_type': 'batch'
+                            "epoch": epoch,
+                            "total_epochs": epochs,
+                            "batch": batch_idx,
+                            "total_batches_per_epoch": total_batches_per_epoch,
+                            "completed_batches": completed_batches,
+                            "total_batches": total_batches,
+                            "bars_processed_this_epoch": bars_processed_this_epoch,
+                            "total_bars_processed": total_bars_processed,
+                            "total_bars": total_bars,
+                            "total_bars_all_epochs": total_bars_all_epochs,
+                            "train_loss": current_train_loss,
+                            "train_accuracy": current_train_acc,
+                            "progress_type": "batch",
                         }
-                        
+
                         self.progress_callback(epoch, epochs, batch_metrics)
                     except Exception as e:
                         print(f"Warning: Batch progress callback failed: {e}")
@@ -338,7 +361,7 @@ class ModelTrainer:
                 duration=duration,
             )
             self.history.append(metrics)
-            
+
             # Analytics collection (if enabled)
             if self.analyzer:
                 try:
@@ -346,38 +369,47 @@ class ModelTrainer:
                     if X_val is not None:
                         # Use validation data for more reliable metrics
                         analytics_outputs = val_outputs
-                        analytics_predicted = val_predicted 
+                        analytics_predicted = val_predicted
                         analytics_true = y_val
                     else:
                         # Fallback to training data if no validation
                         with torch.no_grad():
                             model.eval()
-                            analytics_outputs = model(X_train[:1000])  # Sample for efficiency
-                            _, analytics_predicted = torch.max(analytics_outputs.data, 1)
+                            analytics_outputs = model(
+                                X_train[:1000]
+                            )  # Sample for efficiency
+                            _, analytics_predicted = torch.max(
+                                analytics_outputs.data, 1
+                            )
                             analytics_true = y_train[:1000]
                             model.train()
-                    
+
                     # Collect detailed analytics
                     detailed_metrics = self.analyzer.collect_epoch_metrics(
                         epoch=epoch,
                         model=model,
-                        train_metrics={'loss': avg_train_loss, 'accuracy': train_accuracy},
-                        val_metrics={'loss': val_loss, 'accuracy': val_accuracy},
+                        train_metrics={
+                            "loss": avg_train_loss,
+                            "accuracy": train_accuracy,
+                        },
+                        val_metrics={"loss": val_loss, "accuracy": val_accuracy},
                         optimizer=optimizer,
                         y_pred=analytics_predicted,
                         y_true=analytics_true,
                         model_outputs=analytics_outputs,
                         batch_count=len(train_loader),
                         total_samples=len(X_train),
-                        early_stopping_triggered=False  # Will be updated if early stopping triggers
+                        early_stopping_triggered=False,  # Will be updated if early stopping triggers
                     )
-                    
+
                     # Log any alerts
-                    if hasattr(self.analyzer, 'alerts') and self.analyzer.alerts:
-                        recent_alerts = [a for a in self.analyzer.alerts if a.get('epoch') == epoch]
+                    if hasattr(self.analyzer, "alerts") and self.analyzer.alerts:
+                        recent_alerts = [
+                            a for a in self.analyzer.alerts if a.get("epoch") == epoch
+                        ]
                         for alert in recent_alerts:
                             print(f"🚨 Training Alert: {alert['message']}")
-                            
+
                 except Exception as e:
                     print(f"⚠️ Analytics collection failed for epoch {epoch}: {e}")
                     # Continue training even if analytics fail
@@ -400,25 +432,26 @@ class ModelTrainer:
             # Progress logging
             if epoch % 10 == 0 or epoch == epochs - 1:
                 self._log_progress(metrics)
-            
+
             # Progress callback for external monitoring (e.g., API progress updates)
             if self.progress_callback:
                 try:
                     # Epoch-level metrics (complete epoch with validation)
                     epoch_metrics = {
-                        'epoch': epoch,
-                        'total_epochs': epochs,
-                        'total_batches_per_epoch': total_batches_per_epoch,
-                        'completed_batches': (epoch + 1) * total_batches_per_epoch,
-                        'total_batches': total_batches,
-                        'total_bars_processed': (epoch + 1) * total_bars,  # All bars in completed epochs
-                        'total_bars': total_bars,
-                        'total_bars_all_epochs': total_bars_all_epochs,
-                        'train_loss': avg_train_loss,
-                        'train_accuracy': train_accuracy,
-                        'val_loss': val_loss,
-                        'val_accuracy': val_accuracy,
-                        'progress_type': 'epoch'
+                        "epoch": epoch,
+                        "total_epochs": epochs,
+                        "total_batches_per_epoch": total_batches_per_epoch,
+                        "completed_batches": (epoch + 1) * total_batches_per_epoch,
+                        "total_batches": total_batches,
+                        "total_bars_processed": (epoch + 1)
+                        * total_bars,  # All bars in completed epochs
+                        "total_bars": total_bars,
+                        "total_bars_all_epochs": total_bars_all_epochs,
+                        "train_loss": avg_train_loss,
+                        "train_accuracy": train_accuracy,
+                        "val_loss": val_loss,
+                        "val_accuracy": val_accuracy,
+                        "progress_type": "epoch",
                     }
                     self.progress_callback(epoch, epochs, epoch_metrics)
                 except Exception as e:
@@ -434,28 +467,32 @@ class ModelTrainer:
             try:
                 # Determine stopping reason
                 final_epoch = len(self.history)
-                stopping_reason = "early_stopping" if final_epoch < epochs else "completed"
-                
+                stopping_reason = (
+                    "early_stopping" if final_epoch < epochs else "completed"
+                )
+
                 # Finalize analytics
                 self.analyzer.finalize_training(final_epoch, stopping_reason)
-                
+
                 # Export all analytics
                 export_paths = self.analyzer.export_all()
                 analytics_results = {
-                    'analytics_enabled': True,
-                    'run_id': self.analyzer.run_id,
-                    'export_paths': {k: str(v) if v else None for k, v in export_paths.items()},
-                    'total_alerts': len(self.analyzer.alerts),
-                    'final_analysis': getattr(self.analyzer, 'final_analysis', {})
+                    "analytics_enabled": True,
+                    "run_id": self.analyzer.run_id,
+                    "export_paths": {
+                        k: str(v) if v else None for k, v in export_paths.items()
+                    },
+                    "total_alerts": len(self.analyzer.alerts),
+                    "final_analysis": getattr(self.analyzer, "final_analysis", {}),
                 }
-                
+
                 print(f"📊 Analytics exported to: {self.analyzer.output_dir}")
-                if export_paths.get('csv'):
+                if export_paths.get("csv"):
                     print(f"📈 CSV for LLM analysis: {export_paths['csv']}")
-                    
+
             except Exception as e:
                 print(f"⚠️ Analytics finalization failed: {e}")
-                analytics_results = {'analytics_enabled': True, 'error': str(e)}
+                analytics_results = {"analytics_enabled": True, "error": str(e)}
 
         return {**self._create_training_summary(), **analytics_results}
 
@@ -465,11 +502,11 @@ class ModelTrainer:
         X_train: torch.Tensor,
         y_train: torch.Tensor,
         symbol_indices_train: torch.Tensor,
-        symbols: List[str],
+        symbols: list[str],
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
         symbol_indices_val: Optional[torch.Tensor] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train the multi-symbol neural network model with balanced sampling.
 
         Args:
@@ -550,7 +587,9 @@ class ModelTrainer:
             train_correct = 0
             train_total = 0
 
-            for batch_idx, (batch_X, batch_y, batch_symbol_indices) in enumerate(train_loader):
+            for batch_idx, (batch_X, batch_y, batch_symbol_indices) in enumerate(
+                train_loader
+            ):
                 # Move batch to device (should already be there, but just in case)
                 batch_X = batch_X.to(self.device)
                 batch_y = batch_y.to(self.device)
@@ -558,13 +597,24 @@ class ModelTrainer:
 
                 # DEBUG: Check for NaN in first batch of first epoch
                 if epoch == 0 and batch_idx == 0:
-                    print(f"🔍 Multi-symbol DEBUG: First batch - X contains NaN: {torch.isnan(batch_X).any()}")
-                    print(f"🔍 Multi-symbol DEBUG: First batch - y contains NaN: {torch.isnan(batch_y).any()}")
-                    print(f"🔍 Multi-symbol DEBUG: First batch - symbol_indices: {batch_symbol_indices}")
-                    print(f"🔍 Multi-symbol DEBUG: First batch - X shape: {batch_X.shape}, y shape: {batch_y.shape}")
+                    print(
+                        f"🔍 Multi-symbol DEBUG: First batch - X contains NaN: {torch.isnan(batch_X).any()}"
+                    )
+                    print(
+                        f"🔍 Multi-symbol DEBUG: First batch - y contains NaN: {torch.isnan(batch_y).any()}"
+                    )
+                    print(
+                        f"🔍 Multi-symbol DEBUG: First batch - symbol_indices: {batch_symbol_indices}"
+                    )
+                    print(
+                        f"🔍 Multi-symbol DEBUG: First batch - X shape: {batch_X.shape}, y shape: {batch_y.shape}"
+                    )
 
                 # Forward pass with symbol indices
-                if hasattr(model, 'forward') and 'symbol_indices' in model.forward.__code__.co_varnames:
+                if (
+                    hasattr(model, "forward")
+                    and "symbol_indices" in model.forward.__code__.co_varnames
+                ):
                     outputs = model(batch_X, batch_symbol_indices)
                 else:
                     # Fallback for models without symbol embedding support
@@ -605,21 +655,23 @@ class ModelTrainer:
                         current_train_acc = train_correct / max(train_total, 1)
 
                         batch_metrics = {
-                            'epoch': epoch,
-                            'total_epochs': epochs,
-                            'batch': batch_idx,
-                            'total_batches_per_epoch': total_batches_per_epoch,
-                            'completed_batches': completed_batches,
-                            'total_batches': total_batches,
-                            'train_loss': current_train_loss,
-                            'train_accuracy': current_train_acc,
-                            'progress_type': 'batch',
-                            'multi_symbol': True,
+                            "epoch": epoch,
+                            "total_epochs": epochs,
+                            "batch": batch_idx,
+                            "total_batches_per_epoch": total_batches_per_epoch,
+                            "completed_batches": completed_batches,
+                            "total_batches": total_batches,
+                            "train_loss": current_train_loss,
+                            "train_accuracy": current_train_acc,
+                            "progress_type": "batch",
+                            "multi_symbol": True,
                         }
 
                         self.progress_callback(epoch, epochs, batch_metrics)
                     except Exception as e:
-                        print(f"Warning: Multi-symbol batch progress callback failed: {e}")
+                        print(
+                            f"Warning: Multi-symbol batch progress callback failed: {e}"
+                        )
 
             # Calculate training metrics
             avg_train_loss = train_loss / train_total
@@ -632,11 +684,14 @@ class ModelTrainer:
             if X_val is not None:
                 model.eval()
                 with torch.no_grad():
-                    if hasattr(model, 'forward') and 'symbol_indices' in model.forward.__code__.co_varnames:
+                    if (
+                        hasattr(model, "forward")
+                        and "symbol_indices" in model.forward.__code__.co_varnames
+                    ):
                         val_outputs = model(X_val, symbol_indices_val)
                     else:
                         val_outputs = model(X_val)
-                    
+
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
                     val_accuracy = (val_predicted == y_val).float().mean().item()
@@ -680,14 +735,14 @@ class ModelTrainer:
             if self.progress_callback:
                 try:
                     epoch_metrics = {
-                        'epoch': epoch,
-                        'total_epochs': epochs,
-                        'train_loss': avg_train_loss,
-                        'train_accuracy': train_accuracy,
-                        'val_loss': val_loss,
-                        'val_accuracy': val_accuracy,
-                        'progress_type': 'epoch',
-                        'multi_symbol': True,
+                        "epoch": epoch,
+                        "total_epochs": epochs,
+                        "train_loss": avg_train_loss,
+                        "train_accuracy": train_accuracy,
+                        "val_loss": val_loss,
+                        "val_accuracy": val_accuracy,
+                        "progress_type": "epoch",
+                        "multi_symbol": True,
                     }
                     self.progress_callback(epoch, epochs, epoch_metrics)
                 except Exception as e:
@@ -702,19 +757,25 @@ class ModelTrainer:
         if self.analyzer:
             try:
                 final_epoch = len(self.history)
-                stopping_reason = "early_stopping" if final_epoch < epochs else "completed"
+                stopping_reason = (
+                    "early_stopping" if final_epoch < epochs else "completed"
+                )
                 self.analyzer.finalize_training(final_epoch, stopping_reason)
                 export_paths = self.analyzer.export_all()
                 analytics_results = {
-                    'analytics_enabled': True,
-                    'run_id': self.analyzer.run_id,
-                    'export_paths': {k: str(v) if v else None for k, v in export_paths.items()},
-                    'total_alerts': len(self.analyzer.alerts),
+                    "analytics_enabled": True,
+                    "run_id": self.analyzer.run_id,
+                    "export_paths": {
+                        k: str(v) if v else None for k, v in export_paths.items()
+                    },
+                    "total_alerts": len(self.analyzer.alerts),
                 }
-                print(f"📊 Multi-symbol analytics exported to: {self.analyzer.output_dir}")
+                print(
+                    f"📊 Multi-symbol analytics exported to: {self.analyzer.output_dir}"
+                )
             except Exception as e:
                 print(f"⚠️ Multi-symbol analytics finalization failed: {e}")
-                analytics_results = {'analytics_enabled': True, 'error': str(e)}
+                analytics_results = {"analytics_enabled": True, "error": str(e)}
 
         return {**self._create_training_summary(), **analytics_results}
 
@@ -807,7 +868,7 @@ class ModelTrainer:
         msg += f" (LR: {metrics.learning_rate:.6f}, Time: {metrics.duration:.2f}s)"
         print(msg)
 
-    def _create_training_summary(self) -> Dict[str, Any]:
+    def _create_training_summary(self) -> dict[str, Any]:
         """Create summary of training results.
 
         Returns:

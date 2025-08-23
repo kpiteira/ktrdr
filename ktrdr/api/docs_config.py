@@ -7,9 +7,10 @@ configuration used across the API and documentation templates.
 
 import os
 from pathlib import Path
+from typing import List, Optional
+
 import yaml
 from pydantic import BaseModel, Field
-from typing import List, Optional
 
 # Configuration file path
 DEFAULT_CONFIG_PATH = (
@@ -49,8 +50,8 @@ class BrandingConfig(BaseModel):
 class ExamplesConfig(BaseModel):
     """Documentation examples configuration."""
 
-    symbols: List[str] = Field(default_factory=lambda: ["AAPL", "MSFT", "GOOGL"])
-    timeframes: List[str] = Field(
+    symbols: list[str] = Field(default_factory=lambda: ["AAPL", "MSFT", "GOOGL"])
+    timeframes: list[str] = Field(
         default_factory=lambda: [
             "1m",
             "5m",
@@ -96,7 +97,7 @@ def load_docs_config(config_path: Optional[str] = None) -> DocsConfig:
 
     try:
         # Load the configuration file
-        with open(path, "r") as f:
+        with open(path) as f:
             config_data = yaml.safe_load(f)
 
         # Convert to Pydantic model

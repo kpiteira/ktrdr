@@ -6,15 +6,15 @@ and other sensitive information from environment variables.
 """
 
 import os
-from typing import Dict, Optional, Any, Union, ClassVar, Type
-from pydantic import BaseModel, Field, model_validator
+from typing import Any, Dict, Optional, Union
 
+from pydantic import BaseModel, Field, model_validator
 
 from ktrdr import get_logger
 from ktrdr.errors import (
     ConfigurationError,
-    MissingConfigurationError,
     InvalidConfigurationError,
+    MissingConfigurationError,
 )
 
 logger = get_logger(__name__)
@@ -85,7 +85,7 @@ class APICredentials(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def ensure_no_empty_strings(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+    def ensure_no_empty_strings(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Ensure no credential is an empty string."""
         if not isinstance(data, dict):
             return data

@@ -6,14 +6,19 @@ through the API, including listing available fuzzy sets and
 fuzzifying indicator values.
 """
 
-from typing import Dict, List, Any, Optional, Tuple, Union
-import pandas as pd
-from datetime import datetime
-import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 
 from ktrdr import get_logger
-from ktrdr.fuzzy.engine import FuzzyEngine
+from ktrdr.api.services.base import BaseService
+from ktrdr.data import DataManager
+from ktrdr.errors import (
+    ConfigurationError,
+    DataError,
+    ProcessingError,
+)
 from ktrdr.fuzzy.batch_calculator import BatchFuzzyCalculator
 from ktrdr.fuzzy.config import (
     FuzzyConfig,
@@ -21,16 +26,8 @@ from ktrdr.fuzzy.config import (
     FuzzySetConfig,
     TriangularMFConfig,
 )
-from ktrdr.data import DataManager
+from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators import IndicatorEngine
-from ktrdr.errors import (
-    DataError,
-    ConfigurationError,
-    ProcessingError,
-    retry_with_backoff,
-    RetryConfig,
-)
-from ktrdr.api.services.base import BaseService
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -137,7 +134,7 @@ class FuzzyService(BaseService):
             self.fuzzy_engine = None
             self.batch_calculator = None
 
-    async def get_available_indicators(self) -> List[Dict[str, Any]]:
+    async def get_available_indicators(self) -> list[dict[str, Any]]:
         """
         Get a list of indicators available for fuzzy operations.
 
@@ -190,7 +187,7 @@ class FuzzyService(BaseService):
                 details={"error": str(e)},
             ) from e
 
-    async def get_fuzzy_sets(self, indicator: str) -> Dict[str, Dict[str, Any]]:
+    async def get_fuzzy_sets(self, indicator: str) -> dict[str, dict[str, Any]]:
         """
         Get detailed information about fuzzy sets for an indicator.
 
@@ -256,8 +253,8 @@ class FuzzyService(BaseService):
             ) from e
 
     async def fuzzify_indicator(
-        self, indicator: str, values: List[float], dates: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        self, indicator: str, values: list[float], dates: Optional[list[str]] = None
+    ) -> dict[str, Any]:
         """
         Fuzzify indicator values using the configured membership functions.
 
@@ -340,10 +337,10 @@ class FuzzyService(BaseService):
         self,
         symbol: str,
         timeframe: str,
-        indicator_configs: List[Dict[str, Any]],
+        indicator_configs: list[dict[str, Any]],
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Load data, calculate indicators, and fuzzify the indicator values.
 
@@ -491,10 +488,10 @@ class FuzzyService(BaseService):
         self,
         symbol: str,
         timeframe: str,
-        indicators: Optional[List[str]] = None,
+        indicators: Optional[list[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get fuzzy membership overlays for indicators over time.
 
@@ -741,7 +738,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No RSI column found in result")
+                        self.logger.warning("No RSI column found in result")
                         return None
 
                 elif indicator_name.lower() == "macd":
@@ -761,7 +758,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No MACD column found in result")
+                        self.logger.warning("No MACD column found in result")
                         return None
 
                 elif indicator_name.lower() == "ema":
@@ -777,7 +774,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No EMA column found in result")
+                        self.logger.warning("No EMA column found in result")
                         return None
 
                 elif indicator_name.lower() == "sma":
@@ -793,7 +790,7 @@ class FuzzyService(BaseService):
                         indicator_perf["end_tracking"]()
                         return indicator_series
                     else:
-                        self.logger.warning(f"No SMA column found in result")
+                        self.logger.warning("No SMA column found in result")
                         return None
 
                 else:
@@ -814,7 +811,7 @@ class FuzzyService(BaseService):
             )
             return None
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the fuzzy service.
 
@@ -836,7 +833,7 @@ class FuzzyService(BaseService):
             available_indicators = self.fuzzy_engine.get_available_indicators()
 
             # Get a sample fuzzy set for testing if available
-            sample_fuzzy_sets: List[str] = []
+            sample_fuzzy_sets: list[str] = []
             if available_indicators:
                 sample_indicator = available_indicators[0]
                 sample_fuzzy_sets = list(

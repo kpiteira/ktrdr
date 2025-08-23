@@ -4,32 +4,30 @@ Data endpoints for the KTRDR API.
 This module implements the API endpoints for accessing market data, symbols, and timeframes.
 """
 
-import logging
-from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, Path, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
-from ktrdr.errors import DataNotFoundError, DataError
-from ktrdr.api.services.data_service import DataService
+from ktrdr.api.dependencies import get_data_service
+from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.data import (
+    DataLoadApiResponse,
+    DataLoadOperationResponse,
+    DataLoadRequest,
+    DataLoadResponse,
+    DataRangeInfo,
+    DataRangeRequest,
+    DataRangeResponse,
+    OHLCVData,
     SymbolInfo,
     SymbolsResponse,
     TimeframeInfo,
     TimeframesResponse,
-    DataLoadRequest,
-    DataLoadResponse,
-    OHLCVData,
-    DataRangeRequest,
-    DataRangeResponse,
-    DataRangeInfo,
-    DataLoadApiResponse,
-    DataLoadOperationResponse,
 )
-from ktrdr.api.dependencies import get_data_service
-from ktrdr.api.models.base import ApiResponse
-import os
-from pathlib import Path as FilePath
+from ktrdr.api.services.data_service import DataService
+from ktrdr.errors import DataError, DataNotFoundError
 
 # Setup module-level logger
 logger = get_logger(__name__)

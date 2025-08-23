@@ -4,9 +4,11 @@ IB (Interactive Brokers) models for the KTRDR API.
 This module defines the request and response models for IB-related endpoints.
 """
 
-from typing import Dict, Any, Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
 from ktrdr.api.models.base import ApiResponse
 
 
@@ -215,10 +217,10 @@ class IbConfigInfo(BaseModel):
 
     host: str = Field(..., description="Configured IB Gateway/TWS host")
     port: int = Field(..., description="Configured IB Gateway/TWS port")
-    client_id_range: Dict[str, int] = Field(..., description="Range of client IDs used")
+    client_id_range: dict[str, int] = Field(..., description="Range of client IDs used")
     timeout: int = Field(..., description="Connection timeout in seconds")
     readonly: bool = Field(..., description="Whether connection is read-only")
-    rate_limit: Dict[str, Any] = Field(..., description="Rate limit settings")
+    rate_limit: dict[str, Any] = Field(..., description="Rate limit settings")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -352,7 +354,7 @@ class SymbolRangeResponse(BaseModel):
     """
 
     symbol: str = Field(..., description="Symbol name")
-    ranges: Dict[str, Optional[DataRangeInfo]] = Field(
+    ranges: dict[str, Optional[DataRangeInfo]] = Field(
         ..., description="Timeframe to range mapping"
     )
 
@@ -389,11 +391,11 @@ class DataRangesResponse(BaseModel):
         cache_stats: Statistics about cache usage
     """
 
-    symbols: List[SymbolRangeResponse] = Field(
+    symbols: list[SymbolRangeResponse] = Field(
         ..., description="Symbol range information"
     )
-    requested_timeframes: List[str] = Field(..., description="Requested timeframes")
-    cache_stats: Dict[str, Any] = Field(..., description="Cache usage statistics")
+    requested_timeframes: list[str] = Field(..., description="Requested timeframes")
+    cache_stats: dict[str, Any] = Field(..., description="Cache usage statistics")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -654,12 +656,12 @@ class DiscoveredSymbolsResponse(BaseModel):
         cache_stats: Symbol discovery cache statistics
     """
 
-    symbols: List[SymbolInfo] = Field(..., description="List of discovered symbols")
+    symbols: list[SymbolInfo] = Field(..., description="List of discovered symbols")
     total_count: int = Field(..., description="Total number of symbols")
-    instrument_types: Dict[str, int] = Field(
+    instrument_types: dict[str, int] = Field(
         ..., description="Count by instrument type"
     )
-    cache_stats: Dict[str, Any] = Field(..., description="Cache statistics")
+    cache_stats: dict[str, Any] = Field(..., description="Cache statistics")
 
     model_config = ConfigDict(
         json_schema_extra={

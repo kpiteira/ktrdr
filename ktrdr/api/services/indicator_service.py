@@ -6,25 +6,24 @@ through the API, including listing available indicators and calculating
 indicator values for given data.
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-import pandas as pd
 from datetime import datetime
+from typing import Any, Dict, List, Tuple
+
+import pandas as pd
 
 from ktrdr import get_logger
-from ktrdr.data import DataManager
-from ktrdr.errors import DataError, ConfigurationError, ProcessingError
-from ktrdr.indicators.indicator_engine import IndicatorEngine
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.categories import get_indicator_category, CATEGORY_DESCRIPTIONS
 from ktrdr.api.models.indicators import (
+    IndicatorCalculateRequest,
     IndicatorMetadata,
     IndicatorParameter,
     IndicatorType,
-    IndicatorConfig,
-    IndicatorCalculateRequest,
 )
 from ktrdr.api.services.base import BaseService
+from ktrdr.data import DataManager
+from ktrdr.errors import ConfigurationError, DataError, ProcessingError
+from ktrdr.indicators.categories import get_indicator_category
+from ktrdr.indicators.indicator_engine import IndicatorEngine
+from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -44,7 +43,7 @@ class IndicatorService(BaseService):
         self.data_manager = DataManager()
         self.logger.info("Initialized IndicatorService")
 
-    async def get_available_indicators(self) -> List[IndicatorMetadata]:
+    async def get_available_indicators(self) -> list[IndicatorMetadata]:
         """
         Get a list of all available indicators with their metadata.
 
@@ -56,7 +55,7 @@ class IndicatorService(BaseService):
             ProcessingError: If there is an error retrieving indicator information.
         """
         try:
-            indicators: List[IndicatorMetadata] = []
+            indicators: list[IndicatorMetadata] = []
 
             # Process built-in indicators
             for id_name, indicator_class in BUILT_IN_INDICATORS.items():
@@ -179,7 +178,7 @@ class IndicatorService(BaseService):
 
     async def calculate_indicators(
         self, request: IndicatorCalculateRequest
-    ) -> Tuple[List[str], Dict[str, List[float]], Dict[str, Any]]:
+    ) -> tuple[list[str], dict[str, list[float]], dict[str, Any]]:
         """
         Calculate indicators based on the provided request.
 
@@ -351,7 +350,7 @@ class IndicatorService(BaseService):
                 details={"error": str(e)},
             ) from e
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the indicator service.
 

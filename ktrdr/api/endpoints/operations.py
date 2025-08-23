@@ -8,26 +8,24 @@ This module provides endpoints for managing long-running operations:
 - Monitor progress
 """
 
-import logging
-from typing import List, Optional
-from datetime import datetime
-from fastapi import APIRouter, Depends, Path, Query, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
-from ktrdr.logging.config import should_rate_limit_log
-from ktrdr.errors import DataError, ValidationError
+from ktrdr.api.dependencies import get_operations_service
 from ktrdr.api.models.operations import (
-    OperationListResponse,
-    OperationStatusResponse,
-    OperationCancelResponse,
     CancelOperationRequest,
+    OperationCancelResponse,
+    OperationListResponse,
     OperationStatus,
-    OperationType,
+    OperationStatusResponse,
     OperationSummary,
-    OperationInfo,
+    OperationType,
 )
 from ktrdr.api.services.operations_service import OperationsService
-from ktrdr.api.dependencies import get_operations_service
+from ktrdr.errors import DataError
+from ktrdr.logging.config import should_rate_limit_log
 
 # Setup module-level logger
 logger = get_logger(__name__)

@@ -1,11 +1,10 @@
 """Multi-Layer Perceptron implementation for trading decisions."""
 
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-import pandas as pd
-from typing import Dict, Any, List, Optional
 
 from .base_model import BaseNeuralModel
 
@@ -58,7 +57,7 @@ class MLPTradingModel(BaseNeuralModel):
         # - This prevents dangerous double-softmax bugs
         # - Config "output_activation" is IGNORED for classification tasks
         # - Inference code handles logit-to-probability conversion
-        
+
         return nn.Sequential(*layers)
 
     def prepare_features(
@@ -76,26 +75,32 @@ class MLPTradingModel(BaseNeuralModel):
         """
         # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
         feature_config = self.config.get("features", {})
-        
+
         # CRITICAL FIX: Disable temporal features in backtesting mode
         # When fuzzy_data has only 1 row, we're in backtesting and FeatureCache provides lag features
         disable_temporal = len(fuzzy_data) == 1
         if disable_temporal:
             from ... import get_logger
+
             logger = get_logger(__name__)
-            logger.debug(f"Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)")
-        
+            logger.debug(
+                "Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)"
+            )
+
         # Use FuzzyNeuralProcessor for pure neuro-fuzzy models
         from ...training.fuzzy_neural_processor import FuzzyNeuralProcessor
-        processor = FuzzyNeuralProcessor(feature_config, disable_temporal=disable_temporal)
+
+        processor = FuzzyNeuralProcessor(
+            feature_config, disable_temporal=disable_temporal
+        )
         features_tensor, _ = processor.prepare_input(fuzzy_data)
-        
+
         device = self._get_device()
         return features_tensor.to(device)
 
     def train(
         self, X: torch.Tensor, y: torch.Tensor, validation_data: Optional[tuple] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Train the MLP model.
 
         Args:
@@ -192,11 +197,11 @@ class MultiSymbolMLPTradingModel(BaseNeuralModel):
             Multi-symbol neural network model with embeddings
         """
         self.input_size = input_size
-        
+
         # Get symbol embedding config
         num_symbols = self.config["num_symbols"]
         symbol_embedding_dim = self.config.get("symbol_embedding_dim", 16)
-        
+
         # Get architecture config
         hidden_layers = self.config["architecture"]["hidden_layers"]
         dropout = self.config["architecture"].get("dropout", 0.2)
@@ -235,19 +240,25 @@ class MultiSymbolMLPTradingModel(BaseNeuralModel):
         """
         # Same feature preparation as single-symbol model
         feature_config = self.config.get("features", {})
-        
+
         # CRITICAL FIX: Disable temporal features in backtesting mode
         disable_temporal = len(fuzzy_data) == 1
         if disable_temporal:
             from ... import get_logger
+
             logger = get_logger(__name__)
-            logger.debug(f"Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)")
-        
+            logger.debug(
+                "Single-row fuzzy data detected - disabling temporal feature generation (FeatureCache provides lag features)"
+            )
+
         # Use FuzzyNeuralProcessor for pure neuro-fuzzy models
         from ...training.fuzzy_neural_processor import FuzzyNeuralProcessor
-        processor = FuzzyNeuralProcessor(feature_config, disable_temporal=disable_temporal)
+
+        processor = FuzzyNeuralProcessor(
+            feature_config, disable_temporal=disable_temporal
+        )
         features_tensor, _ = processor.prepare_input(fuzzy_data)
-        
+
         device = self._get_device()
         return features_tensor.to(device)
 
@@ -260,7 +271,7 @@ class MultiSymbolMLP(nn.Module):
         input_size: int,
         num_symbols: int,
         symbol_embedding_dim: int,
-        hidden_layers: List[int],
+        hidden_layers: list[int],
         dropout: float,
         activation_fn: type,
         num_classes: int = 3,
@@ -277,34 +288,38 @@ class MultiSymbolMLP(nn.Module):
             num_classes: Number of output classes
         """
         super().__init__()
-        
+
         self.input_size = input_size
         self.num_symbols = num_symbols
         self.symbol_embedding_dim = symbol_embedding_dim
-        
+
         # Symbol embedding layer
         self.symbol_embedding = nn.Embedding(num_symbols, symbol_embedding_dim)
-        
+
         # Combined input size: features + symbol embedding
         combined_input_size = input_size + symbol_embedding_dim
-        
+
         # Build MLP layers
         layers = []
         prev_size = combined_input_size
         for hidden_size in hidden_layers:
-            layers.extend([
-                nn.Linear(prev_size, hidden_size),
-                activation_fn(),
-                nn.Dropout(dropout),
-            ])
+            layers.extend(
+                [
+                    nn.Linear(prev_size, hidden_size),
+                    activation_fn(),
+                    nn.Dropout(dropout),
+                ]
+            )
             prev_size = hidden_size
-        
+
         # Output layer
         layers.append(nn.Linear(prev_size, num_classes))
-        
+
         self.mlp = nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor, symbol_indices: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, symbol_indices: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Forward pass with symbol embeddings.
 
         Args:
@@ -316,16 +331,20 @@ class MultiSymbolMLP(nn.Module):
             Output logits [batch_size, num_classes]
         """
         batch_size = x.size(0)
-        
+
         # If no symbol indices provided, use symbol 0 for all samples
         if symbol_indices is None:
             symbol_indices = torch.zeros(batch_size, dtype=torch.long, device=x.device)
-        
+
         # Get symbol embeddings
-        symbol_embeds = self.symbol_embedding(symbol_indices)  # [batch_size, symbol_embedding_dim]
-        
+        symbol_embeds = self.symbol_embedding(
+            symbol_indices
+        )  # [batch_size, symbol_embedding_dim]
+
         # Concatenate features and symbol embeddings
-        combined_input = torch.cat([x, symbol_embeds], dim=1)  # [batch_size, input_size + symbol_embedding_dim]
-        
+        combined_input = torch.cat(
+            [x, symbol_embeds], dim=1
+        )  # [batch_size, input_size + symbol_embedding_dim]
+
         # Pass through MLP
         return self.mlp(combined_input)

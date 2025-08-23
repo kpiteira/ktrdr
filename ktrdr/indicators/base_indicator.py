@@ -8,11 +8,12 @@ all technical indicators.
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Union
+
 import pandas as pd
 
 from ktrdr import get_logger
-from ktrdr.errors import DataError
 from ktrdr.config.validation import InputValidator
+from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
 
@@ -55,7 +56,7 @@ class BaseIndicator(ABC):
 
         logger.info(f"Initialized {self.name} indicator with parameters: {self.params}")
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Validate the parameters passed to the indicator.
 

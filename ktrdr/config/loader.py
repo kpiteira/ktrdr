@@ -7,29 +7,27 @@ YAML files using Pydantic models.
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, TypeVar, Union, cast
+from typing import Any, Dict, Optional, Type, TypeVar, Union
 
 import yaml
 from pydantic import BaseModel, ValidationError
 
 # Import the new logging system
 from ktrdr import get_logger, log_entry_exit, log_error
-
 from ktrdr.config.models import (
     KtrdrConfig,
     MultiTimeframeIndicatorConfig,
-    TimeframeIndicatorConfig,
 )
 from ktrdr.config.validation import InputValidator, sanitize_parameter
 from ktrdr.errors import (
     ConfigurationError,
-    MissingConfigurationError,
-    InvalidConfigurationError,
     ConfigurationFileError,
     ErrorHandler,
-    retry_with_backoff,
-    fallback,
     FallbackStrategy,
+    InvalidConfigurationError,
+    MissingConfigurationError,
+    fallback,
+    retry_with_backoff,
 )
 
 T = TypeVar("T", bound=BaseModel)
@@ -49,7 +47,7 @@ class ConfigLoader:
     @ErrorHandler.with_error_handling(logger=logger)
     @log_entry_exit(logger=logger)
     def load(
-        self, config_path: Union[str, Path], model_type: Type[T] = KtrdrConfig
+        self, config_path: Union[str, Path], model_type: type[T] = KtrdrConfig
     ) -> T:
         """
         Load a YAML configuration file and validate it against a Pydantic model.
@@ -106,7 +104,7 @@ class ConfigLoader:
 
         # Load YAML file
         try:
-            with open(config_path, "r") as file:
+            with open(config_path) as file:
                 config_dict = yaml.safe_load(file)
 
             # Handle empty file case
@@ -139,7 +137,7 @@ class ConfigLoader:
         self,
         env_var: str = "KTRDR_CONFIG",
         default_path: Optional[Union[str, Path]] = None,
-        model_type: Type[T] = KtrdrConfig,
+        model_type: type[T] = KtrdrConfig,
     ) -> T:
         """
         Load configuration from a path specified in an environment variable.
@@ -198,7 +196,7 @@ class ConfigLoader:
             raise
 
     @log_entry_exit(logger=logger)
-    def load_fuzzy_defaults(self) -> Dict[str, Any]:
+    def load_fuzzy_defaults(self) -> dict[str, Any]:
         """
         Load fuzzy logic default configurations from config/fuzzy.yaml.
 
@@ -219,7 +217,7 @@ class ConfigLoader:
                 return {}
 
             # Load YAML file without using a specific Pydantic model
-            with open(fuzzy_config_path, "r") as file:
+            with open(fuzzy_config_path) as file:
                 config_dict = yaml.safe_load(file)
 
             # Handle empty file case
@@ -290,7 +288,7 @@ class ConfigLoader:
     @log_entry_exit(logger=logger)
     def validate_multi_timeframe_config(
         self, config: MultiTimeframeIndicatorConfig
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Validate a multi-timeframe indicator configuration.
 

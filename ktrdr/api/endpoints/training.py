@@ -5,14 +5,17 @@ This module implements the API endpoints for neural network model training,
 using the existing CLI training functionality as the foundation.
 """
 
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
+from ktrdr.api.services.operations_service import (
+    get_operations_service,
+)
 from ktrdr.api.services.training_service import TrainingService
-from ktrdr.api.services.operations_service import get_operations_service, OperationsService
-from ktrdr.errors import ValidationError, DataError
+from ktrdr.errors import DataError, ValidationError
 
 logger = get_logger(__name__)
 
@@ -25,12 +28,12 @@ class TrainingConfig(BaseModel):
     """Training configuration parameters."""
 
     model_type: str = "mlp"
-    hidden_layers: List[int] = [64, 32, 16]
+    hidden_layers: list[int] = [64, 32, 16]
     epochs: int = 100
     learning_rate: float = 0.001
     batch_size: int = 32
     validation_split: float = 0.2
-    early_stopping: Dict[str, Any] = {"patience": 10, "monitor": "val_accuracy"}
+    early_stopping: dict[str, Any] = {"patience": 10, "monitor": "val_accuracy"}
     optimizer: str = "adam"
     dropout_rate: float = 0.2
 
@@ -38,8 +41,8 @@ class TrainingConfig(BaseModel):
 class TrainingRequest(BaseModel):
     """Request model for starting neural network training."""
 
-    symbols: List[str]
-    timeframes: List[str]
+    symbols: list[str]
+    timeframes: list[str]
     strategy_name: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -48,35 +51,33 @@ class TrainingRequest(BaseModel):
 
     @field_validator("symbols")
     @classmethod
-    def validate_symbols(cls, v: List[str]) -> List[str]:
+    def validate_symbols(cls, v: list[str]) -> list[str]:
         """Validate that symbols list is not empty and contains valid symbols."""
         if not v or len(v) == 0:
             raise ValueError("At least one symbol must be specified")
-        
+
         valid_symbols = []
         for symbol in v:
             if not symbol or not symbol.strip():
                 raise ValueError("Symbol cannot be empty")
             valid_symbols.append(symbol.strip())
-        
+
         return valid_symbols
-    
+
     @field_validator("timeframes")
     @classmethod
-    def validate_timeframes(cls, v: List[str]) -> List[str]:
+    def validate_timeframes(cls, v: list[str]) -> list[str]:
         """Validate that timeframes list is not empty and contains valid timeframes."""
         if not v or len(v) == 0:
             raise ValueError("At least one timeframe must be specified")
-        
+
         valid_timeframes = []
         for timeframe in v:
             if not timeframe or not timeframe.strip():
                 raise ValueError("Timeframe cannot be empty")
             valid_timeframes.append(timeframe.strip())
-        
+
         return valid_timeframes
-
-
 
 
 class TrainingStartResponse(BaseModel):
@@ -86,12 +87,10 @@ class TrainingStartResponse(BaseModel):
     task_id: str
     status: str
     message: str
-    symbols: List[str]
-    timeframes: List[str]
+    symbols: list[str]
+    timeframes: list[str]
     strategy_name: str
     estimated_duration_minutes: Optional[int] = None
-
-
 
 
 class CurrentMetrics(BaseModel):
@@ -112,8 +111,8 @@ class TrainingStatusResponse(BaseModel):
     progress: int  # 0-100
     current_epoch: Optional[int] = None
     total_epochs: Optional[int] = None
-    symbols: List[str]
-    timeframes: List[str]
+    symbols: list[str]
+    timeframes: list[str]
     started_at: str
     estimated_completion: Optional[str] = None
     current_metrics: Optional[CurrentMetrics] = None
@@ -215,8 +214,6 @@ async def start_training(
     except Exception as e:
         logger.error(f"Failed to start training: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to start training")
-
-
 
 
 @router.get("/{task_id}/performance", response_model=PerformanceResponse)

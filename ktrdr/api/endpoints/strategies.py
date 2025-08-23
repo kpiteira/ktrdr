@@ -4,17 +4,16 @@ Strategies endpoints for the KTRDR API.
 This module implements the API endpoints for listing and managing trading strategies.
 """
 
-from fastapi import APIRouter, HTTPException
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
+
 import yaml
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from ktrdr import get_logger
-from ktrdr.config.loader import ConfigLoader
-from ktrdr.training.model_storage import ModelStorage
-from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
 
@@ -39,10 +38,10 @@ class StrategyInfo(BaseModel):
     description: str
     symbol: str
     timeframe: str
-    indicators: List[Dict[str, Any]]
-    fuzzy_config: Dict[str, Any]
+    indicators: list[dict[str, Any]]
+    fuzzy_config: dict[str, Any]
     training_status: str  # 'untrained', 'training', 'trained', 'failed'
-    available_versions: List[int]
+    available_versions: list[int]
     latest_version: Optional[int] = None
     latest_training_date: Optional[str] = None
     latest_metrics: Optional[StrategyMetrics] = None
@@ -52,26 +51,26 @@ class StrategiesResponse(BaseModel):
     """Response model for strategies list."""
 
     success: bool = True
-    strategies: List[StrategyInfo]
+    strategies: list[StrategyInfo]
 
 
 class ValidationIssue(BaseModel):
     """A validation issue found in a strategy."""
-    
+
     severity: str  # 'error', 'warning'
     category: str  # 'indicators', 'fuzzy_sets', 'structure', 'configuration'
     message: str
-    details: Optional[Dict[str, Any]] = None
+    details: Optional[dict[str, Any]] = None
 
 
 class StrategyValidationResponse(BaseModel):
     """Response model for strategy validation."""
-    
+
     success: bool
     valid: bool
     strategy_name: str
-    issues: List[ValidationIssue]
-    available_indicators: List[str]
+    issues: list[ValidationIssue]
+    available_indicators: list[str]
     message: str
 
 
@@ -95,7 +94,7 @@ async def list_strategies() -> StrategiesResponse:
     for yaml_file in strategy_dir.glob("*.yaml"):
         try:
             # Load strategy configuration using existing loader
-            with open(yaml_file, "r") as f:
+            with open(yaml_file) as f:
                 config = yaml.safe_load(f)
 
             strategy_name = config.get("name", yaml_file.stem)
@@ -158,7 +157,7 @@ async def list_strategies() -> StrategiesResponse:
                             if metrics_file.exists():
                                 import json
 
-                                with open(metrics_file, "r") as f:
+                                with open(metrics_file) as f:
                                     metrics_data = json.load(f)
 
                                 # Extract test metrics
@@ -236,25 +235,27 @@ async def get_strategy_details(
     return strategy
 
 
-def _validate_strategy_config(config: Dict[str, Any], strategy_name: str) -> List[ValidationIssue]:
+def _validate_strategy_config(
+    config: dict[str, Any], strategy_name: str
+) -> list[ValidationIssue]:
     """
     Validate a strategy configuration and return list of issues.
-    
+
     Args:
         config: Strategy configuration dictionary
         strategy_name: Name of the strategy being validated
-        
+
     Returns:
         List of validation issues found
     """
     issues = []
-    
+
     # Get name mapping for strategy indicators
     name_mapping = {
         # Common aliases to official names
         "bollinger_bands": "BollingerBands",
         "bbands": "BollingerBands",
-        "keltner_channels": "KeltnerChannels", 
+        "keltner_channels": "KeltnerChannels",
         "momentum": "Momentum",
         "volume_sma": "SMA",
         "atr": "ATR",
@@ -289,104 +290,121 @@ def _validate_strategy_config(config: Dict[str, Any], strategy_name: str) -> Lis
         "bb_width": "BollingerBandWidth",
         "volume_ratio": "VolumeRatio",
         "squeeze_intensity": "SqueezeIntensity",
-        "distance_from_ma": "DistanceFromMA"
+        "distance_from_ma": "DistanceFromMA",
     }
-    
+
     # 1. Check basic structure
     required_sections = ["indicators", "fuzzy_sets"]
     for section in required_sections:
         if section not in config:
-            issues.append(ValidationIssue(
-                severity="error",
-                category="structure",
-                message=f"Missing required section: '{section}'",
-                details={"section": section}
-            ))
-    
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    category="structure",
+                    message=f"Missing required section: '{section}'",
+                    details={"section": section},
+                )
+            )
+
     # 2. Validate indicators
     if "indicators" in config:
         indicator_configs = config["indicators"]
         if not isinstance(indicator_configs, list):
-            issues.append(ValidationIssue(
-                severity="error",
-                category="indicators",
-                message="'indicators' section must be a list",
-                details={"type": str(type(indicator_configs))}
-            ))
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    category="indicators",
+                    message="'indicators' section must be a list",
+                    details={"type": str(type(indicator_configs))},
+                )
+            )
         else:
             strategy_indicators = []
             missing_indicators = []
-            
+
             for idx, indicator_config in enumerate(indicator_configs):
                 if not isinstance(indicator_config, dict):
-                    issues.append(ValidationIssue(
-                        severity="error",
-                        category="indicators", 
-                        message=f"Indicator at index {idx} must be a dictionary",
-                        details={"index": idx, "type": str(type(indicator_config))}
-                    ))
+                    issues.append(
+                        ValidationIssue(
+                            severity="error",
+                            category="indicators",
+                            message=f"Indicator at index {idx} must be a dictionary",
+                            details={"index": idx, "type": str(type(indicator_config))},
+                        )
+                    )
                     continue
-                
+
                 if "name" not in indicator_config:
-                    issues.append(ValidationIssue(
-                        severity="error",
-                        category="indicators",
-                        message=f"Indicator at index {idx} missing 'name' field",
-                        details={"index": idx}
-                    ))
+                    issues.append(
+                        ValidationIssue(
+                            severity="error",
+                            category="indicators",
+                            message=f"Indicator at index {idx} missing 'name' field",
+                            details={"index": idx},
+                        )
+                    )
                     continue
-                
+
                 indicator_name = indicator_config["name"]
                 strategy_indicators.append(indicator_name)
-                
+
                 # Check if indicator exists in registry
                 mapped_name = name_mapping.get(indicator_name.lower())
-                
+
                 if mapped_name is None:
                     # Try the original name as-is (for PascalCase names like "BollingerBands")
                     if indicator_name in BUILT_IN_INDICATORS:
                         mapped_name = indicator_name
                     else:
                         # Fallback: convert snake_case to PascalCase
-                        mapped_name = "".join(word.capitalize() for word in indicator_name.split("_"))
-                
+                        mapped_name = "".join(
+                            word.capitalize() for word in indicator_name.split("_")
+                        )
+
                 if mapped_name not in BUILT_IN_INDICATORS:
                     missing_indicators.append(indicator_name)
-            
+
             # Report missing indicators
             if missing_indicators:
                 available_indicators = sorted(set(BUILT_IN_INDICATORS.keys()))
-                issues.append(ValidationIssue(
-                    severity="error",
-                    category="indicators",
-                    message=f"Missing indicators: {', '.join(missing_indicators)} referenced by the strategy. Available indicators are: {', '.join(available_indicators)}",
-                    details={
-                        "missing_indicators": missing_indicators,
-                        "available_indicators": available_indicators,
-                        "strategy_indicators": strategy_indicators
-                    }
-                ))
-    
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        category="indicators",
+                        message=f"Missing indicators: {', '.join(missing_indicators)} referenced by the strategy. Available indicators are: {', '.join(available_indicators)}",
+                        details={
+                            "missing_indicators": missing_indicators,
+                            "available_indicators": available_indicators,
+                            "strategy_indicators": strategy_indicators,
+                        },
+                    )
+                )
+
     # 3. Validate fuzzy sets
     if "fuzzy_sets" in config and "indicators" in config:
-        fuzzy_configs = config["fuzzy_sets"] 
+        fuzzy_configs = config["fuzzy_sets"]
         indicator_configs = config["indicators"]
-        
+
         if not isinstance(fuzzy_configs, dict):
-            issues.append(ValidationIssue(
-                severity="error",
-                category="fuzzy_sets",
-                message="'fuzzy_sets' section must be a dictionary",
-                details={"type": str(type(fuzzy_configs))}
-            ))
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    category="fuzzy_sets",
+                    message="'fuzzy_sets' section must be a dictionary",
+                    details={"type": str(type(fuzzy_configs))},
+                )
+            )
         else:
             # Get list of indicator names and expected derived metrics
             indicator_names = []
             if isinstance(indicator_configs, list):
                 for indicator_config in indicator_configs:
-                    if isinstance(indicator_config, dict) and "name" in indicator_config:
+                    if (
+                        isinstance(indicator_config, dict)
+                        and "name" in indicator_config
+                    ):
                         indicator_names.append(indicator_config["name"])
-            
+
             # Expected derived metrics from complex indicators
             expected_derived = set()
             for name in indicator_names:
@@ -396,80 +414,107 @@ def _validate_strategy_config(config: Dict[str, Any], strategy_name: str) -> Lis
                     expected_derived.add("volume_ratio")
                 elif name in ["bollinger_bands", "keltner_channels"]:
                     # Both needed for squeeze_intensity
-                    if "bollinger_bands" in indicator_names and "keltner_channels" in indicator_names:
+                    if (
+                        "bollinger_bands" in indicator_names
+                        and "keltner_channels" in indicator_names
+                    ):
                         expected_derived.add("squeeze_intensity")
-            
+
             # All possible fuzzy targets: direct indicators + derived metrics
             all_possible_targets = set(indicator_names) | expected_derived
-            
+
             # Check if fuzzy sets reference valid indicators/metrics
             invalid_fuzzy_refs = []
             for fuzzy_name in fuzzy_configs.keys():
                 if fuzzy_name not in all_possible_targets:
                     invalid_fuzzy_refs.append(fuzzy_name)
-            
+
             if invalid_fuzzy_refs:
-                issues.append(ValidationIssue(
-                    severity="error",
-                    category="fuzzy_sets",
-                    message=f"Fuzzy sets reference invalid indicators/metrics: {', '.join(invalid_fuzzy_refs)}. Valid targets are: {', '.join(sorted(all_possible_targets))}",
-                    details={
-                        "invalid_references": invalid_fuzzy_refs,
-                        "valid_targets": sorted(all_possible_targets),
-                        "strategy_indicators": indicator_names,
-                        "derived_metrics": sorted(expected_derived)
-                    }
-                ))
-            
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        category="fuzzy_sets",
+                        message=f"Fuzzy sets reference invalid indicators/metrics: {', '.join(invalid_fuzzy_refs)}. Valid targets are: {', '.join(sorted(all_possible_targets))}",
+                        details={
+                            "invalid_references": invalid_fuzzy_refs,
+                            "valid_targets": sorted(all_possible_targets),
+                            "strategy_indicators": indicator_names,
+                            "derived_metrics": sorted(expected_derived),
+                        },
+                    )
+                )
+
             # Validate fuzzy set structure
             for fuzzy_name, fuzzy_config in fuzzy_configs.items():
                 if not isinstance(fuzzy_config, dict):
-                    issues.append(ValidationIssue(
-                        severity="error",
-                        category="fuzzy_sets",
-                        message=f"Fuzzy set '{fuzzy_name}' must be a dictionary",
-                        details={"fuzzy_set": fuzzy_name, "type": str(type(fuzzy_config))}
-                    ))
+                    issues.append(
+                        ValidationIssue(
+                            severity="error",
+                            category="fuzzy_sets",
+                            message=f"Fuzzy set '{fuzzy_name}' must be a dictionary",
+                            details={
+                                "fuzzy_set": fuzzy_name,
+                                "type": str(type(fuzzy_config)),
+                            },
+                        )
+                    )
                     continue
-                
+
                 # Check fuzzy set structure - should have membership functions
                 if not fuzzy_config:
-                    issues.append(ValidationIssue(
-                        severity="warning",
-                        category="fuzzy_sets",
-                        message=f"Fuzzy set '{fuzzy_name}' is empty",
-                        details={"fuzzy_set": fuzzy_name}
-                    ))
+                    issues.append(
+                        ValidationIssue(
+                            severity="warning",
+                            category="fuzzy_sets",
+                            message=f"Fuzzy set '{fuzzy_name}' is empty",
+                            details={"fuzzy_set": fuzzy_name},
+                        )
+                    )
                     continue
-                
+
                 # Validate each membership function
                 for member_name, member_config in fuzzy_config.items():
                     if not isinstance(member_config, dict):
-                        issues.append(ValidationIssue(
-                            severity="error", 
-                            category="fuzzy_sets",
-                            message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' must be a dictionary",
-                            details={"fuzzy_set": fuzzy_name, "membership_function": member_name}
-                        ))
+                        issues.append(
+                            ValidationIssue(
+                                severity="error",
+                                category="fuzzy_sets",
+                                message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' must be a dictionary",
+                                details={
+                                    "fuzzy_set": fuzzy_name,
+                                    "membership_function": member_name,
+                                },
+                            )
+                        )
                         continue
-                    
+
                     # Check required fields for membership functions
                     if "type" not in member_config:
-                        issues.append(ValidationIssue(
-                            severity="error",
-                            category="fuzzy_sets", 
-                            message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' missing 'type' field",
-                            details={"fuzzy_set": fuzzy_name, "membership_function": member_name}
-                        ))
-                    
+                        issues.append(
+                            ValidationIssue(
+                                severity="error",
+                                category="fuzzy_sets",
+                                message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' missing 'type' field",
+                                details={
+                                    "fuzzy_set": fuzzy_name,
+                                    "membership_function": member_name,
+                                },
+                            )
+                        )
+
                     if "parameters" not in member_config:
-                        issues.append(ValidationIssue(
-                            severity="error",
-                            category="fuzzy_sets",
-                            message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' missing 'parameters' field", 
-                            details={"fuzzy_set": fuzzy_name, "membership_function": member_name}
-                        ))
-    
+                        issues.append(
+                            ValidationIssue(
+                                severity="error",
+                                category="fuzzy_sets",
+                                message=f"Membership function '{member_name}' in fuzzy set '{fuzzy_name}' missing 'parameters' field",
+                                details={
+                                    "fuzzy_set": fuzzy_name,
+                                    "membership_function": member_name,
+                                },
+                            )
+                        )
+
     return issues
 
 
@@ -477,16 +522,16 @@ def _validate_strategy_config(config: Dict[str, Any], strategy_name: str) -> Lis
 async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
     """
     Validate a strategy configuration for completeness and correctness.
-    
+
     This endpoint performs comprehensive validation of a strategy file:
     - Checks that all referenced indicators exist in the system
-    - Validates fuzzy sets configuration  
+    - Validates fuzzy sets configuration
     - Verifies strategy file structure
     - Provides detailed error messages for issues found
-    
+
     Args:
         strategy_name: Name of the strategy file (without .yaml extension)
-        
+
     Returns:
         Validation response with issues found and available indicators
     """
@@ -495,27 +540,28 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
         strategy_file = Path(f"strategies/{strategy_name}.yaml")
         if not strategy_file.exists():
             raise HTTPException(
-                status_code=404, 
-                detail=f"Strategy file not found: {strategy_name}.yaml"
+                status_code=404, detail=f"Strategy file not found: {strategy_name}.yaml"
             )
-        
-        with open(strategy_file, "r") as f:
+
+        with open(strategy_file) as f:
             config = yaml.safe_load(f)
-        
+
         # Validate the configuration
         issues = _validate_strategy_config(config, strategy_name)
-        
+
         # Get available indicators for reference
         available_indicators = sorted(set(BUILT_IN_INDICATORS.keys()))
-        
+
         # Determine if validation passed
         has_errors = any(issue.severity == "error" for issue in issues)
         is_valid = not has_errors
-        
+
         # Create response message
         if is_valid:
             if issues:  # Has warnings but no errors
-                message = f"Strategy '{strategy_name}' is valid with {len(issues)} warning(s)"
+                message = (
+                    f"Strategy '{strategy_name}' is valid with {len(issues)} warning(s)"
+                )
             else:
                 message = f"Strategy '{strategy_name}' is valid"
         else:
@@ -524,16 +570,16 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
             message = f"Strategy '{strategy_name}' has {error_count} error(s)"
             if warning_count > 0:
                 message += f" and {warning_count} warning(s)"
-        
+
         return StrategyValidationResponse(
             success=True,
             valid=is_valid,
             strategy_name=strategy_name,
             issues=issues,
             available_indicators=available_indicators,
-            message=message
+            message=message,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -542,12 +588,14 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
             success=False,
             valid=False,
             strategy_name=strategy_name,
-            issues=[ValidationIssue(
-                severity="error",
-                category="system",
-                message=f"Failed to validate strategy: {str(e)}",
-                details={"error": str(e)}
-            )],
+            issues=[
+                ValidationIssue(
+                    severity="error",
+                    category="system",
+                    message=f"Failed to validate strategy: {str(e)}",
+                    details={"error": str(e)},
+                )
+            ],
             available_indicators=sorted(set(BUILT_IN_INDICATORS.keys())),
-            message=f"Validation failed due to system error"
+            message="Validation failed due to system error",
         )

@@ -5,31 +5,26 @@ This module provides service layer functionality for IB operations using the new
 simplified IB architecture with dedicated threads and persistent event loops.
 """
 
-import time
 import asyncio
-import pandas as pd
-from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any, List
-from pathlib import Path
+import time
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
 from ktrdr import get_logger
-from ktrdr.ib import IbConnectionPool, IbErrorClassifier, IbPaceManager
-from ktrdr.data.ib_data_adapter import IbDataAdapter
-from ktrdr.config.ib_config import get_ib_config
 from ktrdr.api.models.ib import (
     ConnectionInfo,
     ConnectionMetrics,
     DataFetchMetrics,
-    IbStatusResponse,
-    IbHealthStatus,
+    DataRangesResponse,
     IbConfigInfo,
     IbConfigUpdateRequest,
     IbConfigUpdateResponse,
-    DataRangeInfo,
-    SymbolRangeResponse,
-    DataRangesResponse,
+    IbHealthStatus,
+    IbStatusResponse,
 )
 from ktrdr.config.ib_config import reset_ib_config
+from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.ib import IbPaceManager
 
 logger = get_logger(__name__)
 
@@ -89,14 +84,15 @@ class IbService:
             IbStatusResponse with connection info, metrics, and availability
         """
         # Import dependencies at top of method
-        from ktrdr.config.loader import ConfigLoader
-        from ktrdr.config.models import KtrdrConfig, IbHostServiceConfig
-        from ktrdr.config.ib_config import get_ib_config
-        from ktrdr.data.ib_data_adapter import IbDataAdapter
+        import os
         from datetime import datetime, timezone
         from pathlib import Path
-        import os
-        
+
+        from ktrdr.config.ib_config import get_ib_config
+        from ktrdr.config.loader import ConfigLoader
+        from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
+        from ktrdr.data.ib_data_adapter import IbDataAdapter
+
         # Load host service configuration to determine connection method
         try:
 
@@ -109,7 +105,7 @@ class IbService:
                     host_service_config = main_config.ib_host_service
                 else:
                     host_service_config = IbHostServiceConfig()
-                    
+
                 # Check environment variable override (same logic as DataManager)
                 env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
                 if env_enabled in ("true", "1", "yes"):
@@ -120,9 +116,11 @@ class IbService:
                         host_service_config.url = env_url
                 elif env_enabled in ("false", "0", "no"):
                     host_service_config.enabled = False
-                    
-                logger.info(f"🔍 IB status check: host_service.enabled={host_service_config.enabled}, url={host_service_config.url}")
-                    
+
+                logger.info(
+                    f"🔍 IB status check: host_service.enabled={host_service_config.enabled}, url={host_service_config.url}"
+                )
+
             except Exception as e:
                 logger.warning(f"Failed to load host service config: {e}")
                 host_service_config = IbHostServiceConfig()
@@ -130,24 +128,26 @@ class IbService:
             if host_service_config.enabled:
                 # Use host service for status
                 ib_config = get_ib_config()
-                
+
                 # Create IbDataAdapter in host service mode
                 adapter = IbDataAdapter(
                     host=ib_config.host,
                     port=ib_config.port,
                     use_host_service=True,
-                    host_service_url=host_service_config.url
+                    host_service_url=host_service_config.url,
                 )
-                
+
                 # Get health check from host service
                 health = await adapter.health_check()
-                
+
                 # Convert health check to IbStatusResponse format
                 ib_available = health.get("healthy", False)
                 connected = health.get("connected", False)
-                
-                logger.info(f"🔍 IB status via host service: healthy={ib_available}, connected={connected}")
-                
+
+                logger.info(
+                    f"🔍 IB status via host service: healthy={ib_available}, connected={connected}"
+                )
+
                 # Create response based on host service health
                 return IbStatusResponse(
                     connection=ConnectionInfo(
@@ -155,7 +155,9 @@ class IbService:
                         host=host_service_config.url,
                         port=5001,  # Host service port
                         client_id=0,
-                        connection_time=datetime.now(timezone.utc) if connected else None,
+                        connection_time=(
+                            datetime.now(timezone.utc) if connected else None
+                        ),
                     ),
                     connection_metrics=ConnectionMetrics(
                         total_connections=1 if connected else 0,
@@ -165,7 +167,9 @@ class IbService:
                         uptime_seconds=None,
                     ),
                     data_metrics=DataFetchMetrics(
-                        total_requests=health.get("provider_info", {}).get("requests_made", 0),
+                        total_requests=health.get("provider_info", {}).get(
+                            "requests_made", 0
+                        ),
                         successful_requests=0,
                         failed_requests=health.get("error_count", 0),
                         total_bars_fetched=0,
@@ -181,7 +185,9 @@ class IbService:
                 pool_stats = pool.get_pool_stats()
                 ib_available = pool_stats["total_connections"] >= 0  # Pool exists
 
-                logger.info("🔍 IB status via direct connection - checking connection pool")
+                logger.info(
+                    "🔍 IB status via direct connection - checking connection pool"
+                )
 
         except Exception as e:
             logger.warning(f"IB status check failed: {e}")
@@ -379,7 +385,7 @@ class IbService:
             error_message=error_message,
         )
 
-    async def get_connection_resilience_status(self) -> Dict[str, Any]:
+    async def get_connection_resilience_status(self) -> dict[str, Any]:
         """
         Get basic connection resilience status for new architecture.
 
@@ -469,7 +475,7 @@ class IbService:
                 },
             )
 
-    async def cleanup_connections(self) -> Dict[str, Any]:
+    async def cleanup_connections(self) -> dict[str, Any]:
         """
         Clean up all IB connections.
 
@@ -500,7 +506,7 @@ class IbService:
 
             return {
                 "success": True,
-                "message": f"IB connection pool cleaned up successfully",
+                "message": "IB connection pool cleaned up successfully",
                 "connections_closed": connections_closed,
                 "pool_stats_before": stats_before,
                 "pool_stats_after": stats_after,
@@ -586,7 +592,7 @@ class IbService:
         )
 
     async def get_data_ranges(
-        self, symbols: List[str], timeframes: List[str]
+        self, symbols: list[str], timeframes: list[str]
     ) -> DataRangesResponse:
         """
         Get historical data ranges for multiple symbols and timeframes.
@@ -615,7 +621,7 @@ class IbService:
 
     async def discover_symbol(
         self, symbol: str, force_refresh: bool = False
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Discover symbol information using unified IB symbol validator.
 
@@ -628,10 +634,11 @@ class IbService:
         """
         try:
             # Use IB data adapter with host service support
+            from pathlib import Path
+
             from ktrdr.config.ib_config import get_ib_config
             from ktrdr.config.loader import ConfigLoader
-            from ktrdr.config.models import KtrdrConfig, IbHostServiceConfig
-            from pathlib import Path
+            from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
 
             # Load host service configuration
             try:
@@ -647,13 +654,13 @@ class IbService:
 
             # Get IB connection config for fallback
             ib_config = get_ib_config()
-            
+
             # Initialize adapter with appropriate mode
             adapter = IbDataAdapter(
                 host=ib_config.host,
                 port=ib_config.port,
                 use_host_service=host_service_config.enabled,
-                host_service_url=host_service_config.url
+                host_service_url=host_service_config.url,
             )
 
             # Validate symbol using new architecture
@@ -684,7 +691,7 @@ class IbService:
 
     def get_discovered_symbols(
         self, instrument_type: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get all discovered symbols from the cache.
 
@@ -701,7 +708,7 @@ class IbService:
         )
         return []
 
-    def get_symbol_discovery_stats(self) -> Dict[str, Any]:
+    def get_symbol_discovery_stats(self) -> dict[str, Any]:
         """
         Get symbol discovery cache statistics.
 

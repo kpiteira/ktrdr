@@ -4,22 +4,22 @@ Gap Analysis CLI Commands
 Provides command-line interface for gap analysis and gap filler service management.
 """
 
-import typer
-import json
 import asyncio
+import json
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
-from datetime import datetime, timezone, timedelta
+
+import typer
 from tabulate import tabulate
 
-from ktrdr.logging import get_logger
-from ktrdr.api.services.gap_analysis_service import GapAnalysisService
 from ktrdr.api.models.gap_analysis import (
-    GapAnalysisRequest,
-    GapAnalysisMode,
     BatchGapAnalysisRequest,
+    GapAnalysisMode,
+    GapAnalysisRequest,
 )
+from ktrdr.api.services.gap_analysis_service import GapAnalysisService
 from ktrdr.data.ib_gap_filler import get_gap_filler
-from ktrdr.data.gap_classifier import GapClassification
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -107,7 +107,7 @@ def analyze_gaps(
 @gap_analysis_app.command("batch")
 def analyze_batch_gaps(
     timeframe: str = typer.Argument(..., help="Timeframe (e.g., 1d, 1h)"),
-    symbols: List[str] = typer.Argument(
+    symbols: list[str] = typer.Argument(
         ..., help="Trading symbols (e.g., AAPL MSFT GOOGL)"
     ),
     start_date: Optional[str] = typer.Option(
@@ -450,7 +450,7 @@ def _print_gap_table(result, mode: str, include_expected: bool):
 
 def _print_batch_summary(result):
     """Print batch analysis summary."""
-    typer.echo(f"\nBatch Gap Analysis Summary")
+    typer.echo("\nBatch Gap Analysis Summary")
     typer.echo("=" * 40)
 
     # Request summary
@@ -490,7 +490,7 @@ def _print_batch_table(result):
 
     # Individual symbol results
     if result.results:
-        typer.echo(f"\nIndividual Symbol Results")
+        typer.echo("\nIndividual Symbol Results")
         typer.echo("=" * 35)
 
         symbol_data = []

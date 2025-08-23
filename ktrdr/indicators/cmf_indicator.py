@@ -9,13 +9,13 @@ selling pressure.
 Author: KTRDR
 """
 
+from typing import Any, Dict
+
 import pandas as pd
-import numpy as np
-from typing import Dict, Any, List, Optional, Union
 
 from ktrdr import get_logger
-from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 
 logger = get_logger(__name__)
 
@@ -56,7 +56,7 @@ class CMFIndicator(BaseIndicator):
         # Call parent constructor - CMF is typically displayed in separate panel
         super().__init__(name="CMF", display_as_overlay=False, period=period)
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate indicator parameters."""
         period = params.get("period", 21)
 
@@ -265,7 +265,7 @@ class CMFIndicator(BaseIndicator):
 
         return result
 
-    def get_analysis(self, data: pd.DataFrame) -> Dict[str, Any]:
+    def get_analysis(self, data: pd.DataFrame) -> dict[str, Any]:
         """
         Get comprehensive analysis of CMF.
 

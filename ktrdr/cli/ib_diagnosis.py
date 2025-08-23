@@ -5,8 +5,8 @@ This module provides CLI-specific diagnosis of IB Gateway connectivity issues
 to give clear, actionable error messages that match the backend diagnosis.
 """
 
-from typing import Dict, Any, Optional, Tuple
 from enum import Enum
+from typing import Any, Dict, Optional, Tuple
 
 from ktrdr.logging import get_logger
 
@@ -23,8 +23,8 @@ class IBProblemType(Enum):
 
 
 def detect_ib_issue_from_api_response(
-    response: Dict[str, Any],
-) -> Tuple[Optional[IBProblemType], Optional[str], Dict[str, Any]]:
+    response: dict[str, Any],
+) -> tuple[Optional[IBProblemType], Optional[str], dict[str, Any]]:
     """
     Detect IB Gateway issues from API response.
 
@@ -126,7 +126,7 @@ def detect_ib_issue_from_api_response(
 
 
 def format_ib_diagnostic_message(
-    problem_type: IBProblemType, message: str, details: Dict[str, Any] = None
+    problem_type: IBProblemType, message: str, details: dict[str, Any] = None
 ) -> str:
     """
     Format a clear, actionable IB diagnostic message for CLI display.
@@ -213,7 +213,7 @@ def get_ib_recovery_suggestions(problem_type: IBProblemType) -> str:
         )
 
 
-def should_show_ib_diagnosis(response: Dict[str, Any]) -> bool:
+def should_show_ib_diagnosis(response: dict[str, Any]) -> bool:
     """
     Determine if we should show IB diagnosis for this response.
 

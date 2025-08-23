@@ -10,8 +10,8 @@ This classifier is based on comprehensive research of official IB documentation
 and real-world usage patterns.
 """
 
-from typing import Tuple
 from enum import Enum
+from typing import Tuple
 
 from ktrdr.logging import get_logger
 
@@ -160,7 +160,7 @@ class IbErrorClassifier:
     ]
 
     @classmethod
-    def classify(cls, error_code: int, error_message: str) -> Tuple[IbErrorType, float]:
+    def classify(cls, error_code: int, error_message: str) -> tuple[IbErrorType, float]:
         """
         Classify error and return (type, suggested_wait_seconds)
 

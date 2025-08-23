@@ -10,27 +10,24 @@ This module contains essential CLI commands related to trading strategies:
 
 import asyncio
 import sys
-import json
-from typing import Optional
 from pathlib import Path
 
 import typer
 from rich.console import Console
-from rich.table import Table
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
     TextColumn,
-    BarColumn,
     TimeElapsedColumn,
 )
+from rich.table import Table
 
-from ktrdr.cli.api_client import get_api_client, check_api_connection
-from ktrdr.config.validation import InputValidator
-from ktrdr.errors import ValidationError, DataError
-from ktrdr.logging import get_logger
-from ktrdr.config.strategy_validator import StrategyValidator
+from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.config.strategy_loader import strategy_loader
+from ktrdr.config.strategy_validator import StrategyValidator
+from ktrdr.config.validation import InputValidator
+from ktrdr.logging import get_logger
 
 # Setup logging and console
 logger = get_logger(__name__)
@@ -114,8 +111,12 @@ def validate_strategy(
 
 @strategies_app.command("list")
 def list_strategies(
-    directory: str = typer.Argument("strategies", help="Directory containing strategy files"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information"),
+    directory: str = typer.Argument(
+        "strategies", help="Directory containing strategy files"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed information"
+    ),
 ):
     """
     List all available trading strategies.
@@ -124,18 +125,26 @@ def list_strategies(
     """
     strategies_dir = Path(directory)
     if not strategies_dir.exists():
-        console.print(f"[red]❌ Error: Strategies directory not found: {strategies_dir}[/red]")
+        console.print(
+            f"[red]❌ Error: Strategies directory not found: {strategies_dir}[/red]"
+        )
         raise typer.Exit(1)
 
     # Find all YAML files
-    strategy_files = list(strategies_dir.glob("*.yaml")) + list(strategies_dir.glob("*.yml"))
-    strategy_files = [f for f in strategy_files if not f.name.startswith('.')]
+    strategy_files = list(strategies_dir.glob("*.yaml")) + list(
+        strategies_dir.glob("*.yml")
+    )
+    strategy_files = [f for f in strategy_files if not f.name.startswith(".")]
 
     if not strategy_files:
-        console.print(f"[yellow]📭 No strategy files found in {strategies_dir}[/yellow]")
+        console.print(
+            f"[yellow]📭 No strategy files found in {strategies_dir}[/yellow]"
+        )
         return
 
-    console.print(f"📋 Found {len(strategy_files)} strategy files in [blue]{strategies_dir}[/blue]")
+    console.print(
+        f"📋 Found {len(strategy_files)} strategy files in [blue]{strategies_dir}[/blue]"
+    )
     console.print("=" * 80)
 
     validator = StrategyValidator()
@@ -160,9 +169,13 @@ def list_strategies(
             # Load and validate strategy
             config, is_v2 = strategy_loader.load_strategy_config(str(strategy_file))
             result = validator.validate_strategy(str(strategy_file))
-            
-            status = "[green]✅ Valid[/green]" if result.is_valid else "[red]❌ Invalid[/red]"
-            
+
+            status = (
+                "[green]✅ Valid[/green]"
+                if result.is_valid
+                else "[red]❌ Invalid[/red]"
+            )
+
             if result.is_valid:
                 valid_strategies.append(strategy_file.name)
             else:
@@ -170,60 +183,83 @@ def list_strategies(
 
             if verbose:
                 # Extract detailed info
-                symbols, timeframes = strategy_loader.extract_training_symbols_and_timeframes(config)
-                scope = getattr(config, 'scope', 'unknown')
-                scope_str = str(scope).split('.')[-1] if hasattr(scope, 'value') else str(scope)
-                
-                symbols_str = ', '.join(symbols[:2]) + ('...' if len(symbols) > 2 else '')
-                timeframes_str = ', '.join(timeframes[:2]) + ('...' if len(timeframes) > 2 else '')
-                
+                symbols, timeframes = (
+                    strategy_loader.extract_training_symbols_and_timeframes(config)
+                )
+                scope = getattr(config, "scope", "unknown")
+                scope_str = (
+                    str(scope).split(".")[-1] if hasattr(scope, "value") else str(scope)
+                )
+
+                symbols_str = ", ".join(symbols[:2]) + (
+                    "..." if len(symbols) > 2 else ""
+                )
+                timeframes_str = ", ".join(timeframes[:2]) + (
+                    "..." if len(timeframes) > 2 else ""
+                )
+
                 table.add_row(
                     config.name,
                     strategy_file.name,
                     scope_str,
                     symbols_str,
                     timeframes_str,
-                    status
+                    status,
                 )
             else:
-                table.add_row(
-                    config.name,
-                    strategy_file.name,
-                    status
-                )
+                table.add_row(config.name, strategy_file.name, status)
 
         except Exception as e:
             invalid_strategies.append(strategy_file.name)
             status = f"[red]❌ Error: {str(e)[:50]}...[/red]"
-            
+
             if verbose:
-                table.add_row("Unknown", strategy_file.name, "Unknown", "Unknown", "Unknown", status)
+                table.add_row(
+                    "Unknown",
+                    strategy_file.name,
+                    "Unknown",
+                    "Unknown",
+                    "Unknown",
+                    status,
+                )
             else:
                 table.add_row("Unknown", strategy_file.name, status)
 
     console.print(table)
     console.print("\n" + "=" * 80)
-    console.print(f"📊 [bold]Summary:[/bold]")
+    console.print("📊 [bold]Summary:[/bold]")
     console.print(f"   [green]✅ Valid: {len(valid_strategies)}[/green]")
     console.print(f"   [red]❌ Invalid: {len(invalid_strategies)}[/red]")
     console.print(f"   Total: {len(strategy_files)}")
 
     if invalid_strategies:
-        console.print(f"\n[red]❌ Invalid strategies:[/red]")
+        console.print("\n[red]❌ Invalid strategies:[/red]")
         for strategy in invalid_strategies:
             console.print(f"   • {strategy}")
 
 
 @strategies_app.command("backtest")
 def backtest_strategy(
-    strategy_file: str = typer.Argument(..., help="Path to strategy configuration file"),
+    strategy_file: str = typer.Argument(
+        ..., help="Path to strategy configuration file"
+    ),
     symbol: str = typer.Argument(..., help="Symbol to backtest (e.g., AAPL, EURUSD)"),
-    timeframe: str = typer.Argument(..., help="Timeframe for backtesting (e.g., 1h, 4h, 1d)"),
-    start_date: str = typer.Option("2020-01-01", "--start", help="Start date (YYYY-MM-DD)"),
+    timeframe: str = typer.Argument(
+        ..., help="Timeframe for backtesting (e.g., 1h, 4h, 1d)"
+    ),
+    start_date: str = typer.Option(
+        "2020-01-01", "--start", help="Start date (YYYY-MM-DD)"
+    ),
     end_date: str = typer.Option("2024-01-01", "--end", help="End date (YYYY-MM-DD)"),
-    initial_capital: float = typer.Option(100000.0, "--capital", help="Initial capital"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without executing"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+    initial_capital: float = typer.Option(
+        100000.0, "--capital", help="Initial capital"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be done without executing"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed progress"
+    ),
 ):
     """
     Run backtesting for a trading strategy.
@@ -248,14 +284,29 @@ def backtest_strategy(
         raise typer.Exit(1)
 
     # Run the backtest asynchronously
-    asyncio.run(run_backtest_async(
-        strategy_file, symbol, timeframe, start_date, end_date, initial_capital, dry_run, verbose
-    ))
+    asyncio.run(
+        run_backtest_async(
+            strategy_file,
+            symbol,
+            timeframe,
+            start_date,
+            end_date,
+            initial_capital,
+            dry_run,
+            verbose,
+        )
+    )
 
 
 async def run_backtest_async(
-    strategy_file: str, symbol: str, timeframe: str, start_date: str, end_date: str,
-    initial_capital: float, dry_run: bool, verbose: bool
+    strategy_file: str,
+    symbol: str,
+    timeframe: str,
+    start_date: str,
+    end_date: str,
+    initial_capital: float,
+    dry_run: bool,
+    verbose: bool,
 ):
     """Async wrapper for backtest execution."""
     try:
@@ -278,7 +329,7 @@ async def run_backtest_async(
             console.print(f"💰 Initial capital: ${initial_capital:,.2f}")
 
         if dry_run:
-            console.print(f"🔍 [yellow]DRY RUN - No backtest will be executed[/yellow]")
+            console.print("🔍 [yellow]DRY RUN - No backtest will be executed[/yellow]")
             console.print(f"📋 Would backtest: {symbol} on {timeframe}")
             console.print(f"📊 Strategy: {strategy_file}")
             console.print(f"💰 Capital: ${initial_capital:,.2f}")
@@ -286,8 +337,8 @@ async def run_backtest_async(
             return
 
         # Call the real backtesting API endpoint
-        console.print(f"🚀 [cyan]Starting backtest via API...[/cyan]")
-        console.print(f"📋 Backtest parameters:")
+        console.print("🚀 [cyan]Starting backtest via API...[/cyan]")
+        console.print("📋 Backtest parameters:")
         console.print(f"   Strategy: {strategy_file}")
         console.print(f"   Symbol: {symbol}")
         console.print(f"   Timeframe: {timeframe}")
@@ -307,10 +358,10 @@ async def run_backtest_async(
                 end_date=end_date,
                 initial_capital=initial_capital,
             )
-            
+
             backtest_id = result["backtest_id"]
             console.print(f"✅ Backtest started with ID: [bold]{backtest_id}[/bold]")
-            
+
         except Exception as e:
             console.print(f"❌ [red]Failed to start backtest: {str(e)}[/red]")
             return
@@ -318,10 +369,11 @@ async def run_backtest_async(
         # Poll for progress with real API calls
         # Temporarily suppress httpx logging to keep progress display clean
         import logging
+
         httpx_logger = logging.getLogger("httpx")
         original_level = httpx_logger.level
         httpx_logger.setLevel(logging.WARNING)
-        
+
         try:
             with Progress(
                 SpinnerColumn(),
@@ -336,30 +388,40 @@ async def run_backtest_async(
                 while True:
                     try:
                         # Get real status from operations API
-                        status_result = await api_client.get_operation_status(backtest_id)
+                        status_result = await api_client.get_operation_status(
+                            backtest_id
+                        )
                         data = status_result.get("data", {})
                         status = data.get("status", "unknown")
                         progress_info = data.get("progress", {})
                         progress_pct = progress_info.get("percentage", 0)
-                        
+
                         # Update progress bar with real progress
-                        progress.update(task, completed=progress_pct, description=f"Status: {status}")
-                        
+                        progress.update(
+                            task,
+                            completed=progress_pct,
+                            description=f"Status: {status}",
+                        )
+
                         if status == "completed":
-                            console.print(f"✅ [green]Backtest completed successfully![/green]")
+                            console.print(
+                                "✅ [green]Backtest completed successfully![/green]"
+                            )
                             break
                         elif status == "failed":
                             error_msg = data.get("error_message", "Unknown error")
                             console.print(f"❌ [red]Backtest failed: {error_msg}[/red]")
                             return
-                        
+
                         # Wait before next poll
                         await asyncio.sleep(2)
-                        
+
                     except Exception as e:
-                        console.print(f"❌ [red]Error polling backtest status: {str(e)}[/red]")
+                        console.print(
+                            f"❌ [red]Error polling backtest status: {str(e)}[/red]"
+                        )
                         return
-                        
+
         finally:
             # Restore original logging level
             httpx_logger.setLevel(original_level)
@@ -367,17 +429,17 @@ async def run_backtest_async(
         # Get final results
         try:
             results = await api_client.get_backtest_results(backtest_id)
-            
+
             if results:
-                console.print(f"\n📊 [bold green]Backtest Results:[/bold green]")
+                console.print("\n📊 [bold green]Backtest Results:[/bold green]")
                 console.print(f"   Total Return: {results.get('total_return', 'N/A')}")
                 console.print(f"   Sharpe Ratio: {results.get('sharpe_ratio', 'N/A')}")
                 console.print(f"   Max Drawdown: {results.get('max_drawdown', 'N/A')}")
                 console.print(f"   Total Trades: {results.get('total_trades', 'N/A')}")
                 console.print(f"   Win Rate: {results.get('win_rate', 'N/A')}")
             else:
-                console.print(f"[yellow]⚠️  Results not yet available[/yellow]")
-                
+                console.print("[yellow]⚠️  Results not yet available[/yellow]")
+
         except Exception as e:
             console.print(f"[yellow]⚠️  Could not retrieve results: {str(e)}[/yellow]")
 
@@ -389,12 +451,16 @@ async def run_backtest_async(
 @strategies_app.command("validate-all")
 def validate_all_cmd(
     directory: str = typer.Argument(..., help="Directory containing strategy files"),
-    fail_fast: bool = typer.Option(False, "--fail-fast", help="Stop on first validation error"),
-    summary_only: bool = typer.Option(False, "--summary", help="Show only summary statistics"),
+    fail_fast: bool = typer.Option(
+        False, "--fail-fast", help="Stop on first validation error"
+    ),
+    summary_only: bool = typer.Option(
+        False, "--summary", help="Show only summary statistics"
+    ),
 ):
     """
     Validate all strategy files in a directory.
-    
+
     Runs validation on all strategy files and provides a comprehensive
     report of validation results.
     """
@@ -408,19 +474,19 @@ def validate_all_cmd(
 
     validator = StrategyValidator()
     strategy_files = list(dir_path.glob("*.yaml")) + list(dir_path.glob("*.yml"))
-    
+
     if not strategy_files:
         console.print("[yellow]📭 No strategy files found[/yellow]")
         return
-    
+
     valid_count = 0
     invalid_count = 0
     error_details = []
-    
+
     for file_path in sorted(strategy_files):
         try:
             result = validator.validate_strategy(str(file_path))
-            
+
             if result.is_valid:
                 valid_count += 1
                 if not summary_only:
@@ -428,45 +494,51 @@ def validate_all_cmd(
             else:
                 invalid_count += 1
                 error_details.append((file_path.name, result.errors))
-                
+
                 if not summary_only:
-                    console.print(f"[red]❌[/red] {file_path.name} ({len(result.errors)} errors)")
+                    console.print(
+                        f"[red]❌[/red] {file_path.name} ({len(result.errors)} errors)"
+                    )
                     for error in result.errors[:2]:  # Show first 2 errors
                         console.print(f"    • {error}")
                     if len(result.errors) > 2:
                         console.print(f"    ... and {len(result.errors) - 2} more")
-                
+
                 if fail_fast:
-                    console.print(f"\n[red]💥 Stopping on first error (--fail-fast)[/red]")
+                    console.print(
+                        "\n[red]💥 Stopping on first error (--fail-fast)[/red]"
+                    )
                     break
-                    
+
         except Exception as e:
             invalid_count += 1
             if not summary_only:
-                console.print(f"[red]❌[/red] {file_path.name} (validation failed: {e})")
-            
+                console.print(
+                    f"[red]❌[/red] {file_path.name} (validation failed: {e})"
+                )
+
             if fail_fast:
-                console.print(f"\n[red]💥 Stopping on first error (--fail-fast)[/red]")
+                console.print("\n[red]💥 Stopping on first error (--fail-fast)[/red]")
                 break
-    
+
     # Summary
     total = valid_count + invalid_count
     success_rate = (valid_count / total * 100) if total > 0 else 0
-    
+
     console.print("\n" + "=" * 60)
-    console.print(f"[bold]📊 Validation Summary:[/bold]")
+    console.print("[bold]📊 Validation Summary:[/bold]")
     console.print(f"  Total files: {total}")
     console.print(f"  [green]✅ Valid: {valid_count}[/green]")
     console.print(f"  [red]❌ Invalid: {invalid_count}[/red]")
     console.print(f"  Success rate: {success_rate:.1f}%")
-    
+
     if invalid_count > 0:
         console.print(f"\n[red]❌ {invalid_count} files have validation errors[/red]")
         if summary_only and error_details:
             console.print("\n[red]Files with errors:[/red]")
             for filename, errors in error_details:
                 console.print(f"  • {filename} ({len(errors)} errors)")
-        
+
         raise typer.Exit(1)
     else:
-        console.print(f"\n[green]🎉 All strategies are valid![/green]")
+        console.print("\n[green]🎉 All strategies are valid![/green]")

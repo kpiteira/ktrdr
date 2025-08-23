@@ -6,8 +6,9 @@ request and response models for generating and configuring charts.
 """
 
 from enum import Enum
-from typing import Dict, List, Any, Optional, Union
-from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.indicators import IndicatorConfig
@@ -170,7 +171,7 @@ class ChartPanel(BaseModel):
     id: str = Field(..., description="Unique identifier for the panel")
     title: str = Field(..., description="Panel title")
     height: int = Field(300, description="Panel height in pixels")
-    series: List[ChartSeries] = Field(
+    series: list[ChartSeries] = Field(
         ..., description="Series to display in this panel"
     )
     y_axis: Optional[ChartAxisOptions] = Field(None, description="Y-axis options")
@@ -241,7 +242,7 @@ class ChartRenderRequest(BaseModel):
 
     symbol: str = Field(..., description="Trading symbol")
     timeframe: str = Field(..., description="Data timeframe")
-    indicators: List[IndicatorConfig] = Field(
+    indicators: list[IndicatorConfig] = Field(
         default_factory=list, description="Indicators to include in the chart"
     )
     start_date: Optional[str] = Field(
@@ -250,7 +251,7 @@ class ChartRenderRequest(BaseModel):
     end_date: Optional[str] = Field(
         None, description="End date for data range (ISO format)"
     )
-    panels: Optional[List[ChartPanel]] = Field(
+    panels: Optional[list[ChartPanel]] = Field(
         None, description="Custom panel configuration"
     )
     options: Optional[ChartOptions] = Field(None, description="Chart rendering options")
@@ -288,10 +289,10 @@ class ChartData(BaseModel):
         metadata (Dict[str, Any]): Chart metadata
     """
 
-    config: Dict[str, Any] = Field(..., description="Chart configuration object")
-    panels: List[Dict[str, Any]] = Field(..., description="Panel configuration")
-    data: Dict[str, List[Any]] = Field(..., description="Data series")
-    metadata: Dict[str, Any] = Field(..., description="Chart metadata")
+    config: dict[str, Any] = Field(..., description="Chart configuration object")
+    panels: list[dict[str, Any]] = Field(..., description="Panel configuration")
+    data: dict[str, list[Any]] = Field(..., description="Data series")
+    metadata: dict[str, Any] = Field(..., description="Chart metadata")
 
 
 class ChartRenderResponse(ApiResponse[ChartData]):
@@ -318,12 +319,12 @@ class ChartTemplateInfo(BaseModel):
     preview_url: Optional[str] = Field(
         None, description="URL to template preview image"
     )
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list, description="Template tags for categorization"
     )
 
 
-class ChartTemplatesResponse(ApiResponse[List[ChartTemplateInfo]]):
+class ChartTemplatesResponse(ApiResponse[list[ChartTemplateInfo]]):
     """Response model for listing available chart templates."""
 
     pass

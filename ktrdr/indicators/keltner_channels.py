@@ -8,13 +8,13 @@ They help identify volatility, trend direction, and potential reversal points.
 Author: KTRDR
 """
 
+from typing import Any, Dict
+
 import pandas as pd
-import numpy as np
-from typing import Dict, Any, List, Optional, Union
 
 from ktrdr import get_logger
-from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 
 logger = get_logger(__name__)
 
@@ -64,7 +64,7 @@ class KeltnerChannelsIndicator(BaseIndicator):
             multiplier=multiplier,
         )
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate indicator parameters."""
         period = params.get("period", 20)
         atr_period = params.get("atr_period", 10)
@@ -268,7 +268,7 @@ class KeltnerChannelsIndicator(BaseIndicator):
 
         return result
 
-    def get_analysis(self, data: pd.DataFrame) -> Dict[str, Any]:
+    def get_analysis(self, data: pd.DataFrame) -> dict[str, Any]:
         """
         Get comprehensive analysis of Keltner Channels.
 

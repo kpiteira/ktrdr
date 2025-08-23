@@ -900,5 +900,115 @@
         "error": null
       }
     }
+  },
+  {
+    "timestamp": "2025-08-22T20:52:29.901288",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-08-22T20:52:29.898057",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.711151123046875,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-08-22T20:52:29.900803",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.2679100036621094,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": true,
+          "device_count": 1,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
+  },
+  {
+    "timestamp": "2025-08-22T20:52:30.012495",
+    "metrics": {
+      "ib-host": {
+        "timestamp": "2025-08-22T20:52:30.009860",
+        "service_name": "ib-host",
+        "status": "running",
+        "port": 5001,
+        "response_time_ms": 4.544973373413086,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": false,
+          "device_count": 0,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      },
+      "training-host": {
+        "timestamp": "2025-08-22T20:52:30.012317",
+        "service_name": "training-host",
+        "status": "running",
+        "port": 5002,
+        "response_time_ms": 1.1608600616455078,
+        "cpu_usage_percent": 0.0,
+        "memory_usage_mb": 0.0,
+        "active_connections": 0,
+        "uptime_seconds": 0.0,
+        "gpu_metrics": {
+          "available": true,
+          "device_count": 1,
+          "memory_total_mb": 0.0,
+          "memory_allocated_mb": 0.0,
+          "memory_utilization_percent": 0.0,
+          "temperature_celsius": null,
+          "power_usage_watts": null,
+          "compute_utilization_percent": null,
+          "manager_status": "unknown",
+          "error": null
+        },
+        "custom_metrics": {},
+        "error": null
+      }
+    }
   }
 ]

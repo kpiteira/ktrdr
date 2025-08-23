@@ -1,17 +1,14 @@
 """Robust error handling and recovery system for KTRDR training."""
 
-import sys
-import traceback
-import time
-import pickle
+import signal
 import threading
-from pathlib import Path
-from typing import Dict, Any, Optional, List, Callable, Union, Type
+import time
+import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import inspect
-import signal
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from ktrdr import get_logger
 
@@ -52,10 +49,10 @@ class ErrorContext:
     operation: str
     retry_count: int = 0
     max_retries: int = 3
-    recovery_actions: List[RecoveryAction] = field(default_factory=list)
-    additional_data: Dict[str, Any] = field(default_factory=dict)
+    recovery_actions: list[RecoveryAction] = field(default_factory=list)
+    additional_data: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "timestamp": self.timestamp,
@@ -77,11 +74,11 @@ class ErrorContext:
 class RecoveryStrategy:
     """Recovery strategy configuration."""
 
-    error_types: List[Type[Exception]]
+    error_types: list[type[Exception]]
     severity: ErrorSeverity
     max_retries: int
     retry_delay: float  # seconds
-    recovery_actions: List[RecoveryAction]
+    recovery_actions: list[RecoveryAction]
     fallback_function: Optional[Callable] = None
     cleanup_function: Optional[Callable] = None
 
@@ -103,9 +100,9 @@ class ErrorHandler:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Error tracking
-        self.error_history: List[ErrorContext] = []
-        self.recovery_strategies: List[RecoveryStrategy] = []
-        self.component_health: Dict[str, Dict[str, Any]] = {}
+        self.error_history: list[ErrorContext] = []
+        self.recovery_strategies: list[RecoveryStrategy] = []
+        self.component_health: dict[str, dict[str, Any]] = {}
 
         # Recovery state
         self.recovery_in_progress = False
@@ -192,7 +189,7 @@ class ErrorHandler:
         error: Exception,
         component: str,
         operation: str,
-        additional_data: Optional[Dict[str, Any]] = None,
+        additional_data: Optional[dict[str, Any]] = None,
     ) -> RecoveryAction:
         """Handle an error and determine recovery action.
 
@@ -337,6 +334,7 @@ class ErrorHandler:
     def _cleanup_memory(self):
         """Memory cleanup recovery function."""
         import gc
+
         import torch
 
         # Python garbage collection
@@ -469,7 +467,7 @@ class ErrorHandler:
 
         logger.info("Graceful shutdown completed")
 
-    def get_error_summary(self) -> Dict[str, Any]:
+    def get_error_summary(self) -> dict[str, Any]:
         """Get comprehensive error summary."""
         if not self.error_history:
             return {"total_errors": 0, "components": {}, "error_types": {}}
@@ -558,7 +556,7 @@ class ErrorHandler:
         logger.info(f"Error logs exported to: {export_path}")
         return export_path
 
-    def get_health_report(self) -> Dict[str, Any]:
+    def get_health_report(self) -> dict[str, Any]:
         """Get system health report."""
         recent_errors = [
             e for e in self.error_history if time.time() - e.timestamp < 3600

@@ -5,14 +5,14 @@ This module implements the complete Ichimoku Cloud indicator system, which provi
 a comprehensive view of trend, momentum, and support/resistance levels.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
+import pandas as pd
+
 from ktrdr import get_logger
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import ICHIMOKU_SCHEMA
-from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
 

@@ -9,13 +9,13 @@ stock price and volume flow.
 Author: KTRDR
 """
 
+from typing import Any, Dict
+
 import pandas as pd
-import numpy as np
-from typing import Dict, Any, List, Optional, Union
 
 from ktrdr import get_logger
-from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 
 logger = get_logger(__name__)
 
@@ -62,7 +62,7 @@ class ADLineIndicator(BaseIndicator):
             smoothing_period=smoothing_period,
         )
 
-    def _validate_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_params(self, params: dict[str, Any]) -> dict[str, Any]:
         """Validate indicator parameters."""
         use_sma_smoothing = params.get("use_sma_smoothing", False)
         smoothing_period = params.get("smoothing_period", 21)
@@ -268,7 +268,7 @@ class ADLineIndicator(BaseIndicator):
 
         return result
 
-    def get_analysis(self, data: pd.DataFrame) -> Dict[str, Any]:
+    def get_analysis(self, data: pd.DataFrame) -> dict[str, Any]:
         """
         Get comprehensive analysis of A/D Line.
 

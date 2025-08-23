@@ -3,8 +3,9 @@ Debug utilities for troubleshooting specific issues.
 """
 
 import logging
-from ktrdr.logging.config import set_component_log_level
+
 from ktrdr.logging import get_logger
+from ktrdr.logging.config import set_component_log_level
 
 logger = get_logger(__name__)
 

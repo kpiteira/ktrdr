@@ -24,19 +24,19 @@ Key Features:
 """
 
 import asyncio
-import time
 import json
+import time
+from dataclasses import dataclass
+from datetime import timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Union
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
-from ib_insync import Contract, Forex, Stock, Future
+from typing import Dict, List, Optional, Set
 
-from ktrdr.logging import get_logger
-from ktrdr.errors import DataError
-from ktrdr.ib.pool_manager import get_shared_ib_pool
+from ib_insync import Contract, Forex, Future, Stock
+
 from ktrdr.ib.pace_manager import IbPaceManager
+from ktrdr.ib.pool_manager import get_shared_ib_pool
 from ktrdr.ib.trading_hours_parser import IBTradingHoursParser
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -67,9 +67,9 @@ class ContractInfo:
     currency: str
     description: str
     validated_at: float
-    trading_hours: Optional[Dict] = None  # Serialized TradingHours
+    trading_hours: Optional[dict] = None  # Serialized TradingHours
     head_timestamp: Optional[str] = None  # ISO format for JSON serialization
-    head_timestamp_timeframes: Optional[Dict[str, str]] = (
+    head_timestamp_timeframes: Optional[dict[str, str]] = (
         None  # timeframe -> ISO timestamp
     )
     head_timestamp_fetched_at: Optional[float] = (
@@ -85,7 +85,7 @@ class ValidationResult:
     symbol: str
     error_message: Optional[str] = None
     contract_info: Optional[ContractInfo] = None
-    head_timestamps: Optional[Dict[str, str]] = None  # timeframe -> ISO timestamp
+    head_timestamps: Optional[dict[str, str]] = None  # timeframe -> ISO timestamp
     suggested_symbol: Optional[str] = (
         None  # For format corrections like USDJPY -> USD.JPY
     )
@@ -113,8 +113,8 @@ class IbSymbolValidator:
         self.pace_manager = IbPaceManager()
 
         # Cache management
-        self._cache: Dict[str, ContractInfo] = {}
-        self._validated_symbols: Set[str] = set()  # Permanently validated symbols
+        self._cache: dict[str, ContractInfo] = {}
+        self._validated_symbols: set[str] = set()  # Permanently validated symbols
         self._cache_ttl = 86400 * 30  # 30 days for re-validation
 
         # Metrics tracking
@@ -396,7 +396,7 @@ class IbSymbolValidator:
                 if not details:
                     logger.debug(f"No contract details returned for: {contract}")
                     logger.debug(
-                        f"   This means IB has no security definition for this contract specification"
+                        "   This means IB has no security definition for this contract specification"
                     )
                     self.metrics["failed_validations"] += 1
                     return None
@@ -574,7 +574,7 @@ class IbSymbolValidator:
         return head_timestamp
 
     async def validate_symbol_with_metadata(
-        self, symbol: str, timeframes: List[str]
+        self, symbol: str, timeframes: list[str]
     ) -> ValidationResult:
         """
         Validate symbol and get all metadata including head timestamps for timeframes.
@@ -919,7 +919,7 @@ class IbSymbolValidator:
         """
         try:
             if self._cache_file.exists():
-                with open(self._cache_file, "r") as f:
+                with open(self._cache_file) as f:
                     cache_data = json.load(f)
 
                 # Convert loaded data back to ContractInfo objects
@@ -1062,13 +1062,19 @@ class IbSymbolValidator:
                     }
                     json.dumps(test_data)
                 except Exception as debug_e:
-                    logger.error(f"JSON serialization failed for symbol {symbol}: {debug_e}")
-                    logger.error(f"Trading hours type: {type(contract_info.trading_hours)}")
-                    if hasattr(contract_info.trading_hours, '__dict__'):
-                        logger.error(f"Trading hours content: {contract_info.trading_hours.__dict__}")
+                    logger.error(
+                        f"JSON serialization failed for symbol {symbol}: {debug_e}"
+                    )
+                    logger.error(
+                        f"Trading hours type: {type(contract_info.trading_hours)}"
+                    )
+                    if hasattr(contract_info.trading_hours, "__dict__"):
+                        logger.error(
+                            f"Trading hours content: {contract_info.trading_hours.__dict__}"
+                        )
                     break
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """
         Get cache statistics.
 

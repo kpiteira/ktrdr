@@ -16,13 +16,12 @@ Additional Rules:
 - 2 second minimum between historical data calls (conservative approach)
 """
 
-import time
 import asyncio
 import threading
-from collections import deque, defaultdict
-from typing import Tuple, Optional
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+import time
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 from ktrdr.logging import get_logger
 
@@ -223,7 +222,7 @@ class IbPaceManager:
         is_historical: bool = False,
         contract_key: Optional[str] = None,
         is_bid_ask: bool = False,
-    ) -> Tuple[bool, float]:
+    ) -> tuple[bool, float]:
         """
         Check if request can be made immediately.
 

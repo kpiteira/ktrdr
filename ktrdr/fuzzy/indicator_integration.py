@@ -6,21 +6,22 @@ and MultiTimeframeFuzzyEngine, enabling end-to-end processing from raw market da
 to fuzzy logical outputs across multiple timeframes.
 """
 
-from typing import Dict, Any, List, Optional, Union
-import pandas as pd
 import time
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 
 from ktrdr import get_logger
-from ktrdr.indicators.multi_timeframe_indicator_engine import (
-    MultiTimeframeIndicatorEngine,
-    TimeframeIndicatorConfig,
-)
+from ktrdr.errors import ConfigurationError, ProcessingError
 from ktrdr.fuzzy.multi_timeframe_engine import (
     MultiTimeframeFuzzyEngine,
     MultiTimeframeFuzzyResult,
 )
-from ktrdr.errors import ProcessingError, DataValidationError, ConfigurationError
+from ktrdr.indicators.multi_timeframe_indicator_engine import (
+    MultiTimeframeIndicatorEngine,
+    TimeframeIndicatorConfig,
+)
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -41,10 +42,10 @@ class IntegratedFuzzyResult:
     """
 
     fuzzy_result: MultiTimeframeFuzzyResult
-    indicator_data: Dict[str, Dict[str, float]]
-    processing_metadata: Dict[str, Any] = field(default_factory=dict)
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    indicator_data: dict[str, dict[str, float]]
+    processing_metadata: dict[str, Any] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     total_processing_time: float = 0.0
 
 
@@ -59,8 +60,8 @@ class MultiTimeframeFuzzyIndicatorPipeline:
 
     def __init__(
         self,
-        indicator_config: Dict[str, Any],
-        fuzzy_config: Dict[str, Any],
+        indicator_config: dict[str, Any],
+        fuzzy_config: dict[str, Any],
         enable_error_recovery: bool = True,
         enable_performance_monitoring: bool = True,
     ):
@@ -124,7 +125,7 @@ class MultiTimeframeFuzzyIndicatorPipeline:
         )
 
     def _create_indicator_engine(
-        self, indicator_config: Dict[str, Any]
+        self, indicator_config: dict[str, Any]
     ) -> MultiTimeframeIndicatorEngine:
         """
         Create MultiTimeframeIndicatorEngine from configuration dictionary.
@@ -170,8 +171,8 @@ class MultiTimeframeFuzzyIndicatorPipeline:
 
     def process_market_data(
         self,
-        market_data: Dict[str, pd.DataFrame],
-        timeframe_filter: Optional[List[str]] = None,
+        market_data: dict[str, pd.DataFrame],
+        timeframe_filter: Optional[list[str]] = None,
         fail_fast: bool = False,
     ) -> IntegratedFuzzyResult:
         """
@@ -351,9 +352,9 @@ class MultiTimeframeFuzzyIndicatorPipeline:
 
     def _convert_indicators_to_fuzzy_input(
         self,
-        indicator_results: Dict[str, pd.DataFrame],
-        timeframe_filter: Optional[List[str]] = None,
-    ) -> Dict[str, Dict[str, float]]:
+        indicator_results: dict[str, pd.DataFrame],
+        timeframe_filter: Optional[list[str]] = None,
+    ) -> dict[str, dict[str, float]]:
         """
         Convert indicator results to fuzzy engine input format.
 
@@ -420,13 +421,13 @@ class MultiTimeframeFuzzyIndicatorPipeline:
 
         return base_name.lower()
 
-    def get_supported_timeframes(self) -> List[str]:
+    def get_supported_timeframes(self) -> list[str]:
         """Get timeframes supported by both indicator and fuzzy engines."""
         indicator_timeframes = set(self.indicator_engine.get_supported_timeframes())
         fuzzy_timeframes = set(self.fuzzy_engine.get_supported_timeframes())
         return list(indicator_timeframes.intersection(fuzzy_timeframes))
 
-    def get_pipeline_health(self) -> Dict[str, Any]:
+    def get_pipeline_health(self) -> dict[str, Any]:
         """
         Get health status of the pipeline components.
 
@@ -462,7 +463,7 @@ class MultiTimeframeFuzzyIndicatorPipeline:
 
 
 def create_integrated_pipeline(
-    indicator_config: Dict[str, Any], fuzzy_config: Dict[str, Any], **kwargs
+    indicator_config: dict[str, Any], fuzzy_config: dict[str, Any], **kwargs
 ) -> MultiTimeframeFuzzyIndicatorPipeline:
     """
     Factory function to create an integrated fuzzy-indicator pipeline.

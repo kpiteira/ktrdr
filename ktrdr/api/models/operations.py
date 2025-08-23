@@ -6,11 +6,10 @@ like data loading, training, backtesting, etc.
 """
 
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
 from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Dict, List, Optional
 
-from ktrdr.api.models.base import ApiResponse, ErrorResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OperationStatus(str, Enum):
@@ -73,7 +72,7 @@ class OperationMetadata(BaseModel):
     mode: Optional[str] = Field(None, description="Operation mode")
     start_date: Optional[datetime] = Field(None, description="Start date for operation")
     end_date: Optional[datetime] = Field(None, description="End date for operation")
-    parameters: Dict[str, Any] = Field(
+    parameters: dict[str, Any] = Field(
         default_factory=dict, description="Additional parameters"
     )
 
@@ -109,9 +108,9 @@ class OperationInfo(BaseModel):
         default_factory=OperationMetadata, description="Operation metadata"
     )
     error_message: Optional[str] = Field(None, description="Error message if failed")
-    warnings: List[str] = Field(default_factory=list, description="Non-fatal warnings")
-    errors: List[str] = Field(default_factory=list, description="Error messages")
-    result_summary: Optional[Dict[str, Any]] = Field(
+    warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
+    errors: list[str] = Field(default_factory=list, description="Error messages")
+    result_summary: Optional[dict[str, Any]] = Field(
         None, description="Summary of results"
     )
 
@@ -206,7 +205,7 @@ class OperationListResponse(BaseModel):
     """Response containing list of operations."""
 
     success: bool = Field(True, description="Whether the request was successful")
-    data: List[OperationSummary] = Field(..., description="List of operations")
+    data: list[OperationSummary] = Field(..., description="List of operations")
     total_count: int = Field(..., ge=0, description="Total number of operations")
     active_count: int = Field(..., ge=0, description="Number of active operations")
 
@@ -264,7 +263,7 @@ class OperationCancelResponse(BaseModel):
     """Response for operation cancellation."""
 
     success: bool = Field(True, description="Whether the request was successful")
-    data: Dict[str, Any] = Field(..., description="Cancellation result")
+    data: dict[str, Any] = Field(..., description="Cancellation result")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -285,7 +284,7 @@ class OperationStartResponse(BaseModel):
     """Response for operation start."""
 
     success: bool = Field(True, description="Whether the request was successful")
-    data: Dict[str, Any] = Field(..., description="Operation start result")
+    data: dict[str, Any] = Field(..., description="Operation start result")
 
     model_config = ConfigDict(
         json_schema_extra={

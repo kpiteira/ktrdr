@@ -5,8 +5,9 @@ This module defines the base models used across the API for consistent
 request and response formats.
 """
 
-from typing import Generic, TypeVar, Dict, List, Any, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Dict, Generic, List, Optional, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field
 
 # Define a type variable for generic response types
 T = TypeVar("T")
@@ -24,7 +25,7 @@ class ErrorResponse(BaseModel):
 
     code: str = Field(..., description="Error code identifier")
     message: str = Field(..., description="Human-readable error message")
-    details: Optional[Dict[str, Any]] = Field(
+    details: Optional[dict[str, Any]] = Field(
         None, description="Additional error details"
     )
 
@@ -70,7 +71,7 @@ class PaginatedData(BaseModel, Generic[T]):
         pages (int): Total number of pages
     """
 
-    items: List[T] = Field(..., description="List of items in the current page")
+    items: list[T] = Field(..., description="List of items in the current page")
     total: int = Field(..., description="Total number of items across all pages")
     page: int = Field(..., description="Current page number (1-based)")
     page_size: int = Field(..., description="Number of items per page")

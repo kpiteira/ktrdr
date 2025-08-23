@@ -18,12 +18,12 @@ Where:
 - CCI can exceed ±100 during strong trends
 """
 
-import pandas as pd
 import numpy as np
-from typing import Union
+import pandas as pd
+
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import CCI_SCHEMA
-from ktrdr.errors import DataError
 
 
 class CCIIndicator(BaseIndicator):

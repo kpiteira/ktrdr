@@ -34,11 +34,11 @@ __author__ = "KTRDR Team"
 
 # Import main classes for easy access
 from .connection import IbConnection
-from .pool import IbConnectionPool
+from .data_fetcher import IbDataFetcher
 from .error_classifier import IbErrorClassifier, IbErrorType
 from .pace_manager import IbPaceManager
-from .symbol_validator import IbSymbolValidator, ValidationResult, ContractInfo
-from .data_fetcher import IbDataFetcher
+from .pool import IbConnectionPool
+from .symbol_validator import ContractInfo, IbSymbolValidator, ValidationResult
 
 __all__ = [
     "IbConnection",

@@ -9,10 +9,9 @@ This module provides a comprehensive parameter validation framework that support
 - Enhanced error reporting with context
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Union, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -52,7 +51,7 @@ class ParameterDefinition:
     default: Any = None
     min_value: Optional[Union[int, float]] = None
     max_value: Optional[Union[int, float]] = None
-    options: Optional[List[Any]] = None
+    options: Optional[list[Any]] = None
     required: bool = False
 
     def validate_value(self, value: Any) -> Any:
@@ -208,10 +207,10 @@ class ParameterConstraint:
 
     name: str
     description: str
-    validator: Callable[[Dict[str, Any]], bool]
+    validator: Callable[[dict[str, Any]], bool]
     error_message: str
 
-    def validate(self, params: Dict[str, Any]) -> None:
+    def validate(self, params: dict[str, Any]) -> None:
         """
         Validate the constraint against parameters.
 
@@ -256,8 +255,8 @@ class ParameterSchema:
         self,
         name: str,
         description: str,
-        parameters: List[ParameterDefinition],
-        constraints: Optional[List[ParameterConstraint]] = None,
+        parameters: list[ParameterDefinition],
+        constraints: Optional[list[ParameterConstraint]] = None,
     ):
         """
         Initialize parameter schema.
@@ -277,7 +276,7 @@ class ParameterSchema:
             f"Created parameter schema '{name}' with {len(parameters)} parameters"
         )
 
-    def validate(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def validate(self, params: dict[str, Any]) -> dict[str, Any]:
         """
         Validate parameters against this schema.
 
@@ -319,7 +318,7 @@ class ParameterSchema:
         )
         return validated_params
 
-    def get_defaults(self) -> Dict[str, Any]:
+    def get_defaults(self) -> dict[str, Any]:
         """
         Get default values for all parameters.
 
@@ -332,7 +331,7 @@ class ParameterSchema:
             if param_def.default is not None
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert schema to dictionary for API serialization.
 
@@ -366,37 +365,37 @@ class ParameterSchema:
 
 
 # Built-in parameter constraint validators
-def greater_than(param1: str, param2: str) -> Callable[[Dict[str, Any]], bool]:
+def greater_than(param1: str, param2: str) -> Callable[[dict[str, Any]], bool]:
     """Create a constraint that validates param1 > param2."""
 
-    def validator(params: Dict[str, Any]) -> bool:
+    def validator(params: dict[str, Any]) -> bool:
         return params[param1] > params[param2]
 
     return validator
 
 
-def less_than(param1: str, param2: str) -> Callable[[Dict[str, Any]], bool]:
+def less_than(param1: str, param2: str) -> Callable[[dict[str, Any]], bool]:
     """Create a constraint that validates param1 < param2."""
 
-    def validator(params: Dict[str, Any]) -> bool:
+    def validator(params: dict[str, Any]) -> bool:
         return params[param1] < params[param2]
 
     return validator
 
 
-def greater_equal(param1: str, param2: str) -> Callable[[Dict[str, Any]], bool]:
+def greater_equal(param1: str, param2: str) -> Callable[[dict[str, Any]], bool]:
     """Create a constraint that validates param1 >= param2."""
 
-    def validator(params: Dict[str, Any]) -> bool:
+    def validator(params: dict[str, Any]) -> bool:
         return params[param1] >= params[param2]
 
     return validator
 
 
-def less_equal(param1: str, param2: str) -> Callable[[Dict[str, Any]], bool]:
+def less_equal(param1: str, param2: str) -> Callable[[dict[str, Any]], bool]:
     """Create a constraint that validates param1 <= param2."""
 
-    def validator(params: Dict[str, Any]) -> bool:
+    def validator(params: dict[str, Any]) -> bool:
         return params[param1] <= params[param2]
 
     return validator

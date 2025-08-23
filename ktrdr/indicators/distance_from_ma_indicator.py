@@ -2,18 +2,19 @@
 Distance from Moving Average indicator implementation.
 
 Distance from MA calculates the percentage distance between the current price
-and a moving average, providing a normalized measure of how far price has 
+and a moving average, providing a normalized measure of how far price has
 deviated from its trend.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
+import numpy as np
+import pandas as pd
+
+from ktrdr.errors import DataError
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import DISTANCE_FROM_MA_SCHEMA
-from ktrdr.indicators import SimpleMovingAverage, ExponentialMovingAverage
-from ktrdr.errors import DataError
 
 
 class DistanceFromMAIndicator(BaseIndicator):
@@ -119,16 +120,15 @@ class DistanceFromMAIndicator(BaseIndicator):
         # Calculate percentage distance using safe division (same logic as training pipeline)
         # Only calculate where MA values are not NaN
         distance_pct = np.where(
-            (pd.notna(ma_values)) & (np.abs(ma_values) > 1e-10),  # Avoid NaN and tiny denominators
+            (pd.notna(ma_values))
+            & (np.abs(ma_values) > 1e-10),  # Avoid NaN and tiny denominators
             (current_price - ma_values) / ma_values * 100,
-            np.nan  # Keep NaN where MA is NaN, 0.0 where MA is ~0
+            np.nan,  # Keep NaN where MA is NaN, 0.0 where MA is ~0
         )
-        
+
         # Handle case where MA is ~0 but not NaN
         distance_pct = np.where(
-            (pd.notna(ma_values)) & (np.abs(ma_values) <= 1e-10),
-            0.0,
-            distance_pct
+            (pd.notna(ma_values)) & (np.abs(ma_values) <= 1e-10), 0.0, distance_pct
         )
 
         # Create result Series

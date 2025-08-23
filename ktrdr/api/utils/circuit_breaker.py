@@ -7,9 +7,9 @@ providing fast-fail behavior and automatic recovery.
 
 import asyncio
 import time
-from enum import Enum
-from typing import Any, Callable, Dict, Optional
 from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Callable, Dict
 
 from ktrdr import get_logger
 
@@ -121,7 +121,7 @@ class CircuitBreaker:
                 f"Last error: {error}"
             )
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get current circuit breaker status."""
         return {
             "name": self.name,
@@ -148,7 +148,7 @@ class CircuitBreakerOpenError(Exception):
 
 
 # Global circuit breakers for different IB operations
-_circuit_breakers: Dict[str, CircuitBreaker] = {}
+_circuit_breakers: dict[str, CircuitBreaker] = {}
 
 
 def get_circuit_breaker(
@@ -160,7 +160,7 @@ def get_circuit_breaker(
     return _circuit_breakers[name]
 
 
-def get_all_circuit_breakers() -> Dict[str, CircuitBreaker]:
+def get_all_circuit_breakers() -> dict[str, CircuitBreaker]:
     """Get all active circuit breakers."""
     return _circuit_breakers.copy()
 

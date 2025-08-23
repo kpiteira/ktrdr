@@ -14,13 +14,13 @@ Key Features:
 """
 
 import time
-from typing import Optional
 from datetime import datetime
-import pandas as pd
-from ib_insync import Stock, Forex, Contract
 
-from ktrdr.logging import get_logger
+import pandas as pd
+from ib_insync import Contract, Forex, Stock
+
 from ktrdr.ib.pool_manager import get_shared_ib_pool
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -136,7 +136,9 @@ class IbDataFetcher:
 
         # Request historical data (synchronous call)
         try:
-            logger.info(f"🔍 IB REQUEST: {contract.symbol} ({contract.secType}) {start.date()} to {end.date()}")
+            logger.info(
+                f"🔍 IB REQUEST: {contract.symbol} ({contract.secType}) {start.date()} to {end.date()}"
+            )
             logger.info(f"   ├─ Contract: {contract}")
             logger.info(f"   ├─ Duration: {duration}, Bar Size: {ib_bar_size}")
             logger.info(f"   ├─ What to Show: {what_to_show}, Use RTH: True")
@@ -154,10 +156,14 @@ class IbDataFetcher:
 
             logger.info(f"📊 IB RESPONSE: {len(bars) if bars else 0} bars returned")
             if bars:
-                logger.info(f"   ├─ First bar: {bars[0].date} ({bars[0].open}-{bars[0].close})")
-                logger.info(f"   └─ Last bar: {bars[-1].date} ({bars[-1].open}-{bars[-1].close})")
+                logger.info(
+                    f"   ├─ First bar: {bars[0].date} ({bars[0].open}-{bars[0].close})"
+                )
+                logger.info(
+                    f"   └─ Last bar: {bars[-1].date} ({bars[-1].open}-{bars[-1].close})"
+                )
             else:
-                logger.warning(f"❌ IB RESPONSE: No data available for requested period")
+                logger.warning("❌ IB RESPONSE: No data available for requested period")
 
         except Exception as e:
             logger.error(f"IB reqHistoricalData failed: {e}")
@@ -170,7 +176,7 @@ class IbDataFetcher:
         # Convert to DataFrame
         try:
             logger.debug(f"Converting {len(bars)} bars to DataFrame")
-            
+
             # Create DataFrame
             df = pd.DataFrame(
                 {

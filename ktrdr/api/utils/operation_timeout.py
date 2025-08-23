@@ -8,7 +8,7 @@ even if individual timeouts fail.
 import asyncio
 import functools
 import time
-from typing import Any, Callable, TypeVar, Union
+from typing import Any, Callable, TypeVar
 
 from ktrdr import get_logger
 

@@ -5,27 +5,23 @@ This module provides progress bars and status reporting for long-running
 IB data operations and other CLI tasks.
 """
 
-import time
-from typing import Optional, Dict, Any, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, Optional
 
 from rich.console import Console
-from rich.progress import (
-    Progress,
-    TaskID,
-    BarColumn,
-    TextColumn,
-    TimeRemainingColumn,
-    MofNCompleteColumn,
-    SpinnerColumn,
-    TimeElapsedColumn,
-)
-from rich.live import Live
-from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+from rich.table import Table
 
 from ktrdr import get_logger
 
@@ -282,7 +278,7 @@ class IbProgressTracker:
         ) as progress:
             yield progress
 
-    def print_connection_status(self, connection_info: Dict[str, Any]):
+    def print_connection_status(self, connection_info: dict[str, Any]):
         """
         Print IB connection status in a formatted table.
 
@@ -325,7 +321,7 @@ class IbProgressTracker:
 
         self.console.print(panel)
 
-    def print_metrics_summary(self, metrics: Dict[str, Any]):
+    def print_metrics_summary(self, metrics: dict[str, Any]):
         """
         Print IB metrics summary.
 

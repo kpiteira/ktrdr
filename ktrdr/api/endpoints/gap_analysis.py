@@ -4,21 +4,20 @@ Gap Analysis API Endpoints
 Provides comprehensive gap analysis functionality with trading hours awareness.
 """
 
-from typing import List, Dict, Optional, Any
-from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import JSONResponse
+from typing import Any, Dict
 
-from ktrdr.logging import get_logger
-from ktrdr.api.services.gap_analysis_service import GapAnalysisService
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.gap_analysis import (
-    GapAnalysisRequest,
-    GapAnalysisResponse,
-    GapAnalysisMode,
     BatchGapAnalysisRequest,
     BatchGapAnalysisResponse,
-    GapAnalysisError,
+    GapAnalysisMode,
+    GapAnalysisRequest,
+    GapAnalysisResponse,
 )
-from ktrdr.api.models.base import ApiResponse
+from ktrdr.api.services.gap_analysis_service import GapAnalysisService
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -190,7 +189,7 @@ async def analyze_batch_gaps(
 
 @router.get(
     "/data/{symbol}/{timeframe}/summary",
-    response_model=ApiResponse[Dict[str, Any]],
+    response_model=ApiResponse[dict[str, Any]],
     summary="Get gap analysis summary only",
     description="""
     Get a quick summary of data completeness for a symbol/timeframe without detailed gap analysis.
@@ -204,7 +203,7 @@ async def get_gap_summary(
     start_date: str = Query(..., description="Analysis start date (ISO format)"),
     end_date: str = Query(..., description="Analysis end date (ISO format)"),
     service: GapAnalysisService = Depends(get_gap_analysis_service),
-) -> ApiResponse[Dict[str, Any]]:
+) -> ApiResponse[dict[str, Any]]:
     """
     Get gap analysis summary without detailed gap information.
 
@@ -250,13 +249,13 @@ async def get_gap_summary(
 
 @router.get(
     "/health",
-    response_model=ApiResponse[Dict[str, Any]],
+    response_model=ApiResponse[dict[str, Any]],
     summary="Gap analysis service health check",
     description="Check if gap analysis service is operational and return system information.",
 )
 async def health_check(
     service: GapAnalysisService = Depends(get_gap_analysis_service),
-) -> ApiResponse[Dict[str, Any]]:
+) -> ApiResponse[dict[str, Any]]:
     """
     Health check for gap analysis service.
 

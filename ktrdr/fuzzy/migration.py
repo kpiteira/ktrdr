@@ -5,13 +5,14 @@ This module provides utilities to migrate single-timeframe fuzzy configurations
 to the new multi-timeframe format introduced in Phase 5.
 """
 
-from typing import Dict, Any, List, Optional
-import yaml
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from ktrdr import get_logger
-from ktrdr.fuzzy.config import FuzzyConfig, FuzzyConfigLoader
 from ktrdr.errors import ConfigurationError
+from ktrdr.fuzzy.config import FuzzyConfigLoader
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -32,10 +33,10 @@ class FuzzyConfigMigrator:
 
     def migrate_single_to_multi_timeframe(
         self,
-        single_config: Dict[str, Any],
+        single_config: dict[str, Any],
         target_timeframe: str = "1h",
         timeframe_weight: float = 1.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Migrate a single-timeframe fuzzy configuration to multi-timeframe format.
 
@@ -90,10 +91,10 @@ class FuzzyConfigMigrator:
 
     def migrate_to_multiple_timeframes(
         self,
-        single_config: Dict[str, Any],
-        timeframes: List[str],
-        timeframe_weights: Optional[Dict[str, float]] = None,
-    ) -> Dict[str, Any]:
+        single_config: dict[str, Any],
+        timeframes: list[str],
+        timeframe_weights: Optional[dict[str, float]] = None,
+    ) -> dict[str, Any]:
         """
         Migrate a single-timeframe configuration to multiple timeframes.
 
@@ -122,7 +123,7 @@ class FuzzyConfigMigrator:
         # Default weights
         if timeframe_weights is None:
             weight_per_tf = 1.0 / len(timeframes)
-            timeframe_weights = {tf: weight_per_tf for tf in timeframes}
+            timeframe_weights = dict.fromkeys(timeframes, weight_per_tf)
 
         try:
             # Validate the input configuration
@@ -179,7 +180,7 @@ class FuzzyConfigMigrator:
 
         try:
             # Load the input file
-            with open(input_file, "r") as f:
+            with open(input_file) as f:
                 single_config = yaml.safe_load(f)
 
             # Migrate the configuration
@@ -208,7 +209,7 @@ class FuzzyConfigMigrator:
                 },
             ) from e
 
-    def check_migration_needed(self, config: Dict[str, Any]) -> bool:
+    def check_migration_needed(self, config: dict[str, Any]) -> bool:
         """
         Check if a fuzzy configuration needs migration to multi-timeframe format.
 
@@ -237,7 +238,7 @@ class FuzzyConfigMigrator:
         logger.debug("Configuration format could not be determined")
         return False
 
-    def get_migration_recommendations(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def get_migration_recommendations(self, config: dict[str, Any]) -> dict[str, Any]:
         """
         Get recommendations for migrating a single-timeframe configuration.
 
@@ -267,8 +268,8 @@ class FuzzyConfigMigrator:
 
 
 def migrate_fuzzy_config(
-    config: Dict[str, Any], target_timeframe: str = "1h"
-) -> Dict[str, Any]:
+    config: dict[str, Any], target_timeframe: str = "1h"
+) -> dict[str, Any]:
     """
     Convenience function to migrate a single-timeframe config to multi-timeframe.
 
@@ -283,7 +284,7 @@ def migrate_fuzzy_config(
     return migrator.migrate_single_to_multi_timeframe(config, target_timeframe)
 
 
-def check_config_compatibility(config: Dict[str, Any]) -> Dict[str, Any]:
+def check_config_compatibility(config: dict[str, Any]) -> dict[str, Any]:
     """
     Check configuration compatibility and provide migration recommendations.
 

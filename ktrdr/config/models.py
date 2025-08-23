@@ -4,10 +4,12 @@ Pydantic models for configuration validation.
 This module defines the structure and validation rules for KTRDR configuration.
 """
 
-from pathlib import Path
-from typing import Optional, List, Any, Dict, Union, Literal
-from pydantic import BaseModel, Field, field_validator
+import builtins
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class DataConfig(BaseModel):
@@ -69,9 +71,7 @@ class IbHostServiceConfig(BaseModel):
     enabled: bool = Field(
         False, description="Whether to use host service instead of direct IB connection"
     )
-    url: str = Field(
-        "http://localhost:5001", description="URL of the IB host service"
-    )
+    url: str = Field("http://localhost:5001", description="URL of the IB host service")
 
 
 class IndicatorConfig(BaseModel):
@@ -79,7 +79,7 @@ class IndicatorConfig(BaseModel):
 
     type: str = Field(..., description="The type/class of indicator")
     name: Optional[str] = Field(None, description="Custom name for the indicator")
-    params: Dict[str, Any] = Field(
+    params: dict[str, Any] = Field(
         default_factory=dict, description="Parameters for indicator initialization"
     )
 
@@ -99,7 +99,7 @@ class TimeframeIndicatorConfig(BaseModel):
     timeframe: str = Field(
         ..., description="Timeframe identifier (e.g., '1h', '4h', '1d')"
     )
-    indicators: List[IndicatorConfig] = Field(
+    indicators: list[IndicatorConfig] = Field(
         default_factory=list,
         description="List of indicator configurations for this timeframe",
     )
@@ -160,11 +160,11 @@ class TimeframeIndicatorConfig(BaseModel):
 class MultiTimeframeIndicatorConfig(BaseModel):
     """Configuration for multi-timeframe indicators."""
 
-    timeframes: List[TimeframeIndicatorConfig] = Field(
+    timeframes: list[TimeframeIndicatorConfig] = Field(
         default_factory=list,
         description="List of timeframe-specific indicator configurations",
     )
-    cross_timeframe_features: Dict[str, Dict[str, Any]] = Field(
+    cross_timeframe_features: dict[str, dict[str, Any]] = Field(
         default_factory=dict, description="Cross-timeframe feature specifications"
     )
     column_standardization: bool = Field(
@@ -174,8 +174,8 @@ class MultiTimeframeIndicatorConfig(BaseModel):
     @field_validator("timeframes")
     @classmethod
     def validate_unique_timeframes(
-        cls, v: List[TimeframeIndicatorConfig]
-    ) -> List[TimeframeIndicatorConfig]:
+        cls, v: list[TimeframeIndicatorConfig]
+    ) -> list[TimeframeIndicatorConfig]:
         """Validate that timeframes are unique."""
         timeframes = [tf.timeframe for tf in v]
         if len(timeframes) != len(set(timeframes)):
@@ -187,7 +187,7 @@ class MultiTimeframeIndicatorConfig(BaseModel):
 class IndicatorsConfig(BaseModel):
     """Configuration for all indicators."""
 
-    indicators: List[IndicatorConfig] = Field(
+    indicators: list[IndicatorConfig] = Field(
         default_factory=list, description="List of indicator configurations"
     )
     multi_timeframe: Optional[MultiTimeframeIndicatorConfig] = Field(
@@ -198,7 +198,7 @@ class IndicatorsConfig(BaseModel):
 # Strategy Configuration Models (New Schema)
 class StrategyScope(str, Enum):
     """Defines the scope/applicability of a strategy."""
-    
+
     UNIVERSAL = "universal"  # Can trade any compatible symbol
     SYMBOL_GROUP = "symbol_group"  # Restricted to specific symbol groups
     SYMBOL_SPECIFIC = "symbol_specific"  # Legacy: trained for specific symbols only
@@ -206,21 +206,21 @@ class StrategyScope(str, Enum):
 
 class SymbolMode(str, Enum):
     """Defines how symbols are specified in strategy."""
-    
+
     SINGLE = "single"  # Legacy single symbol
     MULTI_SYMBOL = "multi_symbol"  # Multiple symbols for training
 
 
 class TimeframeMode(str, Enum):
     """Defines how timeframes are specified in strategy."""
-    
+
     SINGLE = "single"  # Legacy single timeframe
     MULTI_TIMEFRAME = "multi_timeframe"  # Multiple timeframes for features
 
 
 class TargetSymbolMode(str, Enum):
     """Defines deployment symbol restrictions."""
-    
+
     UNIVERSAL = "universal"  # No symbol restrictions
     GROUP_RESTRICTED = "group_restricted"  # Restricted to specific groups
     TRAINING_ONLY = "training_only"  # Legacy: only symbols used in training
@@ -228,15 +228,25 @@ class TargetSymbolMode(str, Enum):
 
 class SymbolSelectionCriteria(BaseModel):
     """Criteria for automatic symbol selection."""
-    
-    asset_class: Optional[str] = Field(None, description="Asset class filter (forex, stocks, crypto)")
-    volatility_range: Optional[List[float]] = Field(None, description="[min, max] volatility range")
-    liquidity_tier: Optional[str] = Field(None, description="Liquidity tier requirement")
-    market_cap_range: Optional[List[float]] = Field(None, description="Market cap range for stocks")
-    
+
+    asset_class: Optional[str] = Field(
+        None, description="Asset class filter (forex, stocks, crypto)"
+    )
+    volatility_range: Optional[list[float]] = Field(
+        None, description="[min, max] volatility range"
+    )
+    liquidity_tier: Optional[str] = Field(
+        None, description="Liquidity tier requirement"
+    )
+    market_cap_range: Optional[list[float]] = Field(
+        None, description="Market cap range for stocks"
+    )
+
     @field_validator("volatility_range")
     @classmethod
-    def validate_volatility_range(cls, v: Optional[List[float]]) -> Optional[List[float]]:
+    def validate_volatility_range(
+        cls, v: Optional[list[float]]
+    ) -> Optional[list[float]]:
         if v is not None:
             if len(v) != 2 or v[0] >= v[1]:
                 raise ValueError("Volatility range must be [min, max] with min < max")
@@ -245,32 +255,36 @@ class SymbolSelectionCriteria(BaseModel):
 
 class SymbolConfiguration(BaseModel):
     """Configuration for symbols in strategy."""
-    
+
     mode: SymbolMode = Field(..., description="Symbol specification mode")
-    
+
     # For single symbol mode (legacy)
     symbol: Optional[str] = Field(None, description="Single symbol for legacy mode")
-    
+
     # For multi-symbol mode
     list: Optional[List[str]] = Field(None, description="Explicit list of symbols")
     selection_criteria: Optional[SymbolSelectionCriteria] = Field(
         None, description="Automatic symbol selection criteria"
     )
-    
+
     @field_validator("symbol")
     @classmethod
     def validate_single_mode_symbol(cls, v: Optional[str], info) -> Optional[str]:
-        if hasattr(info, 'data') and info.data.get('mode') == SymbolMode.SINGLE:
+        if hasattr(info, "data") and info.data.get("mode") == SymbolMode.SINGLE:
             if not v:
                 raise ValueError("Symbol must be specified for single mode")
         return v
-    
+
     @field_validator("list")
     @classmethod
-    def validate_multi_mode_symbols(cls, v: Optional[List[str]], info) -> Optional[List[str]]:
-        if hasattr(info, 'data') and info.data.get('mode') == SymbolMode.MULTI_SYMBOL:
-            if not v and not info.data.get('selection_criteria'):
-                raise ValueError("Either symbol list or selection criteria must be specified for multi_symbol mode")
+    def validate_multi_mode_symbols(
+        cls, v: Optional[List[str]], info
+    ) -> Optional[List[str]]:
+        if hasattr(info, "data") and info.data.get("mode") == SymbolMode.MULTI_SYMBOL:
+            if not v and not info.data.get("selection_criteria"):
+                raise ValueError(
+                    "Either symbol list or selection criteria must be specified for multi_symbol mode"
+                )
             if v and len(v) < 1:
                 raise ValueError("Multi-symbol mode requires at least 1 symbol")
         return v
@@ -278,56 +292,80 @@ class SymbolConfiguration(BaseModel):
 
 class TimeframeConfiguration(BaseModel):
     """Configuration for timeframes in strategy."""
-    
+
     mode: TimeframeMode = Field(..., description="Timeframe specification mode")
-    
+
     # For single timeframe mode (legacy)
-    timeframe: Optional[str] = Field(None, description="Single timeframe for legacy mode")
-    
+    timeframe: Optional[str] = Field(
+        None, description="Single timeframe for legacy mode"
+    )
+
     # For multi-timeframe mode
-    list: Optional[List[str]] = Field(None, description="List of timeframes for features")
-    base_timeframe: Optional[str] = Field(None, description="Reference timeframe for alignment")
-    
+    list: Optional[List[str]] = Field(
+        None, description="List of timeframes for features"
+    )
+    base_timeframe: Optional[str] = Field(
+        None, description="Reference timeframe for alignment"
+    )
+
     @field_validator("timeframe")
     @classmethod
     def validate_single_mode_timeframe(cls, v: Optional[str], info) -> Optional[str]:
-        if hasattr(info, 'data') and info.data.get('mode') == TimeframeMode.SINGLE:
+        if hasattr(info, "data") and info.data.get("mode") == TimeframeMode.SINGLE:
             if not v:
                 raise ValueError("Timeframe must be specified for single mode")
         return v
-    
+
     @field_validator("list")
     @classmethod
-    def validate_multi_mode_timeframes(cls, v: Optional[List[str]], info) -> Optional[List[str]]:
-        if hasattr(info, 'data') and info.data.get('mode') == TimeframeMode.MULTI_TIMEFRAME:
+    def validate_multi_mode_timeframes(
+        cls, v: Optional[List[str]], info
+    ) -> Optional[List[str]]:
+        if (
+            hasattr(info, "data")
+            and info.data.get("mode") == TimeframeMode.MULTI_TIMEFRAME
+        ):
             if not v:
-                raise ValueError("Timeframe list must be specified for multi_timeframe mode")
+                raise ValueError(
+                    "Timeframe list must be specified for multi_timeframe mode"
+                )
             if len(v) < 2:
                 raise ValueError("Multi-timeframe mode requires at least 2 timeframes")
         return v
-    
+
     @field_validator("base_timeframe")
     @classmethod
     def validate_base_timeframe_in_list(cls, v: Optional[str], info) -> Optional[str]:
-        if (hasattr(info, 'data') and 
-            info.data.get('mode') == TimeframeMode.MULTI_TIMEFRAME and 
-            v and info.data.get('list')):
-            if v not in info.data['list']:
+        if (
+            hasattr(info, "data")
+            and info.data.get("mode") == TimeframeMode.MULTI_TIMEFRAME
+            and v
+            and info.data.get("list")
+        ):
+            if v not in info.data["list"]:
                 raise ValueError("Base timeframe must be in the timeframes list")
         return v
 
 
 class TrainingDataConfiguration(BaseModel):
     """Configuration for training data."""
-    
+
     symbols: SymbolConfiguration = Field(..., description="Symbol configuration")
-    timeframes: TimeframeConfiguration = Field(..., description="Timeframe configuration")
-    
+    timeframes: TimeframeConfiguration = Field(
+        ..., description="Timeframe configuration"
+    )
+
     # Data requirements
-    history_required: int = Field(200, description="Minimum bars required per timeframe")
-    start_date: Optional[str] = Field(None, description="Explicit start date for training data")
-    end_date: Optional[str] = Field(None, description="Explicit end date for training data")
-    
+    history_required: int = Field(
+        200, description="Minimum bars required per timeframe"
+    )
+    start_date: Optional[str] = Field(
+        None, description="Explicit start date for training data"
+    )
+    end_date: Optional[str] = Field(
+        None, description="Explicit end date for training data"
+    )
+
     @field_validator("history_required")
     @classmethod
     def validate_history_required(cls, v: int) -> int:
@@ -338,15 +376,21 @@ class TrainingDataConfiguration(BaseModel):
 
 class TargetSymbolRestrictions(BaseModel):
     """Restrictions for target symbol deployment."""
-    
-    asset_classes: Optional[List[str]] = Field(None, description="Allowed asset classes")
-    excluded_symbols: Optional[List[str]] = Field(None, description="Explicitly excluded symbols")
-    min_liquidity_tier: Optional[str] = Field(None, description="Minimum liquidity tier")
+
+    asset_classes: Optional[List[str]] = Field(
+        None, description="Allowed asset classes"
+    )
+    excluded_symbols: Optional[List[str]] = Field(
+        None, description="Explicitly excluded symbols"
+    )
+    min_liquidity_tier: Optional[str] = Field(
+        None, description="Minimum liquidity tier"
+    )
 
 
 class TargetSymbolConfiguration(BaseModel):
     """Configuration for deployment target symbols."""
-    
+
     mode: TargetSymbolMode = Field(..., description="Target symbol mode")
     restrictions: Optional[TargetSymbolRestrictions] = Field(
         None, description="Symbol restrictions (only for group_restricted mode)"
@@ -355,52 +399,79 @@ class TargetSymbolConfiguration(BaseModel):
 
 class TargetTimeframeConfiguration(BaseModel):
     """Configuration for deployment target timeframes."""
-    
+
     mode: TimeframeMode = Field(..., description="Target timeframe mode")
-    supported: Optional[List[str]] = Field(None, description="Supported timeframes (subset of training)")
+    supported: Optional[List[str]] = Field(
+        None, description="Supported timeframes (subset of training)"
+    )
     timeframe: Optional[str] = Field(None, description="Single timeframe for legacy")
-    
+
     @field_validator("supported")
     @classmethod
-    def validate_supported_timeframes(cls, v: Optional[List[str]], info) -> Optional[List[str]]:
-        if hasattr(info, 'data') and info.data.get('mode') == TimeframeMode.MULTI_TIMEFRAME:
+    def validate_supported_timeframes(
+        cls, v: Optional[List[str]], info
+    ) -> Optional[List[str]]:
+        if (
+            hasattr(info, "data")
+            and info.data.get("mode") == TimeframeMode.MULTI_TIMEFRAME
+        ):
             if not v:
-                raise ValueError("Supported timeframes must be specified for multi_timeframe mode")
+                raise ValueError(
+                    "Supported timeframes must be specified for multi_timeframe mode"
+                )
         return v
 
 
 class DeploymentConfiguration(BaseModel):
     """Configuration for model deployment."""
-    
-    target_symbols: TargetSymbolConfiguration = Field(..., description="Target symbol configuration")
-    target_timeframes: TargetTimeframeConfiguration = Field(..., description="Target timeframe configuration")
+
+    target_symbols: TargetSymbolConfiguration = Field(
+        ..., description="Target symbol configuration"
+    )
+    target_timeframes: TargetTimeframeConfiguration = Field(
+        ..., description="Target timeframe configuration"
+    )
 
 
 class StrategyConfigurationV2(BaseModel):
     """New strategy configuration schema (v2) supporting multi-scope training and deployment."""
-    
+
     # Meta information
     name: str = Field(..., description="Strategy name")
     description: Optional[str] = Field(None, description="Strategy description")
     version: str = Field(..., description="Strategy version")
     scope: StrategyScope = Field(..., description="Strategy scope/applicability")
-    
+
     # Training and deployment configuration
-    training_data: TrainingDataConfiguration = Field(..., description="Training data configuration")
-    deployment: DeploymentConfiguration = Field(..., description="Deployment configuration")
-    
+    training_data: TrainingDataConfiguration = Field(
+        ..., description="Training data configuration"
+    )
+    deployment: DeploymentConfiguration = Field(
+        ..., description="Deployment configuration"
+    )
+
     # Existing sections (unchanged)
-    indicators: List[Dict[str, Any]] = Field(..., description="Technical indicators configuration")
-    fuzzy_sets: Dict[str, Any] = Field(..., description="Fuzzy logic sets configuration")
-    model: Dict[str, Any] = Field(..., description="Neural network configuration")
-    decisions: Dict[str, Any] = Field(..., description="Decision logic configuration")
-    training: Dict[str, Any] = Field(..., description="Training configuration")
-    
+    indicators: list[dict[str, Any]] = Field(
+        ..., description="Technical indicators configuration"
+    )
+    fuzzy_sets: dict[str, Any] = Field(
+        ..., description="Fuzzy logic sets configuration"
+    )
+    model: dict[str, Any] = Field(..., description="Neural network configuration")
+    decisions: dict[str, Any] = Field(..., description="Decision logic configuration")
+    training: dict[str, Any] = Field(..., description="Training configuration")
+
     # Optional sections
-    orchestrator: Optional[Dict[str, Any]] = Field(None, description="Decision orchestrator settings")
-    risk_management: Optional[Dict[str, Any]] = Field(None, description="Risk management configuration")
-    backtesting: Optional[Dict[str, Any]] = Field(None, description="Backtesting configuration")
-    
+    orchestrator: Optional[dict[str, Any]] = Field(
+        None, description="Decision orchestrator settings"
+    )
+    risk_management: Optional[dict[str, Any]] = Field(
+        None, description="Risk management configuration"
+    )
+    backtesting: Optional[dict[str, Any]] = Field(
+        None, description="Backtesting configuration"
+    )
+
     @field_validator("scope")
     @classmethod
     def validate_scope_consistency(cls, v: StrategyScope, info) -> StrategyScope:
@@ -411,26 +482,38 @@ class StrategyConfigurationV2(BaseModel):
 
 class LegacyStrategyConfiguration(BaseModel):
     """Legacy strategy configuration for backward compatibility."""
-    
+
     # Meta information
     name: str = Field(..., description="Strategy name")
     description: Optional[str] = Field(None, description="Strategy description")
     version: Optional[str] = Field(None, description="Strategy version")
-    
+
     # Legacy data section (optional)
-    data: Optional[Dict[str, Any]] = Field(None, description="Legacy data configuration")
-    
+    data: Optional[dict[str, Any]] = Field(
+        None, description="Legacy data configuration"
+    )
+
     # Required sections
-    indicators: List[Dict[str, Any]] = Field(..., description="Technical indicators configuration")
-    fuzzy_sets: Dict[str, Any] = Field(..., description="Fuzzy logic sets configuration")
-    model: Dict[str, Any] = Field(..., description="Neural network configuration")
-    decisions: Dict[str, Any] = Field(..., description="Decision logic configuration")
-    training: Dict[str, Any] = Field(..., description="Training configuration")
-    
+    indicators: list[dict[str, Any]] = Field(
+        ..., description="Technical indicators configuration"
+    )
+    fuzzy_sets: dict[str, Any] = Field(
+        ..., description="Fuzzy logic sets configuration"
+    )
+    model: dict[str, Any] = Field(..., description="Neural network configuration")
+    decisions: dict[str, Any] = Field(..., description="Decision logic configuration")
+    training: dict[str, Any] = Field(..., description="Training configuration")
+
     # Optional sections
-    orchestrator: Optional[Dict[str, Any]] = Field(None, description="Decision orchestrator settings")
-    risk_management: Optional[Dict[str, Any]] = Field(None, description="Risk management configuration")
-    backtesting: Optional[Dict[str, Any]] = Field(None, description="Backtesting configuration")
+    orchestrator: Optional[dict[str, Any]] = Field(
+        None, description="Decision orchestrator settings"
+    )
+    risk_management: Optional[dict[str, Any]] = Field(
+        None, description="Risk management configuration"
+    )
+    backtesting: Optional[dict[str, Any]] = Field(
+        None, description="Backtesting configuration"
+    )
 
 
 class KtrdrConfig(BaseModel):

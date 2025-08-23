@@ -6,10 +6,10 @@ from anywhere in the codebase. It reads the version from pyproject.toml,
 which serves as the single source of truth.
 """
 
-import os
-import tomli
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict
+
+import tomli
 
 
 # Get the project root directory
@@ -99,7 +99,7 @@ def get_version() -> str:
     return __version__
 
 
-def get_version_parts() -> Dict[str, int]:
+def get_version_parts() -> dict[str, int]:
     """
     Get the version parts as a dictionary.
 

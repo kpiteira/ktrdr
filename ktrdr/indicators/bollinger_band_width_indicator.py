@@ -6,14 +6,15 @@ This indicator provides a measure of volatility - wider bands indicate higher vo
 narrower bands indicate lower volatility.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import BOLLINGER_BAND_WIDTH_SCHEMA
+import numpy as np
+import pandas as pd
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
+from ktrdr.indicators.schemas import BOLLINGER_BAND_WIDTH_SCHEMA
 
 
 class BollingerBandWidthIndicator(BaseIndicator):
@@ -23,7 +24,7 @@ class BollingerBandWidthIndicator(BaseIndicator):
     This indicator calculates the width of Bollinger Bands relative to the middle band:
     Width = (Upper Band - Lower Band) / Middle Band
 
-    The result is a normalized measure of volatility that can be compared across 
+    The result is a normalized measure of volatility that can be compared across
     different price levels and timeframes.
 
     **Interpretation:**
@@ -104,10 +105,10 @@ class BollingerBandWidthIndicator(BaseIndicator):
         bb_indicator = BollingerBandsIndicator(
             period=period, multiplier=multiplier, source=source
         )
-        
+
         # Calculate Bollinger Bands
         bb_data = bb_indicator.compute(data)
-        
+
         # Extract bands
         upper_band = bb_data["upper"]
         middle_band = bb_data["middle"]
@@ -117,7 +118,7 @@ class BollingerBandWidthIndicator(BaseIndicator):
         bb_width = np.where(
             np.abs(middle_band) > 1e-10,  # Avoid tiny denominators
             (upper_band - lower_band) / middle_band,
-            0.0  # Default width when middle is ~0
+            0.0,  # Default width when middle is ~0
         )
 
         # Create result Series

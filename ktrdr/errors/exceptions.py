@@ -6,7 +6,7 @@ raised by various parts of the application, categorized according to
 the error classification in the architecture blueprint.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 class KtrdrError(Exception):
@@ -26,7 +26,7 @@ class KtrdrError(Exception):
         self,
         message: str,
         error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        details: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Initialize a new KtrdrError.

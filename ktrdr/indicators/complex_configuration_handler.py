@@ -4,20 +4,17 @@ This module provides intelligent handling of indicator configurations that may
 require more data than available, with graceful degradation and fallback strategies.
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass
 from enum import Enum
-import warnings
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
 
 from ktrdr import get_logger
 from ktrdr.indicators.multi_timeframe_indicator_engine import (
     MultiTimeframeIndicatorEngine,
     TimeframeIndicatorConfig,
 )
-from ktrdr.indicators.indicator_engine import IndicatorEngine
-from ktrdr.errors import ProcessingError, ConfigurationError
 
 logger = get_logger(__name__)
 
@@ -38,8 +35,8 @@ class IndicatorRequirement:
     indicator_type: str
     minimum_data_points: int
     recommended_data_points: int
-    parameters: Dict[str, Any]
-    fallback_parameters: Optional[Dict[str, Any]] = None
+    parameters: dict[str, Any]
+    fallback_parameters: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -49,7 +46,7 @@ class DataAvailability:
     timeframe: str
     total_points: int
     valid_points: int  # Non-NaN points
-    date_range: Tuple[pd.Timestamp, pd.Timestamp]
+    date_range: tuple[pd.Timestamp, pd.Timestamp]
 
 
 @dataclass
@@ -136,8 +133,8 @@ class ComplexConfigurationHandler:
         }
 
     def analyze_data_availability(
-        self, data: Dict[str, pd.DataFrame]
-    ) -> Dict[str, DataAvailability]:
+        self, data: dict[str, pd.DataFrame]
+    ) -> dict[str, DataAvailability]:
         """
         Analyze available data for each timeframe.
 
@@ -180,9 +177,9 @@ class ComplexConfigurationHandler:
 
     def validate_configuration(
         self,
-        timeframe_configs: List[TimeframeIndicatorConfig],
-        data_availability: Dict[str, DataAvailability],
-    ) -> Tuple[List[ConfigurationIssue], List[TimeframeIndicatorConfig]]:
+        timeframe_configs: list[TimeframeIndicatorConfig],
+        data_availability: dict[str, DataAvailability],
+    ) -> tuple[list[ConfigurationIssue], list[TimeframeIndicatorConfig]]:
         """
         Validate configuration against available data and suggest fixes.
 
@@ -269,7 +266,7 @@ class ComplexConfigurationHandler:
         return issues, corrected_configs
 
     def _calculate_required_points(
-        self, indicator_type: str, params: Dict[str, Any]
+        self, indicator_type: str, params: dict[str, Any]
     ) -> int:
         """Calculate required data points for an indicator."""
 
@@ -305,7 +302,7 @@ class ComplexConfigurationHandler:
             return params.get("period", 20)
 
     def _suggest_fix(
-        self, indicator_type: str, params: Dict[str, Any], available_points: int
+        self, indicator_type: str, params: dict[str, Any], available_points: int
     ) -> str:
         """Suggest a fix for insufficient data."""
 
@@ -331,10 +328,10 @@ class ComplexConfigurationHandler:
 
     def _apply_fallback_strategy(
         self,
-        indicator_config: Dict[str, Any],
+        indicator_config: dict[str, Any],
         available_points: int,
         requirements: IndicatorRequirement,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Apply the configured fallback strategy."""
 
         if self.fallback_strategy == FallbackStrategy.SKIP:
@@ -355,7 +352,7 @@ class ComplexConfigurationHandler:
         elif self.fallback_strategy == FallbackStrategy.PAD_DATA:
             # This would require modifying the data, not just the config
             self.logger.warning(
-                f"PAD_DATA strategy not implemented, using REDUCE_PERIOD"
+                "PAD_DATA strategy not implemented, using REDUCE_PERIOD"
             )
             return self._reduce_indicator_periods(indicator_config, available_points)
 
@@ -363,8 +360,8 @@ class ComplexConfigurationHandler:
             return indicator_config
 
     def _reduce_indicator_periods(
-        self, indicator_config: Dict[str, Any], available_points: int
-    ) -> Dict[str, Any]:
+        self, indicator_config: dict[str, Any], available_points: int
+    ) -> dict[str, Any]:
         """Reduce indicator periods to fit available data."""
 
         corrected_config = indicator_config.copy()
@@ -458,9 +455,9 @@ class ComplexConfigurationHandler:
 
     def create_adaptive_configuration(
         self,
-        base_configs: List[TimeframeIndicatorConfig],
-        data: Dict[str, pd.DataFrame],
-    ) -> Tuple[List[TimeframeIndicatorConfig], List[ConfigurationIssue]]:
+        base_configs: list[TimeframeIndicatorConfig],
+        data: dict[str, pd.DataFrame],
+    ) -> tuple[list[TimeframeIndicatorConfig], list[ConfigurationIssue]]:
         """
         Create an adaptive configuration that works with available data.
 
@@ -494,8 +491,8 @@ class ComplexConfigurationHandler:
         return corrected_configs, issues
 
     def suggest_minimum_data_requirements(
-        self, timeframe_configs: List[TimeframeIndicatorConfig]
-    ) -> Dict[str, int]:
+        self, timeframe_configs: list[TimeframeIndicatorConfig]
+    ) -> dict[str, int]:
         """
         Suggest minimum data requirements for the given configuration.
 
@@ -524,10 +521,10 @@ class ComplexConfigurationHandler:
 
 
 def create_robust_configuration(
-    base_configs: List[TimeframeIndicatorConfig],
-    data: Dict[str, pd.DataFrame],
+    base_configs: list[TimeframeIndicatorConfig],
+    data: dict[str, pd.DataFrame],
     fallback_strategy: FallbackStrategy = FallbackStrategy.REDUCE_PERIOD,
-) -> Tuple[MultiTimeframeIndicatorEngine, List[ConfigurationIssue]]:
+) -> tuple[MultiTimeframeIndicatorEngine, list[ConfigurationIssue]]:
     """
     Create a robust multi-timeframe indicator engine that adapts to available data.
 
@@ -551,8 +548,8 @@ def create_robust_configuration(
 
 
 def validate_configuration_feasibility(
-    timeframe_configs: List[TimeframeIndicatorConfig], data: Dict[str, pd.DataFrame]
-) -> Dict[str, Any]:
+    timeframe_configs: list[TimeframeIndicatorConfig], data: dict[str, pd.DataFrame]
+) -> dict[str, Any]:
     """
     Validate if a configuration is feasible with available data.
 

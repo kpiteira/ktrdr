@@ -5,13 +5,14 @@ This module implements the Momentum indicator, which measures the rate of change
 in price over a specified period to identify trends and momentum shifts.
 """
 
-import pandas as pd
 from typing import Union
 
+import pandas as pd
+
 from ktrdr import get_logger
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import MOMENTUM_SCHEMA
-from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
 

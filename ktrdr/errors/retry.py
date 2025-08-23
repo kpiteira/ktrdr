@@ -5,16 +5,14 @@ This module provides a retry decorator with exponential backoff
 for handling transient errors in network operations.
 """
 
-import time
-import random
 import functools
-from typing import Callable, TypeVar, Any, Optional, Type, Union, List, Tuple, cast
+import random
+import time
+from typing import Any, Callable, List, Optional, Type, TypeVar, Union
 
 # Import the new logging system
-from ktrdr import get_logger, log_error
-
-from ktrdr.errors.exceptions import RetryableError, MaxRetriesExceededError
-
+from ktrdr import get_logger
+from ktrdr.errors.exceptions import MaxRetriesExceededError, RetryableError
 
 # Type variable for functions that can be decorated with retry
 T = TypeVar("T")
@@ -88,7 +86,7 @@ def calculate_delay(retry_number: int, config: RetryConfig) -> float:
 
 def retry_with_backoff(
     retryable_exceptions: Optional[
-        Union[Type[Exception], List[Type[Exception]]]
+        Union[type[Exception], list[type[Exception]]]
     ] = None,
     config: Optional[RetryConfig] = None,
     on_retry: Optional[Callable[[Exception, int, float], None]] = None,

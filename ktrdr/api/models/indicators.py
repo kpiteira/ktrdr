@@ -6,7 +6,8 @@ request and response models for indicator configuration and calculation.
 """
 
 from enum import Enum
-from typing import Dict, List, Any, Optional, Union, Literal
+from typing import Any, Dict, List, Optional, Union
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ktrdr.api.models.base import ApiResponse
@@ -47,7 +48,7 @@ class IndicatorParameter(BaseModel):
     max_value: Optional[Union[int, float]] = Field(
         None, description="Maximum value for numeric parameters"
     )
-    options: Optional[List[Any]] = Field(
+    options: Optional[list[Any]] = Field(
         None, description="Available options for enum-like parameters"
     )
 
@@ -96,10 +97,10 @@ class IndicatorMetadata(BaseModel):
     name: str = Field(..., description="Display name of the indicator")
     description: str = Field(..., description="Description of the indicator")
     type: IndicatorType = Field(..., description="Type of indicator")
-    parameters: List[IndicatorParameter] = Field(
+    parameters: list[IndicatorParameter] = Field(
         ..., description="Available parameters"
     )
-    resources: Optional[Dict[str, str]] = Field(
+    resources: Optional[dict[str, str]] = Field(
         None, description="Additional resources (URLs, docs)"
     )
 
@@ -115,7 +116,7 @@ class IndicatorConfig(BaseModel):
     """
 
     id: str = Field(..., description="Indicator identifier")
-    parameters: Dict[str, Any] = Field(
+    parameters: dict[str, Any] = Field(
         default_factory=dict, description="Indicator parameters"
     )
     output_name: Optional[str] = Field(
@@ -134,10 +135,10 @@ class IndicatorResult(BaseModel):
     """
 
     name: str = Field(..., description="Name of the indicator (or custom output name)")
-    values: List[Optional[float]] = Field(
+    values: list[Optional[float]] = Field(
         ..., description="Calculated indicator values"
     )
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    metadata: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
 
 
 class IndicatorCalculateRequest(BaseModel):
@@ -154,7 +155,7 @@ class IndicatorCalculateRequest(BaseModel):
 
     symbol: str = Field(..., description="Trading symbol")
     timeframe: str = Field(..., description="Data timeframe")
-    indicators: List[IndicatorConfig] = Field(
+    indicators: list[IndicatorConfig] = Field(
         ..., description="Indicator configurations to calculate"
     )
     start_date: Optional[str] = Field(
@@ -204,14 +205,14 @@ class IndicatorCalculateResponse(BaseModel):
     """
 
     success: bool = Field(..., description="Whether the calculation was successful")
-    dates: List[str] = Field(..., description="List of date strings")
-    indicators: Dict[str, List[Optional[float]]] = Field(
+    dates: list[str] = Field(..., description="List of date strings")
+    indicators: dict[str, list[Optional[float]]] = Field(
         ..., description="Calculated indicator values"
     )
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    metadata: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
 
 
-class IndicatorsListResponse(ApiResponse[List[IndicatorMetadata]]):
+class IndicatorsListResponse(ApiResponse[list[IndicatorMetadata]]):
     """Response model for listing available indicators."""
 
     pass
@@ -233,7 +234,7 @@ class IndicatorDetail(BaseModel):
         None, description="HTML-formatted description"
     )
     formula_html: Optional[str] = Field(None, description="HTML-formatted formula")
-    examples: Optional[List[Dict[str, Any]]] = Field(
+    examples: Optional[list[dict[str, Any]]] = Field(
         None, description="Example configurations and results"
     )
 

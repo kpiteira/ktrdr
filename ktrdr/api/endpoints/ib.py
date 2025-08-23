@@ -6,32 +6,28 @@ and connection management.
 """
 
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from ktrdr import get_logger
-from ktrdr.api.services.ib_service import IbService
+from ktrdr.api.models.base import ApiResponse, ErrorResponse
 from ktrdr.api.models.ib import (
-    IbStatusApiResponse,
-    IbHealthApiResponse,
+    DiscoveredSymbolsApiResponse,
+    DiscoveredSymbolsResponse,
     IbConfigApiResponse,
     IbConfigUpdateApiResponse,
-    IbDataRangesApiResponse,
-    SymbolDiscoveryApiResponse,
-    DiscoveredSymbolsApiResponse,
-    IbStatusResponse,
-    IbHealthStatus,
-    IbConfigInfo,
     IbConfigUpdateRequest,
-    IbConfigUpdateResponse,
-    DataRangesResponse,
+    IbDataRangesApiResponse,
+    IbHealthApiResponse,
+    IbStatusApiResponse,
+    SymbolDiscoveryApiResponse,
     SymbolDiscoveryRequest,
     SymbolDiscoveryResponse,
-    DiscoveredSymbolsResponse,
     SymbolInfo,
 )
-from ktrdr.api.models.base import ApiResponse, ErrorResponse
+from ktrdr.api.services.ib_service import IbService
 
 # Setup module-level logger
 logger = get_logger(__name__)
@@ -142,13 +138,13 @@ async def check_ib_health(
 
 @router.get(
     "/resilience",
-    response_model=ApiResponse[Dict[str, Any]],
+    response_model=ApiResponse[dict[str, Any]],
     summary="Get IB Connection Resilience Status",
     description="Get detailed status of connection resilience features including validation, garbage collection, and Client ID preference",
 )
 async def get_ib_resilience_status(
     ib_service: IbService = Depends(get_ib_service),
-) -> ApiResponse[Dict[str, Any]]:
+) -> ApiResponse[dict[str, Any]]:
     """
     Get comprehensive connection resilience status.
 
@@ -223,12 +219,12 @@ async def get_ib_config(
 
 @router.get(
     "/circuit-breakers",
-    response_model=ApiResponse[Dict[str, Any]],
+    response_model=ApiResponse[dict[str, Any]],
     tags=["IB", "Monitoring"],
     summary="Get circuit breaker status",
     description="Returns the status of all IB operation circuit breakers for monitoring silent connection issues.",
 )
-async def get_circuit_breaker_status() -> ApiResponse[Dict[str, Any]]:
+async def get_circuit_breaker_status() -> ApiResponse[dict[str, Any]]:
     """
     Get status of all IB circuit breakers.
 
@@ -277,14 +273,14 @@ async def get_circuit_breaker_status() -> ApiResponse[Dict[str, Any]]:
 
 @router.post(
     "/cleanup",
-    response_model=ApiResponse[Dict[str, Any]],
+    response_model=ApiResponse[dict[str, Any]],
     tags=["IB"],
     summary="Clean up IB connections",
     description="Forcefully disconnects all active IB connections. Useful for troubleshooting connection issues.",
 )
 async def cleanup_ib_connections(
     ib_service: IbService = Depends(get_ib_service),
-) -> ApiResponse[Dict[str, Any]]:
+) -> ApiResponse[dict[str, Any]]:
     """
     Clean up all IB connections.
 
@@ -501,8 +497,8 @@ async def discover_symbol(
         # Discover symbol using IB service with circuit breaker for resilience
         try:
             from ktrdr.api.utils.circuit_breaker import (
-                with_circuit_breaker,
                 CircuitBreakerOpenError,
+                with_circuit_breaker,
             )
 
             symbol_info_dict = await with_circuit_breaker(

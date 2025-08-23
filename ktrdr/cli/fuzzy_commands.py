@@ -9,17 +9,16 @@ This module contains all CLI commands related to fuzzy logic operations:
 
 import asyncio
 import sys
-import json
-from typing import Optional, List
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.api_client import get_api_client, check_api_connection
+from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.config.validation import InputValidator
-from ktrdr.errors import ValidationError, DataError
+from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
 
 # Setup logging and console
@@ -366,9 +365,9 @@ async def _visualize_fuzzy_async(
         # This would call the fuzzy visualization API endpoint
         # For now, show a placeholder message
         console.print(
-            f"⚠️  [yellow]Fuzzy visualization via API not yet implemented[/yellow]"
+            "⚠️  [yellow]Fuzzy visualization via API not yet implemented[/yellow]"
         )
-        console.print(f"📋 Would generate fuzzy chart for:")
+        console.print("📋 Would generate fuzzy chart for:")
         console.print(f"   Symbol: {symbol}")
         console.print(f"   Indicator: {indicator}({period})")
         console.print(f"   Timeframe: {timeframe}")
@@ -380,7 +379,7 @@ async def _visualize_fuzzy_async(
             console.print(f"💾 Would save chart to: {output_file}")
 
         if show:
-            console.print(f"🌐 Would open chart in browser")
+            console.print("🌐 Would open chart in browser")
 
     except Exception as e:
         raise DataError(
@@ -489,13 +488,13 @@ async def _manage_config_async(
 
         if action == "validate":
             console.print(
-                f"✅ [green]Fuzzy config validation would be performed[/green]"
+                "✅ [green]Fuzzy config validation would be performed[/green]"
             )
             console.print(f"📋 Config file: {config_file}")
 
         elif action == "generate":
             console.print(
-                f"🔧 [yellow]Fuzzy config generation not yet implemented[/yellow]"
+                "🔧 [yellow]Fuzzy config generation not yet implemented[/yellow]"
             )
             console.print(f"📋 Would generate config with template: {template}")
             if output_file:
@@ -503,7 +502,7 @@ async def _manage_config_async(
 
         elif action == "upgrade":
             console.print(
-                f"⬆️  [yellow]Fuzzy config upgrade not yet implemented[/yellow]"
+                "⬆️  [yellow]Fuzzy config upgrade not yet implemented[/yellow]"
             )
             console.print(f"📋 Would upgrade: {config_file}")
             if output_file:
@@ -511,7 +510,7 @@ async def _manage_config_async(
 
     except Exception as e:
         raise DataError(
-            message=f"Failed to manage fuzzy config",
+            message="Failed to manage fuzzy config",
             error_code="CLI-FuzzyConfigError",
             details={"action": action, "config_file": config_file, "error": str(e)},
         ) from e

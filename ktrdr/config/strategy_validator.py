@@ -1,14 +1,14 @@
 """Strategy configuration validation and upgrade utilities."""
 
-import yaml
-import json
-from typing import Dict, Any, List, Tuple, Optional, Union
-from pathlib import Path
-from dataclasses import dataclass, field
 from copy import deepcopy
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
+from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
 from ktrdr.config.strategy_loader import strategy_loader
-from ktrdr.config.models import StrategyConfigurationV2, LegacyStrategyConfiguration
 
 
 @dataclass
@@ -16,10 +16,10 @@ class ValidationResult:
     """Result of strategy validation."""
 
     is_valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    missing_sections: List[str] = field(default_factory=list)
-    suggestions: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    missing_sections: list[str] = field(default_factory=list)
+    suggestions: list[str] = field(default_factory=list)
 
 
 class StrategyValidator:
@@ -160,19 +160,23 @@ class StrategyValidator:
         """Validate v2 strategy configuration."""
         # V2 strategies are already validated by Pydantic during loading
         # Just add some additional checks and suggestions
-        
+
         # Check for comprehensive sections
         if not config.training_data:
             result.errors.append("V2 strategy missing training_data section")
             result.is_valid = False
-        
+
         if not config.deployment:
             result.errors.append("V2 strategy missing deployment section")
             result.is_valid = False
 
         # Validate model configuration (shared with v1)
         if config.model:
-            model_dict = config.model if isinstance(config.model, dict) else config.model.model_dump()
+            model_dict = (
+                config.model
+                if isinstance(config.model, dict)
+                else config.model.model_dump()
+            )
             model_result = self._validate_model_section(model_dict)
             result.errors.extend(model_result.errors)
             result.warnings.extend(model_result.warnings)
@@ -181,7 +185,11 @@ class StrategyValidator:
 
         # Validate training configuration (shared with v1)
         if config.training:
-            training_dict = config.training if isinstance(config.training, dict) else config.training.model_dump()
+            training_dict = (
+                config.training
+                if isinstance(config.training, dict)
+                else config.training.model_dump()
+            )
             training_result = self._validate_training_section(training_dict)
             result.errors.extend(training_result.errors)
             result.warnings.extend(training_result.warnings)
@@ -190,7 +198,11 @@ class StrategyValidator:
 
         # Validate decisions configuration (shared with v1)
         if config.decisions:
-            decisions_dict = config.decisions if isinstance(config.decisions, dict) else config.decisions.model_dump()
+            decisions_dict = (
+                config.decisions
+                if isinstance(config.decisions, dict)
+                else config.decisions.model_dump()
+            )
             decisions_result = self._validate_decisions_section(decisions_dict)
             result.errors.extend(decisions_result.errors)
             result.warnings.extend(decisions_result.warnings)
@@ -203,13 +215,19 @@ class StrategyValidator:
             self._check_legacy_format({"fuzzy_sets": fuzzy_dict}, result)
 
         # V2-specific suggestions
-        result.suggestions.append("Strategy is in v2 format - ready for multi-scope training")
-        
+        result.suggestions.append(
+            "Strategy is in v2 format - ready for multi-scope training"
+        )
+
         # Check scope recommendations
         if config.scope == "symbol_specific":
-            result.suggestions.append("Consider migrating to multi-symbol scope for better generalization")
+            result.suggestions.append(
+                "Consider migrating to multi-symbol scope for better generalization"
+            )
         elif config.scope == "universal":
-            result.suggestions.append("Universal scope strategy - excellent for cross-market trading")
+            result.suggestions.append(
+                "Universal scope strategy - excellent for cross-market trading"
+            )
 
         return result
 
@@ -219,7 +237,7 @@ class StrategyValidator:
         """Validate v1 (legacy) strategy configuration."""
         # Convert to dict for existing validation methods
         config_dict = config.model_dump()
-        
+
         # Check required sections for v1
         for section, expected_type in self.REQUIRED_SECTIONS.items():
             if section not in config_dict or config_dict[section] is None:
@@ -252,7 +270,9 @@ class StrategyValidator:
 
         # Validate decisions configuration
         if config_dict.get("decisions"):
-            decisions_result = self._validate_decisions_section(config_dict["decisions"])
+            decisions_result = self._validate_decisions_section(
+                config_dict["decisions"]
+            )
             result.errors.extend(decisions_result.errors)
             result.warnings.extend(decisions_result.warnings)
             if not decisions_result.is_valid:
@@ -263,13 +283,15 @@ class StrategyValidator:
 
         # Generate suggestions for v1
         self._generate_suggestions(config_dict, result)
-        
+
         # V1-specific suggestion
-        result.suggestions.append("Consider migrating to v2 format with 'ktrdr strategies migrate' for multi-scope support")
+        result.suggestions.append(
+            "Consider migrating to v2 format with 'ktrdr strategies migrate' for multi-scope support"
+        )
 
         return result
 
-    def _validate_model_section(self, model_config: Dict[str, Any]) -> ValidationResult:
+    def _validate_model_section(self, model_config: dict[str, Any]) -> ValidationResult:
         """Validate model section."""
         result = ValidationResult(is_valid=True)
 
@@ -293,7 +315,7 @@ class StrategyValidator:
         return result
 
     def _validate_training_section(
-        self, training_config: Dict[str, Any]
+        self, training_config: dict[str, Any]
     ) -> ValidationResult:
         """Validate training section."""
         result = ValidationResult(is_valid=True)
@@ -312,7 +334,7 @@ class StrategyValidator:
         return result
 
     def _validate_decisions_section(
-        self, decisions_config: Dict[str, Any]
+        self, decisions_config: dict[str, Any]
     ) -> ValidationResult:
         """Validate decisions section."""
         result = ValidationResult(is_valid=True)
@@ -330,7 +352,7 @@ class StrategyValidator:
 
         return result
 
-    def _check_legacy_format(self, config: Dict[str, Any], result: ValidationResult):
+    def _check_legacy_format(self, config: dict[str, Any], result: ValidationResult):
         """Check for legacy format indicators."""
         # Check for old fuzzy set format
         if "fuzzy_sets" in config:
@@ -354,7 +376,7 @@ class StrategyValidator:
                     "Minimal model configuration detected - consider upgrading"
                 )
 
-    def _generate_suggestions(self, config: Dict[str, Any], result: ValidationResult):
+    def _generate_suggestions(self, config: dict[str, Any], result: ValidationResult):
         """Generate upgrade suggestions."""
         missing_optional = []
         for section in self.OPTIONAL_SECTIONS:
@@ -376,7 +398,7 @@ class StrategyValidator:
 
     def upgrade_strategy(
         self, config_path: str, output_path: Optional[str] = None
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """Upgrade a strategy configuration to neuro-fuzzy format.
 
         Args:
@@ -387,7 +409,7 @@ class StrategyValidator:
             Tuple of (success, message)
         """
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = yaml.safe_load(f)
         except Exception as e:
             return False, f"Failed to load configuration: {e}"
@@ -433,7 +455,7 @@ class StrategyValidator:
         except Exception as e:
             return False, f"Failed to save upgraded configuration: {e}"
 
-    def _merge_defaults(self, config_section: Dict[str, Any], defaults: Dict[str, Any]):
+    def _merge_defaults(self, config_section: dict[str, Any], defaults: dict[str, Any]):
         """Recursively merge defaults into configuration section."""
         for key, value in defaults.items():
             if key not in config_section:
@@ -441,7 +463,7 @@ class StrategyValidator:
             elif isinstance(value, dict) and isinstance(config_section[key], dict):
                 self._merge_defaults(config_section[key], value)
 
-    def _convert_fuzzy_sets(self, config: Dict[str, Any]):
+    def _convert_fuzzy_sets(self, config: dict[str, Any]):
         """Convert old fuzzy set format to simplified format."""
         if "fuzzy_sets" not in config:
             return

@@ -6,49 +6,46 @@ based on configuration settings.
 """
 
 import importlib
-from typing import Dict, List, Any, Optional, Type, Union
+from typing import Dict, List, Type, Union
 
 from ktrdr import get_logger
-from ktrdr.errors import ConfigurationError
 from ktrdr.config.models import IndicatorConfig, IndicatorsConfig
-from ktrdr.indicators import (
-    BaseIndicator,
-    RSIIndicator,
-    SimpleMovingAverage,
-    ExponentialMovingAverage,
-    MACDIndicator,
-)
-from ktrdr.indicators.zigzag_indicator import ZigZagIndicator
-from ktrdr.indicators.stochastic_indicator import StochasticIndicator
-from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
+from ktrdr.errors import ConfigurationError
+from ktrdr.indicators.base_indicator import BaseIndicator
+from ktrdr.indicators.ma_indicators import ExponentialMovingAverage, SimpleMovingAverage
+from ktrdr.indicators.macd_indicator import MACDIndicator
+from ktrdr.indicators.rsi_indicator import RSIIndicator
+from ktrdr.indicators.ad_line import ADLineIndicator
+from ktrdr.indicators.adx_indicator import ADXIndicator
+from ktrdr.indicators.aroon_indicator import AroonIndicator
 from ktrdr.indicators.atr_indicator import ATRIndicator
-from ktrdr.indicators.obv_indicator import OBVIndicator
+from ktrdr.indicators.bollinger_band_width_indicator import BollingerBandWidthIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 from ktrdr.indicators.cci_indicator import CCIIndicator
-from ktrdr.indicators.momentum_indicator import MomentumIndicator
-from ktrdr.indicators.roc_indicator import ROCIndicator
-from ktrdr.indicators.vwap_indicator import VWAPIndicator
-from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
-from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
-from ktrdr.indicators.rvi_indicator import RVIIndicator
-from ktrdr.indicators.mfi_indicator import MFIIndicator
-from ktrdr.indicators.aroon_indicator import AroonIndicator
-from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
-from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
-from ktrdr.indicators.ad_line import ADLineIndicator
 from ktrdr.indicators.cmf_indicator import CMFIndicator
-from ktrdr.indicators.adx_indicator import ADXIndicator
-from ktrdr.indicators.supertrend_indicator import SuperTrendIndicator
-from ktrdr.indicators.fisher_transform import FisherTransformIndicator
-from ktrdr.indicators.bollinger_band_width_indicator import BollingerBandWidthIndicator
-from ktrdr.indicators.volume_ratio_indicator import VolumeRatioIndicator
-from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicator
 from ktrdr.indicators.distance_from_ma_indicator import DistanceFromMAIndicator
+from ktrdr.indicators.donchian_channels import DonchianChannelsIndicator
+from ktrdr.indicators.fisher_transform import FisherTransformIndicator
+from ktrdr.indicators.ichimoku_indicator import IchimokuIndicator
+from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+from ktrdr.indicators.mfi_indicator import MFIIndicator
+from ktrdr.indicators.momentum_indicator import MomentumIndicator
+from ktrdr.indicators.obv_indicator import OBVIndicator
+from ktrdr.indicators.parabolic_sar_indicator import ParabolicSARIndicator
+from ktrdr.indicators.roc_indicator import ROCIndicator
+from ktrdr.indicators.rvi_indicator import RVIIndicator
+from ktrdr.indicators.squeeze_intensity_indicator import SqueezeIntensityIndicator
+from ktrdr.indicators.stochastic_indicator import StochasticIndicator
+from ktrdr.indicators.supertrend_indicator import SuperTrendIndicator
+from ktrdr.indicators.volume_ratio_indicator import VolumeRatioIndicator
+from ktrdr.indicators.vwap_indicator import VWAPIndicator
+from ktrdr.indicators.williams_r_indicator import WilliamsRIndicator
+from ktrdr.indicators.zigzag_indicator import ZigZagIndicator
 
 logger = get_logger(__name__)
 
 # Registry of built-in indicators for direct access
-BUILT_IN_INDICATORS: Dict[str, Type[BaseIndicator]] = {
+BUILT_IN_INDICATORS: dict[str, type[BaseIndicator]] = {
     "RSI": RSIIndicator,
     "RSIIndicator": RSIIndicator,
     "SMA": SimpleMovingAverage,
@@ -127,7 +124,7 @@ class IndicatorFactory:
         config: The indicator configuration containing indicator specifications
     """
 
-    def __init__(self, config: Union[IndicatorsConfig, List[IndicatorConfig]]):
+    def __init__(self, config: Union[IndicatorsConfig, list[IndicatorConfig]]):
         """
         Initialize the indicator factory with a configuration.
 
@@ -155,7 +152,7 @@ class IndicatorFactory:
             f"Initialized IndicatorFactory with {len(self.indicators_config.indicators)} indicator configurations"
         )
 
-    def build(self) -> List[BaseIndicator]:
+    def build(self) -> list[BaseIndicator]:
         """
         Build and return indicator instances based on the configuration.
 
@@ -253,7 +250,7 @@ class IndicatorFactory:
                 },
             ) from e
 
-    def _get_indicator_class(self, indicator_type: str) -> Type[BaseIndicator]:
+    def _get_indicator_class(self, indicator_type: str) -> type[BaseIndicator]:
         """
         Get the indicator class based on its type name.
 

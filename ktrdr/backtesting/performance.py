@@ -1,24 +1,24 @@
 """Performance analytics for backtesting system."""
 
-from dataclasses import dataclass
-from typing import Dict, List, Any, Optional
-import pandas as pd
-import numpy as np
 import math
-from datetime import datetime
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
-from .position_manager import Trade, PositionStatus
+import numpy as np
+import pandas as pd
+
 from .. import get_logger
+from .position_manager import PositionStatus, Trade
 
 logger = get_logger(__name__)
 
 
 def sanitize_float_for_json(value: float) -> float:
     """Sanitize float values for JSON serialization.
-    
+
     Args:
         value: Float value to sanitize
-        
+
     Returns:
         JSON-safe float value (replaces inf/nan with safe values)
     """
@@ -71,7 +71,7 @@ class PerformanceMetrics:
     sortino_ratio: float
     recovery_factor: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary with JSON-safe float values."""
         return {
             "total_return": sanitize_float_for_json(self.total_return),
@@ -87,8 +87,12 @@ class PerformanceMetrics:
             "win_rate": sanitize_float_for_json(self.win_rate),
             "profit_factor": sanitize_float_for_json(self.profit_factor),
             "avg_holding_period": sanitize_float_for_json(self.avg_holding_period),
-            "avg_win_holding_period": sanitize_float_for_json(self.avg_win_holding_period),
-            "avg_loss_holding_period": sanitize_float_for_json(self.avg_loss_holding_period),
+            "avg_win_holding_period": sanitize_float_for_json(
+                self.avg_win_holding_period
+            ),
+            "avg_loss_holding_period": sanitize_float_for_json(
+                self.avg_loss_holding_period
+            ),
             "avg_win": sanitize_float_for_json(self.avg_win),
             "avg_loss": sanitize_float_for_json(self.avg_loss),
             "largest_win": sanitize_float_for_json(self.largest_win),
@@ -104,8 +108,8 @@ class PerformanceTracker:
 
     def __init__(self):
         """Initialize performance tracker."""
-        self.equity_curve: List[Dict[str, Any]] = []
-        self.daily_returns: List[float] = []
+        self.equity_curve: list[dict[str, Any]] = []
+        self.daily_returns: list[float] = []
         self.peak_equity = 0.0
         self.current_drawdown = 0.0
         self.max_drawdown = 0.0
@@ -148,25 +152,34 @@ class PerformanceTracker:
             self.current_drawdown = (
                 self.peak_equity - portfolio_value
             ) / self.peak_equity
-            
+
             # CRITICAL DEBUG: Check for impossible drawdown values
             if self.current_drawdown > 1.0:
-                logger.error(f"🚨 IMPOSSIBLE DRAWDOWN: {self.current_drawdown:.4f} ({self.current_drawdown*100:.1f}%)")
+                logger.error(
+                    f"🚨 IMPOSSIBLE DRAWDOWN: {self.current_drawdown:.4f} ({self.current_drawdown*100:.1f}%)"
+                )
                 logger.error(f"   Peak equity: ${self.peak_equity:,.2f}")
                 logger.error(f"   Current portfolio: ${portfolio_value:,.2f}")
-                logger.error(f"   Difference: ${self.peak_equity - portfolio_value:,.2f}")
-            
+                logger.error(
+                    f"   Difference: ${self.peak_equity - portfolio_value:,.2f}"
+                )
+
             self.max_drawdown = max(self.max_drawdown, self.current_drawdown)
-            
+
             # CRITICAL DEBUG: Log when max drawdown updates
-            if self.current_drawdown == self.max_drawdown and self.current_drawdown > 0.1:
-                logger.warning(f"📉 New max drawdown: {self.max_drawdown:.4f} ({self.max_drawdown*100:.1f}%) at portfolio ${portfolio_value:,.2f}")
+            if (
+                self.current_drawdown == self.max_drawdown
+                and self.current_drawdown > 0.1
+            ):
+                logger.warning(
+                    f"📉 New max drawdown: {self.max_drawdown:.4f} ({self.max_drawdown*100:.1f}%) at portfolio ${portfolio_value:,.2f}"
+                )
 
         self.last_equity = portfolio_value
 
     def calculate_metrics(
         self,
-        trades: List[Trade],
+        trades: list[Trade],
         initial_capital: float,
         start_date: pd.Timestamp = None,
         end_date: pd.Timestamp = None,
@@ -209,7 +222,7 @@ class PerformanceTracker:
             volatility = np.std(self.daily_returns) * np.sqrt(252)  # Annualized
             avg_return = np.mean(self.daily_returns)
             returns_std = np.std(self.daily_returns)
-            
+
             if returns_std > 1e-10:  # Avoid division by near-zero values
                 sharpe_ratio = (avg_return / returns_std) * np.sqrt(252)
                 # Cap extreme values to prevent JSON serialization issues
@@ -239,7 +252,9 @@ class PerformanceTracker:
             if total_losses > 0:
                 profit_factor = total_wins / total_losses
             elif total_wins > 0:
-                profit_factor = 999999.0  # Very high but finite value instead of infinity
+                profit_factor = (
+                    999999.0  # Very high but finite value instead of infinity
+                )
             else:
                 profit_factor = 0.0
 
@@ -277,20 +292,26 @@ class PerformanceTracker:
         # Max drawdown in absolute terms
         max_drawdown_abs = self.max_drawdown * self.peak_equity
         max_drawdown_pct = self.max_drawdown  # Already as decimal 0-1
-        
+
         # CRITICAL DEBUG: Check for corrupted values
-        logger.info(f"📊 Final metrics calculation:")
+        logger.info("📊 Final metrics calculation:")
         logger.info(f"   self.max_drawdown: {self.max_drawdown:.6f}")
         logger.info(f"   self.peak_equity: ${self.peak_equity:,.2f}")
         logger.info(f"   max_drawdown_abs: ${max_drawdown_abs:,.2f}")
-        logger.info(f"   max_drawdown_pct: {max_drawdown_pct:.6f} ({max_drawdown_pct*100:.2f}%)")
-        
+        logger.info(
+            f"   max_drawdown_pct: {max_drawdown_pct:.6f} ({max_drawdown_pct*100:.2f}%)"
+        )
+
         if max_drawdown_pct > 1.0:
-            logger.error(f"🚨 IMPOSSIBLE: max_drawdown_pct {max_drawdown_pct:.6f} > 1.0!")
+            logger.error(
+                f"🚨 IMPOSSIBLE: max_drawdown_pct {max_drawdown_pct:.6f} > 1.0!"
+            )
         if self.peak_equity <= 0:
             logger.error(f"🚨 IMPOSSIBLE: peak_equity ${self.peak_equity:,.2f} <= 0!")
         if max_drawdown_abs < 0:
-            logger.error(f"🚨 IMPOSSIBLE: max_drawdown_abs ${max_drawdown_abs:,.2f} < 0!")
+            logger.error(
+                f"🚨 IMPOSSIBLE: max_drawdown_abs ${max_drawdown_abs:,.2f} < 0!"
+            )
 
         # Additional risk metrics - Calmar ratio with safe division
         if max_drawdown_pct > 0:

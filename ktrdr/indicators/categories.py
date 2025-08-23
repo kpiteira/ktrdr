@@ -5,9 +5,9 @@ This module provides categorization for all technical indicators, organizing the
 into logical groups that help traders understand their purpose and usage patterns.
 """
 
-from enum import Enum
-from typing import Dict, List, Set
 from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List
 
 
 class IndicatorCategory(str, Enum):
@@ -29,7 +29,7 @@ class CategoryInfo:
     description: str
     purpose: str
     typical_usage: str
-    common_timeframes: List[str]
+    common_timeframes: list[str]
 
 
 # Category descriptions for documentation and API
@@ -80,7 +80,7 @@ CATEGORY_DESCRIPTIONS = {
 
 
 # Mapping of indicator classes to their primary categories
-INDICATOR_CATEGORIES: Dict[str, IndicatorCategory] = {
+INDICATOR_CATEGORIES: dict[str, IndicatorCategory] = {
     # Trend Indicators
     "SimpleMovingAverage": IndicatorCategory.TREND,
     "SMA": IndicatorCategory.TREND,
@@ -163,7 +163,7 @@ def get_indicator_category(indicator_name: str) -> IndicatorCategory:
     return INDICATOR_CATEGORIES[indicator_name]
 
 
-def get_indicators_by_category(category: IndicatorCategory) -> List[str]:
+def get_indicators_by_category(category: IndicatorCategory) -> list[str]:
     """
     Get all indicators in a specific category.
 
@@ -178,7 +178,7 @@ def get_indicators_by_category(category: IndicatorCategory) -> List[str]:
     ]
 
 
-def get_all_categories() -> List[IndicatorCategory]:
+def get_all_categories() -> list[IndicatorCategory]:
     """
     Get all available indicator categories.
 
@@ -201,7 +201,7 @@ def get_category_info(category: IndicatorCategory) -> CategoryInfo:
     return CATEGORY_DESCRIPTIONS[category]
 
 
-def get_category_summary() -> Dict[str, Dict[str, any]]:
+def get_category_summary() -> dict[str, dict[str, any]]:
     """
     Get a summary of all categories with their indicators.
 

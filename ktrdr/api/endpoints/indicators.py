@@ -5,26 +5,26 @@ This module provides endpoints for accessing indicator functionality,
 including listing available indicators and calculating indicator values.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ktrdr import get_logger
-from ktrdr.errors import DataError, ConfigurationError, ProcessingError
-from ktrdr.api.services.indicator_service import IndicatorService
-from ktrdr.indicators.categories import (
-    get_category_summary,
-    get_indicators_by_category,
-    get_all_categories,
-    get_category_info,
-    IndicatorCategory,
-)
+from ktrdr.api.dependencies import get_indicator_service
 from ktrdr.api.models.indicators import (
-    IndicatorMetadata,
     IndicatorCalculateRequest,
     IndicatorCalculateResponse,
     IndicatorsListResponse,
 )
-from ktrdr.api.dependencies import get_indicator_service
+from ktrdr.api.services.indicator_service import IndicatorService
+from ktrdr.errors import ConfigurationError, DataError, ProcessingError
+from ktrdr.indicators.categories import (
+    IndicatorCategory,
+    get_all_categories,
+    get_category_info,
+    get_category_summary,
+    get_indicators_by_category,
+)
 
 # Create module-level logger
 logger = get_logger(__name__)
@@ -347,7 +347,7 @@ async def calculate_indicators(
     and a list of indicators that belong to it.
     """,
 )
-async def get_indicators_by_categories() -> Dict[str, Any]:
+async def get_indicators_by_categories() -> dict[str, Any]:
     """
     Get indicators organized by categories.
 
@@ -422,7 +422,7 @@ async def get_indicators_by_categories() -> Dict[str, Any]:
 async def get_indicators_by_category_endpoint(
     category: str,
     indicator_service: IndicatorService = Depends(get_indicator_service),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get all indicators in a specific category.
 
@@ -521,7 +521,7 @@ async def get_indicators_by_category_endpoint(
     Useful for frontend dropdowns and category selection interfaces.
     """,
 )
-async def get_category_names() -> Dict[str, Any]:
+async def get_category_names() -> dict[str, Any]:
     """
     Get list of available category names.
 

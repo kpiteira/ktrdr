@@ -54,7 +54,7 @@ class TestOperationsEndpoints:
 
     @pytest.mark.api
     def test_get_operation_status_not_found(self, client):
-        """Test getting status for non-existent operation.""" 
+        """Test getting status for non-existent operation."""
         response = client.get("/api/v1/operations/nonexistent_operation_id")
 
         assert response.status_code == 404
@@ -101,7 +101,7 @@ class TestOperationsEndpoints:
         # Should return 404 since operation doesn't exist
         assert response.status_code == 404
 
-    @pytest.mark.api 
+    @pytest.mark.api
     def test_cancel_nonexistent_operation(self, client):
         """Test cancelling non-existent operation."""
         response = client.delete("/api/v1/operations/definitely_nonexistent_operation")

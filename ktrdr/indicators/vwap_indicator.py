@@ -5,13 +5,14 @@ This module implements the VWAP indicator, which calculates the average price
 a security has traded at throughout the day, weighted by volume.
 """
 
-import pandas as pd
 from typing import Union
 
+import pandas as pd
+
 from ktrdr import get_logger
+from ktrdr.errors import DataError
 from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.schemas import VWAP_SCHEMA
-from ktrdr.errors import DataError
 
 logger = get_logger(__name__)
 

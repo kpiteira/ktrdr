@@ -6,21 +6,20 @@ fuzzy logic processing into the KTRDR trading system. It handles configuration
 loading, data management, and result processing.
 """
 
-from typing import Dict, Any, List, Optional, Union
-import pandas as pd
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+import pandas as pd
 import yaml
 
 from ktrdr import get_logger
 from ktrdr.data.data_manager import DataManager
+from ktrdr.errors import ConfigurationError, DataError, ProcessingError
 from ktrdr.fuzzy.indicator_integration import (
-    MultiTimeframeFuzzyIndicatorPipeline,
     IntegratedFuzzyResult,
+    MultiTimeframeFuzzyIndicatorPipeline,
     create_integrated_pipeline,
 )
-from ktrdr.config.models import IndicatorConfig, TimeframeIndicatorConfig
-from ktrdr.fuzzy.config import FuzzyConfigLoader
-from ktrdr.errors import ProcessingError, ConfigurationError, DataError
 
 # Set up module-level logger
 logger = get_logger(__name__)
@@ -60,9 +59,9 @@ class FuzzyPipelineService:
     def process_symbol_fuzzy(
         self,
         symbol: str,
-        indicator_config: Union[Dict[str, Any], str, Path],
-        fuzzy_config: Union[Dict[str, Any], str, Path],
-        timeframes: Optional[List[str]] = None,
+        indicator_config: Union[dict[str, Any], str, Path],
+        fuzzy_config: Union[dict[str, Any], str, Path],
+        timeframes: Optional[list[str]] = None,
         data_period_days: int = 30,
         fail_fast: bool = False,
     ) -> IntegratedFuzzyResult:
@@ -136,13 +135,13 @@ class FuzzyPipelineService:
 
     def process_multiple_symbols(
         self,
-        symbols: List[str],
-        indicator_config: Union[Dict[str, Any], str, Path],
-        fuzzy_config: Union[Dict[str, Any], str, Path],
-        timeframes: Optional[List[str]] = None,
+        symbols: list[str],
+        indicator_config: Union[dict[str, Any], str, Path],
+        fuzzy_config: Union[dict[str, Any], str, Path],
+        timeframes: Optional[list[str]] = None,
         data_period_days: int = 30,
         continue_on_error: bool = True,
-    ) -> Dict[str, IntegratedFuzzyResult]:
+    ) -> dict[str, IntegratedFuzzyResult]:
         """
         Process fuzzy analysis for multiple symbols.
 
@@ -198,9 +197,9 @@ class FuzzyPipelineService:
 
     def create_fuzzy_summary_report(
         self,
-        results: Union[IntegratedFuzzyResult, Dict[str, IntegratedFuzzyResult]],
+        results: Union[IntegratedFuzzyResult, dict[str, IntegratedFuzzyResult]],
         include_performance_metrics: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Create a summary report from fuzzy processing results.
 
@@ -223,8 +222,8 @@ class FuzzyPipelineService:
             )
 
     def _load_configuration(
-        self, config: Union[Dict[str, Any], str, Path], config_type: str
-    ) -> Dict[str, Any]:
+        self, config: Union[dict[str, Any], str, Path], config_type: str
+    ) -> dict[str, Any]:
         """Load and validate configuration from various sources."""
         if isinstance(config, dict):
             return config
@@ -239,7 +238,7 @@ class FuzzyPipelineService:
                 )
 
             try:
-                with open(config_path, "r") as f:
+                with open(config_path) as f:
                     return yaml.safe_load(f)
             except Exception as e:
                 raise ConfigurationError(
@@ -256,7 +255,7 @@ class FuzzyPipelineService:
             )
 
     def _get_or_create_pipeline(
-        self, indicator_config: Dict[str, Any], fuzzy_config: Dict[str, Any]
+        self, indicator_config: dict[str, Any], fuzzy_config: dict[str, Any]
     ) -> MultiTimeframeFuzzyIndicatorPipeline:
         """Get existing pipeline from cache or create new one."""
         # Create cache key from configuration hashes
@@ -281,8 +280,8 @@ class FuzzyPipelineService:
         return pipeline
 
     def _load_market_data(
-        self, symbol: str, timeframes: List[str], period_days: int
-    ) -> Dict[str, pd.DataFrame]:
+        self, symbol: str, timeframes: list[str], period_days: int
+    ) -> dict[str, pd.DataFrame]:
         """Load market data for all required timeframes."""
         market_data = {}
 
@@ -318,7 +317,7 @@ class FuzzyPipelineService:
 
     def _create_single_symbol_report(
         self, result: IntegratedFuzzyResult, include_performance: bool
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create summary report for single symbol result."""
         fuzzy_values = result.fuzzy_result.fuzzy_values
 
@@ -369,8 +368,8 @@ class FuzzyPipelineService:
         return report
 
     def _create_multi_symbol_report(
-        self, results: Dict[str, IntegratedFuzzyResult], include_performance: bool
-    ) -> Dict[str, Any]:
+        self, results: dict[str, IntegratedFuzzyResult], include_performance: bool
+    ) -> dict[str, Any]:
         """Create summary report for multiple symbol results."""
         total_symbols = len(results)
         successful_symbols = sum(1 for r in results.values() if len(r.errors) == 0)
@@ -412,7 +411,7 @@ class FuzzyPipelineService:
 
         return report
 
-    def get_service_health(self) -> Dict[str, Any]:
+    def get_service_health(self) -> dict[str, Any]:
         """Get service health and status information."""
         return {
             "data_manager": {

@@ -6,22 +6,21 @@ bridging the API endpoints with the core KTRDR data modules.
 """
 
 import asyncio
-import logging
-from typing import Dict, List, Optional, Union, Any
-from datetime import datetime
-import pandas as pd
 import time
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
-from ktrdr import get_logger, log_entry_exit, log_performance, log_data_operation
-from ktrdr.data import DataManager
-from ktrdr.errors import DataError, DataNotFoundError, retry_with_backoff, RetryConfig
+import pandas as pd
+
+from ktrdr import get_logger, log_entry_exit, log_performance
+from ktrdr.api.models.operations import (
+    OperationMetadata,
+    OperationType,
+)
 from ktrdr.api.services.base import BaseService
 from ktrdr.api.services.operations_service import get_operations_service
-from ktrdr.api.models.operations import (
-    OperationType,
-    OperationMetadata,
-    OperationProgress,
-)
+from ktrdr.data import DataManager
+from ktrdr.errors import DataError, DataNotFoundError, RetryConfig, retry_with_backoff
 
 # Setup module-level logger
 logger = get_logger(__name__)
@@ -64,9 +63,9 @@ class DataService(BaseService):
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "local",
         include_metadata: bool = True,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         periodic_save_minutes: float = 2.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Load OHLCV data for a symbol and timeframe.
 
@@ -163,7 +162,7 @@ class DataService(BaseService):
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
-        filters: Optional[Dict[str, Any]] = None,
+        filters: Optional[dict[str, Any]] = None,
         periodic_save_minutes: float = 2.0,
     ) -> str:
         """
@@ -205,7 +204,14 @@ class DataService(BaseService):
         # Start the data loading task
         task = asyncio.create_task(
             self._run_data_loading_operation(
-                operation_id, symbol, timeframe, start_date, end_date, mode, filters, periodic_save_minutes
+                operation_id,
+                symbol,
+                timeframe,
+                start_date,
+                end_date,
+                mode,
+                filters,
+                periodic_save_minutes,
             )
         )
 
@@ -222,7 +228,7 @@ class DataService(BaseService):
         start_date: Optional[Union[str, datetime]],
         end_date: Optional[Union[str, datetime]],
         mode: str,
-        filters: Optional[Dict[str, Any]],
+        filters: Optional[dict[str, Any]],
         periodic_save_minutes: float,
     ) -> None:
         """
@@ -301,9 +307,9 @@ class DataService(BaseService):
         start_date: Optional[Union[str, datetime]],
         end_date: Optional[Union[str, datetime]],
         mode: str,
-        filters: Optional[Dict[str, Any]],
+        filters: Optional[dict[str, Any]],
         periodic_save_minutes: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run data loading with cancellation support and real progress updates.
 
@@ -312,8 +318,8 @@ class DataService(BaseService):
         """
         import concurrent.futures
         import threading
-        import time
-        from ktrdr.data.data_manager import DataLoadingProgress, ProgressCallback
+
+        from ktrdr.data.data_manager import DataLoadingProgress
 
         # Create cancellation event for worker thread
         cancel_event = threading.Event()
@@ -416,9 +422,9 @@ class DataService(BaseService):
 
         # Create a cancellation event that can be triggered externally
         cancellation_event = asyncio.Event()
-        
+
         # Store the cancellation event so the operations service can signal it
-        if not hasattr(self.operations_service, '_cancellation_events'):
+        if not hasattr(self.operations_service, "_cancellation_events"):
             self.operations_service._cancellation_events = {}
         self.operations_service._cancellation_events[operation_id] = cancellation_event
 
@@ -435,16 +441,16 @@ class DataService(BaseService):
             # Run data loading in executor with real-time progress updates
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_data_load)
-                
+
                 # Start the cancellation checker
                 cancellation_task = asyncio.create_task(check_cancellation())
-                
+
                 # Wait for either completion or cancellation without blocking event loop
                 done, pending = await asyncio.wait(
                     [asyncio.wrap_future(future), cancellation_task],
-                    return_when=asyncio.FIRST_COMPLETED
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-                
+
                 # Cancel any remaining tasks
                 for task in pending:
                     task.cancel()
@@ -454,19 +460,19 @@ class DataService(BaseService):
                         pass
         finally:
             # Clean up cancellation event
-            if hasattr(self.operations_service, '_cancellation_events'):
+            if hasattr(self.operations_service, "_cancellation_events"):
                 self.operations_service._cancellation_events.pop(operation_id, None)
-            
+
             # Stop progress updates
             cancel_event.set()
             try:
                 await asyncio.wait_for(progress_task, timeout=1.0)
             except asyncio.TimeoutError:
                 progress_task.cancel()
-            
+
             # Ensure ThreadPoolExecutor future result is retrieved to prevent logging warnings
             # This prevents "Future exception was never retrieved" messages in logs
-            if 'future' in locals():
+            if "future" in locals():
                 try:
                     if not future.done():
                         future.cancel()
@@ -482,32 +488,39 @@ class DataService(BaseService):
                 if cancellation_event.is_set():
                     logger.info(f"Data loading operation was cancelled: {operation_id}")
                     raise asyncio.CancelledError("Operation was cancelled")
-                
+
                 # Get result from the completed future
                 completed_task = next(iter(done))
-                if asyncio.isfuture(completed_task) or asyncio.iscoroutine(completed_task):
+                if asyncio.isfuture(completed_task) or asyncio.iscoroutine(
+                    completed_task
+                ):
                     # This was the data loading future
                     try:
                         result = completed_task.result()
-                        
+
                         # Check both error key and failed status
                         if "error" in result or result.get("status") == "failed":
                             error_msg = result.get("error", "Unknown error")
                             raise DataError(
                                 message=f"Data loading failed: {error_msg}",
                                 error_code="DATA-LoadError",
-                                details={"operation_id": operation_id, "symbol": symbol},
+                                details={
+                                    "operation_id": operation_id,
+                                    "symbol": symbol,
+                                },
                             )
                         return result
                     except concurrent.futures.CancelledError:
                         # Future was cancelled - this is expected for cancellation
-                        logger.info(f"Data loading future was cancelled: {operation_id}")
+                        logger.info(
+                            f"Data loading future was cancelled: {operation_id}"
+                        )
                         raise asyncio.CancelledError("Operation was cancelled")
                 else:
                     # This was the cancellation task completing
                     logger.info(f"Data loading operation was cancelled: {operation_id}")
                     raise asyncio.CancelledError("Operation was cancelled")
-                    
+
             except concurrent.futures.CancelledError:
                 logger.info(f"Data loading future was cancelled: {operation_id}")
                 raise asyncio.CancelledError("Operation was cancelled")
@@ -518,7 +531,7 @@ class DataService(BaseService):
         symbol: str,
         timeframe: str,
         include_metadata: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Convert pandas DataFrame to API response format.
 
@@ -561,7 +574,7 @@ class DataService(BaseService):
 
     @log_entry_exit(logger=logger)
     @log_performance(threshold_ms=100, logger=logger)
-    async def get_available_symbols(self) -> List[Dict[str, Any]]:
+    async def get_available_symbols(self) -> list[dict[str, Any]]:
         """
         Get list of available symbols with metadata.
 
@@ -642,7 +655,7 @@ class DataService(BaseService):
         )
         return result
 
-    def _get_symbols_metadata(self) -> Dict[str, Dict[str, Any]]:
+    def _get_symbols_metadata(self) -> dict[str, dict[str, Any]]:
         """
         Get symbol metadata from the symbol validation cache.
 
@@ -669,7 +682,7 @@ class DataService(BaseService):
             cache_file = data_dir / "symbol_discovery_cache.json"
 
             if cache_file.exists():
-                with open(cache_file, "r") as f:
+                with open(cache_file) as f:
                     cache_data = json.load(f)
 
                 return cache_data.get("cache", {})
@@ -713,7 +726,6 @@ class DataService(BaseService):
             Filtered DataFrame
         """
         try:
-            from ktrdr.utils.timezone_utils import TimestampManager
             from ktrdr.data.trading_hours import TradingHoursManager
 
             # Get symbol metadata for trading hours
@@ -761,7 +773,7 @@ class DataService(BaseService):
             return df  # Return original data if filtering fails
 
     @log_entry_exit(logger=logger)
-    async def get_available_timeframes_for_symbol(self, symbol: str) -> List[str]:
+    async def get_available_timeframes_for_symbol(self, symbol: str) -> list[str]:
         """
         Get available timeframes for a specific symbol.
 
@@ -785,7 +797,7 @@ class DataService(BaseService):
         return timeframes
 
     @log_entry_exit(logger=logger)
-    async def get_available_timeframes(self) -> List[Dict[str, str]]:
+    async def get_available_timeframes(self) -> list[dict[str, str]]:
         """
         Get list of available timeframes with metadata.
 
@@ -823,7 +835,7 @@ class DataService(BaseService):
 
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
-    async def get_data_range(self, symbol: str, timeframe: str) -> Dict[str, Any]:
+    async def get_data_range(self, symbol: str, timeframe: str) -> dict[str, Any]:
         """
         Get the available date range for a symbol and timeframe.
 
@@ -891,7 +903,7 @@ class DataService(BaseService):
     def _filter_trading_hours(
         self,
         df: pd.DataFrame,
-        trading_hours: Dict[str, Any],
+        trading_hours: dict[str, Any],
         include_extended: bool = False,
     ) -> pd.DataFrame:
         """
@@ -999,7 +1011,7 @@ class DataService(BaseService):
             # Return original data on error
             return df
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the data service.
 

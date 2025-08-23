@@ -8,13 +8,11 @@ operating with reduced functionality.
 
 import functools
 from enum import Enum, auto
-from typing import Callable, TypeVar, Any, Optional, Dict, List, Union, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 # Import the new logging system
 from ktrdr import get_logger
-
 from ktrdr.errors.exceptions import FallbackNotAvailableError
-
 
 # Type variable for functions that can use fallback strategies
 T = TypeVar("T")
@@ -69,7 +67,7 @@ def fallback(
             pass
     """
     # Cache for last known good results, keyed by args hash
-    result_cache: Dict[int, Any] = {}
+    result_cache: dict[int, Any] = {}
 
     # Get logger reference
     log = logger or get_logger(__name__)
@@ -144,7 +142,7 @@ def fallback(
 
 def with_partial_results(
     logger=None,
-) -> Callable[[Callable[..., List[Any]]], Callable[..., List[Any]]]:
+) -> Callable[[Callable[..., list[Any]]], Callable[..., list[Any]]]:
     """
     Decorator for functions that return lists, allowing partial results even if some items fail.
 
@@ -165,9 +163,9 @@ def with_partial_results(
     # Get logger reference
     log = logger or get_logger(__name__)
 
-    def decorator(func: Callable[..., List[Any]]) -> Callable[..., List[Any]]:
+    def decorator(func: Callable[..., list[Any]]) -> Callable[..., list[Any]]:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> List[Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> list[Any]:
             try:
                 # First try the normal execution
                 return func(*args, **kwargs)
@@ -185,7 +183,7 @@ def with_partial_results(
                 if not args or not isinstance(args[0], (list, tuple)):
                     # If we can't identify the items, re-raise the original exception
                     log.error(
-                        f"Cannot apply partial results strategy: first argument is not a list"
+                        "Cannot apply partial results strategy: first argument is not a list"
                     )
                     raise
 

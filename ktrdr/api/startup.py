@@ -7,8 +7,8 @@ Simplified startup for new IB architecture:
 - Clean separation of concerns
 """
 
-import asyncio
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from ktrdr.logging import get_logger

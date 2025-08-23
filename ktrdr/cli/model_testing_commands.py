@@ -1,14 +1,14 @@
 """Model testing commands for debugging trained models."""
 
-import typer
 from pathlib import Path
 from typing import Optional
+
+import typer
 from rich.console import Console
 from rich.table import Table
-import pandas as pd
 
-from ktrdr.decision.orchestrator import DecisionOrchestrator
 from ktrdr.data.data_manager import DataManager
+from ktrdr.decision.orchestrator import DecisionOrchestrator
 
 # Rich console for formatted output
 console = Console()
@@ -68,7 +68,7 @@ def test_model_signals(
         console.print(f"📅 Test period: {test_data.index[0]} to {test_data.index[-1]}")
 
         # Initialize orchestrator
-        console.print(f"🤖 Initializing decision orchestrator...")
+        console.print("🤖 Initializing decision orchestrator...")
         try:
             orchestrator = DecisionOrchestrator(
                 strategy_config_path=str(strategy_path),
@@ -81,7 +81,7 @@ def test_model_signals(
             raise typer.Exit(1)
 
         # Test each data point
-        console.print(f"\n🔍 Testing model decisions on recent data:")
+        console.print("\n🔍 Testing model decisions on recent data:")
 
         # Create results table
         table = Table(title=f"Model Signals - {symbol} {timeframe}")
@@ -153,7 +153,7 @@ def test_model_signals(
                 valid_decisions
             )
 
-            console.print(f"\n📊 Summary Statistics:")
+            console.print("\n📊 Summary Statistics:")
             console.print(f"   Total decisions: {len(valid_decisions)}")
             console.print(
                 f"   HOLD signals: {hold_count} ({hold_count/len(valid_decisions)*100:.1f}%)"
@@ -167,20 +167,18 @@ def test_model_signals(
             console.print(f"   Average confidence: {avg_confidence:.3f}")
 
             if buy_count == 0 and sell_count == 0:
-                console.print(f"\n⚠️  [yellow]No trading signals generated![/yellow]")
-                console.print(f"💡 This explains why backtests show 0 trades.")
-                console.print(f"🔧 Consider:")
-                console.print(f"   • Lowering confidence thresholds")
-                console.print(f"   • Retraining with different parameters")
-                console.print(f"   • Adjusting fuzzy membership functions")
+                console.print("\n⚠️  [yellow]No trading signals generated![/yellow]")
+                console.print("💡 This explains why backtests show 0 trades.")
+                console.print("🔧 Consider:")
+                console.print("   • Lowering confidence thresholds")
+                console.print("   • Retraining with different parameters")
+                console.print("   • Adjusting fuzzy membership functions")
             else:
-                console.print(
-                    f"\n✅ [green]Model is generating trading signals[/green]"
-                )
+                console.print("\n✅ [green]Model is generating trading signals[/green]")
 
         # Check for specific issues
         if orchestrator.model is None:
-            console.print(f"\n⚠️  [yellow]Warning: No model loaded![/yellow]")
+            console.print("\n⚠️  [yellow]Warning: No model loaded![/yellow]")
             console.print(f"   • Model path: {model if model else 'auto-detect'}")
             console.print(f"   • Check if model exists for {symbol} {timeframe}")
 

@@ -1,9 +1,9 @@
 """Gap Analysis API Models."""
 
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, field_validator
-from datetime import datetime
 
 
 class GapAnalysisError(Exception):
@@ -74,7 +74,7 @@ class GapAnalysisResponse(BaseModel):
     start_date: str
     end_date: str
     summary: GapAnalysisSummary
-    gaps: List[GapInfoModel]
+    gaps: list[GapInfoModel]
     analysis_mode: GapAnalysisMode
     generated_at: str
 
@@ -82,7 +82,7 @@ class GapAnalysisResponse(BaseModel):
 class BatchGapAnalysisRequest(BaseModel):
     """Request for batch gap analysis."""
 
-    symbols: List[str]
+    symbols: list[str]
     timeframe: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -90,7 +90,7 @@ class BatchGapAnalysisRequest(BaseModel):
 
     @field_validator("symbols")
     @classmethod
-    def validate_symbols_list(cls, v: List[str]) -> List[str]:
+    def validate_symbols_list(cls, v: list[str]) -> list[str]:
         if not v:
             raise ValueError("Symbols list cannot be empty")
         return [s.strip() for s in v if s.strip()]
@@ -103,6 +103,6 @@ class BatchGapAnalysisResponse(BaseModel):
     timeframe: str
     start_date: str
     end_date: str
-    results: Dict[str, GapAnalysisResponse]
-    overall_summary: Dict[str, Any]
+    results: dict[str, GapAnalysisResponse]
+    overall_summary: dict[str, Any]
     generated_at: str

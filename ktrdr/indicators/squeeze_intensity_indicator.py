@@ -1,29 +1,30 @@
 """
 Squeeze Intensity indicator implementation.
 
-Squeeze Intensity measures how much Bollinger Bands are compressed inside 
-Keltner Channels. This composite indicator helps identify periods of low 
+Squeeze Intensity measures how much Bollinger Bands are compressed inside
+Keltner Channels. This composite indicator helps identify periods of low
 volatility that often precede significant price movements.
 """
 
-import pandas as pd
-import numpy as np
 from typing import Union
 
-from ktrdr.indicators.base_indicator import BaseIndicator
-from ktrdr.indicators.schemas import SQUEEZE_INTENSITY_SCHEMA
+import numpy as np
+import pandas as pd
+
 from ktrdr.errors import DataError
+from ktrdr.indicators.base_indicator import BaseIndicator
 from ktrdr.indicators.bollinger_bands_indicator import BollingerBandsIndicator
 from ktrdr.indicators.keltner_channels import KeltnerChannelsIndicator
+from ktrdr.indicators.schemas import SQUEEZE_INTENSITY_SCHEMA
 
 
 class SqueezeIntensityIndicator(BaseIndicator):
     """
     Squeeze Intensity technical indicator.
 
-    This indicator measures the intensity of a "squeeze" condition where 
+    This indicator measures the intensity of a "squeeze" condition where
     Bollinger Bands are compressed inside Keltner Channels. The calculation:
-    
+
     1. Calculate Bollinger Bands (upper, middle, lower)
     2. Calculate Keltner Channels (upper, lower)
     3. Determine how much BB bands are inside KC channels
@@ -47,12 +48,12 @@ class SqueezeIntensityIndicator(BaseIndicator):
     """
 
     def __init__(
-        self, 
-        bb_period: int = 20, 
+        self,
+        bb_period: int = 20,
         bb_multiplier: float = 2.0,
         kc_period: int = 20,
         kc_multiplier: float = 2.0,
-        source: str = "close"
+        source: str = "close",
     ):
         """
         Initialize Squeeze Intensity indicator.
@@ -107,7 +108,10 @@ class SqueezeIntensityIndicator(BaseIndicator):
             raise DataError(
                 message=f"Required columns missing: {missing_columns}",
                 error_code="DATA-MissingColumn",
-                details={"missing_columns": missing_columns, "available_columns": list(data.columns)},
+                details={
+                    "missing_columns": missing_columns,
+                    "available_columns": list(data.columns),
+                },
             )
 
         # Check for sufficient data (need max of both periods)
@@ -133,7 +137,7 @@ class SqueezeIntensityIndicator(BaseIndicator):
             period=kc_period, multiplier=kc_multiplier
         )
         kc_data = kc_indicator.compute(data)
-        
+
         # KeltnerChannels returns column names with parameters
         # Format: KC_Upper_{period}_{atr_period}_{multiplier}
         atr_period = 10  # KeltnerChannels default
@@ -142,15 +146,17 @@ class SqueezeIntensityIndicator(BaseIndicator):
 
         # Calculate squeeze intensity using same logic as training pipeline
         kc_range = kc_upper - kc_lower
-        
+
         # Safe division to avoid overflow when KC range is very small
         squeeze_intensity = np.where(
             np.abs(kc_range) > 1e-10,  # Avoid tiny denominators
-            np.maximum(0, np.minimum(
-                (kc_upper - bb_upper) / kc_range,
-                (bb_lower - kc_lower) / kc_range
-            )),
-            0.0  # Default to no squeeze when KC range is ~0
+            np.maximum(
+                0,
+                np.minimum(
+                    (kc_upper - bb_upper) / kc_range, (bb_lower - kc_lower) / kc_range
+                ),
+            ),
+            0.0,  # Default to no squeeze when KC range is ~0
         )
 
         # Create result Series
@@ -168,4 +174,6 @@ class SqueezeIntensityIndicator(BaseIndicator):
         bb_multiplier = self.params.get("bb_multiplier", 2.0)
         kc_period = self.params.get("kc_period", 20)
         kc_multiplier = self.params.get("kc_multiplier", 2.0)
-        return f"SqueezeIntensity_{bb_period}_{bb_multiplier}_{kc_period}_{kc_multiplier}"
+        return (
+            f"SqueezeIntensity_{bb_period}_{bb_multiplier}_{kc_period}_{kc_multiplier}"
+        )

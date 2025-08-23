@@ -4,15 +4,13 @@ Renderer module for visualization.
 This module contains the Renderer class for rendering charts to HTML.
 """
 
-import os
+# Setup logging
+import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Union
 
 from ktrdr.errors import ConfigurationError, DataError
 from ktrdr.visualization.template_manager import TemplateManager
-
-# Setup logging
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +27,8 @@ class Renderer:
     def render_chart(
         self,
         title: str = "KTRDR Chart",
-        chart_configs: List[Dict] = None,
-        chart_data: Dict = None,
+        chart_configs: list[dict] = None,
+        chart_data: dict = None,
         theme: str = "dark",
         has_range_slider: bool = False,
     ) -> str:
@@ -181,13 +179,13 @@ class Renderer:
     def generate_standalone_html(
         self,
         title: str,
-        chart_configs: List[Dict],
-        chart_data: Dict,
+        chart_configs: list[dict],
+        chart_data: dict,
         output_dir: Optional[Union[str, Path]] = None,
         theme: str = "dark",
         filename: Optional[str] = None,
         has_range_slider: bool = False,
-    ) -> Tuple[str, Path]:
+    ) -> tuple[str, Path]:
         """
         Generate a standalone HTML file with charts.
 

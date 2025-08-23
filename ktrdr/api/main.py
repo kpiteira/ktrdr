@@ -7,21 +7,21 @@ for the KTRDR API backend.
 
 import logging
 from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.openapi.utils import get_openapi
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from ktrdr.api.config import APIConfig
 from ktrdr.api.middleware import add_middleware
 from ktrdr.api.startup import lifespan
 from ktrdr.errors import (
+    ConfigurationError,
+    ConnectionError,
     DataError,
     DataNotFoundError,
-    ConnectionError,
-    ConfigurationError,
     ProcessingError,
 )
 

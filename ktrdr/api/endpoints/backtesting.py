@@ -5,14 +5,14 @@ This module implements the API endpoints for running backtests and retrieving re
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
-from ktrdr.api.dependencies import get_api_config
 from ktrdr.api.services.backtesting_service import BacktestingService
 from ktrdr.api.services.operations_service import get_operations_service
-from ktrdr.errors import ValidationError, DataError
+from ktrdr.errors import DataError, ValidationError
 
 logger = get_logger(__name__)
 
@@ -124,7 +124,7 @@ class BacktestTradesResponse(BaseModel):
 
     success: bool
     backtest_id: str
-    trades: List[TradeRecord]
+    trades: list[TradeRecord]
 
 
 class EquityCurveResponse(BaseModel):
@@ -132,9 +132,9 @@ class EquityCurveResponse(BaseModel):
 
     success: bool
     backtest_id: str
-    timestamps: List[str]
-    values: List[float]
-    drawdowns: List[float]
+    timestamps: list[str]
+    values: list[float]
+    drawdowns: list[float]
 
 
 # Singleton backtesting service instance
@@ -146,7 +146,9 @@ async def get_backtesting_service() -> BacktestingService:
     """Get backtesting service instance (singleton)."""
     global _backtesting_service
     if _backtesting_service is None:
-        _backtesting_service = BacktestingService(operations_service=get_operations_service())
+        _backtesting_service = BacktestingService(
+            operations_service=get_operations_service()
+        )
     return _backtesting_service
 
 

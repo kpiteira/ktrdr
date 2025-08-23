@@ -9,27 +9,23 @@ This module contains all CLI commands related to IB integration:
 """
 
 import asyncio
-import sys
 import json
+import sys
 from typing import Optional
-from datetime import datetime
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from ktrdr.cli.api_client import get_api_client, check_api_connection
-from ktrdr.config.validation import InputValidator
-from ktrdr.errors import ValidationError, DataError
-from ktrdr.logging import get_logger
+from ktrdr.cli.api_client import check_api_connection, get_api_client
+from ktrdr.cli.error_handler import display_ib_connection_required_message
 from ktrdr.cli.ib_diagnosis import (
     detect_ib_issue_from_api_response,
-    format_ib_diagnostic_message,
     get_ib_recovery_suggestions,
-    should_show_ib_diagnosis,
-    IBProblemType,
 )
-from ktrdr.cli.error_handler import display_ib_connection_required_message
+from ktrdr.config.validation import InputValidator
+from ktrdr.errors import DataError, ValidationError
+from ktrdr.logging import get_logger
 
 # Setup logging and console
 logger = get_logger(__name__)
@@ -141,15 +137,15 @@ async def _test_connection_async(
         # This would call the IB test API endpoint
         # For now, show a placeholder message
         console.print(
-            f"⚠️  [yellow]IB connection test via API not yet implemented[/yellow]"
+            "⚠️  [yellow]IB connection test via API not yet implemented[/yellow]"
         )
         console.print(f"📋 Would test connection with symbol: {symbol}")
         console.print(f"⏱️  Timeout: {timeout} seconds")
 
         # Simulate test results
-        console.print(f"✅ [green]IB Connection: OK[/green]")
-        console.print(f"✅ [green]Symbol Validation: OK[/green]")
-        console.print(f"✅ [green]Market Data: OK[/green]")
+        console.print("✅ [green]IB Connection: OK[/green]")
+        console.print("✅ [green]Symbol Validation: OK[/green]")
+        console.print("✅ [green]Market Data: OK[/green]")
 
     except Exception as e:
         raise DataError(
@@ -219,15 +215,15 @@ async def _cleanup_connections_async(
         # This would call the IB cleanup API endpoint
         # For now, show a placeholder message
         console.print(
-            f"⚠️  [yellow]IB connection cleanup via API not yet implemented[/yellow]"
+            "⚠️  [yellow]IB connection cleanup via API not yet implemented[/yellow]"
         )
         console.print(f"📋 Would cleanup with force: {force}")
         console.print(f"⏱️  Timeout: {timeout} seconds")
 
         # Simulate cleanup results
-        console.print(f"✅ [green]Connections closed: 2[/green]")
-        console.print(f"✅ [green]Resources cleaned: 5[/green]")
-        console.print(f"✅ [green]Connection pool reset: OK[/green]")
+        console.print("✅ [green]Connections closed: 2[/green]")
+        console.print("✅ [green]Resources cleaned: 5[/green]")
+        console.print("✅ [green]Connection pool reset: OK[/green]")
 
     except Exception as e:
         raise DataError(
@@ -297,7 +293,7 @@ async def _check_status_async(
             print(json.dumps(status_data, indent=2))
         else:
             # Table format
-            console.print(f"\n🔌 [bold]IB Connection Status[/bold]")
+            console.print("\n🔌 [bold]IB Connection Status[/bold]")
             console.print()
 
             table = Table()
@@ -317,7 +313,7 @@ async def _check_status_async(
             console.print(table)
 
         if verbose:
-            console.print(f"✅ Retrieved IB connection status")
+            console.print("✅ Retrieved IB connection status")
 
     except Exception as e:
         raise DataError(

@@ -4,10 +4,9 @@ This module generates "perfect" trading labels using forward-looking ZigZag indi
 NOTE: This is "cheating" and only for training - not for live trading!
 """
 
-import pandas as pd
-import numpy as np
-from typing import Tuple, Optional
 from dataclasses import dataclass
+
+import pandas as pd
 
 
 @dataclass

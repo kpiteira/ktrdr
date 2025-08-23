@@ -7,7 +7,6 @@ to eliminate duplication across the codebase and provide a single source of trut
 Based on official IB API documentation and empirical testing.
 """
 
-from typing import Dict, Union
 from datetime import timedelta
 
 

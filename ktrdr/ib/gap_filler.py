@@ -11,17 +11,18 @@ Automatically fills gaps in market data by:
 
 import threading
 import time
-from typing import List, Dict, Any, Optional, Set
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
-from ktrdr.logging import get_logger
-from ktrdr.data.data_manager import DataManager
-from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.gap_classifier import GapClassifier, GapClassification
 from ktrdr.config.ib_limits import IbLimitsRegistry
 from ktrdr.config.loader import ConfigLoader
+from ktrdr.data.data_manager import DataManager
+from ktrdr.data.gap_classifier import GapClassifier
+from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
@@ -115,7 +116,7 @@ class GapFillerService:
             # Fall back to default if config loading fails
             return "data"
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         """Load IB sync configuration from settings."""
         try:
             config_loader = ConfigLoader()
@@ -311,7 +312,7 @@ class GapFillerService:
         if processed > 0:
             logger.info(f"Gap filling cycle completed: processed {processed} symbols")
 
-    def _discover_symbols_and_timeframes(self) -> List[tuple]:
+    def _discover_symbols_and_timeframes(self) -> list[tuple]:
         """Discover symbols and timeframes from existing CSV files."""
         symbols_timeframes = []
 
@@ -535,7 +536,7 @@ class GapFillerService:
         minutes = timeframe_minutes.get(timeframe, 60)
         return last_timestamp + timedelta(minutes=minutes)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get gap filling statistics."""
         return {
             **self.stats,
@@ -554,7 +555,7 @@ class GapFillerService:
             },
         }
 
-    def force_scan(self) -> Dict[str, Any]:
+    def force_scan(self) -> dict[str, Any]:
         """Force an immediate gap scan (for testing/debugging)."""
         try:
             # Check IB availability via DataManager

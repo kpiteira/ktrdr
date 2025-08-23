@@ -8,18 +8,17 @@ async operations across the KTRDR system.
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple, Any
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
-from ktrdr.logging import get_logger
-from ktrdr.errors import DataError
 from ktrdr.api.models.operations import (
     OperationInfo,
+    OperationMetadata,
+    OperationProgress,
     OperationStatus,
     OperationType,
-    OperationProgress,
-    OperationMetadata,
 )
+from ktrdr.errors import DataError
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,10 +34,10 @@ class OperationsService:
     def __init__(self):
         """Initialize the operations service."""
         # Global operation registry
-        self._operations: Dict[str, OperationInfo] = {}
+        self._operations: dict[str, OperationInfo] = {}
 
         # Operation tasks registry (for cancellation)
-        self._operation_tasks: Dict[str, asyncio.Task] = {}
+        self._operation_tasks: dict[str, asyncio.Task] = {}
 
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
@@ -140,8 +139,8 @@ class OperationsService:
         self,
         operation_id: str,
         progress: OperationProgress,
-        warnings: Optional[List[str]] = None,
-        errors: Optional[List[str]] = None,
+        warnings: Optional[list[str]] = None,
+        errors: Optional[list[str]] = None,
     ) -> None:
         """
         Update operation progress (lock-free for performance).
@@ -178,7 +177,7 @@ class OperationsService:
     async def complete_operation(
         self,
         operation_id: str,
-        result_summary: Optional[Dict[str, Any]] = None,
+        result_summary: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Mark an operation as completed.
@@ -237,7 +236,7 @@ class OperationsService:
         operation_id: str,
         reason: Optional[str] = None,
         force: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Cancel a running operation.
 
@@ -270,7 +269,10 @@ class OperationsService:
                 }
 
             # Signal cancellation event if it exists (for lock-free signaling)
-            if hasattr(self, '_cancellation_events') and operation_id in self._cancellation_events:
+            if (
+                hasattr(self, "_cancellation_events")
+                and operation_id in self._cancellation_events
+            ):
                 self._cancellation_events[operation_id].set()
                 del self._cancellation_events[operation_id]
 
@@ -286,25 +288,43 @@ class OperationsService:
             # For training operations, also cancel the host service session
             training_session_cancelled = False
             if operation.operation_type == OperationType.TRAINING:
-                logger.info(f"Training cancellation requested for operation {operation_id} - reason: {reason or 'No reason provided'}")
-                
+                logger.info(
+                    f"Training cancellation requested for operation {operation_id} - reason: {reason or 'No reason provided'}"
+                )
+
                 session_id = None
-                if hasattr(operation.metadata, 'parameters') and operation.metadata.parameters:
-                    session_id = operation.metadata.parameters.get('session_id')
-                
+                if (
+                    hasattr(operation.metadata, "parameters")
+                    and operation.metadata.parameters
+                ):
+                    session_id = operation.metadata.parameters.get("session_id")
+
                 if session_id:
                     try:
-                        logger.info(f"Sending cancellation request to training host service for session {session_id}")
+                        logger.info(
+                            f"Sending cancellation request to training host service for session {session_id}"
+                        )
                         # Get training service to cancel the session
-                        from ktrdr.api.services.training_service import get_training_service
+                        from ktrdr.api.services.training_service import (
+                            get_training_service,
+                        )
+
                         training_service = get_training_service()
-                        await training_service.cancel_training_session(session_id, reason)
+                        await training_service.cancel_training_session(
+                            session_id, reason
+                        )
                         training_session_cancelled = True
-                        logger.info(f"Successfully sent cancellation to training host service for session {session_id}")
+                        logger.info(
+                            f"Successfully sent cancellation to training host service for session {session_id}"
+                        )
                     except Exception as e:
-                        logger.error(f"Failed to cancel training session {session_id}: {e}")
+                        logger.error(
+                            f"Failed to cancel training session {session_id}: {e}"
+                        )
                 else:
-                    logger.warning(f"No session_id found for training operation {operation_id} - cannot cancel host service")
+                    logger.warning(
+                        f"No session_id found for training operation {operation_id} - cannot cancel host service"
+                    )
 
             # Update operation status
             operation.status = OperationStatus.CANCELLED
@@ -339,22 +359,30 @@ class OperationsService:
             operation = self._operations.get(operation_id)
             if not operation:
                 return None
-            
+
             # For training operations, query host service for live status
-            if (operation.operation_type == OperationType.TRAINING and 
-                operation.status == OperationStatus.RUNNING):
-                
+            if (
+                operation.operation_type == OperationType.TRAINING
+                and operation.status == OperationStatus.RUNNING
+            ):
+
                 try:
                     # Get training host service status
-                    updated_operation = await self._update_training_operation_from_host_service(operation)
+                    updated_operation = (
+                        await self._update_training_operation_from_host_service(
+                            operation
+                        )
+                    )
                     if updated_operation:
                         # Update the stored operation with live data
                         self._operations[operation_id] = updated_operation
                         return updated_operation
                 except Exception as e:
-                    logger.debug(f"Failed to get live training status for {operation_id}: {e}")
+                    logger.debug(
+                        f"Failed to get live training status for {operation_id}: {e}"
+                    )
                     # Fall through to return stored operation
-            
+
             return operation
 
     async def list_operations(
@@ -364,7 +392,7 @@ class OperationsService:
         limit: int = 100,
         offset: int = 0,
         active_only: bool = False,
-    ) -> Tuple[List[OperationInfo], int, int]:
+    ) -> tuple[list[OperationInfo], int, int]:
         """
         List operations with filtering.
 
@@ -516,46 +544,59 @@ class OperationsService:
                 logger.info(f"Cleaned up {len(operations_to_remove)} old operations")
 
             return len(operations_to_remove)
-    
-    async def _update_training_operation_from_host_service(self, operation: OperationInfo) -> Optional[OperationInfo]:
+
+    async def _update_training_operation_from_host_service(
+        self, operation: OperationInfo
+    ) -> Optional[OperationInfo]:
         """
         Update training operation with live status from host service.
-        
+
         Args:
             operation: Current operation info
-            
+
         Returns:
             Updated operation info or None if update failed
         """
         try:
             # Extract session ID from operation metadata or results
             session_id = None
-            if hasattr(operation.metadata, 'parameters') and operation.metadata.parameters:
-                session_id = operation.metadata.parameters.get('session_id')
-            
-            if not session_id and hasattr(operation, 'result_summary') and operation.result_summary:
-                session_id = operation.result_summary.get('session_id')
-            
+            if (
+                hasattr(operation.metadata, "parameters")
+                and operation.metadata.parameters
+            ):
+                session_id = operation.metadata.parameters.get("session_id")
+
+            if (
+                not session_id
+                and hasattr(operation, "result_summary")
+                and operation.result_summary
+            ):
+                session_id = operation.result_summary.get("session_id")
+
             if not session_id:
-                logger.debug(f"No session_id found for training operation {operation.operation_id}")
+                logger.debug(
+                    f"No session_id found for training operation {operation.operation_id}"
+                )
                 return None
-            
+
             # Get training host client
             from ktrdr.api.services.training_host_client import get_training_host_client
             from ktrdr.config.training_host_settings import get_training_host_settings
-            
+
             training_host_settings = get_training_host_settings()
             host_client = get_training_host_client(training_host_settings.base_url)
-            
+
             # Query host service status
             status_data = await host_client.get_training_status(session_id)
-            
+
             host_status = status_data.get("status", "unknown")
             host_progress = status_data.get("progress", {})
             host_metrics = status_data.get("metrics", {})
-            
-            logger.debug(f"Training operation {operation.operation_id}: host_status={host_status}, progress={host_progress}")
-            
+
+            logger.debug(
+                f"Training operation {operation.operation_id}: host_status={host_status}, progress={host_progress}"
+            )
+
             # Convert host service status to operation format
             if host_status == "running":
                 # Extract progress information
@@ -563,28 +604,28 @@ class OperationsService:
                 total_epochs = host_progress.get("total_epochs", 100)
                 current_batch = host_progress.get("batch", 0)
                 total_batches = host_progress.get("total_batches", 0)
-                
+
                 # Calculate percentage (20% to 90% range for training phase)
                 if total_epochs > 0:
-                    epoch_progress = (current_epoch / total_epochs)
+                    epoch_progress = current_epoch / total_epochs
                     if total_batches > 0 and current_batch > 0:
                         # Add batch-level granularity within the epoch
                         batch_progress = (current_batch / total_batches) / total_epochs
                         epoch_progress += batch_progress
-                    
+
                     percentage = 20.0 + (epoch_progress * 70.0)  # 20% to 90%
                 else:
                     percentage = host_progress.get("progress_percent", 0.0)
-                
+
                 percentage = min(percentage, 90.0)  # Cap at 90%
-                
+
                 # Format current step with epoch and batch info
                 current_step = f"Epoch: {current_epoch}"
                 if total_epochs > 0:
                     current_step += f"/{total_epochs}"
                 if total_batches > 0:
                     current_step += f", Batch: {current_batch}/{total_batches}"
-                
+
                 # Add metrics if available
                 if host_metrics and host_metrics.get("current"):
                     metrics = host_metrics["current"]
@@ -595,7 +636,7 @@ class OperationsService:
                             current_step += f" (Acc: {accuracy:.3f})"
                         if loss and len(str(loss)) > 0:
                             current_step += f" (Loss: {loss:.4f})"
-                
+
                 # Update operation progress
                 updated_operation = operation
                 updated_operation.progress = OperationProgress(
@@ -604,13 +645,13 @@ class OperationsService:
                     items_processed=current_epoch,
                     items_total=total_epochs,
                 )
-                
+
                 return updated_operation
-                
+
             elif host_status == "completed":
                 # Training completed - mark operation as completed
                 from datetime import datetime, timezone
-                
+
                 updated_operation = operation
                 updated_operation.status = OperationStatus.COMPLETED
                 updated_operation.completed_at = datetime.now(timezone.utc)
@@ -621,33 +662,37 @@ class OperationsService:
                 # Store host metrics in result summary
                 if not updated_operation.result_summary:
                     updated_operation.result_summary = {}
-                updated_operation.result_summary.update({
-                    "session_id": session_id,
-                    "host_metrics": host_metrics,
-                    "training_completed": True,
-                    "host_service_used": True
-                })
-                
+                updated_operation.result_summary.update(
+                    {
+                        "session_id": session_id,
+                        "host_metrics": host_metrics,
+                        "training_completed": True,
+                        "host_service_used": True,
+                    }
+                )
+
                 return updated_operation
-                
+
             elif host_status == "failed":
                 # Training failed - mark operation as failed
                 from datetime import datetime, timezone
-                
+
                 error_msg = status_data.get("error", "Training failed on host service")
-                
+
                 updated_operation = operation
                 updated_operation.status = OperationStatus.FAILED
                 updated_operation.completed_at = datetime.now(timezone.utc)
                 updated_operation.error_message = error_msg
-                
+
                 return updated_operation
-            
+
             # For other statuses (stopped, etc.), return original operation
             return None
-            
+
         except Exception as e:
-            logger.warning(f"Failed to update training operation from host service: {e}")
+            logger.warning(
+                f"Failed to update training operation from host service: {e}"
+            )
             return None
 
 
