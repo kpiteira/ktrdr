@@ -24,6 +24,7 @@ from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.gap_classifier import GapClassification, GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.managers import ServiceOrchestrator
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.data.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.errors import (
@@ -87,7 +88,7 @@ class ProgressCallback:
         pass
 
 
-class DataManager:
+class DataManager(ServiceOrchestrator):
     """
     Manages, validates, and processes OHLCV data.
 
@@ -245,6 +246,35 @@ class DataManager:
             f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
             f"default_repair_method='{default_repair_method}'"
         )
+
+        # Initialize ServiceOrchestrator if IB is enabled
+        if enable_ib:
+            super().__init__()
+
+    # ServiceOrchestrator abstract method implementations
+    def _initialize_adapter(self) -> IbDataAdapter:
+        """Initialize IB data adapter based on environment variables."""
+        import os
+        env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
+        use_host_service = env_enabled in ("true", "1", "yes")
+        host_service_url = os.getenv("IB_HOST_SERVICE_URL", self._get_default_host_url())
+        
+        return IbDataAdapter(
+            use_host_service=use_host_service,
+            host_service_url=host_service_url
+        )
+
+    def _get_service_name(self) -> str:
+        """Get the service name for logging and configuration."""
+        return "Data/IB"
+
+    def _get_default_host_url(self) -> str:
+        """Get the default host service URL."""
+        return "http://localhost:8001"
+
+    def _get_env_var_prefix(self) -> str:
+        """Get environment variable prefix."""
+        return "IB"
 
     def _check_cancellation(
         self,
