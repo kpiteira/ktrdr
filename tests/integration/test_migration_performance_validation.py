@@ -197,7 +197,7 @@ class TestMigrationPerformanceValidation:
                     [151.0, 153.0, 150.5, 152.5, 1200000],
                 ],
                 "metadata": {"start": "2024-01-01", "end": "2024-01-01"},
-            }
+            },
         }
 
         with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:

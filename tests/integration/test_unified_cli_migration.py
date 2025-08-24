@@ -52,7 +52,7 @@ class TestAsyncCLIClientDataShowMigration:
             # Wrap cached_data in full API response structure
             mock_cli._make_request.return_value = {
                 "success": True,
-                "data": mock_api_responses["cached_data"]
+                "data": mock_api_responses["cached_data"],
             }
             mock_cli_class.return_value = mock_cli
 
@@ -95,7 +95,7 @@ class TestAsyncCLIClientDataShowMigration:
             # Wrap cached_data in full API response structure
             mock_cli._make_request.return_value = {
                 "success": True,
-                "data": mock_api_responses["cached_data"]
+                "data": mock_api_responses["cached_data"],
             }
             mock_cli_class.return_value = mock_cli
 

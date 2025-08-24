@@ -166,7 +166,7 @@ def test_data_show_empty_data(runner, mock_api_client):
             "dates": [],
             "ohlcv": [],
             "metadata": {},
-        }
+        },
     }
 
     result = runner.invoke(cli_app, ["data", "show", "AAPL"])
