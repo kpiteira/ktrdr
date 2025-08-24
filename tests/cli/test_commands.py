@@ -79,7 +79,8 @@ def test_data_show_basic(runner, sample_api_response):
         mock_cli = AsyncMock()
         mock_cli.__aenter__.return_value = mock_cli
         mock_cli.__aexit__.return_value = None
-        mock_cli._make_request.return_value = sample_api_response["data"]
+        # Return full API response structure, not just the data field
+        mock_cli._make_request.return_value = sample_api_response
         mock_cli_class.return_value = mock_cli
 
         result = runner.invoke(cli_app, ["data", "show", "AAPL"])
@@ -90,13 +91,13 @@ def test_data_show_basic(runner, sample_api_response):
         # Check output contains expected data
         assert "AAPL" in result.stdout
         assert "3" in result.stdout  # Number of rows
-        assert "102.0000" in result.stdout  # Sample data point
+        assert "102.0000" in result.stdout  # Sample data point  # Sample data point
 
 
 def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
     """Test the data show command with custom number of rows."""
 
-    mock_api_client._make_request.return_value = sample_api_response["data"]
+    mock_api_client._make_request.return_value = sample_api_response
 
     result = runner.invoke(cli_app, ["data", "show", "AAPL", "--rows", "2"])
 
@@ -107,7 +108,7 @@ def test_data_show_with_rows(runner, mock_api_client, sample_api_response):
 def test_data_show_with_timeframe(runner, mock_api_client, sample_api_response):
     """Test the data show command with timeframe option."""
 
-    mock_api_client._make_request.return_value = sample_api_response["data"]
+    mock_api_client._make_request.return_value = sample_api_response
 
     result = runner.invoke(cli_app, ["data", "show", "AAPL", "--timeframe", "1h"])
 
@@ -122,7 +123,8 @@ def test_data_show_json_format(runner, sample_api_response):
         mock_cli = AsyncMock()
         mock_cli.__aenter__.return_value = mock_cli
         mock_cli.__aexit__.return_value = None
-        mock_cli._make_request.return_value = sample_api_response["data"]
+        # Return full API response structure, not just the data field
+        mock_cli._make_request.return_value = sample_api_response
         mock_cli_class.return_value = mock_cli
 
         result = runner.invoke(cli_app, ["data", "show", "AAPL", "--format", "json"])
@@ -159,9 +161,12 @@ def test_data_show_empty_data(runner, mock_api_client):
     # Mock _make_request to return empty data (should be handled gracefully)
 
     mock_api_client._make_request.return_value = {
-        "dates": [],
-        "ohlcv": [],
-        "metadata": {},
+        "success": True,
+        "data": {
+            "dates": [],
+            "ohlcv": [],
+            "metadata": {},
+        }
     }
 
     result = runner.invoke(cli_app, ["data", "show", "AAPL"])
