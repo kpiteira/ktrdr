@@ -189,12 +189,15 @@ class TestMigrationPerformanceValidation:
         """Ensure migrated commands maintain exact functional compatibility."""
         runner = CliRunner()
         mock_data = {
-            "dates": ["2024-01-01T09:30:00", "2024-01-01T10:30:00"],
-            "ohlcv": [
-                [150.0, 152.0, 149.5, 151.0, 1000000],
-                [151.0, 153.0, 150.5, 152.5, 1200000],
-            ],
-            "metadata": {"start": "2024-01-01", "end": "2024-01-01"},
+            "success": True,
+            "data": {
+                "dates": ["2024-01-01T09:30:00", "2024-01-01T10:30:00"],
+                "ohlcv": [
+                    [150.0, 152.0, 149.5, 151.0, 1000000],
+                    [151.0, 153.0, 150.5, 152.5, 1200000],
+                ],
+                "metadata": {"start": "2024-01-01", "end": "2024-01-01"},
+            },
         }
 
         with patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class:

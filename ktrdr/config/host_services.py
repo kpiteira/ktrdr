@@ -18,7 +18,6 @@ Design principles:
 """
 
 from functools import lru_cache
-from typing import Dict
 
 from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
@@ -133,7 +132,7 @@ class ApiServiceSettings(HostServiceSettings):
     enabled: bool = Field(default=True)  # API is always "enabled" for clients
 
     base_url: str = Field(
-        default=metadata.get("api.client_base_url", "http://localhost:8000"),
+        default=metadata.get("api.client_base_url", "http://localhost:8000/api/v1"),
         description="Base URL for API client connections",
         alias="api_base_url",
     )
@@ -150,7 +149,7 @@ class ApiServiceSettings(HostServiceSettings):
 
     def get_health_url(self) -> str:
         """API health endpoint."""
-        return f"{self.base_url.rstrip('/')}/api/v1/system/health"
+        return f"{self.base_url.rstrip('/')}/system/health"
 
 
 # Cached getters for performance
@@ -212,7 +211,7 @@ def validate_service_url(url: str, service_name: str) -> bool:
     return True
 
 
-def get_all_service_settings() -> Dict[str, HostServiceSettings]:
+def get_all_service_settings() -> dict[str, HostServiceSettings]:
     """
     Get all host service settings for debugging/monitoring.
 

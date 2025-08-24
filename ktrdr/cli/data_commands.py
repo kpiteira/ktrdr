@@ -149,7 +149,9 @@ async def _show_data_async(
 
             # Get cached data via async API call
             try:
-                data = await cli._make_request("GET", "/data/cached", params=params)
+                data = await cli._make_request(
+                    "GET", f"/data/{symbol}/{timeframe}", params=params
+                )
             except AsyncCLIClientError as e:
                 if e.error_code == "CLI-ConnectionError":
                     display_ib_connection_required_message()
@@ -168,8 +170,11 @@ async def _show_data_async(
                 else:
                     raise
 
+            # Extract data from API response
+            api_data = data.get("data", {})
+
             # Check if we got data
-            if not data or not data.get("dates"):
+            if not api_data or not api_data.get("dates"):
                 console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
                 if start_date or end_date:
                     console.print(
@@ -180,9 +185,9 @@ async def _show_data_async(
                 return
 
             # Convert API response back to DataFrame for display
-            dates = data["dates"]
-            ohlcv = data["ohlcv"]
-            metadata = data.get("metadata", {})
+            dates = api_data["dates"]
+            ohlcv = api_data["ohlcv"]
+            metadata = api_data.get("metadata", {})
 
             if not dates or not ohlcv:
                 console.print(f"ℹ️  No data points available for {symbol} ({timeframe})")
@@ -425,13 +430,13 @@ async def _load_data_async(
             nonlocal cancelled
             cancelled = True
             console.print(
-                "\n[yellow]🛑 Cancellation requested... stopping operation[/yellow]"
+                "\\n[yellow]🛑 Cancellation requested... stopping operation[/yellow]"
             )
             # Debug output
             import sys
 
             sys.stderr.write(
-                "\n[DEBUG] Async signal handler called, cancelled flag set to True\n"
+                "\\n[DEBUG] Async signal handler called, cancelled flag set to True\\n"
             )
             sys.stderr.flush()
 
@@ -483,11 +488,11 @@ async def _load_data_async(
                     TimeElapsedColumn(),
                     console=console,
                     transient=False,  # Keep progress visible
-                    refresh_per_second=2,  # Reduce refresh rate
+                    refresh_per_second=4,  # 🔧 FIX: Increase refresh rate to catch more progress states
                 ) as progress:
                     task = progress.add_task("Loading data...", total=100)
 
-                    # Poll operation status
+                    # Poll operation status with higher frequency
                     while True:
                         try:
                             # Check for cancellation and send cancel request immediately
@@ -565,20 +570,21 @@ async def _load_data_async(
 
                             # Check if operation completed
                             if status in ["completed", "failed", "cancelled"]:
-                                progress.update(
-                                    task, completed=100, description="Completed"
-                                )
                                 break
 
-                            # Sleep before next poll
-                            await asyncio.sleep(1.0)
+                            # 🔧 FIX: Poll much more frequently to catch intermediate progress states
+                            await asyncio.sleep(
+                                0.3
+                            )  # Poll every 300ms instead of 1000ms
 
                         except Exception as e:
                             if not quiet:
                                 console.print(
                                     f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
                                 )
-                            break
+                            # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
+                            await asyncio.sleep(1.0)
+                            continue
             else:
                 # Simple polling without progress display
                 while True:
@@ -592,12 +598,13 @@ async def _load_data_async(
                                     operation_id=operation_id,
                                     reason="User requested cancellation via CLI",
                                 )
-                                if not quiet:
-                                    if cancel_response.get("success"):
+                                if cancel_response.get("success"):
+                                    if not quiet:
                                         console.print(
                                             "✅ Cancellation sent successfully"
                                         )
-                                    else:
+                                else:
+                                    if not quiet:
                                         console.print(
                                             f"Cancel failed: {cancel_response}"
                                         )
@@ -612,6 +619,7 @@ async def _load_data_async(
                         operation_data = status_response.get("data", {})
                         status = operation_data.get("status")
 
+                        # Check if operation completed
                         if status in ["completed", "failed", "cancelled"]:
                             break
 
@@ -622,7 +630,9 @@ async def _load_data_async(
                             console.print(
                                 f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
                             )
-                        break
+                        # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
+                        await asyncio.sleep(2.0)
+                        continue
 
             # If we reach here and cancelled is True, the operation was cancelled
             if cancelled:
@@ -644,54 +654,40 @@ async def _load_data_async(
 
                 operation_data = final_response.get("data", {})
 
-                # Handle missing data
-                if not operation_data:
-                    if not quiet:
-                        console.print("[red]❌ Empty operation data from API[/red]")
-                    return
-
-                # Convert operation data to load response format
-                result_summary = operation_data.get("result_summary") or {}
-                operation_status = operation_data.get("status")
-
-                response = {
-                    "success": operation_status == "completed",
-                    "data": {
-                        "status": result_summary.get("status", operation_status),
-                        "fetched_bars": result_summary.get("fetched_bars", 0),
-                        "execution_time_seconds": result_summary.get(
-                            "execution_time_seconds", 0
-                        ),
-                        "operation_id": operation_id,
-                    },
-                    "error": (
-                        {"message": operation_data.get("error_message")}
-                        if operation_data.get("error_message")
-                        else None
-                    ),
-                }
+                # Process final response using common handler
+                return await _process_data_load_response(
+                    final_response,
+                    symbol,
+                    timeframe,
+                    mode,
+                    output_format,
+                    verbose,
+                    quiet,
+                    api_client,
+                )
 
             except Exception as e:
                 if not quiet:
                     console.print(
-                        f"[red]Failed to get final operation status: {str(e)}[/red]"
+                        f"[red]❌ Error getting final operation status: {str(e)}[/red]"
                     )
                 return
 
         finally:
-            # Remove signal handler from event loop
+            # Remove signal handler to avoid issues with event loop
             try:
                 loop.remove_signal_handler(signal.SIGINT)
-            except (ValueError, OSError):
-                # Signal handler was not set or already removed
+            except (ValueError, NotImplementedError):
+                # Signal handling not supported on this platform, ignore
                 pass
 
-        # Process the final response using the helper function
-        await _process_data_load_response(
-            response, symbol, timeframe, mode, output_format, verbose, quiet, api_client
-        )
-
+    except KeyboardInterrupt:
+        if not quiet:
+            console.print("\\n[yellow]Operation cancelled by user[/yellow]")
+        sys.exit(1)
     except Exception as e:
+        if not verbose:
+            httpx_logger.setLevel(original_level)
         raise DataError(
             message=f"Failed to load data for {symbol} ({timeframe})",
             error_code="CLI-LoadDataError",

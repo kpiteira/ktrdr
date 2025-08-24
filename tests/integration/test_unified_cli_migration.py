@@ -49,7 +49,11 @@ class TestAsyncCLIClientDataShowMigration:
             mock_cli = AsyncMock()
             mock_cli.__aenter__.return_value = mock_cli
             mock_cli.__aexit__.return_value = None
-            mock_cli._make_request.return_value = mock_api_responses["cached_data"]
+            # Wrap cached_data in full API response structure
+            mock_cli._make_request.return_value = {
+                "success": True,
+                "data": mock_api_responses["cached_data"],
+            }
             mock_cli_class.return_value = mock_cli
 
             # Run command
@@ -88,7 +92,11 @@ class TestAsyncCLIClientDataShowMigration:
             mock_cli = AsyncMock()
             mock_cli.__aenter__.return_value = mock_cli
             mock_cli.__aexit__.return_value = None
-            mock_cli._make_request.return_value = mock_api_responses["cached_data"]
+            # Wrap cached_data in full API response structure
+            mock_cli._make_request.return_value = {
+                "success": True,
+                "data": mock_api_responses["cached_data"],
+            }
             mock_cli_class.return_value = mock_cli
 
             result = runner.invoke(
