@@ -124,7 +124,7 @@ class KtrdrApiClient:
             ValidationError: For client errors (4xx)
             DataError: For server errors (5xx) or connection issues
         """
-        url = f"{self.base_url}/api/v1{endpoint}"
+        url = f"{self.base_url}{endpoint}"
         request_timeout = timeout or self.timeout
         max_attempts = (retries or self.max_retries) + 1
 
@@ -162,7 +162,7 @@ class KtrdrApiClient:
                         # Client error - don't retry
                         try:
                             error_detail = response.json()
-                        except:
+                        except Exception:
                             error_detail = {"message": response.text}
 
                         raise ValidationError(
@@ -182,7 +182,7 @@ class KtrdrApiClient:
                             # Last attempt - raise error
                             try:
                                 error_detail = response.json()
-                            except:
+                            except Exception:
                                 error_detail = {"message": response.text}
 
                             raise DataError(

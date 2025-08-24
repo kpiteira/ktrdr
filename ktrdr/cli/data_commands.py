@@ -170,8 +170,11 @@ async def _show_data_async(
                 else:
                     raise
 
+            # Extract data from API response
+            api_data = data.get("data", {})
+
             # Check if we got data
-            if not data or not data.get("dates"):
+            if not api_data or not api_data.get("dates"):
                 console.print(f"ℹ️  No cached data found for {symbol} ({timeframe})")
                 if start_date or end_date:
                     console.print(
@@ -182,9 +185,9 @@ async def _show_data_async(
                 return
 
             # Convert API response back to DataFrame for display
-            dates = data["dates"]
-            ohlcv = data["ohlcv"]
-            metadata = data.get("metadata", {})
+            dates = api_data["dates"]
+            ohlcv = api_data["ohlcv"]
+            metadata = api_data.get("metadata", {})
 
             if not dates or not ohlcv:
                 console.print(f"ℹ️  No data points available for {symbol} ({timeframe})")
@@ -570,7 +573,9 @@ async def _load_data_async(
                                 break
 
                             # 🔧 FIX: Poll much more frequently to catch intermediate progress states
-                            await asyncio.sleep(0.3)  # Poll every 300ms instead of 1000ms
+                            await asyncio.sleep(
+                                0.3
+                            )  # Poll every 300ms instead of 1000ms
 
                         except Exception as e:
                             if not quiet:
@@ -595,7 +600,9 @@ async def _load_data_async(
                                 )
                                 if cancel_response.get("success"):
                                     if not quiet:
-                                        console.print("✅ Cancellation sent successfully")
+                                        console.print(
+                                            "✅ Cancellation sent successfully"
+                                        )
                                 else:
                                     if not quiet:
                                         console.print(
