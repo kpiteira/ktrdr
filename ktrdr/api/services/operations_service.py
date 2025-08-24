@@ -168,11 +168,10 @@ class OperationsService:
         if errors:
             operation.errors = operation.errors + errors
 
-        # Log progress at intervals
-        if progress.percentage % 10 == 0:  # Log every 10%
-            logger.debug(
-                f"Operation {operation_id} progress: {progress.percentage:.1f}%"
-            )
+        # 🔧 TEMP DEBUG: Log ALL progress updates at INFO level
+        logger.info(
+            f"📊 Operation {operation_id} progress: {progress.percentage:.1f}% - {progress.current_step or 'Loading'}"
+        )
 
     async def complete_operation(
         self,
