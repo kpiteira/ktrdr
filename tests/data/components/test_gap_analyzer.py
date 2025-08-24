@@ -304,6 +304,45 @@ class TestGapAnalyzer:
                 # Will vary by mode but should be deterministic
                 assert isinstance(gaps, list)
 
+    def test_safeguard_missing_trading_hours(self, gap_analyzer):
+        """Test safeguard that skips gaps <2 days when trading hours data is missing."""
+        # Create test data with a clear gap in the middle
+        timestamps = pd.date_range("2024-01-01 10:00", "2024-01-01 20:00", freq="1h", tz="UTC")
+        
+        # Create data with gap in middle (remove hours 14-16 to create 3-hour gap)
+        data_timestamps = timestamps[[0, 1, 2, 3, 4, 7, 8, 9, 10]]  # Skip indices 5,6 for gap
+        test_data = pd.DataFrame(
+            {"close": list(range(100, 109))},
+            index=data_timestamps
+        )
+        
+        # Mock the gap_classifier to simulate missing trading hours
+        gap_analyzer.gap_classifier.symbol_metadata = {}  # No trading hours data
+        
+        # Test with symbol that has no trading hours data (like MSFT in the issue)
+        gaps = gap_analyzer.analyze_gaps(
+            test_data, timestamps[0], timestamps[-1], "UNKNOWN_SYMBOL", "1h", mode="tail"
+        )
+        
+        # Should find no gaps due to safeguard (gap is <2 days and no trading hours)
+        assert len(gaps) == 0
+        
+        # Test with large gap (>7 days) - should still be filled even without trading hours
+        large_start = pd.Timestamp("2024-01-01 10:00", tz="UTC")
+        large_end = pd.Timestamp("2024-01-10 10:00", tz="UTC")  # 9 days later
+        
+        test_data_large = pd.DataFrame(
+            {"close": [100, 101]},
+            index=[large_start, large_end]
+        )
+        
+        gaps_large = gap_analyzer.analyze_gaps(
+            test_data_large, large_start, large_end, "UNKNOWN_SYMBOL", "1h", mode="tail"
+        )
+        
+        # Should find the large gap (>7 days rule overrides safeguard)
+        assert len(gaps_large) == 1
+
 
 class TestGapAnalyzerIntegration:
     """Integration tests for GapAnalyzer with DataManager."""

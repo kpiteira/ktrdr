@@ -138,6 +138,19 @@ class GapAnalyzer:
                     f"📍 LARGE HISTORICAL GAP TO FILL: {gap_start} → {gap_end} (duration: {gap_duration})"
                 )
             else:
+                # SAFEGUARD: Skip gaps <2 days when trading hours data is missing
+                # This prevents unnecessary IB requests when we can't properly classify gaps
+                if gap_duration < timedelta(days=2):
+                    # Check if we have trading hours data for this symbol
+                    symbol_metadata = self.gap_classifier.symbol_metadata.get(symbol, {})
+                    trading_hours = symbol_metadata.get("trading_hours", {})
+                    
+                    if not trading_hours:
+                        logger.info(
+                            f"⚠️  SAFEGUARD ACTIVATED: Skipping gap <2 days with missing trading hours: {gap_start} → {gap_end} (duration: {gap_duration})"
+                        )
+                        continue
+
                 # For smaller gaps, use intelligent classification
                 gap_info = self.gap_classifier.analyze_gap(
                     gap_start, gap_end, symbol, timeframe
@@ -149,12 +162,12 @@ class GapAnalyzer:
                     GapClassification.MARKET_CLOSURE,
                 ]:
                     gaps_to_fill.append((gap_start, gap_end))
-                    logger.debug(
-                        f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value})"
+                    logger.info(
+                        f"📍 UNEXPECTED GAP TO FILL: {gap_start} → {gap_end} ({gap_info.classification.value}) duration={gap_duration}"
                     )
                 else:
-                    logger.debug(
-                        f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) - {gap_info.note}"
+                    logger.info(
+                        f"📅 EXPECTED GAP SKIPPED: {gap_start} → {gap_end} ({gap_info.classification.value}) duration={gap_duration} - {gap_info.note}"
                     )
 
         logger.info(

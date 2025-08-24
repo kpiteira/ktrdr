@@ -1110,11 +1110,8 @@ class DataManager(ServiceOrchestrator):
 
             try:
                 duration = segment_end - segment_start
-                logger.debug(
-                    f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end}"
-                )
-                logger.debug(
-                    f"🚀 IB REQUEST {i+1}: Duration = {duration} (within IB limit)"
+                logger.info(
+                    f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end} (duration: {duration})"
                 )
 
                 # Use the unified IB data fetcher to fetch exactly what we ask for
