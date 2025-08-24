@@ -250,6 +250,9 @@ class DataManager(ServiceOrchestrator):
         # Initialize ServiceOrchestrator if IB is enabled
         if enable_ib:
             super().__init__()
+        else:
+            # Set adapter to None when IB is disabled for ServiceOrchestrator compatibility
+            self.adapter = None
 
     # ServiceOrchestrator abstract method implementations
     def _initialize_adapter(self) -> IbDataAdapter:
