@@ -7,7 +7,6 @@ into a focused component that enables async architecture and future WebSocket st
 
 import logging
 import threading
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
@@ -37,6 +36,15 @@ class ProgressState:
     step_total: int = 0
     step_detail: str = ""
 
+    # Step percentage range (for custom step allocation)
+    step_start_percentage: float = 0.0
+    step_end_percentage: float = 0.0
+
+    # Item tracking for generic progress (bars, data points, etc.)
+    expected_items: Optional[int] = None
+    items_processed: int = 0
+    step_items_processed: int = 0  # Items processed in current step
+
 
 class ProgressManager:
     """
@@ -58,13 +66,13 @@ class ProgressManager:
     - Includes comprehensive logging
     """
 
-    def __init__(self, callback_func: Optional[Callable[[str, float], None]] = None):
+    def __init__(self, callback_func: Optional[Callable[[Any], None]] = None):
         """
         Initialize ProgressManager with optional callback.
 
         Args:
-            callback_func: Optional callback function with signature (message: str, percentage: float)
-                          Matches existing DataManager callback behavior for backward compatibility
+            callback_func: Optional callback function with signature (progress_state: ProgressState)
+                          Receives complete progress information including steps, items, and timing
         """
         self.callback = callback_func
         self._current_state: Optional[ProgressState] = None
@@ -76,13 +84,19 @@ class ProgressManager:
             "ProgressManager initialized with callback: %s", callback_func is not None
         )
 
-    def start_operation(self, total_steps: int, operation_name: str) -> None:
+    def start_operation(
+        self,
+        total_steps: int,
+        operation_name: str,
+        expected_items: Optional[int] = None,
+    ) -> None:
         """
         Begin tracking new operation.
 
         Args:
             total_steps: Total number of steps in the operation
             operation_name: Human-readable name for the operation
+            expected_items: Expected total number of items to process (bars, data points, etc.)
         """
         with self._lock:
             self._operation_start_time = datetime.now()
@@ -96,6 +110,9 @@ class ProgressManager:
                 start_time=self._operation_start_time,
                 steps_completed=0,
                 steps_total=total_steps,
+                expected_items=expected_items,
+                items_processed=0,
+                step_items_processed=0,
             )
 
             logger.debug(
@@ -105,13 +122,23 @@ class ProgressManager:
             # Trigger initial callback
             self._trigger_callback()
 
-    def start_step(self, step_name: str, step_number: int) -> None:
+    def start_step(
+        self,
+        step_name: str,
+        step_number: int,
+        expected_items: Optional[int] = None,
+        step_percentage: Optional[float] = None,
+        step_end_percentage: Optional[float] = None,
+    ) -> None:
         """
         Start a new step within the current operation.
 
         Args:
             step_name: Name of the step being started
             step_number: Step number (1-based)
+            expected_items: Expected number of items to process in this step
+            step_percentage: Optional custom percentage for this step start (overrides default calculation)
+            step_end_percentage: Optional custom percentage for this step end (for custom step ranges)
         """
         with self._lock:
             if self._current_state is None:
@@ -124,23 +151,54 @@ class ProgressManager:
             self._current_state.step_current = 0
             self._current_state.step_total = 0
             self._current_state.step_detail = ""
+            self._current_state.step_items_processed = 0
+
+            # Update expected items for this step if provided
+            if expected_items is not None:
+                self._current_state.expected_items = expected_items
 
             # Update percentage based on step progress
-            if self._current_state.total_steps > 0:
-                self._current_state.percentage = (
-                    (step_number - 1) / self._current_state.total_steps * 100.0
-                )
+            if step_percentage is not None:
+                # Use custom percentage if provided
+                self._current_state.percentage = step_percentage
+                self._current_state.step_start_percentage = step_percentage
+
+                # Set step end percentage
+                if step_end_percentage is not None:
+                    self._current_state.step_end_percentage = step_end_percentage
+                else:
+                    # Default: assume equal step increments
+                    default_increment = (
+                        100.0 / self._current_state.total_steps
+                        if self._current_state.total_steps > 0
+                        else 10.0
+                    )
+                    self._current_state.step_end_percentage = (
+                        step_percentage + default_increment
+                    )
+
+            elif self._current_state.total_steps > 0:
+                # Use default equal increment calculation
+                start_pct = (step_number - 1) / self._current_state.total_steps * 100.0
+                end_pct = step_number / self._current_state.total_steps * 100.0
+
+                self._current_state.percentage = start_pct
+                self._current_state.step_start_percentage = start_pct
+                self._current_state.step_end_percentage = end_pct
 
             logger.debug("Started step %d: %s", step_number, step_name)
             self._trigger_callback()
 
-    def update_step_progress(self, current: int, total: int, detail: str = "") -> None:
+    def update_step_progress(
+        self, current: int, total: int, items_processed: int = 0, detail: str = ""
+    ) -> None:
         """
         Update progress within the current step.
 
         Args:
             current: Current progress within the step
             total: Total items in the step
+            items_processed: Number of items processed (bars, data points, etc.)
             detail: Additional detail message
         """
         with self._lock:
@@ -152,35 +210,50 @@ class ProgressManager:
             self._current_state.step_total = total
             self._current_state.step_detail = detail
 
-            # Calculate percentage including sub-step progress
-            if self._current_state.total_steps > 0:
-                step_base_percentage = (
-                    (self._current_state.current_step - 1)
-                    / self._current_state.total_steps
-                    * 100.0
-                )
-                step_increment = 100.0 / self._current_state.total_steps
+            # Update item tracking
+            if items_processed > 0:
+                self._current_state.items_processed = items_processed
+                self._current_state.step_items_processed = items_processed
 
-                if total > 0:
-                    sub_step_progress = (current / total) * step_increment
-                    self._current_state.percentage = (
-                        step_base_percentage + sub_step_progress
-                    )
-                else:
-                    self._current_state.percentage = step_base_percentage
+            # Calculate percentage including sub-step progress using step range
+            step_start = self._current_state.step_start_percentage
+            step_end = self._current_state.step_end_percentage
+            step_range = step_end - step_start
 
-            # Update message with detail
+            if total > 0:
+                # Calculate progress within the step's percentage range
+                sub_progress_ratio = current / total
+                sub_progress_percentage = sub_progress_ratio * step_range
+                self._current_state.percentage = step_start + sub_progress_percentage
+            else:
+                # No sub-progress, stay at step start
+                self._current_state.percentage = step_start
+
+            # Update message with detail and item information
             if detail:
                 step_name = (
                     self._current_state.current_step_name
                     or f"Step {self._current_state.current_step}"
                 )
+
+                # Build rich message with item information
+                message_parts = [f"{step_name}: {detail}"]
+
                 if total > 0:
-                    self._current_state.message = (
-                        f"{step_name}: {detail} ({current}/{total})"
-                    )
-                else:
-                    self._current_state.message = f"{step_name}: {detail}"
+                    message_parts.append(f"({current}/{total})")
+
+                # Add item count if available
+                if self._current_state.items_processed > 0:
+                    if self._current_state.expected_items:
+                        message_parts.append(
+                            f"({self._current_state.items_processed}/{self._current_state.expected_items} items)"
+                        )
+                    else:
+                        message_parts.append(
+                            f"({self._current_state.items_processed} items)"
+                        )
+
+                self._current_state.message = " ".join(message_parts)
 
             # Calculate time estimate
             self._update_time_estimate()
@@ -316,6 +389,11 @@ class ProgressManager:
                 step_current=self._current_state.step_current,
                 step_total=self._current_state.step_total,
                 step_detail=self._current_state.step_detail,
+                step_start_percentage=self._current_state.step_start_percentage,
+                step_end_percentage=self._current_state.step_end_percentage,
+                expected_items=self._current_state.expected_items,
+                items_processed=self._current_state.items_processed,
+                step_items_processed=self._current_state.step_items_processed,
             )
 
     def set_cancellation_token(self, token: Any) -> None:
@@ -333,15 +411,14 @@ class ProgressManager:
         """
         Trigger the progress callback if one is set.
 
-        This method maintains backward compatibility with existing DataManager
-        callback signature: callback(message: str, percentage: float)
+        Passes the complete ProgressState to the callback for rich progress information.
         """
         if self.callback is None or self._current_state is None:
             return
 
         try:
-            # Use existing callback signature for backward compatibility
-            self.callback(self._current_state.message, self._current_state.percentage)
+            # Pass the complete ProgressState object to the callback
+            self.callback(self.get_progress_state())
         except Exception as e:
             logger.warning("Progress callback failed: %s", e)
 
