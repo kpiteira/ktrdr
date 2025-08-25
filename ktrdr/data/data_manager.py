@@ -255,6 +255,24 @@ class DataManager(ServiceOrchestrator):
         )
         self.data_processor = DataProcessor(processor_config)
 
+        # Initialize the DataValidator component (consolidates validation logic)
+        from ktrdr.data.components.data_validator import DataValidator, ValidationConfig
+        validator_config = ValidationConfig(
+            strict_ohlc=True,
+            max_price_gap_percent=20.0,
+            min_volume_threshold=0,
+            validate_market_hours=True,
+            weekend_data_allowed=False,
+            max_consecutive_zeros=5,
+            auto_correct=True,
+            max_gap_percentage=max_gap_percentage,
+            enable_head_timestamp_validation=enable_ib
+        )
+        self.data_validator = DataValidator(validator_config)
+        # Connect external provider to validator for async validation operations
+        if self.external_provider:
+            self.data_validator.set_external_provider(self.external_provider)
+
         logger.info(
             f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
             f"default_repair_method='{default_repair_method}'"
@@ -1428,8 +1446,8 @@ class DataManager(ServiceOrchestrator):
         """
         Validate request date range against cached head timestamp data.
 
-        This method checks if the requested start date is within the available
-        data range for the symbol, helping prevent unnecessary error 162s.
+        This method delegates to DataValidator component for validation logic.
+        Maintains backward compatibility with existing interface.
 
         Args:
             symbol: Trading symbol
@@ -1440,54 +1458,16 @@ class DataManager(ServiceOrchestrator):
         Returns:
             Tuple of (is_valid, error_message, adjusted_start_date)
         """
-        if not self.enable_ib or not self.external_provider:
-            return True, None, None
-
-        try:
-            # Get head timestamp from external provider
-            import asyncio
-
-            async def get_head_async():
-                return await self.external_provider.get_head_timestamp(
-                    symbol, timeframe
-                )
-
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, get_head_async())
-                        head_timestamp = future.result(timeout=30)
-                else:
-                    head_timestamp = loop.run_until_complete(get_head_async())
-            except RuntimeError:
-                head_timestamp = asyncio.run(get_head_async())
-
-            if head_timestamp is None:
-                return True, None, None  # No head timestamp available, assume valid
-
-            # Check if start_date is before head timestamp
-            if start_date < head_timestamp:
-                error_message = f"Requested start date {start_date} is before earliest available data {head_timestamp}"
-                logger.warning(f"📅 HEAD TIMESTAMP VALIDATION FAILED: {error_message}")
-                return False, error_message, head_timestamp
-            else:
-                # Request is valid as-is
-                logger.debug(
-                    f"📅 HEAD TIMESTAMP VALIDATION PASSED: {symbol} from {start_date}"
-                )
-                return True, None, None
-
-        except Exception as e:
-            logger.warning(f"Head timestamp validation failed for {symbol}: {e}")
-            # Don't block requests if validation fails
-            return True, None, None
+        # Delegate to DataValidator component
+        return self.data_validator.validate_request_against_head_timestamp_sync(
+            symbol, timeframe, start_date, end_date
+        )
 
     def _ensure_symbol_has_head_timestamp(self, symbol: str, timeframe: str) -> bool:
         """
         Ensure symbol has head timestamp data, triggering validation if needed.
+
+        This method delegates to DataValidator component for validation logic.
 
         Args:
             symbol: Trading symbol
@@ -1496,47 +1476,8 @@ class DataManager(ServiceOrchestrator):
         Returns:
             True if head timestamp is available, False otherwise
         """
-        if not self.enable_ib or not self.external_provider:
-            return False
-
-        try:
-            # Check if we can get head timestamp from external provider
-            import asyncio
-
-            async def check_head_async():
-                head_timestamp = await self.external_provider.get_head_timestamp(
-                    symbol, timeframe
-                )
-                return head_timestamp is not None
-
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, check_head_async())
-                        return future.result(timeout=10)
-                else:
-                    return loop.run_until_complete(check_head_async())
-            except RuntimeError:
-                return asyncio.run(check_head_async())
-
-            # Use a sync wrapper for async head timestamp fetching
-            head_timestamp = self._fetch_head_timestamp_sync(symbol, timeframe)
-
-            if head_timestamp:
-                logger.info(
-                    f"📅 Successfully obtained head timestamp for {symbol}: {head_timestamp}"
-                )
-                return True
-            else:
-                logger.warning(f"📅 Failed to fetch head timestamp for {symbol}")
-                return False
-
-        except Exception as e:
-            logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
-            return False
+        # Delegate to DataValidator component
+        return self.data_validator.ensure_symbol_has_head_timestamp(symbol, timeframe)
 
     def _load_with_fallback(
         self,
@@ -2065,7 +2006,7 @@ class DataManager(ServiceOrchestrator):
         self, df: pd.DataFrame, timeframe: str, is_post_repair: bool = False
     ) -> list[str]:
         """
-        Check for common data integrity issues using DataProcessor component.
+        Check for common data integrity issues using DataValidator component.
 
         Args:
             df: DataFrame containing OHLCV data
@@ -2076,11 +2017,11 @@ class DataManager(ServiceOrchestrator):
             List of detected integrity issues (empty if no issues found)
 
         Note:
-            This method now delegates to DataProcessor for validation
+            This method now delegates to DataValidator component
             but maintains backward compatibility by returning a list of issue strings.
         """
-        # Use DataProcessor for validation
-        validation_result = self.data_processor.validate_data_integrity(df)
+        # Use DataValidator for comprehensive validation
+        validation_result = self.data_validator.validate_data_integrity(df)
         
         # Convert to legacy string format for backward compatibility
         issues = []
@@ -2120,26 +2061,11 @@ class DataManager(ServiceOrchestrator):
         if df.empty or len(df) <= 1:
             return []
 
-        # Use the unified validator which now uses intelligent gap classification
-        _, quality_report = self.data_validator.validate_data(
-            df, "GAP_CHECK", timeframe, validation_type="local"
-        )
-
-        # Extract gap information from the quality report (only significant gaps)
-        gaps = []
-        gap_issues = quality_report.get_issues_by_type("timestamp_gaps")
-        for issue in gap_issues:
-            if "gaps" in issue.metadata:
-                # Parse the gaps from metadata (they're stored as ISO string tuples)
-                for gap_start_str, gap_end_str in issue.metadata["gaps"]:
-                    gap_start = datetime.fromisoformat(
-                        gap_start_str.replace("Z", "+00:00")
-                    )
-                    gap_end = datetime.fromisoformat(gap_end_str.replace("Z", "+00:00"))
-                    gaps.append((gap_start, gap_end))
-
+        # Use the DataValidator component for gap detection
+        gaps = self.data_validator.detect_gaps(df, timeframe)
+        
         logger.info(
-            f"Detected {len(gaps)} significant gaps using intelligent classification"
+            f"Detected {len(gaps)} significant gaps using DataValidator component"
         )
         return gaps
 
