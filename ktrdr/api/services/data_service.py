@@ -319,33 +319,32 @@ class DataService(BaseService):
         import concurrent.futures
         import threading
 
-        from ktrdr.data.data_manager import DataLoadingProgress
-
         # Create cancellation event for worker thread
         cancel_event = threading.Event()
         last_progress = [None]  # Mutable container for thread communication
 
-        def progress_callback_fn(progress: DataLoadingProgress):
-            """Callback function to update operation progress in real-time."""
+        def progress_callback_fn(progress_state):
+            """Callback function to update operation progress in real-time from ProgressManager."""
             try:
-                # Convert DataLoadingProgress to OperationProgress
+                # Convert ProgressState to OperationProgress
                 from ktrdr.api.models.operations import OperationProgress
 
                 operation_progress = OperationProgress(
-                    percentage=progress.percentage,
-                    current_step=progress.current_step,
-                    steps_completed=progress.steps_completed,
-                    steps_total=progress.steps_total,
-                    items_processed=progress.items_processed,
-                    items_total=progress.items_total,
-                    current_item=progress.current_segment or progress.current_item,
+                    percentage=progress_state.percentage,
+                    current_step=progress_state.message,
+                    steps_completed=progress_state.steps_completed,
+                    steps_total=progress_state.steps_total,
+                    items_processed=progress_state.items_processed,
+                    items_total=progress_state.expected_items,
+                    current_item=progress_state.step_detail
+                    or progress_state.current_step_name,
                 )
 
-                # Store for async update with warnings/errors
+                # Store for async update (no warnings/errors from ProgressManager)
                 last_progress[0] = (
                     operation_progress,
-                    progress.warnings or [],
-                    progress.errors or [],
+                    [],  # No warnings from ProgressManager
+                    [],  # No errors from ProgressManager
                 )
 
             except Exception as e:

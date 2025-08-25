@@ -20,12 +20,12 @@ from ktrdr import (
     log_performance,
 )
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
+from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.gap_classifier import GapClassification, GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.managers import ServiceOrchestrator
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.data.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.errors import (
@@ -34,6 +34,7 @@ from ktrdr.errors import (
     DataNotFoundError,
     DataValidationError,
 )
+from ktrdr.managers import ServiceOrchestrator
 from ktrdr.utils.timezone_utils import TimestampManager
 
 # Get module logger
@@ -41,52 +42,8 @@ logger = get_logger(__name__)
 
 
 @dataclass
-class DataLoadingProgress:
-    """Progress information for data loading operations."""
-
-    # Overall progress
-    percentage: float = 0.0
-    current_step: str = "Initializing"
-
-    # Step tracking
-    steps_completed: int = 0
-    steps_total: int = 0
-
-    # Segment tracking
-    segments_completed: int = 0
-    segments_total: int = 0
-    current_segment: Optional[str] = None
-
-    # Item tracking
-    items_processed: int = 0
-    items_total: Optional[int] = None
-    current_item: Optional[str] = None
-
-    # Status tracking
-    is_cancelled: bool = False
-    error_message: Optional[str] = None
-    warnings: list[str] = None
-    errors: list[str] = None
-
-    def __post_init__(self):
-        """Initialize lists if None."""
-        if self.warnings is None:
-            self.warnings = []
-        if self.errors is None:
-            self.errors = []
-
-
-class ProgressCallback:
-    """Interface for progress callbacks in data loading operations."""
-
-    def __call__(self, progress: DataLoadingProgress) -> None:
-        """
-        Called with progress updates during data loading.
-
-        Args:
-            progress: Current progress information
-        """
-        pass
+# Legacy DataLoadingProgress and ProgressCallback classes removed
+# Now using ProgressManager with ProgressState for clean progress tracking
 
 
 class DataManager(ServiceOrchestrator):
@@ -246,6 +203,9 @@ class DataManager(ServiceOrchestrator):
         # Initialize the GapAnalyzer component
         self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)
 
+        # Initialize the progress manager (will be configured per operation)
+        self._progress_manager: Optional[ProgressManager] = None
+
         logger.info(
             f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
             f"default_repair_method='{default_repair_method}'"
@@ -262,13 +222,15 @@ class DataManager(ServiceOrchestrator):
     def _initialize_adapter(self) -> IbDataAdapter:
         """Initialize IB data adapter based on environment variables."""
         import os
+
         env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
         use_host_service = env_enabled in ("true", "1", "yes")
-        host_service_url = os.getenv("IB_HOST_SERVICE_URL", self._get_default_host_url())
-        
+        host_service_url = os.getenv(
+            "IB_HOST_SERVICE_URL", self._get_default_host_url()
+        )
+
         return IbDataAdapter(
-            use_host_service=use_host_service,
-            host_service_url=host_service_url
+            use_host_service=use_host_service, host_service_url=host_service_url
         )
 
     def _get_service_name(self) -> str:
@@ -324,6 +286,9 @@ class DataManager(ServiceOrchestrator):
 
         return False
 
+    # Legacy _create_progress_wrapper method removed
+    # Now using ProgressManager directly with ProgressState callbacks
+
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
     def load_data(
@@ -338,7 +303,7 @@ class DataManager(ServiceOrchestrator):
         repair_outliers: bool = True,
         strict: bool = False,
         cancellation_token: Optional[Any] = None,
-        progress_callback: Optional[ProgressCallback] = None,
+        progress_callback: Optional[Callable] = None,
         periodic_save_minutes: float = 2.0,
     ) -> pd.DataFrame:
         """
@@ -371,26 +336,21 @@ class DataManager(ServiceOrchestrator):
             When mode is 'tail', 'backfill', or 'full', it uses intelligent gap analysis
             and IB fetching for missing data segments.
         """
-        # Initialize progress tracking with revised step allocation
-        progress = DataLoadingProgress(
-            current_step="Starting data loading",
-            steps_total=5 if mode == "local" else 10,  # More steps for IB-enabled modes
-            percentage=0.0,
-        )
+        # Initialize clean ProgressManager (no legacy DataLoadingProgress)
+        total_steps = 5 if mode == "local" else 10  # More steps for IB-enabled modes
+        progress_manager = ProgressManager(progress_callback)
+        progress_manager.start_operation(total_steps, f"load_data_{symbol}_{timeframe}")
 
-        if progress_callback:
-            progress_callback(progress)
+        # Set cancellation token if provided
+        if cancellation_token:
+            progress_manager.set_cancellation_token(cancellation_token)
 
         # Load data based on mode
         logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
 
         if mode == "local":
             # Local-only mode: use basic loader without IB integration
-            progress.current_step = "Loading local data"
-            progress.steps_completed = 1
-            progress.percentage = 20.0
-            if progress_callback:
-                progress_callback(progress)
+            progress_manager.start_step("Loading local data", step_number=1)
 
             df = self.data_loader.load(symbol, timeframe, start_date, end_date)
         else:
@@ -402,8 +362,7 @@ class DataManager(ServiceOrchestrator):
                 end_date,
                 mode,
                 cancellation_token,
-                progress_callback,
-                progress,
+                progress_manager,  # Pass ProgressManager for clean integration
                 periodic_save_minutes,
             )
 
@@ -416,12 +375,10 @@ class DataManager(ServiceOrchestrator):
             )
 
         if validate:
-            # Update progress for validation step (Step 10: 98%)
-            progress.current_step = "Validating data quality"
-            progress.steps_completed = progress.steps_completed + 1
-            progress.percentage = 98.0  # Step 10 of 10 in the revised allocation
-            if progress_callback:
-                progress_callback(progress)
+            # Update progress for validation step
+            progress_manager.start_step(
+                "Validating data quality", step_number=total_steps
+            )
 
             # Use the unified data quality validator
             validation_type = "local"  # Default to local validation type
@@ -498,13 +455,8 @@ class DataManager(ServiceOrchestrator):
                             f"Minor data corrections applied: {quality_report.corrections_made} corrections made"
                         )
 
-        # Final progress update
-        progress.current_step = "Data loading completed"
-        progress.steps_completed = progress.steps_total
-        progress.percentage = 100.0
-        progress.items_processed = len(df) if df is not None else 0
-        if progress_callback:
-            progress_callback(progress)
+        # Complete operation with final item count
+        progress_manager.complete_operation()
 
         logger.debug(
             f"Successfully loaded and processed {len(df)} rows of data for {symbol} ({timeframe})"
@@ -523,7 +475,7 @@ class DataManager(ServiceOrchestrator):
         validate: bool = True,
         repair: bool = False,
         cancellation_token: Optional[Any] = None,
-        progress_callback: Optional[ProgressCallback] = None,
+        progress_callback: Optional[Callable] = None,
     ) -> dict[str, pd.DataFrame]:
         """
         Load OHLCV data for multiple timeframes with temporal alignment.
@@ -570,14 +522,14 @@ class DataManager(ServiceOrchestrator):
                 },
             )
 
-        # Initialize progress tracking
-        progress = DataLoadingProgress(
-            steps_total=len(timeframes) + 1,  # Load each TF + synchronization
-            current_step="Loading multi-timeframe data",
-        )
+        # Initialize clean ProgressManager (no legacy DataLoadingProgress)
+        total_steps = len(timeframes) + 1  # Load each TF + synchronization
+        progress_manager = ProgressManager(progress_callback)
+        progress_manager.start_operation(total_steps, f"load_multi_timeframe_{symbol}")
 
-        if progress_callback:
-            progress_callback(progress)
+        # Set cancellation token if provided
+        if cancellation_token:
+            progress_manager.set_cancellation_token(cancellation_token)
 
         # Dictionary to store loaded data for each timeframe
         timeframe_data = {}
@@ -589,21 +541,12 @@ class DataManager(ServiceOrchestrator):
         for i, timeframe in enumerate(timeframes):
             try:
                 # Check for cancellation
-                if cancellation_token and getattr(
-                    cancellation_token, "is_cancelled", False
-                ):
-                    progress.is_cancelled = True
-                    progress.current_step = "Cancelled by user"
-                    if progress_callback:
-                        progress_callback(progress)
+                if progress_manager.check_cancelled():
+                    progress_manager.update_progress(i, "Cancelled by user")
                     break
 
                 # Update progress for current timeframe
-                progress.current_step = f"Loading {timeframe} data"
-                progress.steps_completed = i
-                progress.percentage = (i / (len(timeframes) + 1)) * 100
-                if progress_callback:
-                    progress_callback(progress)
+                progress_manager.update_progress(i, f"Loading {timeframe} data")
 
                 logger.debug(f"Loading {symbol} data for timeframe: {timeframe}")
 
@@ -632,7 +575,6 @@ class DataManager(ServiceOrchestrator):
                 error_msg = f"Failed to load {timeframe} data: {str(e)}"
                 logger.error(error_msg)
                 loading_errors[timeframe] = error_msg
-                progress.errors.append(error_msg)
 
                 # If base timeframe fails, this is critical
                 if timeframe == base_timeframe:
@@ -687,7 +629,6 @@ class DataManager(ServiceOrchestrator):
                     f"({common_coverage['days']} days). Some requested data outside this window was excluded."
                 )
                 logger.warning(coverage_warning)
-                progress.warnings.append(coverage_warning)
 
             else:
                 # Insufficient common coverage - this is a real problem
@@ -725,11 +666,7 @@ class DataManager(ServiceOrchestrator):
                 )
 
         # Step 2: Synchronize timeframes using TimeframeSynchronizer
-        progress.current_step = "Synchronizing timeframes"
-        progress.steps_completed = len(timeframes)
-        progress.percentage = (len(timeframes) / (len(timeframes) + 1)) * 100
-        if progress_callback:
-            progress_callback(progress)
+        progress_manager.update_progress(len(timeframes), "Synchronizing timeframes")
 
         try:
             synchronizer = TimeframeSynchronizer()
@@ -744,17 +681,12 @@ class DataManager(ServiceOrchestrator):
             )
 
             # Final progress update
-            progress.current_step = "Multi-timeframe loading completed"
-            progress.steps_completed = len(timeframes) + 1
-            progress.percentage = 100.0
-            progress.items_processed = sum(len(df) for df in aligned_data.values())
+            # Complete the operation
+            progress_manager.complete_operation()
 
             if loading_errors:
                 for tf, error in loading_errors.items():
-                    progress.warnings.append(f"Failed to load {tf}: {error}")
-
-            if progress_callback:
-                progress_callback(progress)
+                    logger.warning(f"Failed to load {tf}: {error}")
 
             logger.info(
                 f"Successfully loaded and synchronized {len(aligned_data)} timeframes for {symbol}"
@@ -1048,8 +980,7 @@ class DataManager(ServiceOrchestrator):
         timeframe: str,
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
-        progress_callback: Optional[ProgressCallback] = None,
-        progress: Optional[DataLoadingProgress] = None,
+        progress_manager: Optional[ProgressManager] = None,
         periodic_save_minutes: float = 2.0,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
@@ -1095,18 +1026,15 @@ class DataManager(ServiceOrchestrator):
                 cancellation_token, f"segment {i+1}/{len(segments)}"
             )
 
-            # Update progress for current segment (within 86% allocation: 10% to 96%)
-            if progress and progress_callback:
-                progress.current_segment = f"Segment {i+1}/{len(segments)}: {segment_start.strftime('%Y-%m-%d %H:%M')} to {segment_end.strftime('%Y-%m-%d %H:%M')}"
-                progress.current_step = (
-                    f"Fetching segment {i+1}/{len(segments)} from IB"
+            # Update progress for current segment using ProgressManager
+            if progress_manager:
+                segment_detail = f"Segment {i+1}/{len(segments)}: {segment_start.strftime('%Y-%m-%d %H:%M')} to {segment_end.strftime('%Y-%m-%d %H:%M')}"
+                progress_manager.update_step_progress(
+                    current=i + 1,
+                    total=len(segments),
+                    items_processed=total_bars_saved,  # Track total bars loaded so far
+                    detail=segment_detail,
                 )
-                # Calculate progress within segment fetching phase (86% total allocation)
-                segment_progress = (
-                    i / len(segments)
-                ) * 86.0  # 86% allocated to segment fetching
-                progress.percentage = 10.0 + segment_progress  # Start at 10%, go to 96%
-                progress_callback(progress)
 
             try:
                 duration = segment_end - segment_start
@@ -1133,13 +1061,15 @@ class DataManager(ServiceOrchestrator):
                     )
 
                     # Update progress with successful segment completion
-                    if progress and progress_callback:
-                        progress.segments_completed = successful_count
-                        progress.items_processed += len(segment_data)
-                        # Update to reflect completed segment
-                        completed_segment_progress = ((i + 1) / len(segments)) * 86.0
-                        progress.percentage = 10.0 + completed_segment_progress
-                        progress_callback(progress)
+                    if progress_manager:
+                        # Update total bars processed
+                        total_items_processed = sum(len(df) for df in successful_data)
+                        progress_manager.update_step_progress(
+                            current=successful_count,
+                            total=len(segments),
+                            items_processed=total_items_processed,
+                            detail=f"✅ Loaded {len(segment_data)} bars from segment {i+1}/{len(segments)}",
+                        )
 
                     # 💾 PERIODIC SAVE: Check if it's time to save progress
                     current_time = time.time()
@@ -1164,9 +1094,13 @@ class DataManager(ServiceOrchestrator):
                                 )
 
                                 # Update progress to show save occurred
-                                if progress and progress_callback:
-                                    progress.current_step = f"✅ Saved {total_bars_saved:,} bars to CSV (segment {i+1}/{len(segments)})"
-                                    progress_callback(progress)
+                                if progress_manager:
+                                    progress_manager.update_step_progress(
+                                        current=i + 1,
+                                        total=len(segments),
+                                        items_processed=total_bars_saved,
+                                        detail=f"💾 Saved {total_bars_saved:,} bars to CSV",
+                                    )
                         except Exception as e:
                             logger.warning(f"⚠️ Failed to save periodic progress: {e}")
                             # Continue fetching even if save fails
@@ -1541,8 +1475,7 @@ class DataManager(ServiceOrchestrator):
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
         cancellation_token: Optional[Any] = None,
-        progress_callback: Optional[ProgressCallback] = None,
-        progress: Optional[DataLoadingProgress] = None,
+        progress_manager: Optional[ProgressManager] = None,
         periodic_save_minutes: float = 2.0,
     ) -> Optional[pd.DataFrame]:
         """
@@ -1569,16 +1502,13 @@ class DataManager(ServiceOrchestrator):
         Returns:
             DataFrame with data or None if no data found
         """
-        # Initialize progress if not provided
-        if progress is None:
-            progress = DataLoadingProgress(steps_total=10)
+        # Legacy progress parameter removed - using ProgressManager integration
 
         # Step 1: FAIL FAST - Validate symbol and get metadata FIRST (2%)
-        progress.current_step = "Validating symbol with IB"
-        progress.steps_completed = 1
-        progress.percentage = 2.0
-        if progress_callback:
-            progress_callback(progress)
+        if progress_manager:
+            progress_manager.start_step(
+                "Validate symbol with IB", step_number=1, step_percentage=0.0
+            )
 
         logger.info("📋 STEP 0A: Symbol validation and metadata lookup")
         self._check_cancellation(cancellation_token, "symbol validation")
@@ -1678,11 +1608,10 @@ class DataManager(ServiceOrchestrator):
         )
 
         # Step 2: Validate request range against cached head timestamp (4%)
-        progress.current_step = "Validating request against head timestamp"
-        progress.steps_completed = 2
-        progress.percentage = 4.0
-        if progress_callback:
-            progress_callback(progress)
+        if progress_manager:
+            progress_manager.start_step(
+                "Validate request range", step_number=2, step_percentage=2.0
+            )
 
         logger.info("📅 STEP 0B: Validating request against head timestamp data")
         self._check_cancellation(cancellation_token, "head timestamp validation")
@@ -1757,11 +1686,10 @@ class DataManager(ServiceOrchestrator):
                 logger.info("📅 Proceeding with original request range")
 
         # Step 3: Load existing local data (ALL modes need this for gap analysis) (6%)
-        progress.current_step = "Loading existing local data"
-        progress.steps_completed = 3
-        progress.percentage = 6.0
-        if progress_callback:
-            progress_callback(progress)
+        if progress_manager:
+            progress_manager.start_step(
+                "Load existing local data", step_number=3, step_percentage=4.0
+            )
 
         existing_data = None
         try:
@@ -1780,11 +1708,10 @@ class DataManager(ServiceOrchestrator):
             existing_data = None
 
         # Step 4: Intelligent gap analysis (8%)
-        progress.current_step = "Analyzing data gaps with trading calendar"
-        progress.steps_completed = 4
-        progress.percentage = 8.0
-        if progress_callback:
-            progress_callback(progress)
+        if progress_manager:
+            progress_manager.start_step(
+                "Analyze data gaps", step_number=4, step_percentage=6.0
+            )
 
         logger.info(
             f"🔍 GAP ANALYSIS: Starting intelligent gap detection for {symbol} {timeframe}"
@@ -1818,11 +1745,10 @@ class DataManager(ServiceOrchestrator):
             return existing_data
 
         # Step 5: Split gaps into IB-compliant segments (10%)
-        progress.current_step = f"Creating {len(gaps)} IB-compliant segments"
-        progress.steps_completed = 5
-        progress.percentage = 10.0
-        if progress_callback:
-            progress_callback(progress)
+        if progress_manager:
+            progress_manager.start_step(
+                "Create IB-compliant segments", step_number=5, step_percentage=8.0
+            )
 
         logger.info(
             f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments..."
@@ -1841,14 +1767,15 @@ class DataManager(ServiceOrchestrator):
         fetched_data_frames = []
 
         if self.enable_ib and self.external_provider:
-            # Steps 6-8: Update progress with segment details (10% -> 96%, 86% total)
-            progress.current_step = f"Fetching {len(segments)} segments from IB"
-            progress.steps_completed = 6
-            progress.percentage = 10.0  # Start of segment fetching phase
-            progress.segments_total = len(segments)
-            progress.segments_completed = 0
-            if progress_callback:
-                progress_callback(progress)
+            # Step 6: Start segment fetching with expected bars if we can estimate (10% → 96%)
+            if progress_manager:
+                progress_manager.start_step(
+                    f"Fetch {len(segments)} segments from IB",
+                    step_number=6,
+                    step_percentage=10.0,  # Starts at 10%
+                    step_end_percentage=96.0,  # Ends at 96% - this is the big phase!
+                    expected_items=None,  # We don't know total bars yet
+                )
 
             logger.info(
                 f"🚀 Fetching {len(segments)} segments using resilient strategy..."
@@ -1860,8 +1787,7 @@ class DataManager(ServiceOrchestrator):
                     timeframe,
                     segments,
                     cancellation_token,
-                    progress_callback,
-                    progress,
+                    progress_manager,
                     periodic_save_minutes,
                 )
             )
@@ -1904,12 +1830,11 @@ class DataManager(ServiceOrchestrator):
         else:
             logger.info("ℹ️ IB fetching disabled - using existing data only")
 
-        # Step 5: Merge all data sources
-        progress.current_step = "Merging data sources"
-        progress.steps_completed = 8
-        progress.percentage = 80.0
-        if progress_callback:
-            progress_callback(progress)
+        # Step 7: Merge all data sources (96% → 98%)
+        if progress_manager:
+            progress_manager.start_step(
+                "Merge data sources", step_number=7, step_percentage=96.0
+            )
 
         all_data_frames = []
 
@@ -1957,12 +1882,11 @@ class DataManager(ServiceOrchestrator):
             f"📊 Final dataset: {len(final_data)} bars covering {final_data.index.min() if not final_data.empty else 'N/A'} to {final_data.index.max() if not final_data.empty else 'N/A'}"
         )
 
-        # Step 9: Save the enhanced dataset back to CSV for future use (98%)
-        progress.current_step = "Saving enhanced dataset"
-        progress.steps_completed = 9
-        progress.percentage = 98.0
-        if progress_callback:
-            progress_callback(progress)
+        # Step 8: Save the enhanced dataset back to CSV for future use (98%)
+        if progress_manager:
+            progress_manager.start_step(
+                "Save enhanced dataset", step_number=8, step_percentage=98.0
+            )
 
         if len(fetched_data_frames) > 0:  # Only save if we fetched new data
             try:
@@ -1971,13 +1895,11 @@ class DataManager(ServiceOrchestrator):
             except Exception as e:
                 logger.warning(f"⚠️ Failed to save enhanced dataset: {e}")
 
-        # Step 10: Final completion (100%)
-        progress.current_step = "Data loading completed"
-        progress.steps_completed = 10
-        progress.percentage = 100.0
-        progress.items_processed = len(final_data)
-        if progress_callback:
-            progress_callback(progress)
+        # Step 9: Data loading completed (100%)
+        if progress_manager:
+            progress_manager.start_step(
+                "Data loading completed", step_number=9, step_percentage=100.0
+            )
 
         logger.info(f"🎉 ENHANCED STRATEGY COMPLETE: Returning {len(final_data)} bars")
         return final_data
