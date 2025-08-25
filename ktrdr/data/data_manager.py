@@ -19,6 +19,7 @@ from ktrdr import (
     log_entry_exit,
     log_performance,
 )
+from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.gap_classifier import GapClassification, GapClassifier
@@ -242,6 +243,9 @@ class DataManager(ServiceOrchestrator):
         # Initialize the intelligent gap classifier
         self.gap_classifier = GapClassifier()
 
+        # Initialize the progress manager (will be configured per operation)
+        self._progress_manager: Optional[ProgressManager] = None
+
         logger.info(
             f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
             f"default_repair_method='{default_repair_method}'"
@@ -258,13 +262,15 @@ class DataManager(ServiceOrchestrator):
     def _initialize_adapter(self) -> IbDataAdapter:
         """Initialize IB data adapter based on environment variables."""
         import os
+
         env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
         use_host_service = env_enabled in ("true", "1", "yes")
-        host_service_url = os.getenv("IB_HOST_SERVICE_URL", self._get_default_host_url())
-        
+        host_service_url = os.getenv(
+            "IB_HOST_SERVICE_URL", self._get_default_host_url()
+        )
+
         return IbDataAdapter(
-            use_host_service=use_host_service,
-            host_service_url=host_service_url
+            use_host_service=use_host_service, host_service_url=host_service_url
         )
 
     def _get_service_name(self) -> str:
@@ -320,6 +326,46 @@ class DataManager(ServiceOrchestrator):
 
         return False
 
+    def _create_progress_wrapper(
+        self,
+        progress_callback: Optional[ProgressCallback],
+        operation_progress: DataLoadingProgress,
+    ) -> ProgressManager:
+        """
+        Create a ProgressManager that translates callbacks to DataLoadingProgress format.
+
+        This maintains 100% backward compatibility by wrapping ProgressManager calls
+        in the existing DataLoadingProgress interface.
+
+        Args:
+            progress_callback: Original callback expecting DataLoadingProgress
+            operation_progress: The progress object to update and pass to callback
+
+        Returns:
+            Configured ProgressManager instance
+        """
+
+        def progress_translator(message: str, percentage: float) -> None:
+            """Translate ProgressManager callback to DataLoadingProgress format."""
+            if progress_callback is None:
+                return
+
+            # Update the progress object with new values from ProgressManager
+            operation_progress.current_step = message
+            operation_progress.percentage = percentage
+
+            # Calculate step completion based on percentage and total steps
+            if operation_progress.steps_total > 0:
+                operation_progress.steps_completed = int(
+                    (percentage / 100.0) * operation_progress.steps_total
+                )
+
+            # Call the original callback with updated progress object
+            progress_callback(operation_progress)
+
+        # Create ProgressManager with our translation callback
+        return ProgressManager(progress_translator)
+
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
     def load_data(
@@ -374,19 +420,21 @@ class DataManager(ServiceOrchestrator):
             percentage=0.0,
         )
 
-        if progress_callback:
-            progress_callback(progress)
+        # Create ProgressManager wrapper for backward compatibility
+        progress_manager = self._create_progress_wrapper(progress_callback, progress)
+        total_steps = progress.steps_total
+        progress_manager.start_operation(total_steps, f"load_data_{symbol}_{timeframe}")
+
+        # Set cancellation token if provided
+        if cancellation_token:
+            progress_manager.set_cancellation_token(cancellation_token)
 
         # Load data based on mode
         logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
 
         if mode == "local":
             # Local-only mode: use basic loader without IB integration
-            progress.current_step = "Loading local data"
-            progress.steps_completed = 1
-            progress.percentage = 20.0
-            if progress_callback:
-                progress_callback(progress)
+            progress_manager.update_progress(1, "Loading local data")
 
             df = self.data_loader.load(symbol, timeframe, start_date, end_date)
         else:
@@ -398,7 +446,7 @@ class DataManager(ServiceOrchestrator):
                 end_date,
                 mode,
                 cancellation_token,
-                progress_callback,
+                progress_manager,  # Pass ProgressManager instead of raw callback
                 progress,
                 periodic_save_minutes,
             )
@@ -413,11 +461,7 @@ class DataManager(ServiceOrchestrator):
 
         if validate:
             # Update progress for validation step (Step 10: 98%)
-            progress.current_step = "Validating data quality"
-            progress.steps_completed = progress.steps_completed + 1
-            progress.percentage = 98.0  # Step 10 of 10 in the revised allocation
-            if progress_callback:
-                progress_callback(progress)
+            progress_manager.update_progress(total_steps - 1, "Validating data quality")
 
             # Use the unified data quality validator
             validation_type = "local"  # Default to local validation type
@@ -495,12 +539,8 @@ class DataManager(ServiceOrchestrator):
                         )
 
         # Final progress update
-        progress.current_step = "Data loading completed"
-        progress.steps_completed = progress.steps_total
-        progress.percentage = 100.0
         progress.items_processed = len(df) if df is not None else 0
-        if progress_callback:
-            progress_callback(progress)
+        progress_manager.complete_operation()
 
         logger.debug(
             f"Successfully loaded and processed {len(df)} rows of data for {symbol} ({timeframe})"
@@ -572,8 +612,14 @@ class DataManager(ServiceOrchestrator):
             current_step="Loading multi-timeframe data",
         )
 
-        if progress_callback:
-            progress_callback(progress)
+        # Create ProgressManager wrapper for backward compatibility
+        progress_manager = self._create_progress_wrapper(progress_callback, progress)
+        total_steps = progress.steps_total
+        progress_manager.start_operation(total_steps, f"load_multi_timeframe_{symbol}")
+
+        # Set cancellation token if provided
+        if cancellation_token:
+            progress_manager.set_cancellation_token(cancellation_token)
 
         # Dictionary to store loaded data for each timeframe
         timeframe_data = {}
@@ -589,17 +635,11 @@ class DataManager(ServiceOrchestrator):
                     cancellation_token, "is_cancelled", False
                 ):
                     progress.is_cancelled = True
-                    progress.current_step = "Cancelled by user"
-                    if progress_callback:
-                        progress_callback(progress)
+                    progress_manager.update_progress(i, "Cancelled by user")
                     break
 
                 # Update progress for current timeframe
-                progress.current_step = f"Loading {timeframe} data"
-                progress.steps_completed = i
-                progress.percentage = (i / (len(timeframes) + 1)) * 100
-                if progress_callback:
-                    progress_callback(progress)
+                progress_manager.update_progress(i, f"Loading {timeframe} data")
 
                 logger.debug(f"Loading {symbol} data for timeframe: {timeframe}")
 
@@ -721,11 +761,7 @@ class DataManager(ServiceOrchestrator):
                 )
 
         # Step 2: Synchronize timeframes using TimeframeSynchronizer
-        progress.current_step = "Synchronizing timeframes"
-        progress.steps_completed = len(timeframes)
-        progress.percentage = (len(timeframes) / (len(timeframes) + 1)) * 100
-        if progress_callback:
-            progress_callback(progress)
+        progress_manager.update_progress(len(timeframes), "Synchronizing timeframes")
 
         try:
             synchronizer = TimeframeSynchronizer()
@@ -749,8 +785,7 @@ class DataManager(ServiceOrchestrator):
                 for tf, error in loading_errors.items():
                     progress.warnings.append(f"Failed to load {tf}: {error}")
 
-            if progress_callback:
-                progress_callback(progress)
+            progress_manager.complete_operation()
 
             logger.info(
                 f"Successfully loaded and synchronized {len(aligned_data)} timeframes for {symbol}"
@@ -1772,7 +1807,7 @@ class DataManager(ServiceOrchestrator):
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
         cancellation_token: Optional[Any] = None,
-        progress_callback: Optional[ProgressCallback] = None,
+        progress_manager: Optional[ProgressManager] = None,
         progress: Optional[DataLoadingProgress] = None,
         periodic_save_minutes: float = 2.0,
     ) -> Optional[pd.DataFrame]:
@@ -1804,12 +1839,27 @@ class DataManager(ServiceOrchestrator):
         if progress is None:
             progress = DataLoadingProgress(steps_total=10)
 
+        # Helper function to update progress via either ProgressManager or direct callback
+        def update_progress_step(step: int, message: str) -> None:
+            """Update progress via ProgressManager if available, otherwise update progress object."""
+            if progress_manager:
+                progress_manager.update_progress(step, message)
+            else:
+                # Fallback: update progress object directly (for backward compatibility)
+                progress.current_step = message
+                progress.steps_completed = step
+                progress.percentage = (
+                    (step / progress.steps_total) * 100.0
+                    if progress.steps_total > 0
+                    else 0.0
+                )
+
+        # For backward compatibility with remaining legacy code that references progress_callback
+        # TODO: Replace remaining progress_callback usages with ProgressManager
+        progress_callback = None  # Disable legacy callbacks when using ProgressManager
+
         # Step 1: FAIL FAST - Validate symbol and get metadata FIRST (2%)
-        progress.current_step = "Validating symbol with IB"
-        progress.steps_completed = 1
-        progress.percentage = 2.0
-        if progress_callback:
-            progress_callback(progress)
+        update_progress_step(1, "Validating symbol with IB")
 
         logger.info("📋 STEP 0A: Symbol validation and metadata lookup")
         self._check_cancellation(cancellation_token, "symbol validation")
@@ -1909,11 +1959,7 @@ class DataManager(ServiceOrchestrator):
         )
 
         # Step 2: Validate request range against cached head timestamp (4%)
-        progress.current_step = "Validating request against head timestamp"
-        progress.steps_completed = 2
-        progress.percentage = 4.0
-        if progress_callback:
-            progress_callback(progress)
+        update_progress_step(2, "Validating request against head timestamp")
 
         logger.info("📅 STEP 0B: Validating request against head timestamp data")
         self._check_cancellation(cancellation_token, "head timestamp validation")
@@ -1988,11 +2034,7 @@ class DataManager(ServiceOrchestrator):
                 logger.info("📅 Proceeding with original request range")
 
         # Step 3: Load existing local data (ALL modes need this for gap analysis) (6%)
-        progress.current_step = "Loading existing local data"
-        progress.steps_completed = 3
-        progress.percentage = 6.0
-        if progress_callback:
-            progress_callback(progress)
+        update_progress_step(3, "Loading existing local data")
 
         existing_data = None
         try:
@@ -2011,11 +2053,7 @@ class DataManager(ServiceOrchestrator):
             existing_data = None
 
         # Step 4: Intelligent gap analysis (8%)
-        progress.current_step = "Analyzing data gaps with trading calendar"
-        progress.steps_completed = 4
-        progress.percentage = 8.0
-        if progress_callback:
-            progress_callback(progress)
+        update_progress_step(4, "Analyzing data gaps with trading calendar")
 
         logger.info(
             f"🔍 GAP ANALYSIS: Starting intelligent gap detection for {symbol} {timeframe}"
@@ -2049,11 +2087,7 @@ class DataManager(ServiceOrchestrator):
             return existing_data
 
         # Step 5: Split gaps into IB-compliant segments (10%)
-        progress.current_step = f"Creating {len(gaps)} IB-compliant segments"
-        progress.steps_completed = 5
-        progress.percentage = 10.0
-        if progress_callback:
-            progress_callback(progress)
+        update_progress_step(5, f"Creating {len(gaps)} IB-compliant segments")
 
         logger.info(
             f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments..."
