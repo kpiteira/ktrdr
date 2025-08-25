@@ -21,7 +21,6 @@ from ktrdr import (
 )
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.data_processor import DataProcessor, ProcessorConfig
-from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.gap_classifier import GapClassification, GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
@@ -235,11 +234,7 @@ class DataManager(ServiceOrchestrator):
         self.max_gap_percentage = max_gap_percentage
         self.default_repair_method = default_repair_method
 
-        # Initialize the unified data quality validator
-        self.data_validator = DataQualityValidator(
-            auto_correct=True,  # Enable auto-correction by default
-            max_gap_percentage=max_gap_percentage,
-        )
+        # Note: Data validation is now handled by DataProcessor component
 
         # Initialize the intelligent gap classifier
         self.gap_classifier = GapClassifier()
@@ -2070,7 +2065,7 @@ class DataManager(ServiceOrchestrator):
         self, df: pd.DataFrame, timeframe: str, is_post_repair: bool = False
     ) -> list[str]:
         """
-        Check for common data integrity issues using unified validator.
+        Check for common data integrity issues using DataProcessor component.
 
         Args:
             df: DataFrame containing OHLCV data
@@ -2081,41 +2076,26 @@ class DataManager(ServiceOrchestrator):
             List of detected integrity issues (empty if no issues found)
 
         Note:
-            This method now uses the unified DataQualityValidator for consistency
+            This method now delegates to DataProcessor for validation
             but maintains backward compatibility by returning a list of issue strings.
         """
-        # Use the unified validator for integrity checking (without auto-correction)
-        validator = DataQualityValidator(
-            auto_correct=False, max_gap_percentage=self.max_gap_percentage
-        )
-
-        _, quality_report = validator.validate_data(
-            df, "CHECK", timeframe, validation_type="local"
-        )
-
-        # Convert the quality report issues to the legacy string format for backward compatibility
+        # Use DataProcessor for validation
+        validation_result = self.data_processor.validate_data_integrity(df)
+        
+        # Convert to legacy string format for backward compatibility
         issues = []
-        for issue in quality_report.issues:
-            # Skip certain issue types when checking post-repair data
-            if is_post_repair:
-                # These issues are expected to remain after repair and shouldn't be treated as failures
-                if issue.issue_type in [
-                    "timestamp_gaps",
-                    "zero_volume",
-                    "price_outliers",
-                ]:
-                    continue
-
-            # Map new issue types to legacy strings that tests expect
-            if issue.issue_type == "missing_values":
-                issues.append(f"Missing values: {issue.description}")
-            elif issue.issue_type in ["low_too_high", "high_too_low", "ohlc_invalid"]:
-                issues.append(f"Invalid OHLC relationships: {issue.description}")
-            elif issue.issue_type == "negative_volume":
-                issues.append(f"Negative volume: {issue.description}")
-            else:
-                # For other issue types, use the default format
-                issues.append(f"{issue.issue_type}: {issue.description}")
+        for error in validation_result.errors:
+            issues.append(error)
+            
+        # Handle post-repair filtering if needed
+        if is_post_repair:
+            # Filter out expected issues after repair
+            filtered_issues = []
+            for issue in issues:
+                if not any(expected in issue.lower() for expected in 
+                          ['timestamp_gaps', 'zero_volume', 'price_outliers']):
+                    filtered_issues.append(issue)
+            issues = filtered_issues
 
         return issues
 
@@ -2174,7 +2154,7 @@ class DataManager(ServiceOrchestrator):
         log_outliers: bool = True,
     ) -> int:
         """
-        Detect outliers in price data using unified validator.
+        Detect outliers in price data using DataProcessor component.
 
         Args:
             df: DataFrame containing OHLCV data
@@ -2189,52 +2169,35 @@ class DataManager(ServiceOrchestrator):
             Number of outliers detected
 
         Note:
-            This method now uses the unified DataQualityValidator for consistency.
+            This method now delegates to DataProcessor for validation.
         """
         if df.empty:
             return 0
 
-        # Delegate to unified validator (without auto-correction for detection only)
-        validator = DataQualityValidator(
-            auto_correct=False, max_gap_percentage=self.max_gap_percentage
-        )
-
-        try:
-            _, quality_report = validator.validate_data(
-                df, "OUTLIER_CHECK", "1h", validation_type="local"
+        # Use DataProcessor for validation
+        validation_result = self.data_processor.validate_data_integrity(df)
+        
+        # Count outlier-related errors
+        total_outliers = 0
+        if validation_result.quality_report:
+            outlier_issues = validation_result.quality_report.get_issues_by_type("price_outliers")
+            total_outliers = sum(
+                issue.metadata.get("count", 0) for issue in outlier_issues
             )
-
-            # Check if validation failed (report contains validation errors)
-            validation_errors = quality_report.get_issues_by_type("validation_error")
-            if validation_errors:
-                # Validation failed, use fallback method
+            
+            if total_outliers > 0 and log_outliers:
                 logger.warning(
-                    f"Validation failed with {len(validation_errors)} errors, using fallback method"
+                    f"Detected {total_outliers} outliers in price data:"
                 )
-                total_outliers = self._detect_outliers_fallback(
-                    df, std_threshold, columns, context_window, log_outliers
-                )
-            else:
-                # Count outliers from the quality report
-                outlier_issues = quality_report.get_issues_by_type("price_outliers")
-                total_outliers = sum(
-                    issue.metadata.get("count", 0) for issue in outlier_issues
-                )
-        except Exception as e:
-            # If validation raises an exception, fall back to simple outlier detection
-            logger.warning(
-                f"Validation-based outlier detection failed ({e}), using fallback method"
-            )
+                for issue in outlier_issues:
+                    logger.warning(f"  - {issue.description}")
+        
+        # Fallback if DataProcessor doesn't have outlier detection yet
+        if total_outliers == 0 and validation_result.errors:
+            # Use fallback method for backward compatibility
             total_outliers = self._detect_outliers_fallback(
                 df, std_threshold, columns, context_window, log_outliers
             )
-
-        if total_outliers > 0 and log_outliers:
-            logger.warning(
-                f"Detected {total_outliers} outliers in price data using unified validator:"
-            )
-            for issue in outlier_issues:
-                logger.warning(f"  - {issue.description}")
 
         return total_outliers
 
@@ -2353,23 +2316,24 @@ class DataManager(ServiceOrchestrator):
             )
 
         logger.info(
-            f"Repairing data using unified validator (method={method} - delegated to validator)"
+            f"Repairing data using DataProcessor (method={method} - delegated to component)"
         )
 
-        # Use the unified data quality validator for repairs
-        df_repaired, quality_report = self.data_validator.validate_data(
-            df, "REPAIR", timeframe, validation_type="local"
-        )
-
+        # Use DataProcessor for data repair
+        df_repaired = self.data_processor.process_raw_data(df, "REPAIR", timeframe)
+        
+        # Get validation result to check what was repaired
+        validation_result = self.data_processor.validate_data_integrity(df)
+        
         # Log summary of repairs made
-        if quality_report.corrections_made > 0:
+        if validation_result.quality_report and validation_result.quality_report.corrections_made > 0:
             logger.info(
-                f"Repair completed: {quality_report.corrections_made} corrections made"
+                f"Repair completed: {validation_result.quality_report.corrections_made} corrections made"
             )
 
             # Log details of issues that were corrected
             corrected_issues = [
-                issue for issue in quality_report.issues if issue.corrected
+                issue for issue in validation_result.quality_report.issues if issue.corrected
             ]
             for issue in corrected_issues:
                 logger.debug(f"  - Fixed {issue.issue_type}: {issue.description}")
