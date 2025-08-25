@@ -20,6 +20,7 @@ from ktrdr import (
     log_performance,
 )
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
+from ktrdr.data.components.data_processor import DataProcessor, ProcessorConfig
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.gap_classifier import GapClassification, GapClassifier
@@ -245,6 +246,19 @@ class DataManager(ServiceOrchestrator):
         
         # Initialize the GapAnalyzer component
         self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)
+        
+        # Initialize the DataProcessor component
+        processor_config = ProcessorConfig(
+            remove_duplicates=True,
+            fill_gaps=True,
+            validate_ohlc=True,
+            max_gap_tolerance=timedelta(hours=1),
+            timezone_conversion=True,
+            auto_correct=True,
+            max_gap_percentage=max_gap_percentage,
+            strict_validation=False
+        )
+        self.data_processor = DataProcessor(processor_config)
 
         logger.info(
             f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
@@ -423,23 +437,19 @@ class DataManager(ServiceOrchestrator):
             if progress_callback:
                 progress_callback(progress)
 
-            # Use the unified data quality validator
-            validation_type = "local"  # Default to local validation type
-
-            # Temporarily disable auto-correct if repair is not requested
-            if not repair:
-                # Create a non-correcting validator for validation-only mode
-                validator = DataQualityValidator(
-                    auto_correct=False, max_gap_percentage=self.max_gap_percentage
-                )
+            # Use the DataProcessor component for processing and validation
+            if repair:
+                # Process data with validation, cleaning, and transformation
+                df_validated = self.data_processor.process_raw_data(df, symbol, timeframe)
+                
+                # Get validation result for quality report
+                validation_result = self.data_processor.validate_data_integrity(df)
+                quality_report = validation_result.quality_report
             else:
-                # Use the instance validator which has auto-correct enabled
-                validator = self.data_validator
-
-            # Perform validation
-            df_validated, quality_report = validator.validate_data(
-                df, symbol, timeframe, validation_type
-            )
+                # Validation only - check data integrity without processing
+                validation_result = self.data_processor.validate_data_integrity(df)
+                df_validated = df  # Don't modify data if repair is disabled
+                quality_report = validation_result.quality_report
 
             # Handle repair_outliers parameter if repair is enabled but repair_outliers is False
             if repair and not repair_outliers:
@@ -974,7 +984,7 @@ class DataManager(ServiceOrchestrator):
         """
         Normalize DataFrame index to UTC timezone-aware.
 
-        Note: Using TimestampManager for consistent timezone handling.
+        Note: Now using DataProcessor for consistent timezone handling.
 
         Args:
             df: DataFrame with datetime index
@@ -982,7 +992,7 @@ class DataManager(ServiceOrchestrator):
         Returns:
             DataFrame with UTC timezone-aware index
         """
-        return TimestampManager.convert_dataframe_index(df)
+        return self.data_processor._normalize_dataframe_timezone(df)
 
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
