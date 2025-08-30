@@ -23,10 +23,9 @@ from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.external_data_interface import ExternalDataProvider
-from ktrdr.data.gap_classifier import GapClassification, GapClassifier
+from ktrdr.data.gap_classifier import GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.data.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.errors import (
     DataCorruptionError,
@@ -199,7 +198,7 @@ class DataManager(ServiceOrchestrator):
 
         # Initialize the intelligent gap classifier
         self.gap_classifier = GapClassifier()
-        
+
         # Initialize the GapAnalyzer component
         self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)
 
@@ -338,21 +337,21 @@ class DataManager(ServiceOrchestrator):
         """
         # Initialize clean ProgressManager (no legacy DataLoadingProgress)
         total_steps = 5 if mode == "local" else 10  # More steps for IB-enabled modes
-        
+
         # Create enhanced context for better progress descriptions
         operation_context = {
-            'symbol': symbol,
-            'timeframe': timeframe,
-            'mode': mode,
-            'start_date': start_date.isoformat() if start_date else None,
-            'end_date': end_date.isoformat() if end_date else None,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "mode": mode,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
         }
-        
+
         progress_manager = ProgressManager(progress_callback)
         progress_manager.start_operation(
-            total_steps, 
+            total_steps,
             f"load_data_{symbol}_{timeframe}",
-            operation_context=operation_context
+            operation_context=operation_context,
         )
 
         # Set cancellation token if provided
@@ -365,8 +364,9 @@ class DataManager(ServiceOrchestrator):
         if mode == "local":
             # Local-only mode: use basic loader without IB integration
             progress_manager.update_progress_with_context(
-                1, "Loading local data from cache", 
-                current_item_detail=f"Reading {symbol} {timeframe} from local storage"
+                1,
+                "Loading local data from cache",
+                current_item_detail=f"Reading {symbol} {timeframe} from local storage",
             )
 
             df = self.data_loader.load(symbol, timeframe, start_date, end_date)
@@ -394,8 +394,9 @@ class DataManager(ServiceOrchestrator):
         if validate:
             # Update progress for validation step with context
             progress_manager.update_progress_with_context(
-                total_steps, "Validating data quality",
-                current_item_detail=f"Checking {len(df)} data points for completeness and accuracy"
+                total_steps,
+                "Validating data quality",
+                current_item_detail=f"Checking {len(df)} data points for completeness and accuracy",
             )
 
             # Use the unified data quality validator
@@ -1525,8 +1526,9 @@ class DataManager(ServiceOrchestrator):
         # Step 1: FAIL FAST - Validate symbol and get metadata FIRST (2%)
         if progress_manager:
             progress_manager.update_progress_with_context(
-                1, "Validating symbol with IB Gateway",
-                current_item_detail=f"Checking if {symbol} is valid and tradeable"
+                1,
+                "Validating symbol with IB Gateway",
+                current_item_detail=f"Checking if {symbol} is valid and tradeable",
             )
 
         logger.info("📋 STEP 0A: Symbol validation and metadata lookup")

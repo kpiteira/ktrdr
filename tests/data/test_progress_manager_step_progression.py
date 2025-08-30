@@ -5,7 +5,6 @@ This test verifies that all 10 DataManager steps are properly tracked
 and that progress percentages progress smoothly from 0% to 100%.
 """
 
-
 from ktrdr.data.components.progress_manager import ProgressManager, ProgressState
 
 

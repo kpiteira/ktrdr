@@ -23,8 +23,6 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
-from rich.table import Table
-from rich.text import Text
 
 from ktrdr.data.components.progress_manager import ProgressState
 

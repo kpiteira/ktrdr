@@ -142,9 +142,11 @@ class GapAnalyzer:
                 # This prevents unnecessary IB requests when we can't properly classify gaps
                 if gap_duration < timedelta(days=2):
                     # Check if we have trading hours data for this symbol
-                    symbol_metadata = self.gap_classifier.symbol_metadata.get(symbol, {})
+                    symbol_metadata = self.gap_classifier.symbol_metadata.get(
+                        symbol, {}
+                    )
                     trading_hours = symbol_metadata.get("trading_hours", {})
-                    
+
                     if not trading_hours:
                         logger.info(
                             f"⚠️  SAFEGUARD ACTIVATED: Skipping gap <2 days with missing trading hours: {gap_start} → {gap_end} (duration: {gap_duration})"

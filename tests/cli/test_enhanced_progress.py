@@ -2,12 +2,13 @@
 Tests for enhanced CLI progress display integration.
 """
 
-import pytest
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from datetime import timedelta
 from io import StringIO
+from unittest.mock import Mock, patch
 
+import pytest
 from rich.console import Console
+
 from ktrdr.cli.progress_display_enhanced import (
     EnhancedCLIProgressDisplay,
     create_enhanced_progress_callback,

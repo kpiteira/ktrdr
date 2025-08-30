@@ -71,11 +71,11 @@ class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
     A robust rotating file handler that gracefully handles file operations
     during log rotation to prevent race conditions and file not found errors.
     """
-    
+
     def shouldRollover(self, record):
         """
         Determine if rollover should occur with error handling.
-        
+
         Overrides the parent method to safely handle cases where the log file
         might be temporarily unavailable during rotation or external changes.
         """
@@ -87,11 +87,11 @@ class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
         except Exception:
             # For any other unexpected errors, don't rollover to avoid issues
             return False
-    
+
     def emit(self, record):
         """
         Emit a record with robust error handling.
-        
+
         Overrides the parent method to gracefully handle file system issues
         that can occur during high-volume logging with rotation.
         """

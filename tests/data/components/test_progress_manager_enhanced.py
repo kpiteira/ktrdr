@@ -3,13 +3,14 @@ Tests for enhanced ProgressManager capabilities including contextual progress,
 time estimation, and enhanced CLI display integration.
 """
 
-import pytest
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
+
+import pytest
 
 from ktrdr.data.components.progress_manager import (
     ProgressManager,

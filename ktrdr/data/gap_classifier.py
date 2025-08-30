@@ -586,36 +586,46 @@ class GapClassifier:
         # Check for weekend gaps
         if self._spans_default_weekend(start_time, end_time):
             return True
-            
+
         # Check for overnight gaps (market closes 4 PM, opens 9:30 AM next day)
         # Convert to EST for standard US market hours
         try:
             import pytz
-            est = pytz.timezone('US/Eastern')
-            
+
+            est = pytz.timezone("US/Eastern")
+
             # Convert UTC to EST
-            start_est = start_time.astimezone(est) if start_time.tzinfo else est.localize(start_time)
-            end_est = end_time.astimezone(est) if end_time.tzinfo else est.localize(end_time)
-            
+            start_est = (
+                start_time.astimezone(est)
+                if start_time.tzinfo
+                else est.localize(start_time)
+            )
+            end_est = (
+                end_time.astimezone(est) if end_time.tzinfo else est.localize(end_time)
+            )
+
             # Extract time components
             start_time_only = start_est.time()
             end_time_only = end_est.time()
-            
+
             # Market hours: 9:30 AM - 4:00 PM EST
-            market_open = pd.Timestamp('09:30').time()
-            market_close = pd.Timestamp('16:00').time()
-            
+            market_open = pd.Timestamp("09:30").time()
+            market_close = pd.Timestamp("16:00").time()
+
             # If gap starts after market close (4 PM) and ends before market open (9:30 AM)
             # this is an overnight gap (expected)
             if start_time_only >= market_close and end_time_only <= market_open:
                 # Make sure it's the next day or same day
-                if (end_est.date() > start_est.date()) or (end_est.date() == start_est.date() and start_time_only >= market_close):
+                if (end_est.date() > start_est.date()) or (
+                    end_est.date() == start_est.date()
+                    and start_time_only >= market_close
+                ):
                     return True
-                    
+
         except Exception:
             # Fallback to simple weekend check if timezone conversion fails
             pass
-            
+
         return self._spans_default_weekend(start_time, end_time)
 
     def _is_time_range_outside_session(
