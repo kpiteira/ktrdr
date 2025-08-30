@@ -352,7 +352,7 @@ async def _visualize_fuzzy_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"📈 Generating fuzzy visualization for {symbol}")
@@ -479,7 +479,7 @@ async def _manage_config_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"⚙️  Managing fuzzy config: {action}")

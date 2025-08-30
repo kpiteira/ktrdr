@@ -23,7 +23,7 @@ def client():
 def mock_training_service():
     """Create a mock TrainingService for testing endpoints."""
     service_mock = AsyncMock()
-    
+
     # Mock successful start_training response
     service_mock.start_training.return_value = {
         "success": True,
@@ -35,7 +35,7 @@ def mock_training_service():
         "strategy_name": "rsi_mean_reversion",
         "estimated_duration_minutes": 30
     }
-    
+
     # Mock successful get_model_performance response
     service_mock.get_model_performance.return_value = {
         "success": True,
@@ -57,7 +57,7 @@ def mock_training_service():
             "training_time_seconds": 1800
         }
     }
-    
+
     return service_mock
 
 
@@ -65,12 +65,12 @@ def mock_training_service():
 def client_with_mocked_training(client, mock_training_service):
     """Create a test client with mocked training service dependency."""
     from ktrdr.api.endpoints.training import get_training_service
-    
+
     # Override the training service dependency
     client.app.dependency_overrides[get_training_service] = lambda: mock_training_service
-    
+
     yield client
-    
+
     # Clean up after test
     client.app.dependency_overrides.clear()
 
@@ -81,7 +81,7 @@ class TestTrainingEndpoints:
     @pytest.mark.api
     def test_start_training_success(self, client_with_mocked_training, mock_training_service):
         """Test starting a training operation successfully."""
-        
+
         payload = {
             "symbols": ["AAPL"],
             "timeframes": ["1h"],
@@ -104,7 +104,7 @@ class TestTrainingEndpoints:
         # Verify the response structure matches expected format
         assert data["message"] == "Training started successfully"
         assert data["strategy_name"] == "rsi_mean_reversion"
-        
+
         # Verify the service was called with correct parameters
         mock_training_service.start_training.assert_called_once_with(
             symbols=["AAPL"],
@@ -124,7 +124,7 @@ class TestTrainingEndpoints:
         # Update mock response for this test
         mock_training_service.start_training.return_value["symbols"] = ["MSFT"]
         mock_training_service.start_training.return_value["timeframes"] = ["1d"]
-        
+
         payload = {
             "symbols": ["MSFT"],
             "timeframes": ["1d"],
@@ -141,7 +141,7 @@ class TestTrainingEndpoints:
         assert data["status"] == "training_started"
         assert data["symbols"] == ["MSFT"]
         assert data["timeframes"] == ["1d"]
-        
+
         # Verify service call
         mock_training_service.start_training.assert_called_once_with(
             symbols=["MSFT"],
@@ -175,7 +175,7 @@ class TestTrainingEndpoints:
         from ktrdr.errors import DataError
         mock_training_service.start_training.side_effect = DataError("Insufficient training data")
         mock_get_service.return_value = mock_training_service
-        
+
         payload = {
             "symbols": ["AAPL"],
             "timeframes": ["1h"],
@@ -193,7 +193,7 @@ class TestTrainingEndpoints:
     def test_get_model_performance_success(self, mock_get_service, client, mock_training_service):
         """Test getting model performance for completed training."""
         mock_get_service.return_value = mock_training_service
-        
+
         response = client.get("/api/v1/trainings/completed_training_789/performance")
 
         assert response.status_code == 200
@@ -202,7 +202,7 @@ class TestTrainingEndpoints:
         assert "training_metrics" in data
         assert "test_metrics" in data
         assert "model_info" in data
-        
+
         # Verify service was called
         mock_training_service.get_model_performance.assert_called_once_with("completed_training_789")
 
@@ -213,7 +213,7 @@ class TestTrainingEndpoints:
         from ktrdr.errors import DataError
         mock_training_service.get_model_performance.side_effect = DataError("Training not completed")
         mock_get_service.return_value = mock_training_service
-        
+
         response = client.get("/api/v1/trainings/running_training/performance")
 
         assert response.status_code == 500
@@ -239,7 +239,7 @@ class TestTrainingEndpoints:
     def test_training_config_defaults(self, mock_get_service, client, mock_training_service):
         """Test that training configuration uses proper defaults."""
         mock_get_service.return_value = mock_training_service
-        
+
         # Minimal payload - should use defaults for most config
         payload = {
             "symbols": ["AAPL"],
@@ -259,7 +259,7 @@ class TestTrainingEndpoints:
     def test_training_large_config(self, mock_get_service, client, mock_training_service):
         """Test training with large/complex configuration."""
         mock_get_service.return_value = mock_training_service
-        
+
         payload = {
             "symbols": ["AAPL"],
             "timeframes": ["1m"],
@@ -295,7 +295,7 @@ class TestTrainingEndpoints:
     def test_training_with_custom_task_id(self, mock_get_service, client, mock_training_service):
         """Test starting training with custom task ID."""
         mock_get_service.return_value = mock_training_service
-        
+
         payload = {
             "symbols": ["AAPL"],
             "timeframes": ["1h"],
@@ -317,7 +317,7 @@ class TestTrainingEndpoints:
         mock_get_service.return_value = mock_training_service
         # Update mock response for multiple timeframes
         mock_training_service.start_training.return_value["timeframes"] = ["1h", "1d"]
-        
+
         payload = {
             "symbols": ["AAPL"],
             "timeframes": ["1h", "1d"],

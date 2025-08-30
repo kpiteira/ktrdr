@@ -285,7 +285,7 @@ class SymbolBalancedSampler(Sampler):
             symbol_iterators[symbol] = iter(shuffled_indices.tolist())
 
         # Generate batches
-        for batch_idx in range(self.num_batches):
+        for _batch_idx in range(self.num_batches):
             batch_indices = []
 
             # Sample from each symbol

@@ -83,7 +83,7 @@ def load_indicators_from_file(file_path: str) -> list:
 
     try:
         # Load the YAML file
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             config_data = yaml.safe_load(f)
 
         # Create IndicatorsConfig from the loaded data

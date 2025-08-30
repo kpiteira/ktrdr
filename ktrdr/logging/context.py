@@ -132,7 +132,6 @@ def with_context(
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Get operation name (use function name if not provided)
-            op_name = operation_name or func.__name__
 
             # Create context with module and function information
             module_name = func.__module__

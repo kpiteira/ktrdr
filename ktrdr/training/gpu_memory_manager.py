@@ -293,7 +293,7 @@ class GPUMemoryManager:
                     total = torch.cuda.get_device_properties(device_id).total_memory / (
                         1024**2
                     )  # MB
-                except:
+                except Exception:
                     total = 0
         elif self.device_type == "mps":
             # MPS memory tracking is limited
@@ -328,7 +328,7 @@ class GPUMemoryManager:
                     temperature = pynvml.nvmlDeviceGetTemperature(
                         handle, pynvml.NVML_TEMPERATURE_GPU
                     )
-                except:
+                except Exception:
                     pass
 
                 # Power usage
@@ -336,7 +336,7 @@ class GPUMemoryManager:
                     power_usage = (
                         pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
                     )  # Convert mW to W
-                except:
+                except Exception:
                     pass
 
             except ImportError:

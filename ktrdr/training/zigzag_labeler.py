@@ -145,7 +145,7 @@ class ZigZagLabeler:
 
             if labels.iloc[i] == 0:  # BUY label
                 # Find best exit point
-                best_exit_idx = future_window.idxmax()
+                future_window.idxmax()
                 best_exit_price = future_window.max()
                 actual_return = (best_exit_price - current_price) / current_price
 
@@ -162,7 +162,7 @@ class ZigZagLabeler:
 
             elif labels.iloc[i] == 2:  # SELL label
                 # For SELL, we calculate as if we shorted
-                worst_exit_idx = future_window.idxmin()
+                future_window.idxmin()
                 worst_exit_price = future_window.min()
                 actual_return = (current_price - worst_exit_price) / current_price
 

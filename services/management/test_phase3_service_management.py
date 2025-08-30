@@ -10,15 +10,12 @@ implementation including:
 - Performance monitoring and baseline tracking
 """
 
+import json
 import os
+import subprocess
 import sys
 import time
-import json
-import subprocess
-import requests
 from pathlib import Path
-from typing import Dict, List, Any
-import asyncio
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -28,7 +25,7 @@ print("🧪 Phase 3: Service Management & Auto-Startup Testing")
 print("=" * 60)
 
 
-def run_command(cmd: List[str], cwd: str = None) -> tuple:
+def run_command(cmd: list[str], cwd: str = None) -> tuple:
     """Run a command and return (success, output, error)."""
     try:
         result = subprocess.run(

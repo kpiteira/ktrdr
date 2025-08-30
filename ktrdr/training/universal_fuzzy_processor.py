@@ -237,7 +237,7 @@ class UniversalFuzzyNeuralProcessor:
                 indicators_df[name] = values
 
         # Create mock fuzzy data for now (in real implementation, this would come from fuzzy engine)
-        fuzzy_features = pd.DataFrame(index=price_data.index)
+        pd.DataFrame(index=price_data.index)
 
         # Create universal features
         universal_features = self._create_universal_features(indicators_df)

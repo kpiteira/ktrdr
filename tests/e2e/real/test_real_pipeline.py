@@ -97,7 +97,7 @@ class TestRealDataPipeline:
 
         # Monitor operation status
         max_polls = 30  # 30 seconds timeout
-        for i in range(max_polls):
+        for _i in range(max_polls):
             status_response = api_client.get(f"/api/v1/operations/{operation_id}")
             assert status_response.status_code == 200
 
@@ -143,7 +143,7 @@ class TestRealDataPipeline:
 
         # Should succeed but return no symbol info for invalid symbols
         if discover_data["success"]:
-            symbol_info = discover_data["data"]["symbol_info"]
+            discover_data["data"]["symbol_info"]
             # symbol_info might be None for invalid symbols, which is fine
 
         # Test data loading handles invalid symbols gracefully
@@ -159,7 +159,7 @@ class TestRealDataPipeline:
 
         # Should either succeed with no data or fail gracefully
         if load_response.status_code == 200:
-            load_data = load_response.json()
+            load_response.json()
             # Success with 0 bars is acceptable for invalid symbols
         else:
             # 400/422 errors are also acceptable for invalid symbols

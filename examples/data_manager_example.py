@@ -127,7 +127,7 @@ def plot_data_comparison(original, repaired, title="Data Comparison"):
 
     plt.tight_layout()
     plt.savefig(os.path.join(os.path.dirname(__file__), "data_repair_example.png"))
-    print(f"Plot saved as data_repair_example.png")
+    print("Plot saved as data_repair_example.png")
     plt.close()
 
 
@@ -156,7 +156,7 @@ def demonstrate_data_manager():
     # 1. Basic data loading
     print("\n2. Loading data and performing basic integrity check...")
     try:
-        data = data_manager.load_data(symbol, timeframe, validate=True, strict=True)
+        data_manager.load_data(symbol, timeframe, validate=True, strict=True)
         print("  - Data loaded successfully")
     except DataCorruptionError as e:
         print(f"  - Data corruption detected (expected): {e}")

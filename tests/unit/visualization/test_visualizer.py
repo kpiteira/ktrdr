@@ -130,7 +130,7 @@ class TestVisualizer:
 
         # Verify the range slider was added
         assert len(chart["configs"]) == 2
-        assert chart["configs"][1]["is_range_slider"] == True
+        assert chart["configs"][1]["is_range_slider"]
         assert "range_slider" in chart["data"]
 
         # Update the range slider height

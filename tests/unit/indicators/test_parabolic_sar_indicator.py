@@ -317,7 +317,7 @@ class TestParabolicSARIndicator:
         current_price = 100.0
         trend = 1  # 1 for up, -1 for down
 
-        for i in range(30):
+        for _i in range(30):
             # Occasional trend changes
             if np.random.random() < 0.1:
                 trend *= -1

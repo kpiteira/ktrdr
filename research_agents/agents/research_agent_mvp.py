@@ -8,24 +8,20 @@ research workflows from hypothesis generation to results analysis.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
-from uuid import UUID, uuid4
-from enum import Enum
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Optional
+from uuid import UUID, uuid4
 
-import logging
-
-from .base import BaseResearchAgent
-from .researcher import ResearcherAgent
-from .assistant import AssistantAgent
 from ..services.database import ResearchDatabaseService
 from ..services.research_orchestrator import (
-    ResearchOrchestrator,
-    ExperimentConfig,
-    ExperimentType,
     ExperimentStatus,
+    ResearchOrchestrator,
 )
+from .assistant import AssistantAgent
+from .base import BaseResearchAgent
+from .researcher import ResearcherAgent
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +56,10 @@ class ResearchCycle:
     session_id: UUID
     strategy: ResearchStrategy
     phase: ResearchPhase
-    hypotheses: List[Dict[str, Any]]
-    experiments: List[UUID]
-    insights: List[str]
-    fitness_scores: List[float]
+    hypotheses: list[dict[str, Any]]
+    experiments: list[UUID]
+    insights: list[str]
+    fitness_scores: list[float]
     started_at: datetime
     completed_at: Optional[datetime] = None
     success_rate: Optional[float] = None
@@ -78,7 +74,7 @@ class ResearchProgress:
     active_experiments: int
     best_fitness_score: float
     avg_fitness_score: float
-    successful_strategies: List[str]
+    successful_strategies: list[str]
     failed_experiments: int
     knowledge_base_size: int
     research_velocity: float  # cycles per hour
@@ -114,7 +110,7 @@ class ResearchAgentMVP(BaseResearchAgent):
         self.current_session_id: Optional[UUID] = None
         self.current_cycle: Optional[ResearchCycle] = None
         self.research_progress: Optional[ResearchProgress] = None
-        self.active_experiments: Dict[UUID, Dict[str, Any]] = {}
+        self.active_experiments: dict[UUID, dict[str, Any]] = {}
 
         # Sub-agents (will be initialized during startup)
         self.researcher: Optional[ResearcherAgent] = None
@@ -126,8 +122,8 @@ class ResearchAgentMVP(BaseResearchAgent):
 
         # Research strategy state
         self.current_strategy = ResearchStrategy.EXPLORATORY
-        self.strategy_performance: Dict[ResearchStrategy, float] = {}
-        self.knowledge_cache: Dict[str, Any] = {}
+        self.strategy_performance: dict[ResearchStrategy, float] = {}
+        self.knowledge_cache: dict[str, Any] = {}
 
         logger.info("Info message")
 
@@ -141,7 +137,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -189,7 +185,7 @@ class ResearchAgentMVP(BaseResearchAgent):
     async def start_research_session(
         self,
         session_name: str,
-        strategic_goals: List[str],
+        strategic_goals: list[str],
         strategy: ResearchStrategy = ResearchStrategy.EXPLORATORY,
     ) -> UUID:
         """Start a new research session"""
@@ -226,7 +222,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             return session_id
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -326,7 +322,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -361,7 +357,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -387,7 +383,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
                         return exp_id, result
 
-                    except Exception as e:
+                    except Exception:
                         logger.error("Error occurred")
                         return exp_id, None
 
@@ -411,7 +407,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -429,7 +425,7 @@ class ResearchAgentMVP(BaseResearchAgent):
                     status = await self.orchestrator.get_experiment_status(exp_id)
                     if status.get("status") == ExperimentStatus.COMPLETED.value:
                         experiment_results.append(status)
-                except Exception as e:
+                except Exception:
                     logger.error("Error occurred")
 
             # Analyze results using assistant
@@ -454,7 +450,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -491,7 +487,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -523,7 +519,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
             raise
 
@@ -606,7 +602,7 @@ class ResearchAgentMVP(BaseResearchAgent):
         except Exception:
             return 0
 
-    async def _get_recent_insights(self, limit: int = 10) -> List[Dict[str, Any]]:
+    async def _get_recent_insights(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get recent insights from knowledge base"""
         try:
             return await self.db_service.search_knowledge_base(
@@ -615,7 +611,7 @@ class ResearchAgentMVP(BaseResearchAgent):
         except Exception:
             return []
 
-    async def _get_successful_patterns(self) -> List[Dict[str, Any]]:
+    async def _get_successful_patterns(self) -> list[dict[str, Any]]:
         """Get patterns from successful experiments"""
         try:
             # Get high-quality knowledge entries
@@ -668,7 +664,7 @@ class ResearchAgentMVP(BaseResearchAgent):
                 "recent_insights": recent_knowledge,
                 "updated_at": datetime.now(timezone.utc),
             }
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
 
     async def _record_cycle_failure(self, error_message: str) -> None:
@@ -684,7 +680,7 @@ class ResearchAgentMVP(BaseResearchAgent):
             quality_score=0.1,
         )
 
-    async def get_research_status(self) -> Dict[str, Any]:
+    async def get_research_status(self) -> dict[str, Any]:
         """Get comprehensive research status"""
         status = {
             "agent_id": self.agent_id,
@@ -842,7 +838,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             logger.info("Info message")
 
-        except Exception as e:
+        except Exception:
             logger.error("Error occurred")
 
 

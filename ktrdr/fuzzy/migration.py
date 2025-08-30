@@ -58,7 +58,7 @@ class FuzzyConfigMigrator:
         try:
             # Validate the input configuration
             loader = FuzzyConfigLoader()
-            fuzzy_config = loader.load_from_dict(single_config)
+            loader.load_from_dict(single_config)
 
             # Extract indicators from the single config
             indicators = list(single_config.keys())
@@ -128,7 +128,7 @@ class FuzzyConfigMigrator:
         try:
             # Validate the input configuration
             loader = FuzzyConfigLoader()
-            fuzzy_config = loader.load_from_dict(single_config)
+            loader.load_from_dict(single_config)
 
             # Extract indicators from the single config
             indicators = list(single_config.keys())
@@ -227,7 +227,7 @@ class FuzzyConfigMigrator:
         # Single-timeframe configs are flat dictionaries with indicator names as keys
         if isinstance(config, dict) and config:
             # Check if all top-level keys look like indicator names
-            for key, value in config.items():
+            for _key, value in config.items():
                 if isinstance(value, dict) and any(
                     mf_key in value
                     for mf_key in ["low", "high", "neutral", "negative", "positive"]

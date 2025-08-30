@@ -5,7 +5,7 @@ def test_ktrdr_imports():
 
         assert True
     except ImportError:
-        assert False, "Failed to import ktrdr package"
+        raise AssertionError("Failed to import ktrdr package") from None
 
 
 def test_environment():

@@ -274,7 +274,7 @@ class TestFuzzyPipelineService:
         assert "GOOGL" in results
         assert "MSFT" in results
 
-        for symbol, result in results.items():
+        for _symbol, result in results.items():
             assert isinstance(result, IntegratedFuzzyResult)
 
     @patch("ktrdr.services.fuzzy_pipeline_service.create_integrated_pipeline")
@@ -293,7 +293,7 @@ class TestFuzzyPipelineService:
 
         def side_effect(*args, **kwargs):
             # Check if data was requested for GOOGL (will be in market data)
-            market_data = args[0] if args else kwargs.get("market_data", {})
+            args[0] if args else kwargs.get("market_data", {})
             if mock_data_manager.get_data.call_count == 2:  # Second call is for GOOGL
                 raise Exception("Failed to process GOOGL")
 

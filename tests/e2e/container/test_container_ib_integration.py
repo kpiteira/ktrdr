@@ -289,7 +289,7 @@ class TestContainerIbRefactorValidation:
 
         # All should succeed
         assert len(collected_results) == 3
-        for endpoint, status_code in collected_results:
+        for _endpoint, status_code in collected_results:
             assert status_code == 200
 
 

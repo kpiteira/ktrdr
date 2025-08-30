@@ -51,7 +51,7 @@ class TestEnd2EndFuzzyIntegration:
 
         # 1h timeframe (all points)
         dates_1h = pd.date_range("2024-01-01", periods=n_points, freq="1h")
-        for i, date in enumerate(dates_1h):
+        for i, _date in enumerate(dates_1h):
             price = base_price[i]
             data_1h.append(
                 {
@@ -65,7 +65,7 @@ class TestEnd2EndFuzzyIntegration:
 
         # 4h timeframe (every 4th point)
         dates_4h = pd.date_range("2024-01-01", periods=n_points // 4, freq="4h")
-        for i, date in enumerate(dates_4h):
+        for i, _date in enumerate(dates_4h):
             idx = i * 4
             if idx < len(base_price):
                 price = base_price[idx]
@@ -81,7 +81,7 @@ class TestEnd2EndFuzzyIntegration:
 
         # 1d timeframe (every 24th point)
         dates_1d = pd.date_range("2024-01-01", periods=n_points // 24, freq="1d")
-        for i, date in enumerate(dates_1d):
+        for i, _date in enumerate(dates_1d):
             idx = i * 24
             if idx < len(base_price):
                 price = base_price[idx]
@@ -367,7 +367,7 @@ class TestEnd2EndFuzzyIntegration:
             assert len(tf_result) > 0, f"No fuzzy values for timeframe {timeframe}"
 
             # Check that values are valid
-            for fuzzy_set, value in tf_result.items():
+            for _fuzzy_set, value in tf_result.items():
                 assert 0.0 <= value <= 1.0
                 assert not np.isnan(value)
 
@@ -776,6 +776,6 @@ class TestFuzzyValueValidation:
         ), "Should have fuzzy values from at least one indicator"
 
         # All values should be valid
-        for key, value in fuzzy_values.items():
+        for _key, value in fuzzy_values.items():
             assert 0.0 <= value <= 1.0
             assert not np.isnan(value)

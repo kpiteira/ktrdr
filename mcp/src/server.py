@@ -1,12 +1,13 @@
 """KTRDR MCP Server - Main entry point"""
 
-import asyncio
 import json
-from typing import Any, Dict, List, Optional
-from mcp.server.fastmcp import FastMCP
+from typing import Any, Optional
+
 import structlog
 
-from .api_client import KTRDRAPIClient, get_api_client
+from mcp.server.fastmcp import FastMCP
+
+from .api_client import get_api_client
 from .storage_manager import get_storage
 
 logger = structlog.get_logger()
@@ -27,7 +28,7 @@ def hello_ktrdr(name: str = "World") -> str:
 
 
 @mcp.tool()
-async def check_backend_health() -> Dict[str, Any]:
+async def check_backend_health() -> dict[str, Any]:
     """Check if KTRDR backend is healthy and accessible"""
     try:
         async with get_api_client() as client:
@@ -49,7 +50,7 @@ async def check_backend_health() -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_available_symbols() -> List[Dict[str, Any]]:
+async def get_available_symbols() -> list[dict[str, Any]]:
     """Get list of available trading symbols with metadata from KTRDR backend"""
     try:
         async with get_api_client() as client:
@@ -69,7 +70,7 @@ async def get_market_data(
     end_date: Optional[str] = None,
     trading_hours_only: bool = False,
     limit_bars: int = 50,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get cached market data for analysis (fast, local data only)
 
     ⚠️ RESPONSE SIZE LIMITS: This tool can return large datasets. For best results:
@@ -123,7 +124,7 @@ async def load_data_from_source(
     mode: str = "tail",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Instruct backend to load data from external sources (e.g., Interactive Brokers)
 
     Args:
@@ -152,7 +153,7 @@ async def load_data_from_source(
 
 
 @mcp.tool()
-async def get_data_summary(symbol: str, timeframe: str = "1h") -> Dict[str, Any]:
+async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]:
     """Get summary information about available data for a symbol
 
     NOTE: This tool provides metadata about available data ranges without
@@ -188,8 +189,8 @@ async def get_data_summary(symbol: str, timeframe: str = "1h") -> Dict[str, Any]
 
 @mcp.tool()
 async def create_experiment(
-    name: str, description: str = "", config: Optional[Dict] = None
-) -> Dict[str, Any]:
+    name: str, description: str = "", config: Optional[dict] = None
+) -> dict[str, Any]:
     """Create a new research experiment
 
     Args:
@@ -215,7 +216,7 @@ async def create_experiment(
 
 
 @mcp.tool()
-async def list_experiments(status: Optional[str] = None, limit: int = 10) -> List[Dict]:
+async def list_experiments(status: Optional[str] = None, limit: int = 10) -> list[dict]:
     """List research experiments
 
     Args:
@@ -235,8 +236,8 @@ async def list_experiments(status: Optional[str] = None, limit: int = 10) -> Lis
 
 @mcp.tool()
 async def save_strategy(
-    name: str, config: Dict[str, Any], description: str = ""
-) -> Dict[str, Any]:
+    name: str, config: dict[str, Any], description: str = ""
+) -> dict[str, Any]:
     """Save a trading strategy configuration
 
     Args:
@@ -261,7 +262,7 @@ async def save_strategy(
 
 
 @mcp.tool()
-async def load_strategy(name: str) -> Dict[str, Any]:
+async def load_strategy(name: str) -> dict[str, Any]:
     """Load a trading strategy configuration by name"""
     try:
         storage = await get_storage()
@@ -278,7 +279,7 @@ async def load_strategy(name: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def list_strategies() -> List[Dict]:
+async def list_strategies() -> list[dict]:
     """List all saved trading strategies"""
     try:
         storage = await get_storage()
@@ -296,8 +297,8 @@ async def add_knowledge(
     topic: str,
     content: str,
     source_type: str = "manual",
-    tags: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    tags: Optional[list[str]] = None,
+) -> dict[str, Any]:
     """Add knowledge to the research knowledge base
 
     Args:
@@ -325,8 +326,8 @@ async def add_knowledge(
 
 @mcp.tool()
 async def search_knowledge(
-    topic: Optional[str] = None, tags: Optional[List[str]] = None
-) -> List[Dict]:
+    topic: Optional[str] = None, tags: Optional[list[str]] = None
+) -> list[dict]:
     """Search the knowledge base
 
     Args:
@@ -345,7 +346,7 @@ async def search_knowledge(
 
 
 @mcp.tool()
-async def get_available_indicators() -> List[Dict[str, Any]]:
+async def get_available_indicators() -> list[dict[str, Any]]:
     """Get list of available indicators that can be used in strategies
 
     Returns:
@@ -362,7 +363,7 @@ async def get_available_indicators() -> List[Dict[str, Any]]:
 
 
 @mcp.tool()
-async def get_available_strategies() -> List[Dict[str, Any]]:
+async def get_available_strategies() -> list[dict[str, Any]]:
     """Get list of available trading strategies
 
     Returns:
@@ -387,10 +388,10 @@ async def start_model_training(
     experiment_id: str,
     symbol: str,
     timeframe: str = "1h",
-    training_config: Optional[Dict[str, Any]] = None,
+    training_config: Optional[dict[str, Any]] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Start neural network model training for a trading strategy
 
     This is a CORE capability that enables autonomous strategy discovery through
@@ -466,7 +467,7 @@ async def start_model_training(
 
 
 @mcp.tool()
-async def get_training_status(task_id: str) -> Dict[str, Any]:
+async def get_training_status(task_id: str) -> dict[str, Any]:
     """Get the status and progress of a neural network training task
 
     Args:
@@ -511,7 +512,7 @@ async def get_training_status(task_id: str) -> Dict[str, Any]:
 @mcp.tool()
 async def list_training_tasks(
     experiment_id: Optional[str] = None, status: Optional[str] = None, limit: int = 10
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """List neural network training tasks
 
     Args:
@@ -537,7 +538,7 @@ async def list_training_tasks(
 
 
 @mcp.tool()
-async def get_model_performance(task_id: str) -> Dict[str, Any]:
+async def get_model_performance(task_id: str) -> dict[str, Any]:
     """Get detailed performance metrics for a trained model
 
     Args:
@@ -561,7 +562,7 @@ async def get_model_performance(task_id: str) -> Dict[str, Any]:
 @mcp.tool()
 async def save_trained_model(
     task_id: str, model_name: str, description: str = ""
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Save a trained neural network model for later use
 
     Args:
@@ -611,7 +612,7 @@ async def save_trained_model(
 
 
 @mcp.tool()
-async def load_trained_model(model_name: str) -> Dict[str, Any]:
+async def load_trained_model(model_name: str) -> dict[str, Any]:
     """Load a previously saved neural network model
 
     Args:
@@ -647,7 +648,7 @@ async def load_trained_model(model_name: str) -> Dict[str, Any]:
 @mcp.tool()
 async def test_model_prediction(
     model_name: str, symbol: str, timeframe: str = "1h", test_date: Optional[str] = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Test a trained model's prediction capability on specific data
 
     Args:
@@ -689,7 +690,7 @@ async def run_strategy_backtest(
     end_date: str,
     initial_capital: float = 10000.0,
     backtest_name: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run a comprehensive backtest for a trading strategy
 
     This is a CORE capability that enables rigorous strategy evaluation through
@@ -715,7 +716,7 @@ async def run_strategy_backtest(
             backtest_name = f"{strategy_name}_{symbol}_{start_date}_{end_date}"
 
         # Store backtest task in experiment
-        storage = await get_storage()
+        await get_storage()
 
         # Start backtest through backend API (CORRECTED API CALL)
         async with get_api_client() as client:
@@ -748,7 +749,7 @@ async def run_strategy_backtest(
 
 
 @mcp.tool()
-async def get_backtest_results(backtest_id: int) -> Dict[str, Any]:
+async def get_backtest_results(backtest_id: int) -> dict[str, Any]:
     """Get detailed results from a completed backtest
 
     Args:
@@ -795,8 +796,8 @@ async def get_backtest_results(backtest_id: int) -> Dict[str, Any]:
 
 @mcp.tool()
 async def compare_backtests(
-    backtest_ids: List[int], metrics: Optional[List[str]] = None
-) -> Dict[str, Any]:
+    backtest_ids: list[int], metrics: Optional[list[str]] = None
+) -> dict[str, Any]:
     """Compare performance metrics across multiple backtests
 
     Args:
@@ -881,13 +882,13 @@ async def compare_backtests(
 @mcp.tool()
 async def run_walk_forward_analysis(
     experiment_id: str,
-    strategy_config: Dict[str, Any],
+    strategy_config: dict[str, Any],
     symbol: str,
     start_date: str,
     end_date: str,
     train_period_months: int = 12,
     test_period_months: int = 3,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run walk-forward analysis to test strategy robustness over time
 
     Walk-forward analysis divides the data into multiple training and testing periods
@@ -909,7 +910,8 @@ async def run_walk_forward_analysis(
         # This would be implemented with multiple backtests across rolling windows
         # For now, return a structured response indicating the capability
 
-        from datetime import datetime, timedelta
+        from datetime import datetime
+
         import dateutil.relativedelta as rd
 
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -963,7 +965,7 @@ async def run_walk_forward_analysis(
 @mcp.tool()
 async def get_backtest_performance_summary(
     symbol: Optional[str] = None, strategy_name: Optional[str] = None, limit: int = 10
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get a performance summary of recent backtests
 
     Args:
@@ -989,7 +991,7 @@ async def get_backtest_performance_summary(
         # Calculate summary statistics
         summary = {
             "total_backtests": len(backtests),
-            "symbols_tested": list(set(bt["symbol"] for bt in backtests)),
+            "symbols_tested": list({bt["symbol"] for bt in backtests}),
             "date_range": {
                 "earliest": min(bt["start_date"] for bt in backtests),
                 "latest": max(bt["end_date"] for bt in backtests),

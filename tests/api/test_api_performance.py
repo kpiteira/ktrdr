@@ -49,7 +49,7 @@ class PerformanceMetrics:
         # Measure initial resource usage
         start_memory = self.process.memory_info().rss / 1024 / 1024  # MB
         start_time = time.time()
-        start_cpu = self.process.cpu_percent()
+        self.process.cpu_percent()
 
         # Yield control to execute the test
         yield
@@ -574,7 +574,7 @@ def test_memory_usage_stability(client, mock_fuzzy_service):
         "ktrdr.api.dependencies.get_fuzzy_service", return_value=mock_fuzzy_service
     ):
         for i in range(num_requests):
-            response = client.post("/api/v1/fuzzy/data", json=request_data)
+            client.post("/api/v1/fuzzy/data", json=request_data)
             # Record memory every 10 requests
             if i % 10 == 0:
                 # Force garbage collection to measure stable memory usage

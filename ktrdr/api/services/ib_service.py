@@ -280,7 +280,7 @@ class IbService:
             from ktrdr.ib.pool_manager import get_shared_ib_pool
 
             pool = get_shared_ib_pool()
-            pool_stats = pool.get_pool_stats()
+            pool.get_pool_stats()
             pool_available = True  # Pool created successfully
         except Exception as e:
             logger.warning(f"IB connection pool not available: {e}")
@@ -330,7 +330,7 @@ class IbService:
                     logger.warning(
                         f"❌ Level 2 failed: managedAccounts call failed: {e}"
                     )
-                    raise Exception("Managed accounts access failed")
+                    raise Exception("Managed accounts access failed") from e
 
                 api_test_ok = True
                 logger.info(

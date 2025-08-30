@@ -2,12 +2,12 @@
 Pytest configuration and fixtures for research agents tests
 """
 
-import asyncio
 import os
+from collections.abc import AsyncGenerator
+from uuid import uuid4
+
 import pytest
 import pytest_asyncio
-from typing import AsyncGenerator, Generator
-from uuid import uuid4
 
 # Import test dependencies
 try:
@@ -17,14 +17,13 @@ try:
 except ImportError:
     pytest.skip("Test dependencies not available", allow_module_level=True)
 
-from research_agents.services.database import (
-    ResearchDatabaseService,
-    DatabaseConfig,
-    create_database_service,
-)
-from research_agents.services.api import create_app
 from datetime import datetime
 
+from research_agents.services.api import create_app
+from research_agents.services.database import (
+    DatabaseConfig,
+    ResearchDatabaseService,
+)
 
 # Test database configuration
 TEST_DB_CONFIG = DatabaseConfig(
@@ -116,11 +115,9 @@ async def _cleanup_test_data(db: ResearchDatabaseService) -> None:
 @pytest.fixture
 def test_app():
     """Create a test FastAPI application."""
-    from research_agents.services.api import create_app
-    from unittest.mock import AsyncMock
-
     # Get the app but skip lifespan
     import os
+    from unittest.mock import AsyncMock
 
     os.environ["TESTING"] = "1"  # Signal to skip database initialization
 
@@ -222,7 +219,6 @@ def test_app():
     mock_db.execute_query.side_effect = mock_execute_query_side_effect
 
     # Experiment-related mocks
-    test_experiment_id = "87654321-4321-8765-4321-876543218765"
     created_experiments = {}
     experiment_counter = 0
 

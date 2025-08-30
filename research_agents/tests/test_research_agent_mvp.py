@@ -5,29 +5,27 @@ Tests the unified autonomous research system following the implementation
 plan's quality-first approach with comprehensive workflow and error handling testing.
 """
 
-import asyncio
-import pytest
-import pytest_asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
-from typing import Dict, Any, List
+from uuid import uuid4
 
+import pytest
+import pytest_asyncio
+
+from research_agents.agents.assistant import AssistantAgent
 from research_agents.agents.research_agent_mvp import (
     ResearchAgentMVP,
-    ResearchPhase,
-    ResearchStrategy,
     ResearchCycle,
+    ResearchPhase,
     ResearchProgress,
-    create_research_agent_mvp,
+    ResearchStrategy,
 )
 from research_agents.agents.researcher import ResearcherAgent
-from research_agents.agents.assistant import AssistantAgent
 from research_agents.services.database import ResearchDatabaseService
 from research_agents.services.research_orchestrator import (
-    ResearchOrchestrator,
     ExperimentConfig,
     ExperimentType,
+    ResearchOrchestrator,
 )
 
 
@@ -1103,7 +1101,7 @@ class TestIntegrationScenarios:
                     with patch.object(research_agent_mvp, "_refresh_knowledge_cache"):
 
                         # Execute multiple cycles
-                        for i in range(3):
+                        for _i in range(3):
                             await research_agent_mvp._execute_research_cycle()
 
                         # Verify progress tracking

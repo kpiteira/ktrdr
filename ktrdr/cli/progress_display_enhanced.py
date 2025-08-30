@@ -8,7 +8,7 @@ and time estimation.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from rich.console import Console
 from rich.live import Live
@@ -61,7 +61,7 @@ class EnhancedCLIProgressDisplay:
         self,
         operation_name: str,
         total_steps: int,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Start rich progress display for an operation.
@@ -177,7 +177,7 @@ class EnhancedCLIProgressDisplay:
         self.operation_start_time = None
 
     def report_error(
-        self, error_message: str, context: Optional[Dict[str, Any]] = None
+        self, error_message: str, context: Optional[dict[str, Any]] = None
     ) -> None:
         """
         Report an error with contextual information.
@@ -203,7 +203,7 @@ class EnhancedCLIProgressDisplay:
         self.console.print(error_text, style="bold red")
 
     def _create_operation_title(
-        self, operation_name: str, context: Optional[Dict[str, Any]]
+        self, operation_name: str, context: Optional[dict[str, Any]]
     ) -> str:
         """Create enhanced operation title with context."""
         if not context:

@@ -294,7 +294,7 @@ class TestIbConnectionPool:
 
         # Should raise ConnectionError for pool exhausted
         assert "pool exhausted" in str(exc_info.value)
-        
+
         # Connection should not be stopped since it's healthy and we're just at limit
         assert not hasattr(healthy_conn, 'stop') or not healthy_conn.stop.called
 

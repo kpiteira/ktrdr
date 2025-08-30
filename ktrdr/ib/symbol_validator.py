@@ -143,7 +143,7 @@ class IbSymbolValidator:
                     if hasattr(settings, "data_dir")
                     else Path("data")
                 )
-            except:
+            except Exception:
                 data_dir = Path("data")
             self._cache_file = data_dir / "symbol_discovery_cache.json"
 

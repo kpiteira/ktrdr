@@ -615,7 +615,7 @@ class TrainingStabilizer:
         """Verify checkpoint integrity using hashes."""
         try:
             model_state = checkpoint_data["model_state_dict"]
-            optimizer_state = checkpoint_data["optimizer_state_dict"]
+            checkpoint_data["optimizer_state_dict"]
             stored_model_hash = checkpoint_data.get("model_hash", "")
             stored_optimizer_hash = checkpoint_data.get("optimizer_hash", "")
 

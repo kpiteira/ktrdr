@@ -4,18 +4,18 @@ Simple Tests for KTRDR Integration
 Basic tests to verify core functionality works.
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from research_agents.services.ktrdr_integration import (
+    BacktestConfig,
+    BacktestResults,
+    BacktestStatus,
     KTRDRIntegrationService,
     TrainingConfig,
-    BacktestConfig,
     TrainingResults,
-    BacktestResults,
     TrainingStatus,
-    BacktestStatus,
-    create_ktrdr_integration_service,
 )
 
 
@@ -228,7 +228,7 @@ class TestBasicKTRDRIntegration:
         """Test factory function with defaults"""
         with patch(
             "research_agents.services.ktrdr_integration.KTRDRIntegrationService.initialize"
-        ) as mock_init:
+        ):
             # Can't actually call async factory in sync test, but can test service creation
             service = KTRDRIntegrationService()
             assert isinstance(service, KTRDRIntegrationService)
@@ -238,7 +238,7 @@ class TestBasicKTRDRIntegration:
         """Test factory function with custom params"""
         with patch(
             "research_agents.services.ktrdr_integration.KTRDRIntegrationService.initialize"
-        ) as mock_init:
+        ):
             service = KTRDRIntegrationService(
                 ktrdr_api_base_url="https://custom:9000", api_key="custom-key"
             )

@@ -148,7 +148,7 @@ class TestTriangularMF:
     def test_unsupported_input_type(self):
         """Test that an error is raised for unsupported input types."""
         mf = TriangularMF([0, 50, 100])
-        with pytest.raises(TypeError) as exc_info:
+        with pytest.raises(TypeError):
             mf.evaluate("not a number")
 
 
@@ -289,7 +289,7 @@ class TestTrapezoidalMF:
     def test_unsupported_input_type(self):
         """Test that an error is raised for unsupported input types."""
         mf = TrapezoidalMF([0, 25, 75, 100])
-        with pytest.raises(TypeError) as exc_info:
+        with pytest.raises(TypeError):
             mf.evaluate("not a number")
 
 
@@ -425,7 +425,7 @@ class TestGaussianMF:
     def test_unsupported_input_type(self):
         """Test that an error is raised for unsupported input types."""
         mf = GaussianMF([50, 10])
-        with pytest.raises(TypeError) as exc_info:
+        with pytest.raises(TypeError):
             mf.evaluate("not a number")
 
 

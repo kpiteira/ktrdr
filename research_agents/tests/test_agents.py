@@ -2,16 +2,15 @@
 Unit tests for research agents base functionality
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
-from typing import Dict, Any
+from unittest.mock import AsyncMock
 
-from research_agents.agents.base import BaseResearchAgent, AgentError
-from research_agents.agents.researcher import ResearcherAgent
+import pytest
+
 from research_agents.agents.assistant import AssistantAgent
-from research_agents.services.database import ResearchDatabaseService, DatabaseConfig
+from research_agents.agents.base import AgentError, BaseResearchAgent
+from research_agents.agents.researcher import ResearcherAgent
+from research_agents.services.database import ResearchDatabaseService
 
 
 class MockResearchAgent(BaseResearchAgent):

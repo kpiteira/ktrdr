@@ -8,7 +8,7 @@ components with GPU acceleration and host-level resource management.
 import asyncio
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 class TrainingSession:
     """Represents an active training session with all its resources."""
 
-    def __init__(self, session_id: str, config: Dict[str, Any]):
+    def __init__(self, session_id: str, config: dict[str, Any]):
         self.session_id = session_id
         self.config = config
         self.status = "initializing"
@@ -71,7 +71,7 @@ class TrainingSession:
         # Error tracking
         self.error = None
 
-    def update_progress(self, epoch: int, batch: int, metrics: Dict[str, float]):
+    def update_progress(self, epoch: int, batch: int, metrics: dict[str, float]):
         """Update training progress and metrics."""
         self.current_epoch = epoch
         self.current_batch = batch
@@ -91,7 +91,7 @@ class TrainingSession:
                 if key not in self.best_metrics or value > self.best_metrics[key]:
                     self.best_metrics[key] = value
 
-    def get_progress_dict(self) -> Dict[str, Any]:
+    def get_progress_dict(self) -> dict[str, Any]:
         """Get progress information as dictionary."""
         return {
             "epoch": self.current_epoch,
@@ -105,7 +105,7 @@ class TrainingSession:
             ),
         }
 
-    def get_resource_usage(self) -> Dict[str, Any]:
+    def get_resource_usage(self) -> dict[str, Any]:
         """Get current resource usage information."""
         resource_info = {
             "gpu_allocated": self.gpu_manager is not None and self.gpu_manager.enabled,
@@ -195,7 +195,7 @@ class TrainingService:
     ):
         self.max_concurrent_sessions = max_concurrent_sessions
         self.session_timeout_minutes = session_timeout_minutes
-        self.sessions: Dict[str, TrainingSession] = {}
+        self.sessions: dict[str, TrainingSession] = {}
 
         # Global resource managers
         self.global_gpu_manager: Optional[GPUMemoryManager] = None
@@ -229,7 +229,7 @@ class TrainingService:
                     profiling_interval_seconds=1.0,
                 )
                 self.global_gpu_manager = GPUMemoryManager(gpu_config)
-                logger.info(f"Global GPU manager initialized with Apple Silicon MPS")
+                logger.info("Global GPU manager initialized with Apple Silicon MPS")
             else:
                 logger.info("No GPU available (CUDA or MPS), running in CPU-only mode")
         except Exception as e:
@@ -237,7 +237,7 @@ class TrainingService:
             self.global_gpu_manager = None
 
     async def create_session(
-        self, config: Dict[str, Any], session_id: Optional[str] = None
+        self, config: dict[str, Any], session_id: Optional[str] = None
     ) -> str:
         """
         Create a new training session.
@@ -294,7 +294,7 @@ class TrainingService:
         except Exception as e:
             # Cleanup on failure
             await session.cleanup()
-            raise Exception(f"Failed to create training session: {str(e)}")
+            raise Exception(f"Failed to create training session: {str(e)}") from e
 
     async def _initialize_session_resources(self, session: TrainingSession):
         """Initialize resources for a training session."""
@@ -407,7 +407,7 @@ class TrainingService:
             if torch.backends.mps.is_available():
                 device = torch.device("mps")
                 device_type = "mps"
-                logger.info(f"Using Apple Silicon MPS for GPU acceleration")
+                logger.info("Using Apple Silicon MPS for GPU acceleration")
             elif torch.cuda.is_available():
                 device = torch.device("cuda")
                 device_type = "cuda"
@@ -417,7 +417,7 @@ class TrainingService:
             else:
                 device = torch.device("cpu")
                 device_type = "cpu"
-                logger.info(f"No GPU available, using CPU")
+                logger.info("No GPU available, using CPU")
 
             # Extract training configuration from the structured format
             config = session.config
@@ -503,10 +503,10 @@ class TrainingService:
                     }
                 }
             )
-            fuzzy_engine = FuzzyEngine(fuzzy_config)
+            FuzzyEngine(fuzzy_config)
 
             # Initialize fuzzy neural processor for feature preparation
-            neural_processor = FuzzyNeuralProcessor(
+            FuzzyNeuralProcessor(
                 config={"lookback_periods": 0}  # Simple config for feature processing
             )
 
@@ -723,7 +723,7 @@ class TrainingService:
                 # Ensure exactly 20 features
                 feature_vector = feature_vector[:20]
 
-            except Exception as e:
+            except Exception:
                 # Fallback to random features if processing fails
                 feature_vector = np.random.normal(0, 0.01, 20).tolist()
 
@@ -731,7 +731,7 @@ class TrainingService:
 
         return np.array(features)
 
-    def _generate_training_labels(self, batch_data) -> List[int]:
+    def _generate_training_labels(self, batch_data) -> list[int]:
         """Generate training labels based on price movement."""
         labels = []
 
@@ -810,7 +810,7 @@ class TrainingService:
 
         return True
 
-    def get_session_status(self, session_id: str) -> Dict[str, Any]:
+    def get_session_status(self, session_id: str) -> dict[str, Any]:
         """Get detailed status of a training session."""
         if session_id not in self.sessions:
             raise Exception(f"Session {session_id} not found")
@@ -828,7 +828,7 @@ class TrainingService:
             "error": session.error,
         }
 
-    def list_sessions(self) -> List[Dict[str, Any]]:
+    def list_sessions(self) -> list[dict[str, Any]]:
         """List all training sessions with summary information."""
         sessions = []
         for session_id, session in self.sessions.items():

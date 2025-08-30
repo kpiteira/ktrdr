@@ -6,12 +6,12 @@ from training dynamics to final backtest results.
 """
 
 import asyncio
-import json
 import logging
-import aiohttp
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from uuid import UUID
+
+import aiohttp
 
 from .base import BaseResearchAgent
 
@@ -43,8 +43,8 @@ class AssistantAgent(BaseResearchAgent):
         self.max_training_time = config.get("max_training_time", 14400)  # 4 hours
 
         # Execution state
-        self.active_experiments: Dict[UUID, Dict[str, Any]] = {}
-        self.experiment_queue: List[UUID] = []
+        self.active_experiments: dict[UUID, dict[str, Any]] = {}
+        self.experiment_queue: list[UUID] = []
 
         # HTTP session for KTRDR API calls
         self.http_session: Optional[aiohttp.ClientSession] = None
@@ -141,7 +141,7 @@ class AssistantAgent(BaseResearchAgent):
                     error_details={"error": str(e), "stage": "startup"},
                 )
 
-    async def _start_experiment(self, experiment: Dict[str, Any]) -> None:
+    async def _start_experiment(self, experiment: dict[str, Any]) -> None:
         """Start executing an experiment"""
         experiment_id = experiment["id"]
 
@@ -155,7 +155,7 @@ class AssistantAgent(BaseResearchAgent):
 
         # Assign to this agent
         query = """
-        UPDATE research.experiments 
+        UPDATE research.experiments
         SET assigned_agent_id = (
             SELECT id FROM research.agent_states WHERE agent_id = $1
         )
@@ -221,8 +221,8 @@ class AssistantAgent(BaseResearchAgent):
                 del self.active_experiments[experiment_id]
 
     async def _prepare_experiment_config(
-        self, experiment: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, experiment: dict[str, Any]
+    ) -> dict[str, Any]:
         """Prepare KTRDR configuration from experiment specification"""
         config = experiment.get("configuration", {})
 
@@ -259,8 +259,8 @@ class AssistantAgent(BaseResearchAgent):
         return ktrdr_config
 
     async def _start_ktrdr_training(
-        self, experiment_id: UUID, config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, experiment_id: UUID, config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Start KTRDR training job"""
         try:
             url = f"{self.ktrdr_api_url}/training/start"
@@ -290,7 +290,6 @@ class AssistantAgent(BaseResearchAgent):
             raise Exception("No KTRDR job ID available for monitoring")
 
         start_time = datetime.utcnow()
-        last_metrics_update = start_time
 
         while True:
             try:
@@ -325,7 +324,7 @@ class AssistantAgent(BaseResearchAgent):
                                 "metrics": status["metrics"],
                             }
                         )
-                        last_metrics_update = datetime.utcnow()
+                        datetime.utcnow()
 
                         # Analyze metrics for early stopping decisions
                         if await self._should_stop_training(
@@ -344,7 +343,7 @@ class AssistantAgent(BaseResearchAgent):
                 self.logger.error(f"Error monitoring training for {experiment_id}: {e}")
                 raise
 
-    async def _get_training_status(self, job_id: str) -> Dict[str, Any]:
+    async def _get_training_status(self, job_id: str) -> dict[str, Any]:
         """Get KTRDR training job status"""
         try:
             url = f"{self.ktrdr_api_url}/training/status/{job_id}"
@@ -362,7 +361,7 @@ class AssistantAgent(BaseResearchAgent):
             return {"status": "unknown", "error": str(e)}
 
     async def _should_stop_training(
-        self, experiment_id: UUID, metrics: Dict[str, Any]
+        self, experiment_id: UUID, metrics: dict[str, Any]
     ) -> bool:
         """Decide whether to stop training early based on metrics analysis"""
         experiment_data = self.active_experiments[experiment_id]
@@ -441,7 +440,7 @@ class AssistantAgent(BaseResearchAgent):
             },
         )
 
-    async def _get_training_results(self, job_id: str) -> Dict[str, Any]:
+    async def _get_training_results(self, job_id: str) -> dict[str, Any]:
         """Get final training results from KTRDR"""
         try:
             url = f"{self.ktrdr_api_url}/training/results/{job_id}"
@@ -457,7 +456,7 @@ class AssistantAgent(BaseResearchAgent):
             self.logger.error(f"Error getting training results: {e}")
             return {"error": str(e), "status": "failed"}
 
-    async def _calculate_fitness_score(self, results: Dict[str, Any]) -> float:
+    async def _calculate_fitness_score(self, results: dict[str, Any]) -> float:
         """Calculate fitness score based on training results"""
         if results.get("status") == "failed":
             return 0.0
@@ -490,7 +489,7 @@ class AssistantAgent(BaseResearchAgent):
         return min(1.0, max(0.0, fitness_score))
 
     async def _generate_experiment_insights(
-        self, experiment_id: UUID, results: Dict[str, Any]
+        self, experiment_id: UUID, results: dict[str, Any]
     ) -> None:
         """Generate insights from successful experiment"""
         experiment = self.active_experiments[experiment_id]["experiment"]
@@ -605,8 +604,8 @@ class AssistantAgent(BaseResearchAgent):
     # ========================================================================
 
     async def execute_experiment(
-        self, experiment_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, experiment_config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute an experiment with the given configuration"""
         try:
             # If we have a mock ktrdr_client (for tests), use it directly
@@ -630,7 +629,7 @@ class AssistantAgent(BaseResearchAgent):
 
             raise AgentError(f"Experiment execution failed: {e}") from e
 
-    async def monitor_training(self, training_id: str) -> Dict[str, Any]:
+    async def monitor_training(self, training_id: str) -> dict[str, Any]:
         """Monitor the status of a training session"""
         # If we have a mock ktrdr_client (for tests), use it directly
         if hasattr(self.ktrdr_client, "get_training_status"):
@@ -645,7 +644,7 @@ class AssistantAgent(BaseResearchAgent):
             "total_epochs": 10,
         }
 
-    async def analyze_results(self, training_results: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze_results(self, training_results: dict[str, Any]) -> dict[str, Any]:
         """Analyze training/backtesting results"""
         fitness_score = training_results.get("fitness_score", 0.0)
 
@@ -666,8 +665,8 @@ class AssistantAgent(BaseResearchAgent):
         return analysis
 
     async def extract_knowledge(
-        self, experiment_results: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, experiment_results: dict[str, Any]
+    ) -> dict[str, Any]:
         """Extract knowledge insights from experiment results"""
         knowledge = {
             "insights": [

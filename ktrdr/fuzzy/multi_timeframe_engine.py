@@ -265,7 +265,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                 indicator_fuzzy_sets = {}
                 for key, fuzzy_set_config in tf_config.fuzzy_sets.items():
                     if key.startswith(f"{indicator}_"):
-                        set_name = key[len(f"{indicator}_") :]
+                        key[len(f"{indicator}_") :]
                         for fs_name, mf_config in fuzzy_set_config.root.items():
                             indicator_fuzzy_sets[fs_name] = mf_config
 
@@ -436,7 +436,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                 set(timeframe_filter)
             )
 
-        return sorted(list(candidate_timeframes))
+        return sorted(candidate_timeframes)
 
     def _process_timeframe(
         self, timeframe: str, indicators: dict[str, float]

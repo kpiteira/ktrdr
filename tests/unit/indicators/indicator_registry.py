@@ -8,7 +8,7 @@ automatically validated by the testing framework.
 """
 
 import logging
-from typing import Any, Dict, List, Type
+from typing import Any
 
 from ktrdr.indicators import BaseIndicator
 
@@ -20,12 +20,12 @@ INDICATOR_REGISTRY = {}
 
 
 def register_indicator(
-    indicator_class: Type[BaseIndicator],
-    default_params: Dict[str, Any] = None,
-    reference_datasets: List[str] = None,
-    reference_values: Dict[str, Dict[int, float]] = None,
+    indicator_class: type[BaseIndicator],
+    default_params: dict[str, Any] = None,
+    reference_datasets: list[str] = None,
+    reference_values: dict[str, dict[int, float]] = None,
     tolerance: float = 0.01,
-    known_edge_cases: List[Dict[str, Any]] = None,
+    known_edge_cases: list[dict[str, Any]] = None,
 ):
     """
     Register an indicator for automated validation.
@@ -55,7 +55,7 @@ def register_indicator(
     logger.info(f"Registered indicator {indicator_name} for automated validation")
 
 
-def get_registered_indicators() -> Dict[str, Dict[str, Any]]:
+def get_registered_indicators() -> dict[str, dict[str, Any]]:
     """
     Get all registered indicators and their validation data.
 

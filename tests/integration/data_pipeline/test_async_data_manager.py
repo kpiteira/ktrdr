@@ -128,7 +128,7 @@ class TestDataManagerConstruction:
         manager = DataManager()
 
         # Should configure adapter based on environment
-        assert manager.adapter.use_host_service == True
+        assert manager.adapter.use_host_service
         assert "test:8001" in manager.adapter.host_service_url
 
 
@@ -393,7 +393,7 @@ class TestDataManagerPerformance:
 
         tasks = [manager.load_data(f"SYMBOL{i}", "1d") for i in range(5)]
 
-        results = await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks)
         end_time = asyncio.get_event_loop().time()
 
         # Should complete concurrently (much faster than sequential)
@@ -440,7 +440,7 @@ class TestDataManagerHealthChecks:
         assert isinstance(config_info, dict)
         assert config_info["max_gap_percentage"] == 10.0
         assert config_info["default_repair_method"] == "interpolate"
-        assert config_info["enable_ib"] == True
+        assert config_info["enable_ib"]
 
 
 class TestDataManagerBackwardCompatibility:

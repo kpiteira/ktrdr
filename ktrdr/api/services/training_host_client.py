@@ -104,7 +104,7 @@ class TrainingHostClient:
                 )
 
         except httpx.RequestError as e:
-            raise TrainingHostServiceError(f"Connection error: {str(e)}")
+            raise TrainingHostServiceError(f"Connection error: {str(e)}") from e
 
     async def start_training_session(self, config: dict[str, Any]) -> str:
         """
@@ -176,7 +176,7 @@ class TrainingHostClient:
                 )
 
         except httpx.RequestError as e:
-            raise TrainingHostServiceError(f"Connection error: {str(e)}")
+            raise TrainingHostServiceError(f"Connection error: {str(e)}") from e
 
     async def get_training_status(self, session_id: str) -> dict[str, Any]:
         """
@@ -201,7 +201,7 @@ class TrainingHostClient:
                 )
 
         except httpx.RequestError as e:
-            raise TrainingHostServiceError(f"Connection error: {str(e)}")
+            raise TrainingHostServiceError(f"Connection error: {str(e)}") from e
 
     async def stop_training_session(
         self, session_id: str, save_checkpoint: bool = True
@@ -237,7 +237,7 @@ class TrainingHostClient:
                 )
 
         except httpx.RequestError as e:
-            raise TrainingHostServiceError(f"Connection error: {str(e)}")
+            raise TrainingHostServiceError(f"Connection error: {str(e)}") from e
 
     async def list_training_sessions(self) -> list[dict[str, Any]]:
         """
@@ -260,7 +260,7 @@ class TrainingHostClient:
                 )
 
         except httpx.RequestError as e:
-            raise TrainingHostServiceError(f"Connection error: {str(e)}")
+            raise TrainingHostServiceError(f"Connection error: {str(e)}") from e
 
     async def cleanup_session(self, session_id: str) -> dict[str, Any]:
         """
@@ -288,7 +288,7 @@ class TrainingHostClient:
                 )
 
         except httpx.RequestError as e:
-            raise TrainingHostServiceError(f"Connection error: {str(e)}")
+            raise TrainingHostServiceError(f"Connection error: {str(e)}") from e
 
     async def wait_for_completion(
         self,

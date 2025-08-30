@@ -8,7 +8,7 @@ This module provides utilities for:
 """
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -30,7 +30,7 @@ class IndicatorValidationResult:
         failed_points: int,
         max_deviation: float,
         avg_deviation: float,
-        details: Dict[int, Dict[str, Any]] = None,
+        details: dict[int, dict[str, Any]] = None,
     ):
         """
         Initialize the validation result.
@@ -108,7 +108,7 @@ class IndicatorValidationResult:
 def validate_indicator_against_reference(
     indicator: BaseIndicator,
     data: pd.DataFrame,
-    reference_values: Dict[int, float],
+    reference_values: dict[int, float],
     tolerance: float = 0.01,
     relative: bool = False,
 ) -> IndicatorValidationResult:
@@ -131,6 +131,7 @@ def validate_indicator_against_reference(
         result = indicator.compute(data)
     except Exception as e:
         raise DataError(
+
             message=f"Error computing indicator: {str(e)}",
             error_code="DATA-ComputationError",
             details={"indicator": indicator.name},
@@ -221,7 +222,7 @@ def validate_indicator_against_reference(
 
 
 def create_standard_test_data(
-    patterns: List[Tuple[float, int, str]],
+    patterns: list[tuple[float, int, str]],
     start_date: str = "2023-01-01",
     include_ohlcv: bool = True,
 ) -> pd.DataFrame:
@@ -282,10 +283,10 @@ def create_standard_test_data(
 def generate_indicator_report(
     indicator: BaseIndicator,
     data: pd.DataFrame,
-    expected_values: Dict[int, float] = None,
-    key_points: List[int] = None,
+    expected_values: dict[int, float] = None,
+    key_points: list[int] = None,
     full: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate a comprehensive report about an indicator's behavior.
 

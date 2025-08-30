@@ -54,7 +54,7 @@ class StrategyConfigurationLoader:
             with open(config_path) as f:
                 raw_config = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML in {config_path}: {e}")
+            raise ValueError(f"Invalid YAML in {config_path}: {e}") from e
 
         if not isinstance(raw_config, dict):
             raise ValueError(
@@ -189,7 +189,7 @@ class StrategyConfigurationLoader:
         target_timeframes = TargetTimeframeConfiguration(
             mode=timeframe_config.mode,
             supported=(
-                timeframe_config.list
+                timeframe_config.timeframes
                 if timeframe_config.mode == TimeframeMode.MULTI_TIMEFRAME
                 else None
             ),
@@ -336,14 +336,14 @@ class StrategyConfigurationLoader:
             if symbols_config.mode == SymbolMode.SINGLE:
                 symbols = [symbols_config.symbol] if symbols_config.symbol else []
             else:
-                symbols = symbols_config.list or []
+                symbols = symbols_config.symbols or []
 
             if timeframes_config.mode == TimeframeMode.SINGLE:
                 timeframes = (
                     [timeframes_config.timeframe] if timeframes_config.timeframe else []
                 )
             else:
-                timeframes = timeframes_config.list or []
+                timeframes = timeframes_config.timeframes or []
 
         else:
             # Legacy format

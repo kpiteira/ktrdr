@@ -563,12 +563,12 @@ class IbConnection:
 
         except queue.Full:
             logger.error(f"Request queue full for connection {self.client_id}")
-            raise ConnectionError(f"Request queue full for connection {self.client_id}")
+            raise ConnectionError(f"Request queue full for connection {self.client_id}") from None
         except concurrent.futures.TimeoutError:
             logger.error(
                 f"Timeout waiting for result from request {request.request_id}"
             )
-            raise ConnectionError(f"Request timeout for connection {self.client_id}")
+            raise ConnectionError(f"Request timeout for connection {self.client_id}") from None
         except Exception as e:
             logger.error(f"Request {request.request_id} failed: {e}")
             raise
@@ -613,7 +613,7 @@ class IbConnection:
             logger.debug(f"Request queued for connection {self.client_id}")
 
         except queue.Full:
-            raise ConnectionError(f"Request queue full for connection {self.client_id}")
+            raise ConnectionError(f"Request queue full for connection {self.client_id}") from None
 
         # Wait for result with timeout
         try:
@@ -621,7 +621,7 @@ class IbConnection:
             return result
 
         except TimeoutError:
-            raise ConnectionError(f"Request timeout for connection {self.client_id}")
+            raise ConnectionError(f"Request timeout for connection {self.client_id}") from None
 
     def _detect_potential_sleep_wake(self) -> bool:
         """
@@ -683,7 +683,7 @@ class IbConnection:
         try:
             # Quick validation: managedAccounts() is lightweight and cached
             # If this succeeds, the connection is truly functional
-            accounts = self.ib.managedAccounts()
+            self.ib.managedAccounts()
 
             if potential_sleep:
                 logger.info(

@@ -14,12 +14,6 @@ import pytest
 
 from ktrdr.errors import DataError
 from ktrdr.visualization.data_adapter import DataAdapter
-from tests.unit.visualization.test_fixtures import (
-    edge_case_data,
-    histogram_data,
-    sample_indicators,
-    sample_price_data,
-)
 
 # Import test fixtures
 
@@ -77,7 +71,7 @@ class TestDataTransformation:
 
         # NaN values might be filtered out, so we can't directly compare lengths
         # Get count of non-NaN values in source data
-        non_nan_count = sample_indicators["sma_10"].notna().sum()
+        sample_indicators["sma_10"].notna().sum()
 
         # Check we have data points (might not be exactly the same number as source due to NaN handling)
         assert len(result) > 0
@@ -92,7 +86,7 @@ class TestDataTransformation:
             assert isinstance(item["value"], float)
 
         # Verify values are correctly transformed for non-NaN entries
-        for i, row in enumerate(sample_indicators.iterrows()):
+        for _i, row in enumerate(sample_indicators.iterrows()):
             idx, source_row = row
             source_val = source_row["sma_10"]
 
@@ -161,7 +155,7 @@ class TestDataTransformation:
         # 1. Skip NaN values entirely (item not in result)
         # 2. Include NaN values as null or undefined (value is NaN)
         # 3. Replace NaN with 0 or other default value
-        for i, row in enumerate(edge_case_data.iterrows()):
+        for _i, row in enumerate(edge_case_data.iterrows()):
             idx, source_row = row
             source_val = source_row["missing_values"]
 
@@ -188,7 +182,7 @@ class TestDataTransformation:
 
         # Verify extreme values are properly handled
         # This might handle extreme values differently, so check more flexibly
-        for i, row in enumerate(edge_case_data.iterrows()):
+        for _i, row in enumerate(edge_case_data.iterrows()):
             idx, source_row = row
             source_val = source_row["extreme_values"]
 

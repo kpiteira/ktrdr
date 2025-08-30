@@ -41,13 +41,13 @@ router = APIRouter()
     summary="List operations",
     description="""
     Get a list of all operations with optional filtering.
-    
+
     **Features:**
     - Filter by status (running, completed, failed, etc.)
     - Filter by operation type (data_load, training, etc.)
     - Pagination support
     - Sort by creation date or status
-    
+
     **Perfect for:** CLI status commands, dashboards, monitoring
     """,
 )
@@ -144,13 +144,13 @@ async def list_operations(
     summary="Get operation status",
     description="""
     Get detailed status and progress information for a specific operation.
-    
+
     **Features:**
     - Complete operation information including progress
     - Real-time status updates
     - Error details if operation failed
     - Result summary if operation completed
-    
+
     **Perfect for:** Progress monitoring, debugging, result retrieval
     """,
 )
@@ -227,13 +227,13 @@ async def get_operation_status(
     summary="Cancel operation",
     description="""
     Cancel a running or pending operation.
-    
+
     **Features:**
     - Graceful cancellation with cleanup
     - Force cancellation option for stuck operations
     - Cancellation reason tracking
     - Status verification before cancellation
-    
+
     **Perfect for:** CLI Ctrl+C handling, stuck operation recovery, resource cleanup
     """,
 )
@@ -344,12 +344,12 @@ async def cancel_operation(
     summary="Retry failed operation",
     description="""
     Retry a failed operation with the same parameters.
-    
+
     **Features:**
     - Restart failed operations
     - Preserve original parameters
     - Create new operation ID for tracking
-    
+
     **Perfect for:** Automatic retry logic, error recovery
     """,
 )

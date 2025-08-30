@@ -366,7 +366,7 @@ class FuzzyPerformanceAnalyzer:
         service: FuzzyPipelineService,
         indicator_config: dict[str, Any],
         fuzzy_config: dict[str, Any],
-        data_sizes: list[int] = [10, 30, 90, 180, 365],
+        data_sizes: list[int] = None,
         symbol: str = "AAPL",
     ) -> dict[str, Any]:
         """
@@ -382,6 +382,8 @@ class FuzzyPerformanceAnalyzer:
         Returns:
             Scalability analysis results
         """
+        if data_sizes is None:
+            data_sizes = [10, 30, 90, 180, 365]
         logger.info(f"Analyzing scalability across {len(data_sizes)} data sizes")
 
         scalability_data = []

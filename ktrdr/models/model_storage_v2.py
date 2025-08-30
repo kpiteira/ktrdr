@@ -426,7 +426,7 @@ class ModelStorageV2:
                 logger.info(
                     f"Deleting model: {metadata.strategy_name} v{metadata.model_version}"
                 )
-            except:
+            except Exception:
                 logger.info(f"Deleting model directory: {model_path}")
 
             # Remove directory and all contents

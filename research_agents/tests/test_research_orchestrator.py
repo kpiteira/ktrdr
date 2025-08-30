@@ -6,23 +6,22 @@ plan's quality-first approach with comprehensive error handling and state manage
 """
 
 import asyncio
-import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
-from typing import Dict, Any
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
+import pytest
+
+from research_agents.services.database import ResearchDatabaseService
 from research_agents.services.research_orchestrator import (
-    ResearchOrchestrator,
     ExperimentConfig,
-    ExperimentResults,
+    ExperimentExecutionError,
     ExperimentStatus,
     ExperimentType,
+    ResearchOrchestrator,
     ResearchOrchestratorError,
-    ExperimentExecutionError,
     ResourceLimitError,
 )
-from research_agents.services.database import ResearchDatabaseService
 
 
 @pytest.fixture
@@ -225,7 +224,7 @@ class TestExperimentLifecycle:
         assert status["id"] == experiment_id
         assert status["experiment_name"] == "Test Experiment"
         assert status["status"] == "running"
-        assert status["is_running"] == False  # Not in _running_experiments
+        assert not status["is_running"]  # Not in _running_experiments
         assert "runtime_info" in status
         assert status["runtime_info"]["total_experiments"] == 0
 
@@ -428,8 +427,8 @@ class TestExperimentListingAndSearch:
         assert experiments[1]["experiment_name"] == "Experiment 2"
 
         # Verify is_running status added
-        assert experiments[0]["is_running"] == False
-        assert experiments[1]["is_running"] == False
+        assert not experiments[0]["is_running"]
+        assert not experiments[1]["is_running"]
 
     @pytest.mark.asyncio
     async def test_list_experiments_with_session_filter(
@@ -522,7 +521,7 @@ class TestMetricsAndMonitoring:
         assert metrics["failed_experiments"] == 2
         assert metrics["running_experiments"] == 1
         assert metrics["max_concurrent"] == 2  # From fixture
-        assert metrics["is_initialized"] == True
+        assert metrics["is_initialized"]
         assert metrics["database_health"]["status"] == "healthy"
 
 
@@ -733,7 +732,7 @@ class TestExperimentWorkflow:
         # Step 3: Start experiment (mock execution)
         with patch.object(
             orchestrator, "_execute_experiment", new_callable=AsyncMock
-        ) as mock_execute:
+        ):
             await orchestrator.start_experiment(experiment_id)
 
             # Verify experiment is tracked
@@ -853,8 +852,8 @@ class TestPerformanceCharacteristics:
         initial_count = orchestrator._completed_experiments
 
         # Simulate many completed experiments
-        for i in range(1000):
-            experiment_id = uuid4()
+        for _i in range(1000):
+            uuid4()
             # Add to completed counter without actually running
             orchestrator._completed_experiments += 1
 

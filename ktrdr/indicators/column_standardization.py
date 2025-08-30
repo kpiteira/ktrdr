@@ -400,7 +400,7 @@ class ColumnStandardizer:
 
         # Check for consistent timeframe usage
         for tf in timeframes:
-            tf_columns = self.filter_columns_by_timeframe(columns, tf)
+            self.filter_columns_by_timeframe(columns, tf)
 
             # Check for columns that should have timeframe but don't
             for col in columns:

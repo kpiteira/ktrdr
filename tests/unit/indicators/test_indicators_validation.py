@@ -403,7 +403,7 @@ class TestAllIndicatorsValidation:
                     )
                 else:
                     try:
-                        result = indicator.compute(test["data"])
+                        indicator.compute(test["data"])
                         logger.info(
                             f"{indicator.name} handled {test['name']} correctly"
                         )

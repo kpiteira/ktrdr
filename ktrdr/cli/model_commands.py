@@ -161,7 +161,7 @@ def train_model(
             )
         except Exception as e:
             console.print(f"[red]❌ Error loading strategy config: {e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
 
         # Use strategy config or CLI overrides
         final_symbols = [symbol] if symbol else config_symbols
@@ -669,7 +669,7 @@ async def _list_models_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print("📋 Retrieving available models")
@@ -835,7 +835,7 @@ async def _test_model_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🧪 Testing model: {model_name}")
@@ -970,7 +970,7 @@ async def _make_prediction_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🔮 Making prediction with model: {model_name}")

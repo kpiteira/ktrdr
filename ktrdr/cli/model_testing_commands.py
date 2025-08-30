@@ -78,7 +78,7 @@ def test_model_signals(
             console.print(f"✅ Strategy: {orchestrator.strategy_name}")
         except Exception as e:
             console.print(f"[red]❌ Error initializing orchestrator: {str(e)}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
 
         # Test each data point
         console.print("\n🔍 Testing model decisions on recent data:")
@@ -187,4 +187,4 @@ def test_model_signals(
         import traceback
 
         console.print(traceback.format_exc())
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e

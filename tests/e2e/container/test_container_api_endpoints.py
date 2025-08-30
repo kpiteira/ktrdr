@@ -287,7 +287,7 @@ class TestContainerAsyncEndpoints:
             tasks = []
 
             # Create 5 concurrent requests
-            for i in range(5):
+            for _i in range(5):
                 task = client.get("/ib/status")
                 tasks.append(task)
 

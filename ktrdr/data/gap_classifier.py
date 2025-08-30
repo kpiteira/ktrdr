@@ -293,7 +293,7 @@ class GapClassifier:
                 end_hour = int(session_end.split(":")[0])
                 # Cross-midnight if start hour > end hour (like 22:00 to 21:59)
                 is_cross_midnight = start_hour > end_hour
-            except:
+            except Exception:
                 pass
 
         return has_sunday and no_saturday and is_cross_midnight
@@ -380,7 +380,6 @@ class GapClassifier:
         """Check if a specific date is a major holiday."""
         month = date_obj.month
         day = date_obj.day
-        year = date_obj.year
 
         # Christmas period (Dec 24-26)
         if month == 12 and day in [24, 25, 26]:

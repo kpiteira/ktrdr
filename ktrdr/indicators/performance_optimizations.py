@@ -291,7 +291,7 @@ class IncrementalProcessor:
             # Determine which rows are new
             if timeframe in self.cached_results:
                 # Only return new rows
-                cached_len = len(self.cached_results[timeframe])
+                len(self.cached_results[timeframe])
                 new_rows = standardized_result.tail(len(new_df))
                 incremental_results[timeframe] = new_rows
             else:

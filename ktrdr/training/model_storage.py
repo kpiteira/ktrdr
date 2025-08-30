@@ -184,7 +184,7 @@ class ModelStorage:
         try:
             # Try loading full model first (easier)
             model = torch.load(model_dir / "model_full.pt", map_location="cpu")
-        except:
+        except Exception:
             # Fallback: load state dict (requires rebuilding model)
             model_state = torch.load(model_dir / "model.pt", map_location="cpu")
             # Note: Would need model architecture info to rebuild

@@ -18,7 +18,7 @@ def main():
 
     try:
         # Load YAML file
-        with open("config/fuzzy.yaml", "r") as file:
+        with open("config/fuzzy.yaml") as file:
             config_dict = yaml.safe_load(file)
 
         # Validate configuration

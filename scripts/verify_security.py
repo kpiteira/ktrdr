@@ -8,15 +8,14 @@ This script verifies the functionality of security measures implemented in Task 
 import os
 import sys
 from pathlib import Path
-import yaml
 
 # Ensure ktrdr package is in path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ktrdr.config import (
     ConfigLoader,
-    get_credentials,
     InputValidator,
+    get_credentials,
     sanitize_parameters,
 )
 from ktrdr.errors import ConfigurationError, ValidationError
@@ -109,7 +108,7 @@ def verify_security_config():
     # Verify .gitignore patterns
     gitignore_path = Path(".gitignore")
     if gitignore_path.exists():
-        with open(gitignore_path, "r") as f:
+        with open(gitignore_path) as f:
             gitignore_content = f.read()
 
         security_patterns = ["*.key", "*.pem", "*.env", "*_credentials*", "*.cert"]

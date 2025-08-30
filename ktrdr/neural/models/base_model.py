@@ -134,7 +134,7 @@ class BaseNeuralModel(ABC):
 
             # CRITICAL: Log first few feature values to detect identical inputs
             if features.shape[1] >= 3:  # If we have at least 3 features
-                first_features = features[0, : min(5, features.shape[1])].cpu().numpy()
+                features[0, : min(5, features.shape[1])].cpu().numpy()
                 # debug_logger.info(f"🔍 [{ts_str}] First 5 features: {first_features}")  # Commented for performance
 
             # CRITICAL: Track feature diversity

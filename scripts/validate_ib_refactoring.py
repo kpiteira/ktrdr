@@ -14,13 +14,13 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from ktrdr.logging import get_logger
-from ktrdr.data.ib_connection_pool import get_connection_pool, acquire_ib_connection
 from ktrdr.data.ib_client_id_registry import ClientIdPurpose, get_client_id_registry
-from ktrdr.data.ib_metrics_collector import get_metrics_collector
-from ktrdr.data.ib_health_monitor import get_health_monitor
+from ktrdr.data.ib_connection_pool import acquire_ib_connection, get_connection_pool
 from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
+from ktrdr.data.ib_health_monitor import get_health_monitor
+from ktrdr.data.ib_metrics_collector import get_metrics_collector
 from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -41,9 +41,9 @@ async def validate_component_imports():
         for name, component_func in components:
             try:
                 if asyncio.iscoroutinefunction(component_func):
-                    component = await component_func()
+                    await component_func()
                 else:
-                    component = component_func()
+                    component_func()
 
                 logger.info(f"  ✅ {name}: OK")
             except Exception as e:
@@ -52,17 +52,17 @@ async def validate_component_imports():
 
         # Test component classes
         try:
-            data_fetcher = IbDataFetcherUnified(component_name="validation_test")
-            logger.info(f"  ✅ Data Fetcher Unified: OK")
+            IbDataFetcherUnified(component_name="validation_test")
+            logger.info("  ✅ Data Fetcher Unified: OK")
         except Exception as e:
             logger.error(f"  ❌ Data Fetcher Unified: {e}")
             return False
 
         try:
-            symbol_validator = IbSymbolValidatorUnified(
+            IbSymbolValidatorUnified(
                 component_name="validation_test"
             )
-            logger.info(f"  ✅ Symbol Validator Unified: OK")
+            logger.info("  ✅ Symbol Validator Unified: OK")
         except Exception as e:
             logger.error(f"  ❌ Symbol Validator Unified: {e}")
             return False

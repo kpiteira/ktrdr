@@ -7,11 +7,13 @@ Imports existing IB configuration and extends with host service settings.
 
 from pathlib import Path
 from typing import Optional
+
 from pydantic import BaseModel, Field
+
+from ktrdr.config.ib_config import IbConfig as KtrdrIbConfig
 
 # Import existing ktrdr config utilities
 from ktrdr.config.loader import ConfigLoader
-from ktrdr.config.ib_config import IbConfig as KtrdrIbConfig
 
 
 # Define host service specific configuration model

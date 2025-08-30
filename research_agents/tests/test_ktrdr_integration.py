@@ -6,24 +6,26 @@ quality-first approach with comprehensive error handling and API communication.
 """
 
 import asyncio
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
-from typing import Dict, Any
-import aiohttp
 import json
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import aiohttp
+import pytest
 
 from research_agents.services.ktrdr_integration import (
-    KTRDRIntegrationService,
-    TrainingConfig,
     BacktestConfig,
-    TrainingResults,
+    BacktestError,
     BacktestResults,
-    TrainingStatus,
     BacktestStatus,
     KTRDRIntegrationError,
+    KTRDRIntegrationService,
+    TrainingConfig,
     TrainingError,
-    BacktestError,
+    TrainingResults,
+    TrainingStatus,
+)
+from research_agents.services.ktrdr_integration import (
     ConnectionError as KTRDRConnectionError,
 )
 

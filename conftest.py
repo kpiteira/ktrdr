@@ -2,7 +2,6 @@
 Global pytest configuration for KTRDR project.
 """
 
-import pytest
 
 
 def pytest_configure(config):

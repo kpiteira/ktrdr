@@ -10,10 +10,9 @@ This script showcases the various features of the logging system:
 """
 
 import logging
-import time
 import random
-import os
 import sys
+import time
 from pathlib import Path
 
 # Add the project root to the Python path
@@ -25,12 +24,12 @@ if project_root not in sys.path:
 from ktrdr import (
     configure_logging,
     get_logger,
+    log_data_operation,
+    log_entry_exit,
+    log_error,
+    log_performance,
     set_debug_mode,
     with_context,
-    log_entry_exit,
-    log_performance,
-    log_data_operation,
-    log_error,
 )
 
 # Get a logger for this module

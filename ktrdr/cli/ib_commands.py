@@ -129,7 +129,7 @@ async def _test_connection_async(
             display_ib_connection_required_message()
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🔌 Testing IB connection (timeout: {timeout}s)")
@@ -207,7 +207,7 @@ async def _cleanup_connections_async(
             display_ib_connection_required_message()
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🧹 Cleaning up IB connections (timeout: {timeout}s)")
@@ -272,7 +272,7 @@ async def _check_status_async(
             display_ib_connection_required_message()
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print("📊 Retrieving IB connection status")

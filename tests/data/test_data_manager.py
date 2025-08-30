@@ -249,7 +249,8 @@ class TestDataManager:
     def test_filter_data_by_condition(self, data_manager, sample_data):
         """Test filtering data with custom conditions."""
         # Define a condition: close > open (bullish candles)
-        bullish_condition = lambda df: df["close"] > df["open"]
+        def bullish_condition(df):
+            return df["close"] > df["open"]
 
         # Filter for bullish candles
         bullish_df = data_manager.filter_data_by_condition(
@@ -312,7 +313,7 @@ class TestDataManager:
 
         # Add outliers
         outlier_idx = df.index[30]
-        original_value = df.loc[outlier_idx, "close"]
+        df.loc[outlier_idx, "close"]
         df.loc[outlier_idx, "close"] = df.loc[outlier_idx, "close"] * 2  # 100% spike
 
         # Test repair with outlier repair enabled (default)
@@ -395,7 +396,7 @@ class TestDataManager:
 
         # Add an extreme outlier that should be detected by any method
         outlier_idx = corrupt_data.index[30]
-        original_value = corrupt_data.loc[outlier_idx, "close"]
+        corrupt_data.loc[outlier_idx, "close"]
         corrupt_data.loc[outlier_idx, "close"] = 999.99  # Extreme value
         data_manager.data_loader.save(corrupt_data, "OUTLIER_TEST", "1d")
 

@@ -60,7 +60,7 @@ async def get_ib_status() -> dict[str, Any]:
         logger.error(f"Error getting IB status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting IB status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/gap-filler-status")
@@ -103,7 +103,7 @@ async def get_gap_filler_status() -> dict[str, Any]:
         logger.error(f"Error getting gap filler status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting gap filler status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/system-status")
@@ -157,7 +157,7 @@ async def get_system_status() -> dict[str, Any]:
         logger.error(f"Error getting system status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/status")
@@ -216,7 +216,7 @@ async def get_system_status_standardized() -> ApiResponse:
         logger.error(f"Error getting system status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/config")
@@ -267,7 +267,7 @@ async def get_system_config() -> ApiResponse:
         logger.error(f"Error getting system config: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system config: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/gap-filler/force-scan")
@@ -292,4 +292,4 @@ async def force_gap_scan() -> dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error forcing gap scan: {e}")
-        raise HTTPException(status_code=500, detail=f"Error forcing gap scan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error forcing gap scan: {str(e)}") from e

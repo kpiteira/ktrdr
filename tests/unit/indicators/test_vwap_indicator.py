@@ -327,7 +327,7 @@ class TestVWAPIndicator:
         volumes = []
         base_price = 100.0
 
-        for i in range(20):
+        for _i in range(20):
             # Simulate price movement
             price_change = np.random.normal(0, 0.5)
             current_price = base_price + price_change

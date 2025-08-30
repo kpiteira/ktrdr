@@ -514,7 +514,7 @@ class DataService(BaseService):
                         logger.info(
                             f"Data loading future was cancelled: {operation_id}"
                         )
-                        raise asyncio.CancelledError("Operation was cancelled")
+                        raise asyncio.CancelledError("Operation was cancelled") from None
                 else:
                     # This was the cancellation task completing
                     logger.info(f"Data loading operation was cancelled: {operation_id}")
@@ -522,7 +522,7 @@ class DataService(BaseService):
 
             except concurrent.futures.CancelledError:
                 logger.info(f"Data loading future was cancelled: {operation_id}")
-                raise asyncio.CancelledError("Operation was cancelled")
+                raise asyncio.CancelledError("Operation was cancelled") from None
 
     def _convert_df_to_api_format(
         self,
@@ -590,7 +590,7 @@ class DataService(BaseService):
         )
 
         # Extract unique symbols from the available files
-        symbols = sorted(set(symbol for symbol, _ in available_files))
+        symbols = sorted({symbol for symbol, _ in available_files})
         logger.debug(
             f"Aggregated {len(available_files)} files into {len(symbols)} unique symbols"
         )
@@ -675,7 +675,7 @@ class DataService(BaseService):
                     if hasattr(settings, "data_dir")
                     else Path("data")
                 )
-            except:
+            except Exception:
                 data_dir = Path("data")
 
             cache_file = data_dir / "symbol_discovery_cache.json"

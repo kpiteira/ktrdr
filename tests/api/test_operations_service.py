@@ -179,10 +179,9 @@ class TestOperationsService:
         )
         backtest_id = backtest_op.operation_id
 
-        training_op = await operations_service.create_operation(
+        await operations_service.create_operation(
             operation_type=OperationType.TRAINING, metadata=sample_metadata
         )
-        training_id = training_op.operation_id
 
         # Complete one operation
         await operations_service.complete_operation(backtest_id, {"result": "success"})

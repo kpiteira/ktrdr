@@ -6,23 +6,22 @@ Runs all IB-related tests in a systematic way with proper setup and teardown.
 Provides different test modes for development, CI, and production validation.
 """
 
-import sys
-import os
-import asyncio
-import time
 import argparse
-import subprocess
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+import asyncio
 import json
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from ktrdr.logging import get_logger
 from ktrdr.config.ib_config import get_ib_config
+from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -63,7 +62,7 @@ class IbTestRunner:
         self.output_file = output_file
 
         self.project_root = project_root
-        self.test_results: Dict[str, Any] = {
+        self.test_results: dict[str, Any] = {
             "start_time": datetime.now().isoformat(),
             "test_mode": test_mode,
             "results": {},
@@ -231,8 +230,8 @@ class IbTestRunner:
     async def _run_pytest_tests(
         self,
         test_category: str,
-        test_files: List[str],
-        extra_args: Optional[List[str]] = None,
+        test_files: list[str],
+        extra_args: Optional[list[str]] = None,
     ) -> bool:
         """Run pytest tests for specified files."""
         if extra_args is None:

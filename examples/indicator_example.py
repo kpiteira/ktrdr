@@ -83,7 +83,7 @@ def main():
         # Demonstrate error handling with invalid parameters
         try:
             print("\nTesting error handling with invalid parameter...")
-            invalid_rsi = RSIIndicator(period=1)
+            RSIIndicator(period=1)
         except DataError as e:
             print(f"Successfully caught error: {e}")
             print(f"Error code: {e.error_code}")

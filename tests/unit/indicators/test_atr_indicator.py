@@ -532,7 +532,7 @@ class TestATRSchemaValidation:
         """Test detailed error information from schema validation."""
         try:
             ATR_SCHEMA.validate({"period": -1})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-BelowMinimum"
             assert "period" in str(e.message)
@@ -541,7 +541,7 @@ class TestATRSchemaValidation:
 
         try:
             ATR_SCHEMA.validate({"period": "not_a_number"})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-InvalidType"
             assert "period" in e.details["parameter"]

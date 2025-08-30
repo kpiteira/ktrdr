@@ -8,15 +8,10 @@ with the ability to override configuration via command line arguments.
 import argparse
 import logging
 import sys
+
 import uvicorn
-from typing import Dict, Any
 
 from ktrdr.api.config import APIConfig
-from ktrdr.api.models import (
-    OHLCVData,
-    IndicatorConfig,
-    FuzzyConfig,
-)  # Import our models
 
 # Configure logging
 logging.basicConfig(
@@ -87,7 +82,7 @@ def main():
     args = parse_args()
 
     # Create environment variables dictionary for configuration
-    env_vars: Dict[str, str] = {}
+    env_vars: dict[str, str] = {}
 
     if hasattr(args, "host") and args.host:
         env_vars["KTRDR_API_HOST"] = args.host
@@ -109,7 +104,7 @@ def main():
 
     # Apply configuration overrides
     try:
-        config = APIConfig.from_env(env_vars)
+        APIConfig.from_env(env_vars)
     except Exception as e:
         logger.error(f"Failed to load configuration: {str(e)}")
         sys.exit(1)

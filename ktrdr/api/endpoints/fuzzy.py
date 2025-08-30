@@ -29,7 +29,7 @@ router = APIRouter(prefix="/fuzzy", tags=["Fuzzy"])
     response_model=dict[str, Any],
     summary="List available fuzzy indicators",
     description="""
-    Returns a list of indicators that have fuzzy set configurations available, along with their 
+    Returns a list of indicators that have fuzzy set configurations available, along with their
     fuzzy sets and membership functions. These indicators can be used with the fuzzy evaluation endpoints.
     """,
 )
@@ -84,7 +84,7 @@ async def list_fuzzy_indicators(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in list_fuzzy_indicators: {str(e)}")
         raise HTTPException(
@@ -97,7 +97,7 @@ async def list_fuzzy_indicators(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.get(
@@ -162,7 +162,7 @@ async def get_fuzzy_sets(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ProcessingError as e:
         logger.error(f"Processing error in get_fuzzy_sets: {str(e)}")
         raise HTTPException(
@@ -175,7 +175,7 @@ async def get_fuzzy_sets(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in get_fuzzy_sets: {str(e)}")
         raise HTTPException(
@@ -188,7 +188,7 @@ async def get_fuzzy_sets(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.get(
@@ -199,7 +199,7 @@ async def get_fuzzy_sets(
     Returns time series fuzzy membership values for indicators over a given period.
     This endpoint is designed for frontend chart overlays, providing fuzzy membership
     data in a format optimized for visualization.
-    
+
     The endpoint loads OHLCV data, calculates requested indicators, and computes
     fuzzy membership values using the configured membership functions. Results
     are returned as time series data suitable for chart overlays.
@@ -290,7 +290,7 @@ async def get_fuzzy_overlay_data(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ConfigurationError as e:
         logger.error(f"Configuration error in get_fuzzy_overlay_data: {str(e)}")
         raise HTTPException(
@@ -302,7 +302,7 @@ async def get_fuzzy_overlay_data(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ProcessingError as e:
         logger.error(f"Processing error in get_fuzzy_overlay_data: {str(e)}")
         raise HTTPException(
@@ -314,7 +314,7 @@ async def get_fuzzy_overlay_data(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in get_fuzzy_overlay_data: {str(e)}")
         raise HTTPException(
@@ -326,7 +326,7 @@ async def get_fuzzy_overlay_data(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.post(
@@ -426,7 +426,7 @@ async def fuzzify_values(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ProcessingError as e:
         logger.error(f"Processing error in fuzzify_values: {str(e)}")
         raise HTTPException(
@@ -439,7 +439,7 @@ async def fuzzify_values(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in fuzzify_values: {str(e)}")
         raise HTTPException(
@@ -452,7 +452,7 @@ async def fuzzify_values(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.post(
@@ -593,7 +593,7 @@ async def fuzzify_data(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ConfigurationError as e:
         logger.error(f"Configuration error in fuzzify_data: {str(e)}")
         raise HTTPException(
@@ -606,7 +606,7 @@ async def fuzzify_data(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ProcessingError as e:
         logger.error(f"Processing error in fuzzify_data: {str(e)}")
         raise HTTPException(
@@ -619,7 +619,7 @@ async def fuzzify_data(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in fuzzify_data: {str(e)}")
         raise HTTPException(
@@ -632,4 +632,4 @@ async def fuzzify_data(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e

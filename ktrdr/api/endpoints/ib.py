@@ -523,7 +523,7 @@ async def discover_symbol(
                     "message": f"Symbol discovery circuit breaker OPEN for {request.symbol}",
                     "details": {"symbol": request.symbol, "reason": str(e)},
                 },
-            )
+            ) from None
         except asyncio.TimeoutError:
             logger.error(
                 f"Symbol discovery TIMEOUT for {request.symbol} - possible silent IB connection!"
@@ -539,7 +539,7 @@ async def discover_symbol(
                         "possible_cause": "IB connection appears connected but operations timeout - check IB Gateway connectivity",
                     },
                 },
-            )
+            ) from None
 
         discovery_time_ms = (time.time() - start_time) * 1000
 

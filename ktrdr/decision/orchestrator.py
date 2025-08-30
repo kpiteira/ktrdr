@@ -97,7 +97,7 @@ class PositionState:
             elif decision.signal == Signal.SELL and self.position == Position.LONG:
                 # Calculate realized P&L
                 if self.entry_price:
-                    realized_pnl = current_bar["close"] - self.entry_price
+                    current_bar["close"] - self.entry_price
                     # Could store this for performance tracking
 
                 # Close position

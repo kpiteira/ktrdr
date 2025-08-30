@@ -737,7 +737,7 @@ class DataValidator:
         timeframe_features = {}
         unnamed_features = []
 
-        for i, name in enumerate(feature_names):
+        for _i, name in enumerate(feature_names):
             found_timeframe = False
             for tf in common_timeframes:
                 if f"_{tf}_" in name or name.endswith(f"_{tf}"):

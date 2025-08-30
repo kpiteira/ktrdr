@@ -330,7 +330,7 @@ async def _plot_chart_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"📈 Generating chart for {symbol} ({timeframe})")

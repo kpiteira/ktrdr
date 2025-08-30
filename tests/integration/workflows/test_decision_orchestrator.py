@@ -179,7 +179,7 @@ class TestDecisionOrchestrator:
             pass  # Expected since we don't have a real model
         except Exception as e:
             if "Invalid model path format" in str(e):
-                assert False, f"Model path parsing failed: {e}"
+                raise AssertionError(f"Model path parsing failed: {e}") from e
             # Other exceptions (like file not found) are expected
 
     def test_context_preparation(self):
@@ -343,7 +343,7 @@ class TestDecisionOrchestrator:
         )
 
         # Add some decisions to history
-        for i in range(5):
+        for _i in range(5):
             decision = TradingDecision(
                 signal=Signal.HOLD,
                 confidence=0.5,

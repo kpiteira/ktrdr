@@ -4,17 +4,16 @@ Basic Import Tests
 Simple tests to verify our modules can be imported and basic functionality works.
 """
 
+
 import pytest
-from uuid import uuid4
 
 
 def test_import_research_orchestrator():
     """Test that research orchestrator can be imported"""
     from research_agents.services.research_orchestrator import (
-        ResearchOrchestrator,
-        ExperimentConfig,
-        ExperimentType,
         ExperimentStatus,
+        ExperimentType,
+        ResearchOrchestrator,
     )
 
     assert ResearchOrchestrator is not None
@@ -26,7 +25,6 @@ def test_import_ktrdr_integration():
     """Test that KTRDR integration can be imported"""
     from research_agents.services.ktrdr_integration import (
         KTRDRIntegrationService,
-        TrainingConfig,
         TrainingStatus,
     )
 

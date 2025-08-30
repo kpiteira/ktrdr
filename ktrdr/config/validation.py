@@ -171,6 +171,7 @@ class InputValidator:
             dt = datetime.strptime(value, format_string)
         except ValueError as e:
             raise ValidationError(
+
                 message=f"Invalid date format: {value} (expected format: {format_string})",
                 error_code="VAL-DateFormat",
                 details={"format": format_string, "value": value, "error": str(e)},

@@ -85,7 +85,7 @@ class TestBatchFuzzyCalculator:
         assert "rsi_high" in result
 
         # Check that all results are Series with correct index
-        for set_name, series in result.items():
+        for _set_name, series in result.items():
             assert isinstance(series, pd.Series)
             assert len(series) == len(sample_rsi_series)
             assert series.index.equals(sample_rsi_series.index)
@@ -107,7 +107,7 @@ class TestBatchFuzzyCalculator:
 
         # Check that NaN positions are preserved
         nan_positions = rsi_series.isna()
-        for set_name, series in result.items():
+        for _set_name, series in result.items():
             assert series.isna()[nan_positions].all()
             assert not series.isna()[~nan_positions].any()
 

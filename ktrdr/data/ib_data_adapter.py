@@ -120,10 +120,12 @@ class IbDataAdapter(ExternalDataProvider):
                 return response.json()
         except httpx.HTTPError as e:
             raise DataProviderConnectionError(
+
                 f"Host service request failed: {str(e)}", provider="IB"
             )
         except Exception as e:
             raise DataProviderError(
+
                 f"Host service communication error: {str(e)}", provider="IB"
             )
 
@@ -143,10 +145,12 @@ class IbDataAdapter(ExternalDataProvider):
                 return response.json()
         except httpx.HTTPError as e:
             raise DataProviderConnectionError(
+
                 f"Host service request failed: {str(e)}", provider="IB"
             )
         except Exception as e:
             raise DataProviderError(
+
                 f"Host service communication error: {str(e)}", provider="IB"
             )
 

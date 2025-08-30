@@ -255,7 +255,7 @@ class ResilientProcessor:
         original_indicators = engine.indicators.copy()
 
         # Try removing indicators one by one
-        for i, indicator in enumerate(original_indicators):
+        for i, _indicator in enumerate(original_indicators):
             try:
                 # Create new engine without this indicator
                 remaining_indicators = [

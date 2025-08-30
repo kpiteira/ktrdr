@@ -2,11 +2,11 @@
 Verification script for triangular membership functions.
 """
 
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
 
-from ktrdr.fuzzy.membership import TriangularMF
 from ktrdr.fuzzy.config import TriangularMFConfig
+from ktrdr.fuzzy.membership import TriangularMF
 
 
 def verify_triangular_mf():

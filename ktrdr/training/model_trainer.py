@@ -385,7 +385,7 @@ class ModelTrainer:
                             model.train()
 
                     # Collect detailed analytics
-                    detailed_metrics = self.analyzer.collect_epoch_metrics(
+                    self.analyzer.collect_epoch_metrics(
                         epoch=epoch,
                         model=model,
                         train_metrics={
@@ -575,7 +575,7 @@ class ModelTrainer:
         total_batches_per_epoch = len(train_loader)
         total_batches = epochs * total_batches_per_epoch
         total_bars = len(X_train)
-        total_bars_all_epochs = total_bars * epochs
+        total_bars * epochs
 
         # Training loop
         for epoch in range(epochs):

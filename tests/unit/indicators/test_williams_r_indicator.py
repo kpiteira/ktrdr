@@ -510,7 +510,7 @@ class TestWilliamsRSchemaValidation:
         """Test detailed error information from schema validation."""
         try:
             WILLIAMS_R_SCHEMA.validate({"period": -1})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-BelowMinimum"
             assert "period" in str(e.message)
@@ -519,7 +519,7 @@ class TestWilliamsRSchemaValidation:
 
         try:
             WILLIAMS_R_SCHEMA.validate({"period": "not_a_number"})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-InvalidType"
             assert "period" in e.details["parameter"]

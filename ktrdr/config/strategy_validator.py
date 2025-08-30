@@ -468,7 +468,7 @@ class StrategyValidator:
         if "fuzzy_sets" not in config:
             return
 
-        for indicator, sets in config["fuzzy_sets"].items():
+        for _indicator, sets in config["fuzzy_sets"].items():
             if isinstance(sets, dict):
                 for set_name, set_config in sets.items():
                     if isinstance(set_config, dict) and "parameters" in set_config:

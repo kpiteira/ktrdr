@@ -363,7 +363,7 @@ class TestStochasticSchemaValidation:
         """Test detailed error information from schema validation."""
         try:
             STOCHASTIC_SCHEMA.validate({"k_period": -1})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-BelowMinimum"
             assert "k_period" in str(e.message)
@@ -372,7 +372,7 @@ class TestStochasticSchemaValidation:
 
         try:
             STOCHASTIC_SCHEMA.validate({"d_period": "not_a_number"})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-InvalidType"
             assert "d_period" in e.details["parameter"]

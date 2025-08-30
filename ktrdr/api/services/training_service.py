@@ -738,7 +738,7 @@ class TrainingService(BaseService):
                                     completed_batches = current_progress.get(
                                         "completed_batches", 0
                                     )
-                                    total_batches = current_progress.get(
+                                    current_progress.get(
                                         "total_batches", 1
                                     )
                                     total_bars_processed = current_progress.get(
@@ -822,7 +822,7 @@ class TrainingService(BaseService):
                     # Clean up progress file
                     try:
                         progress_file.unlink(missing_ok=True)
-                    except:
+                    except Exception:
                         pass
 
                     # Clean up temporary strategy file if analytics was enabled
@@ -1149,7 +1149,7 @@ class TrainingService(BaseService):
                                     completed_batches = current_progress.get(
                                         "completed_batches", 0
                                     )
-                                    total_batches = current_progress.get(
+                                    current_progress.get(
                                         "total_batches", 1
                                     )
                                     total_bars_processed = current_progress.get(
@@ -1233,7 +1233,7 @@ class TrainingService(BaseService):
                     # Clean up progress file
                     try:
                         progress_file.unlink(missing_ok=True)
-                    except:
+                    except Exception:
                         pass
 
                     # Clean up temporary strategy file if analytics was enabled

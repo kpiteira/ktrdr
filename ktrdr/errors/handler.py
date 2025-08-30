@@ -243,7 +243,7 @@ def error_to_user_message(error: Exception) -> str:
         User-friendly error message
     """
     # Get the error class for message template lookup
-    error_class = type(error)
+    type(error)
 
     # Get message from KtrdrError if available
     if isinstance(error, KtrdrError) and hasattr(error, "message"):

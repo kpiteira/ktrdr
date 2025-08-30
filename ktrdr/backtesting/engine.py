@@ -526,7 +526,7 @@ class BacktestingEngine:
                                 logger.warning(
                                     f"High drawdown detected: {current_dd*100:.1f}%"
                                 )
-                        except:
+                        except Exception:
                             pass
 
                     # Additional sanity checks at progress milestones
@@ -550,7 +550,7 @@ class BacktestingEngine:
                                     drawdown_info = (
                                         f" | 🚨 Drawdown: {current_dd*100:.1f}%"
                                     )
-                            except:
+                            except Exception:
                                 pass
 
                         print(

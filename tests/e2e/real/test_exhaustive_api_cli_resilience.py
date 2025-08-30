@@ -649,7 +649,7 @@ class TestFullSystemIntegrationResilience:
         print("✅ Phase 1: Applying connection stress")
 
         stress_requests = []
-        for i in range(20):
+        for _i in range(20):
             try:
                 response = api_client.get("/api/v1/ib/status")
                 stress_requests.append(response.status_code)

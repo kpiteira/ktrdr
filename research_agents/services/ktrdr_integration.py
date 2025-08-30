@@ -9,15 +9,12 @@ and comprehensive logging.
 import asyncio
 import json
 import logging
-from typing import Dict, List, Optional, Any, Union
-from uuid import UUID, uuid4
-from datetime import datetime, timezone
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Optional
 
 import aiohttp
-import logging
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +49,14 @@ class TrainingConfig:
     end_date: str
 
     # Neural network configuration
-    architecture: Dict[str, Any]
-    training_params: Dict[str, Any]
+    architecture: dict[str, Any]
+    training_params: dict[str, Any]
 
     # Fuzzy logic configuration
-    fuzzy_config: Dict[str, Any]
+    fuzzy_config: dict[str, Any]
 
     # Data configuration
-    indicators: List[str]
+    indicators: list[str]
     lookback_period: int
     validation_split: float = 0.2
 
@@ -107,10 +104,10 @@ class TrainingResults:
     f1_score: Optional[float]
 
     # Additional data
-    loss_history: List[float]
-    validation_history: List[float]
-    error_info: Optional[Dict[str, Any]]
-    metadata: Dict[str, Any]
+    loss_history: list[float]
+    validation_history: list[float]
+    error_info: Optional[dict[str, Any]]
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -140,14 +137,14 @@ class BacktestResults:
     max_consecutive_losses: int
 
     # Trade analysis
-    trade_details: List[Dict[str, Any]]
-    equity_curve: List[Dict[str, Any]]
-    drawdown_periods: List[Dict[str, Any]]
+    trade_details: list[dict[str, Any]]
+    equity_curve: list[dict[str, Any]]
+    drawdown_periods: list[dict[str, Any]]
 
     # Execution info
     execution_time_minutes: float
-    error_info: Optional[Dict[str, Any]]
-    metadata: Dict[str, Any]
+    error_info: Optional[dict[str, Any]]
+    metadata: dict[str, Any]
 
 
 class KTRDRIntegrationError(Exception):
@@ -236,7 +233,7 @@ class KTRDRIntegrationService:
         self._is_initialized = False
         logger.info("KTRDR integration service closed")
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check KTRDR API health"""
         if not self._is_initialized:
             raise KTRDRIntegrationError("Service not initialized")

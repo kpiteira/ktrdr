@@ -306,7 +306,6 @@ class TestConnectionResilienceIntegration:
 
         # All should be consistent in their availability reporting
         status_available = status_response.status_code == 200
-        health_available = health_response.status_code == 200
         resilience_available = resilience_response.status_code == 200
 
         # Resilience should be available if status is available

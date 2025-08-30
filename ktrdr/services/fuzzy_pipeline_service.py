@@ -337,7 +337,7 @@ class FuzzyPipelineService:
         for timeframe, tf_result in result.fuzzy_result.timeframe_results.items():
             report["timeframe_breakdown"][timeframe] = {
                 "fuzzy_value_count": len(tf_result),
-                "indicators": list(set(key.split("_")[0] for key in tf_result.keys())),
+                "indicators": list({key.split("_")[0] for key in tf_result.keys()}),
             }
 
         # Top fuzzy values (sorted by value)

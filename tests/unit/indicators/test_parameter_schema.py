@@ -316,7 +316,7 @@ class TestErrorMessages:
         """Test parameter validation error details."""
         try:
             MACD_SCHEMA.validate({"fast_period": "invalid"})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-InvalidType"
             assert "fast_period" in e.details["parameter"]
@@ -327,7 +327,7 @@ class TestErrorMessages:
         """Test constraint validation error details."""
         try:
             MACD_SCHEMA.validate({"fast_period": 30, "slow_period": 20})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-ConstraintViolation"
             assert "constraint" in e.details
@@ -337,7 +337,7 @@ class TestErrorMessages:
         """Test range validation error details."""
         try:
             RSI_SCHEMA.validate({"period": 0})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-BelowMinimum"
             assert "minimum" in e.details

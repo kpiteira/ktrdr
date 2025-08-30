@@ -14,12 +14,6 @@ from ktrdr.visualization import (
 )
 
 # Import test fixtures
-from tests.unit.visualization.test_fixtures import (
-    histogram_data,
-    multiple_series_data,
-    sample_indicators,
-    sample_price_data,
-)
 
 
 class TestVisualizationIntegration:
@@ -234,7 +228,7 @@ class TestVisualizationIntegration:
 
         # Attempt to create candlestick chart with invalid data
         with pytest.raises(DataError):
-            chart = visualizer.create_chart(
+            visualizer.create_chart(
                 data=invalid_data, title="Invalid Data Test", chart_type="candlestick"
             )
 

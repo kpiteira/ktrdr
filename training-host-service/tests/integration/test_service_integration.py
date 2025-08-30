@@ -141,7 +141,7 @@ class TestServiceIntegration:
                 requests.delete(
                     f"{service_url}/training/sessions/{session_id}", timeout=30
                 )
-            except:
+            except Exception:
                 pass  # Cleanup might fail if session was already cleaned up
 
     def test_concurrent_session_limit(self, integration_config, sample_training_config):
@@ -183,7 +183,7 @@ class TestServiceIntegration:
                 requests.delete(
                     f"{service_url}/training/sessions/{session_id1}", timeout=30
                 )
-            except:
+            except Exception:
                 pass
 
     def test_model_evaluation(self, integration_config):
@@ -238,7 +238,7 @@ class TestServiceIntegration:
         response = requests.get(f"{service_url}/health/detailed")
         assert response.status_code == 200
         initial_data = response.json()
-        initial_memory = initial_data.get("gpu_memory_allocated_mb", 0)
+        initial_data.get("gpu_memory_allocated_mb", 0)
 
         # Start training session to allocate resources
         training_config = {
@@ -259,7 +259,7 @@ class TestServiceIntegration:
                 time.sleep(5)  # Let training start
                 response = requests.get(f"{service_url}/health/detailed")
                 if response.status_code == 200:
-                    training_data = response.json()
+                    response.json()
                     # Resource usage might be higher during training
                     # This is mainly to verify the endpoint works during training
 
@@ -281,7 +281,7 @@ class TestServiceIntegration:
                     requests.delete(
                         f"{service_url}/training/sessions/{session_id}", timeout=30
                     )
-                except:
+                except Exception:
                     pass
                 raise e
 
@@ -324,7 +324,7 @@ class TestServicePerformance:
             try:
                 response = requests.get(f"{service_url}/health", timeout=5)
                 return response.status_code == 200
-            except:
+            except Exception:
                 return False
 
         # Make concurrent health check requests

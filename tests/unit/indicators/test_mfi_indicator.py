@@ -541,7 +541,7 @@ class TestMFIIndicator:
         assert len(result) == 16
 
         # When volume is zero, money flow is zero, so MFI should handle this appropriately
-        valid_values = result.dropna()
+        result.dropna()
         # With zero volume, we expect specific behavior depending on implementation
 
     def test_flat_prices_varying_volume(self):

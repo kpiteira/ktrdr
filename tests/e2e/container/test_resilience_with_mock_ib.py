@@ -105,7 +105,7 @@ class MockIBGateway:
                     time_response = b"4\x002\x0049\x001\x0020250614 16:30:00\x00\x00"
                     client.send(time_response)
 
-        except:
+        except Exception:
             pass
         finally:
             client.close()
@@ -168,7 +168,7 @@ class TestResilienceWithMockIB:
         if response.status_code == 503:
             data = response.json()
             # Should detect unhealthy connection (any unhealthy error is acceptable)
-            error_data = data.get("error", {})
+            data.get("error", {})
             health_data = data.get("data", {})
             assert not health_data.get(
                 "healthy", True

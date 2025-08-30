@@ -58,7 +58,7 @@ class TestResilienceScenarios:
         """
         # Multiple rapid requests to stress test connection handling
         results = []
-        for i in range(5):
+        for _i in range(5):
             response = api_client.get("/ib/status")
             results.append(response.status_code)
             time.sleep(0.2)
@@ -180,13 +180,13 @@ class TestResilienceScenarios:
         try:
             response = api_client.post("/ib/nonexistent")
             invalid_responses.append(response.status_code)
-        except:
+        except Exception:
             pass
 
         try:
             response = api_client.get("/ib/status?invalid=param")
             invalid_responses.append(response.status_code)
-        except:
+        except Exception:
             pass
 
         # Check that resilience system is still functioning after errors

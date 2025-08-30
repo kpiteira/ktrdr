@@ -8,15 +8,16 @@ and visualizes the membership degrees for different indicator inputs.
 
 import os
 import sys
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 # Make sure ktrdr module can be imported
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ktrdr.fuzzy import FuzzyEngine, FuzzyConfig, TriangularMF
+from ktrdr.fuzzy import FuzzyConfig, FuzzyEngine, TriangularMF
 from ktrdr.fuzzy.config import FuzzyConfigLoader
 
 
@@ -77,7 +78,7 @@ def validate_triangular_membership_function():
     output_dir.mkdir(exist_ok=True)
     plt.savefig(output_dir / "fuzzy_membership_variants.png")
     print(
-        f"\nMembership function visualization saved to output/fuzzy_membership_variants.png"
+        "\nMembership function visualization saved to output/fuzzy_membership_variants.png"
     )
 
     # Test with vectorized inputs
@@ -183,7 +184,7 @@ def validate_fuzzy_engine():
     # Save the plot
     plt.savefig(output_dir / "rsi_membership_functions.png")
     print(
-        f"\nRSI membership function visualization saved to output/rsi_membership_functions.png"
+        "\nRSI membership function visualization saved to output/rsi_membership_functions.png"
     )
 
     # Visualize MACD fuzzy sets
@@ -213,7 +214,7 @@ def validate_fuzzy_engine():
     # Save the plot
     plt.savefig(output_dir / "macd_membership_functions.png")
     print(
-        f"MACD membership function visualization saved to output/macd_membership_functions.png"
+        "MACD membership function visualization saved to output/macd_membership_functions.png"
     )
 
     return True
@@ -363,7 +364,7 @@ def validate_edge_cases():
     # Save the plot
     plt.savefig(output_dir / "edge_case_membership_functions.png")
     print(
-        f"\nEdge case visualization saved to output/edge_case_membership_functions.png"
+        "\nEdge case visualization saved to output/edge_case_membership_functions.png"
     )
 
     return True
@@ -400,7 +401,7 @@ def validate_performance():
 
         # Measure execution time
         start_time = time.time()
-        result = engine.fuzzify("rsi", values)
+        engine.fuzzify("rsi", values)
         end_time = time.time()
 
         execution_time = end_time - start_time

@@ -23,7 +23,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -44,7 +44,7 @@ class ExhaustiveTestRunner:
         self.verbose = verbose
         self.test_results = []
 
-    def check_prerequisites(self) -> Dict[str, Any]:
+    def check_prerequisites(self) -> dict[str, Any]:
         """Check that all prerequisites are met for testing."""
         print("🔍 Checking prerequisites...")
 
@@ -128,7 +128,7 @@ class ExhaustiveTestRunner:
 
         return results
 
-    def run_test_suite(self, test_level: str = "standard") -> Dict[str, Any]:
+    def run_test_suite(self, test_level: str = "standard") -> dict[str, Any]:
         """Run the appropriate test suite based on level."""
         print(f"\n🚀 Running {test_level} resilience tests...")
 
@@ -210,7 +210,7 @@ class ExhaustiveTestRunner:
                 "test_results": {"error": str(e)},
             }
 
-    def _parse_pytest_output(self, stdout: str, stderr: str) -> Dict[str, Any]:
+    def _parse_pytest_output(self, stdout: str, stderr: str) -> dict[str, Any]:
         """Parse pytest output to extract test results."""
         results = {
             "total_tests": 0,
@@ -270,7 +270,7 @@ class ExhaustiveTestRunner:
         return results
 
     def generate_report(
-        self, test_results: Dict[str, Any], output_file: str = None
+        self, test_results: dict[str, Any], output_file: str = None
     ) -> str:
         """Generate a detailed test report."""
         report_time = datetime.now().isoformat()
@@ -401,7 +401,7 @@ Review the following areas:
             if isinstance(stats, dict):
                 total = stats.get("total_tests", 0)
                 passed = stats.get("passed", 0)
-                failed = stats.get("failed", 0)
+                stats.get("failed", 0)
 
                 if total > 0:
                     success_rate = (passed / total) * 100

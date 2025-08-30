@@ -57,7 +57,7 @@ class TestMigrationPerformanceValidation:
                                 result = runner.invoke(
                                     data_app, ["show", "AAPL", "--format", "json"]
                                 )
-                            except:
+                            except Exception:
                                 pass  # Expected when forcing original path
 
                     # For this test, we simulate the original being slower

@@ -8,7 +8,7 @@ patterns across all service managers (Data, Training, Backtesting, etc.).
 
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
 from ktrdr.logging import get_logger
 
@@ -135,7 +135,7 @@ class ServiceOrchestrator(ABC):
             return getattr(self.adapter, "host_service_url", None)
         return None
 
-    def get_configuration_info(self) -> Dict[str, Any]:
+    def get_configuration_info(self) -> dict[str, Any]:
         """
         Get current configuration information for diagnostics and debugging.
 
@@ -167,7 +167,7 @@ class ServiceOrchestrator(ABC):
             },
         }
 
-    def get_adapter_statistics(self) -> Dict[str, Any]:
+    def get_adapter_statistics(self) -> dict[str, Any]:
         """
         Get adapter usage statistics if available.
 
@@ -186,7 +186,7 @@ class ServiceOrchestrator(ABC):
         else:
             return {"statistics": "not_available"}
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform health check on the orchestrator and its adapter.
 

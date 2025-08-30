@@ -7,7 +7,7 @@ Tests the enforcement of official IB pacing rules.
 import asyncio
 import time
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from ktrdr.ib.pace_manager import IbPaceManager, RequestInfo
 
@@ -40,7 +40,7 @@ class TestIbPaceManager(unittest.TestCase):
         now = time.time()
 
         # Fill up the request queue with recent requests
-        for i in range(50):
+        for _i in range(50):
             self.pace_manager.request_times.append(now - 0.1)  # All within last 100ms
 
         # Next request should require waiting
@@ -70,7 +70,7 @@ class TestIbPaceManager(unittest.TestCase):
         now = time.time()
 
         # Fill up with 60 requests in the last 10 minutes
-        for i in range(60):
+        for _i in range(60):
             self.pace_manager.historical_requests.append(
                 RequestInfo(
                     timestamp=now - 300,  # 5 minutes ago
@@ -90,7 +90,7 @@ class TestIbPaceManager(unittest.TestCase):
         now = time.time()
 
         # Fill up with 30 BID_ASK requests (counts as 60)
-        for i in range(30):
+        for _i in range(30):
             self.pace_manager.historical_requests.append(
                 RequestInfo(
                     timestamp=now - 300,  # 5 minutes ago
@@ -113,7 +113,7 @@ class TestIbPaceManager(unittest.TestCase):
         now = time.time()
 
         # Fill up contract-specific requests
-        for i in range(6):
+        for _i in range(6):
             self.pace_manager.contract_requests[contract_key].append(now - 0.1)
 
         # Next request for same contract should require waiting
@@ -163,7 +163,7 @@ class TestIbPaceManager(unittest.TestCase):
 
                 # Second request should trigger sleep for historical rate limiting
                 await self.pace_manager.wait_if_needed(is_historical=True)
-                
+
                 # Verify that sleep was called with approximately 2.0 seconds
                 # (historical requests have 2-second minimum spacing)
                 mock_sleep.assert_called_once()
@@ -221,7 +221,7 @@ class TestIbPaceManager(unittest.TestCase):
         now = time.time()
 
         # Add old historical requests (older than 10 minutes)
-        for i in range(5):
+        for _i in range(5):
             self.pace_manager.historical_requests.append(
                 RequestInfo(
                     timestamp=now - 700,  # More than 10 minutes ago
@@ -254,7 +254,7 @@ class TestIbPaceManager(unittest.TestCase):
         now = time.time()
 
         # Add old contract requests (older than 2 seconds)
-        for i in range(3):
+        for _i in range(3):
             self.pace_manager.contract_requests[contract_key].append(now - 5.0)
 
         # Add recent request

@@ -22,14 +22,14 @@ class TestAroonIndicator:
 
         assert indicator.name == "Aroon"
         assert indicator.params["period"] == 14
-        assert indicator.params["include_oscillator"] == False
+        assert not indicator.params["include_oscillator"]
 
     def test_custom_initialization(self):
         """Test Aroon initialization with custom parameters."""
         indicator = AroonIndicator(period=20, include_oscillator=True)
 
         assert indicator.params["period"] == 20
-        assert indicator.params["include_oscillator"] == True
+        assert indicator.params["include_oscillator"]
 
     def test_parameter_validation_success(self):
         """Test successful parameter validation."""
@@ -601,7 +601,7 @@ class TestAroonIndicator:
 
         assert indicator.name == "Aroon"
         assert indicator.params["period"] == 20
-        assert indicator.params["include_oscillator"] == True
+        assert indicator.params["include_oscillator"]
 
     def test_aroon_boundary_values(self):
         """Test Aroon calculation with boundary scenarios."""

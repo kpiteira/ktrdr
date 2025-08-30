@@ -189,7 +189,7 @@ class TestTimeframeSynchronizer:
         # Create data with different timezones
         dates_utc = pd.date_range("2023-01-01", periods=10, freq="1h", tz="UTC")
         dates_naive = pd.date_range("2023-01-01", periods=10, freq="1h")
-        dates_est = pd.date_range("2023-01-01", periods=10, freq="1h", tz="US/Eastern")
+        pd.date_range("2023-01-01", periods=10, freq="1h", tz="US/Eastern")
 
         source_data = pd.DataFrame({"close": range(10)}, index=dates_naive)
         reference_data = pd.DataFrame({"close": range(10)}, index=dates_utc)
@@ -332,8 +332,8 @@ class TestTimeframeSynchronizer:
 
         results = synchronizer.validate_temporal_consistency(data_dict)
 
-        assert results["1h_consistent"] == True
-        assert results["1h_inconsistent"] == False
+        assert results["1h_consistent"]
+        assert not results["1h_inconsistent"]
 
     def test_validate_temporal_consistency_empty_data(self, synchronizer):
         """Test temporal consistency with empty data."""

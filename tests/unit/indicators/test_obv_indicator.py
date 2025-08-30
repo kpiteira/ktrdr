@@ -389,7 +389,7 @@ class TestOBVSchemaValidation:
         """Test detailed error information from schema validation."""
         try:
             OBV_SCHEMA.validate({"invalid_param": "value"})
-            assert False, "Should have raised DataError"
+            raise AssertionError("Should have raised DataError")
         except DataError as e:
             assert e.error_code == "PARAM-Unknown"
             assert "invalid_param" in str(e.message)

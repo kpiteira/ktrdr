@@ -51,7 +51,7 @@ def generate_api_docs():
 
                 # Add entry to the index file
                 with open(DOCS_DIR / "index.md", "a") as f:
-                    tag = operation.get("tags", ["Other"])[0]
+                    operation.get("tags", ["Other"])[0]
                     endpoint_id = f"{method}_{path.replace('/', '_').replace('{', '').replace('}', '')}"
                     endpoint_file = f"{endpoint_id}.md"
                     f.write(

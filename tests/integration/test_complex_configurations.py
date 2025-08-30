@@ -226,7 +226,7 @@ class TestComplexConfigurationHandler:
         report = validate_configuration_feasibility(demanding_configuration, small_data)
 
         # Should report infeasibility
-        assert report["feasible"] == False
+        assert not report["feasible"]
 
         # Should have data availability info
         assert "data_availability" in report
@@ -371,7 +371,7 @@ class TestComplexConfigurationHandler:
             assert len(results["1h"]) > 0
 
             # Check that results make sense
-            for timeframe, df in results.items():
+            for _timeframe, df in results.items():
                 assert not df.empty
                 assert "close" in df.columns  # Original data preserved
 
@@ -393,7 +393,7 @@ class TestComplexConfigurationHandler:
 
         availability = handler.analyze_data_availability(empty_data)
 
-        for tf, avail in availability.items():
+        for _tf, avail in availability.items():
             assert avail.total_points == 0
             assert avail.valid_points == 0
 

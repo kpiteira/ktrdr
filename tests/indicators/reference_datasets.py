@@ -137,7 +137,7 @@ def create_reference_dataset_obv() -> pd.DataFrame:
 
     # Generate volume that tends to be higher on larger price moves
     volumes = []
-    for i, change in enumerate([0] + list(price_changes)):
+    for _i, change in enumerate([0] + list(price_changes)):
         # Higher volume on larger price moves
         volume_multiplier = 1 + abs(change) * 2
         daily_volume = (

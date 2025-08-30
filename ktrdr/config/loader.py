@@ -89,6 +89,7 @@ class ConfigLoader:
 
         except ValidationError as e:
             raise ConfigurationError(
+
                 message=f"Invalid configuration path: {e}",
                 error_code="CONF-InvalidPath",
                 details={"path": str(config_path), "error": str(e)},
@@ -119,6 +120,7 @@ class ConfigLoader:
                 return config_obj
             except ValidationError as e:
                 raise InvalidConfigurationError(
+
                     message=f"Configuration validation failed: {e}",
                     error_code="CONF-ValidationFailed",
                     details={"validation_errors": e.errors()},
@@ -126,6 +128,7 @@ class ConfigLoader:
 
         except yaml.YAMLError as e:
             raise InvalidConfigurationError(
+
                 message=f"Invalid YAML format in {config_path}: {e}",
                 error_code="CONF-InvalidYaml",
                 details={"yaml_error": str(e)},
@@ -164,6 +167,7 @@ class ConfigLoader:
             )
         except ValidationError as e:
             raise ConfigurationError(
+
                 message=f"Invalid environment variable name: {e}",
                 error_code="CONF-InvalidEnvVar",
                 details={"env_var": env_var, "error": str(e)},
@@ -233,6 +237,7 @@ class ConfigLoader:
         except yaml.YAMLError as e:
             logger.error(f"Invalid YAML format in {fuzzy_config_path}: {e}")
             raise InvalidConfigurationError(
+
                 message=f"Invalid YAML format in fuzzy configuration: {e}",
                 error_code="CONF-InvalidYaml",
                 details={"yaml_error": str(e)},
@@ -240,6 +245,7 @@ class ConfigLoader:
         except Exception as e:
             logger.error(f"Failed to load fuzzy configuration: {e}")
             raise ConfigurationError(
+
                 message=f"Failed to load fuzzy configuration: {e}",
                 error_code="CONF-FuzzyLoadFailed",
                 details={"error": str(e)},
@@ -280,6 +286,7 @@ class ConfigLoader:
             raise
         except Exception as e:
             raise ConfigurationError(
+
                 message=f"Failed to load multi-timeframe indicator configuration: {e}",
                 error_code="CONF-MultiTimeframeLoadFailed",
                 details={"error": str(e), "path": str(config_path)},

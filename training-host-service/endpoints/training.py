@@ -6,7 +6,7 @@ Provides GPU-accelerated training functionality.
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -14,8 +14,10 @@ from pydantic import BaseModel, Field
 # Import existing ktrdr modules
 from ktrdr.logging import get_logger
 
-# Import training service
+# Import training service and health utilities
 from services.training_service import get_training_service
+
+from .health import get_gpu_manager
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/training", tags=["training"])
@@ -33,10 +35,10 @@ class TrainingStartRequest(BaseModel):
     """Request to start a training session."""
 
     session_id: Optional[str] = Field(default=None, description="Optional session ID")
-    model_configuration: Dict[str, Any] = Field(description="Model configuration")
-    training_configuration: Dict[str, Any] = Field(description="Training configuration")
-    data_configuration: Dict[str, Any] = Field(description="Data configuration")
-    gpu_configuration: Optional[Dict[str, Any]] = Field(
+    model_configuration: dict[str, Any] = Field(description="Model configuration")
+    training_configuration: dict[str, Any] = Field(description="Training configuration")
+    data_configuration: dict[str, Any] = Field(description="Data configuration")
+    gpu_configuration: Optional[dict[str, Any]] = Field(
         default=None, description="GPU-specific configuration"
     )
 
@@ -55,9 +57,9 @@ class TrainingStatusResponse(BaseModel):
 
     session_id: str
     status: str  # "running", "completed", "failed", "stopped"
-    progress: Dict[str, Any]
-    metrics: Dict[str, Any]
-    gpu_usage: Dict[str, Any]
+    progress: dict[str, Any]
+    metrics: dict[str, Any]
+    gpu_usage: dict[str, Any]
     start_time: str
     last_updated: str
     error: Optional[str] = None
@@ -77,8 +79,8 @@ class EvaluationRequest(BaseModel):
     """Request to evaluate a model."""
 
     model_path: str = Field(description="Path to model file")
-    data_config: Dict[str, Any] = Field(description="Evaluation data configuration")
-    metrics: List[str] = Field(
+    data_config: dict[str, Any] = Field(description="Evaluation data configuration")
+    metrics: list[str] = Field(
         default=["accuracy", "loss"], description="Metrics to compute"
     )
 
@@ -87,7 +89,7 @@ class EvaluationResponse(BaseModel):
     """Model evaluation response."""
 
     evaluation_id: str
-    results: Dict[str, float]
+    results: dict[str, float]
     gpu_used: bool
     evaluation_time_seconds: float
     timestamp: str
@@ -138,7 +140,7 @@ async def start_training(request: TrainingStartRequest):
         logger.error(f"Failed to start training session: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to start training: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/stop")
@@ -168,7 +170,7 @@ async def stop_training(request: TrainingStopRequest):
         logger.error(f"Failed to stop training session {request.session_id}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to stop training: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/status/{session_id}", response_model=TrainingStatusResponse)
@@ -200,7 +202,7 @@ async def get_training_status(session_id: str):
         logger.error(f"Failed to get status for session {session_id}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to get training status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/sessions")
@@ -224,7 +226,7 @@ async def list_training_sessions():
         logger.error(f"Failed to list training sessions: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to list sessions: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/evaluate", response_model=EvaluationResponse)
@@ -264,7 +266,7 @@ async def evaluate_model(request: EvaluationRequest):
         logger.error(f"Failed to evaluate model: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Model evaluation failed: {str(e)}"
-        )
+        ) from e
 
 
 @router.delete("/sessions/{session_id}")
@@ -292,4 +294,4 @@ async def cleanup_session(session_id: str):
         logger.error(f"Failed to cleanup session {session_id}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to cleanup session: {str(e)}"
-        )
+        ) from e

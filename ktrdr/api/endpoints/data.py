@@ -119,7 +119,7 @@ async def get_data_info(
         logger.error(f"Error getting data info: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting data information: {str(e)}"
-        )
+        ) from e
 
 
 @router.get(
@@ -251,13 +251,13 @@ async def get_timeframes(
     summary="Get cached OHLCV data (Frontend)",
     description="""
     Retrieves cached OHLCV data for visualization. This endpoint is optimized for frontend use:
-    
+
     **Features:**
     - Fast response (local data only, no external API calls)
     - Returns actual OHLCV data arrays for charting
     - Optional date filtering with query parameters
     - Returns empty data if not cached locally (no errors)
-    
+
     **Perfect for:** Frontend charts, data visualization, dashboards
     """,
 )
@@ -322,21 +322,21 @@ async def get_cached_data(
         if start_date:
             try:
                 start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-            except ValueError:
+            except ValueError as err:
                 raise DataError(
                     message="Invalid start_date format. Use YYYY-MM-DD",
                     error_code="DATA-InvalidDate",
                     details={"start_date": start_date},
-                )
+                ) from err
         if end_date:
             try:
                 end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-            except ValueError:
+            except ValueError as err:
                 raise DataError(
                     message="Invalid end_date format. Use YYYY-MM-DD",
                     error_code="DATA-InvalidDate",
                     details={"end_date": end_date},
-                )
+                ) from err
 
         # Load data using DataManager with local mode only
         df = data_service.data_manager.load_data(
@@ -450,21 +450,21 @@ async def get_cached_data(
     summary="Load data via DataManager (CLI/Operations)",
     description="""
     Data loading operations endpoint for CLI and background processes.
-    
+
     This endpoint performs actual data loading operations and returns operational
     metrics about what was fetched, from where, and how long it took.
-    
+
     **Loading Modes:**
     - `tail`: Load recent data from last available timestamp to now
-    - `backfill`: Load historical data before earliest available timestamp  
+    - `backfill`: Load historical data before earliest available timestamp
     - `full`: Load both historical (backfill) and recent (tail) data
-    
+
     **Features:**
     - Intelligent gap analysis with trading calendar awareness
     - Progressive loading for large date ranges
     - Partial failure resilience (continues with successful segments)
     - Detailed operation metrics and timing
-    
+
     **Perfect for:** CLI commands, background jobs, data management operations
     """,
 )
@@ -669,8 +669,8 @@ async def load_data(
     tags=["Data"],
     summary="Get available date range for data",
     description="""
-    Retrieves the earliest and latest available dates for the specified symbol and timeframe, 
-    along with the total number of data points. Useful for determining what time range is available 
+    Retrieves the earliest and latest available dates for the specified symbol and timeframe,
+    along with the total number of data points. Useful for determining what time range is available
     before loading full data.
     """,
 )
@@ -733,7 +733,7 @@ async def get_data_range(
         raise HTTPException(
             status_code=404,
             detail=f"Data not found for {request.symbol} ({request.timeframe})",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Error retrieving date range: {str(e)}")
         raise DataError(

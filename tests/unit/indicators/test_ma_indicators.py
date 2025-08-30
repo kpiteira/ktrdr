@@ -198,13 +198,13 @@ class TestExponentialMovingAverage:
         ema = ExponentialMovingAverage()
         assert ema.params["period"] == 20
         assert ema.params["source"] == "close"
-        assert ema.params["adjust"] == True
+        assert ema.params["adjust"]
 
         # Custom parameters
         ema = ExponentialMovingAverage(period=10, source="high", adjust=False)
         assert ema.params["period"] == 10
         assert ema.params["source"] == "high"
-        assert ema.params["adjust"] == False
+        assert not ema.params["adjust"]
 
         # Test column name generation
         assert ema.get_column_name() == "ema_10"

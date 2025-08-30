@@ -529,7 +529,7 @@ class BacktestingService(BaseService):
         # Calculate final value from initial capital + total return
         initial_capital = config_data.get("initial_capital", 100000)
         total_return = metrics_data.get("total_return", 0)
-        final_value = initial_capital + total_return
+        initial_capital + total_return
 
         # Extract metadata
         strategy_name = operation.metadata.parameters.get("strategy_name", "unknown")

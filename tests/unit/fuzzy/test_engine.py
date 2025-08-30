@@ -38,7 +38,7 @@ class TestFuzzyEngine:
             # Create minimal config dictionary with no indicators
             minimal_config = {}
             # This should be caught by FuzzyConfig validation
-            config = FuzzyConfig.model_validate(minimal_config)
+            FuzzyConfig.model_validate(minimal_config)
 
         # Check the message instead of error code since this is coming from the config validation
         assert "At least one indicator must be defined" in str(excinfo.value)

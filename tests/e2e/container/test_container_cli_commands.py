@@ -8,7 +8,7 @@ all functionality works correctly with the refactored IB components.
 import re
 import subprocess
 import time
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 
@@ -84,7 +84,7 @@ class ContainerCLIRunner:
         self.timeout = 30.0
 
     def run_command(
-        self, cli_args: List[str], timeout: Optional[float] = None
+        self, cli_args: list[str], timeout: Optional[float] = None
     ) -> CLITestResult:
         """
         Run a CLI command in the container.
@@ -98,7 +98,7 @@ class ContainerCLIRunner:
         """
         # Build docker exec command using Python module invocation
         # This works around uv cache permission issues in the container
-        cli_args_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cli_args)
+        " ".join(f'"{arg}"' if " " in arg else arg for arg in cli_args)
         python_cmd = f'python -c "from ktrdr.cli import app; import sys; sys.argv[1:] = {cli_args}; app()"'
         docker_cmd = ["docker", "exec", self.container_name, "bash", "-c", python_cmd]
 
@@ -151,7 +151,7 @@ class ContainerCLIRunner:
             result = self.run_command([command, "--help"])
             # If help succeeds, command is available
             return result.returncode == 0 and "No such command" not in result.stderr
-        except:
+        except Exception:
             return False
 
 
