@@ -2544,7 +2544,7 @@ class DataManager(ServiceOrchestrator):
             df_sorted = df.sort_index() if not df.index.is_monotonic_increasing else df
 
             # Resample the data
-            resampled = df_sorted.resample(target_freq).agg(agg_functions)
+            resampled = df_sorted.resample(target_freq).agg(agg_functions)  # type: ignore[arg-type]
 
             # Fill gaps if requested
             if fill_gaps and not resampled.empty:

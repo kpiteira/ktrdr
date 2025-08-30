@@ -225,11 +225,11 @@ class GapFillerService:
 
             except Exception as e:
                 logger.error(f"Error in gap filling loop: {e}")
-                self.stats["errors"].append(
+                self.stats["errors"].append(  # type: ignore[union-attr]
                     {"time": datetime.now(timezone.utc), "error": str(e)}
                 )
                 # Keep only last 10 errors
-                self.stats["errors"] = self.stats["errors"][-10:]
+                self.stats["errors"] = self.stats["errors"][-10:]  # type: ignore[index]
 
                 # Wait longer on error
                 self._stop_event.wait(60)
@@ -269,7 +269,7 @@ class GapFillerService:
                 gap_filled = self._check_and_fill_gap(symbol, timeframe)
                 if gap_filled:
                     processed += 1
-                    self.stats["symbols_processed"].add(f"{symbol}_{timeframe}")
+                    self.stats["symbols_processed"].add(f"{symbol}_{timeframe}")  # type: ignore[union-attr]
 
                     # Add small delay between successful requests to respect IB pacing
                     if (
@@ -315,7 +315,7 @@ class GapFillerService:
 
     def _discover_symbols_and_timeframes(self) -> list[tuple]:
         """Discover symbols and timeframes from existing CSV files."""
-        symbols_timeframes = []
+        symbols_timeframes: list[tuple[str, str]] = []
 
         try:
             data_path = Path(self.data_dir)
@@ -369,8 +369,10 @@ class GapFillerService:
             last_timestamp = TimestampManager.to_utc(last_timestamp)
 
             # Calculate expected next timestamp based on timeframe
+            if last_timestamp is None:
+                return False
             next_expected = self._calculate_next_expected_timestamp(
-                last_timestamp, timeframe
+                last_timestamp.to_pydatetime(), timeframe
             )
             current_time = TimestampManager.now_utc()
 
@@ -403,7 +405,7 @@ class GapFillerService:
             # Update classification statistics
             classification_key = gap_info.classification.value
             if classification_key in self.stats["gap_classifications"]:  # type: ignore[operator]
-                self.stats["gap_classifications"][classification_key] += 1  # type: ignore[operator]
+                self.stats["gap_classifications"][classification_key] += 1  # type: ignore[operator,index,call-overload]
 
             # Log gap detection with classification
             logger.info(

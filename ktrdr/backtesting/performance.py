@@ -285,9 +285,9 @@ class PerformanceTracker:
             )
         else:
             total_trades = win_count = loss_count = 0
-            win_rate = profit_factor = avg_win = avg_loss = 0.0
-            largest_win = largest_loss = 0
-            avg_holding_period = avg_win_holding_period = avg_loss_holding_period = 0.0
+            win_rate = profit_factor = avg_win = avg_loss = 0.0  # type: ignore[assignment]
+            largest_win = largest_loss = 0.0
+            avg_holding_period = avg_win_holding_period = avg_loss_holding_period = 0.0  # type: ignore[assignment]
 
         # Max drawdown in absolute terms
         max_drawdown_abs = self.max_drawdown * self.peak_equity
