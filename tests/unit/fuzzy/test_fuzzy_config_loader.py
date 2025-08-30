@@ -264,7 +264,7 @@ class TestFuzzyConfigLoader:
         # This test uses the actual project files
         # It will pass if the default fuzzy.yaml and any strategy files are valid
         loader = FuzzyConfigLoader(
-            config_dir=Path(__file__).parent.parent.parent / "config"
+            config_dir=Path(__file__).parent.parent.parent.parent / "config"
         )
 
         # Load default config
