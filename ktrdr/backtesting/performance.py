@@ -2,7 +2,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -181,8 +181,8 @@ class PerformanceTracker:
         self,
         trades: list[Trade],
         initial_capital: float,
-        start_date: pd.Timestamp = None,
-        end_date: pd.Timestamp = None,
+        start_date: Optional[pd.Timestamp] = None,
+        end_date: Optional[pd.Timestamp] = None,
     ) -> PerformanceMetrics:
         """Calculate comprehensive performance metrics.
 
@@ -285,9 +285,9 @@ class PerformanceTracker:
             )
         else:
             total_trades = win_count = loss_count = 0
-            win_rate = profit_factor = avg_win = avg_loss = 0
+            win_rate = profit_factor = avg_win = avg_loss = 0.0
             largest_win = largest_loss = 0
-            avg_holding_period = avg_win_holding_period = avg_loss_holding_period = 0
+            avg_holding_period = avg_win_holding_period = avg_loss_holding_period = 0.0
 
         # Max drawdown in absolute terms
         max_drawdown_abs = self.max_drawdown * self.peak_equity
@@ -352,11 +352,11 @@ class PerformanceTracker:
             losing_trades=loss_count,
             win_rate=win_rate,
             profit_factor=profit_factor,
-            avg_holding_period=avg_holding_period,
-            avg_win_holding_period=avg_win_holding_period,
-            avg_loss_holding_period=avg_loss_holding_period,
-            avg_win=avg_win,
-            avg_loss=avg_loss,
+            avg_holding_period=float(avg_holding_period),
+            avg_win_holding_period=float(avg_win_holding_period),
+            avg_loss_holding_period=float(avg_loss_holding_period),
+            avg_win=float(avg_win),
+            avg_loss=float(avg_loss),
             largest_win=largest_win,
             largest_loss=largest_loss,
             calmar_ratio=calmar_ratio,

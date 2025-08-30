@@ -1590,7 +1590,9 @@ class DataManager(ServiceOrchestrator):
             elif mode == "backfill" or mode == "full":
                 # Use head timestamp if available, otherwise fall back to IB limits
                 if cached_head_timestamp:
-                    requested_start = self._normalize_timezone(cached_head_timestamp)
+                    normalized_ts = self._normalize_timezone(cached_head_timestamp)
+                    if normalized_ts is not None:
+                        requested_start = normalized_ts
                     logger.info(
                         f"📅 Using head timestamp for default start: {requested_start}"
                     )
@@ -1611,13 +1613,17 @@ class DataManager(ServiceOrchestrator):
                 requested_start = pd.Timestamp.now(tz="UTC") - max_duration
         else:
             # ALWAYS respect user-provided start_date regardless of mode
-            requested_start = self._normalize_timezone(start_date)
+            normalized_start = self._normalize_timezone(start_date)
+            if normalized_start is not None:
+                requested_start = normalized_start
 
         if end_date is None:
             requested_end = pd.Timestamp.now(tz="UTC")
         else:
             # ALWAYS respect user-provided end_date regardless of mode
-            requested_end = self._normalize_timezone(end_date)
+            normalized_end = self._normalize_timezone(end_date)
+            if normalized_end is not None:
+                requested_end = normalized_end
 
         if requested_start >= requested_end:
             logger.warning(
@@ -1663,7 +1669,7 @@ class DataManager(ServiceOrchestrator):
                     logger.info(
                         f"📅 Adjusting start time to earliest available: {head_dt}"
                     )
-                    requested_start = head_dt
+                    requested_start = pd.Timestamp(head_dt)
 
                 logger.info("📅 Request range validated against head timestamp")
 
@@ -1698,7 +1704,7 @@ class DataManager(ServiceOrchestrator):
                         logger.info(
                             f"📅 Request adjusted based on head timestamp: {requested_start} → {adjusted_start}"
                         )
-                        requested_start = adjusted_start
+                        requested_start = pd.Timestamp(adjusted_start)
                 else:
                     logger.info(
                         f"📅 No head timestamp available for {symbol}, proceeding with original request"

@@ -246,11 +246,11 @@ class IbDataAdapter(ExternalDataProvider):
                     is_valid=False,
                     symbol=symbol,
                     error_message=str(e),
-                    contract_info={},
+                    contract_info=None,
                     head_timestamps=None,
                 )
 
-    async def fetch_historical_data(
+    async def fetch_historical_data(  # type: ignore[return]
         self,
         symbol: str,
         timeframe: str,

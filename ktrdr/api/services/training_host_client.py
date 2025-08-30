@@ -382,7 +382,7 @@ class TrainingHostClient:
             "stopped": "failed",  # Map stopped to failed for operation status
         }
 
-        operation_status = status_mapping.get(status.get("status"), "in_progress")
+        operation_status = status_mapping.get(status.get("status", ""), "in_progress")
 
         # Create operation progress format
         operation_progress = {
