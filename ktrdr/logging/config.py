@@ -66,6 +66,50 @@ class ColorFormatter(logging.Formatter):
         return super().format(record)
 
 
+class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """
+    A robust rotating file handler that gracefully handles file operations
+    during log rotation to prevent race conditions and file not found errors.
+    """
+    
+    def shouldRollover(self, record):
+        """
+        Determine if rollover should occur with error handling.
+        
+        Overrides the parent method to safely handle cases where the log file
+        might be temporarily unavailable during rotation or external changes.
+        """
+        try:
+            return super().shouldRollover(record)
+        except (OSError, FileNotFoundError):
+            # File might have been moved/deleted externally, trigger rollover
+            return True
+        except Exception:
+            # For any other unexpected errors, don't rollover to avoid issues
+            return False
+    
+    def emit(self, record):
+        """
+        Emit a record with robust error handling.
+        
+        Overrides the parent method to gracefully handle file system issues
+        that can occur during high-volume logging with rotation.
+        """
+        try:
+            super().emit(record)
+        except (OSError, FileNotFoundError):
+            # File operations failed, try to reinitialize the stream
+            try:
+                self._open()
+                super().emit(record)
+            except Exception:
+                # If we still can't write, fail silently to prevent log spam
+                pass
+        except Exception:
+            # Catch any other unexpected errors to prevent breaking the app
+            pass
+
+
 def get_logger(name: str) -> logging.Logger:
     """
     Get a logger with the specified name and apply component-specific levels.
@@ -167,7 +211,7 @@ def configure_logging(
         log_path.mkdir(exist_ok=True, parents=True)
         log_file = log_path / "ktrdr.log"
 
-        file_handler = logging.handlers.RotatingFileHandler(
+        file_handler = SafeRotatingFileHandler(
             filename=log_file,
             maxBytes=max_file_size_mb * 1024 * 1024,  # Convert MB to bytes
             backupCount=backup_count,
