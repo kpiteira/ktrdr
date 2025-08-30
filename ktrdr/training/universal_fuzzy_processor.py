@@ -199,7 +199,7 @@ class UniversalFuzzyNeuralProcessor:
             temporal_features = pd.concat([temporal_features, lagged], axis=1)
 
         # Forward fill initial NaN values from lags
-        temporal_features = temporal_features.fillna(method="ffill").fillna(0)
+        temporal_features = temporal_features.ffill().fillna(0)
 
         logger.debug(
             f"Added temporal features, total: {len(temporal_features.columns)}"
@@ -237,7 +237,7 @@ class UniversalFuzzyNeuralProcessor:
                 indicators_df[name] = values
 
         # Create mock fuzzy data for now (in real implementation, this would come from fuzzy engine)
-        fuzzy_features = pd.DataFrame(index=price_data.index)
+        pd.DataFrame(index=price_data.index)
 
         # Create universal features
         universal_features = self._create_universal_features(indicators_df)

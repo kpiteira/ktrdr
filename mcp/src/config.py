@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+
 import structlog
 from dotenv import load_dotenv
 

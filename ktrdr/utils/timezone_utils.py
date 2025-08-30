@@ -162,7 +162,7 @@ class TimestampManager:
         df_copy = df.copy()
 
         # Convert index to UTC
-        df_copy.index = TimestampManager.to_utc_series(df_copy.index)
+        df_copy.index = TimestampManager.to_utc_series(pd.DatetimeIndex(df_copy.index))
 
         return df_copy
 
@@ -321,7 +321,7 @@ class TimestampManager:
     @staticmethod
     def is_market_hours_enhanced(
         timestamp: pd.Timestamp,
-        symbol: str = None,
+        symbol: Optional[str] = None,
         exchange_tz: str = "America/New_York",
     ) -> bool:
         """
@@ -364,7 +364,9 @@ class TimestampManager:
             return False
 
     @staticmethod
-    def get_market_status_enhanced(timestamp: pd.Timestamp, symbol: str = None) -> str:
+    def get_market_status_enhanced(
+        timestamp: pd.Timestamp, symbol: Optional[str] = None
+    ) -> str:
         """
         Get detailed market status using symbol-specific trading hours.
 
@@ -419,15 +421,15 @@ class TimestampManager:
 
             # Try to get data directory from settings
             try:
-                from ktrdr.config.settings import get_settings
+                from ktrdr.config.settings import get_api_settings
 
-                settings = get_settings()
+                settings = get_api_settings()
                 data_dir = (
                     Path(settings.data_dir)
                     if hasattr(settings, "data_dir")
                     else Path("data")
                 )
-            except:
+            except Exception:
                 data_dir = Path("data")
 
             cache_file = data_dir / "symbol_discovery_cache.json"
@@ -450,7 +452,9 @@ class TimestampManager:
 
 
 # Convenience functions for backward compatibility
-def ensure_utc_timestamp(dt: Union[datetime, pd.Timestamp, str]) -> pd.Timestamp:
+def ensure_utc_timestamp(
+    dt: Union[datetime, pd.Timestamp, str],
+) -> Optional[pd.Timestamp]:
     """Convenience function - alias for TimestampManager.to_utc()."""
     return TimestampManager.to_utc(dt)
 

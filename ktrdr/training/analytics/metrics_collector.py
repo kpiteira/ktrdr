@@ -1,6 +1,6 @@
 """Core metrics collection utilities for training analytics."""
 
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import torch
@@ -140,9 +140,16 @@ class MetricsCollector:
             y_pred_np = y_pred.cpu().numpy()
 
             # Calculate metrics
+            from numpy import ndarray
+
             precision, recall, f1, support = precision_recall_fscore_support(
                 y_true_np, y_pred_np, average=None, zero_division=0, labels=[0, 1, 2]
             )
+            # Type narrowing: with average=None, these are always arrays
+            precision = cast(ndarray, precision)
+            recall = cast(ndarray, recall)
+            f1 = cast(ndarray, f1)
+            support = cast(ndarray, support)
 
             # Organize by class name
             class_precisions = {}
@@ -354,7 +361,7 @@ class MetricsCollector:
 
         cv = std_support / mean_support
         # Convert to balance score (1 - normalized CV)
-        balance_score = max(0.0, 1.0 - min(1.0, cv))
+        balance_score = max(0.0, 1.0 - min(1.0, float(cv)))
         return float(balance_score)
 
     def _calculate_convergence_indicator(

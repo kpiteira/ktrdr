@@ -87,14 +87,14 @@ class ComplexConfigurationHandler:
             "SimpleMovingAverage": IndicatorRequirement(
                 indicator_type="SimpleMovingAverage",
                 minimum_data_points=1,
-                recommended_data_points=None,  # Depends on period
+                recommended_data_points=50,  # Usually 2-3x the period
                 parameters={"period": 20},
                 fallback_parameters={"period": 10},
             ),
             "ExponentialMovingAverage": IndicatorRequirement(
                 indicator_type="ExponentialMovingAverage",
                 minimum_data_points=1,
-                recommended_data_points=None,
+                recommended_data_points=50,  # Usually 2-3x the period
                 parameters={"period": 20},
                 fallback_parameters={"period": 10},
             ),
@@ -112,7 +112,7 @@ class ComplexConfigurationHandler:
             "BollingerBands": IndicatorRequirement(
                 indicator_type="BollingerBands",
                 minimum_data_points=2,
-                recommended_data_points=None,
+                recommended_data_points=40,  # Usually 2x the period
                 parameters={"period": 20, "std_dev": 2},
                 fallback_parameters={"period": 10, "std_dev": 2},
             ),
@@ -126,7 +126,7 @@ class ComplexConfigurationHandler:
             "ATR": IndicatorRequirement(
                 indicator_type="ATR",
                 minimum_data_points=2,
-                recommended_data_points=None,
+                recommended_data_points=28,  # Usually 2x the period (14)
                 parameters={"period": 14},
                 fallback_parameters={"period": 7},
             ),
@@ -190,8 +190,8 @@ class ComplexConfigurationHandler:
         Returns:
             Tuple of (issues found, corrected configurations)
         """
-        issues = []
-        corrected_configs = []
+        issues: list[ConfigurationIssue] = []
+        corrected_configs: list[TimeframeIndicatorConfig] = []
 
         for config in timeframe_configs:
             timeframe = config.timeframe
@@ -255,13 +255,13 @@ class ComplexConfigurationHandler:
                     corrected_indicators.append(indicator_config)
 
             # Create corrected timeframe config
-            corrected_config = TimeframeIndicatorConfig(
+            timeframe_config: TimeframeIndicatorConfig = TimeframeIndicatorConfig(
                 timeframe=config.timeframe,
                 indicators=corrected_indicators,
                 enabled=config.enabled,
                 weight=config.weight,
             )
-            corrected_configs.append(corrected_config)
+            corrected_configs.append(timeframe_config)
 
         return issues, corrected_configs
 
@@ -572,7 +572,7 @@ def validate_configuration_feasibility(
     issues, _ = handler.validate_configuration(timeframe_configs, availability)
 
     # Create report
-    report = {
+    report: dict[str, Any] = {
         "feasible": len(issues) == 0,
         "data_availability": {
             tf: {

@@ -247,7 +247,7 @@ class IbConnectionPool:
                 # For other errors, decide whether to retry
                 if error_type == IbErrorType.FATAL:
                     logger.error(f"Fatal error creating connection: {e}")
-                    raise ConnectionError(f"Fatal error: {e}")
+                    raise ConnectionError(f"Fatal error: {e}") from None
 
                 logger.warning(f"Connection attempt {attempt + 1} failed: {e}")
 

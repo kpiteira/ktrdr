@@ -348,7 +348,8 @@ class IbConnection:
             logger.debug(f"Function {request.func.__name__} completed successfully")
 
             # Return successful result
-            request.result_future.set_result(result)
+            if request.result_future is not None:
+                request.result_future.set_result(result)
             self.requests_processed += 1
 
             logger.debug(f"Request {request.request_id} completed successfully")
@@ -357,7 +358,8 @@ class IbConnection:
             # Return error to caller
             logger.error(f"Sync request {request.request_id} execution failed: {e}")
             logger.error(f"Exception type: {type(e)}")
-            request.result_future.set_exception(e)
+            if request.result_future is not None:
+                request.result_future.set_exception(e)
             self.errors_encountered += 1
 
     async def _connect_to_ib(self):
@@ -479,7 +481,8 @@ class IbConnection:
             logger.debug(f" Function {request.func.__name__} completed successfully")
 
             # Return successful result
-            request.result_future.set_result(result)
+            if request.result_future is not None:
+                request.result_future.set_result(result)
             self.requests_processed += 1
 
             logger.debug(f" Request {request.request_id} completed successfully")
@@ -488,7 +491,8 @@ class IbConnection:
             # Return error to caller
             logger.error(f"Async request {request.request_id} execution failed: {e}")
             logger.error(f"Exception type: {type(e)}")
-            request.result_future.set_exception(e)
+            if request.result_future is not None:
+                request.result_future.set_exception(e)
             self.errors_encountered += 1
 
     async def _disconnect_from_ib(self):
@@ -557,18 +561,25 @@ class IbConnection:
 
             # Wait for result from the connection thread
             logger.debug(f" Waiting for result from request {request.request_id}")
-            result = request.result_future.result(timeout=30.0)
+            if request.result_future is not None:
+                result = request.result_future.result(timeout=30.0)
+            else:
+                raise ConnectionError("No result future available")
             logger.debug(f" Got result from request {request.request_id} successfully")
             return result
 
         except queue.Full:
             logger.error(f"Request queue full for connection {self.client_id}")
-            raise ConnectionError(f"Request queue full for connection {self.client_id}")
+            raise ConnectionError(
+                f"Request queue full for connection {self.client_id}"
+            ) from None
         except concurrent.futures.TimeoutError:
             logger.error(
                 f"Timeout waiting for result from request {request.request_id}"
             )
-            raise ConnectionError(f"Request timeout for connection {self.client_id}")
+            raise ConnectionError(
+                f"Request timeout for connection {self.client_id}"
+            ) from None
         except Exception as e:
             logger.error(f"Request {request.request_id} failed: {e}")
             raise
@@ -596,13 +607,14 @@ class IbConnection:
             raise ConnectionError(f"IB connection {self.client_id} is not healthy")
 
         # Create future for result
-        result_future = Future()
+        result_future: Future[Any] = Future()
 
         # Create request object
         request = ConnectionRequest(
             func=func,
             args=args,
             kwargs=kwargs,
+            request_id=f"req_{int(time.time() * 1000000)}",
             result_future=result_future,
             timestamp=time.time(),
         )
@@ -613,7 +625,9 @@ class IbConnection:
             logger.debug(f"Request queued for connection {self.client_id}")
 
         except queue.Full:
-            raise ConnectionError(f"Request queue full for connection {self.client_id}")
+            raise ConnectionError(
+                f"Request queue full for connection {self.client_id}"
+            ) from None
 
         # Wait for result with timeout
         try:
@@ -621,7 +635,9 @@ class IbConnection:
             return result
 
         except TimeoutError:
-            raise ConnectionError(f"Request timeout for connection {self.client_id}")
+            raise ConnectionError(
+                f"Request timeout for connection {self.client_id}"
+            ) from None
 
     def _detect_potential_sleep_wake(self) -> bool:
         """
@@ -683,7 +699,7 @@ class IbConnection:
         try:
             # Quick validation: managedAccounts() is lightweight and cached
             # If this succeeds, the connection is truly functional
-            accounts = self.ib.managedAccounts()
+            self.ib.managedAccounts()
 
             if potential_sleep:
                 logger.info(

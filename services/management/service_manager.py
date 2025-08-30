@@ -9,20 +9,19 @@ Manages both IB Host Service and Training Host Service with:
 - Cross-platform service registration
 """
 
+import logging
 import os
+import signal
+import subprocess
 import sys
 import time
-import json
-import signal
-import asyncio
-import subprocess
-import psutil
-import requests
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
-import logging
+from pathlib import Path
+from typing import Optional
+
+import psutil
+import requests
 
 # Setup logging
 logging.basicConfig(
@@ -53,7 +52,7 @@ class ServiceConfig:
     start_script: str
     stop_script: str
     health_endpoint: str
-    dependencies: Optional[List[str]] = None
+    dependencies: Optional[list[str]] = None
     startup_delay: int = 5
     health_timeout: int = 10
     max_restart_attempts: int = 3
@@ -82,7 +81,7 @@ class ServiceManager:
         self.status_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Track restart attempts
-        self.restart_attempts: Dict[str, int] = {}
+        self.restart_attempts: dict[str, int] = {}
 
         logger.info(f"ServiceManager initialized for project: {self.project_root}")
 
@@ -97,7 +96,7 @@ class ServiceManager:
         # Fallback to current directory
         return str(Path.cwd())
 
-    def _load_service_configs(self) -> Dict[str, ServiceConfig]:
+    def _load_service_configs(self) -> dict[str, ServiceConfig]:
         """Load service configurations."""
         return {
             "ib-host": ServiceConfig(
@@ -219,7 +218,7 @@ class ServiceManager:
             os.chmod(start_script_path, 0o755)
 
             # Start the service in background
-            process = subprocess.Popen(
+            subprocess.Popen(
                 [str(start_script_path)],
                 cwd=str(service_dir),
                 stdout=subprocess.PIPE,
@@ -284,7 +283,7 @@ class ServiceManager:
             os.chmod(stop_script_path, 0o755)
 
             # Stop the service
-            result = subprocess.run(
+            subprocess.run(
                 [str(stop_script_path)],
                 cwd=str(service_dir),
                 capture_output=True,
@@ -363,7 +362,7 @@ class ServiceManager:
 
         return success
 
-    def get_all_status(self) -> Dict[str, Dict]:
+    def get_all_status(self) -> dict[str, dict]:
         """Get status of all services."""
         status_info = {}
 
@@ -389,11 +388,11 @@ class ServiceManager:
         """Monitor services and restart if needed."""
         logger.info(f"Starting service monitoring (interval: {interval}s)")
 
-        failure_counts: Dict[str, int] = {}
+        failure_counts: dict[str, int] = {}
 
         try:
             while True:
-                for service_name, config in self.services.items():
+                for service_name, _config in self.services.items():
                     try:
                         status = self.get_service_status(service_name)
 
@@ -507,7 +506,7 @@ def main():
         print("\n🔧 KTRDR Host Services Status")
         print("=" * 50)
 
-        for service_name, info in status_info.items():
+        for _service_name, info in status_info.items():
             status_emoji = "✅" if info["status"] == "running" else "❌"
             health_emoji = "💚" if info["health_ok"] else "💔"
 

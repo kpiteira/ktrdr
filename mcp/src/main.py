@@ -1,8 +1,9 @@
 """Entry point for MCP server"""
 
 import sys
-from .server import KTRDRMCPServer
+
 from .config import setup_logging
+from .server import KTRDRMCPServer
 
 
 def main():

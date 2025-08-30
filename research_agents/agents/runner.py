@@ -6,15 +6,14 @@ Supports different agent types and configurations.
 """
 
 import asyncio
-import os
 import logging
+import os
 import signal
 import sys
-from typing import Optional
 
-from .researcher import ResearcherAgent
 from .assistant import AssistantAgent
 from .research_agent_mvp import ResearchAgentMVP
+from .researcher import ResearcherAgent
 
 # Configure logging
 logging.basicConfig(

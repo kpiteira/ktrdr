@@ -6,12 +6,12 @@ This script demonstrates the functionality of the FuzzyEngine class for
 transforming indicator values into fuzzy membership degrees.
 """
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
 
-from ktrdr.fuzzy import FuzzyConfig, FuzzyEngine, TriangularMF
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from ktrdr.fuzzy import FuzzyConfig, FuzzyEngine
 
 # Create a simple fuzzy configuration for RSI indicator
 fuzzy_config_dict = {

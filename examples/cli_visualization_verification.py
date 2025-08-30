@@ -7,7 +7,6 @@ added in Task 3.4. It uses the subprocess module to run the commands
 and checks for expected outputs.
 """
 
-import os
 import subprocess
 import sys
 from pathlib import Path

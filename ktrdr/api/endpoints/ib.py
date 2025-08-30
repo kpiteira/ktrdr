@@ -9,7 +9,6 @@ import asyncio
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
 
 from ktrdr import get_logger
 from ktrdr.api.models.base import ApiResponse, ErrorResponse
@@ -105,35 +104,23 @@ async def check_ib_health(
 
         # Return appropriate HTTP status based on health
         if not health.healthy:
-            return JSONResponse(
-                status_code=503,  # Service Unavailable
-                content=ApiResponse(
-                    success=False,
-                    data=health,
-                    error=ErrorResponse(
-                        code="IB-UNHEALTHY",
-                        message="IB connection is unhealthy",
-                        details={"error_message": health.error_message},
-                    ),
-                ).model_dump(),
+            # Use HTTPException for proper FastAPI error handling
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=503,
+                detail=f"IB connection is unhealthy: {health.error_message}",
             )
 
         return ApiResponse(success=True, data=health, error=None)
 
     except Exception as e:
         logger.error(f"Error checking IB health: {e}")
-        return JSONResponse(
-            status_code=500,
-            content=ApiResponse(
-                success=False,
-                data=None,
-                error=ErrorResponse(
-                    code="IB-HEALTH-ERROR",
-                    message="Failed to check IB health",
-                    details={"error": str(e)},
-                ),
-            ).model_dump(),
-        )
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=500, detail=f"Failed to check IB health: {str(e)}"
+        ) from e
 
 
 @router.get(
@@ -165,18 +152,11 @@ async def get_ib_resilience_status(
 
     except Exception as e:
         logger.error(f"Error getting IB resilience status: {e}")
-        return JSONResponse(
-            status_code=500,
-            content=ApiResponse(
-                success=False,
-                data=None,
-                error=ErrorResponse(
-                    code="IB-RESILIENCE-ERROR",
-                    message="Failed to get IB resilience status",
-                    details={"error": str(e)},
-                ),
-            ).model_dump(),
-        )
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get IB resilience status: {str(e)}"
+        ) from e
 
 
 @router.get(
@@ -523,7 +503,7 @@ async def discover_symbol(
                     "message": f"Symbol discovery circuit breaker OPEN for {request.symbol}",
                     "details": {"symbol": request.symbol, "reason": str(e)},
                 },
-            )
+            ) from None
         except asyncio.TimeoutError:
             logger.error(
                 f"Symbol discovery TIMEOUT for {request.symbol} - possible silent IB connection!"
@@ -539,7 +519,7 @@ async def discover_symbol(
                         "possible_cause": "IB connection appears connected but operations timeout - check IB Gateway connectivity",
                     },
                 },
-            )
+            ) from None
 
         discovery_time_ms = (time.time() - start_time) * 1000
 
@@ -550,6 +530,7 @@ async def discover_symbol(
                 data=SymbolDiscoveryResponse(
                     symbol_info=None, cached=False, discovery_time_ms=discovery_time_ms
                 ),
+                error=None,
             )
 
         # Convert dict to SymbolInfo model
@@ -565,6 +546,7 @@ async def discover_symbol(
                 cached=cached,
                 discovery_time_ms=discovery_time_ms,
             ),
+            error=None,
         )
 
     except Exception as e:
@@ -621,7 +603,7 @@ async def get_discovered_symbols(
         symbols = [SymbolInfo(**symbol_dict) for symbol_dict in symbols_data]
 
         # Count by instrument type
-        instrument_type_counts = {}
+        instrument_type_counts: dict[str, int] = {}
         for symbol in symbols:
             instrument_type_counts[symbol.instrument_type] = (
                 instrument_type_counts.get(symbol.instrument_type, 0) + 1
@@ -638,6 +620,7 @@ async def get_discovered_symbols(
                 instrument_types=instrument_type_counts,
                 cache_stats=cache_stats,
             ),
+            error=None,
         )
 
     except Exception as e:

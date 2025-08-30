@@ -82,9 +82,9 @@ class ProgressDisplayManager:
             console: Optional Rich console instance
         """
         self.console = console or Console()
-        self.stats = None
-        self._active_progress = None
-        self._active_task = None
+        self.stats: Optional[ProgressStats] = None
+        self._active_progress: Optional[Any] = None
+        self._active_task: Optional[Any] = None  # TaskID when active
 
     @contextmanager
     def progress_context(

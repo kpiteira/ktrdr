@@ -3,9 +3,10 @@
 Volume histogram chart example for KTRDR visualization module.
 """
 
-import pandas as pd
 import os
 from pathlib import Path
+
+import pandas as pd
 
 from ktrdr.visualization import Visualizer
 

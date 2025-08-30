@@ -49,7 +49,7 @@ class TradingHours:
     regular_hours: TradingSession
     extended_hours: list[TradingSession]
     trading_days: list[int]  # 0=Monday, 6=Sunday
-    holidays: list[str] = None  # ISO date strings
+    holidays: Optional[list[str]] = None  # ISO date strings
 
 
 class TradingHoursManager:

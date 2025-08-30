@@ -68,7 +68,7 @@ class IndicatorService(BaseService):
 
                 # Create a temporary instance to get default parameters
                 try:
-                    temp_instance = indicator_class()
+                    temp_instance = indicator_class(name=indicator_class.__name__)
 
                     # Get indicator type from categorization system
                     try:
@@ -156,6 +156,7 @@ class IndicatorService(BaseService):
                         ),
                         type=indicator_type,
                         parameters=params,
+                        resources={},  # Empty resources dict for now
                     )
 
                     indicators.append(metadata)
@@ -260,7 +261,10 @@ class IndicatorService(BaseService):
 
                     # If custom output name is specified, store it for later
                     if indicator_config.output_name:
-                        indicator.output_name = indicator_config.output_name
+                        # Use setattr to safely set the output_name attribute (MyPy type safety)
+                        setattr(
+                            indicator, "output_name", indicator_config.output_name
+                        )  # noqa: B010
 
                     indicators.append(indicator)
 
@@ -294,7 +298,10 @@ class IndicatorService(BaseService):
                 ) from e
 
             # Extract dates and indicator values
-            dates = result_df.index.strftime("%Y-%m-%d %H:%M:%S").tolist()
+            dates = [
+                dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(dt, "strftime") else str(dt)
+                for dt in result_df.index
+            ]
 
             # Determine which columns are indicators (not OHLCV)
             ohlcv_columns = ["open", "high", "low", "close", "volume"]
@@ -319,7 +326,7 @@ class IndicatorService(BaseService):
                 # Replace NaN and Inf values with None for JSON serialization
                 import math
 
-                clean_values = []
+                clean_values: list[float | None] = []
                 for val in values:
                     if pd.isna(val) or math.isinf(val):
                         clean_values.append(None)
@@ -337,7 +344,15 @@ class IndicatorService(BaseService):
                 "points": len(dates),
             }
 
-            return dates, indicator_values, metadata
+            # Ensure proper types for return values
+            dates_list: list[str] = [str(d) for d in dates]
+            indicator_values_clean: dict[str, list[float]] = {
+                k: [float(val) if val is not None else 0.0 for val in v]
+                for k, v in indicator_values.items()
+            }
+            metadata_clean: dict[str, Any] = dict(metadata)
+
+            return dates_list, indicator_values_clean, metadata_clean
 
         except (DataError, ConfigurationError, ProcessingError):
             # Re-raise known error types

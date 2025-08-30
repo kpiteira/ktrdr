@@ -104,7 +104,9 @@ class IbService:
                     main_config = config_loader.load(config_path, KtrdrConfig)
                     host_service_config = main_config.ib_host_service
                 else:
-                    host_service_config = IbHostServiceConfig()
+                    host_service_config = IbHostServiceConfig(
+                        enabled=False, url="http://localhost:5001"
+                    )
 
                 # Check environment variable override (same logic as DataManager)
                 env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
@@ -123,7 +125,9 @@ class IbService:
 
             except Exception as e:
                 logger.warning(f"Failed to load host service config: {e}")
-                host_service_config = IbHostServiceConfig()
+                host_service_config = IbHostServiceConfig(
+                    enabled=False, url="http://localhost:5001"
+                )
 
             if host_service_config.enabled:
                 # Use host service for status
@@ -280,7 +284,7 @@ class IbService:
             from ktrdr.ib.pool_manager import get_shared_ib_pool
 
             pool = get_shared_ib_pool()
-            pool_stats = pool.get_pool_stats()
+            pool.get_pool_stats()
             pool_available = True  # Pool created successfully
         except Exception as e:
             logger.warning(f"IB connection pool not available: {e}")
@@ -330,7 +334,7 @@ class IbService:
                     logger.warning(
                         f"❌ Level 2 failed: managedAccounts call failed: {e}"
                     )
-                    raise Exception("Managed accounts access failed")
+                    raise Exception("Managed accounts access failed") from e
 
                 api_test_ok = True
                 logger.info(
@@ -648,9 +652,13 @@ class IbService:
                     main_config = config_loader.load(config_path, KtrdrConfig)
                     host_service_config = main_config.ib_host_service
                 else:
-                    host_service_config = IbHostServiceConfig()
+                    host_service_config = IbHostServiceConfig(
+                        enabled=False, url="http://localhost:5001"
+                    )
             except Exception:
-                host_service_config = IbHostServiceConfig()
+                host_service_config = IbHostServiceConfig(
+                    enabled=False, url="http://localhost:5001"
+                )
 
             # Get IB connection config for fallback
             ib_config = get_ib_config()

@@ -15,7 +15,7 @@ from ktrdr import metadata
 from ktrdr.api.models.base import ApiResponse
 
 # Old architecture removed - using new ktrdr.ib module
-from ktrdr.data.ib_gap_filler import get_gap_filler
+from ktrdr.ib.gap_filler import get_gap_filler
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -37,10 +37,13 @@ async def get_ib_status() -> dict[str, Any]:
         # TODO: Implement with new IB architecture
         pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
 
+        # Extract available connections once to ensure type consistency
+        available_connections = pool_stats.get("available_connections", 0)
+
         return {
             "success": True,
             "connection_pool": {
-                "available_connections": pool_stats.get("available_connections", 0),
+                "available_connections": available_connections,
                 "total_connections": pool_stats.get("total_connections", 0),
                 "failed_connections": pool_stats.get("failed_connections", 0),
                 "host": pool_stats.get("host", ""),
@@ -50,7 +53,7 @@ async def get_ib_status() -> dict[str, Any]:
             },
             "status": (
                 "available"
-                if pool_stats.get("available_connections", 0) > 0
+                if isinstance(available_connections, int) and available_connections > 0
                 else "initializing"
             ),
             "timestamp": pool_stats.get("timestamp", ""),
@@ -60,7 +63,7 @@ async def get_ib_status() -> dict[str, Any]:
         logger.error(f"Error getting IB status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting IB status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/gap-filler-status")
@@ -103,7 +106,7 @@ async def get_gap_filler_status() -> dict[str, Any]:
         logger.error(f"Error getting gap filler status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting gap filler status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/system-status")
@@ -118,7 +121,8 @@ async def get_system_status() -> dict[str, Any]:
         # Get IB connection status from pool
         # TODO: Implement with new IB architecture
         pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
-        ib_connected = pool_stats.get("available_connections", 0) > 0
+        available_conns = pool_stats.get("available_connections", 0)
+        ib_connected = isinstance(available_conns, int) and available_conns > 0
 
         # Get gap filler status
         gap_filler = get_gap_filler()
@@ -157,7 +161,7 @@ async def get_system_status() -> dict[str, Any]:
         logger.error(f"Error getting system status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/status")
@@ -172,7 +176,8 @@ async def get_system_status_standardized() -> ApiResponse:
         # Get IB connection status from pool
         # TODO: Implement with new IB architecture
         pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
-        ib_connected = pool_stats.get("available_connections", 0) > 0
+        available_conns = pool_stats.get("available_connections", 0)
+        ib_connected = isinstance(available_conns, int) and available_conns > 0
 
         # Get gap filler status
         gap_filler = get_gap_filler()
@@ -210,13 +215,14 @@ async def get_system_status_standardized() -> ApiResponse:
                     ),
                 },
             },
+            error=None,
         )
 
     except Exception as e:
         logger.error(f"Error getting system status: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/config")
@@ -261,13 +267,14 @@ async def get_system_config() -> ApiResponse:
                     "data_fetcher",
                 ],
             },
+            error=None,
         )
 
     except Exception as e:
         logger.error(f"Error getting system config: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting system config: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/gap-filler/force-scan")
@@ -292,4 +299,6 @@ async def force_gap_scan() -> dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error forcing gap scan: {e}")
-        raise HTTPException(status_code=500, detail=f"Error forcing gap scan: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error forcing gap scan: {str(e)}"
+        ) from e

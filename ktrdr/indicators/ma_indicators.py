@@ -6,6 +6,8 @@ This module provides classes for different types of moving averages:
 - ExponentialMovingAverage (EMA): A weighted average that gives more importance to recent data
 """
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
@@ -230,7 +232,7 @@ class ExponentialMovingAverage(BaseIndicator):
 
         return params
 
-    def get_column_name(self, suffix: str = None) -> str:
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Get the standardized column name for this indicator.
 

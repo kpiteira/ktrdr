@@ -36,15 +36,15 @@ def get_gap_analysis_service() -> GapAnalysisService:
     summary="Analyze data gaps for symbol/timeframe",
     description="""
     Perform comprehensive gap analysis for a specific symbol and timeframe.
-    
+
     The analysis classifies gaps as expected (weekends, holidays, non-trading hours)
     or unexpected (requiring investigation) based on trading hours metadata.
-    
+
     **Analysis Modes:**
     - `normal`: Summary statistics only
-    - `extended`: Summary + unexpected gaps only  
+    - `extended`: Summary + unexpected gaps only
     - `verbose`: Summary + all gaps (expected and unexpected)
-    
+
     **Examples:**
     - `/gap-analysis/data/AAPL/1d/gaps?start_date=2024-01-01&end_date=2024-12-31`
     - `/gap-analysis/data/EURUSD/1h/gaps?start_date=2024-01-01&end_date=2024-02-01&mode=extended`
@@ -86,7 +86,6 @@ async def analyze_symbol_gaps(
             start_date=start_date,
             end_date=end_date,
             mode=mode,
-            include_expected=include_expected,
         )
 
         logger.info(
@@ -98,27 +97,27 @@ async def analyze_symbol_gaps(
 
         logger.info(
             f"Gap analysis completed for {symbol}_{timeframe}: "
-            f"{result.summary.data_completeness_pct:.1f}% complete, "
-            f"{result.summary.total_missing} missing bars"
+            f"{result.summary.coverage_percentage:.1f}% complete, "
+            f"{result.summary.total_missing_hours:.1f} missing hours"
         )
 
-        return ApiResponse(success=True, data=result)
+        return ApiResponse(success=True, data=result, error=None)
 
     except ValueError as e:
         logger.warning(f"Invalid gap analysis request: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     except FileNotFoundError as e:
         logger.warning(f"Data not found for gap analysis: {e}")
         raise HTTPException(
             status_code=404, detail=f"No data found for {symbol}_{timeframe}"
-        )
+        ) from e
 
     except Exception as e:
         logger.error(f"Gap analysis failed for {symbol}_{timeframe}: {e}")
         raise HTTPException(
             status_code=500, detail="Internal server error during gap analysis"
-        )
+        ) from e
 
 
 @router.post(
@@ -127,10 +126,10 @@ async def analyze_symbol_gaps(
     summary="Batch gap analysis for multiple symbols",
     description="""
     Perform gap analysis for multiple symbols in a single request.
-    
+
     Useful for analyzing data quality across multiple instruments with the same timeframe.
     Results include individual symbol analysis plus aggregated statistics.
-    
+
     **Request Body Example:**
     ```json
     {
@@ -167,24 +166,24 @@ async def analyze_batch_gaps(
         # Perform batch analysis
         result = await service.analyze_gaps_batch(request)
 
-        success_count = result.request_summary["symbols_successful"]
-        error_count = result.request_summary["symbols_failed"]
+        success_count = result.overall_summary.get("symbols_successful", 0)
+        error_count = result.overall_summary.get("symbols_failed", 0)
 
         logger.info(
             f"Batch gap analysis completed: {success_count} successful, {error_count} failed"
         )
 
-        return ApiResponse(success=True, data=result)
+        return ApiResponse(success=True, data=result, error=None)
 
     except ValueError as e:
         logger.warning(f"Invalid batch gap analysis request: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     except Exception as e:
         logger.error(f"Batch gap analysis failed: {e}")
         raise HTTPException(
             status_code=500, detail="Internal server error during batch analysis"
-        )
+        ) from e
 
 
 @router.get(
@@ -193,7 +192,7 @@ async def analyze_batch_gaps(
     summary="Get gap analysis summary only",
     description="""
     Get a quick summary of data completeness for a symbol/timeframe without detailed gap analysis.
-    
+
     Useful for dashboards and data quality monitoring where only high-level statistics are needed.
     """,
 )
@@ -225,26 +224,25 @@ async def get_gap_summary(
             start_date=start_date,
             end_date=end_date,
             mode=GapAnalysisMode.NORMAL,
-            include_expected=False,
         )
 
         # Perform analysis
         result = await service.analyze_gaps(request)
 
-        # Return just the summary and recommendations
+        # Return just the summary and analysis details
         summary_data = {
             "symbol": result.symbol,
             "timeframe": result.timeframe,
-            "analysis_period": result.analysis_period,
+            "analysis_mode": result.analysis_mode.value,
             "summary": result.summary.dict(),
-            "recommendations": result.recommendations,
+            "gaps": [gap.dict() for gap in result.gaps],
         }
 
-        return ApiResponse(success=True, data=summary_data)
+        return ApiResponse(success=True, data=summary_data, error=None)
 
     except Exception as e:
         logger.error(f"Gap summary failed for {symbol}_{timeframe}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get(
@@ -276,8 +274,10 @@ async def health_check(
             "version": "1.0.0",
         }
 
-        return ApiResponse(success=True, data=health_data)
+        return ApiResponse(success=True, data=health_data, error=None)
 
     except Exception as e:
         logger.error(f"Gap analysis health check failed: {e}")
-        raise HTTPException(status_code=500, detail="Service health check failed")
+        raise HTTPException(
+            status_code=500, detail="Service health check failed"
+        ) from e

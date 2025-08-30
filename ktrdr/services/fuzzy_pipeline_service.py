@@ -51,8 +51,8 @@ class FuzzyPipelineService:
         self.data_manager = data_manager or DataManager()
         self.enable_caching = enable_caching
         self.cache_ttl_seconds = cache_ttl_seconds
-        self._pipeline_cache = {}
-        self._result_cache = {}
+        self._pipeline_cache: dict[str, Any] = {}
+        self._result_cache: dict[str, Any] = {}
 
         logger.info("Initialized FuzzyPipelineService")
 
@@ -288,9 +288,7 @@ class FuzzyPipelineService:
         for timeframe in timeframes:
             try:
                 # Use data manager to load data
-                data = self.data_manager.get_data(
-                    symbol=symbol, timeframe=timeframe, period_days=period_days
-                )
+                data = self.data_manager.load_data(symbol=symbol, timeframe=timeframe)
 
                 if data is not None and not data.empty:
                     market_data[timeframe] = data
@@ -321,7 +319,7 @@ class FuzzyPipelineService:
         """Create summary report for single symbol result."""
         fuzzy_values = result.fuzzy_result.fuzzy_values
 
-        report = {
+        report: dict[str, Any] = {
             "summary": {
                 "total_fuzzy_values": len(fuzzy_values),
                 "processed_timeframes": len(result.fuzzy_result.timeframe_results),
@@ -337,15 +335,22 @@ class FuzzyPipelineService:
         for timeframe, tf_result in result.fuzzy_result.timeframe_results.items():
             report["timeframe_breakdown"][timeframe] = {
                 "fuzzy_value_count": len(tf_result),
-                "indicators": list(set(key.split("_")[0] for key in tf_result.keys())),
+                "indicators": list({key.split("_")[0] for key in tf_result.keys()}),
             }
 
         # Top fuzzy values (sorted by value)
         if fuzzy_values:
-            sorted_values = sorted(
-                fuzzy_values.items(), key=lambda x: x[1], reverse=True
-            )
-            report["top_fuzzy_values"] = dict(sorted_values[:10])
+            # Filter to only numeric values for sorting
+            numeric_values = {
+                k: float(v)
+                for k, v in fuzzy_values.items()
+                if isinstance(v, (int, float))
+            }
+            if numeric_values:
+                sorted_values = sorted(
+                    numeric_values.items(), key=lambda x: x[1], reverse=True
+                )
+                report["top_fuzzy_values"] = dict(sorted_values[:10])
 
         # Performance metrics
         if include_performance and result.processing_metadata:
@@ -374,7 +379,7 @@ class FuzzyPipelineService:
         total_symbols = len(results)
         successful_symbols = sum(1 for r in results.values() if len(r.errors) == 0)
 
-        report = {
+        report: dict[str, Any] = {
             "summary": {
                 "total_symbols": total_symbols,
                 "successful_symbols": successful_symbols,

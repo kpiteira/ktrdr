@@ -1,13 +1,12 @@
 """Storage Manager for MCP Experiments and Knowledge Accumulation"""
 
 import json
-import sqlite3
-import asyncio
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Optional
+
 import aiosqlite
 import structlog
+
 from .config import get_config
 
 logger = structlog.get_logger()
@@ -41,7 +40,7 @@ class ExperimentStorage:
                     results TEXT,  -- JSON results
                     metadata TEXT  -- JSON metadata
                 );
-                
+
                 -- Strategies table - stores strategy configurations
                 CREATE TABLE IF NOT EXISTS strategies (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +52,7 @@ class ExperimentStorage:
                     performance_metrics TEXT,  -- JSON performance data
                     tags TEXT  -- JSON array of tags
                 );
-                
+
                 -- Models table - stores trained model information
                 CREATE TABLE IF NOT EXISTS models (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +65,7 @@ class ExperimentStorage:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (strategy_id) REFERENCES strategies (id)
                 );
-                
+
                 -- Backtests table - stores backtest results
                 CREATE TABLE IF NOT EXISTS backtests (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +78,7 @@ class ExperimentStorage:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (strategy_id) REFERENCES strategies (id)
                 );
-                
+
                 -- Training tasks - tracks neural network training jobs
                 CREATE TABLE IF NOT EXISTS training_tasks (
                     id TEXT PRIMARY KEY,  -- UUID task identifier
@@ -97,7 +96,7 @@ class ExperimentStorage:
                     progress TEXT,  -- JSON progress information
                     FOREIGN KEY (experiment_id) REFERENCES experiments (id)
                 );
-                
+
                 -- Model records - tracks saved neural network models
                 CREATE TABLE IF NOT EXISTS model_records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,7 +110,7 @@ class ExperimentStorage:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (task_id) REFERENCES training_tasks (id)
                 );
-                
+
                 -- Knowledge base - stores research insights and learnings
                 CREATE TABLE IF NOT EXISTS knowledge_base (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +121,7 @@ class ExperimentStorage:
                     tags TEXT,  -- JSON array of tags
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
-                
+
                 -- Create indexes for better performance
                 CREATE INDEX IF NOT EXISTS idx_experiments_status ON experiments(status);
                 CREATE INDEX IF NOT EXISTS idx_experiments_created ON experiments(created_at);
@@ -139,7 +138,7 @@ class ExperimentStorage:
 
     # Experiment Management
     async def create_experiment(
-        self, name: str, description: str = "", config: Optional[Dict] = None
+        self, name: str, description: str = "", config: Optional[dict] = None
     ) -> int:
         """Create a new experiment"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -156,8 +155,8 @@ class ExperimentStorage:
         self,
         experiment_id: int,
         status: Optional[str] = None,
-        results: Optional[Dict] = None,
-        metadata: Optional[Dict] = None,
+        results: Optional[dict] = None,
+        metadata: Optional[dict] = None,
     ):
         """Update experiment status and results"""
         updates = ["updated_at = CURRENT_TIMESTAMP"]
@@ -182,7 +181,7 @@ class ExperimentStorage:
             await db.commit()
             logger.info("Experiment updated", id=experiment_id, status=status)
 
-    async def get_experiment(self, experiment_id: int) -> Optional[Dict]:
+    async def get_experiment(self, experiment_id: int) -> Optional[dict]:
         """Get experiment by ID"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -196,7 +195,7 @@ class ExperimentStorage:
 
     async def list_experiments(
         self, status: Optional[str] = None, limit: int = 50
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """List experiments with optional status filter"""
         query = "SELECT * FROM experiments"
         params = []
@@ -216,7 +215,7 @@ class ExperimentStorage:
 
     # Strategy Management
     async def save_strategy(
-        self, name: str, config: Dict, description: str = ""
+        self, name: str, config: dict, description: str = ""
     ) -> int:
         """Save or update a strategy"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -246,7 +245,7 @@ class ExperimentStorage:
             logger.info("Strategy saved", id=strategy_id, name=name)
             return strategy_id
 
-    async def get_strategy(self, name: str) -> Optional[Dict]:
+    async def get_strategy(self, name: str) -> Optional[dict]:
         """Get strategy by name"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -264,7 +263,7 @@ class ExperimentStorage:
                 return strategy
             return None
 
-    async def list_strategies(self) -> List[Dict]:
+    async def list_strategies(self) -> list[dict]:
         """List all strategies"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -281,14 +280,14 @@ class ExperimentStorage:
         symbol: str,
         start_date: str,
         end_date: str,
-        results: Dict,
-        metrics: Dict,
+        results: dict,
+        metrics: dict,
     ) -> int:
         """Save backtest results"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
-                """INSERT INTO backtests 
-                   (strategy_id, symbol, start_date, end_date, results, metrics) 
+                """INSERT INTO backtests
+                   (strategy_id, symbol, start_date, end_date, results, metrics)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (
                     strategy_id,
@@ -308,7 +307,7 @@ class ExperimentStorage:
 
     async def get_backtest_history(
         self, strategy_id: Optional[int] = None, symbol: Optional[str] = None
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Get backtest history with optional filters"""
         query = "SELECT * FROM backtests"
         params = []
@@ -339,7 +338,7 @@ class ExperimentStorage:
         content: str,
         source_type: str = "manual",
         source_id: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> int:
         """Add knowledge to the base"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -359,8 +358,8 @@ class ExperimentStorage:
             return knowledge_id
 
     async def search_knowledge(
-        self, topic: Optional[str] = None, tags: Optional[List[str]] = None
-    ) -> List[Dict]:
+        self, topic: Optional[str] = None, tags: Optional[list[str]] = None
+    ) -> list[dict]:
         """Search knowledge base"""
         query = "SELECT * FROM knowledge_base"
         params = []
@@ -399,7 +398,7 @@ class ExperimentStorage:
         experiment_id: int,
         symbol: str,
         timeframe: str,
-        config: Dict,
+        config: dict,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> str:
@@ -410,8 +409,8 @@ class ExperimentStorage:
 
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
-                """INSERT INTO training_tasks 
-                   (id, experiment_id, symbol, timeframe, config, start_date, end_date) 
+                """INSERT INTO training_tasks
+                   (id, experiment_id, symbol, timeframe, config, start_date, end_date)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     task_id,
@@ -433,7 +432,7 @@ class ExperimentStorage:
         self,
         task_id: str,
         status: Optional[str] = None,
-        progress: Optional[Dict] = None,
+        progress: Optional[dict] = None,
         error_message: Optional[str] = None,
     ):
         """Update training task status and progress"""
@@ -470,7 +469,7 @@ class ExperimentStorage:
             await db.commit()
             logger.info("Training task updated", task_id=task_id, status=status)
 
-    async def get_training_task(self, task_id: str) -> Optional[Dict]:
+    async def get_training_task(self, task_id: str) -> Optional[dict]:
         """Get training task by ID"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -491,7 +490,7 @@ class ExperimentStorage:
         experiment_id: Optional[int] = None,
         status: Optional[str] = None,
         limit: int = 50,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """List training tasks with optional filters"""
         query = "SELECT * FROM training_tasks"
         params = []
@@ -529,16 +528,16 @@ class ExperimentStorage:
         name: str,
         task_id: str,
         description: str,
-        config: Dict,
+        config: dict,
         symbol: str,
         timeframe: str,
-        performance_metrics: Optional[Dict] = None,
+        performance_metrics: Optional[dict] = None,
     ) -> int:
         """Save a model record"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
-                """INSERT INTO model_records 
-                   (name, task_id, description, config, symbol, timeframe, performance_metrics) 
+                """INSERT INTO model_records
+                   (name, task_id, description, config, symbol, timeframe, performance_metrics)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     name,
@@ -555,7 +554,7 @@ class ExperimentStorage:
             logger.info("Model record saved", model_id=model_id, name=name)
             return model_id
 
-    async def get_model_record(self, name: str) -> Optional[Dict]:
+    async def get_model_record(self, name: str) -> Optional[dict]:
         """Get model record by name"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -573,7 +572,7 @@ class ExperimentStorage:
                 return model
             return None
 
-    async def list_model_records(self) -> List[Dict]:
+    async def list_model_records(self) -> list[dict]:
         """List all model records"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row

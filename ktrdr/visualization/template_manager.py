@@ -9,6 +9,7 @@ import json
 
 # Setup logging
 import logging
+from typing import Any, Optional
 
 from ktrdr.errors import ConfigurationError
 
@@ -40,8 +41,8 @@ class TemplateManager:
     <title>{title}</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: {background_color};
@@ -171,19 +172,19 @@ class TemplateManager:
                 alert('Unable to load chart library. Please check your internet connection and try again.');
                 return;
             }}
-            
+
             // Get elements
             const darkThemeBtn = document.getElementById('darkTheme');
             const lightThemeBtn = document.getElementById('lightTheme');
             const zoomFitBtn = document.getElementById('zoomFit');
-            
+
             // Create all charts and keep references for theme switching
             const charts = [];
             // Store all series for toggling visibility
             const allSeries = {{}};
-            
+
             {chart_scripts}
-            
+
             // Theme switch functionality
             darkThemeBtn.addEventListener('click', () => {{
                 // Apply dark theme styling
@@ -199,11 +200,11 @@ class TemplateManager:
                     el.style.color = '#d1d4dc';
                     el.style.borderColor = '#2a2e39';
                 }});
-                
+
                 // Update disabled state of theme buttons
                 darkThemeBtn.disabled = true;
                 lightThemeBtn.disabled = false;
-                
+
                 // Apply theme to all charts
                 charts.forEach(chart => {{
                     chart.applyOptions({{
@@ -214,7 +215,7 @@ class TemplateManager:
                     }});
                 }});
             }});
-            
+
             lightThemeBtn.addEventListener('click', () => {{
                 // Apply light theme styling
                 document.body.style.backgroundColor = '#ffffff';
@@ -229,11 +230,11 @@ class TemplateManager:
                     el.style.color = '#333333';
                     el.style.borderColor = '#e6e6e6';
                 }});
-                
+
                 // Update disabled state of theme buttons
                 darkThemeBtn.disabled = false;
                 lightThemeBtn.disabled = true;
-                
+
                 // Apply theme to all charts
                 charts.forEach(chart => {{
                     chart.applyOptions({{
@@ -244,17 +245,17 @@ class TemplateManager:
                     }});
                 }});
             }});
-            
+
             // Handle window resize
             window.addEventListener('resize', () => {{
                 {resize_handlers}
             }});
-            
+
             // Handle zoom fit button
             zoomFitBtn.addEventListener('click', () => {{
                 {zoom_fit_handlers}
             }});
-            
+
             // Function to toggle series visibility
             function toggleSeries(seriesId, visible) {{
                 const series = allSeries[seriesId];
@@ -272,7 +273,7 @@ class TemplateManager:
                 }}
                 return false;
             }}
-            
+
             // Function to update dynamic panel layout when indicators are toggled
             function updatePanelLayouts() {{
                 // Recalculate heights based on visible panels
@@ -282,14 +283,14 @@ class TemplateManager:
                     }}
                 }});
             }}
-            
+
             // Set up event handlers for legend items with toggle functionality
             document.querySelectorAll('.legend-toggle').forEach(toggle => {{
                 toggle.addEventListener('change', (e) => {{
                     const seriesId = e.target.dataset.seriesId;
                     const isVisible = e.target.checked;
                     toggleSeries(seriesId, isVisible);
-                    
+
                     // If this is a panel (not an overlay), adjust layout
                     if (e.target.dataset.isPanel === 'true') {{
                         const panelId = e.target.dataset.panelId;
@@ -301,13 +302,13 @@ class TemplateManager:
                     }}
                 }});
             }});
-            
+
             // Add click handlers for legend items without checkboxes
             document.querySelectorAll('.legend-clickable').forEach(item => {{
                 item.addEventListener('click', (e) => {{
                     const seriesId = e.currentTarget.dataset.seriesId;
                     const newState = toggleSeries(seriesId);
-                    
+
                     // Update visual feedback
                     if (newState) {{
                         e.currentTarget.style.opacity = '1';
@@ -316,9 +317,9 @@ class TemplateManager:
                     }}
                 }});
             }});
-            
+
             {sync_scripts}
-            
+
             // Create overlay series
             {overlay_scripts}
         }});
@@ -330,8 +331,8 @@ class TemplateManager:
     @staticmethod
     def render_chart_html(
         title: str = "KTRDR Chart",
-        chart_configs: list[dict] = None,
-        chart_data: dict = None,
+        chart_configs: Optional[list[dict]] = None,
+        chart_data: Optional[dict] = None,
         theme: str = "dark",
         has_range_slider: bool = False,
     ) -> str:
@@ -394,8 +395,8 @@ class TemplateManager:
         overlay_scripts = ""
 
         # Maps to track charts for synchronization
-        chart_ids = []
-        charts_to_sync = {}
+        chart_ids: list[str] = []
+        charts_to_sync: dict[str, Any] = {}
 
         # Process chart configurations
         for config in chart_configs:
@@ -408,7 +409,7 @@ class TemplateManager:
 
             # Handle visibility states for dynamic layouts
             is_panel = config.get("is_panel", False) or chart_id.endswith("_panel")
-            is_range_slider = config.get("is_range_slider", False)
+            config.get("is_range_slider", False)
             visibility_style = (
                 ""
                 if not is_panel
@@ -491,22 +492,22 @@ class TemplateManager:
             title: '{title}'
         }});
         {overlay_id}.setData({json.dumps(overlay_data)});
-        
+
         // Register series for toggling
         allSeries['{overlay_id}'] = {overlay_id};
-        
+
         // Add to legend with toggle checkbox
         const {overlay_id}_legend = document.createElement('div');
         {overlay_id}_legend.className = 'legend-item legend-clickable';
         {overlay_id}_legend.dataset.seriesId = '{overlay_id}';
-        
+
         const {overlay_id}_color = document.createElement('div');
         {overlay_id}_color.className = 'legend-color';
         {overlay_id}_color.style.backgroundColor = '{color}';
-        
+
         const {overlay_id}_label = document.createElement('span');
         {overlay_id}_label.textContent = '{title}';
-        
+
         {overlay_id}_legend.appendChild({overlay_id}_color);
         {overlay_id}_legend.appendChild({overlay_id}_label);
         document.getElementById('{chart_id}_legend').appendChild({overlay_id}_legend);
@@ -651,7 +652,7 @@ class TemplateManager:
         // Create {chart_id} container with explicit size
         const {chart_id}_container = document.getElementById('{chart_id}');
         {chart_id}_container.style.height = '{height}px';
-        
+
         // Create chart with explicit options
         const {chart_id} = LightweightCharts.createChart({chart_id}_container, {{
             layout: {{
@@ -676,27 +677,27 @@ class TemplateManager:
             handleScroll: {str(chart_options.get("handleScroll", True)).lower()},
             handleScale: {str(chart_options.get("handleScale", True)).lower()}
         }});
-        
+
         // Add chart to the charts array for theme switching
         charts.push({chart_id});
-        
+
         // Make sure chart is properly sized
         {chart_id}.resize(
             {chart_id}_container.clientWidth,
             {chart_id}_container.clientHeight
         );
-        
+
         // Create series with explicit options
         const {chart_id}_series = {chart_id}.{method_name}({{
             {', '.join([f'{k}: "{v}"' if isinstance(v, str) else f'{k}: {str(v).lower()}' if isinstance(v, bool) else f'{k}: {v}' for k, v in series_options.items()])}
         }});
-        
+
         // Register main series for toggling
         allSeries['{chart_id}_main'] = {chart_id}_series;
-        
+
         // Set data for {chart_id}
         {chart_id}_series.setData({json.dumps(data)});
-        
+
         // Fit content to ensure chart displays properly
         {chart_id}.timeScale().fitContent();
 """
@@ -710,7 +711,7 @@ class TemplateManager:
                 window.onRangeChange(timeRange);
             }}
         }};
-        
+
         {chart_id}.timeScale().subscribeVisibleLogicalRangeChange(handle{chart_id}TimeRangeChange);
 """
 

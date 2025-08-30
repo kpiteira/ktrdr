@@ -291,7 +291,7 @@ class IncrementalProcessor:
             # Determine which rows are new
             if timeframe in self.cached_results:
                 # Only return new rows
-                cached_len = len(self.cached_results[timeframe])
+                len(self.cached_results[timeframe])
                 new_rows = standardized_result.tail(len(new_df))
                 incremental_results[timeframe] = new_rows
             else:
@@ -382,12 +382,12 @@ class OptimizedMultiTimeframeEngine:
         if use_chunking and use_parallel:
             self.logger.info("Using chunked + parallel processing")
             results = self._process_chunked_parallel(data)
-        elif use_chunking:
+        elif use_chunking and self.chunked_processor is not None:
             self.logger.info("Using chunked processing")
             results = self.chunked_processor.process_multi_timeframe_chunked(
                 data, self.base_engine
             )
-        elif use_parallel:
+        elif use_parallel and self.parallel_processor is not None:
             self.logger.info("Using parallel processing")
             results = self.parallel_processor.process_multi_timeframe_parallel(
                 data, self.base_engine
@@ -417,9 +417,12 @@ class OptimizedMultiTimeframeEngine:
         ) -> tuple[str, pd.DataFrame]:
             if timeframe in self.base_engine.engines:
                 engine = self.base_engine.engines[timeframe]
-                result = self.chunked_processor.process_timeframe_chunked(
-                    df, engine, timeframe
-                )
+                if self.chunked_processor is not None:
+                    result = self.chunked_processor.process_timeframe_chunked(
+                        df, engine, timeframe
+                    )
+                else:
+                    result = df
 
                 # Apply standardization
                 standardized = self.base_engine._standardize_column_names(
@@ -431,9 +434,12 @@ class OptimizedMultiTimeframeEngine:
 
         results = {}
 
-        with ThreadPoolExecutor(
-            max_workers=self.parallel_processor.max_workers
-        ) as executor:
+        max_workers = (
+            self.parallel_processor.max_workers
+            if self.parallel_processor is not None
+            else 4  # Default fallback
+        )
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(process_timeframe_chunked_parallel, tf, df): tf
                 for tf, df in data.items()
@@ -462,7 +468,9 @@ class OptimizedMultiTimeframeEngine:
 
     def get_performance_metrics(self) -> dict[str, Any]:
         """Get performance metrics and recommendations."""
-        metrics = {
+        from typing import Any
+
+        metrics: dict[str, Any] = {
             "optimizations_enabled": {
                 "chunking": self.enable_chunking,
                 "parallel": self.enable_parallel,

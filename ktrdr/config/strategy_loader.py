@@ -54,7 +54,7 @@ class StrategyConfigurationLoader:
             with open(config_path) as f:
                 raw_config = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML in {config_path}: {e}")
+            raise ValueError(f"Invalid YAML in {config_path}: {e}") from e
 
         if not isinstance(raw_config, dict):
             raise ValueError(
@@ -69,8 +69,8 @@ class StrategyConfigurationLoader:
                 f"Loading v2 multi-scope strategy configuration: {config_path.name}"
             )
             try:
-                config = StrategyConfigurationV2(**raw_config)
-                return config, True
+                v2_config = StrategyConfigurationV2(**raw_config)
+                return v2_config, True
             except ValidationError as e:
                 raise ValueError(
                     f"V2 strategy validation failed for {config_path}: {e}"
@@ -80,8 +80,8 @@ class StrategyConfigurationLoader:
             try:
                 # Add sensible defaults for missing required fields
                 raw_config = self._add_legacy_defaults(raw_config)
-                config = LegacyStrategyConfiguration(**raw_config)
-                return config, False
+                legacy_config = LegacyStrategyConfiguration(**raw_config)
+                return legacy_config, False
             except ValidationError as e:
                 raise ValueError(
                     f"Legacy strategy validation failed for {config_path}: {e}"
@@ -150,10 +150,15 @@ class StrategyConfigurationLoader:
             symbol_config = SymbolConfiguration(
                 mode=SymbolMode.SINGLE,
                 symbol=legacy_symbols[0] if legacy_symbols else "PLACEHOLDER",
+                symbols=None,
+                selection_criteria=None,
             )
         else:
             symbol_config = SymbolConfiguration(
-                mode=SymbolMode.MULTI_SYMBOL, list=legacy_symbols
+                mode=SymbolMode.MULTI_SYMBOL,
+                symbol=None,
+                symbols=legacy_symbols,
+                selection_criteria=None,
             )
 
         # Create timeframe configuration
@@ -161,11 +166,14 @@ class StrategyConfigurationLoader:
             timeframe_config = TimeframeConfiguration(
                 mode=TimeframeMode.SINGLE,
                 timeframe=legacy_timeframes[0] if legacy_timeframes else "1h",
+                timeframes=None,
+                base_timeframe=None,
             )
         else:
             timeframe_config = TimeframeConfiguration(
                 mode=TimeframeMode.MULTI_TIMEFRAME,
-                list=legacy_timeframes,
+                timeframe=None,
+                timeframes=legacy_timeframes,
                 base_timeframe=legacy_timeframes[0],  # Use first as base
             )
 
@@ -174,6 +182,8 @@ class StrategyConfigurationLoader:
             symbols=symbol_config,
             timeframes=timeframe_config,
             history_required=data_section.get("history_required", 200),
+            start_date=None,
+            end_date=None,
         )
 
         # Create deployment configuration
@@ -184,12 +194,14 @@ class StrategyConfigurationLoader:
         else:
             target_symbol_mode = TargetSymbolMode.UNIVERSAL
 
-        target_symbols = TargetSymbolConfiguration(mode=target_symbol_mode)
+        target_symbols = TargetSymbolConfiguration(
+            mode=target_symbol_mode, restrictions=None
+        )
 
         target_timeframes = TargetTimeframeConfiguration(
             mode=timeframe_config.mode,
             supported=(
-                timeframe_config.list
+                timeframe_config.timeframes
                 if timeframe_config.mode == TimeframeMode.MULTI_TIMEFRAME
                 else None
             ),
@@ -336,14 +348,14 @@ class StrategyConfigurationLoader:
             if symbols_config.mode == SymbolMode.SINGLE:
                 symbols = [symbols_config.symbol] if symbols_config.symbol else []
             else:
-                symbols = symbols_config.list or []
+                symbols = symbols_config.symbols or []
 
             if timeframes_config.mode == TimeframeMode.SINGLE:
                 timeframes = (
                     [timeframes_config.timeframe] if timeframes_config.timeframe else []
                 )
             else:
-                timeframes = timeframes_config.list or []
+                timeframes = timeframes_config.timeframes or []
 
         else:
             # Legacy format

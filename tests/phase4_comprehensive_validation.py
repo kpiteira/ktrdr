@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import httpx
 
@@ -26,9 +26,14 @@ import httpx
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ktrdr.api.services.training_host_client import TrainingHostClient
-from services.management.health_monitor import HealthMonitor
-from services.management.service_manager import ServiceManager
+try:
+    from ktrdr.api.services.training_host_client import TrainingHostClient
+    from services.management.health_monitor import HealthMonitor
+    from services.management.service_manager import ServiceManager
+except ImportError as e:
+    print(f"Error importing modules: {e}")
+    print("Make sure you're running this from the correct directory")
+    sys.exit(1)
 
 # Setup logging
 logging.basicConfig(
@@ -44,7 +49,7 @@ class ValidationResult:
     test_name: str
     success: bool
     duration_seconds: float
-    details: Dict[str, Any]
+    details: dict[str, Any]
     error: Optional[str] = None
 
 
@@ -68,8 +73,8 @@ class Phase4Validator:
         self.project_root = PROJECT_ROOT
         self.service_manager = ServiceManager()
         self.health_monitor = HealthMonitor()
-        self.results: List[ValidationResult] = []
-        self.benchmarks: List[PerformanceBenchmark] = []
+        self.results: list[ValidationResult] = []
+        self.benchmarks: list[PerformanceBenchmark] = []
 
         # Test configuration
         self.test_config = {
@@ -81,7 +86,7 @@ class Phase4Validator:
 
         logger.info(f"Phase4Validator initialized for project: {self.project_root}")
 
-    async def run_comprehensive_validation(self) -> Dict[str, Any]:
+    async def run_comprehensive_validation(self) -> dict[str, Any]:
         """Run complete Phase 4 validation suite."""
         logger.info("🚀 Starting Phase 4 Comprehensive Validation")
         print("=" * 80)
@@ -131,7 +136,7 @@ class Phase4Validator:
         total_duration = time.time() - validation_start
         return self._generate_validation_report(total_duration)
 
-    async def _test_service_management(self) -> List[ValidationResult]:
+    async def _test_service_management(self) -> list[ValidationResult]:
         """Test service management functionality."""
         results = []
 
@@ -268,7 +273,7 @@ class Phase4Validator:
 
         return results
 
-    async def _test_health_monitoring(self) -> List[ValidationResult]:
+    async def _test_health_monitoring(self) -> list[ValidationResult]:
         """Test health monitoring functionality."""
         results = []
 
@@ -369,7 +374,7 @@ class Phase4Validator:
 
         return results
 
-    async def _test_gpu_acceleration(self) -> List[ValidationResult]:
+    async def _test_gpu_acceleration(self) -> list[ValidationResult]:
         """Test GPU acceleration functionality."""
         results = []
 
@@ -464,7 +469,7 @@ class Phase4Validator:
 
         return results
 
-    async def _test_performance_benchmarking(self) -> List[ValidationResult]:
+    async def _test_performance_benchmarking(self) -> list[ValidationResult]:
         """Test performance improvements with GPU acceleration."""
         results = []
 
@@ -526,7 +531,7 @@ class Phase4Validator:
 
         return results
 
-    async def _test_training_workflow(self) -> List[ValidationResult]:
+    async def _test_training_workflow(self) -> list[ValidationResult]:
         """Test complete training workflow through host service."""
         results = []
 
@@ -570,7 +575,7 @@ class Phase4Validator:
 
         return results
 
-    async def _test_reliability_recovery(self) -> List[ValidationResult]:
+    async def _test_reliability_recovery(self) -> list[ValidationResult]:
         """Test system reliability and recovery capabilities."""
         results = []
 
@@ -628,7 +633,7 @@ class Phase4Validator:
 
         return results
 
-    async def _test_system_integration(self) -> List[ValidationResult]:
+    async def _test_system_integration(self) -> list[ValidationResult]:
         """Test system integration across all components."""
         results = []
 
@@ -680,7 +685,7 @@ class Phase4Validator:
 
         return results
 
-    async def _test_rollback_procedures(self) -> List[ValidationResult]:
+    async def _test_rollback_procedures(self) -> list[ValidationResult]:
         """Test rollback procedures and failure recovery."""
         results = []
 
@@ -758,7 +763,7 @@ class Phase4Validator:
         except Exception as e:
             logger.warning(f"Error stopping services: {e}")
 
-    def _generate_validation_report(self, total_duration: float) -> Dict[str, Any]:
+    def _generate_validation_report(self, total_duration: float) -> dict[str, Any]:
         """Generate comprehensive validation report."""
         total_tests = len(self.results)
         passed_tests = sum(1 for r in self.results if r.success)
@@ -811,7 +816,7 @@ class Phase4Validator:
 
         return report
 
-    def print_validation_summary(self, report: Dict[str, Any]):
+    def print_validation_summary(self, report: dict[str, Any]):
         """Print validation summary."""
         print("\n" + "=" * 80)
         print("🎯 Phase 4 Validation Summary")

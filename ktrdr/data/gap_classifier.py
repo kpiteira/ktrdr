@@ -18,7 +18,6 @@ from typing import Optional
 
 import pandas as pd
 
-from ktrdr.data.local_data_loader import TimestampManager
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
@@ -111,8 +110,8 @@ class GapClassifier:
             GapClassification enum value
         """
         # Ensure timestamps are UTC
-        start_time = TimestampManager.to_utc(start_time)
-        end_time = TimestampManager.to_utc(end_time)
+        start_time = TimestampManager.to_utc(start_time)  # type: ignore[assignment]
+        end_time = TimestampManager.to_utc(end_time)  # type: ignore[assignment]
 
         # Get symbol metadata
         symbol_data = self.symbol_metadata.get(symbol, {})
@@ -242,7 +241,9 @@ class GapClassifier:
 
             if is_24_5_market:
                 # For 24/5 markets, weekend is the gap between Friday close and Sunday open
-                return self._is_forex_weekend_gap(start_local, end_local, regular_hours)
+                return self._is_forex_weekend_gap(
+                    pd.Timestamp(start_local), pd.Timestamp(end_local), regular_hours
+                )
             else:
                 # For regular markets, check if gap includes non-trading days
                 current = start_local
@@ -293,7 +294,7 @@ class GapClassifier:
                 end_hour = int(session_end.split(":")[0])
                 # Cross-midnight if start hour > end hour (like 22:00 to 21:59)
                 is_cross_midnight = start_hour > end_hour
-            except:
+            except Exception:
                 pass
 
         return has_sunday and no_saturday and is_cross_midnight
@@ -366,6 +367,8 @@ class GapClassifier:
         end_utc = TimestampManager.to_utc(end_time)
 
         # Check each day in the gap period
+        if start_utc is None or end_utc is None:
+            return False
         current = start_utc.date()
         end_date = end_utc.date()
 
@@ -380,7 +383,6 @@ class GapClassifier:
         """Check if a specific date is a major holiday."""
         month = date_obj.month
         day = date_obj.day
-        year = date_obj.year
 
         # Christmas period (Dec 24-26)
         if month == 12 and day in [24, 25, 26]:
@@ -494,10 +496,10 @@ class GapClassifier:
         h = (19 * a + b - d - g + 15) % 30
         i = c // 4
         k = c % 4
-        l = (32 + 2 * e + 2 * i - h - k) % 7
-        m = (a + 11 * h + 22 * l) // 451
-        n = (h + l - 7 * m + 114) // 31
-        p = (h + l - 7 * m + 114) % 31
+        leap = (32 + 2 * e + 2 * i - h - k) % 7
+        m = (a + 11 * h + 22 * leap) // 451
+        n = (h + leap - 7 * m + 114) // 31
+        p = (h + leap - 7 * m + 114) % 31
 
         return date(year, n, p + 1)
 
@@ -539,7 +541,7 @@ class GapClassifier:
 
         try:
             # Convert UTC times to exchange timezone
-            if hasattr(start_time, "tz_convert"):
+            if hasattr(start_time, "tz_convert") and hasattr(end_time, "tz_convert"):
                 # Already a pandas timestamp with timezone
                 start_local = start_time.tz_convert(timezone_str)
                 end_local = end_time.tz_convert(timezone_str)
@@ -815,8 +817,8 @@ class GapClassifier:
             return False
 
         # Ensure timezone consistency - convert all to UTC timezone-aware
-        start_time = TimestampManager.to_utc(start_time)
-        end_time = TimestampManager.to_utc(end_time)
+        start_time = TimestampManager.to_utc(start_time)  # type: ignore[assignment]
+        end_time = TimestampManager.to_utc(end_time)  # type: ignore[assignment]
 
         # Look for volume=-1 in the period around the gap
         gap_window = timedelta(hours=6)  # Look 6 hours before and after gap

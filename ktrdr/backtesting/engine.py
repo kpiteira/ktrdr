@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import pandas as pd
 
@@ -165,7 +165,7 @@ class BacktestingEngine:
 
         # Initialize tracking
         trades_executed = 0
-        last_progress_update = 0
+        last_progress_update = 0.0
 
         # DEBUG: Track signal statistics
         signal_counts = {"BUY": 0, "SELL": 0, "HOLD": 0}
@@ -204,7 +204,7 @@ class BacktestingEngine:
 
         for idx in range(start_idx, len(data)):
             current_bar = data.iloc[idx]
-            current_timestamp = current_bar.name
+            current_timestamp = cast(pd.Timestamp, current_bar.name)
             current_price = current_bar["close"]
 
             # DEBUG: Log first few bars to ensure loop is running
@@ -526,7 +526,7 @@ class BacktestingEngine:
                                 logger.warning(
                                     f"High drawdown detected: {current_dd*100:.1f}%"
                                 )
-                        except:
+                        except Exception:
                             pass
 
                     # Additional sanity checks at progress milestones
@@ -550,7 +550,7 @@ class BacktestingEngine:
                                     drawdown_info = (
                                         f" | 🚨 Drawdown: {current_dd*100:.1f}%"
                                     )
-                            except:
+                            except Exception:
                                 pass
 
                         print(
@@ -580,10 +580,13 @@ class BacktestingEngine:
         # This prevents unrealized losses from skewing performance metrics
         final_bar = data.iloc[-1]
         final_price = final_bar["close"]
-        final_timestamp = (
-            final_bar.name
-            if hasattr(final_bar.name, "strftime")
-            else pd.Timestamp(final_bar.name)
+        final_timestamp = cast(
+            pd.Timestamp,
+            (
+                final_bar.name
+                if hasattr(final_bar.name, "strftime")
+                else pd.Timestamp(cast(str, final_bar.name))
+            ),
         )
 
         # CRITICAL DEBUG: Track force-close logic
@@ -696,14 +699,22 @@ class BacktestingEngine:
         if self.config.start_date:
             start_date = pd.to_datetime(self.config.start_date)
             # Make timezone-aware if needed to match data index
-            if data.index.tz is not None and start_date.tz is None:
+            if (
+                hasattr(data.index, "tz")
+                and data.index.tz is not None
+                and start_date.tz is None
+            ):
                 start_date = start_date.tz_localize("UTC")
             data = data[data.index >= start_date]
 
         if self.config.end_date:
             end_date = pd.to_datetime(self.config.end_date)
             # Make timezone-aware if needed to match data index
-            if data.index.tz is not None and end_date.tz is None:
+            if (
+                hasattr(data.index, "tz")
+                and data.index.tz is not None
+                and end_date.tz is None
+            ):
                 end_date = end_date.tz_localize("UTC")
             data = data[data.index <= end_date]
 

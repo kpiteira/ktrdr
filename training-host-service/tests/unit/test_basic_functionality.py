@@ -3,10 +3,11 @@ Basic functionality tests for the training host service.
 Tests core functionality without complex mocking.
 """
 
-import pytest
-from unittest.mock import patch, Mock
 import sys
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -85,7 +86,7 @@ def test_service_basic_operations():
 
 def test_health_response_models():
     """Test health response model creation."""
-    from endpoints.health import HealthResponse, DetailedHealthResponse
+    from endpoints.health import DetailedHealthResponse, HealthResponse
 
     # Test basic health response
     health_data = {

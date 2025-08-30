@@ -75,7 +75,7 @@ class BalancedMultiSymbolBatchSampler:
 
         # Group indices by symbol
         self.symbol_to_indices = {}
-        for symbol_idx, symbol in enumerate(symbols):
+        for symbol_idx, _symbol in enumerate(symbols):
             symbol_mask = symbol_indices == symbol_idx
             self.symbol_to_indices[symbol_idx] = torch.nonzero(
                 symbol_mask, as_tuple=False

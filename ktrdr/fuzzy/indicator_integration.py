@@ -191,7 +191,7 @@ class MultiTimeframeFuzzyIndicatorPipeline:
         """
         start_time = time.time()
         errors = []
-        warnings = []
+        warnings: list[str] = []
         processing_metadata = {
             "start_time": start_time,
             "input_timeframes": list(market_data.keys()),

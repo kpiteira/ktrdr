@@ -70,8 +70,12 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.2.1",
     "ruff>=0.12.10",
+    "scikit-learn-stubs>=0.0.3",
+    "types-pillow>=10.2.0.20240822",
     "types-psutil>=7.0.0.20250601",
+    "types-pyyaml>=6.0.12.20250822",
     "types-requests>=2.32.4.20250611",
+    "types-tabulate>=0.9.0.20241207",
 ]
 
 [tool.ruff]
@@ -105,3 +109,19 @@ ignore = [
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101"]  # skip assert_used test
+
+[tool.coverage.run]
+source = ["ktrdr"]
+omit = [
+    "ktrdr/scripts/*",
+    "tests/*",
+    "ktrdr/dev/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]

@@ -16,7 +16,7 @@ The DataManager extends ServiceOrchestrator to provide:
 import asyncio
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Optional, Protocol, Union
 
 import pandas as pd
 
@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 class ProgressCallback(Protocol):
     """Type protocol for progress callback functions."""
 
-    def __call__(self, progress: Dict[str, Any]) -> None: ...
+    def __call__(self, progress: dict[str, Any]) -> None: ...
 
 
 class CancellationToken(Protocol):
@@ -510,14 +510,14 @@ class DataManager(ServiceOrchestrator):
     async def load_multi_timeframe_data(
         self,
         symbol: str,
-        timeframes: List[str],
+        timeframes: list[str],
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "local",
         validate: bool = True,
         align_data: bool = False,
         **kwargs,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """
         Load data for multiple timeframes concurrently.
 
@@ -558,8 +558,8 @@ class DataManager(ServiceOrchestrator):
         return timeframe_data
 
     def _align_timeframe_data(
-        self, timeframe_data: Dict[str, pd.DataFrame]
-    ) -> Dict[str, pd.DataFrame]:
+        self, timeframe_data: dict[str, pd.DataFrame]
+    ) -> dict[str, pd.DataFrame]:
         """Align multiple timeframe data to common date coverage."""
         # Find common date range (intersection of all data ranges)
         valid_dataframes = {
@@ -588,7 +588,7 @@ class DataManager(ServiceOrchestrator):
 
         return aligned_data
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform comprehensive health check on data manager and components.
 
@@ -623,7 +623,7 @@ class DataManager(ServiceOrchestrator):
 
         return health_info
 
-    def get_data_summary(self, symbol: str, timeframe: str) -> Dict[str, Any]:
+    def get_data_summary(self, symbol: str, timeframe: str) -> dict[str, Any]:
         """
         Get summary information about available data.
 
@@ -633,7 +633,7 @@ class DataManager(ServiceOrchestrator):
         try:
             # Get basic file information from local loader
             # Note: Assuming basic file existence check since get_data_info may not exist
-            file_path = self.data_loader._get_file_path(symbol, timeframe)
+            file_path = self.data_loader._build_file_path(symbol, timeframe)
             import os
 
             if os.path.exists(file_path):

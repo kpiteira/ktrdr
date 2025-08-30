@@ -5,12 +5,11 @@ These endpoints mirror the IbDataAdapter interface to provide
 seamless integration with the existing backend.
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
 from datetime import datetime
-import pandas as pd
-import logging
+from typing import Any, Optional
+
+from fastapi import APIRouter
+from pydantic import BaseModel, Field
 
 # Import existing ktrdr modules
 from ktrdr.ib import IbDataFetcher, IbSymbolValidator
@@ -66,7 +65,7 @@ class ValidationRequest(BaseModel):
     """Request for symbol validation."""
 
     symbol: str = Field(..., description="Trading symbol")
-    timeframes: Optional[List[str]] = Field(None, description="Timeframes for metadata")
+    timeframes: Optional[list[str]] = Field(None, description="Timeframes for metadata")
 
 
 class ValidationResponse(BaseModel):
@@ -75,8 +74,8 @@ class ValidationResponse(BaseModel):
     success: bool
     is_valid: Optional[bool] = None
     error_message: Optional[str] = None
-    contract_info: Optional[Dict[str, Any]] = None
-    head_timestamps: Optional[Dict[str, Optional[str]]] = None
+    contract_info: Optional[dict[str, Any]] = None
+    head_timestamps: Optional[dict[str, Optional[str]]] = None
     error: Optional[str] = None
 
 

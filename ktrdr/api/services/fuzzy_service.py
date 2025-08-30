@@ -52,6 +52,10 @@ class FuzzyService(BaseService):
         self.data_manager = DataManager()
         self.indicator_engine = IndicatorEngine()
 
+        # Declare types for attributes that may be None in error cases
+        self.fuzzy_engine: Optional[FuzzyEngine] = None
+        self.batch_calculator: Optional[BatchFuzzyCalculator] = None
+
         # Load fuzzy configuration
         try:
             config_loader = FuzzyConfigLoader()
@@ -299,8 +303,23 @@ class FuzzyService(BaseService):
 
             # Convert result to dictionary
             fuzzified_values = {}
-            for col in result.columns:
-                fuzzified_values[col] = result[col].tolist()
+            if hasattr(result, "columns"):  # It's a DataFrame
+                for col in result.columns:
+                    col_data = result[col]
+                    if hasattr(col_data, "tolist"):
+                        fuzzified_values[col] = col_data.tolist()
+                    else:
+                        fuzzified_values[col] = (
+                            [col_data] if not isinstance(col_data, list) else col_data
+                        )
+            else:  # It's already a dict
+                for key, value in result.items():
+                    if hasattr(value, "tolist"):
+                        fuzzified_values[key] = value.tolist()
+                    else:
+                        fuzzified_values[key] = (
+                            [value] if not isinstance(value, list) else value
+                        )
 
             end_tracking = perf_metrics["end_tracking"]
             performance_metrics = end_tracking()
@@ -415,7 +434,7 @@ class FuzzyService(BaseService):
             dates = [dt.strftime("%Y-%m-%d %H:%M:%S") for dt in df.index]
 
             # Create response structure
-            response = {
+            response: dict[str, Any] = {
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "dates": dates,
@@ -454,7 +473,11 @@ class FuzzyService(BaseService):
                     fuzzified = await self.fuzzify_indicator(
                         indicator_name, indicator_values.tolist(), dates
                     )
-                    fuzzy_perf["end_tracking"]()
+                    if hasattr(fuzzy_perf, "__getitem__"):  # It's dict-like
+                        fuzzy_perf["end_tracking"]()  # type: ignore[index]
+                    else:
+                        # Handle non-dict return case
+                        pass
 
                     # Add to response
                     response["indicators"][indicator_name] = fuzzified["values"]

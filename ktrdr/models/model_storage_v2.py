@@ -379,10 +379,26 @@ class ModelStorageV2:
                         "strategy_name": metadata.strategy_name,
                         "model_version": metadata.model_version,
                         "scope": metadata.scope.value,
-                        "training_symbols": metadata.training_data.symbols,
-                        "training_timeframes": metadata.training_data.timeframes,
-                        "accuracy": metadata.performance_metrics.overall_accuracy,
-                        "cross_symbol_accuracy": metadata.performance_metrics.cross_symbol_accuracy,
+                        "training_symbols": (
+                            metadata.training_data.symbols
+                            if metadata.training_data
+                            else []
+                        ),
+                        "training_timeframes": (
+                            metadata.training_data.timeframes
+                            if metadata.training_data
+                            else []
+                        ),
+                        "accuracy": (
+                            metadata.performance_metrics.overall_accuracy
+                            if metadata.performance_metrics
+                            else None
+                        ),
+                        "cross_symbol_accuracy": (
+                            metadata.performance_metrics.cross_symbol_accuracy
+                            if metadata.performance_metrics
+                            else None
+                        ),
                         "created_at": metadata.created_at,
                         "training_status": metadata.training_status.value,
                     }
@@ -393,7 +409,7 @@ class ModelStorageV2:
                     logger.debug(f"Could not load metadata from {model_dir}: {e}")
 
         # Sort by creation date (newest first)
-        models.sort(key=lambda x: x["created_at"], reverse=True)
+        models.sort(key=lambda x: x["created_at"], reverse=True)  # type: ignore
         return models
 
     def delete_model(self, model_path: Union[str, Path], confirm: bool = False) -> bool:
@@ -426,7 +442,7 @@ class ModelStorageV2:
                 logger.info(
                     f"Deleting model: {metadata.strategy_name} v{metadata.model_version}"
                 )
-            except:
+            except Exception:
                 logger.info(f"Deleting model directory: {model_path}")
 
             # Remove directory and all contents
@@ -493,13 +509,17 @@ class ModelStorageV2:
             if isinstance(strategy_config, StrategyConfigurationV2):
                 scope = strategy_config.scope
             else:
-                scope = ModelScope.SYMBOL_SPECIFIC  # Legacy models are symbol-specific
+                scope = ModelScope.SYMBOL_SPECIFIC  # type: ignore[assignment]  # Legacy models are symbol-specific
 
             metadata = self.metadata_manager.create_metadata(
                 strategy_name=strategy_config.name,
                 strategy_version=strategy_config.version or "1.0",
                 model_version=legacy_version,
-                scope=scope,
+                scope=(
+                    ModelScope(scope.value)
+                    if hasattr(scope, "value")
+                    else ModelScope(scope)
+                ),
                 training_symbols=symbols or [legacy_symbol],
                 training_timeframes=timeframes or [legacy_timeframe],
             )

@@ -73,7 +73,7 @@ class DecisionEngine:
         if isinstance(current_data.name, pd.Timestamp):
             timestamp = current_data.name
         else:
-            timestamp = pd.Timestamp(current_data.name)
+            timestamp = pd.Timestamp(current_data.name)  # type: ignore[arg-type]
 
         # Get timestamp for logging
         timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M")
@@ -191,9 +191,12 @@ class DecisionEngine:
                 indicators_df[col] = current_data[col]
 
         # Use model's feature preparation with saved scaler for consistent scaling
-        return self.neural_model.prepare_features(
-            fuzzy_df, indicators_df, self.neural_model.feature_scaler
-        )
+        if self.neural_model is not None:
+            return self.neural_model.prepare_features(
+                fuzzy_df, indicators_df, self.neural_model.feature_scaler
+            )
+        else:
+            raise ValueError("Neural model is not available")
 
     def _apply_position_logic(
         self, raw_signal: Signal, confidence: float, timestamp: pd.Timestamp
@@ -279,7 +282,9 @@ class DecisionEngine:
 
         return active_filters
 
-    def update_position(self, executed_signal: Signal, timestamp: pd.Timestamp = None):
+    def update_position(
+        self, executed_signal: Signal, timestamp: Optional[pd.Timestamp] = None
+    ):
         """Update internal position tracking after trade execution.
 
         Args:

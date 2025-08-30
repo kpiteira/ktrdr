@@ -304,7 +304,9 @@ class TimeframeSynchronizer:
             failed_alignments=0,  # No alignment failures since we don't align
             reference_timeframe=reference_timeframe,
             reference_periods=len(data_dict[reference_timeframe]),
-            average_quality_score=np.mean(quality_scores) if quality_scores else 1.0,
+            average_quality_score=(
+                float(np.mean(quality_scores)) if quality_scores else 1.0
+            ),
             processing_time=processing_time,
         )
 
@@ -331,7 +333,7 @@ class TimeframeSynchronizer:
             DataFrame with interpolated values
         """
         interpolated_data = data.interpolate(
-            method=method, limit=limit, limit_direction="both"
+            method=method, limit=limit, limit_direction="both"  # type: ignore[call-overload]
         )
 
         # Log interpolation statistics
@@ -378,9 +380,16 @@ class TimeframeSynchronizer:
 
                 # Check if most deltas are within tolerance of expected
                 tolerance = pd.Timedelta(minutes=tolerance_minutes)
-                consistent_count = (
-                    (actual_deltas - expected_delta).abs() <= tolerance
-                ).sum()
+                # Calculate differences using numpy arrays to avoid MyPy operator issues
+                import numpy as np
+
+                actual_deltas_array = actual_deltas.values
+                expected_delta_ns = expected_delta.value  # Get nanoseconds
+                differences = np.abs(
+                    actual_deltas_array.astype("int64") - expected_delta_ns
+                )
+                tolerance_ns = tolerance.value
+                consistent_count = int(np.sum(differences <= tolerance_ns))
                 consistency_ratio = consistent_count / len(actual_deltas)
 
                 # Consider consistent if >90% of deltas are correct
@@ -431,16 +440,16 @@ class TimeframeSynchronizer:
 
     def _ensure_utc_timezone(self, data: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """Ensure data has UTC timezone."""
-        if data.index.tz is None:
+        if data.index.tz is None:  # type: ignore[attr-defined]
             # Localize to UTC
             data = data.copy()
-            data.index = data.index.tz_localize("UTC")
+            data.index = data.index.tz_localize("UTC")  # type: ignore[attr-defined]
             logger.debug(f"Localized {timeframe} data to UTC")
-        elif str(data.index.tz) != "UTC":
+        elif str(data.index.tz) != "UTC":  # type: ignore[attr-defined]
             # Convert to UTC
             data = data.copy()
-            data.index = data.index.tz_convert("UTC")
-            logger.debug(f"Converted {timeframe} data to UTC from {data.index.tz}")
+            data.index = data.index.tz_convert("UTC")  # type: ignore[attr-defined]
+            logger.debug(f"Converted {timeframe} data to UTC from {data.index.tz}")  # type: ignore[attr-defined]
 
         return data
 
@@ -533,7 +542,7 @@ class TimeframeSynchronizer:
         Returns:
             Dictionary with memory usage estimates in MB
         """
-        estimates = {}
+        estimates: dict[str, float] = {}
 
         if target_timeframe not in data_dict:
             return estimates

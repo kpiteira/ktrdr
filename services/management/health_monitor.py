@@ -9,17 +9,16 @@ Provides comprehensive health monitoring including:
 - Alerting and notification systems
 """
 
-import os
-import sys
 import json
+import logging
 import time
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Optional, cast
+
 import psutil
 import requests
-from pathlib import Path
-from typing import Dict, List, Optional, Any, cast
-from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
-import logging
 
 # Setup logging
 logging.basicConfig(
@@ -58,7 +57,7 @@ class ServiceHealthMetrics:
     active_connections: int
     uptime_seconds: float
     gpu_metrics: Optional[GPUMetrics] = None
-    custom_metrics: Optional[Dict[str, Any]] = None
+    custom_metrics: Optional[dict[str, Any]] = None
     error: Optional[str] = None
 
     def __post_init__(self):
@@ -124,13 +123,13 @@ class HealthMonitor:
             current_dir = current_dir.parent
         return str(Path.cwd())
 
-    def _load_baselines(self) -> Dict[str, PerformanceBaseline]:
+    def _load_baselines(self) -> dict[str, PerformanceBaseline]:
         """Load performance baselines from file."""
         if not self.baseline_file.exists():
             return {}
 
         try:
-            with open(self.baseline_file, "r") as f:
+            with open(self.baseline_file) as f:
                 data = json.load(f)
 
             baselines = {}
@@ -288,7 +287,7 @@ class HealthMonitor:
             error=error,
         )
 
-    def get_all_health_metrics(self) -> Dict[str, ServiceHealthMetrics]:
+    def get_all_health_metrics(self) -> dict[str, ServiceHealthMetrics]:
         """Get health metrics for all services."""
         metrics = {}
         for service_name in self.services:
@@ -312,13 +311,13 @@ class HealthMonitor:
 
         return metrics
 
-    def save_health_history(self, metrics: Dict[str, ServiceHealthMetrics]) -> None:
+    def save_health_history(self, metrics: dict[str, ServiceHealthMetrics]) -> None:
         """Save health metrics to history file."""
         try:
             # Load existing history
             history = []
             if self.history_file.exists():
-                with open(self.history_file, "r") as f:
+                with open(self.history_file) as f:
                     history = json.load(f)
 
             # Add new metrics
@@ -356,7 +355,7 @@ class HealthMonitor:
                 logger.warning("No health history available for baseline calculation")
                 return
 
-            with open(self.history_file, "r") as f:
+            with open(self.history_file) as f:
                 history = json.load(f)
 
             # Filter to recent metrics
@@ -417,8 +416,8 @@ class HealthMonitor:
             logger.error(f"Error updating baseline for {service_name}: {e}")
 
     def check_anomalies(
-        self, metrics: Dict[str, ServiceHealthMetrics]
-    ) -> List[Dict[str, Any]]:
+        self, metrics: dict[str, ServiceHealthMetrics]
+    ) -> list[dict[str, Any]]:
         """Check for performance anomalies against baselines."""
         anomalies = []
 
@@ -482,7 +481,7 @@ class HealthMonitor:
 
         return anomalies
 
-    def generate_health_report(self) -> Dict[str, Any]:
+    def generate_health_report(self) -> dict[str, Any]:
         """Generate comprehensive health report."""
         metrics = self.get_all_health_metrics()
         anomalies = self.check_anomalies(metrics)
@@ -527,7 +526,7 @@ class HealthMonitor:
         print(f"📅 Timestamp: {report['timestamp']}")
 
         # Service details
-        print(f"\n📊 Service Details:")
+        print("\n📊 Service Details:")
         print("-" * 80)
 
         for service_name, metrics in report["services"].items():
@@ -602,7 +601,7 @@ class HealthMonitor:
         """Run continuous health monitoring."""
         logger.info(f"Starting continuous health monitoring (interval: {interval}s)")
 
-        last_baseline_update: Dict[str, datetime] = {}
+        last_baseline_update: dict[str, datetime] = {}
 
         try:
             while True:

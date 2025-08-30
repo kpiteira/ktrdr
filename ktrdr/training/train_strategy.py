@@ -6,7 +6,11 @@ import numpy as np
 import pandas as pd
 import torch
 import yaml
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import (
+    f1_score,
+    precision_score,
+    recall_score,
+)
 
 from ..data.data_manager import DataManager
 from ..fuzzy.engine import FuzzyEngine
@@ -33,7 +37,9 @@ class StrategyTrainer:
         self.model_storage = ModelStorage(models_dir)
         self.data_manager = DataManager()
         self.indicator_engine = IndicatorEngine()
-        self.fuzzy_engine = None  # Will be initialized with strategy config
+        self.fuzzy_engine: Optional[FuzzyEngine] = (
+            None  # Will be initialized with strategy config
+        )
 
     def train_multi_symbol_strategy(
         self,
@@ -340,7 +346,7 @@ class StrategyTrainer:
         if isinstance(indicators, dict):
             # Multi-timeframe case: check each timeframe
             total_nan_count = 0
-            for tf, tf_indicators in indicators.items():
+            for _, tf_indicators in indicators.items():
                 tf_nan_count = tf_indicators.isna().sum().sum()
                 total_nan_count += tf_nan_count
             indicators_nan_count = total_nan_count
@@ -367,7 +373,7 @@ class StrategyTrainer:
         if isinstance(fuzzy_data, dict):
             # Multi-timeframe case: check each timeframe
             total_fuzzy_nan_count = 0
-            for tf, tf_fuzzy in fuzzy_data.items():
+            for _, tf_fuzzy in fuzzy_data.items():
                 tf_fuzzy_nan_count = tf_fuzzy.isna().sum().sum()
                 total_fuzzy_nan_count += tf_fuzzy_nan_count
             fuzzy_nan_count = total_fuzzy_nan_count
@@ -598,7 +604,7 @@ class StrategyTrainer:
         end = pd.to_datetime(end_date)
 
         # Make dates timezone-aware if needed
-        if data.index.tz is not None:
+        if hasattr(data.index, "tz") and data.index.tz is not None:
             if start.tz is None:
                 start = start.tz_localize("UTC")
             if end.tz is None:
@@ -829,6 +835,9 @@ class StrategyTrainer:
             fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
             self.fuzzy_engine = FuzzyEngine(fuzzy_config)
 
+        # Ensure fuzzy engine is initialized
+        assert self.fuzzy_engine is not None
+
         # Handle single timeframe case (backward compatibility)
         if len(indicators) == 1 and isinstance(
             list(indicators.values())[0], pd.DataFrame
@@ -836,12 +845,12 @@ class StrategyTrainer:
             timeframe, tf_indicators = next(iter(indicators.items()))
 
             # Process each indicator (original single-timeframe logic)
-            fuzzy_results = {}
+            fuzzy_results: dict[str, Any] = {}
             for indicator_name, indicator_data in tf_indicators.items():
                 if indicator_name in fuzzy_configs:
                     # Fuzzify the indicator
                     membership_values = self.fuzzy_engine.fuzzify(
-                        indicator_name, indicator_data
+                        str(indicator_name), indicator_data
                     )
                     fuzzy_results.update(membership_values)
 
@@ -1203,7 +1212,9 @@ class StrategyTrainer:
                 )
 
             # Importance is the drop in accuracy
-            importance_scores[feature_name] = baseline_accuracy - permuted_accuracy
+            importance_scores[feature_name] = float(
+                baseline_accuracy - permuted_accuracy
+            )
 
         return importance_scores
 
@@ -1406,10 +1417,10 @@ class StrategyTrainer:
                 f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
 
                 per_symbol_metrics[symbol] = {
-                    "accuracy": accuracy,
-                    "precision": precision,
-                    "recall": recall,
-                    "f1_score": f1,
+                    "accuracy": float(accuracy),
+                    "precision": float(precision),
+                    "recall": float(recall),
+                    "f1_score": float(f1),
                     "sample_count": int(symbol_mask.sum()),
                 }
 

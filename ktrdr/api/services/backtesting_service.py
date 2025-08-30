@@ -84,6 +84,7 @@ class BacktestingService(BaseService):
         metadata = OperationMetadata(
             symbol=symbol,
             timeframe=timeframe,
+            mode="backtesting",
             start_date=pd.to_datetime(start_date).tz_localize("UTC"),
             end_date=pd.to_datetime(end_date).tz_localize("UTC"),
             parameters={
@@ -138,7 +139,13 @@ class BacktestingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=5.0, current_step="Validating strategy configuration"
+                    percentage=5.0,
+                    current_step="Validating strategy configuration",
+                    steps_completed=0,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None,
                 ),
             )
 
@@ -151,7 +158,13 @@ class BacktestingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=10.0, current_step="Preparing data loading configuration"
+                    percentage=10.0,
+                    current_step="Preparing data loading configuration",
+                    steps_completed=1,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None,
                 ),
             )
 
@@ -180,7 +193,11 @@ class BacktestingService(BaseService):
                 OperationProgress(
                     percentage=15.0,
                     current_step=f"Loading {symbol} {timeframe} data",
+                    steps_completed=2,
+                    steps_total=10,
+                    items_processed=0,
                     items_total=total_bars,
+                    current_item=None,
                 ),
             )
 
@@ -196,7 +213,13 @@ class BacktestingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=95.0, current_step="Processing backtest results"
+                    percentage=95.0,
+                    current_step="Processing backtest results",
+                    steps_completed=9,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None,
                 ),
             )
 
@@ -376,6 +399,11 @@ class BacktestingService(BaseService):
             OperationProgress(
                 percentage=20.0,
                 current_step="Starting backtest with proven engine",
+                steps_completed=2,
+                steps_total=10,
+                items_processed=0,
+                items_total=None,
+                current_item=None,
             ),
         )
 
@@ -392,7 +420,9 @@ class BacktestingService(BaseService):
 
         # Create a progress callback that gets REAL progress from the engine
         def progress_callback(
-            current_bar: int, total_bars: int, additional_data: dict = None
+            current_bar: int,
+            total_bars: int,
+            additional_data: Optional[dict[Any, Any]] = None,
         ):
             """Real progress callback based on actual bars processed."""
             try:
@@ -446,8 +476,11 @@ class BacktestingService(BaseService):
                         OperationProgress(
                             percentage=real_percentage,
                             current_step=step_desc,
+                            steps_completed=3,
+                            steps_total=10,
                             items_processed=current_bar,
                             items_total=total_bars,
+                            current_item=None,
                         ),
                     )
                     last_reported_percentage = real_percentage
@@ -529,7 +562,7 @@ class BacktestingService(BaseService):
         # Calculate final value from initial capital + total return
         initial_capital = config_data.get("initial_capital", 100000)
         total_return = metrics_data.get("total_return", 0)
-        final_value = initial_capital + total_return
+        initial_capital + total_return
 
         # Extract metadata
         strategy_name = operation.metadata.parameters.get("strategy_name", "unknown")

@@ -2,10 +2,10 @@
 Unit tests for the core training service.
 """
 
-import pytest
 import asyncio
-from unittest.mock import Mock, patch, AsyncMock
-from datetime import datetime
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 
 class TestTrainingService:

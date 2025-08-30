@@ -35,7 +35,7 @@ def with_global_timeout(
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             start_time = time.time()
-            operation_id = f"{operation_name}_{id(func)}_{start_time}"
+            f"{operation_name}_{id(func)}_{start_time}"
 
             logger.debug(
                 f"🕐 Starting {operation_name} with {timeout_seconds}s global timeout"
@@ -62,14 +62,14 @@ def with_global_timeout(
                 raise asyncio.TimeoutError(
                     f"Global timeout: {operation_name} hung for {duration:.2f}s "
                     f"(limit: {timeout_seconds}s). Possible silent IB connection."
-                )
+                ) from None
 
             except Exception as e:
                 duration = time.time() - start_time
                 logger.error(f"❌ {operation_name} failed after {duration:.2f}s: {e}")
                 raise
 
-        return wrapper
+        return wrapper  # type: ignore
 
     return decorator
 
@@ -122,7 +122,7 @@ async def safe_ib_operation(
         raise asyncio.TimeoutError(
             f"Operation '{operation_name}' timed out after {duration:.2f}s. "
             f"This indicates an IB connection or event loop issue."
-        )
+        ) from None
 
 
 class OperationTimeoutError(Exception):
@@ -160,6 +160,8 @@ def emergency_operation_killer(max_duration: float = 60.0):
                 f"Actual duration: {duration:.2f}s. System may be in deadlock!"
             )
 
-            raise OperationTimeoutError(operation_name, max_duration, duration)
+            raise OperationTimeoutError(
+                operation_name, max_duration, duration
+            ) from None
 
     return killer

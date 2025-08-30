@@ -7,15 +7,11 @@ managing the complete lifecycle from hypothesis to results analysis.
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any, Union
-from uuid import UUID, uuid4
-from enum import Enum
 from dataclasses import dataclass
-
-from pydantic import BaseModel, Field
-import logging
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Optional
+from uuid import UUID, uuid4
 
 from .database import ResearchDatabaseService
 
@@ -51,10 +47,10 @@ class ExperimentConfig:
     experiment_name: str
     hypothesis: str
     experiment_type: ExperimentType
-    parameters: Dict[str, Any]
-    data_requirements: Dict[str, Any]
-    training_config: Dict[str, Any]
-    validation_config: Dict[str, Any]
+    parameters: dict[str, Any]
+    data_requirements: dict[str, Any]
+    training_config: dict[str, Any]
+    validation_config: dict[str, Any]
     timeout_minutes: int = 240  # 4 hours default
     priority: int = 1  # 1=high, 2=medium, 3=low
 
@@ -66,11 +62,11 @@ class ExperimentResults:
     experiment_id: UUID
     status: ExperimentStatus
     fitness_score: Optional[float]
-    performance_metrics: Dict[str, Any]
-    training_results: Optional[Dict[str, Any]]
-    backtesting_results: Optional[Dict[str, Any]]
-    insights: List[str]
-    error_info: Optional[Dict[str, Any]]
+    performance_metrics: dict[str, Any]
+    training_results: Optional[dict[str, Any]]
+    backtesting_results: Optional[dict[str, Any]]
+    insights: list[str]
+    error_info: Optional[dict[str, Any]]
     execution_time_minutes: float
     completed_at: Optional[datetime]
 
@@ -112,8 +108,8 @@ class ResearchOrchestrator:
         self.default_timeout_minutes = default_timeout_minutes
 
         # Track running experiments
-        self._running_experiments: Dict[UUID, asyncio.Task] = {}
-        self._experiment_locks: Dict[UUID, asyncio.Lock] = {}
+        self._running_experiments: dict[UUID, asyncio.Task] = {}
+        self._experiment_locks: dict[UUID, asyncio.Lock] = {}
 
         # Service state
         self._is_initialized = False
@@ -189,7 +185,7 @@ class ResearchOrchestrator:
             await self.db_service.execute_query(
                 """
                 INSERT INTO research.experiments (
-                    id, session_id, experiment_name, hypothesis, 
+                    id, session_id, experiment_name, hypothesis,
                     experiment_type, configuration, status, created_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
@@ -254,14 +250,14 @@ class ResearchOrchestrator:
             f"Experiment started: {experiment_id} '{experiment['experiment_name']}'"
         )
 
-    async def get_experiment_status(self, experiment_id: UUID) -> Dict[str, Any]:
+    async def get_experiment_status(self, experiment_id: UUID) -> dict[str, Any]:
         """Get current status of an experiment"""
         experiment = await self.db_service.execute_query(
             """
             SELECT id, experiment_name, status, hypothesis, experiment_type,
                    configuration, created_at, started_at, completed_at,
                    results, error_info
-            FROM research.experiments 
+            FROM research.experiments
             WHERE id = $1
         """,
             experiment_id,
@@ -290,7 +286,7 @@ class ResearchOrchestrator:
         session_id: Optional[UUID] = None,
         status: Optional[ExperimentStatus] = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List experiments with optional filtering"""
         query = """
             SELECT id, session_id, experiment_name, status, hypothesis,
@@ -346,7 +342,7 @@ class ResearchOrchestrator:
 
         logger.info(f"Experiment cancelled: {experiment_id}")
 
-    async def get_orchestrator_metrics(self) -> Dict[str, Any]:
+    async def get_orchestrator_metrics(self) -> dict[str, Any]:
         """Get orchestrator performance metrics"""
         return {
             "total_experiments": self._total_experiments,
@@ -361,7 +357,7 @@ class ResearchOrchestrator:
     # Private methods
 
     async def _execute_experiment(
-        self, experiment_id: UUID, experiment_config: Dict[str, Any]
+        self, experiment_id: UUID, experiment_config: dict[str, Any]
     ) -> ExperimentResults:
         """Execute a single experiment with comprehensive error handling"""
         start_time = datetime.now(timezone.utc)
@@ -463,13 +459,13 @@ class ResearchOrchestrator:
 
     async def _get_experiment_config(
         self, experiment_id: UUID
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Get experiment configuration from database"""
         return await self.db_service.execute_query(
             """
             SELECT id, session_id, experiment_name, hypothesis, experiment_type,
                    configuration, status, created_at
-            FROM research.experiments 
+            FROM research.experiments
             WHERE id = $1
         """,
             experiment_id,
@@ -480,7 +476,7 @@ class ResearchOrchestrator:
         self,
         experiment_id: UUID,
         status: ExperimentStatus,
-        additional_data: Optional[Dict[str, Any]] = None,
+        additional_data: Optional[dict[str, Any]] = None,
     ) -> None:
         """Update experiment status in database"""
         update_data = {"status": status.value, "updated_at": datetime.now(timezone.utc)}
@@ -499,7 +495,7 @@ class ResearchOrchestrator:
 
         await self.db_service.execute_query(
             """
-            UPDATE research.experiments 
+            UPDATE research.experiments
             SET status = $2, updated_at = $3
             WHERE id = $1
         """,
@@ -509,7 +505,7 @@ class ResearchOrchestrator:
         )
 
     async def _initialize_experiment(
-        self, experiment_id: UUID, experiment_config: Dict[str, Any]
+        self, experiment_id: UUID, experiment_config: dict[str, Any]
     ) -> None:
         """Initialize experiment environment"""
         # This will be implemented to prepare data, validate configuration, etc.
@@ -519,8 +515,8 @@ class ResearchOrchestrator:
         await asyncio.sleep(0.1)  # Simulate initialization work
 
     async def _execute_training(
-        self, experiment_id: UUID, experiment_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, experiment_id: UUID, experiment_config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Execute neural network training via KTRDR API"""
         logger.info(f"Starting training phase: {experiment_id}")
 
@@ -542,9 +538,9 @@ class ResearchOrchestrator:
     async def _execute_backtesting(
         self,
         experiment_id: UUID,
-        experiment_config: Dict[str, Any],
-        training_results: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        experiment_config: dict[str, Any],
+        training_results: dict[str, Any],
+    ) -> dict[str, Any]:
         """Execute strategy backtesting"""
         logger.info(f"Starting backtesting phase: {experiment_id}")
 
@@ -564,9 +560,9 @@ class ResearchOrchestrator:
     async def _analyze_results(
         self,
         experiment_id: UUID,
-        training_results: Dict[str, Any],
-        backtesting_results: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        training_results: dict[str, Any],
+        backtesting_results: dict[str, Any],
+    ) -> dict[str, Any]:
         """Analyze experiment results and calculate fitness score"""
         logger.info(f"Analyzing results: {experiment_id}")
 
@@ -603,8 +599,8 @@ class ResearchOrchestrator:
         """Mark experiment as completed and store results"""
         await self.db_service.execute_query(
             """
-            UPDATE research.experiments 
-            SET status = $2, fitness_score = $3, results = $4, 
+            UPDATE research.experiments
+            SET status = $2, fitness_score = $3, results = $4,
                 completed_at = $5, updated_at = $5
             WHERE id = $1
         """,
@@ -622,12 +618,12 @@ class ResearchOrchestrator:
         )
 
     async def _fail_experiment(
-        self, experiment_id: UUID, error_info: Dict[str, Any]
+        self, experiment_id: UUID, error_info: dict[str, Any]
     ) -> None:
         """Mark experiment as failed and store error information"""
         await self.db_service.execute_query(
             """
-            UPDATE research.experiments 
+            UPDATE research.experiments
             SET status = $2, error_info = $3, completed_at = $4, updated_at = $4
             WHERE id = $1
         """,
@@ -641,8 +637,8 @@ class ResearchOrchestrator:
         """Recover experiments that were interrupted during shutdown"""
         interrupted = await self.db_service.execute_query(
             """
-            SELECT id, experiment_name 
-            FROM research.experiments 
+            SELECT id, experiment_name
+            FROM research.experiments
             WHERE status IN ('initializing', 'running', 'analyzing')
         """,
             fetch="all",
@@ -654,8 +650,8 @@ class ResearchOrchestrator:
             for exp in interrupted:
                 await self.db_service.execute_query(
                     """
-                    UPDATE research.experiments 
-                    SET status = 'failed', 
+                    UPDATE research.experiments
+                    SET status = 'failed',
                         error_info = $2,
                         completed_at = $3,
                         updated_at = $3

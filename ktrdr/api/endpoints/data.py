@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
 from ktrdr.api.dependencies import get_data_service
-from ktrdr.api.models.base import ApiResponse
+from ktrdr.api.models.base import ApiResponse, ErrorResponse
 from ktrdr.api.models.data import (
     DataLoadApiResponse,
     DataLoadOperationResponse,
@@ -73,14 +73,14 @@ async def get_data_info(
 
         # Calculate statistics
         total_symbols = len(available_symbols)
-        symbol_types = {}
+        symbol_types: dict[str, int] = {}
         symbol_names = []
 
         for symbol in available_symbols:
             # Handle both string and object types
             if hasattr(symbol, "symbol"):
                 symbol_name = symbol.symbol
-                instrument_type = getattr(symbol, "instrument_type", "unknown")
+                instrument_type = str(getattr(symbol, "instrument_type", "unknown"))
             else:
                 symbol_name = str(symbol)
                 instrument_type = "unknown"
@@ -113,13 +113,14 @@ async def get_data_info(
                     "real_time_updates",
                 ],
             },
+            error=None,
         )
 
     except Exception as e:
         logger.error(f"Error getting data info: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error getting data information: {str(e)}"
-        )
+        ) from e
 
 
 @router.get(
@@ -171,7 +172,7 @@ async def get_symbols(
         symbols = [SymbolInfo(**s) for s in symbols_data]
 
         logger.info(f"Retrieved {len(symbols)} symbols")
-        return SymbolsResponse(success=True, data=symbols)
+        return SymbolsResponse(success=True, data=symbols, error=None)
     except Exception as e:
         logger.error(f"Error retrieving symbols: {str(e)}")
         raise DataError(
@@ -234,7 +235,7 @@ async def get_timeframes(
         timeframes = [TimeframeInfo(**t) for t in timeframes_data]
 
         logger.info(f"Retrieved {len(timeframes)} timeframes")
-        return TimeframesResponse(success=True, data=timeframes)
+        return TimeframesResponse(success=True, data=timeframes, error=None)
     except Exception as e:
         logger.error(f"Error retrieving timeframes: {str(e)}")
         raise DataError(
@@ -251,13 +252,13 @@ async def get_timeframes(
     summary="Get cached OHLCV data (Frontend)",
     description="""
     Retrieves cached OHLCV data for visualization. This endpoint is optimized for frontend use:
-    
+
     **Features:**
     - Fast response (local data only, no external API calls)
     - Returns actual OHLCV data arrays for charting
     - Optional date filtering with query parameters
     - Returns empty data if not cached locally (no errors)
-    
+
     **Perfect for:** Frontend charts, data visualization, dashboards
     """,
 )
@@ -322,21 +323,21 @@ async def get_cached_data(
         if start_date:
             try:
                 start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-            except ValueError:
+            except ValueError as err:
                 raise DataError(
                     message="Invalid start_date format. Use YYYY-MM-DD",
                     error_code="DATA-InvalidDate",
                     details={"start_date": start_date},
-                )
+                ) from err
         if end_date:
             try:
                 end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-            except ValueError:
+            except ValueError as err:
                 raise DataError(
                     message="Invalid end_date format. Use YYYY-MM-DD",
                     error_code="DATA-InvalidDate",
                     details={"end_date": end_date},
-                )
+                ) from err
 
         # Load data using DataManager with local mode only
         df = data_service.data_manager.load_data(
@@ -364,7 +365,7 @@ async def get_cached_data(
 
                     # Apply trading hours filter using the data service helper
                     df = data_service._filter_trading_hours(
-                        df, trading_hours, include_extended
+                        df, trading_hours, include_extended or False
                     )
 
                     filtered_count = len(df) if df is not None else 0
@@ -394,6 +395,7 @@ async def get_cached_data(
                     "end": "",
                     "points": 0,
                 },
+                points=None,
             )
         else:
             # Convert DataFrame to API format
@@ -405,7 +407,7 @@ async def get_cached_data(
         logger.info(
             f"Retrieved {len(data.dates)} cached data points for {clean_symbol}"
         )
-        return DataLoadResponse(success=True, data=data)
+        return DataLoadResponse(success=True, data=data, error=None)
 
     except DataNotFoundError as e:
         logger.warning(
@@ -422,8 +424,9 @@ async def get_cached_data(
                 "end": "",
                 "points": 0,
             },
+            points=None,
         )
-        return DataLoadResponse(success=True, data=data)
+        return DataLoadResponse(success=True, data=data, error=None)
 
     except DataError as e:
         logger.error(f"Data error getting cached data for {clean_symbol}: {str(e)}")
@@ -450,21 +453,21 @@ async def get_cached_data(
     summary="Load data via DataManager (CLI/Operations)",
     description="""
     Data loading operations endpoint for CLI and background processes.
-    
+
     This endpoint performs actual data loading operations and returns operational
     metrics about what was fetched, from where, and how long it took.
-    
+
     **Loading Modes:**
     - `tail`: Load recent data from last available timestamp to now
-    - `backfill`: Load historical data before earliest available timestamp  
+    - `backfill`: Load historical data before earliest available timestamp
     - `full`: Load both historical (backfill) and recent (tail) data
-    
+
     **Features:**
     - Intelligent gap analysis with trading calendar awareness
     - Progressive loading for large date ranges
     - Partial failure resilience (continues with successful segments)
     - Detailed operation metrics and timing
-    
+
     **Perfect for:** CLI commands, background jobs, data management operations
     """,
 )
@@ -622,11 +625,11 @@ async def load_data(
             return DataLoadApiResponse(
                 success=True,  # Still considered success for partial data
                 data=response_data,
-                error={
-                    "code": "DATA-PartialLoad",
-                    "message": "Data loading partially successful",
-                    "details": {"error_message": result.get("error_message")},
-                },
+                error=ErrorResponse(
+                    code="DATA-PartialLoad",
+                    message="Data loading partially successful",
+                    details={"error_message": result.get("error_message")},
+                ),
             )
         else:
             logger.error(
@@ -635,15 +638,15 @@ async def load_data(
             return DataLoadApiResponse(
                 success=False,
                 data=response_data,
-                error={
-                    "code": "DATA-LoadFailed",
-                    "message": result.get("error_message", "Data loading failed"),
-                    "details": {
+                error=ErrorResponse(
+                    code="DATA-LoadFailed",
+                    message=result.get("error_message", "Data loading failed"),
+                    details={
                         "symbol": clean_symbol,
                         "timeframe": request.timeframe,
                         "mode": request.mode,
                     },
-                },
+                ),
             )
 
     except DataError as e:
@@ -669,8 +672,8 @@ async def load_data(
     tags=["Data"],
     summary="Get available date range for data",
     description="""
-    Retrieves the earliest and latest available dates for the specified symbol and timeframe, 
-    along with the total number of data points. Useful for determining what time range is available 
+    Retrieves the earliest and latest available dates for the specified symbol and timeframe,
+    along with the total number of data points. Useful for determining what time range is available
     before loading full data.
     """,
 )
@@ -727,13 +730,13 @@ async def get_data_range(
         range_info = DataRangeInfo(**range_data)
 
         logger.info(f"Successfully retrieved date range for {request.symbol}")
-        return DataRangeResponse(success=True, data=range_info)
+        return DataRangeResponse(success=True, data=range_info, error=None)
     except DataNotFoundError as e:
         logger.error(f"Data not found: {str(e)}")
         raise HTTPException(
             status_code=404,
             detail=f"Data not found for {request.symbol} ({request.timeframe})",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Error retrieving date range: {str(e)}")
         raise DataError(

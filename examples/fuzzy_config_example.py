@@ -3,11 +3,11 @@
 Example script demonstrating how to load and validate fuzzy set configurations.
 """
 
-import yaml
-from pprint import pprint
 
-from ktrdr.fuzzy.config import FuzzyConfigLoader
+import yaml
+
 from ktrdr.errors import ConfigurationError
+from ktrdr.fuzzy.config import FuzzyConfigLoader
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
 
     try:
         # Load YAML file
-        with open("config/fuzzy.yaml", "r") as file:
+        with open("config/fuzzy.yaml") as file:
             config_dict = yaml.safe_load(file)
 
         # Validate configuration

@@ -47,7 +47,7 @@ class ConfigLoader:
     @ErrorHandler.with_error_handling(logger=logger)
     @log_entry_exit(logger=logger)
     def load(
-        self, config_path: Union[str, Path], model_type: type[T] = KtrdrConfig
+        self, config_path: Union[str, Path], model_type: type[T] = KtrdrConfig  # type: ignore
     ) -> T:
         """
         Load a YAML configuration file and validate it against a Pydantic model.
@@ -92,7 +92,7 @@ class ConfigLoader:
                 message=f"Invalid configuration path: {e}",
                 error_code="CONF-InvalidPath",
                 details={"path": str(config_path), "error": str(e)},
-            )
+            ) from e
 
         # Check if file exists
         if not config_path.exists():
@@ -122,14 +122,14 @@ class ConfigLoader:
                     message=f"Configuration validation failed: {e}",
                     error_code="CONF-ValidationFailed",
                     details={"validation_errors": e.errors()},
-                )
+                ) from e
 
         except yaml.YAMLError as e:
             raise InvalidConfigurationError(
                 message=f"Invalid YAML format in {config_path}: {e}",
                 error_code="CONF-InvalidYaml",
                 details={"yaml_error": str(e)},
-            )
+            ) from e
 
     @fallback(strategy=FallbackStrategy.DEFAULT_VALUE, logger=logger)
     @log_entry_exit(logger=logger, log_result=True)
@@ -137,7 +137,7 @@ class ConfigLoader:
         self,
         env_var: str = "KTRDR_CONFIG",
         default_path: Optional[Union[str, Path]] = None,
-        model_type: type[T] = KtrdrConfig,
+        model_type: type[T] = KtrdrConfig,  # type: ignore
     ) -> T:
         """
         Load configuration from a path specified in an environment variable.
@@ -167,7 +167,7 @@ class ConfigLoader:
                 message=f"Invalid environment variable name: {e}",
                 error_code="CONF-InvalidEnvVar",
                 details={"env_var": env_var, "error": str(e)},
-            )
+            ) from e
 
         config_path = os.environ.get(env_var)
 
@@ -236,14 +236,14 @@ class ConfigLoader:
                 message=f"Invalid YAML format in fuzzy configuration: {e}",
                 error_code="CONF-InvalidYaml",
                 details={"yaml_error": str(e)},
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Failed to load fuzzy configuration: {e}")
             raise ConfigurationError(
                 message=f"Failed to load fuzzy configuration: {e}",
                 error_code="CONF-FuzzyLoadFailed",
                 details={"error": str(e)},
-            )
+            ) from e
 
     @log_entry_exit(logger=logger)
     def load_multi_timeframe_indicators(
@@ -273,7 +273,7 @@ class ConfigLoader:
                 return full_config.indicators.multi_timeframe
             else:
                 logger.warning("No multi-timeframe indicator configuration found")
-                return MultiTimeframeIndicatorConfig()
+                return MultiTimeframeIndicatorConfig(column_standardization=True)
 
         except ConfigurationError:
             # Re-raise configuration errors
@@ -283,7 +283,7 @@ class ConfigLoader:
                 message=f"Failed to load multi-timeframe indicator configuration: {e}",
                 error_code="CONF-MultiTimeframeLoadFailed",
                 details={"error": str(e), "path": str(config_path)},
-            )
+            ) from e
 
     @log_entry_exit(logger=logger)
     def validate_multi_timeframe_config(
@@ -298,7 +298,7 @@ class ConfigLoader:
         Returns:
             Dictionary with validation results
         """
-        validation_results = {
+        validation_results: dict[str, Any] = {
             "valid": True,
             "warnings": [],
             "errors": [],

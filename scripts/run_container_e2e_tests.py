@@ -14,14 +14,14 @@ Usage:
 """
 
 import argparse
-import subprocess
-import time
-import sys
 import json
-import requests
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
 import logging
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import requests
 
 # Setup logging
 logging.basicConfig(
@@ -109,8 +109,8 @@ class ContainerE2ETestRunner:
             return f"Error getting logs: {e}"
 
     def run_pytest_command(
-        self, test_file: str, markers: List[str], extra_args: List[str] = None
-    ) -> Tuple[bool, str]:
+        self, test_file: str, markers: list[str], extra_args: list[str] = None
+    ) -> tuple[bool, str]:
         """Run a pytest command and return success status and output."""
         cmd = [
             "uv",

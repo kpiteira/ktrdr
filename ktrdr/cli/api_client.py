@@ -97,7 +97,7 @@ class KtrdrApiClient:
 
         return response_data
 
-    async def _make_request(
+    async def _make_request(  # type: ignore[return]
         self,
         method: str,
         endpoint: str,
@@ -330,9 +330,9 @@ class KtrdrApiClient:
         if end_date:
             params["end_date"] = end_date
         if trading_hours_only:
-            params["trading_hours_only"] = trading_hours_only
+            params["trading_hours_only"] = str(trading_hours_only)
         if include_extended:
-            params["include_extended"] = include_extended
+            params["include_extended"] = str(include_extended)
 
         response = await self._make_request(
             "GET",
@@ -664,9 +664,9 @@ class KtrdrApiClient:
     ) -> dict[str, Any]:
         """List operations with optional filtering."""
         params = {
-            "limit": limit,
-            "offset": offset,
-            "active_only": active_only,
+            "limit": str(limit),
+            "offset": str(offset),
+            "active_only": str(active_only),
         }
         if status:
             params["status"] = status
@@ -704,7 +704,7 @@ class KtrdrApiClient:
         if reason:
             payload["reason"] = reason
         if force:
-            payload["force"] = force
+            payload["force"] = str(force)
 
         response = await self._make_request(
             "DELETE",

@@ -140,6 +140,7 @@ class TrainingService(BaseService):
         metadata = OperationMetadata(
             symbol=symbols[0] if symbols else "MULTI",
             timeframe=timeframes[0] if timeframes else "1h",
+            mode="training",
             start_date=datetime.fromisoformat(start_date) if start_date else None,
             end_date=datetime.fromisoformat(end_date) if end_date else None,
             parameters={
@@ -213,6 +214,11 @@ class TrainingService(BaseService):
                         current_step=progress.get(
                             "current_step", "Training in progress"
                         ),
+                        steps_completed=progress.get("steps_completed", 0),
+                        steps_total=progress.get("steps_total", 100),
+                        items_processed=progress.get("items_processed", 0),
+                        items_total=progress.get("items_total", None),
+                        current_item=progress.get("current_item", None),
                     ),
                 )
 
@@ -247,6 +253,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=15.0,
                         current_step=f"Training started on host service (session: {session_id})",
+                        steps_completed=1,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
                     ),
                 )
             else:
@@ -256,7 +267,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=100.0,
                         current_step="Training completed successfully",
-                        completed=True,
+                        steps_completed=10,
+                        steps_total=10,
+                        items_processed=100,
+                        items_total=100,
+                        current_item="Complete",
                     ),
                 )
                 logger.info(
@@ -270,7 +285,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=0.0,
                     current_step=f"Training failed: {str(e)}",
-                    error=str(e),
+                    steps_completed=0,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None,
                 ),
             )
             logger.error(f"Training failed for operation {operation_id}: {str(e)}")
@@ -500,7 +519,13 @@ class TrainingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=5.0, current_step="Validating training configuration"
+                    percentage=5.0,
+                    current_step="Validating training configuration",
+                    steps_completed=0,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None,
                 ),
             )
 
@@ -554,7 +579,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=10.0,
                     current_step="Preparing training environment",
+                    steps_completed=1,
+                    steps_total=10,
+                    items_processed=0,
                     items_total=total_epochs,
+                    current_item=None,
                 ),
             )
 
@@ -563,14 +592,20 @@ class TrainingService(BaseService):
                 await self.operations_service.update_progress(
                     operation_id,
                     OperationProgress(
-                        percentage=15.0, current_step="Initializing strategy trainer"
+                        percentage=15.0,
+                        current_step="Initializing strategy trainer",
+                        steps_completed=2,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
                     ),
                 )
 
                 trainer = StrategyTrainer(models_dir="models")
 
                 # If analytics is enabled, create a temporary strategy file with modified config
-                actual_strategy_path = strategy_path
+                actual_strategy_path = str(strategy_path)
                 if detailed_analytics:
                     temp_strategy_file = tempfile.NamedTemporaryFile(
                         mode="w", suffix=".yaml", delete=False
@@ -596,8 +631,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step=f"Starting training for {total_epochs} epochs",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None,
                     ),
                 )
 
@@ -607,8 +645,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step="Starting neural network training...",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None,
                     ),
                 )
 
@@ -709,8 +750,8 @@ class TrainingService(BaseService):
                         actual_strategy_path,
                         symbol,
                         timeframes,
-                        start_date,
-                        end_date,
+                        start_date or "",
+                        end_date or "",
                         training_config.get("validation_split", 0.2),
                         "local",
                         sync_progress_callback,
@@ -738,9 +779,7 @@ class TrainingService(BaseService):
                                     completed_batches = current_progress.get(
                                         "completed_batches", 0
                                     )
-                                    total_batches = current_progress.get(
-                                        "total_batches", 1
-                                    )
+                                    current_progress.get("total_batches", 1)
                                     total_bars_processed = current_progress.get(
                                         "total_bars_processed", 0
                                     )
@@ -764,8 +803,14 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_progress.get(
+                                                    "current_epoch", 0
+                                                )
+                                                + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None,
                                             ),
                                         )
                                         last_reported_batch = completed_batches
@@ -790,8 +835,14 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_progress.get(
+                                                    "current_epoch", 0
+                                                )
+                                                + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None,
                                             ),
                                         )
                                     elif total_epochs > 0:
@@ -806,8 +857,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_epoch,
+                                                steps_total=total_epochs,
                                                 items_processed=current_epoch,
                                                 items_total=total_epochs,
+                                                current_item=None,
                                             ),
                                         )
                         except Exception as e:
@@ -822,7 +876,7 @@ class TrainingService(BaseService):
                     # Clean up progress file
                     try:
                         progress_file.unlink(missing_ok=True)
-                    except:
+                    except Exception:
                         pass
 
                     # Clean up temporary strategy file if analytics was enabled
@@ -841,7 +895,13 @@ class TrainingService(BaseService):
                 await self.operations_service.update_progress(
                     operation_id,
                     OperationProgress(
-                        percentage=95.0, current_step="Processing training results"
+                        percentage=95.0,
+                        current_step="Processing training results",
+                        steps_completed=9,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
                     ),
                 )
 
@@ -921,6 +981,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=5.0,
                     current_step="Configuring multi-symbol training environment",
+                    steps_completed=0,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None,
                 ),
             )
 
@@ -954,7 +1019,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=10.0,
                     current_step="Preparing multi-symbol training environment",
+                    steps_completed=1,
+                    steps_total=10,
+                    items_processed=0,
                     items_total=total_epochs,
+                    current_item=None,
                 ),
             )
 
@@ -965,13 +1034,18 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=15.0,
                         current_step="Initializing multi-symbol strategy trainer",
+                        steps_completed=2,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
                     ),
                 )
 
                 trainer = StrategyTrainer(models_dir="models")
 
                 # If analytics is enabled, create a temporary strategy file with modified config
-                actual_strategy_path = strategy_path
+                actual_strategy_path = str(strategy_path)
                 if detailed_analytics:
                     temp_strategy_file = tempfile.NamedTemporaryFile(
                         mode="w", suffix=".yaml", delete=False
@@ -997,8 +1071,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step=f"Starting multi-symbol training for {total_epochs} epochs",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None,
                     ),
                 )
 
@@ -1008,8 +1085,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step=f"Starting multi-symbol neural network training for {len(symbols)} symbols...",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None,
                     ),
                 )
 
@@ -1120,8 +1200,8 @@ class TrainingService(BaseService):
                         actual_strategy_path,
                         symbols,
                         timeframes,
-                        start_date,
-                        end_date,
+                        start_date or "",
+                        end_date or "",
                         training_config.get("validation_split", 0.2),
                         "local",
                         sync_progress_callback,
@@ -1149,9 +1229,7 @@ class TrainingService(BaseService):
                                     completed_batches = current_progress.get(
                                         "completed_batches", 0
                                     )
-                                    total_batches = current_progress.get(
-                                        "total_batches", 1
-                                    )
+                                    current_progress.get("total_batches", 1)
                                     total_bars_processed = current_progress.get(
                                         "total_bars_processed", 0
                                     )
@@ -1175,8 +1253,14 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_progress.get(
+                                                    "current_epoch", 0
+                                                )
+                                                + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None,
                                             ),
                                         )
                                         last_reported_batch = completed_batches
@@ -1201,8 +1285,14 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_progress.get(
+                                                    "current_epoch", 0
+                                                )
+                                                + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None,
                                             ),
                                         )
                                     elif total_epochs > 0:
@@ -1217,8 +1307,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_epoch,
+                                                steps_total=total_epochs,
                                                 items_processed=current_epoch,
                                                 items_total=total_epochs,
+                                                current_item=None,
                                             ),
                                         )
                         except Exception as e:
@@ -1233,7 +1326,7 @@ class TrainingService(BaseService):
                     # Clean up progress file
                     try:
                         progress_file.unlink(missing_ok=True)
-                    except:
+                    except Exception:
                         pass
 
                     # Clean up temporary strategy file if analytics was enabled
@@ -1254,6 +1347,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=95.0,
                         current_step="Processing multi-symbol training results",
+                        steps_completed=9,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
                     ),
                 )
 

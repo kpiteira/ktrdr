@@ -74,14 +74,14 @@ class ZigZagLabeler:
             if max_gain >= self.threshold and max_gain > max_loss:
                 # Additional check: ensure gain happens before any significant loss
                 bars_to_max = (
-                    len(close_prices.loc[close_prices.index[i] : max_gain_idx]) - 1
+                    len(close_prices.loc[close_prices.index[i] : max_gain_idx]) - 1  # type: ignore
                 )
                 if bars_to_max >= self.min_swing_length:
                     labels.iloc[i] = 0  # BUY
             elif max_loss >= self.threshold and max_loss > max_gain:
                 # Additional check: ensure loss happens before any significant gain
                 bars_to_min = (
-                    len(close_prices.loc[close_prices.index[i] : max_loss_idx]) - 1
+                    len(close_prices.loc[close_prices.index[i] : max_loss_idx]) - 1  # type: ignore
                 )
                 if bars_to_min >= self.min_swing_length:
                     labels.iloc[i] = 2  # SELL
@@ -145,7 +145,7 @@ class ZigZagLabeler:
 
             if labels.iloc[i] == 0:  # BUY label
                 # Find best exit point
-                best_exit_idx = future_window.idxmax()
+                future_window.idxmax()
                 best_exit_price = future_window.max()
                 actual_return = (best_exit_price - current_price) / current_price
 
@@ -162,7 +162,7 @@ class ZigZagLabeler:
 
             elif labels.iloc[i] == 2:  # SELL label
                 # For SELL, we calculate as if we shorted
-                worst_exit_idx = future_window.idxmin()
+                future_window.idxmin()
                 worst_exit_price = future_window.min()
                 actual_return = (current_price - worst_exit_price) / current_price
 

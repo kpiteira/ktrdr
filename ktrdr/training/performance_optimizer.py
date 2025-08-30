@@ -227,7 +227,7 @@ class PerformanceOptimizer:
         # Enable gradient checkpointing for memory efficiency
         if self.config.enable_gradient_checkpointing:
             if hasattr(model, "gradient_checkpointing_enable"):
-                model.gradient_checkpointing_enable()
+                model.gradient_checkpointing_enable()  # type: ignore[operator]
                 logger.info("Gradient checkpointing enabled")
             else:
                 logger.warning("Model does not support gradient checkpointing")
@@ -235,7 +235,7 @@ class PerformanceOptimizer:
         # Compile model for faster execution (PyTorch 2.0+)
         if self.config.compile_model and self.compile_available:
             try:
-                optimized_model = torch.compile(
+                optimized_model = torch.compile(  # type: ignore[assignment]
                     model,
                     mode=self.config.compile_mode,
                     fullgraph=False,  # Allow graph breaks for compatibility

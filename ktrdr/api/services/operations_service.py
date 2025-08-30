@@ -39,6 +39,9 @@ class OperationsService:
         # Operation tasks registry (for cancellation)
         self._operation_tasks: dict[str, asyncio.Task] = {}
 
+        # Cancellation events registry (for data service integration)
+        self._cancellation_events: dict[str, asyncio.Event] = {}
+
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
 
@@ -101,6 +104,10 @@ class OperationsService:
                 status=OperationStatus.PENDING,
                 created_at=datetime.now(timezone.utc),
                 metadata=metadata,
+                started_at=None,
+                completed_at=None,
+                error_message=None,
+                result_summary=None,
             )
 
             # Add to registry
@@ -493,6 +500,10 @@ class OperationsService:
                 status=OperationStatus.PENDING,
                 created_at=datetime.now(timezone.utc),
                 metadata=original_operation.metadata,
+                started_at=None,
+                completed_at=None,
+                error_message=None,
+                result_summary=None,
             )
 
             # Add to registry
@@ -641,8 +652,11 @@ class OperationsService:
                 updated_operation.progress = OperationProgress(
                     percentage=percentage,
                     current_step=current_step,
+                    steps_completed=current_epoch,
+                    steps_total=total_epochs,
                     items_processed=current_epoch,
                     items_total=total_epochs,
+                    current_item=None,
                 )
 
                 return updated_operation
@@ -657,6 +671,11 @@ class OperationsService:
                 updated_operation.progress = OperationProgress(
                     percentage=100.0,
                     current_step="Training completed successfully",
+                    steps_completed=100,
+                    steps_total=100,
+                    items_processed=100,
+                    items_total=100,
+                    current_item=None,
                 )
                 # Store host metrics in result summary
                 if not updated_operation.result_summary:

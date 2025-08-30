@@ -2,17 +2,15 @@
 Unit tests for research agents database service layer
 """
 
-import pytest
 import asyncio
-from datetime import datetime, timezone
-from uuid import uuid4, UUID
-from typing import Dict, Any, List, Optional
+from typing import Any
+from uuid import UUID, uuid4
+
+import pytest
 
 from research_agents.services.database import (
-    ResearchDatabaseService,
-    DatabaseConfig,
     DatabaseError,
-    create_database_service,
+    ResearchDatabaseService,
 )
 
 
@@ -83,7 +81,7 @@ class TestResearchDatabaseService:
 
     @pytest.mark.asyncio
     async def test_agent_state_crud_operations(
-        self, clean_database: ResearchDatabaseService, sample_agent_data: Dict[str, Any]
+        self, clean_database: ResearchDatabaseService, sample_agent_data: dict[str, Any]
     ):
         """Test CRUD operations for agent states"""
         agent_id = sample_agent_data["agent_id"]
@@ -178,7 +176,7 @@ class TestResearchDatabaseService:
     async def test_experiment_lifecycle(
         self,
         clean_database: ResearchDatabaseService,
-        sample_experiment_data: Dict[str, Any],
+        sample_experiment_data: dict[str, Any],
     ):
         """Test complete experiment lifecycle"""
         # Create session first
@@ -270,7 +268,7 @@ class TestResearchDatabaseService:
     async def test_knowledge_base_operations(
         self,
         clean_database: ResearchDatabaseService,
-        sample_knowledge_data: Dict[str, Any],
+        sample_knowledge_data: dict[str, Any],
     ):
         """Test knowledge base CRUD operations"""
         # Create knowledge entry

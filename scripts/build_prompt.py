@@ -5,8 +5,10 @@ Assemble a self‑contained prompt for "Implement task X.Y".
 Usage:
     python build_prompt.py 1.5 | pbcopy   # macOS: copies prompt to clipboard
 """
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
-import sys, textwrap, subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / "specification"

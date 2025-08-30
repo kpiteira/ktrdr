@@ -8,9 +8,10 @@ This example demonstrates:
 3. How the same data looks with different styling
 """
 
-import pandas as pd
 import os
 from pathlib import Path
+
+import pandas as pd
 
 from ktrdr.visualization import Visualizer
 

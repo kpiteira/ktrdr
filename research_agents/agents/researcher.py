@@ -6,13 +6,13 @@ based on accumulated knowledge and innovative thinking.
 """
 
 import asyncio
-import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from uuid import UUID
 
 import openai
+
 from .base import BaseResearchAgent
 
 logger = logging.getLogger(__name__)
@@ -44,8 +44,8 @@ class ResearcherAgent(BaseResearchAgent):
 
         # Research state
         self.current_session_id: Optional[UUID] = None
-        self.recent_experiments: List[Dict[str, Any]] = []
-        self.knowledge_cache: Dict[str, Any] = {}
+        self.recent_experiments: list[dict[str, Any]] = []
+        self.knowledge_cache: dict[str, Any] = {}
 
     async def _initialize_agent(self) -> None:
         """Initialize researcher-specific functionality"""
@@ -153,7 +153,7 @@ class ResearcherAgent(BaseResearchAgent):
             self.logger.error(f"Failed to generate experiment batch: {e}")
             raise
 
-    async def _gather_research_context(self) -> Dict[str, Any]:
+    async def _gather_research_context(self) -> dict[str, Any]:
         """Gather context for hypothesis generation"""
         # Get recent experiment results
         recent_results = []
@@ -187,8 +187,8 @@ class ResearcherAgent(BaseResearchAgent):
         }
 
     async def _generate_hypotheses(
-        self, context: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, context: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Generate novel hypotheses using LLM"""
         if not self.openai_client:
             # Fallback to template-based hypotheses if no LLM
@@ -220,7 +220,7 @@ class ResearcherAgent(BaseResearchAgent):
             # Fallback to template-based generation
             return await self._generate_template_hypotheses(context)
 
-    def _build_hypothesis_prompt(self, context: Dict[str, Any]) -> str:
+    def _build_hypothesis_prompt(self, context: dict[str, Any]) -> str:
         """Build prompt for LLM hypothesis generation"""
         prompt_parts = [
             "Generate 3-5 novel trading strategy hypotheses based on the following context:",
@@ -278,7 +278,7 @@ class ResearcherAgent(BaseResearchAgent):
 
     async def _parse_hypotheses_response(
         self, response_text: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Parse LLM response into structured hypotheses"""
         hypotheses = []
         current_hypothesis = {}
@@ -307,8 +307,8 @@ class ResearcherAgent(BaseResearchAgent):
         return hypotheses
 
     async def _generate_template_hypotheses(
-        self, context: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, context: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Generate hypotheses using templates (fallback)"""
         templates = [
             {
@@ -337,7 +337,7 @@ class ResearcherAgent(BaseResearchAgent):
         return templates[: self.hypothesis_batch_size]
 
     async def _create_experiment_from_hypothesis(
-        self, hypothesis: Dict[str, Any]
+        self, hypothesis: dict[str, Any]
     ) -> UUID:
         """Create an experiment from a generated hypothesis"""
         # Determine experiment type based on approach
@@ -390,7 +390,7 @@ class ResearcherAgent(BaseResearchAgent):
             await self._generate_success_insight(successful_experiments)
 
     async def _generate_success_insight(
-        self, successful_experiments: List[Dict[str, Any]]
+        self, successful_experiments: list[dict[str, Any]]
     ) -> None:
         """Generate insights from successful experiments"""
         # Analyze common patterns in successful experiments
@@ -434,7 +434,7 @@ class ResearcherAgent(BaseResearchAgent):
             )
             self.knowledge_cache[content_type] = entries
 
-    async def _get_session_goals(self) -> List[str]:
+    async def _get_session_goals(self) -> list[str]:
         """Get current session strategic goals"""
         if not self.current_session_id:
             return []
@@ -445,7 +445,7 @@ class ResearcherAgent(BaseResearchAgent):
 
         return []
 
-    async def _identify_unexplored_areas(self) -> List[str]:
+    async def _identify_unexplored_areas(self) -> list[str]:
         """Identify research areas that haven't been explored yet"""
         # Simple heuristic - could be enhanced
         all_experiment_types = [
@@ -476,7 +476,7 @@ class ResearcherAgent(BaseResearchAgent):
     # PUBLIC API METHODS
     # ========================================================================
 
-    async def generate_hypothesis(self) -> Dict[str, Any]:
+    async def generate_hypothesis(self) -> dict[str, Any]:
         """Generate a single hypothesis based on current research context"""
         # If we have a mock llm_client (for tests), use it directly
         if hasattr(self, "llm_client") and hasattr(
@@ -501,12 +501,12 @@ class ResearcherAgent(BaseResearchAgent):
             }
 
     async def search_knowledge(
-        self, tags: List[str], limit: int = 10
-    ) -> List[Dict[str, Any]]:
+        self, tags: list[str], limit: int = 10
+    ) -> list[dict[str, Any]]:
         """Search knowledge base by tags"""
         return await self.db.search_knowledge_by_tags(tags, limit=limit)
 
-    async def design_experiment(self, hypothesis: Dict[str, Any]) -> Dict[str, Any]:
+    async def design_experiment(self, hypothesis: dict[str, Any]) -> dict[str, Any]:
         """Design an experiment configuration from a hypothesis"""
         experiment_type = hypothesis.get("experiment_type", "momentum_strategy")
 
@@ -532,7 +532,7 @@ class ResearcherAgent(BaseResearchAgent):
 
         return experiment_design
 
-    def _get_default_parameters(self, experiment_type: str) -> Dict[str, Any]:
+    def _get_default_parameters(self, experiment_type: str) -> dict[str, Any]:
         """Get default parameters for different experiment types"""
         parameter_templates = {
             "momentum_strategy": {

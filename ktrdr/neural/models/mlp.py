@@ -1,6 +1,6 @@
 """Multi-Layer Perceptron implementation for trading decisions."""
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import pandas as pd
 import torch
@@ -117,11 +117,12 @@ class MLPTradingModel(BaseNeuralModel):
         # Get training parameters
         training_config = self.config.get("training", {})
         learning_rate = training_config.get("learning_rate", 0.001)
-        batch_size = training_config.get("batch_size", 32)
+        training_config.get("batch_size", 32)
         epochs = training_config.get("epochs", 100)
 
         # Setup optimizer and loss
         optimizer_name = training_config.get("optimizer", "adam").lower()
+        optimizer: Union[torch.optim.Adam, torch.optim.SGD]
         if optimizer_name == "adam":
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         elif optimizer_name == "sgd":
@@ -134,7 +135,7 @@ class MLPTradingModel(BaseNeuralModel):
         criterion = nn.CrossEntropyLoss()
 
         # Training history
-        history = {
+        history: dict[str, list[float]] = {
             "train_loss": [],
             "train_accuracy": [],
             "val_loss": [],
@@ -146,7 +147,7 @@ class MLPTradingModel(BaseNeuralModel):
 
         # Simple training loop (placeholder - would be more sophisticated in production)
         self.model.train()
-        for epoch in range(epochs):
+        for _epoch in range(epochs):
             # Forward pass
             outputs = self.model(X)
             loss = criterion(outputs, y)

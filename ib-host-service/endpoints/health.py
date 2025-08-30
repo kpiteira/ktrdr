@@ -4,11 +4,11 @@ Health check endpoints for IB Connector Host Service
 Provides health monitoring and connection status information.
 """
 
+from datetime import datetime
+from typing import Any, Optional
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
-from datetime import datetime
-import logging
 
 # Import existing ktrdr modules
 from ktrdr.ib import IbConnectionPool
@@ -38,8 +38,8 @@ class HealthResponse(BaseModel):
     healthy: bool
     service: str = "ib-connector"
     timestamp: str
-    ib_status: Dict[str, Any]
-    connection_info: Dict[str, Any]
+    ib_status: dict[str, Any]
+    connection_info: dict[str, Any]
     error: Optional[str] = None
 
 
@@ -55,7 +55,7 @@ class DetailedHealthResponse(BaseModel):
     error_count: int
     last_error: Optional[str] = None
     uptime_seconds: float
-    connection_pool_status: Dict[str, Any]
+    connection_pool_status: dict[str, Any]
 
 
 # Endpoints

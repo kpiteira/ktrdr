@@ -18,7 +18,7 @@ from ktrdr.api.models.gap_analysis import (
     GapAnalysisRequest,
 )
 from ktrdr.api.services.gap_analysis_service import GapAnalysisService
-from ktrdr.data.ib_gap_filler import get_gap_filler
+from ktrdr.ib.gap_filler import get_gap_filler
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -84,7 +84,6 @@ def analyze_gaps(
             start_date=start_date,
             end_date=end_date,
             mode=GapAnalysisMode(mode),
-            include_expected=include_expected,
         )
 
         # Run analysis
@@ -101,7 +100,7 @@ def analyze_gaps(
     except Exception as e:
         logger.error(f"Gap analysis failed: {e}")
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @gap_analysis_app.command("batch")
@@ -159,7 +158,6 @@ def analyze_batch_gaps(
             start_date=start_date,
             end_date=end_date,
             mode=GapAnalysisMode(mode),
-            include_expected=include_expected,
         )
 
         # Run batch analysis
@@ -176,7 +174,7 @@ def analyze_batch_gaps(
     except Exception as e:
         logger.error(f"Batch gap analysis failed: {e}")
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 # Create Typer app for gap service commands
@@ -246,7 +244,7 @@ def gap_service_status():
     except Exception as e:
         logger.error(f"Failed to get gap service status: {e}")
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @gap_service_app.command("start")
@@ -280,7 +278,7 @@ def gap_service_start(
     except Exception as e:
         logger.error(f"Failed to start gap service: {e}")
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @gap_service_app.command("stop")
@@ -294,7 +292,7 @@ def gap_service_stop():
     except Exception as e:
         logger.error(f"Failed to stop gap service: {e}")
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @gap_service_app.command("scan-now")
@@ -342,7 +340,7 @@ def gap_service_scan_now(
     except Exception as e:
         logger.error(f"Gap scan failed: {e}")
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 # Helper functions
@@ -373,7 +371,7 @@ def _normalize_date(date_str: str) -> str:
     except ValueError:
         raise typer.BadParameter(
             f"Invalid date format: {date_str}. Use YYYY-MM-DD or ISO format."
-        )
+        ) from None
 
 
 def _print_gap_summary(result):
@@ -427,7 +425,7 @@ def _print_gap_table(result, mode: str, include_expected: bool):
         for gap in result.gaps:
             classification = str(gap.classification).replace("_", " ").title()
             start_date = gap.start_time.strftime("%Y-%m-%d %H:%M")
-            end_date = gap.end_time.strftime("%Y-%m-%d %H:%M")
+            gap.end_time.strftime("%Y-%m-%d %H:%M")
 
             gap_data.append(
                 [

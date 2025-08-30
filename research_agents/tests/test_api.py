@@ -2,14 +2,11 @@
 Integration tests for research agents API endpoints
 """
 
+from uuid import UUID, uuid4
+
 import pytest
-import json
-from uuid import uuid4, UUID
-from typing import Dict, Any
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
-
-from research_agents.services.database import ResearchDatabaseService
 
 
 class TestResearchAPI:
@@ -556,7 +553,7 @@ class TestResearchAPI:
         # For now, just verify multiple requests don't cause issues
 
         responses = []
-        for i in range(10):
+        for _i in range(10):
             response = await async_test_client.get("/health")
             responses.append(response)
 

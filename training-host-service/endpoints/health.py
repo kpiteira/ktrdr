@@ -4,16 +4,16 @@ Health check endpoints for Training Host Service
 Provides health monitoring and GPU status information.
 """
 
+from datetime import datetime
+from typing import Any, Optional
+
+import torch
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
-from datetime import datetime
-import logging
-import torch
 
 # Import existing ktrdr modules
 from ktrdr.logging import get_logger
-from ktrdr.training.gpu_memory_manager import GPUMemoryManager, GPUMemoryConfig
+from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/health", tags=["health"])
@@ -59,8 +59,8 @@ class HealthResponse(BaseModel):
     healthy: bool
     service: str = "training-host"
     timestamp: str
-    gpu_status: Dict[str, Any]
-    system_info: Dict[str, Any]
+    gpu_status: dict[str, Any]
+    system_info: dict[str, Any]
     error: Optional[str] = None
 
 
@@ -78,7 +78,7 @@ class DetailedHealthResponse(BaseModel):
     system_memory_usage_percent: float
     system_memory_total_mb: float
     uptime_seconds: float
-    gpu_manager_status: Dict[str, Any]
+    gpu_manager_status: dict[str, Any]
     error: Optional[str] = None
 
 
@@ -140,7 +140,7 @@ async def basic_health_check():
                             device_name = "Unknown MPS Device"
                             total_memory = 0
                             allocated_memory = 0
-                    except:
+                    except Exception:
                         device_name = "Apple Silicon GPU (MPS)"
                         total_memory = 0
                         allocated_memory = 0

@@ -1,6 +1,6 @@
 """Neural network training modules for KTRDR."""
 
-from .multi_timeframe_trainer import (
+from .multi_timeframe_trainer import (  # type: ignore
     CrossTimeframeValidationConfig,
     EarlyStoppingConfig,
     EnhancedEarlyStopping,

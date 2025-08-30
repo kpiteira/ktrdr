@@ -9,9 +9,9 @@ test suite - it's a manual debugging tool for IB connection issues.
 Usage: python scripts/basic_ib_connection_check.py
 """
 
+import asyncio
 import sys
 import time
-import asyncio
 from pathlib import Path
 
 # Add project root to path so we can import ib_insync
@@ -34,10 +34,10 @@ def check_sync_connection():
     ib = IB()
 
     try:
-        print(f"Attempting sync connection to localhost:4002 with client_id=100...")
+        print("Attempting sync connection to localhost:4002 with client_id=100...")
         ib.connect("localhost", 4002, clientId=100, timeout=15)
 
-        print(f"✅ Connection successful!")
+        print("✅ Connection successful!")
         print(f"   Connected: {ib.isConnected()}")
 
         if ib.isConnected():
@@ -66,10 +66,10 @@ async def check_async_connection():
     ib = IB()
 
     try:
-        print(f"Attempting async connection to localhost:4002 with client_id=101...")
+        print("Attempting async connection to localhost:4002 with client_id=101...")
         await ib.connectAsync("localhost", 4002, clientId=101, timeout=15)
 
-        print(f"✅ Async connection successful!")
+        print("✅ Async connection successful!")
         print(f"   Connected: {ib.isConnected()}")
 
         if ib.isConnected():
@@ -141,9 +141,9 @@ def check_port_variations():
         except Exception as e:
             error_type = type(e).__name__
             if "refused" in str(e).lower():
-                print(f"❌ CONNECTION REFUSED")
+                print("❌ CONNECTION REFUSED")
             elif "timeout" in str(e).lower():
-                print(f"❌ TIMEOUT")
+                print("❌ TIMEOUT")
             else:
                 print(f"❌ {error_type}")
 
@@ -160,7 +160,7 @@ def main():
         import ib_insync
 
         print(f"ib_insync version: {ib_insync.__version__}")
-    except:
+    except Exception:
         print("Could not determine ib_insync version")
 
     # Run all tests

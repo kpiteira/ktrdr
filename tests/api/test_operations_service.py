@@ -179,10 +179,9 @@ class TestOperationsService:
         )
         backtest_id = backtest_op.operation_id
 
-        training_op = await operations_service.create_operation(
+        await operations_service.create_operation(
             operation_type=OperationType.TRAINING, metadata=sample_metadata
         )
-        training_id = training_op.operation_id
 
         # Complete one operation
         await operations_service.complete_operation(backtest_id, {"result": "success"})
@@ -287,3 +286,128 @@ class TestOperationsService:
             )
             assert stored_operation is not None
             assert stored_operation.status == OperationStatus.PENDING
+
+
+class TestOperationsServiceCancellationEvents:
+    """Test dynamic cancellation events attribute functionality."""
+
+    @pytest.mark.asyncio
+    async def test_cancellation_events_initialization(self):
+        """Test that _cancellation_events attribute is properly initialized."""
+        operations_service = OperationsService()
+
+        # The attribute should now exist and be initialized as empty dict
+        assert hasattr(operations_service, "_cancellation_events")
+        assert operations_service._cancellation_events == {}
+        assert isinstance(operations_service._cancellation_events, dict)
+
+    @pytest.mark.asyncio
+    async def test_cancellation_events_storage_and_retrieval(self):
+        """Test storing and retrieving cancellation events."""
+        operations_service = OperationsService()
+
+        # Set up cancellation events like DataService does
+        operations_service._cancellation_events = {}
+
+        # Create mock cancellation events
+        event1 = asyncio.Event()
+        event2 = asyncio.Event()
+
+        operation_id1 = "test-op-1"
+        operation_id2 = "test-op-2"
+
+        # Store events
+        operations_service._cancellation_events[operation_id1] = event1
+        operations_service._cancellation_events[operation_id2] = event2
+
+        # Verify storage
+        assert len(operations_service._cancellation_events) == 2
+        assert operations_service._cancellation_events[operation_id1] is event1
+        assert operations_service._cancellation_events[operation_id2] is event2
+
+    @pytest.mark.asyncio
+    async def test_cancellation_events_with_async_operations(self):
+        """Test cancellation events in realistic async operation scenario."""
+        operations_service = OperationsService()
+        operations_service._cancellation_events = {}
+
+        # Create a cancellation event for an operation
+        operation_id = "data-load-123"
+        cancellation_event = asyncio.Event()
+        operations_service._cancellation_events[operation_id] = cancellation_event
+
+        # Simulate an async operation that waits for cancellation
+        operation_cancelled = False
+
+        async def mock_data_operation():
+            nonlocal operation_cancelled
+            try:
+                # This would be the actual data loading work
+                await asyncio.sleep(0.1)  # Simulate work
+                # Check for cancellation during work
+                if cancellation_event.is_set():
+                    operation_cancelled = True
+                    return "cancelled"
+                return "completed"
+            except asyncio.CancelledError:
+                operation_cancelled = True
+                raise
+
+        # Start the operation
+        operation_task = asyncio.create_task(mock_data_operation())
+
+        # Wait a bit, then signal cancellation
+        await asyncio.sleep(0.05)
+        cancellation_event.set()
+
+        await operation_task
+        # The operation should have detected the cancellation signal
+        assert operation_cancelled is True
+
+    @pytest.mark.asyncio
+    async def test_cancellation_events_cleanup(self):
+        """Test that cancellation events can be cleaned up after operations."""
+        operations_service = OperationsService()
+        operations_service._cancellation_events = {}
+
+        operation_id = "cleanup-test-op"
+        cancellation_event = asyncio.Event()
+
+        # Store the event
+        operations_service._cancellation_events[operation_id] = cancellation_event
+        assert operation_id in operations_service._cancellation_events
+
+        # Cleanup after operation completes
+        del operations_service._cancellation_events[operation_id]
+        assert operation_id not in operations_service._cancellation_events
+
+        # Should be able to handle empty dict
+        assert len(operations_service._cancellation_events) == 0
+
+    @pytest.mark.asyncio
+    async def test_multiple_operations_with_cancellation_events(self):
+        """Test handling multiple operations each with their own cancellation events."""
+        operations_service = OperationsService()
+        operations_service._cancellation_events = {}
+
+        # Create multiple operations with events
+        num_operations = 3
+        events = {}
+
+        for i in range(num_operations):
+            op_id = f"multi-op-{i}"
+            event = asyncio.Event()
+            operations_service._cancellation_events[op_id] = event
+            events[op_id] = event
+
+        # Verify all events are stored
+        assert len(operations_service._cancellation_events) == num_operations
+
+        # Cancel one specific operation
+        target_op_id = "multi-op-1"
+        operations_service._cancellation_events[target_op_id].set()
+
+        # Verify only the target operation was cancelled
+        assert operations_service._cancellation_events[target_op_id].is_set()
+        assert not operations_service._cancellation_events["multi-op-0"].is_set()
+        assert not operations_service._cancellation_events["multi-op-2"].is_set()

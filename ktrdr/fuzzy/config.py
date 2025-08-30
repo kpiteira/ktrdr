@@ -491,9 +491,7 @@ class FuzzyConfigLoader:
 
         # Start with a copy of the base config
         merged_dict = {
-            ind: {
-                set_name: mf_config for set_name, mf_config in fuzzy_sets.root.items()
-            }
+            ind: dict(fuzzy_sets.root.items())
             for ind, fuzzy_sets in base_config.root.items()
         }
 

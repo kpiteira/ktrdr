@@ -9,7 +9,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from ktrdr import get_logger
 
@@ -33,15 +33,15 @@ class CircuitBreakerConfig:
 class CircuitBreaker:
     """Circuit breaker for IB operations."""
 
-    def __init__(self, name: str, config: CircuitBreakerConfig = None):
+    def __init__(self, name: str, config: Optional[CircuitBreakerConfig] = None):
         self.name = name
         self.config = config or CircuitBreakerConfig()
 
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0
-        self.last_failure_time = 0
-        self.next_attempt_time = 0
+        self.last_failure_time: float = 0.0
+        self.next_attempt_time: float = 0.0
 
         logger.info(f"Circuit breaker '{name}' initialized: {self.config}")
 
@@ -152,7 +152,7 @@ _circuit_breakers: dict[str, CircuitBreaker] = {}
 
 
 def get_circuit_breaker(
-    name: str, config: CircuitBreakerConfig = None
+    name: str, config: Optional[CircuitBreakerConfig] = None
 ) -> CircuitBreaker:
     """Get or create a circuit breaker for an operation."""
     if name not in _circuit_breakers:

@@ -6,11 +6,9 @@ Provides common functionality for all AI agents in the research laboratory.
 
 import asyncio
 import logging
-import json
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from uuid import UUID
+from typing import Any, Optional
 
 from ..services.database import ResearchDatabaseService, create_database_service
 
@@ -267,7 +265,7 @@ class BaseResearchAgent(ABC):
         except Exception as e:
             self.logger.error(f"Failed to update agent status: {e}")
 
-    async def _update_state_data(self, state_data: Dict[str, Any]) -> None:
+    async def _update_state_data(self, state_data: dict[str, Any]) -> None:
         """Update agent state data"""
         try:
             self.state_data.update(state_data)
@@ -320,7 +318,7 @@ class BaseResearchAgent(ABC):
         self.current_activity = activity
         await self._persist_state()
 
-    def update_config(self, config: Dict[str, Any]) -> None:
+    def update_config(self, config: dict[str, Any]) -> None:
         """Update agent configuration"""
         self.config.update(config)
 
@@ -361,7 +359,7 @@ class BaseResearchAgent(ABC):
     # UTILITY METHODS
     # ========================================================================
 
-    async def get_agent_capabilities(self) -> List[str]:
+    async def get_agent_capabilities(self) -> list[str]:
         """Get agent capabilities from configuration"""
         return self.config.get("capabilities", [])
 
@@ -370,7 +368,7 @@ class BaseResearchAgent(ABC):
         return self.config.get("specialization")
 
     async def log_activity(
-        self, activity: str, details: Optional[Dict[str, Any]] = None
+        self, activity: str, details: Optional[dict[str, Any]] = None
     ):
         """Log agent activity with optional details"""
         self.logger.info(f"Activity: {activity}")

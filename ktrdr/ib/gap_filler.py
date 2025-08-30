@@ -13,7 +13,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 
 import pandas as pd
 
@@ -26,6 +26,19 @@ from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
+
+
+class GapFillerStats(TypedDict):
+    """Type-safe structure for gap filler statistics."""
+
+    gaps_detected: int
+    gaps_filled: int
+    gaps_failed: int
+    gaps_expected_skipped: int
+    last_scan_time: Optional[datetime]
+    symbols_processed: set[str]
+    errors: list[dict[str, Any]]
+    gap_classifications: dict[str, int]
 
 
 class GapFillerService:
@@ -84,7 +97,7 @@ class GapFillerService:
         self.gap_classifier = GapClassifier()
 
         # Statistics
-        self.stats = {
+        self.stats: GapFillerStats = {
             "gaps_detected": 0,
             "gaps_filled": 0,
             "gaps_failed": 0,
@@ -205,6 +218,7 @@ class GapFillerService:
                     # Check if DataManager has IB integration enabled
                     if (
                         self.data_manager.enable_ib
+                        and hasattr(self.data_manager, "ib_data_fetcher")
                         and self.data_manager.ib_data_fetcher
                     ):
                         # Try a simple IB operation to verify connectivity
@@ -224,11 +238,11 @@ class GapFillerService:
 
             except Exception as e:
                 logger.error(f"Error in gap filling loop: {e}")
-                self.stats["errors"].append(
+                self.stats["errors"].append(  # type: ignore[union-attr]
                     {"time": datetime.now(timezone.utc), "error": str(e)}
                 )
                 # Keep only last 10 errors
-                self.stats["errors"] = self.stats["errors"][-10:]
+                self.stats["errors"] = self.stats["errors"][-10:]  # type: ignore[index]
 
                 # Wait longer on error
                 self._stop_event.wait(60)
@@ -268,7 +282,7 @@ class GapFillerService:
                 gap_filled = self._check_and_fill_gap(symbol, timeframe)
                 if gap_filled:
                     processed += 1
-                    self.stats["symbols_processed"].add(f"{symbol}_{timeframe}")
+                    self.stats["symbols_processed"].add(f"{symbol}_{timeframe}")  # type: ignore[union-attr]
 
                     # Add small delay between successful requests to respect IB pacing
                     if (
@@ -314,7 +328,7 @@ class GapFillerService:
 
     def _discover_symbols_and_timeframes(self) -> list[tuple]:
         """Discover symbols and timeframes from existing CSV files."""
-        symbols_timeframes = []
+        symbols_timeframes: list[tuple[str, str]] = []
 
         try:
             data_path = Path(self.data_dir)
@@ -368,8 +382,10 @@ class GapFillerService:
             last_timestamp = TimestampManager.to_utc(last_timestamp)
 
             # Calculate expected next timestamp based on timeframe
+            if last_timestamp is None:
+                return False
             next_expected = self._calculate_next_expected_timestamp(
-                last_timestamp, timeframe
+                last_timestamp.to_pydatetime(), timeframe
             )
             current_time = TimestampManager.now_utc()
 
@@ -540,7 +556,7 @@ class GapFillerService:
         """Get gap filling statistics."""
         return {
             **self.stats,
-            "symbols_processed": list(self.stats["symbols_processed"]),
+            "symbols_processed": list(self.stats["symbols_processed"]),  # type: ignore[arg-type]
             "running": self._running,
             "check_interval": self.check_interval,
             "supported_timeframes": self.supported_timeframes,
@@ -559,7 +575,10 @@ class GapFillerService:
         """Force an immediate gap scan (for testing/debugging)."""
         try:
             # Check IB availability via DataManager
-            if not self.data_manager.enable_ib or not self.data_manager.ib_data_fetcher:
+            if (
+                not self.data_manager.enable_ib
+                or not self.data_manager.external_provider
+            ):
                 return {"error": "IB not enabled in DataManager"}
 
             self._scan_and_fill_gaps()

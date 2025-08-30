@@ -132,7 +132,7 @@ class FuzzyEngine:
 
     def fuzzify(
         self, indicator: str, values: Union[float, pd.Series, np.ndarray]
-    ) -> Union[dict[str, float], pd.DataFrame]:
+    ) -> Union[dict[str, Union[float, pd.Series, np.ndarray]], pd.DataFrame]:
         """
         Fuzzify indicator values using the configured membership functions.
 
@@ -171,7 +171,7 @@ class FuzzyEngine:
         # Handle scalar input
         if isinstance(values, (int, float)):
             logger.debug(f"Fuzzifying scalar value {values} for indicator {indicator}")
-            return self._fuzzify_scalar(indicator, values, membership_functions)
+            return self._fuzzify_scalar(indicator, values, membership_functions)  # type: ignore[return-value]
 
         # Handle pandas Series input
         elif isinstance(values, pd.Series):
@@ -213,12 +213,12 @@ class FuzzyEngine:
         Returns:
             Dictionary mapping fuzzy set names to membership degrees
         """
-        result = {}
+        result: dict[str, float] = {}
 
         for set_name, mf in membership_functions.items():
             # Generate standardized output column name
             output_name = self._get_output_name(indicator, set_name)
-            result[output_name] = mf.evaluate(value)
+            result[output_name] = float(mf.evaluate(value))
 
         return result
 
@@ -367,7 +367,7 @@ class FuzzyEngine:
             if isinstance(fuzzy_sets_config, dict):
                 try:
                     # Validate that we have the necessary indicators
-                    available_indicators = set()
+                    available_indicators: set[str] = set()
                     for tf_data in multi_timeframe_indicators.values():
                         available_indicators.update(tf_data.columns)
 

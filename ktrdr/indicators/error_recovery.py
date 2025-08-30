@@ -165,10 +165,23 @@ class ResilientProcessor:
                     result, timeframe, data.columns.tolist()
                 )
 
+                # Create a dummy context for successful processing
+                success_context = ErrorContext(
+                    timeframe=timeframe,
+                    indicator_type=None,
+                    error_type="",
+                    error_message="",
+                    timestamp=time.time(),
+                    data_info={
+                        "rows": len(standardized),
+                        "columns": list(standardized.columns),
+                    },
+                )
+
                 return RecoveryResult(
                     successful=True,
                     data=standardized,
-                    error_context=None,
+                    error_context=success_context,
                     recovery_action="none",
                     message="Processed successfully",
                 )
@@ -195,6 +208,23 @@ class ResilientProcessor:
                     return self._attempt_recovery(
                         timeframe_engine, timeframe, data, error_context
                     )
+
+        # Fallback return (should never reach here due to loop structure)
+        error_context = ErrorContext(
+            timeframe=timeframe,
+            indicator_type=None,
+            error_type="UnknownError",
+            error_message="Unexpected code path reached",
+            timestamp=time.time(),
+            data_info={"rows": len(data)},
+        )
+        return RecoveryResult(
+            successful=False,
+            data=None,
+            error_context=error_context,
+            recovery_action="none",
+            message="Unexpected error occurred",
+        )
 
     def _attempt_recovery(
         self,
@@ -255,7 +285,7 @@ class ResilientProcessor:
         original_indicators = engine.indicators.copy()
 
         # Try removing indicators one by one
-        for i, indicator in enumerate(original_indicators):
+        for i, _indicator in enumerate(original_indicators):
             try:
                 # Create new engine without this indicator
                 remaining_indicators = [
@@ -498,9 +528,7 @@ class DataQualityChecker:
                 for col in ["open", "high", "low", "close"]:
                     if col in fixed_df.columns:
                         # Forward fill, then backward fill
-                        fixed_df[col] = (
-                            fixed_df[col].fillna(method="ffill").fillna(method="bfill")
-                        )
+                        fixed_df[col] = fixed_df[col].ffill().bfill()
 
                         # If still NaN, use a default value
                         if fixed_df[col].isna().any():
@@ -606,7 +634,7 @@ def process_with_comprehensive_error_handling(
     Returns:
         Tuple of (results, error report)
     """
-    error_report = {
+    error_report: dict[str, Any] = {
         "data_quality_issues": {},
         "processing_errors": [],
         "recovery_actions": [],

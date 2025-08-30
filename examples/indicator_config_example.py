@@ -12,17 +12,16 @@ Run with:
     python examples/indicator_config_example.py
 """
 
-import os
-import pandas as pd
-import numpy as np
-import yaml
 from pathlib import Path
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import yaml
 
 from ktrdr import get_logger
 from ktrdr.config.models import IndicatorsConfig
 from ktrdr.indicators import IndicatorFactory
-from ktrdr.data.data_manager import DataManager
 
 # Set up logger
 logger = get_logger(__name__)
@@ -84,7 +83,7 @@ def load_indicators_from_file(file_path: str) -> list:
 
     try:
         # Load the YAML file
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             config_data = yaml.safe_load(f)
 
         # Create IndicatorsConfig from the loaded data

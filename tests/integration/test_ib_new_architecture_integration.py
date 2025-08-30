@@ -73,7 +73,7 @@ class TestIbNewArchitectureIntegration:
         connection_ids = set()
 
         # Perform multiple operations and track connection IDs
-        for i in range(5):
+        for _i in range(5):
             async with connection_pool.get_connection() as conn:
                 # Record the connection ID
                 connection_ids.add(conn.client_id)
@@ -98,7 +98,7 @@ class TestIbNewArchitectureIntegration:
         errors_caught = []
 
         # Perform operations that previously caused handler closed errors
-        for i in range(10):
+        for _i in range(10):
             try:
                 async with connection_pool.get_connection() as conn:
                     # This pattern previously caused handler closed errors
@@ -172,7 +172,7 @@ class TestIbNewArchitectureIntegration:
         pace_manager = IbPaceManager()
 
         # Test general rate limiting
-        for i in range(50):
+        for _i in range(50):
             await pace_manager.wait_if_needed()
 
         # 51st request should cause a wait

@@ -6,16 +6,14 @@ and performance optimization for the research laboratory system.
 """
 
 import asyncio
-import logging
 import json
+import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 from uuid import UUID, uuid4
-from datetime import datetime, timezone
 
 import asyncpg
-from asyncpg import Connection, Pool
-import numpy as np
+from asyncpg import Pool
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -32,7 +30,7 @@ class DatabaseConfig(BaseModel):
     min_connections: int = 5
     max_connections: int = 20
     command_timeout: int = 60
-    server_settings: Dict[str, str] = Field(
+    server_settings: dict[str, str] = Field(
         default_factory=lambda: {
             "application_name": "ktrdr_research_agents",
             "search_path": "research,public",
@@ -117,7 +115,7 @@ class ResearchDatabaseService:
 
     async def execute_query(
         self, query: str, *args, fetch: str = "none"
-    ) -> Union[List[Dict[str, Any]], Dict[str, Any], None]:
+    ) -> Union[list[dict[str, Any]], dict[str, Any], None]:
         """
         Execute a database query with proper error handling
 
@@ -151,12 +149,12 @@ class ResearchDatabaseService:
     # AGENT STATE OPERATIONS
     # ========================================================================
 
-    async def get_agent_state(self, agent_id: str) -> Optional[Dict[str, Any]]:
+    async def get_agent_state(self, agent_id: str) -> Optional[dict[str, Any]]:
         """Get agent state by ID"""
         query = """
-        SELECT id, agent_id, agent_type, status, current_activity, 
+        SELECT id, agent_id, agent_type, status, current_activity,
                state_data, memory_context, last_heartbeat, created_at, updated_at
-        FROM research.agent_states 
+        FROM research.agent_states
         WHERE agent_id = $1
         """
         return await self.execute_query(query, agent_id, fetch="one")
@@ -164,8 +162,8 @@ class ResearchDatabaseService:
     async def update_agent_heartbeat(self, agent_id: str) -> None:
         """Update agent's last heartbeat timestamp"""
         query = """
-        UPDATE research.agent_states 
-        SET last_heartbeat = NOW() 
+        UPDATE research.agent_states
+        SET last_heartbeat = NOW()
         WHERE agent_id = $1
         """
         await self.execute_query(query, agent_id)
@@ -176,13 +174,13 @@ class ResearchDatabaseService:
         agent_type: str,
         status: str,
         current_activity: str,
-        state_data: Dict[str, Any],
-        memory_context: Dict[str, Any],
+        state_data: dict[str, Any],
+        memory_context: dict[str, Any],
     ) -> None:
         """Create new agent state record"""
         query = """
         INSERT INTO research.agent_states (
-            agent_id, agent_type, status, current_activity, 
+            agent_id, agent_type, status, current_activity,
             state_data, memory_context
         ) VALUES ($1, $2, $3, $4, $5, $6)
         """
@@ -201,13 +199,13 @@ class ResearchDatabaseService:
         agent_id: str,
         status: str,
         current_activity: str,
-        state_data: Dict[str, Any],
-        memory_context: Dict[str, Any],
+        state_data: dict[str, Any],
+        memory_context: dict[str, Any],
     ) -> None:
         """Update complete agent state"""
         query = """
-        UPDATE research.agent_states 
-        SET status = $2, current_activity = $3, state_data = $4, 
+        UPDATE research.agent_states
+        SET status = $2, current_activity = $3, state_data = $4,
             memory_context = $5, last_heartbeat = NOW()
         WHERE agent_id = $1
         """
@@ -226,35 +224,35 @@ class ResearchDatabaseService:
         """Update agent status and current activity"""
         if activity is not None:
             query = """
-            UPDATE research.agent_states 
+            UPDATE research.agent_states
             SET status = $2, current_activity = $3, last_heartbeat = NOW()
             WHERE agent_id = $1
             """
             await self.execute_query(query, agent_id, status, activity)
         else:
             query = """
-            UPDATE research.agent_states 
+            UPDATE research.agent_states
             SET status = $2, last_heartbeat = NOW()
             WHERE agent_id = $1
             """
             await self.execute_query(query, agent_id, status)
 
     async def update_agent_state_data(
-        self, agent_id: str, state_data: Dict[str, Any]
+        self, agent_id: str, state_data: dict[str, Any]
     ) -> None:
         """Update agent's state data"""
         query = """
-        UPDATE research.agent_states 
+        UPDATE research.agent_states
         SET state_data = $2, last_heartbeat = NOW()
         WHERE agent_id = $1
         """
         await self.execute_query(query, agent_id, json.dumps(state_data))
 
-    async def get_active_agents(self) -> List[Dict[str, Any]]:
+    async def get_active_agents(self) -> list[dict[str, Any]]:
         """Get all active agents"""
         query = """
         SELECT agent_id, agent_type, status, current_activity, last_heartbeat
-        FROM research.agent_states 
+        FROM research.agent_states
         WHERE status IN ('idle', 'active', 'processing')
         ORDER BY agent_type, last_heartbeat DESC
         """
@@ -270,7 +268,7 @@ class ResearchDatabaseService:
         experiment_name: str,
         hypothesis: str,
         experiment_type: str,
-        configuration: Dict[str, Any],
+        configuration: dict[str, Any],
         assigned_agent_id: Optional[UUID] = None,
     ) -> UUID:
         """Create a new experiment"""
@@ -296,7 +294,7 @@ class ResearchDatabaseService:
         )
         return result
 
-    async def get_experiment(self, experiment_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_experiment(self, experiment_id: UUID) -> Optional[dict[str, Any]]:
         """Get experiment by ID"""
         query = """
         SELECT e.*, s.session_name, a.agent_id as assigned_agent_name
@@ -311,9 +309,9 @@ class ResearchDatabaseService:
         self,
         experiment_id: UUID,
         status: str,
-        results: Optional[Dict[str, Any]] = None,
+        results: Optional[dict[str, Any]] = None,
         fitness_score: Optional[float] = None,
-        error_details: Optional[Dict[str, Any]] = None,
+        error_details: Optional[dict[str, Any]] = None,
     ) -> None:
         """Update experiment status and results"""
 
@@ -344,14 +342,14 @@ class ResearchDatabaseService:
             set_clauses.append("completed_at = NOW()")
 
         query = f"""
-        UPDATE research.experiments 
+        UPDATE research.experiments
         SET {', '.join(set_clauses)}
         WHERE id = $1
         """
 
         await self.execute_query(query, *params)
 
-    async def get_queued_experiments(self, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_queued_experiments(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get queued experiments ready for processing"""
         query = """
         SELECT e.*, s.session_name
@@ -365,7 +363,7 @@ class ResearchDatabaseService:
 
     async def get_experiments_by_session(
         self, session_id: UUID, status_filter: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get experiments for a specific session"""
         if status_filter:
             query = """
@@ -398,12 +396,12 @@ class ResearchDatabaseService:
         title: str,
         content: str,
         summary: Optional[str] = None,
-        keywords: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
+        keywords: Optional[list[str]] = None,
+        tags: Optional[list[str]] = None,
         source_experiment_id: Optional[UUID] = None,
         source_agent_id: Optional[UUID] = None,
         quality_score: Optional[float] = None,
-        embedding: Optional[List[float]] = None,
+        embedding: Optional[list[float]] = None,
     ) -> UUID:
         """Add new knowledge entry"""
 
@@ -441,11 +439,11 @@ class ResearchDatabaseService:
 
     async def search_knowledge_by_similarity(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         content_type_filter: Optional[str] = None,
         limit: int = 10,
         similarity_threshold: float = 0.7,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search knowledge base using vector similarity"""
 
         embedding_vector = f"[{','.join(map(str, query_embedding))}]"
@@ -454,7 +452,7 @@ class ResearchDatabaseService:
             query = """
             SELECT kb.*, (1 - (kb.embedding <=> $1::vector)) as similarity_score
             FROM research.knowledge_base kb
-            WHERE kb.content_type = $2 
+            WHERE kb.content_type = $2
               AND kb.embedding IS NOT NULL
               AND (1 - (kb.embedding <=> $1::vector)) >= $3
             ORDER BY kb.embedding <=> $1::vector
@@ -483,10 +481,10 @@ class ResearchDatabaseService:
 
     async def search_knowledge_by_keywords(
         self,
-        keywords: List[str],
+        keywords: list[str],
         content_type_filter: Optional[str] = None,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search knowledge base by keywords"""
 
         if content_type_filter:
@@ -510,16 +508,16 @@ class ResearchDatabaseService:
 
     async def search_knowledge_by_tags(
         self,
-        tags: List[str],
+        tags: list[str],
         content_type_filter: Optional[str] = None,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search knowledge base by tags (alias for search_knowledge_by_keywords)"""
         return await self.search_knowledge_by_keywords(tags, content_type_filter, limit)
 
     async def get_knowledge_by_source(
         self, source_experiment_id: UUID
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get knowledge entries generated from a specific experiment"""
         query = """
         SELECT * FROM research.knowledge_base
@@ -532,7 +530,7 @@ class ResearchDatabaseService:
     # SESSION OPERATIONS
     # ========================================================================
 
-    async def get_active_session(self) -> Optional[Dict[str, Any]]:
+    async def get_active_session(self) -> Optional[dict[str, Any]]:
         """Get the currently active research session"""
         query = """
         SELECT s.*, a.agent_id as coordinator_name
@@ -548,8 +546,8 @@ class ResearchDatabaseService:
         self,
         session_name: str,
         description: Optional[str] = None,
-        strategic_goals: Optional[List[str]] = None,
-        priority_areas: Optional[List[str]] = None,
+        strategic_goals: Optional[list[str]] = None,
+        priority_areas: Optional[list[str]] = None,
         coordinator_id: Optional[UUID] = None,
     ) -> UUID:
         """Create a new research session"""
@@ -557,7 +555,7 @@ class ResearchDatabaseService:
         session_id = uuid4()
         query = """
         INSERT INTO research.sessions (
-            id, session_name, description, strategic_goals, 
+            id, session_name, description, strategic_goals,
             priority_areas, coordinator_id
         ) VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
@@ -581,11 +579,11 @@ class ResearchDatabaseService:
 
     async def get_experiment_statistics(
         self, session_id: Optional[UUID] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get experiment statistics for analytics"""
 
         base_query = """
-        SELECT 
+        SELECT
             COUNT(*) as total_experiments,
             COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
             COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
@@ -605,10 +603,10 @@ class ResearchDatabaseService:
 
         return result
 
-    async def get_knowledge_base_statistics(self) -> Dict[str, Any]:
+    async def get_knowledge_base_statistics(self) -> dict[str, Any]:
         """Get knowledge base statistics"""
         query = """
-        SELECT 
+        SELECT
             COUNT(*) as total_entries,
             COUNT(DISTINCT content_type) as content_types,
             AVG(quality_score) as avg_quality,
@@ -618,7 +616,7 @@ class ResearchDatabaseService:
         """
         return await self.execute_query(query, fetch="one")
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Perform database health check"""
         try:
             # Test basic connectivity

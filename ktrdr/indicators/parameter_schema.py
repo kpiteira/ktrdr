@@ -92,7 +92,7 @@ class ParameterDefinition:
                             "received": type(value).__name__,
                             "value": str(value),
                         },
-                    )
+                    ) from None
 
         elif self.param_type == ParameterType.FLOAT:
             if not isinstance(value, (int, float)):
@@ -108,7 +108,7 @@ class ParameterDefinition:
                             "received": type(value).__name__,
                             "value": str(value),
                         },
-                    )
+                    ) from None
 
         elif self.param_type == ParameterType.STRING:
             if not isinstance(value, str):
@@ -241,7 +241,7 @@ class ParameterConstraint:
                     "missing_parameter": str(e).strip("'"),
                     "available_parameters": list(params.keys()),
                 },
-            )
+            ) from e
 
 
 class ParameterSchema:

@@ -195,7 +195,7 @@ class PositionManager:
         return self.current_capital
 
     def can_execute_trade(
-        self, signal: Signal, price: float, quantity: int = None
+        self, signal: Signal, price: float, quantity: Optional[int] = None
     ) -> bool:
         """Check if a trade can be executed.
 
@@ -230,7 +230,7 @@ class PositionManager:
         price: float,
         timestamp: pd.Timestamp,
         symbol: str = "UNKNOWN",
-        decision_metadata: dict[str, Any] = None,
+        decision_metadata: Optional[dict[str, Any]] = None,
     ) -> Optional[Trade]:
         """Execute a trading signal.
 
@@ -458,7 +458,9 @@ class PositionManager:
 
         return quantity
 
-    def _calculate_required_capital(self, price: float, quantity: int = None) -> float:
+    def _calculate_required_capital(
+        self, price: float, quantity: Optional[int] = None
+    ) -> float:
         """Calculate required capital for a trade.
 
         Args:

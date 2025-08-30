@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class ProgressState:
     step_items_processed: int = 0  # Items processed in current step
 
     # Context information for enhanced progress descriptions
-    operation_context: Optional[Dict[str, Any]] = None
+    operation_context: Optional[dict[str, Any]] = None
     current_item_detail: Optional[str] = None
 
     # Enhanced time estimation
@@ -67,11 +67,11 @@ class TimeEstimationEngine:
     def __init__(self, cache_file: Optional[Path] = None):
         """Initialize time estimation engine with optional persistent cache."""
         self.cache_file = cache_file
-        self.operation_history: Dict[str, List[Dict]] = {}
+        self.operation_history: dict[str, list[dict]] = {}
         self._load_cache()
 
     def _create_operation_key(
-        self, operation_type: str, context: Dict[str, Any]
+        self, operation_type: str, context: dict[str, Any]
     ) -> str:
         """Create a unique key for operation type and context."""
         # Create key based on operation type and relevant context
@@ -97,7 +97,7 @@ class TimeEstimationEngine:
         return "|".join(key_parts)
 
     def record_operation_completion(
-        self, operation_type: str, context: Dict[str, Any], duration_seconds: float
+        self, operation_type: str, context: dict[str, Any], duration_seconds: float
     ) -> None:
         """Record completed operation for future estimation."""
         if duration_seconds <= 0:
@@ -125,7 +125,7 @@ class TimeEstimationEngine:
         logger.debug(f"Recorded operation completion: {key} - {duration_seconds:.2f}s")
 
     def estimate_duration(
-        self, operation_type: str, context: Dict[str, Any]
+        self, operation_type: str, context: dict[str, Any]
     ) -> Optional[float]:
         """Estimate operation duration based on historical data."""
         key = self._create_operation_key(operation_type, context)
@@ -236,7 +236,7 @@ class ProgressManager:
         self.enable_time_estimation = enable_time_estimation
         self._time_estimator: Optional[TimeEstimationEngine] = None
         self._current_operation_type: Optional[str] = None
-        self._current_context: Dict[str, Any] = {}
+        self._current_context: dict[str, Any] = {}
 
         if enable_time_estimation:
             # Create time estimation cache in data directory if not specified
@@ -257,7 +257,7 @@ class ProgressManager:
         total_steps: int,
         operation_name: str,
         expected_items: Optional[int] = None,
-        operation_context: Optional[Dict[str, Any]] = None,
+        operation_context: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Begin tracking new operation with enhanced contextual information.
@@ -684,7 +684,7 @@ class ProgressManager:
     def _create_enhanced_message(
         self,
         base_message: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
         current_item_detail: Optional[str] = None,
     ) -> str:
         """
@@ -756,7 +756,7 @@ class ProgressManager:
         self,
         step: int,
         base_message: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
         current_item_detail: Optional[str] = None,
     ) -> None:
         """

@@ -12,13 +12,13 @@ This script demonstrates the features of the DataManager class, including:
 
 """
 
+import logging
 import os
 import sys
-import pandas as pd
-import numpy as np
+
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-import logging
+import numpy as np
+import pandas as pd
 
 # Add the project root to the path so we can import ktrdr
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -31,7 +31,13 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
-from ktrdr.data import DataManager, DataCorruptionError
+# Import after sys.path is configured
+try:
+    from ktrdr.data import DataCorruptionError, DataManager
+except ImportError as e:
+    print(f"Error importing ktrdr modules: {e}")
+    print("Make sure you're running this from the correct directory")
+    sys.exit(1)
 
 
 def create_sample_data_with_outliers():
@@ -127,7 +133,7 @@ def plot_data_comparison(original, repaired, title="Data Comparison"):
 
     plt.tight_layout()
     plt.savefig(os.path.join(os.path.dirname(__file__), "data_repair_example.png"))
-    print(f"Plot saved as data_repair_example.png")
+    print("Plot saved as data_repair_example.png")
     plt.close()
 
 
@@ -156,7 +162,7 @@ def demonstrate_data_manager():
     # 1. Basic data loading
     print("\n2. Loading data and performing basic integrity check...")
     try:
-        data = data_manager.load_data(symbol, timeframe, validate=True, strict=True)
+        data_manager.load_data(symbol, timeframe, validate=True, strict=True)
         print("  - Data loaded successfully")
     except DataCorruptionError as e:
         print(f"  - Data corruption detected (expected): {e}")

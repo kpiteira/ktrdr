@@ -183,10 +183,10 @@ async def start_backtest(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to start backtest: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to start backtest")
+        raise HTTPException(status_code=500, detail="Failed to start backtest") from e
 
 
 @router.get("/{backtest_id}", response_model=BacktestStatusResponse)
@@ -216,10 +216,12 @@ async def get_backtest_status(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get backtest status: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get backtest status")
+        raise HTTPException(
+            status_code=500, detail="Failed to get backtest status"
+        ) from e
 
 
 @router.get("/{backtest_id}/results", response_model=BacktestResultsResponse)
@@ -248,12 +250,14 @@ async def get_backtest_results(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except DataError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get backtest results: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get backtest results")
+        raise HTTPException(
+            status_code=500, detail="Failed to get backtest results"
+        ) from e
 
 
 @router.get("/{backtest_id}/trades", response_model=BacktestTradesResponse)
@@ -276,10 +280,12 @@ async def get_backtest_trades(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get backtest trades: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get backtest trades")
+        raise HTTPException(
+            status_code=500, detail="Failed to get backtest trades"
+        ) from e
 
 
 @router.get("/{backtest_id}/equity_curve", response_model=EquityCurveResponse)
@@ -304,9 +310,9 @@ async def get_equity_curve(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except DataError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get equity curve: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get equity curve")
+        raise HTTPException(status_code=500, detail="Failed to get equity curve") from e

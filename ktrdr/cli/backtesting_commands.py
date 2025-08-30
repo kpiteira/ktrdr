@@ -257,7 +257,7 @@ async def _run_backtest_async(
         # Handle cancellation
         if cancelled and operation_id:
             try:
-                cancel_response = await api_client.cancel_operation(
+                await api_client.cancel_operation(
                     operation_id=operation_id,
                     reason="User requested cancellation via CLI",
                 )
@@ -285,7 +285,7 @@ async def _run_backtest_async(
                 return None
         except Exception as e:
             console.print(f"[red]❌ Failed to get final status: {str(e)}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
 
         # Get results
         try:
@@ -343,7 +343,7 @@ async def _run_backtest_async(
                 console.print("=" * 50)
 
                 metrics = results_data.get("metrics", {})
-                summary = results_data.get("summary", {})
+                results_data.get("summary", {})
 
                 total_return = metrics.get("total_return", 0)
                 total_return_pct = (total_return / capital) * 100 if capital > 0 else 0
@@ -368,7 +368,7 @@ async def _run_backtest_async(
 
         except Exception as e:
             console.print(f"[red]❌ Failed to get backtest results: {str(e)}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
 
     except Exception as e:
         if "Ctrl+C" not in str(e):  # Don't show error for user cancellation
@@ -377,4 +377,4 @@ async def _run_backtest_async(
                 import traceback
 
                 console.print(traceback.format_exc())
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e

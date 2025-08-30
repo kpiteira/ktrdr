@@ -6,17 +6,14 @@ calculates fitness scores for trading strategies, enabling the research
 system to evaluate and compare different approaches.
 """
 
-import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
-from uuid import UUID
-from enum import Enum
 from dataclasses import dataclass
-import statistics
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Optional
+from uuid import UUID
 
 import numpy as np
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +84,9 @@ class AnalysisResult:
     fitness_components: FitnessComponents
     performance_metrics: PerformanceMetrics
     risk_profile: RiskProfile
-    insights: List[str]
-    warnings: List[str]
-    recommendations: List[str]
+    insights: list[str]
+    warnings: list[str]
+    recommendations: list[str]
     analysis_timestamp: datetime
 
 
@@ -133,9 +130,9 @@ class ResultsAnalyzer:
     async def analyze_experiment_results(
         self,
         experiment_id: UUID,
-        training_results: Dict[str, Any],
-        backtesting_results: Dict[str, Any],
-        additional_data: Optional[Dict[str, Any]] = None,
+        training_results: dict[str, Any],
+        backtesting_results: dict[str, Any],
+        additional_data: Optional[dict[str, Any]] = None,
     ) -> AnalysisResult:
         """
         Perform comprehensive analysis of experiment results
@@ -200,7 +197,7 @@ class ResultsAnalyzer:
             raise
 
     async def _calculate_performance_metrics(
-        self, training_results: Dict[str, Any], backtesting_results: Dict[str, Any]
+        self, training_results: dict[str, Any], backtesting_results: dict[str, Any]
     ) -> PerformanceMetrics:
         """Calculate comprehensive performance metrics"""
 
@@ -268,7 +265,7 @@ class ResultsAnalyzer:
         )
 
     async def _calculate_fitness_components(
-        self, metrics: PerformanceMetrics, additional_data: Dict[str, Any]
+        self, metrics: PerformanceMetrics, additional_data: dict[str, Any]
     ) -> FitnessComponents:
         """Calculate individual fitness components"""
 
@@ -393,7 +390,7 @@ class ResultsAnalyzer:
         return max(0.0, min(2.0, efficiency_score))
 
     async def _calculate_robustness_component(
-        self, metrics: PerformanceMetrics, additional_data: Dict[str, Any]
+        self, metrics: PerformanceMetrics, additional_data: dict[str, Any]
     ) -> float:
         """Calculate robustness component"""
         # Distribution characteristics
@@ -473,7 +470,7 @@ class ResultsAnalyzer:
 
     async def _generate_insights(
         self, metrics: PerformanceMetrics, components: FitnessComponents
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate analytical insights"""
         insights = []
 
@@ -504,7 +501,7 @@ class ResultsAnalyzer:
 
         return insights
 
-    async def _generate_warnings(self, metrics: PerformanceMetrics) -> List[str]:
+    async def _generate_warnings(self, metrics: PerformanceMetrics) -> list[str]:
         """Generate performance warnings"""
         warnings = []
 
@@ -537,7 +534,7 @@ class ResultsAnalyzer:
 
     async def _generate_recommendations(
         self, metrics: PerformanceMetrics, risk_profile: RiskProfile
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate improvement recommendations"""
         recommendations = []
 
@@ -569,7 +566,7 @@ class ResultsAnalyzer:
     # Helper calculation methods
 
     async def _calculate_sortino_ratio(
-        self, backtesting_results: Dict[str, Any]
+        self, backtesting_results: dict[str, Any]
     ) -> float:
         """Calculate Sortino ratio from backtesting results"""
         returns = backtesting_results.get("daily_returns", [])
@@ -589,7 +586,7 @@ class ResultsAnalyzer:
             mean_excess_return / downside_deviation if downside_deviation > 0 else 0.0
         )
 
-    async def _calculate_var_95(self, backtesting_results: Dict[str, Any]) -> float:
+    async def _calculate_var_95(self, backtesting_results: dict[str, Any]) -> float:
         """Calculate 95% Value at Risk"""
         returns = backtesting_results.get("daily_returns", [])
         if not returns:
@@ -597,7 +594,7 @@ class ResultsAnalyzer:
 
         return np.percentile(returns, 5)  # 5th percentile for 95% VaR
 
-    async def _calculate_skewness(self, returns: List[float]) -> float:
+    async def _calculate_skewness(self, returns: list[float]) -> float:
         """Calculate skewness of returns"""
         if len(returns) < 3:
             return 0.0
@@ -611,7 +608,7 @@ class ResultsAnalyzer:
         skew = np.mean([((r - mean_return) / std_return) ** 3 for r in returns])
         return skew
 
-    async def _calculate_kurtosis(self, returns: List[float]) -> float:
+    async def _calculate_kurtosis(self, returns: list[float]) -> float:
         """Calculate kurtosis of returns"""
         if len(returns) < 4:
             return 3.0  # Normal distribution kurtosis
@@ -625,7 +622,7 @@ class ResultsAnalyzer:
         kurt = np.mean([((r - mean_return) / std_return) ** 4 for r in returns])
         return kurt
 
-    async def compare_strategies(self, results: List[AnalysisResult]) -> Dict[str, Any]:
+    async def compare_strategies(self, results: list[AnalysisResult]) -> dict[str, Any]:
         """Compare multiple strategy results"""
         if not results:
             return {}

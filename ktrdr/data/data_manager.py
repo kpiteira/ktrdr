@@ -136,7 +136,9 @@ class DataManager(ServiceOrchestrator):
                     host_service_config = config.ib_host_service
                 else:
                     # Use defaults if no config file
-                    host_service_config = IbHostServiceConfig()
+                    host_service_config = IbHostServiceConfig(
+                        enabled=False, url="http://localhost:5001"
+                    )
 
                 # Check for environment override (for easy Docker toggle)
                 override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
@@ -180,7 +182,7 @@ class DataManager(ServiceOrchestrator):
                     f"Failed to load host service config, using direct connection: {e}"
                 )
                 # Fallback to direct connection
-                self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter()
+                self.external_provider = IbDataAdapter()
                 logger.info("IB integration enabled (direct connection - fallback)")
         else:
             self.external_provider = None
@@ -343,8 +345,16 @@ class DataManager(ServiceOrchestrator):
             "symbol": symbol,
             "timeframe": timeframe,
             "mode": mode,
-            "start_date": start_date.isoformat() if start_date else None,
-            "end_date": end_date.isoformat() if end_date else None,
+            "start_date": (
+                start_date.isoformat()
+                if start_date and hasattr(start_date, "isoformat")
+                else str(start_date) if start_date else None
+            ),
+            "end_date": (
+                end_date.isoformat()
+                if end_date and hasattr(end_date, "isoformat")
+                else str(end_date) if end_date else None
+            ),
         }
 
         progress_manager = ProgressManager(progress_callback)
@@ -892,7 +902,8 @@ class DataManager(ServiceOrchestrator):
             # Calculate start_date based on days going backwards from end_date
             if isinstance(end_date, str):
                 end_date = pd.to_datetime(end_date)
-            start_date = end_date - timedelta(days=days)
+            if end_date is not None:
+                start_date = end_date - timedelta(days=days)
 
         # Call the original load_data method with the processed parameters
         return self.load_data(
@@ -1020,7 +1031,7 @@ class DataManager(ServiceOrchestrator):
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
-        successful_data = []
+        successful_data: list[pd.DataFrame] = []
         successful_count = 0
         failed_count = 0
 
@@ -1575,7 +1586,7 @@ class DataManager(ServiceOrchestrator):
                     message=f"Symbol validation failed: {e}",
                     error_code="DATA-SymbolValidationFailed",
                     details={"symbol": symbol, "timeframe": timeframe, "error": str(e)},
-                )
+                ) from e
         else:
             logger.warning("External data provider not available for symbol validation")
 
@@ -1589,7 +1600,9 @@ class DataManager(ServiceOrchestrator):
             elif mode == "backfill" or mode == "full":
                 # Use head timestamp if available, otherwise fall back to IB limits
                 if cached_head_timestamp:
-                    requested_start = self._normalize_timezone(cached_head_timestamp)
+                    normalized_ts = self._normalize_timezone(cached_head_timestamp)
+                    if normalized_ts is not None:
+                        requested_start = normalized_ts
                     logger.info(
                         f"📅 Using head timestamp for default start: {requested_start}"
                     )
@@ -1610,13 +1623,17 @@ class DataManager(ServiceOrchestrator):
                 requested_start = pd.Timestamp.now(tz="UTC") - max_duration
         else:
             # ALWAYS respect user-provided start_date regardless of mode
-            requested_start = self._normalize_timezone(start_date)
+            normalized_start = self._normalize_timezone(start_date)
+            if normalized_start is not None:
+                requested_start = normalized_start
 
         if end_date is None:
             requested_end = pd.Timestamp.now(tz="UTC")
         else:
             # ALWAYS respect user-provided end_date regardless of mode
-            requested_end = self._normalize_timezone(end_date)
+            normalized_end = self._normalize_timezone(end_date)
+            if normalized_end is not None:
+                requested_end = normalized_end
 
         if requested_start >= requested_end:
             logger.warning(
@@ -1662,7 +1679,7 @@ class DataManager(ServiceOrchestrator):
                     logger.info(
                         f"📅 Adjusting start time to earliest available: {head_dt}"
                     )
-                    requested_start = head_dt
+                    requested_start = pd.Timestamp(head_dt)
 
                 logger.info("📅 Request range validated against head timestamp")
 
@@ -1697,7 +1714,7 @@ class DataManager(ServiceOrchestrator):
                         logger.info(
                             f"📅 Request adjusted based on head timestamp: {requested_start} → {adjusted_start}"
                         )
-                        requested_start = adjusted_start
+                        requested_start = pd.Timestamp(adjusted_start)
                 else:
                     logger.info(
                         f"📅 No head timestamp available for {symbol}, proceeding with original request"
@@ -2537,7 +2554,7 @@ class DataManager(ServiceOrchestrator):
             df_sorted = df.sort_index() if not df.index.is_monotonic_increasing else df
 
             # Resample the data
-            resampled = df_sorted.resample(target_freq).agg(agg_functions)
+            resampled = df_sorted.resample(target_freq).agg(agg_functions)  # type: ignore[arg-type]
 
             # Fill gaps if requested
             if fill_gaps and not resampled.empty:

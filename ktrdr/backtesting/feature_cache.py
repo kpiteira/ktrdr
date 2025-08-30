@@ -220,13 +220,15 @@ class FeatureCache:
             timestamp = actual_timestamp
 
         # Get features for this timestamp
-        indicators = self.mapped_indicators_df.loc[timestamp].to_dict()
-        fuzzy_memberships = self.fuzzy_df.loc[timestamp].to_dict()
+        raw_indicators = self.mapped_indicators_df.loc[timestamp].to_dict()
+        raw_fuzzy = self.fuzzy_df.loc[timestamp].to_dict()
 
-        # Remove NaN values
-        indicators = {k: v for k, v in indicators.items() if not pd.isna(v)}
-        fuzzy_memberships = {
-            k: v for k, v in fuzzy_memberships.items() if not pd.isna(v)
+        # Remove NaN values and ensure proper types
+        indicators: dict[str, float] = {
+            str(k): float(v) for k, v in raw_indicators.items() if not pd.isna(v)
+        }
+        fuzzy_memberships: dict[str, float] = {
+            str(k): float(v) for k, v in raw_fuzzy.items() if not pd.isna(v)
         }
 
         return indicators, fuzzy_memberships
@@ -246,6 +248,10 @@ class FeatureCache:
             logger.debug("⏰ No temporal features configured (lookback_periods = 0)")
             return
 
+        if self.fuzzy_df is None:
+            logger.warning("No fuzzy data available for temporal features")
+            return
+
         logger.debug(
             f"⏰ Adding {lookback} lag periods for {len(self.fuzzy_df.columns)} base fuzzy features"
         )
@@ -260,14 +266,16 @@ class FeatureCache:
             for column in base_fuzzy_columns:
                 lag_column_name = f"{column}_lag_{lag}"
                 # Create lagged values using shift operation on the full dataset
-                temporal_data[lag_column_name] = self.fuzzy_df[column].shift(lag)
+                if self.fuzzy_df is not None:
+                    temporal_data[lag_column_name] = self.fuzzy_df[column].shift(lag)
 
         # Add temporal features to the fuzzy DataFrame
-        for lag_column_name, lag_values in temporal_data.items():
-            self.fuzzy_df[lag_column_name] = lag_values
+        if self.fuzzy_df is not None:
+            for lag_column_name, lag_values in temporal_data.items():
+                self.fuzzy_df[lag_column_name] = lag_values
 
-        logger.debug(f"⏰ Added {len(temporal_data)} temporal features to fuzzy_df")
-        logger.debug(f"⏰ Total fuzzy features now: {len(self.fuzzy_df.columns)}")
+            logger.debug(f"⏰ Added {len(temporal_data)} temporal features to fuzzy_df")
+            logger.debug(f"⏰ Total fuzzy features now: {len(self.fuzzy_df.columns)}")
 
     def save_cache(self, filepath: str) -> None:
         """Save computed features to disk.

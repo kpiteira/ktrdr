@@ -5,15 +5,16 @@ Synchronization script to update version and metadata across project files.
 This script ensures that derived configuration files are in sync with
 the central metadata file.
 """
-import yaml
-import tomli
-import tomli_w
+import argparse
 import json
+import sys
 
 # import subprocess
 from pathlib import Path
-import sys
-import argparse
+
+import tomli
+import tomli_w
+import yaml
 
 # Path to project root
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -24,7 +25,7 @@ METADATA_FILE = PROJECT_ROOT / "config" / "ktrdr_metadata.yaml"
 
 def load_metadata():
     """Load metadata from the central file."""
-    with open(METADATA_FILE, "r") as f:
+    with open(METADATA_FILE) as f:
         return yaml.safe_load(f)
 
 

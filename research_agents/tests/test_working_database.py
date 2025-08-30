@@ -2,11 +2,12 @@
 Working integration tests for research agents database
 """
 
-import pytest
-import asyncio
 import json
 from uuid import uuid4
-from research_agents.services.database import ResearchDatabaseService, DatabaseConfig
+
+import pytest
+
+from research_agents.services.database import DatabaseConfig, ResearchDatabaseService
 
 
 @pytest.mark.asyncio
@@ -30,7 +31,7 @@ async def test_database_connection_and_health():
         # Test health check
         health = await db_service.health_check()
         assert health["status"] == "healthy"
-        print(f"✓ Health check passed: Database is healthy")
+        print("✓ Health check passed: Database is healthy")
 
     finally:
         await db_service.close()
@@ -60,7 +61,7 @@ async def test_session_operations_manual():
 
         create_query = """
         INSERT INTO research.sessions (
-            id, session_name, description, strategic_goals, 
+            id, session_name, description, strategic_goals,
             priority_areas, coordinator_id
         ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)
         RETURNING id
@@ -82,8 +83,8 @@ async def test_session_operations_manual():
 
         # Get session
         get_query = """
-        SELECT id, session_name, description, status, created_at 
-        FROM research.sessions 
+        SELECT id, session_name, description, status, created_at
+        FROM research.sessions
         WHERE id = $1
         """
 
@@ -125,7 +126,7 @@ async def test_agent_state_operations_manual():
 
         create_query = """
         INSERT INTO research.agent_states (
-            agent_id, agent_type, status, current_activity, 
+            agent_id, agent_type, status, current_activity,
             state_data, memory_context
         ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
         """
@@ -198,7 +199,7 @@ async def test_knowledge_operations_manual():
 
         create_query = """
         INSERT INTO research.knowledge_base (
-            id, content_type, title, content, summary, 
+            id, content_type, title, content, summary,
             keywords, tags, quality_score
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """
@@ -220,7 +221,7 @@ async def test_knowledge_operations_manual():
         # Get knowledge entry
         get_query = """
         SELECT id, title, content, quality_score, keywords, tags
-        FROM research.knowledge_base 
+        FROM research.knowledge_base
         WHERE id = $1
         """
 

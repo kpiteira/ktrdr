@@ -2,10 +2,11 @@
 Simple integration tests for research agents database
 """
 
-import pytest
-import asyncio
 from uuid import uuid4
-from research_agents.services.database import ResearchDatabaseService, DatabaseConfig
+
+import pytest
+
+from research_agents.services.database import DatabaseConfig, ResearchDatabaseService
 
 
 @pytest.mark.asyncio

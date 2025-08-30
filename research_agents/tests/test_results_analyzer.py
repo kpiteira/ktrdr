@@ -5,19 +5,17 @@ Tests the comprehensive performance analysis and fitness calculation system
 following the implementation plan's quality-first approach.
 """
 
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
-from uuid import UUID, uuid4
-from typing import Dict, Any, List
+from datetime import datetime
+from uuid import uuid4
+
 import numpy as np
+import pytest
 
 from research_agents.services.results_analyzer import (
-    ResultsAnalyzer,
-    PerformanceMetrics,
-    FitnessComponents,
     AnalysisResult,
-    AnalysisMetric,
+    FitnessComponents,
+    PerformanceMetrics,
+    ResultsAnalyzer,
     RiskProfile,
     create_results_analyzer,
 )
@@ -828,7 +826,7 @@ class TestStrategyComparison:
         # Create multiple analysis results
         results = []
 
-        for i, (return_val, sharpe) in enumerate(
+        for _i, (return_val, sharpe) in enumerate(
             [(0.15, 1.4), (0.20, 1.8), (0.10, 1.0)]
         ):
             backtest_results = {
@@ -911,7 +909,7 @@ class TestErrorHandlingAndEdgeCases:
         invalid_training = None
         invalid_backtesting = {"total_return": "invalid"}  # Wrong type
 
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, TypeError)):
             await results_analyzer.analyze_experiment_results(
                 experiment_id, invalid_training, invalid_backtesting
             )

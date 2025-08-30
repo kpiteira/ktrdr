@@ -52,7 +52,7 @@ class EarlyStopping:
         self.monitor = monitor
         self.mode = mode
         self.counter = 0
-        self.best_score = None
+        self.best_score: Optional[float] = None
         self.early_stop = False
 
     def __call__(self, metrics: TrainingMetrics) -> bool:
@@ -75,13 +75,13 @@ class EarlyStopping:
             return False
 
         if self.best_score is None:
-            self.best_score = score
+            self.best_score = float(score)
         elif score < self.best_score + self.min_delta:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
-            self.best_score = score
+            self.best_score = float(score)
             self.counter = 0
 
         return self.early_stop
@@ -109,7 +109,7 @@ class ModelTrainer:
             self.device = torch.device("cpu")
             print("⚠️ Using CPU - GPU acceleration not available")
         self.history: list[TrainingMetrics] = []
-        self.best_model_state = None
+        self.best_model_state: Optional[dict[str, Any]] = None
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
 
@@ -175,7 +175,8 @@ class ModelTrainer:
 
         if X_val is not None:
             X_val = X_val.to(self.device)
-            y_val = y_val.to(self.device)
+            if y_val is not None:
+                y_val = y_val.to(self.device)
 
         # Get training parameters
         learning_rate = self.config.get("learning_rate", 0.001)
@@ -269,7 +270,7 @@ class ModelTrainer:
                         total_params = 0
                         for name, param in model.named_parameters():
                             if torch.isnan(param).any():
-                                nan_params += torch.isnan(param).sum().item()
+                                nan_params += int(torch.isnan(param).sum().item())
                                 print(f"  Parameter '{name}' has NaN values")
                             total_params += param.numel()
                         print(f"  Model has {nan_params}/{total_params} NaN parameters")
@@ -341,7 +342,10 @@ class ModelTrainer:
                     val_outputs = model(X_val)
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = (val_predicted == y_val).float().mean().item()
+                    if y_val is not None:
+                        val_accuracy = (val_predicted == y_val).float().mean().item()
+                    else:
+                        val_accuracy = 0.0
                     val_loss = val_loss.item()
 
                 # Save best model
@@ -384,23 +388,41 @@ class ModelTrainer:
                             analytics_true = y_train[:1000]
                             model.train()
 
-                    # Collect detailed analytics
-                    detailed_metrics = self.analyzer.collect_epoch_metrics(
-                        epoch=epoch,
-                        model=model,
-                        train_metrics={
-                            "loss": avg_train_loss,
-                            "accuracy": train_accuracy,
-                        },
-                        val_metrics={"loss": val_loss, "accuracy": val_accuracy},
-                        optimizer=optimizer,
-                        y_pred=analytics_predicted,
-                        y_true=analytics_true,
-                        model_outputs=analytics_outputs,
-                        batch_count=len(train_loader),
-                        total_samples=len(X_train),
-                        early_stopping_triggered=False,  # Will be updated if early stopping triggers
-                    )
+                    # Collect detailed analytics (only if we have valid data)
+                    if analytics_true is not None:
+                        self.analyzer.collect_epoch_metrics(
+                            epoch=epoch,
+                            model=model,
+                            train_metrics={
+                                "loss": (
+                                    float(avg_train_loss)
+                                    if avg_train_loss is not None
+                                    else 0.0
+                                ),
+                                "accuracy": (
+                                    float(train_accuracy)
+                                    if train_accuracy is not None
+                                    else 0.0
+                                ),
+                            },
+                            val_metrics={
+                                "loss": (
+                                    float(val_loss) if val_loss is not None else 0.0
+                                ),
+                                "accuracy": (
+                                    float(val_accuracy)
+                                    if val_accuracy is not None
+                                    else 0.0
+                                ),
+                            },
+                            optimizer=optimizer,
+                            y_pred=analytics_predicted,
+                            y_true=analytics_true,
+                            model_outputs=analytics_outputs,
+                            batch_count=len(train_loader),
+                            total_samples=len(X_train),
+                            early_stopping_triggered=False,  # Will be updated if early stopping triggers
+                        )
 
                     # Log any alerts
                     if hasattr(self.analyzer, "alerts") and self.analyzer.alerts:
@@ -415,11 +437,11 @@ class ModelTrainer:
                     # Continue training even if analytics fail
 
             # Learning rate scheduling
-            if scheduler is not None:
+            if scheduler is not None and hasattr(scheduler, "step"):
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss else avg_train_loss)
                 else:
-                    scheduler.step()
+                    scheduler.step()  # type: ignore[attr-defined]
 
             # Early stopping check
             if early_stopping and early_stopping(metrics):
@@ -532,7 +554,8 @@ class ModelTrainer:
 
         if X_val is not None:
             X_val = X_val.to(self.device)
-            y_val = y_val.to(self.device)
+            if y_val is not None:
+                y_val = y_val.to(self.device)
             if symbol_indices_val is not None:
                 symbol_indices_val = symbol_indices_val.to(self.device)
 
@@ -575,7 +598,7 @@ class ModelTrainer:
         total_batches_per_epoch = len(train_loader)
         total_batches = epochs * total_batches_per_epoch
         total_bars = len(X_train)
-        total_bars_all_epochs = total_bars * epochs
+        total_bars * epochs
 
         # Training loop
         for epoch in range(epochs):
@@ -694,7 +717,10 @@ class ModelTrainer:
 
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = (val_predicted == y_val).float().mean().item()
+                    if y_val is not None:
+                        val_accuracy = (val_predicted == y_val).float().mean().item()
+                    else:
+                        val_accuracy = 0.0
                     val_loss = val_loss.item()
 
                 # Save best model
@@ -716,11 +742,11 @@ class ModelTrainer:
             self.history.append(metrics)
 
             # Update learning rate scheduler
-            if scheduler is not None:
+            if scheduler is not None and hasattr(scheduler, "step"):
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss is not None else avg_train_loss)
                 else:
-                    scheduler.step()
+                    scheduler.step()  # type: ignore[attr-defined]
 
             # Check early stopping
             if early_stopping and early_stopping(metrics):
@@ -895,18 +921,15 @@ class ModelTrainer:
         }
 
         if val_losses:
-            summary.update(
-                {
-                    "final_val_loss": val_losses[-1],
-                    "final_val_accuracy": val_accuracies[-1],
-                    "best_val_accuracy": self.best_val_accuracy,
-                    "history": {
-                        **summary["history"],
-                        "val_loss": val_losses,
-                        "val_accuracy": val_accuracies,
-                    },
-                }
-            )
+            # Update validation metrics
+            summary["final_val_loss"] = val_losses[-1]
+            summary["final_val_accuracy"] = val_accuracies[-1]
+            summary["best_val_accuracy"] = self.best_val_accuracy
+
+            # Update history with validation data
+            if isinstance(summary["history"], dict):
+                summary["history"]["val_loss"] = val_losses
+                summary["history"]["val_accuracy"] = val_accuracies
 
         return summary
 

@@ -161,7 +161,7 @@ def train_model(
             )
         except Exception as e:
             console.print(f"[red]❌ Error loading strategy config: {e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
 
         # Use strategy config or CLI overrides
         final_symbols = [symbol] if symbol else config_symbols
@@ -669,7 +669,7 @@ async def _list_models_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print("📋 Retrieving available models")
@@ -698,8 +698,9 @@ async def _list_models_async(
 
         # Filter by pattern if specified
         if pattern:
+            pattern_upper = pattern.upper()  # Extract once to help mypy
             models = [
-                model for model in models if pattern.upper() in model["name"].upper()
+                model for model in models if pattern_upper in str(model["name"]).upper()
             ]
 
         # Format output
@@ -730,12 +731,12 @@ async def _list_models_async(
 
             for model in models:
                 table.add_row(
-                    model["name"],
-                    model["symbol"],
-                    model["timeframe"],
-                    model["strategy"],
+                    str(model["name"]),
+                    str(model["symbol"]),
+                    str(model["timeframe"]),
+                    str(model["strategy"]),
                     f"{model['accuracy']:.1%}",
-                    model["size"],
+                    str(model["size"]),
                 )
 
             console.print(table)
@@ -835,7 +836,7 @@ async def _test_model_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🧪 Testing model: {model_name}")
@@ -970,7 +971,7 @@ async def _make_prediction_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🔮 Making prediction with model: {model_name}")
@@ -1004,7 +1005,10 @@ async def _make_prediction_async(
 
         # Filter by confidence threshold
         filtered_predictions = [
-            p for p in predictions if p["confidence"] >= confidence_threshold
+            p
+            for p in predictions
+            if isinstance(p["confidence"], (int, float))
+            and p["confidence"] >= confidence_threshold
         ]
 
         # Format output
@@ -1040,8 +1044,8 @@ async def _make_prediction_async(
 
                 for pred in filtered_predictions:
                     table.add_row(
-                        pred["timestamp"],
-                        pred["signal"],
+                        str(pred["timestamp"]),
+                        str(pred["signal"]),
                         f"{pred['confidence']:.1%}",
                         (
                             f"${pred['price_target']:.2f}"

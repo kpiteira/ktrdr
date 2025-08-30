@@ -32,7 +32,7 @@ class TestLocalDataLoader:
         data_dir = tmp_path / "nonexistent"
 
         # Initialize loader - should create the directory
-        loader = LocalDataLoader(data_dir)
+        LocalDataLoader(data_dir)
 
         # Verify the directory was created
         assert data_dir.exists()
@@ -88,7 +88,7 @@ class TestLocalDataLoader:
         # Based on the fixture, the file is named "sample_AAPL_1d.csv"
         # The LocalDataLoader expects the file pattern to be {symbol}_{timeframe}.csv
         # So we need to rename the file to match the expected pattern
-        new_file_path = data_dir / "sample_AAPL_1d.csv"
+        data_dir / "sample_AAPL_1d.csv"
 
         # Test with the correct symbol and timeframe parameters
         symbol = "sample_AAPL"
@@ -153,9 +153,7 @@ class TestLocalDataLoader:
         if result is not None:
             # If it returned a dataframe, verify it has the expected structure
             assert isinstance(result, pd.DataFrame)
-            assert set(result.columns) >= set(
-                ["open", "high", "low", "close", "volume"]
-            )
+            assert set(result.columns) >= {"open", "high", "low", "close", "volume"}
 
     def test_save_data_success(self, tmp_path, sample_ohlcv_data):
         """Test saving data to a CSV file."""

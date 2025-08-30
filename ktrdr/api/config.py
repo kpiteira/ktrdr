@@ -8,7 +8,8 @@ environment variables and different deployment environments.
 from typing import Any
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ktrdr import metadata  # Use the new metadata module instead of version
 
@@ -16,7 +17,7 @@ from ktrdr import metadata  # Use the new metadata module instead of version
 load_dotenv()
 
 
-class APIConfig(BaseModel):
+class APIConfig(BaseSettings):
     """
     API configuration model with environment variable support.
 
@@ -76,8 +77,8 @@ class APIConfig(BaseModel):
         description="Maximum age (in seconds) of CORS preflight responses to cache",
     )
 
-    # Use ConfigDict instead of Config class
-    model_config = ConfigDict(
+    # Use SettingsConfigDict for settings
+    model_config = SettingsConfigDict(
         env_prefix="KTRDR_API_",
         env_file=".env",
         env_file_encoding="utf-8",

@@ -19,8 +19,8 @@ Design principles:
 
 from functools import lru_cache
 
-from pydantic import ConfigDict, Field
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .. import metadata
 
@@ -87,7 +87,7 @@ class IbHostServiceSettings(HostServiceSettings):
         alias="IB_HOST_SERVICE_URL",
     )
 
-    model_config = ConfigDict(env_prefix="IB_HOST_SERVICE_", extra="forbid")
+    model_config = SettingsConfigDict(env_prefix="IB_HOST_SERVICE_", extra="forbid")
 
 
 class TrainingHostServiceSettings(HostServiceSettings):
@@ -123,7 +123,9 @@ class TrainingHostServiceSettings(HostServiceSettings):
         description="Maximum session duration in seconds",
     )
 
-    model_config = ConfigDict(env_prefix="TRAINING_HOST_SERVICE_", extra="forbid")
+    model_config = SettingsConfigDict(
+        env_prefix="TRAINING_HOST_SERVICE_", extra="forbid"
+    )
 
 
 class ApiServiceSettings(HostServiceSettings):
@@ -143,7 +145,7 @@ class ApiServiceSettings(HostServiceSettings):
 
     retry_delay: float = Field(default=metadata.get("api.client_retry_delay", 1.0))
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_prefix="KTRDR_API_CLIENT_", extra="forbid", populate_by_name=True
     )
 

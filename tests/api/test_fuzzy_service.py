@@ -109,7 +109,7 @@ def mock_config_loader():
             }
 
             # Configure each fuzzy set
-            for fuzzy_set, config in mock_indicator_config.root.items():
+            for _fuzzy_set, config in mock_indicator_config.root.items():
                 config.type = "triangular"
                 config.parameters = [0.0, 0.5, 1.0]  # Dummy parameters
 
@@ -239,7 +239,7 @@ async def test_get_fuzzy_sets(mock_fuzzy_engine, mock_config_loader):
     assert len(result) == 3  # low, medium, high
 
     # Check structure of fuzzy set info
-    for set_name, set_info in result.items():
+    for _set_name, set_info in result.items():
         assert "type" in set_info
         assert "parameters" in set_info
 

@@ -121,7 +121,7 @@ async def list_indicators(
     """
     try:
         indicators = await indicator_service.get_available_indicators()
-        return IndicatorsListResponse(success=True, data=indicators)
+        return IndicatorsListResponse(success=True, data=indicators, error=None)
     except ProcessingError as e:
         logger.error(f"Error in list_indicators: {str(e)}")
         raise HTTPException(
@@ -134,7 +134,7 @@ async def list_indicators(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in list_indicators: {str(e)}")
         raise HTTPException(
@@ -147,7 +147,7 @@ async def list_indicators(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.post(
@@ -260,9 +260,9 @@ async def calculate_indicators(
 
         # Slice the data
         paginated_dates = dates[start_idx:end_idx]
-        paginated_indicators = {}
+        paginated_indicators: dict[str, list[float | None]] = {}
         for name, values in indicator_values.items():
-            paginated_indicators[name] = values[start_idx:end_idx]
+            paginated_indicators[name] = list(values[start_idx:end_idx])
 
         # Add pagination metadata
         pagination_metadata = {
@@ -296,7 +296,7 @@ async def calculate_indicators(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ConfigurationError as e:
         logger.error(f"Configuration error in calculate_indicators: {str(e)}")
         raise HTTPException(
@@ -309,7 +309,7 @@ async def calculate_indicators(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except ProcessingError as e:
         logger.error(f"Processing error in calculate_indicators: {str(e)}")
         raise HTTPException(
@@ -322,7 +322,7 @@ async def calculate_indicators(
                     "details": e.details,
                 },
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in calculate_indicators: {str(e)}")
         raise HTTPException(
@@ -335,7 +335,7 @@ async def calculate_indicators(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.get(
@@ -408,7 +408,7 @@ async def get_indicators_by_categories() -> dict[str, Any]:
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.get(
@@ -474,7 +474,7 @@ async def get_indicators_by_category_endpoint(
                         },
                     },
                 },
-            )
+            ) from None
 
         # Get category information
         category_info = get_category_info(category_enum)
@@ -510,7 +510,7 @@ async def get_indicators_by_category_endpoint(
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e
 
 
 @router.get(
@@ -566,4 +566,4 @@ async def get_category_names() -> dict[str, Any]:
                     "details": {"error": str(e)},
                 },
             },
-        )
+        ) from e

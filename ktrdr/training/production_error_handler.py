@@ -168,7 +168,7 @@ class ProductionErrorHandler:
         # Host information (must be set before logging setup)
         try:
             self.hostname = socket.gethostname()
-        except:
+        except Exception:
             self.hostname = "unknown"
         self.process_id = os.getpid()
 

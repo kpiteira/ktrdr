@@ -132,7 +132,7 @@ class TestModelsTrainPerformanceBenchmarks:
         """Create a mock strategy file."""
         strategy_content = """
         symbols: ["AAPL"]
-        timeframes: ["1h"] 
+        timeframes: ["1h"]
         strategy:
           name: "test_strategy"
         """

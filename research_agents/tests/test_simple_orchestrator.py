@@ -4,15 +4,16 @@ Simple Tests for Research Orchestrator
 Basic tests to verify core functionality works without complex mocking.
 """
 
-import pytest
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
+
 from research_agents.services.research_orchestrator import (
-    ResearchOrchestrator,
     ExperimentConfig,
-    ExperimentType,
     ExperimentStatus,
+    ExperimentType,
+    ResearchOrchestrator,
     ResearchOrchestratorError,
 )
 
@@ -137,7 +138,7 @@ class TestBasicOrchestrator:
         assert metrics["completed_experiments"] == 3
         assert metrics["failed_experiments"] == 1
         assert metrics["running_experiments"] == 0
-        assert metrics["is_initialized"] == True
+        assert metrics["is_initialized"]
         assert metrics["database_health"]["status"] == "healthy"
 
 

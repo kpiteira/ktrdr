@@ -135,7 +135,9 @@ class IndicatorFactory:
             ConfigurationError: If the configuration is invalid
         """
         if isinstance(config, list):
-            self.indicators_config = IndicatorsConfig(indicators=config)
+            self.indicators_config = IndicatorsConfig(
+                indicators=config, multi_timeframe=None
+            )
         elif isinstance(config, IndicatorsConfig):
             self.indicators_config = config
         else:

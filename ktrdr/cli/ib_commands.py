@@ -102,7 +102,9 @@ def test_connection(
             symbol = InputValidator.validate_string(
                 symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
             )
-        timeout = InputValidator.validate_numeric(timeout, min_value=5, max_value=300)
+        timeout = int(
+            InputValidator.validate_numeric(timeout, min_value=5, max_value=300)
+        )
 
         # Run async operation
         asyncio.run(_test_connection_async(symbol, verbose, timeout))
@@ -129,7 +131,7 @@ async def _test_connection_async(
             display_ib_connection_required_message()
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🔌 Testing IB connection (timeout: {timeout}s)")
@@ -180,7 +182,9 @@ def cleanup_connections(
     """
     try:
         # Input validation
-        timeout = InputValidator.validate_numeric(timeout, min_value=5, max_value=300)
+        timeout = int(
+            InputValidator.validate_numeric(timeout, min_value=5, max_value=300)
+        )
 
         # Run async operation
         asyncio.run(_cleanup_connections_async(force, timeout, verbose))
@@ -207,7 +211,7 @@ async def _cleanup_connections_async(
             display_ib_connection_required_message()
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"🧹 Cleaning up IB connections (timeout: {timeout}s)")
@@ -272,7 +276,7 @@ async def _check_status_async(
             display_ib_connection_required_message()
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print("📊 Retrieving IB connection status")
@@ -303,12 +307,12 @@ async def _check_status_async(
             table.add_row(
                 "Connected", "✅ Yes" if status_data["connected"] else "❌ No"
             )
-            table.add_row("Connection Time", status_data["connection_time"])
+            table.add_row("Connection Time", str(status_data["connection_time"]))
             table.add_row("Active Connections", str(status_data["active_connections"]))
             table.add_row("Total Requests", str(status_data["total_requests"]))
             table.add_row("Failed Requests", str(status_data["failed_requests"]))
-            table.add_row("Rate Limit Status", status_data["rate_limit_status"])
-            table.add_row("Last Heartbeat", status_data["last_heartbeat"])
+            table.add_row("Rate Limit Status", str(status_data["rate_limit_status"]))
+            table.add_row("Last Heartbeat", str(status_data["last_heartbeat"]))
 
             console.print(table)
 

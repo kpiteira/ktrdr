@@ -5,20 +5,19 @@ Provides REST API endpoints for managing research sessions, experiments,
 and agent coordination in the autonomous research laboratory.
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from uuid import UUID
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .database import ResearchDatabaseService, create_database_service, DatabaseConfig
+from .database import ResearchDatabaseService, create_database_service
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class HealthResponse(BaseModel):
 
     status: str
     timestamp: datetime
-    database: Dict[str, Any]
+    database: dict[str, Any]
     version: str = "0.1.0"
 
 
@@ -53,7 +52,7 @@ class ExperimentRequest(BaseModel):
     experiment_name: str = Field(..., description="Name of the experiment")
     hypothesis: str = Field(..., description="Research hypothesis to test")
     experiment_type: str = Field(..., description="Type of experiment")
-    configuration: Dict[str, Any] = Field(
+    configuration: dict[str, Any] = Field(
         default_factory=dict, description="Experiment configuration"
     )
     session_id: Optional[UUID] = Field(
@@ -69,8 +68,8 @@ class ExperimentResponse(BaseModel):
     hypothesis: str
     experiment_type: str
     status: str
-    configuration: Dict[str, Any]
-    results: Optional[Dict[str, Any]] = None
+    configuration: dict[str, Any]
+    results: Optional[dict[str, Any]] = None
     fitness_score: Optional[float] = None
     assigned_agent_name: Optional[str] = None
     session_name: Optional[str] = None
@@ -88,8 +87,8 @@ class KnowledgeEntry(BaseModel):
     title: str
     content: str
     summary: Optional[str] = None
-    keywords: List[str] = Field(default_factory=list)
-    tags: List[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     quality_score: Optional[float] = None
     relevance_score: Optional[float] = None
     created_at: datetime
@@ -123,10 +122,10 @@ class SessionRequest(BaseModel):
 
     session_name: str = Field(..., min_length=1, description="Name of the session")
     description: Optional[str] = Field(None, description="Session description")
-    strategic_goals: List[str] = Field(
+    strategic_goals: list[str] = Field(
         default_factory=list, description="Strategic goals for the session"
     )
-    priority_areas: List[str] = Field(
+    priority_areas: list[str] = Field(
         default_factory=list, description="Priority research areas"
     )
 
@@ -139,8 +138,8 @@ class SessionResponse(BaseModel):
     description: Optional[str] = None
     status: str
     started_at: datetime
-    strategic_goals: List[str] = Field(default_factory=list)
-    priority_areas: List[str] = Field(default_factory=list)
+    strategic_goals: list[str] = Field(default_factory=list)
+    priority_areas: list[str] = Field(default_factory=list)
 
 
 class KnowledgeRequest(BaseModel):
@@ -150,10 +149,10 @@ class KnowledgeRequest(BaseModel):
     title: str = Field(..., min_length=1, description="Title of the entry")
     content: str = Field(..., min_length=1, description="Main content")
     summary: Optional[str] = Field(None, description="Summary of the content")
-    keywords: List[str] = Field(
+    keywords: list[str] = Field(
         default_factory=list, description="Keywords for searchability"
     )
-    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    tags: list[str] = Field(default_factory=list, description="Tags for categorization")
     quality_score: Optional[float] = Field(
         None, ge=0.0, le=1.0, description="Quality score between 0 and 1"
     )
@@ -169,7 +168,7 @@ class CompletionRequest(BaseModel):
     """Request model for experiment completion"""
 
     status: str = Field(default="completed", description="Completion status")
-    results: Dict[str, Any] = Field(..., description="Experiment results")
+    results: dict[str, Any] = Field(..., description="Experiment results")
     fitness_score: Optional[float] = Field(None, description="Calculated fitness score")
 
 
@@ -280,7 +279,7 @@ async def health_check(db: ResearchDatabaseService = Depends(get_database)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Service unhealthy: {e}",
-        )
+        ) from e
 
 
 @app.get("/agents/status")
@@ -311,7 +310,7 @@ async def get_agents_status(db: ResearchDatabaseService = Depends(get_database))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve agent status: {e}",
-        )
+        ) from e
 
 
 # ============================================================================
@@ -380,7 +379,7 @@ async def create_experiment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create experiment: {e}",
-        )
+        ) from e
 
 
 @app.get("/experiments/{experiment_id}", response_model=ExperimentResponse)
@@ -405,10 +404,10 @@ async def get_experiment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve experiment: {e}",
-        )
+        ) from e
 
 
-@app.get("/experiments", response_model=List[ExperimentResponse])
+@app.get("/experiments", response_model=list[ExperimentResponse])
 async def list_experiments(
     session_id: Optional[UUID] = None,
     status_filter: Optional[str] = None,
@@ -439,7 +438,7 @@ async def list_experiments(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list experiments: {e}",
-        )
+        ) from e
 
 
 @app.patch("/experiments/{experiment_id}/status")
@@ -461,7 +460,7 @@ async def update_experiment_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update experiment status: {e}",
-        )
+        ) from e
 
 
 @app.patch("/experiments/{experiment_id}/complete")
@@ -486,10 +485,10 @@ async def complete_experiment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to complete experiment: {e}",
-        )
+        ) from e
 
 
-@app.get("/experiments/queue", response_model=List[ExperimentResponse])
+@app.get("/experiments/queue", response_model=list[ExperimentResponse])
 async def get_experiment_queue(
     limit: int = 10, db: ResearchDatabaseService = Depends(get_database)
 ):
@@ -503,7 +502,7 @@ async def get_experiment_queue(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve experiment queue: {e}",
-        )
+        ) from e
 
 
 # ============================================================================
@@ -512,7 +511,7 @@ async def get_experiment_queue(
 
 
 @app.post(
-    "/knowledge", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED
+    "/knowledge", response_model=dict[str, Any], status_code=status.HTTP_201_CREATED
 )
 async def create_knowledge_entry(
     knowledge: KnowledgeRequest, db: ResearchDatabaseService = Depends(get_database)
@@ -540,7 +539,7 @@ async def create_knowledge_entry(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create knowledge entry: {e}",
-        )
+        ) from e
 
 
 @app.get("/knowledge/{entry_id}", response_model=KnowledgeEntry)
@@ -591,10 +590,10 @@ async def get_knowledge_entry(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve knowledge entry: {e}",
-        )
+        ) from e
 
 
-@app.get("/knowledge/search", response_model=List[KnowledgeEntry])
+@app.get("/knowledge/search", response_model=list[KnowledgeEntry])
 async def search_knowledge_by_query(
     tags: Optional[str] = None,
     content_type: Optional[str] = None,
@@ -652,10 +651,10 @@ async def search_knowledge_by_query(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Knowledge search failed: {e}",
-        )
+        ) from e
 
 
-@app.post("/knowledge/search", response_model=List[KnowledgeEntry])
+@app.post("/knowledge/search", response_model=list[KnowledgeEntry])
 async def search_knowledge(
     search_request: KnowledgeSearchRequest,
     db: ResearchDatabaseService = Depends(get_database),
@@ -682,10 +681,10 @@ async def search_knowledge(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Knowledge search failed: {e}",
-        )
+        ) from e
 
 
-@app.get("/knowledge/experiment/{experiment_id}", response_model=List[KnowledgeEntry])
+@app.get("/knowledge/experiment/{experiment_id}", response_model=list[KnowledgeEntry])
 async def get_experiment_knowledge(
     experiment_id: UUID, db: ResearchDatabaseService = Depends(get_database)
 ):
@@ -699,7 +698,7 @@ async def get_experiment_knowledge(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve experiment knowledge: {e}",
-        )
+        ) from e
 
 
 # ============================================================================
@@ -759,7 +758,7 @@ async def create_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create session: {e}",
-        )
+        ) from e
 
 
 @app.get("/sessions/{session_id}", response_model=SessionResponse)
@@ -797,10 +796,10 @@ async def get_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve session: {e}",
-        )
+        ) from e
 
 
-@app.get("/sessions", response_model=List[SessionResponse])
+@app.get("/sessions", response_model=list[SessionResponse])
 async def list_sessions(
     limit: int = 20, db: ResearchDatabaseService = Depends(get_database)
 ):
@@ -830,10 +829,10 @@ async def list_sessions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list sessions: {e}",
-        )
+        ) from e
 
 
-@app.get("/sessions/{session_id}/experiments", response_model=List[ExperimentResponse])
+@app.get("/sessions/{session_id}/experiments", response_model=list[ExperimentResponse])
 async def list_experiments_by_session(
     session_id: UUID,
     status_filter: Optional[str] = None,
@@ -852,7 +851,7 @@ async def list_experiments_by_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list experiments: {e}",
-        )
+        ) from e
 
 
 @app.get("/sessions/{session_id}/statistics", response_model=SessionStatistics)
@@ -885,7 +884,7 @@ async def get_session_statistics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve statistics: {e}",
-        )
+        ) from e
 
 
 @app.get("/session/active")
@@ -907,7 +906,7 @@ async def get_active_session(db: ResearchDatabaseService = Depends(get_database)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve active session: {e}",
-        )
+        ) from e
 
 
 @app.get("/analytics/experiments", response_model=SessionStatistics)
@@ -925,7 +924,7 @@ async def get_experiment_analytics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve analytics: {e}",
-        )
+        ) from e
 
 
 @app.get("/analytics/knowledge")
@@ -940,7 +939,7 @@ async def get_knowledge_analytics(db: ResearchDatabaseService = Depends(get_data
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve knowledge analytics: {e}",
-        )
+        ) from e
 
 
 # ============================================================================

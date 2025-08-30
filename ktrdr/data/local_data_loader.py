@@ -81,7 +81,7 @@ class LocalDataLoader:
                 message=f"Invalid file format: {e.message}",
                 error_code="DATA-InvalidFormat",
                 details={"format": default_format},
-            )
+            ) from e
 
         if data_dir is None:
             # Load from configuration
@@ -231,7 +231,7 @@ class LocalDataLoader:
                     "start_date": str(start_date) if start_date else None,
                     "end_date": str(end_date) if end_date else None,
                 },
-            )
+            ) from e
         except ValueError as e:
             # Handle date parsing errors
             logger.error(f"Date parsing error: {e}")
@@ -242,7 +242,7 @@ class LocalDataLoader:
                     "start_date": str(start_date) if start_date else None,
                     "end_date": str(end_date) if end_date else None,
                 },
-            )
+            ) from e
 
         file_path = self._build_file_path(symbol, timeframe, file_format)
         logger.info(f"Loading data for {symbol} ({timeframe}) from {file_path}")
@@ -357,21 +357,21 @@ class LocalDataLoader:
                 message=f"Empty data file: {file_path}",
                 error_code="DATA-EmptyFile",
                 details={"file_path": str(file_path)},
-            )
+            ) from None
         except pd.errors.ParserError as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
                 message=f"Invalid CSV format in file: {file_path}",
                 error_code="DATA-InvalidFormat",
                 details={"file_path": str(file_path), "parser_error": str(e)},
-            )
+            ) from e
         except Exception as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataError(
                 message=f"Error reading data file {file_path}: {str(e)}",
                 error_code="DATA-ReadError",
                 details={"file_path": str(file_path), "error": str(e)},
-            )
+            ) from e
 
     @retry_with_backoff(
         retryable_exceptions=[IOError, OSError], config=None, logger=logger
@@ -535,7 +535,7 @@ class LocalDataLoader:
         Returns:
             List of tuples containing (symbol, timeframe) for available data files
         """
-        result = []
+        result: list[tuple[str, str]] = []
 
         try:
             if not self.data_dir.exists():
@@ -638,7 +638,7 @@ class LocalDataLoader:
 
             # Parse the CSV lines manually
             # First determine the column index of the date
-            headers = header.split(",")
+            header.split(",")
             date_col_idx = 0  # Default to first column
 
             # Get the values from the first and last lines
@@ -686,18 +686,18 @@ class LocalDataLoader:
                 message=f"Empty data file: {file_path}",
                 error_code="DATA-EmptyFile",
                 details={"file_path": str(file_path)},
-            )
+            ) from None
         except pd.errors.ParserError as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
                 message=f"Invalid CSV format in file: {file_path}",
                 error_code="DATA-InvalidFormat",
                 details={"file_path": str(file_path), "parser_error": str(e)},
-            )
+            ) from e
         except Exception as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
                 message=f"Error extracting date range from {file_path}: {str(e)}",
                 error_code="DATA-DateRangeError",
                 details={"file_path": str(file_path), "error": str(e)},
-            )
+            ) from e

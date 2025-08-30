@@ -74,7 +74,7 @@ class FuzzyNeuralProcessor:
         if not features:
             raise ValueError("No fuzzy features found in input data")
 
-        feature_matrix = np.column_stack(features) if len(features) > 1 else features[0]
+        feature_matrix = np.column_stack(features) if len(features) > 1 else features[0]  # type: ignore
 
         # Validate fuzzy range (should be 0-1)
         self._validate_fuzzy_range(feature_matrix, feature_names)
@@ -505,7 +505,7 @@ class FuzzyNeuralProcessor:
             raise ValueError("No valid fuzzy features found")
 
         # Stack as column matrix
-        feature_matrix = np.column_stack(features)
+        feature_matrix = np.column_stack(features)  # type: ignore
 
         logger.debug(f"Extracted {len(names)} fuzzy features: {names[:5]}...")
         return feature_matrix, names
@@ -542,7 +542,7 @@ class FuzzyNeuralProcessor:
             return np.array([]), []
 
         # Stack temporal features
-        temporal_matrix = np.column_stack(temporal_features)
+        temporal_matrix = np.column_stack(temporal_features)  # type: ignore
 
         logger.debug(f"Added {len(temporal_names)} temporal fuzzy features")
         return temporal_matrix, temporal_names

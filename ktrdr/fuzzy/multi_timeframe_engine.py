@@ -219,9 +219,9 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                     if mf_type == "triangular":
                         mf_instance = TriangularMFConfig(**mf_config)
                     elif mf_type == "trapezoidal":
-                        mf_instance = TrapezoidalMFConfig(**mf_config)
+                        mf_instance = TrapezoidalMFConfig(**mf_config)  # type: ignore
                     elif mf_type == "gaussian":
-                        mf_instance = GaussianMFConfig(**mf_config)
+                        mf_instance = GaussianMFConfig(**mf_config)  # type: ignore
                     else:
                         raise ConfigurationError(
                             message=f"Unknown membership function type: {mf_type}",
@@ -265,7 +265,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                 indicator_fuzzy_sets = {}
                 for key, fuzzy_set_config in tf_config.fuzzy_sets.items():
                     if key.startswith(f"{indicator}_"):
-                        set_name = key[len(f"{indicator}_") :]
+                        key[len(f"{indicator}_") :]
                         for fs_name, mf_config in fuzzy_set_config.root.items():
                             indicator_fuzzy_sets[fs_name] = mf_config
 
@@ -436,7 +436,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                 set(timeframe_filter)
             )
 
-        return sorted(list(candidate_timeframes))
+        return sorted(candidate_timeframes)
 
     def _process_timeframe(
         self, timeframe: str, indicators: dict[str, float]
@@ -456,7 +456,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         """
         logger.debug(f"Processing fuzzy logic for timeframe {timeframe}")
 
-        result = {}
+        result: dict[str, Any] = {}
 
         # Get timeframe configuration
         if self._is_multi_timeframe and timeframe in self._timeframe_configs:
@@ -493,12 +493,16 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
                 # Remove timeframe suffix from output names for cleaner result
                 for fuzzy_name, membership in fuzzy_result.items():
-                    if self._is_multi_timeframe and fuzzy_name.endswith(
-                        f"_{timeframe}"
+                    if (
+                        self._is_multi_timeframe
+                        and isinstance(fuzzy_name, str)
+                        and fuzzy_name.endswith(f"_{timeframe}")
                     ):
-                        clean_name = fuzzy_name[: -len(f"_{timeframe}")]
+                        clean_name = str(
+                            fuzzy_name
+                        )  # Ensure string type[: -len(f"_{timeframe}")]
                     else:
-                        clean_name = fuzzy_name
+                        clean_name = str(fuzzy_name)  # Ensure string type
                     result[clean_name] = membership
 
             except Exception as e:

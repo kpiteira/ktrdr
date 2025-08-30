@@ -82,7 +82,7 @@ class TrainingAdapter:
             # Local training mode (existing behavior)
             from .train_strategy import StrategyTrainer
 
-            self.local_trainer = StrategyTrainer()
+            self.local_trainer: Optional[StrategyTrainer] = StrategyTrainer()
             logger.info("TrainingAdapter initialized for local training")
         else:
             # Host service mode
@@ -113,11 +113,11 @@ class TrainingAdapter:
         except httpx.HTTPError as e:
             raise TrainingProviderConnectionError(
                 f"Host service request failed: {str(e)}", provider="Training"
-            )
+            ) from e
         except Exception as e:
             raise TrainingProviderError(
                 f"Host service communication error: {str(e)}", provider="Training"
-            )
+            ) from e
 
     async def _call_host_service_get(
         self, endpoint: str, params: Optional[dict[str, Any]] = None
@@ -136,11 +136,11 @@ class TrainingAdapter:
         except httpx.HTTPError as e:
             raise TrainingProviderConnectionError(
                 f"Host service request failed: {str(e)}", provider="Training"
-            )
+            ) from e
         except Exception as e:
             raise TrainingProviderError(
                 f"Host service communication error: {str(e)}", provider="Training"
-            )
+            ) from e
 
     async def train_multi_symbol_strategy(
         self,
@@ -231,6 +231,11 @@ class TrainingAdapter:
                 # Use local training (existing behavior)
                 logger.info(f"Starting local training for {symbols} on {timeframes}")
 
+                if self.local_trainer is None:
+                    raise TrainingProviderError(
+                        "Local trainer not initialized", provider="Training"
+                    )
+
                 return self.local_trainer.train_multi_symbol_strategy(
                     strategy_config_path=strategy_config_path,
                     symbols=symbols,
@@ -251,7 +256,7 @@ class TrainingAdapter:
             self.errors_encountered += 1
             raise TrainingProviderError(
                 f"Training failed: {str(e)}", provider="Training"
-            )
+            ) from e
 
     async def get_training_status(self, session_id: str) -> dict[str, Any]:
         """Get status of a training session (host service only)."""

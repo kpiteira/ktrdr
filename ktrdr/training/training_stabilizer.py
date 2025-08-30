@@ -151,7 +151,7 @@ class TrainingStabilizer:
         model_config: dict[str, Any],
         training_config: dict[str, Any],
         force: bool = False,
-    ) -> Path:
+    ) -> Optional[Path]:
         """Save training checkpoint.
 
         Args:
@@ -473,7 +473,7 @@ class TrainingStabilizer:
 
     def get_recovery_recommendations(self) -> list[str]:
         """Get recommendations for training recovery."""
-        recommendations = []
+        recommendations: list[str] = []
 
         if not self.stability_history:
             return recommendations
@@ -615,7 +615,7 @@ class TrainingStabilizer:
         """Verify checkpoint integrity using hashes."""
         try:
             model_state = checkpoint_data["model_state_dict"]
-            optimizer_state = checkpoint_data["optimizer_state_dict"]
+            checkpoint_data["optimizer_state_dict"]
             stored_model_hash = checkpoint_data.get("model_hash", "")
             stored_optimizer_hash = checkpoint_data.get("optimizer_hash", "")
 
@@ -710,7 +710,7 @@ class TrainingStabilizer:
             "recommendations": self.get_recovery_recommendations(),
         }
 
-    def export_stability_log(self, file_path: Optional[Path] = None) -> Path:
+    def export_stability_log(self, file_path: Optional[Path] = None) -> Optional[Path]:
         """Export training stability log.
 
         Args:

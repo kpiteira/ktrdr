@@ -1,8 +1,9 @@
 """Model testing commands for debugging trained models."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
+import pandas as pd
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -78,7 +79,7 @@ def test_model_signals(
             console.print(f"✅ Strategy: {orchestrator.strategy_name}")
         except Exception as e:
             console.print(f"[red]❌ Error initializing orchestrator: {str(e)}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from e
 
         # Test each data point
         console.print("\n🔍 Testing model decisions on recent data:")
@@ -128,7 +129,7 @@ def test_model_signals(
                     signal_color = "red"
 
                 table.add_row(
-                    current_bar.name.strftime("%Y-%m-%d"),
+                    cast(pd.Timestamp, current_bar.name).strftime("%Y-%m-%d"),
                     f"${current_bar['close']:.2f}",
                     f"[{signal_color}]{decision.signal.value}[/{signal_color}]",
                     f"{decision.confidence:.3f}",
@@ -139,7 +140,8 @@ def test_model_signals(
                 console.print(
                     f"[red]❌ Error processing {current_bar.name}: {str(e)}[/red]"
                 )
-                decisions.append(None)
+                # Skip this decision instead of appending None
+                continue
 
         console.print(table)
 
@@ -187,4 +189,4 @@ def test_model_signals(
         import traceback
 
         console.print(traceback.format_exc())
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e

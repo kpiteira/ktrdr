@@ -40,7 +40,7 @@ class IbConfig:
     )
 
     # Data fetching settings
-    chunk_days: dict[str, int] = field(
+    chunk_days: dict[str, float] = field(
         default_factory=lambda: {
             "1 secs": 0.02,  # 30 minutes
             "5 secs": 0.08,  # 2 hours
@@ -127,7 +127,7 @@ class IbConfig:
             "readonly": self.readonly,
         }
 
-    def get_chunk_size(self, bar_size: str) -> int:
+    def get_chunk_size(self, bar_size: str) -> float:
         """
         Get maximum chunk size in days for a given bar size.
 

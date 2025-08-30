@@ -174,7 +174,7 @@ class InputValidator:
                 message=f"Invalid date format: {value} (expected format: {format_string})",
                 error_code="VAL-DateFormat",
                 details={"format": format_string, "value": value, "error": str(e)},
-            )
+            ) from e
 
         if min_date is not None and dt < min_date:
             raise ValidationError(

@@ -5,14 +5,13 @@ Basic tests to verify core functionality works.
 """
 
 import pytest
-from uuid import uuid4
 
 from research_agents.services.results_analyzer import (
-    ResultsAnalyzer,
-    PerformanceMetrics,
-    FitnessComponents,
-    RiskProfile,
     AnalysisMetric,
+    FitnessComponents,
+    PerformanceMetrics,
+    ResultsAnalyzer,
+    RiskProfile,
     create_results_analyzer,
 )
 

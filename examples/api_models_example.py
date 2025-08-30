@@ -6,7 +6,6 @@ This script demonstrates how to use the KTRDR API models for creating
 and validating data structures for API requests and responses.
 """
 import sys
-import pandas as pd
 from datetime import datetime, timedelta
 from pprint import pprint
 
@@ -16,24 +15,24 @@ sys.path.append("/Users/karl/Documents/dev/ktrdr2")
 from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.data import (
     DataLoadRequest,
-    OHLCVPoint,
     OHLCVData,
+    OHLCVPoint,
     SymbolInfo,
     TimeframeInfo,
 )
-from ktrdr.api.models.indicators import (
-    IndicatorType,
-    IndicatorParameter,
-    IndicatorConfig,
-    IndicatorMetadata,
-    IndicatorCalculateRequest,
-)
 from ktrdr.api.models.fuzzy import (
-    MembershipFunctionType,
-    MembershipFunction,
-    FuzzyVariable,
     FuzzyRule,
     FuzzySystem,
+    FuzzyVariable,
+    MembershipFunction,
+    MembershipFunctionType,
+)
+from ktrdr.api.models.indicators import (
+    IndicatorCalculateRequest,
+    IndicatorConfig,
+    IndicatorMetadata,
+    IndicatorParameter,
+    IndicatorType,
 )
 
 

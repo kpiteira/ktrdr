@@ -72,6 +72,10 @@ class IbDataAdapter(ExternalDataProvider):
         self.use_host_service = use_host_service
         self.host_service_url = host_service_url or "http://localhost:5001"
 
+        # Declare Optional attributes
+        self.symbol_validator: Optional[Any] = None
+        self.data_fetcher: Optional[Any] = None
+
         # Validate configuration
         if use_host_service and not HTTPX_AVAILABLE:
             raise DataProviderError(
@@ -121,11 +125,11 @@ class IbDataAdapter(ExternalDataProvider):
         except httpx.HTTPError as e:
             raise DataProviderConnectionError(
                 f"Host service request failed: {str(e)}", provider="IB"
-            )
+            ) from e
         except Exception as e:
             raise DataProviderError(
                 f"Host service communication error: {str(e)}", provider="IB"
-            )
+            ) from e
 
     async def _call_host_service_get(
         self, endpoint: str, params: Optional[dict[str, Any]] = None
@@ -144,11 +148,11 @@ class IbDataAdapter(ExternalDataProvider):
         except httpx.HTTPError as e:
             raise DataProviderConnectionError(
                 f"Host service request failed: {str(e)}", provider="IB"
-            )
+            ) from e
         except Exception as e:
             raise DataProviderError(
                 f"Host service communication error: {str(e)}", provider="IB"
-            )
+            ) from e
 
     async def validate_and_get_metadata(self, symbol: str, timeframes: list[str]):
         """
@@ -196,21 +200,28 @@ class IbDataAdapter(ExternalDataProvider):
                                 timestamp_str.replace("Z", "+00:00")
                             )
                         else:
-                            head_timestamps[tf] = None
+                            head_timestamps[tf] = None  # type: ignore[assignment]
+
+                # Convert head_timestamps to the expected format (dict[str, str])
+                head_timestamps_str = {}
+                if head_timestamps:
+                    for tf, dt in head_timestamps.items():
+                        if dt is not None:
+                            head_timestamps_str[str(tf)] = dt.isoformat()
 
                 validation_result = ValidationResult(
                     is_valid=response.get("is_valid", False),
                     symbol=symbol,
                     error_message=response.get("error_message"),
                     contract_info=contract_info,
-                    head_timestamps=head_timestamps,
+                    head_timestamps=(
+                        head_timestamps_str if head_timestamps_str else None
+                    ),
                 )
             else:
                 # Use direct IB connection (existing behavior)
-                validation_result = (
-                    await self.symbol_validator.validate_symbol_with_metadata(
-                        symbol, timeframes
-                    )
+                validation_result = await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
+                    symbol, timeframes
                 )
 
             self._update_stats()
@@ -230,8 +241,16 @@ class IbDataAdapter(ExternalDataProvider):
                 raise
             else:
                 self._handle_ib_error(e, "validate_and_get_metadata")
+                # Return error validation result
+                return ValidationResult(
+                    is_valid=False,
+                    symbol=symbol,
+                    error_message=str(e),
+                    contract_info=None,
+                    head_timestamps=None,
+                )
 
-    async def fetch_historical_data(
+    async def fetch_historical_data(  # type: ignore[return]
         self,
         symbol: str,
         timeframe: str,
@@ -289,7 +308,7 @@ class IbDataAdapter(ExternalDataProvider):
                     result = pd.DataFrame()
             else:
                 # Use direct IB connection (existing behavior)
-                result = await self.data_fetcher.fetch_historical_data(
+                result = await self.data_fetcher.fetch_historical_data(  # type: ignore[union-attr]
                     symbol=symbol,
                     timeframe=timeframe,
                     start=start,
@@ -331,7 +350,7 @@ class IbDataAdapter(ExternalDataProvider):
                 result = response["success"] and response.get("is_valid", False)
             else:
                 # Use direct IB connection (existing behavior)
-                result = await self.symbol_validator.validate_symbol_async(symbol)
+                result = await self.symbol_validator.validate_symbol_async(symbol)  # type: ignore[union-attr]
 
             self._update_stats()
             return result
@@ -385,21 +404,28 @@ class IbDataAdapter(ExternalDataProvider):
                                 timestamp_str.replace("Z", "+00:00")
                             )
                         else:
-                            head_timestamps[tf] = None
+                            head_timestamps[tf] = None  # type: ignore[assignment]
+
+                # Convert head_timestamps to the expected format (dict[str, str])
+                head_timestamps_str = {}
+                if head_timestamps:
+                    for tf, dt in head_timestamps.items():
+                        if dt is not None:
+                            head_timestamps_str[str(tf)] = dt.isoformat()
 
                 validation_result = ValidationResult(
                     is_valid=response.get("is_valid", False),
                     symbol=symbol,
                     error_message=response.get("error_message"),
                     contract_info=contract_info,
-                    head_timestamps=head_timestamps,
+                    head_timestamps=(
+                        head_timestamps_str if head_timestamps_str else None
+                    ),
                 )
             else:
                 # Use direct IB connection (existing behavior)
-                validation_result = (
-                    await self.symbol_validator.validate_symbol_with_metadata(
-                        symbol, []
-                    )
+                validation_result = await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
+                    symbol, []
                 )
 
             self._update_stats()
@@ -451,10 +477,8 @@ class IbDataAdapter(ExternalDataProvider):
                 return None
             else:
                 # Use direct IB connection (existing behavior)
-                head_timestamp_iso = (
-                    await self.symbol_validator.fetch_head_timestamp_async(
-                        symbol, timeframe
-                    )
+                head_timestamp_iso = await self.symbol_validator.fetch_head_timestamp_async(  # type: ignore[union-attr]
+                    symbol, timeframe
                 )
 
                 if head_timestamp_iso:
@@ -519,8 +543,8 @@ class IbDataAdapter(ExternalDataProvider):
                 }
             else:
                 # Direct IB connection health check (existing behavior)
-                data_fetcher_stats = self.data_fetcher.get_stats()
-                validator_stats = self.symbol_validator.get_cache_stats()
+                data_fetcher_stats = self.data_fetcher.get_stats()  # type: ignore[union-attr]
+                validator_stats = self.symbol_validator.get_cache_stats()  # type: ignore[union-attr]
 
                 # Check if we can connect (basic health check)
                 from ktrdr.ib.pool_manager import get_shared_ib_pool

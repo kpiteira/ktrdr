@@ -9,12 +9,10 @@ After running this script, users should re-download data from IB to get clean,
 properly timezone-aware data using the new TimestampManager system.
 """
 
-import os
-import shutil
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
 
 
 def get_project_root() -> Path:
@@ -32,14 +30,14 @@ def create_backup_directory() -> Path:
     return backup_dir
 
 
-def get_data_files(data_dir: Path) -> List[Path]:
+def get_data_files(data_dir: Path) -> list[Path]:
     """Get all CSV data files in the data directory."""
     if not data_dir.exists():
         return []
     return list(data_dir.glob("*.csv"))
 
 
-def backup_data_files(data_dir: Path, backup_dir: Path) -> List[str]:
+def backup_data_files(data_dir: Path, backup_dir: Path) -> list[str]:
     """Backup all CSV files to the backup directory."""
     data_files = get_data_files(data_dir)
     backed_up_files = []
@@ -70,7 +68,7 @@ def reset_symbol_cache(data_dir: Path) -> None:
 
     if cache_file.exists():
         try:
-            with open(cache_file, "r") as f:
+            with open(cache_file) as f:
                 cache_data = json.load(f)
 
             # Keep validated symbols but clear failed symbols
@@ -92,7 +90,7 @@ def reset_symbol_cache(data_dir: Path) -> None:
         print("ℹ️  No symbol cache found to reset")
 
 
-def remove_data_files(data_dir: Path, backed_up_files: List[str]) -> None:
+def remove_data_files(data_dir: Path, backed_up_files: list[str]) -> None:
     """Remove the backed-up data files from the data directory."""
     removed_count = 0
     for filename in backed_up_files:
@@ -106,7 +104,7 @@ def remove_data_files(data_dir: Path, backed_up_files: List[str]) -> None:
 
 
 def create_cleanup_summary(
-    backup_dir: Path, backed_up_files: List[str], cache_backed_up: bool
+    backup_dir: Path, backed_up_files: list[str], cache_backed_up: bool
 ) -> None:
     """Create a summary file of what was cleaned up."""
     summary = {

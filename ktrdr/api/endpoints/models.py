@@ -157,10 +157,12 @@ async def save_trained_model(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to save model: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to save model: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save model: {str(e)}"
+        ) from e
 
 
 @router.post("/{model_name}/load", response_model=LoadModelResponse)
@@ -181,10 +183,12 @@ async def load_trained_model(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to load model {model_name}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to load model: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load model: {str(e)}"
+        ) from e
 
 
 @router.post("/predict", response_model=PredictionResponse)
@@ -217,12 +221,12 @@ async def test_model_prediction(
         )
 
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to make prediction: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to make prediction: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("", response_model=ModelsListResponse)
@@ -253,4 +257,6 @@ async def list_trained_models(
 
     except Exception as e:
         logger.error(f"Failed to list models: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list models: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list models: {str(e)}"
+        ) from e

@@ -6,7 +6,7 @@ and other sensitive information from environment variables.
 """
 
 import os
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -59,7 +59,7 @@ class CredentialProvider:
 
     @staticmethod
     def validate_credential(
-        value: Optional[str], validation_func: callable, error_message: str
+        value: Optional[str], validation_func: Callable[[str], bool], error_message: str
     ) -> None:
         """
         Validate a credential against specified criteria.

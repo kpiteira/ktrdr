@@ -11,7 +11,7 @@ This module contains all CLI commands related to data operations:
 import asyncio
 import json
 import sys
-from typing import Optional
+from typing import Optional, cast
 
 import pandas as pd
 import typer
@@ -238,7 +238,7 @@ async def _show_data_async(
 
                 for date, row in display_df.iterrows():
                     table.add_row(
-                        date.strftime("%Y-%m-%d %H:%M:%S"),
+                        cast(pd.Timestamp, date).strftime("%Y-%m-%d %H:%M:%S"),
                         f"{row['Open']:.4f}",
                         f"{row['High']:.4f}",
                         f"{row['Low']:.4f}",

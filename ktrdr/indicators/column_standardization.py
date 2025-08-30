@@ -8,7 +8,7 @@ for ensuring consistent naming across different timeframes and indicators.
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from ktrdr import get_logger
 
@@ -394,13 +394,18 @@ class ColumnStandardizer:
         Returns:
             Dictionary with validation results
         """
-        results = {"valid": [], "invalid": [], "warnings": [], "recommendations": []}
+        results: dict[str, Any] = {
+            "valid": [],
+            "invalid": [],
+            "warnings": [],
+            "recommendations": [],
+        }
 
         timeframes = self.get_timeframes(columns)
 
         # Check for consistent timeframe usage
         for tf in timeframes:
-            tf_columns = self.filter_columns_by_timeframe(columns, tf)
+            self.filter_columns_by_timeframe(columns, tf)
 
             # Check for columns that should have timeframe but don't
             for col in columns:
@@ -415,7 +420,7 @@ class ColumnStandardizer:
                             )
 
         # Check for potential duplicates
-        base_names = {}
+        base_names: dict[str, Any] = {}
         for col in columns:
             if col in self.column_mapping:
                 info = self.column_mapping[col]

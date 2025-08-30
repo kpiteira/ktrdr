@@ -27,8 +27,8 @@ class Renderer:
     def render_chart(
         self,
         title: str = "KTRDR Chart",
-        chart_configs: list[dict] = None,
-        chart_data: dict = None,
+        chart_configs: Optional[list[dict]] = None,
+        chart_data: Optional[dict] = None,
         theme: str = "dark",
         has_range_slider: bool = False,
     ) -> str:

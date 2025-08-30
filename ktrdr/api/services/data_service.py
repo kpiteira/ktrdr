@@ -423,8 +423,6 @@ class DataService(BaseService):
         cancellation_event = asyncio.Event()
 
         # Store the cancellation event so the operations service can signal it
-        if not hasattr(self.operations_service, "_cancellation_events"):
-            self.operations_service._cancellation_events = {}
         self.operations_service._cancellation_events[operation_id] = cancellation_event
 
         async def check_cancellation():
@@ -481,48 +479,44 @@ class DataService(BaseService):
                     # Expected for cancellation - ignore silently
                     pass
 
-            # Get the result
-            try:
-                # Check if cancellation was completed
-                if cancellation_event.is_set():
-                    logger.info(f"Data loading operation was cancelled: {operation_id}")
-                    raise asyncio.CancelledError("Operation was cancelled")
-
-                # Get result from the completed future
-                completed_task = next(iter(done))
-                if asyncio.isfuture(completed_task) or asyncio.iscoroutine(
-                    completed_task
-                ):
-                    # This was the data loading future
-                    try:
-                        result = completed_task.result()
-
-                        # Check both error key and failed status
-                        if "error" in result or result.get("status") == "failed":
-                            error_msg = result.get("error", "Unknown error")
-                            raise DataError(
-                                message=f"Data loading failed: {error_msg}",
-                                error_code="DATA-LoadError",
-                                details={
-                                    "operation_id": operation_id,
-                                    "symbol": symbol,
-                                },
-                            )
-                        return result
-                    except concurrent.futures.CancelledError:
-                        # Future was cancelled - this is expected for cancellation
-                        logger.info(
-                            f"Data loading future was cancelled: {operation_id}"
-                        )
-                        raise asyncio.CancelledError("Operation was cancelled")
-                else:
-                    # This was the cancellation task completing
-                    logger.info(f"Data loading operation was cancelled: {operation_id}")
-                    raise asyncio.CancelledError("Operation was cancelled")
-
-            except concurrent.futures.CancelledError:
-                logger.info(f"Data loading future was cancelled: {operation_id}")
+        # Process the result after cleanup
+        try:
+            # Check if cancellation was completed
+            if cancellation_event.is_set():
+                logger.info(f"Data loading operation was cancelled: {operation_id}")
                 raise asyncio.CancelledError("Operation was cancelled")
+
+            # Get result from the completed future
+            completed_task = next(iter(done))
+            if asyncio.isfuture(completed_task) or asyncio.iscoroutine(completed_task):
+                # This was the data loading future
+                try:
+                    result = completed_task.result()
+
+                    # Check both error key and failed status
+                    if "error" in result or result.get("status") == "failed":
+                        error_msg = result.get("error", "Unknown error")
+                        raise DataError(
+                            message=f"Data loading failed: {error_msg}",
+                            error_code="DATA-LoadError",
+                            details={
+                                "operation_id": operation_id,
+                                "symbol": symbol,
+                            },
+                        )
+                    return result
+                except concurrent.futures.CancelledError:
+                    # Future was cancelled - this is expected for cancellation
+                    logger.info(f"Data loading future was cancelled: {operation_id}")
+                    raise asyncio.CancelledError("Operation was cancelled") from None
+            else:
+                # This was the cancellation task completing
+                logger.info(f"Data loading operation was cancelled: {operation_id}")
+                raise asyncio.CancelledError("Operation was cancelled")
+
+        except concurrent.futures.CancelledError:
+            logger.info(f"Data loading future was cancelled: {operation_id}")
+            raise asyncio.CancelledError("Operation was cancelled") from None
 
     def _convert_df_to_api_format(
         self,
@@ -551,7 +545,7 @@ class DataService(BaseService):
             }
 
         # Format the dates as ISO strings
-        dates = df.index.strftime("%Y-%m-%dT%H:%M:%S").tolist()
+        dates = pd.to_datetime(df.index).strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
         # Extract OHLCV data as nested list
         ohlcv = df[["open", "high", "low", "close", "volume"]].values.tolist()
@@ -590,13 +584,13 @@ class DataService(BaseService):
         )
 
         # Extract unique symbols from the available files
-        symbols = sorted(set(symbol for symbol, _ in available_files))
+        symbols = sorted({symbol for symbol, _ in available_files})
         logger.debug(
             f"Aggregated {len(available_files)} files into {len(symbols)} unique symbols"
         )
 
         # Create a map of symbol to timeframes
-        symbol_timeframes = {}
+        symbol_timeframes: dict[str, list[str]] = {}
         for symbol, timeframe in available_files:
             if symbol not in symbol_timeframes:
                 symbol_timeframes[symbol] = []
@@ -667,7 +661,7 @@ class DataService(BaseService):
 
             # Try to get data directory from settings
             try:
-                from ktrdr.config.settings import get_settings
+                from ktrdr.config.settings import get_api_settings as get_settings
 
                 settings = get_settings()
                 data_dir = (
@@ -675,7 +669,7 @@ class DataService(BaseService):
                     if hasattr(settings, "data_dir")
                     else Path("data")
                 )
-            except:
+            except Exception:
                 data_dir = Path("data")
 
             cache_file = data_dir / "symbol_discovery_cache.json"
@@ -899,7 +893,7 @@ class DataService(BaseService):
                 details={"symbol": symbol, "timeframe": timeframe},
             ) from e
 
-    def _filter_trading_hours(
+    def _filter_trading_hours_advanced(
         self,
         df: pd.DataFrame,
         trading_hours: dict[str, Any],
@@ -937,15 +931,23 @@ class DataService(BaseService):
 
             # Convert index to the exchange timezone
             df_tz = df.copy()
-            if df_tz.index.tz is None:
+            if (
+                hasattr(df_tz.index, "tz")
+                and df_tz.index.tz is None
+                and hasattr(df_tz.index, "tz_localize")
+            ):
                 df_tz.index = df_tz.index.tz_localize("UTC")
-            df_tz.index = df_tz.index.tz_convert(timezone)
+            if hasattr(df_tz.index, "tz_convert"):
+                df_tz.index = df_tz.index.tz_convert(timezone)
 
             # Create boolean mask for filtering
             mask = pd.Series(False, index=df_tz.index)
 
             # Filter by trading days
-            day_mask = df_tz.index.dayofweek.isin(trading_days)
+            if hasattr(df_tz.index, "dayofweek"):
+                day_mask = df_tz.index.dayofweek.isin(trading_days)
+            else:
+                day_mask = pd.Series(True, index=df_tz.index)
 
             # Add regular hours
             if regular_hours:
@@ -957,16 +959,22 @@ class DataService(BaseService):
                 end_hour, end_min = map(int, end_time.split(":"))
 
                 # Create time-based mask
-                time_mask = (
-                    (df_tz.index.hour > start_hour)
-                    | (
-                        (df_tz.index.hour == start_hour)
-                        & (df_tz.index.minute >= start_min)
+                if hasattr(df_tz.index, "hour") and hasattr(df_tz.index, "minute"):
+                    time_mask = (
+                        (df_tz.index.hour > start_hour)
+                        | (
+                            (df_tz.index.hour == start_hour)
+                            & (df_tz.index.minute >= start_min)
+                        )
+                    ) & (
+                        (df_tz.index.hour < end_hour)
+                        | (
+                            (df_tz.index.hour == end_hour)
+                            & (df_tz.index.minute <= end_min)
+                        )
                     )
-                ) & (
-                    (df_tz.index.hour < end_hour)
-                    | ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
-                )
+                else:
+                    time_mask = pd.Series(True, index=df_tz.index)
 
                 mask |= day_mask & time_mask
 
@@ -981,19 +989,22 @@ class DataService(BaseService):
                     end_hour, end_min = map(int, end_time.split(":"))
 
                     # Create time-based mask for extended session
-                    extended_mask = (
-                        (df_tz.index.hour > start_hour)
-                        | (
-                            (df_tz.index.hour == start_hour)
-                            & (df_tz.index.minute >= start_min)
+                    if hasattr(df_tz.index, "hour") and hasattr(df_tz.index, "minute"):
+                        extended_mask = (
+                            (df_tz.index.hour > start_hour)
+                            | (
+                                (df_tz.index.hour == start_hour)
+                                & (df_tz.index.minute >= start_min)
+                            )
+                        ) & (
+                            (df_tz.index.hour < end_hour)
+                            | (
+                                (df_tz.index.hour == end_hour)
+                                & (df_tz.index.minute <= end_min)
+                            )
                         )
-                    ) & (
-                        (df_tz.index.hour < end_hour)
-                        | (
-                            (df_tz.index.hour == end_hour)
-                            & (df_tz.index.minute <= end_min)
-                        )
-                    )
+                    else:
+                        extended_mask = pd.Series(True, index=df_tz.index)
 
                     mask |= day_mask & extended_mask
 

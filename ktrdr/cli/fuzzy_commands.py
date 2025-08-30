@@ -76,7 +76,9 @@ def compute_fuzzy(
         indicator = InputValidator.validate_string(
             indicator, min_length=1, max_length=20
         )
-        period = InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        period = int(
+            InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        )
 
         if fuzzy_config:
             config_path = Path(fuzzy_config)
@@ -293,7 +295,9 @@ def visualize_fuzzy(
         indicator = InputValidator.validate_string(
             indicator, min_length=1, max_length=20
         )
-        period = InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        period = int(
+            InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        )
 
         if fuzzy_config:
             config_path = Path(fuzzy_config)
@@ -352,7 +356,7 @@ async def _visualize_fuzzy_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"📈 Generating fuzzy visualization for {symbol}")
@@ -479,7 +483,7 @@ async def _manage_config_async(
             )
             sys.exit(1)
 
-        api_client = get_api_client()
+        get_api_client()
 
         if verbose:
             console.print(f"⚙️  Managing fuzzy config: {action}")

@@ -94,12 +94,12 @@ class ConfigBuilder:
         # Add additional time scale options if provided
         if time_scale_options:
             for key, value in time_scale_options.items():
-                options["timeScale"][key] = value
+                options["timeScale"][key] = value  # type: ignore[index]
 
         # Add additional right price scale options if provided
         if right_price_scale_options:
             for key, value in right_price_scale_options.items():
-                options["rightPriceScale"][key] = value
+                options["rightPriceScale"][key] = value  # type: ignore[index]
 
         return options
 
@@ -241,14 +241,14 @@ class ConfigBuilder:
             options.update(
                 {
                     "color": color,
-                    "lineWidth": line_width,
-                    "lineStyle": kwargs.get(
-                        "line_style", 0
+                    "lineWidth": int(line_width),  # type: ignore[dict-item]
+                    "lineStyle": int(
+                        kwargs.get("line_style", 0)  # type: ignore[dict-item]
                     ),  # 0 = solid, 1 = dotted, 2 = dashed
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": kwargs.get("crosshair_marker_radius", 4),
+                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),  # type: ignore[dict-item]
                 }
             )
         elif series_type == "area":
@@ -259,12 +259,12 @@ class ConfigBuilder:
                     ),  # Add alpha for transparency
                     "bottomColor": kwargs.get("bottom_color", color + "10"),
                     "lineColor": kwargs.get("line_color", color),
-                    "lineWidth": line_width,
-                    "lineStyle": kwargs.get("line_style", 0),
+                    "lineWidth": int(line_width),  # type: ignore[dict-item]
+                    "lineStyle": int(kwargs.get("line_style", 0)),  # type: ignore[dict-item]
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": kwargs.get("crosshair_marker_radius", 4),
+                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),  # type: ignore[dict-item]
                 }
             )
         elif series_type == "histogram":
@@ -311,7 +311,7 @@ class ConfigBuilder:
     def create_multi_panel_config(
         title: str = "Multi-Panel Chart",
         theme: str = "dark",
-        panels: list[dict[str, Any]] = None,
+        panels: Optional[list[dict[str, Any]]] = None,
         has_range_slider: bool = False,
     ) -> dict[str, Any]:
         """

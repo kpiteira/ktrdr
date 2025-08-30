@@ -5,7 +5,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypedDict, Union
 
 import torch
 import torch.nn as nn
@@ -13,6 +13,19 @@ import torch.nn as nn
 from ktrdr import get_logger
 
 logger = get_logger(__name__)
+
+
+class GPUMemorySummary(TypedDict):
+    """Type-safe structure for GPU memory summary."""
+
+    gpu_available: bool
+    num_devices: int
+    device_ids: list[int]
+    devices: dict[int, dict[str, Any]]
+    total_memory_mb: float
+    total_allocated_mb: float
+    total_free_mb: float
+    peak_usage: dict[int, float]
 
 
 @dataclass
@@ -293,7 +306,7 @@ class GPUMemoryManager:
                     total = torch.cuda.get_device_properties(device_id).total_memory / (
                         1024**2
                     )  # MB
-                except:
+                except Exception:
                     total = 0
         elif self.device_type == "mps":
             # MPS memory tracking is limited
@@ -315,7 +328,7 @@ class GPUMemoryManager:
 
         if self.device_type == "cuda":
             try:
-                import pynvml
+                import pynvml  # type: ignore
 
                 if not hasattr(self, "_nvml_initialized"):
                     pynvml.nvmlInit()
@@ -328,7 +341,7 @@ class GPUMemoryManager:
                     temperature = pynvml.nvmlDeviceGetTemperature(
                         handle, pynvml.NVML_TEMPERATURE_GPU
                     )
-                except:
+                except Exception:
                     pass
 
                 # Power usage
@@ -336,7 +349,7 @@ class GPUMemoryManager:
                     power_usage = (
                         pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
                     )  # Convert mW to W
-                except:
+                except Exception:
                     pass
 
             except ImportError:
@@ -519,19 +532,28 @@ class GPUMemoryManager:
 
         return final_batch_size
 
-    def get_memory_summary(self) -> dict[str, Any]:
+    def get_memory_summary(self) -> GPUMemorySummary:
         """Get comprehensive GPU memory summary."""
         if not self.enabled:
-            return {"gpu_available": False}
+            return {
+                "gpu_available": False,
+                "num_devices": 0,
+                "device_ids": [],
+                "devices": {},
+                "total_memory_mb": 0.0,
+                "total_allocated_mb": 0.0,
+                "total_free_mb": 0.0,
+                "peak_usage": {},
+            }
 
-        summary = {
+        summary: GPUMemorySummary = {
             "gpu_available": True,
             "num_devices": self.num_devices,
             "device_ids": self.device_ids,
             "devices": {},
-            "total_memory_mb": 0,
-            "total_allocated_mb": 0,
-            "total_free_mb": 0,
+            "total_memory_mb": 0.0,
+            "total_allocated_mb": 0.0,
+            "total_free_mb": 0.0,
             "peak_usage": self.peak_memory_usage,
         }
 
@@ -606,7 +628,7 @@ class GPUMemoryManager:
         def __init__(self, manager: "GPUMemoryManager", name: str):
             self.manager = manager
             self.name = name
-            self.start_snapshots = {}
+            self.start_snapshots: dict[str, Any] = {}
 
         def __enter__(self):
             if self.manager.enabled:

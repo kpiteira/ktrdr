@@ -150,9 +150,11 @@ class StrategyValidator:
             return result
 
         if is_v2:
-            return self._validate_v2_strategy(config, result)
+            # Type checked - config is StrategyConfigurationV2 when is_v2 is True
+            return self._validate_v2_strategy(config, result)  # type: ignore
         else:
-            return self._validate_v1_strategy(config, result)
+            # Type checked - config is LegacyStrategyConfiguration when is_v2 is False
+            return self._validate_v1_strategy(config, result)  # type: ignore
 
     def _validate_v2_strategy(
         self, config: StrategyConfigurationV2, result: ValidationResult
@@ -295,15 +297,15 @@ class StrategyValidator:
         """Validate model section."""
         result = ValidationResult(is_valid=True)
 
-        for field, expected_type in self.NEURAL_MODEL_REQUIRED.items():
-            if field not in model_config:
+        for field_name, expected_type in self.NEURAL_MODEL_REQUIRED.items():
+            if field_name not in model_config:
                 result.is_valid = False
-                result.missing_sections.append(f"model.{field}")
-                result.errors.append(f"Missing required model field: {field}")
-            elif not isinstance(model_config[field], expected_type):
+                result.missing_sections.append(f"model.{field_name}")
+                result.errors.append(f"Missing required model field: {field_name}")
+            elif not isinstance(model_config[field_name], expected_type):
                 result.is_valid = False
                 result.errors.append(
-                    f"Model field '{field}' must be of type {expected_type.__name__}"
+                    f"Model field '{field_name}' must be of type {expected_type.__name__}"
                 )
 
         # Check for old format
@@ -320,15 +322,15 @@ class StrategyValidator:
         """Validate training section."""
         result = ValidationResult(is_valid=True)
 
-        for field, expected_type in self.TRAINING_REQUIRED.items():
-            if field not in training_config:
+        for field_name, expected_type in self.TRAINING_REQUIRED.items():
+            if field_name not in training_config:
                 result.is_valid = False
-                result.missing_sections.append(f"training.{field}")
-                result.errors.append(f"Missing required training field: {field}")
-            elif not isinstance(training_config[field], expected_type):
+                result.missing_sections.append(f"training.{field_name}")
+                result.errors.append(f"Missing required training field: {field_name}")
+            elif not isinstance(training_config[field_name], expected_type):
                 result.is_valid = False
                 result.errors.append(
-                    f"Training field '{field}' must be of type {expected_type.__name__}"
+                    f"Training field '{field_name}' must be of type {expected_type.__name__}"
                 )
 
         return result
@@ -339,15 +341,16 @@ class StrategyValidator:
         """Validate decisions section."""
         result = ValidationResult(is_valid=True)
 
-        for field, expected_type in self.DECISIONS_REQUIRED.items():
-            if field not in decisions_config:
+        for field_name, expected_type in self.DECISIONS_REQUIRED.items():
+            if field_name not in decisions_config:
                 result.is_valid = False
-                result.missing_sections.append(f"decisions.{field}")
-                result.errors.append(f"Missing required decisions field: {field}")
-            elif not isinstance(decisions_config[field], expected_type):
+                result.missing_sections.append(f"decisions.{field_name}")
+                result.errors.append(f"Missing required decisions field: {field_name}")
+            elif not isinstance(decisions_config[field_name], expected_type):  # type: ignore[arg-type]
                 result.is_valid = False
+                type_name = getattr(expected_type, "__name__", str(expected_type))
                 result.errors.append(
-                    f"Decisions field '{field}' must be of type {expected_type.__name__}"
+                    f"Decisions field '{field_name}' must be of type {type_name}"
                 )
 
         return result
@@ -426,7 +429,10 @@ class StrategyValidator:
                 upgraded_config[section] = deepcopy(defaults)
             else:
                 # Merge missing fields
-                self._merge_defaults(upgraded_config[section], defaults)
+                if isinstance(defaults, dict):
+                    self._merge_defaults(upgraded_config[section], defaults)
+                else:
+                    self._merge_defaults(upgraded_config[section], dict(defaults))  # type: ignore
 
         # Update version if present
         if "version" in upgraded_config:
@@ -468,7 +474,7 @@ class StrategyValidator:
         if "fuzzy_sets" not in config:
             return
 
-        for indicator, sets in config["fuzzy_sets"].items():
+        for _indicator, sets in config["fuzzy_sets"].items():
             if isinstance(sets, dict):
                 for set_name, set_config in sets.items():
                     if isinstance(set_config, dict) and "parameters" in set_config:
