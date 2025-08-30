@@ -53,19 +53,20 @@ class IndicatorEngine:
                 from ..config.models import IndicatorConfig
 
                 # Convert dict configs to IndicatorConfig objects
-                indicator_configs = []
+                indicator_configs: list[IndicatorConfig] = []
                 for ind_dict in indicators:
                     if isinstance(ind_dict, dict):
                         indicator_configs.append(IndicatorConfig(**ind_dict))
                     else:
-                        indicator_configs.append(ind_dict)
+                        # Already an IndicatorConfig object
+                        indicator_configs.append(ind_dict)  # type: ignore[arg-type]
 
                 # Create factory with configs and build all indicators
                 factory = IndicatorFactory(indicator_configs)
                 self.indicators = factory.build()
             elif isinstance(indicators[0], BaseIndicator):
                 # Use provided indicator instances directly
-                self.indicators = indicators
+                self.indicators = indicators  # type: ignore[assignment]
             else:
                 raise ConfigurationError(
                     "Invalid indicator specification type. Must be dict or BaseIndicator instance.",

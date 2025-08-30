@@ -105,34 +105,21 @@ async def check_ib_health(
 
         # Return appropriate HTTP status based on health
         if not health.healthy:
-            return JSONResponse(
-                status_code=503,  # Service Unavailable
-                content=ApiResponse(
-                    success=False,
-                    data=health,
-                    error=ErrorResponse(
-                        code="IB-UNHEALTHY",
-                        message="IB connection is unhealthy",
-                        details={"error_message": health.error_message},
-                    ),
-                ).model_dump(),
+            # Use HTTPException for proper FastAPI error handling
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=503,
+                detail=f"IB connection is unhealthy: {health.error_message}"
             )
 
         return ApiResponse(success=True, data=health, error=None)
 
     except Exception as e:
         logger.error(f"Error checking IB health: {e}")
-        return JSONResponse(
+        from fastapi import HTTPException
+        raise HTTPException(
             status_code=500,
-            content=ApiResponse(
-                success=False,
-                data=None,
-                error=ErrorResponse(
-                    code="IB-HEALTH-ERROR",
-                    message="Failed to check IB health",
-                    details={"error": str(e)},
-                ),
-            ).model_dump(),
+            detail=f"Failed to check IB health: {str(e)}"
         )
 
 
@@ -165,17 +152,10 @@ async def get_ib_resilience_status(
 
     except Exception as e:
         logger.error(f"Error getting IB resilience status: {e}")
-        return JSONResponse(
+        from fastapi import HTTPException
+        raise HTTPException(
             status_code=500,
-            content=ApiResponse(
-                success=False,
-                data=None,
-                error=ErrorResponse(
-                    code="IB-RESILIENCE-ERROR",
-                    message="Failed to get IB resilience status",
-                    details={"error": str(e)},
-                ),
-            ).model_dump(),
+            detail=f"Failed to get IB resilience status: {str(e)}"
         )
 
 

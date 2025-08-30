@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional, cast
 
+import pandas as pd
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -139,7 +140,8 @@ def test_model_signals(
                 console.print(
                     f"[red]❌ Error processing {current_bar.name}: {str(e)}[/red]"
                 )
-                decisions.append(None)
+                # Skip this decision instead of appending None
+                continue
 
         console.print(table)
 

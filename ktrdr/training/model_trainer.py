@@ -109,7 +109,7 @@ class ModelTrainer:
             self.device = torch.device("cpu")
             print("⚠️ Using CPU - GPU acceleration not available")
         self.history: list[TrainingMetrics] = []
-        self.best_model_state = None
+        self.best_model_state: Optional[dict[str, Any]] = None
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
 
@@ -342,7 +342,10 @@ class ModelTrainer:
                     val_outputs = model(X_val)
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = (val_predicted == y_val).float().mean().item()
+                    if y_val is not None:
+                        val_accuracy = (val_predicted == y_val).float().mean().item()
+                    else:
+                        val_accuracy = 0.0
                     val_loss = val_loss.item()
 
                 # Save best model
@@ -385,23 +388,24 @@ class ModelTrainer:
                             analytics_true = y_train[:1000]
                             model.train()
 
-                    # Collect detailed analytics
-                    self.analyzer.collect_epoch_metrics(
-                        epoch=epoch,
-                        model=model,
-                        train_metrics={
-                            "loss": avg_train_loss,
-                            "accuracy": train_accuracy,
-                        },
-                        val_metrics={"loss": val_loss, "accuracy": val_accuracy},
-                        optimizer=optimizer,
-                        y_pred=analytics_predicted,
-                        y_true=analytics_true,
-                        model_outputs=analytics_outputs,
-                        batch_count=len(train_loader),
-                        total_samples=len(X_train),
-                        early_stopping_triggered=False,  # Will be updated if early stopping triggers
-                    )
+                    # Collect detailed analytics (only if we have valid data)
+                    if analytics_true is not None:
+                        self.analyzer.collect_epoch_metrics(
+                            epoch=epoch,
+                            model=model,
+                            train_metrics={
+                                "loss": float(avg_train_loss) if avg_train_loss is not None else 0.0,
+                                "accuracy": float(train_accuracy) if train_accuracy is not None else 0.0,
+                            },
+                            val_metrics={"loss": float(val_loss) if val_loss is not None else 0.0, "accuracy": float(val_accuracy) if val_accuracy is not None else 0.0},
+                            optimizer=optimizer,
+                            y_pred=analytics_predicted,
+                            y_true=analytics_true,
+                            model_outputs=analytics_outputs,
+                            batch_count=len(train_loader),
+                            total_samples=len(X_train),
+                            early_stopping_triggered=False,  # Will be updated if early stopping triggers
+                        )
 
                     # Log any alerts
                     if hasattr(self.analyzer, "alerts") and self.analyzer.alerts:
@@ -416,11 +420,11 @@ class ModelTrainer:
                     # Continue training even if analytics fail
 
             # Learning rate scheduling
-            if scheduler is not None:
+            if scheduler is not None and hasattr(scheduler, 'step'):
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss else avg_train_loss)
                 else:
-                    scheduler.step()
+                    scheduler.step()  # type: ignore[attr-defined]
 
             # Early stopping check
             if early_stopping and early_stopping(metrics):
@@ -533,7 +537,8 @@ class ModelTrainer:
 
         if X_val is not None:
             X_val = X_val.to(self.device)
-            y_val = y_val.to(self.device)
+            if y_val is not None:
+                y_val = y_val.to(self.device)
             if symbol_indices_val is not None:
                 symbol_indices_val = symbol_indices_val.to(self.device)
 
@@ -695,7 +700,10 @@ class ModelTrainer:
 
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = (val_predicted == y_val).float().mean().item()
+                    if y_val is not None:
+                        val_accuracy = (val_predicted == y_val).float().mean().item()
+                    else:
+                        val_accuracy = 0.0
                     val_loss = val_loss.item()
 
                 # Save best model
@@ -717,11 +725,11 @@ class ModelTrainer:
             self.history.append(metrics)
 
             # Update learning rate scheduler
-            if scheduler is not None:
+            if scheduler is not None and hasattr(scheduler, 'step'):
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss is not None else avg_train_loss)
                 else:
-                    scheduler.step()
+                    scheduler.step()  # type: ignore[attr-defined]
 
             # Check early stopping
             if early_stopping and early_stopping(metrics):
@@ -896,18 +904,15 @@ class ModelTrainer:
         }
 
         if val_losses:
-            summary.update(
-                {
-                    "final_val_loss": val_losses[-1],
-                    "final_val_accuracy": val_accuracies[-1],
-                    "best_val_accuracy": self.best_val_accuracy,
-                    "history": {
-                        **summary["history"],
-                        "val_loss": val_losses,
-                        "val_accuracy": val_accuracies,
-                    },
-                }
-            )
+            # Update validation metrics
+            summary["final_val_loss"] = val_losses[-1]
+            summary["final_val_accuracy"] = val_accuracies[-1]
+            summary["best_val_accuracy"] = self.best_val_accuracy
+            
+            # Update history with validation data
+            if isinstance(summary["history"], dict):
+                summary["history"]["val_loss"] = val_losses
+                summary["history"]["val_accuracy"] = val_accuracies
 
         return summary
 

@@ -462,7 +462,8 @@ class OptimizedMultiTimeframeEngine:
 
     def get_performance_metrics(self) -> dict[str, Any]:
         """Get performance metrics and recommendations."""
-        metrics = {
+        from typing import Any
+        metrics: dict[str, Any] = {
             "optimizations_enabled": {
                 "chunking": self.enable_chunking,
                 "parallel": self.enable_parallel,
