@@ -122,12 +122,12 @@ class IbDataAdapter(ExternalDataProvider):
             raise DataProviderConnectionError(
 
                 f"Host service request failed: {str(e)}", provider="IB"
-            )
+            ) from e
         except Exception as e:
             raise DataProviderError(
 
                 f"Host service communication error: {str(e)}", provider="IB"
-            )
+            ) from e
 
     async def _call_host_service_get(
         self, endpoint: str, params: Optional[dict[str, Any]] = None
@@ -147,12 +147,12 @@ class IbDataAdapter(ExternalDataProvider):
             raise DataProviderConnectionError(
 
                 f"Host service request failed: {str(e)}", provider="IB"
-            )
+            ) from e
         except Exception as e:
             raise DataProviderError(
 
                 f"Host service communication error: {str(e)}", provider="IB"
-            )
+            ) from e
 
     async def validate_and_get_metadata(self, symbol: str, timeframes: list[str]):
         """

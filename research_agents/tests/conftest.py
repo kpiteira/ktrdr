@@ -11,7 +11,6 @@ import pytest_asyncio
 
 # Import test dependencies
 try:
-    import asyncpg
     from fastapi.testclient import TestClient
     from httpx import AsyncClient
 except ImportError:

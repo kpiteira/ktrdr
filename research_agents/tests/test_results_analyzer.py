@@ -909,7 +909,7 @@ class TestErrorHandlingAndEdgeCases:
         invalid_training = None
         invalid_backtesting = {"total_return": "invalid"}  # Wrong type
 
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, TypeError)):
             await results_analyzer.analyze_experiment_results(
                 experiment_id, invalid_training, invalid_backtesting
             )

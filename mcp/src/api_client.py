@@ -76,7 +76,7 @@ class KTRDRAPIClient:
             logger.error("HTTP error", status=e.response.status_code, url=url)
             try:
                 error_data = e.response.json()
-            except:
+            except Exception:
                 error_data = {"detail": e.response.text}
 
             raise KTRDRAPIError(
@@ -84,7 +84,7 @@ class KTRDRAPIClient:
                 f"HTTP {e.response.status_code}: {error_data.get('detail', 'Unknown error')}",
                 status_code=e.response.status_code,
                 details=error_data,
-            )
+            ) from e
         except httpx.RequestError as e:
             logger.error("Request error", error=str(e), url=url)
             raise KTRDRAPIError(f"Request failed: {str(e)}") from e

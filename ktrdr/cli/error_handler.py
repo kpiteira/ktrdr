@@ -127,7 +127,6 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
         from ktrdr.data.external_data_interface import (
             DataProviderConfigError,
             DataProviderConnectionError,
-            DataProviderRateLimitError,
         )
 
         if isinstance(e, (DataProviderConnectionError, DataProviderConfigError)):

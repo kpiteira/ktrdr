@@ -114,12 +114,12 @@ class TrainingAdapter:
             raise TrainingProviderConnectionError(
 
                 f"Host service request failed: {str(e)}", provider="Training"
-            )
+            ) from e
         except Exception as e:
             raise TrainingProviderError(
 
                 f"Host service communication error: {str(e)}", provider="Training"
-            )
+            ) from e
 
     async def _call_host_service_get(
         self, endpoint: str, params: Optional[dict[str, Any]] = None
@@ -139,12 +139,12 @@ class TrainingAdapter:
             raise TrainingProviderConnectionError(
 
                 f"Host service request failed: {str(e)}", provider="Training"
-            )
+            ) from e
         except Exception as e:
             raise TrainingProviderError(
 
                 f"Host service communication error: {str(e)}", provider="Training"
-            )
+            ) from e
 
     async def train_multi_symbol_strategy(
         self,
@@ -256,7 +256,7 @@ class TrainingAdapter:
             raise TrainingProviderError(
 
                 f"Training failed: {str(e)}", provider="Training"
-            )
+            ) from e
 
     async def get_training_status(self, session_id: str) -> dict[str, Any]:
         """Get status of a training session (host service only)."""

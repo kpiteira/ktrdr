@@ -93,7 +93,7 @@ class ConfigLoader:
                 message=f"Invalid configuration path: {e}",
                 error_code="CONF-InvalidPath",
                 details={"path": str(config_path), "error": str(e)},
-            )
+            ) from e
 
         # Check if file exists
         if not config_path.exists():
@@ -124,7 +124,7 @@ class ConfigLoader:
                     message=f"Configuration validation failed: {e}",
                     error_code="CONF-ValidationFailed",
                     details={"validation_errors": e.errors()},
-                )
+                ) from e
 
         except yaml.YAMLError as e:
             raise InvalidConfigurationError(
@@ -132,7 +132,7 @@ class ConfigLoader:
                 message=f"Invalid YAML format in {config_path}: {e}",
                 error_code="CONF-InvalidYaml",
                 details={"yaml_error": str(e)},
-            )
+            ) from e
 
     @fallback(strategy=FallbackStrategy.DEFAULT_VALUE, logger=logger)
     @log_entry_exit(logger=logger, log_result=True)
@@ -171,7 +171,7 @@ class ConfigLoader:
                 message=f"Invalid environment variable name: {e}",
                 error_code="CONF-InvalidEnvVar",
                 details={"env_var": env_var, "error": str(e)},
-            )
+            ) from e
 
         config_path = os.environ.get(env_var)
 
@@ -241,7 +241,7 @@ class ConfigLoader:
                 message=f"Invalid YAML format in fuzzy configuration: {e}",
                 error_code="CONF-InvalidYaml",
                 details={"yaml_error": str(e)},
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Failed to load fuzzy configuration: {e}")
             raise ConfigurationError(
@@ -249,7 +249,7 @@ class ConfigLoader:
                 message=f"Failed to load fuzzy configuration: {e}",
                 error_code="CONF-FuzzyLoadFailed",
                 details={"error": str(e)},
-            )
+            ) from e
 
     @log_entry_exit(logger=logger)
     def load_multi_timeframe_indicators(
@@ -290,7 +290,7 @@ class ConfigLoader:
                 message=f"Failed to load multi-timeframe indicator configuration: {e}",
                 error_code="CONF-MultiTimeframeLoadFailed",
                 details={"error": str(e), "path": str(config_path)},
-            )
+            ) from e
 
     @log_entry_exit(logger=logger)
     def validate_multi_timeframe_config(

@@ -6,7 +6,6 @@ time series data to compute fuzzy membership values in bulk operations.
 """
 
 import time
-from functools import cache
 from typing import Optional
 
 import numpy as np
@@ -296,7 +295,6 @@ class BatchFuzzyCalculator:
         values_hash = hash(tuple(series.values))
         return f"{indicator_name}:{values_hash}:{len(series)}"
 
-    @cache
     def _get_cached_result(self, cache_key: str) -> Optional[dict[str, pd.Series]]:
         """
         Get cached result if available.

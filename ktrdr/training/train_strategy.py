@@ -340,7 +340,7 @@ class StrategyTrainer:
         if isinstance(indicators, dict):
             # Multi-timeframe case: check each timeframe
             total_nan_count = 0
-            for tf, tf_indicators in indicators.items():
+            for _, tf_indicators in indicators.items():
                 tf_nan_count = tf_indicators.isna().sum().sum()
                 total_nan_count += tf_nan_count
             indicators_nan_count = total_nan_count
@@ -367,7 +367,7 @@ class StrategyTrainer:
         if isinstance(fuzzy_data, dict):
             # Multi-timeframe case: check each timeframe
             total_fuzzy_nan_count = 0
-            for tf, tf_fuzzy in fuzzy_data.items():
+            for _, tf_fuzzy in fuzzy_data.items():
                 tf_fuzzy_nan_count = tf_fuzzy.isna().sum().sum()
                 total_fuzzy_nan_count += tf_fuzzy_nan_count
             fuzzy_nan_count = total_fuzzy_nan_count

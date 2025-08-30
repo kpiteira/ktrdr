@@ -1576,7 +1576,7 @@ class DataManager(ServiceOrchestrator):
                     message=f"Symbol validation failed: {e}",
                     error_code="DATA-SymbolValidationFailed",
                     details={"symbol": symbol, "timeframe": timeframe, "error": str(e)},
-                )
+                ) from e
         else:
             logger.warning("External data provider not available for symbol validation")
 

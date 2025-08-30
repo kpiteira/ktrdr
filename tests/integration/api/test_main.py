@@ -48,8 +48,10 @@ class TestMainApplication:
         for ErrorType, status_code, error_code, message in error_types:
             # Create a test route that raises the specific error
             @self.app.get(f"/test-{error_code.lower()}")
-            async def test_error_route():
-                raise ErrorType(message=message, error_code=error_code)
+            async def test_error_route(
+                _error_type=ErrorType, _message=message, _error_code=error_code
+            ):
+                raise _error_type(message=_message, error_code=_error_code)
 
             # Test the response
             response = self.client.get(f"/test-{error_code.lower()}")

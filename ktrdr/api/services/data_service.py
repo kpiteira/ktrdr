@@ -481,48 +481,48 @@ class DataService(BaseService):
                     # Expected for cancellation - ignore silently
                     pass
 
-            # Get the result
-            try:
-                # Check if cancellation was completed
-                if cancellation_event.is_set():
-                    logger.info(f"Data loading operation was cancelled: {operation_id}")
-                    raise asyncio.CancelledError("Operation was cancelled")
+        # Process the result after cleanup
+        try:
+            # Check if cancellation was completed
+            if cancellation_event.is_set():
+                logger.info(f"Data loading operation was cancelled: {operation_id}")
+                raise asyncio.CancelledError("Operation was cancelled")
 
-                # Get result from the completed future
-                completed_task = next(iter(done))
-                if asyncio.isfuture(completed_task) or asyncio.iscoroutine(
-                    completed_task
-                ):
-                    # This was the data loading future
-                    try:
-                        result = completed_task.result()
+            # Get result from the completed future
+            completed_task = next(iter(done))
+            if asyncio.isfuture(completed_task) or asyncio.iscoroutine(
+                completed_task
+            ):
+                # This was the data loading future
+                try:
+                    result = completed_task.result()
 
-                        # Check both error key and failed status
-                        if "error" in result or result.get("status") == "failed":
-                            error_msg = result.get("error", "Unknown error")
-                            raise DataError(
-                                message=f"Data loading failed: {error_msg}",
-                                error_code="DATA-LoadError",
-                                details={
-                                    "operation_id": operation_id,
-                                    "symbol": symbol,
-                                },
-                            )
-                        return result
-                    except concurrent.futures.CancelledError:
-                        # Future was cancelled - this is expected for cancellation
-                        logger.info(
-                            f"Data loading future was cancelled: {operation_id}"
+                    # Check both error key and failed status
+                    if "error" in result or result.get("status") == "failed":
+                        error_msg = result.get("error", "Unknown error")
+                        raise DataError(
+                            message=f"Data loading failed: {error_msg}",
+                            error_code="DATA-LoadError",
+                            details={
+                                "operation_id": operation_id,
+                                "symbol": symbol,
+                            },
                         )
-                        raise asyncio.CancelledError("Operation was cancelled") from None
-                else:
-                    # This was the cancellation task completing
-                    logger.info(f"Data loading operation was cancelled: {operation_id}")
-                    raise asyncio.CancelledError("Operation was cancelled")
+                    return result
+                except concurrent.futures.CancelledError:
+                    # Future was cancelled - this is expected for cancellation
+                    logger.info(
+                        f"Data loading future was cancelled: {operation_id}"
+                    )
+                    raise asyncio.CancelledError("Operation was cancelled") from None
+            else:
+                # This was the cancellation task completing
+                logger.info(f"Data loading operation was cancelled: {operation_id}")
+                raise asyncio.CancelledError("Operation was cancelled")
 
-            except concurrent.futures.CancelledError:
-                logger.info(f"Data loading future was cancelled: {operation_id}")
-                raise asyncio.CancelledError("Operation was cancelled") from None
+        except concurrent.futures.CancelledError:
+            logger.info(f"Data loading future was cancelled: {operation_id}")
+            raise asyncio.CancelledError("Operation was cancelled") from None
 
     def _convert_df_to_api_format(
         self,

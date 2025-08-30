@@ -112,7 +112,7 @@ def fallback(
                         raise FallbackNotAvailableError(
 
                             f"Fallback function strategy specified for {func.__name__}, but no function provided"
-                        )
+                        ) from None
                     return fallback_function(*args, **kwargs)
 
                 elif strategy == FallbackStrategy.LAST_KNOWN_GOOD:

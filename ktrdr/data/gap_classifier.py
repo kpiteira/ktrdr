@@ -18,7 +18,6 @@ from typing import Optional
 
 import pandas as pd
 
-from ktrdr.data.local_data_loader import TimestampManager
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
@@ -493,10 +492,10 @@ class GapClassifier:
         h = (19 * a + b - d - g + 15) % 30
         i = c // 4
         k = c % 4
-        l = (32 + 2 * e + 2 * i - h - k) % 7
-        m = (a + 11 * h + 22 * l) // 451
-        n = (h + l - 7 * m + 114) // 31
-        p = (h + l - 7 * m + 114) % 31
+        leap = (32 + 2 * e + 2 * i - h - k) % 7
+        m = (a + 11 * h + 22 * leap) // 451
+        n = (h + leap - 7 * m + 114) // 31
+        p = (h + leap - 7 * m + 114) % 31
 
         return date(year, n, p + 1)
 

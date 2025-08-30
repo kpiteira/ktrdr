@@ -82,7 +82,7 @@ class LocalDataLoader:
                 message=f"Invalid file format: {e.message}",
                 error_code="DATA-InvalidFormat",
                 details={"format": default_format},
-            )
+            ) from e
 
         if data_dir is None:
             # Load from configuration
@@ -233,7 +233,7 @@ class LocalDataLoader:
                     "start_date": str(start_date) if start_date else None,
                     "end_date": str(end_date) if end_date else None,
                 },
-            )
+            ) from e
         except ValueError as e:
             # Handle date parsing errors
             logger.error(f"Date parsing error: {e}")
@@ -245,7 +245,7 @@ class LocalDataLoader:
                     "start_date": str(start_date) if start_date else None,
                     "end_date": str(end_date) if end_date else None,
                 },
-            )
+            ) from e
 
         file_path = self._build_file_path(symbol, timeframe, file_format)
         logger.info(f"Loading data for {symbol} ({timeframe}) from {file_path}")
@@ -361,7 +361,7 @@ class LocalDataLoader:
                 message=f"Empty data file: {file_path}",
                 error_code="DATA-EmptyFile",
                 details={"file_path": str(file_path)},
-            )
+            ) from None
         except pd.errors.ParserError as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(

@@ -135,7 +135,7 @@ def validate_indicator_against_reference(
             message=f"Error computing indicator: {str(e)}",
             error_code="DATA-ComputationError",
             details={"indicator": indicator.name},
-        )
+        ) from e
 
     # Prepare result variables
     passed = True

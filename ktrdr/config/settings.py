@@ -11,6 +11,12 @@ from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 
 from .. import metadata
+from .host_services import (
+    ApiServiceSettings,
+    TrainingHostServiceSettings,
+    get_api_service_settings,
+    get_training_host_service_settings,
+)
 from .ib_config import IbConfig, get_ib_config
 
 
@@ -43,13 +49,6 @@ class LoggingSettings(BaseSettings):
     model_config = ConfigDict(env_prefix="KTRDR_LOGGING_")
 
 
-# Import the unified host service configuration system
-from .host_services import (
-    ApiServiceSettings,
-    TrainingHostServiceSettings,
-    get_api_service_settings,
-    get_training_host_service_settings,
-)
 
 
 # Cache settings to avoid repeated disk/env access
@@ -95,12 +94,10 @@ __all__ = [
     "LoggingSettings",
     "TrainingHostServiceSettings",
     "ApiServiceSettings",
-    "IbHostServiceSettings",
     "get_api_settings",
     "get_logging_settings",
     "get_training_host_service_settings",
     "get_api_service_settings",
-    "get_ib_host_service_settings",
     "clear_settings_cache",
     # Compatibility aliases
     "TrainingHostSettings",

@@ -397,7 +397,7 @@ class ResearchAgentMVP(BaseResearchAgent):
 
             # Process results
             successful_experiments = 0
-            for exp_id, result in results:
+            for _, result in results:
                 if isinstance(result, Exception):
                     logger.error("Error occurred")
                 elif result is not None:
