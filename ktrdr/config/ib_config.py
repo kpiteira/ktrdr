@@ -40,7 +40,7 @@ class IbConfig:
     )
 
     # Data fetching settings
-    chunk_days: dict[str, int] = field(
+    chunk_days: dict[str, float] = field(
         default_factory=lambda: {
             "1 secs": 0.02,  # 30 minutes
             "5 secs": 0.08,  # 2 hours

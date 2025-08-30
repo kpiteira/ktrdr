@@ -135,19 +135,19 @@ class ModelMetadata:
     training_duration_minutes: Optional[float] = None
 
     # Training data information
-    training_data: TrainingDataInfo = None
+    training_data: Optional[TrainingDataInfo] = None
 
     # Model capabilities
-    deployment_capabilities: DeploymentCapabilities = None
+    deployment_capabilities: Optional[DeploymentCapabilities] = None
 
     # Architecture details
-    feature_architecture: FeatureArchitecture = None
+    feature_architecture: Optional[FeatureArchitecture] = None
 
     # Performance metrics
-    performance_metrics: PerformanceMetrics = None
+    performance_metrics: Optional[PerformanceMetrics] = None
 
     # Training details
-    training_config: TrainingConfiguration = None
+    training_config: Optional[TrainingConfiguration] = None
 
     # Compatibility information
     compatibility: ModelCompatibility = field(default_factory=ModelCompatibility)
@@ -268,7 +268,7 @@ class ModelMetadata:
         return cls.from_dict(data)
 
     def is_compatible_with(
-        self, symbol: str, timeframe: str, asset_class: str = None
+        self, symbol: str, timeframe: str, asset_class: Optional[str] = None
     ) -> bool:
         """Check if model is compatible with trading target."""
 
@@ -386,7 +386,7 @@ class ModelMetadataManager:
         return metadata
 
     def find_compatible_models(
-        self, symbol: str, timeframe: str, asset_class: str = None
+        self, symbol: str, timeframe: str, asset_class: Optional[str] = None
     ) -> list[tuple[str, ModelMetadata]]:
         """Find models compatible with trading target."""
 

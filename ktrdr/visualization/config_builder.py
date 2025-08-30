@@ -311,7 +311,7 @@ class ConfigBuilder:
     def create_multi_panel_config(
         title: str = "Multi-Panel Chart",
         theme: str = "dark",
-        panels: list[dict[str, Any]] = None,
+        panels: Optional[list[dict[str, Any]]] = None,
         has_range_slider: bool = False,
     ) -> dict[str, Any]:
         """
