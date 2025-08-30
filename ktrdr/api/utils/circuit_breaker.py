@@ -40,8 +40,8 @@ class CircuitBreaker:
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0
-        self.last_failure_time = 0
-        self.next_attempt_time = 0
+        self.last_failure_time: float = 0.0
+        self.next_attempt_time: float = 0.0
 
         logger.info(f"Circuit breaker '{name}' initialized: {self.config}")
 

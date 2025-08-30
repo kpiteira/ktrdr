@@ -6,6 +6,7 @@ templates used in the visualization module.
 """
 
 import json
+from typing import Optional
 
 # Setup logging
 import logging
@@ -330,8 +331,8 @@ class TemplateManager:
     @staticmethod
     def render_chart_html(
         title: str = "KTRDR Chart",
-        chart_configs: list[dict] = None,
-        chart_data: dict = None,
+        chart_configs: Optional[list[dict]] = None,
+        chart_data: Optional[dict] = None,
         theme: str = "dark",
         has_range_slider: bool = False,
     ) -> str:

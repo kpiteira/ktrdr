@@ -7,8 +7,8 @@ overrides and environment variable support.
 
 from functools import lru_cache
 
-from pydantic import ConfigDict, Field
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .. import metadata
 from .host_services import (
@@ -33,7 +33,7 @@ class APISettings(BaseSettings):
     api_prefix: str = Field(default=metadata.API_PREFIX)
     cors_origins: list = Field(default=metadata.get("api.cors_origins", ["*"]))
 
-    model_config = ConfigDict(env_prefix="KTRDR_API_")
+    model_config = SettingsConfigDict(env_prefix="KTRDR_API_")
 
 
 class LoggingSettings(BaseSettings):
@@ -46,7 +46,7 @@ class LoggingSettings(BaseSettings):
         )
     )
 
-    model_config = ConfigDict(env_prefix="KTRDR_LOGGING_")
+    model_config = SettingsConfigDict(env_prefix="KTRDR_LOGGING_")
 
 
 # Cache settings to avoid repeated disk/env access

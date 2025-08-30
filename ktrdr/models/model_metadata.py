@@ -429,7 +429,7 @@ class ModelMetadataManager:
         return compatible_models
 
     def get_model_rankings(
-        self, asset_class: str = None
+        self, asset_class: Optional[str] = None
     ) -> dict[str, list[dict[str, Any]]]:
         """Get model rankings by scope and performance."""
 
