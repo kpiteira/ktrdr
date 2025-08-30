@@ -338,8 +338,22 @@ class DataManager(ServiceOrchestrator):
         """
         # Initialize clean ProgressManager (no legacy DataLoadingProgress)
         total_steps = 5 if mode == "local" else 10  # More steps for IB-enabled modes
+        
+        # Create enhanced context for better progress descriptions
+        operation_context = {
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'mode': mode,
+            'start_date': start_date.isoformat() if start_date else None,
+            'end_date': end_date.isoformat() if end_date else None,
+        }
+        
         progress_manager = ProgressManager(progress_callback)
-        progress_manager.start_operation(total_steps, f"load_data_{symbol}_{timeframe}")
+        progress_manager.start_operation(
+            total_steps, 
+            f"load_data_{symbol}_{timeframe}",
+            operation_context=operation_context
+        )
 
         # Set cancellation token if provided
         if cancellation_token:
@@ -350,7 +364,10 @@ class DataManager(ServiceOrchestrator):
 
         if mode == "local":
             # Local-only mode: use basic loader without IB integration
-            progress_manager.start_step("Loading local data", step_number=1)
+            progress_manager.update_progress_with_context(
+                1, "Loading local data from cache", 
+                current_item_detail=f"Reading {symbol} {timeframe} from local storage"
+            )
 
             df = self.data_loader.load(symbol, timeframe, start_date, end_date)
         else:
@@ -375,9 +392,10 @@ class DataManager(ServiceOrchestrator):
             )
 
         if validate:
-            # Update progress for validation step
-            progress_manager.start_step(
-                "Validating data quality", step_number=total_steps
+            # Update progress for validation step with context
+            progress_manager.update_progress_with_context(
+                total_steps, "Validating data quality",
+                current_item_detail=f"Checking {len(df)} data points for completeness and accuracy"
             )
 
             # Use the unified data quality validator
@@ -1506,8 +1524,9 @@ class DataManager(ServiceOrchestrator):
 
         # Step 1: FAIL FAST - Validate symbol and get metadata FIRST (2%)
         if progress_manager:
-            progress_manager.start_step(
-                "Validate symbol with IB", step_number=1, step_percentage=0.0
+            progress_manager.update_progress_with_context(
+                1, "Validating symbol with IB Gateway",
+                current_item_detail=f"Checking if {symbol} is valid and tradeable"
             )
 
         logger.info("📋 STEP 0A: Symbol validation and metadata lookup")

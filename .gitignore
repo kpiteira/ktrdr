@@ -110,3 +110,4 @@ ib-host-service/data/symbol_discovery_cache.json
 .claude/
 .serena/
 *.iws
+.agent-os/

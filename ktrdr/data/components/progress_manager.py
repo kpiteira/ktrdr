@@ -6,10 +6,12 @@ into a focused component that enables async architecture and future WebSocket st
 """
 
 import logging
+import pickle
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,149 @@ class ProgressState:
     items_processed: int = 0
     step_items_processed: int = 0  # Items processed in current step
 
+    # Context information for enhanced progress descriptions
+    operation_context: Optional[Dict[str, Any]] = None
+    current_item_detail: Optional[str] = None
+
+    # Enhanced time estimation
+    estimated_completion: Optional[datetime] = None
+    overall_percentage: float = 0.0
+
+
+class TimeEstimationEngine:
+    """
+    Learning-based time estimation engine for progress operations.
+
+    Records completion times for different operation types and contexts,
+    then uses this historical data to provide increasingly accurate estimates.
+    """
+
+    def __init__(self, cache_file: Optional[Path] = None):
+        """Initialize time estimation engine with optional persistent cache."""
+        self.cache_file = cache_file
+        self.operation_history: Dict[str, List[Dict]] = {}
+        self._load_cache()
+
+    def _create_operation_key(
+        self, operation_type: str, context: Dict[str, Any]
+    ) -> str:
+        """Create a unique key for operation type and context."""
+        # Create key based on operation type and relevant context
+        key_parts = [operation_type]
+
+        # Add relevant context parts for better estimation
+        if "symbol" in context:
+            key_parts.append(f"symbol:{context['symbol']}")
+        if "timeframe" in context:
+            key_parts.append(f"tf:{context['timeframe']}")
+        if "mode" in context:
+            key_parts.append(f"mode:{context['mode']}")
+        if "data_points" in context:
+            # Group by data size ranges for better estimation
+            size = int(context["data_points"])
+            if size < 1000:
+                key_parts.append("size:small")
+            elif size < 10000:
+                key_parts.append("size:medium")
+            else:
+                key_parts.append("size:large")
+
+        return "|".join(key_parts)
+
+    def record_operation_completion(
+        self, operation_type: str, context: Dict[str, Any], duration_seconds: float
+    ) -> None:
+        """Record completed operation for future estimation."""
+        if duration_seconds <= 0:
+            return  # Invalid duration
+
+        key = self._create_operation_key(operation_type, context)
+
+        if key not in self.operation_history:
+            self.operation_history[key] = []
+
+        self.operation_history[key].append(
+            {
+                "duration": duration_seconds,
+                "timestamp": datetime.now(),
+                "context": context.copy(),
+            }
+        )
+
+        # Keep only recent history (last 10 operations)
+        self.operation_history[key] = self.operation_history[key][-10:]
+
+        # Save to cache periodically
+        self._save_cache()
+
+        logger.debug(f"Recorded operation completion: {key} - {duration_seconds:.2f}s")
+
+    def estimate_duration(
+        self, operation_type: str, context: Dict[str, Any]
+    ) -> Optional[float]:
+        """Estimate operation duration based on historical data."""
+        key = self._create_operation_key(operation_type, context)
+
+        if key not in self.operation_history or len(self.operation_history[key]) < 2:
+            return None  # Not enough data for estimation
+
+        # Use weighted average with more weight on recent operations
+        history = self.operation_history[key]
+        total_weight = 0.0
+        weighted_sum = 0.0
+
+        for i, record in enumerate(history):
+            # More recent = higher weight, also consider recency by timestamp
+            age_weight = i + 1
+            time_weight = 1.0
+
+            # Reduce weight for very old records (older than 30 days)
+            age_days = (datetime.now() - record["timestamp"]).days
+            if age_days > 30:
+                time_weight = 0.5
+            elif age_days > 7:
+                time_weight = 0.8
+
+            combined_weight = age_weight * time_weight
+            weighted_sum += record["duration"] * combined_weight
+            total_weight += combined_weight
+
+        estimated = weighted_sum / total_weight if total_weight > 0 else None
+
+        if estimated:
+            logger.debug(
+                f"Estimated duration for {key}: {estimated:.2f}s (based on {len(history)} records)"
+            )
+
+        return estimated
+
+    def _load_cache(self) -> None:
+        """Load operation history from cache file."""
+        if not self.cache_file or not self.cache_file.exists():
+            return
+
+        try:
+            with open(self.cache_file, "rb") as f:
+                self.operation_history = pickle.load(f)
+            logger.debug(
+                f"Loaded time estimation cache with {len(self.operation_history)} operation types"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load time estimation cache: {e}")
+            self.operation_history = {}
+
+    def _save_cache(self) -> None:
+        """Save operation history to cache file."""
+        if not self.cache_file:
+            return
+
+        try:
+            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.cache_file, "wb") as f:
+                pickle.dump(self.operation_history, f)
+        except Exception as e:
+            logger.warning(f"Failed to save time estimation cache: {e}")
+
 
 class ProgressManager:
     """
@@ -66,13 +211,20 @@ class ProgressManager:
     - Includes comprehensive logging
     """
 
-    def __init__(self, callback_func: Optional[Callable[[Any], None]] = None):
+    def __init__(
+        self,
+        callback_func: Optional[Callable[[Any], None]] = None,
+        enable_time_estimation: bool = True,
+        time_estimation_cache_file: Optional[Path] = None,
+    ):
         """
-        Initialize ProgressManager with optional callback.
+        Initialize ProgressManager with enhanced capabilities.
 
         Args:
             callback_func: Optional callback function with signature (progress_state: ProgressState)
                           Receives complete progress information including steps, items, and timing
+            enable_time_estimation: Enable learning-based time estimation
+            time_estimation_cache_file: Optional file path for persisting time estimation data
         """
         self.callback = callback_func
         self._current_state: Optional[ProgressState] = None
@@ -80,8 +232,24 @@ class ProgressManager:
         self._cancellation_token: Optional[Any] = None
         self._operation_start_time: Optional[datetime] = None
 
+        # Enhanced capabilities
+        self.enable_time_estimation = enable_time_estimation
+        self._time_estimator: Optional[TimeEstimationEngine] = None
+        self._current_operation_type: Optional[str] = None
+        self._current_context: Dict[str, Any] = {}
+
+        if enable_time_estimation:
+            # Create time estimation cache in data directory if not specified
+            if time_estimation_cache_file is None:
+                cache_dir = Path.home() / ".ktrdr" / "cache"
+                time_estimation_cache_file = cache_dir / "progress_time_estimation.pkl"
+
+            self._time_estimator = TimeEstimationEngine(time_estimation_cache_file)
+
         logger.debug(
-            "ProgressManager initialized with callback: %s", callback_func is not None
+            "ProgressManager initialized with callback: %s, time_estimation: %s",
+            callback_func is not None,
+            enable_time_estimation,
         )
 
     def start_operation(
@@ -89,23 +257,44 @@ class ProgressManager:
         total_steps: int,
         operation_name: str,
         expected_items: Optional[int] = None,
+        operation_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Begin tracking new operation.
+        Begin tracking new operation with enhanced contextual information.
 
         Args:
             total_steps: Total number of steps in the operation
             operation_name: Human-readable name for the operation
             expected_items: Expected total number of items to process (bars, data points, etc.)
+            operation_context: Context information for enhanced progress descriptions and time estimation
+                             (e.g., {'symbol': 'AAPL', 'timeframe': '1d', 'mode': 'backfill'})
         """
         with self._lock:
             self._operation_start_time = datetime.now()
+            self._current_operation_type = operation_name
+            self._current_context = operation_context or {}
+
+            # Estimate completion time if time estimation is enabled
+            estimated_completion = None
+            if self.enable_time_estimation and self._time_estimator:
+                estimated_duration = self._time_estimator.estimate_duration(
+                    operation_name, self._current_context
+                )
+                if estimated_duration:
+                    estimated_completion = self._operation_start_time + timedelta(
+                        seconds=estimated_duration
+                    )
+
+            # Create enhanced start message with context
+            start_message = self._create_enhanced_message(
+                f"Starting {operation_name}", self._current_context
+            )
 
             self._current_state = ProgressState(
                 operation_id=operation_name,
                 current_step=0,
                 total_steps=total_steps,
-                message=f"Starting {operation_name}",
+                message=start_message,
                 percentage=0.0,
                 start_time=self._operation_start_time,
                 steps_completed=0,
@@ -113,10 +302,16 @@ class ProgressManager:
                 expected_items=expected_items,
                 items_processed=0,
                 step_items_processed=0,
+                operation_context=self._current_context,
+                estimated_completion=estimated_completion,
+                overall_percentage=0.0,
             )
 
             logger.debug(
-                "Started operation '%s' with %d steps", operation_name, total_steps
+                "Started operation '%s' with %d steps and context: %s",
+                operation_name,
+                total_steps,
+                self._current_context,
             )
 
             # Trigger initial callback
@@ -317,23 +512,46 @@ class ProgressManager:
             self._trigger_callback()
 
     def complete_operation(self) -> None:
-        """Mark operation complete and cleanup."""
+        """Mark operation complete and cleanup with time estimation recording."""
         with self._lock:
             if self._current_state is None:
                 logger.warning("complete_operation called without active operation")
                 return
 
+            # Record operation completion for time estimation
+            if (
+                self.enable_time_estimation
+                and self._time_estimator
+                and self._operation_start_time
+                and self._current_operation_type
+            ):
+
+                duration = (datetime.now() - self._operation_start_time).total_seconds()
+                self._time_estimator.record_operation_completion(
+                    self._current_operation_type, self._current_context, duration
+                )
+
             self._current_state.current_step = self._current_state.total_steps
             self._current_state.steps_completed = self._current_state.total_steps
             self._current_state.percentage = 100.0
-            self._current_state.message = (
-                f"Operation '{self._current_state.operation_id}' completed successfully"
+            self._current_state.overall_percentage = 100.0
+
+            # Create enhanced completion message
+            completion_message = self._create_enhanced_message(
+                f"Operation '{self._current_state.operation_id}' completed successfully",
+                {},
             )
+            self._current_state.message = completion_message
             self._current_state.estimated_remaining = timedelta(0)
 
             logger.info(
-                "Operation '%s' completed successfully",
+                "Operation '%s' completed successfully in %.2fs",
                 self._current_state.operation_id,
+                (
+                    (datetime.now() - self._operation_start_time).total_seconds()
+                    if self._operation_start_time
+                    else 0
+                ),
             )
             self._trigger_callback()
 
@@ -394,6 +612,10 @@ class ProgressManager:
                 expected_items=self._current_state.expected_items,
                 items_processed=self._current_state.items_processed,
                 step_items_processed=self._current_state.step_items_processed,
+                operation_context=self._current_state.operation_context,
+                current_item_detail=self._current_state.current_item_detail,
+                estimated_completion=self._current_state.estimated_completion,
+                overall_percentage=self._current_state.overall_percentage,
             )
 
     def set_cancellation_token(self, token: Any) -> None:
@@ -458,3 +680,106 @@ class ProgressManager:
         except (ZeroDivisionError, OverflowError) as e:
             logger.debug("Time estimation failed: %s", e)
             self._current_state.estimated_remaining = None
+
+    def _create_enhanced_message(
+        self,
+        base_message: str,
+        context: Optional[Dict[str, Any]] = None,
+        current_item_detail: Optional[str] = None,
+    ) -> str:
+        """
+        Create enhanced progress message with contextual information.
+
+        Args:
+            base_message: Base progress message
+            context: Optional context information
+            current_item_detail: Optional detail about current item being processed
+
+        Returns:
+            Enhanced message with context information
+        """
+        enhanced_context = {**self._current_context, **(context or {})}
+        message_parts = [base_message]
+
+        # Add symbol and timeframe if available
+        if "symbol" in enhanced_context and "timeframe" in enhanced_context:
+            context_info = (
+                f"({enhanced_context['symbol']} {enhanced_context['timeframe']}"
+            )
+
+            # Add mode if available
+            if "mode" in enhanced_context:
+                context_info += f", {enhanced_context['mode']} mode"
+
+            context_info += ")"
+            message_parts.append(context_info)
+
+        # Add current item detail if provided
+        if current_item_detail:
+            message_parts.append(f"- {current_item_detail}")
+
+        # Add time estimate if available and significant
+        if (
+            self.enable_time_estimation
+            and self._current_state
+            and self._current_state.estimated_remaining
+            and self._current_state.estimated_remaining.total_seconds() > 5
+        ):
+
+            remaining = self._current_state.estimated_remaining
+            time_str = self._format_time_remaining(remaining)
+            message_parts.append(f"(Est: {time_str})")
+
+        return " ".join(message_parts)
+
+    def _format_time_remaining(self, remaining: timedelta) -> str:
+        """Format remaining time in user-friendly format."""
+        total_seconds = int(remaining.total_seconds())
+        if total_seconds < 60:
+            return f"{total_seconds}s remaining"
+        elif total_seconds < 3600:
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+            if seconds > 0:
+                return f"{minutes}m {seconds}s remaining"
+            else:
+                return f"{minutes}m remaining"
+        else:
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            if minutes > 0:
+                return f"{hours}h {minutes}m remaining"
+            else:
+                return f"{hours}h remaining"
+
+    def update_progress_with_context(
+        self,
+        step: int,
+        base_message: str,
+        context: Optional[Dict[str, Any]] = None,
+        current_item_detail: Optional[str] = None,
+    ) -> None:
+        """
+        Enhanced progress update with contextual information.
+
+        Args:
+            step: Current step number
+            base_message: Base progress message
+            context: Optional additional context for this update
+            current_item_detail: Optional detail about current item being processed
+        """
+        with self._lock:
+            if self._current_state is None:
+                return  # Skip if no operation active
+
+            # Create enhanced message with context
+            enhanced_message = self._create_enhanced_message(
+                base_message, context, current_item_detail
+            )
+
+            # Update current item detail in state
+            if current_item_detail:
+                self._current_state.current_item_detail = current_item_detail
+
+            # Update using existing method with enhanced message
+            self.update_progress(step, enhanced_message)
