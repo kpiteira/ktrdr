@@ -520,8 +520,12 @@ class KtrdrConfig(BaseModel):
     """Root configuration model for KTRDR."""
 
     data: DataConfig
-    logging: LoggingConfig = Field(default_factory=LoggingConfig)
-    security: SecurityConfig = Field(default_factory=SecurityConfig)
+    logging: LoggingConfig = Field(default_factory=lambda: LoggingConfig(
+        level="INFO",
+        file_path=None,
+        console_output=True
+    ))
+    security: SecurityConfig = Field(default_factory=lambda: SecurityConfig())
     ib_host_service: IbHostServiceConfig = Field(default_factory=lambda: IbHostServiceConfig(
         enabled=False,
         url="http://localhost:5001"

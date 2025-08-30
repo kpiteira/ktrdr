@@ -348,7 +348,8 @@ class IbConnection:
             logger.debug(f"Function {request.func.__name__} completed successfully")
 
             # Return successful result
-            request.result_future.set_result(result)
+            if request.result_future is not None:
+                request.result_future.set_result(result)
             self.requests_processed += 1
 
             logger.debug(f"Request {request.request_id} completed successfully")
@@ -357,7 +358,8 @@ class IbConnection:
             # Return error to caller
             logger.error(f"Sync request {request.request_id} execution failed: {e}")
             logger.error(f"Exception type: {type(e)}")
-            request.result_future.set_exception(e)
+            if request.result_future is not None:
+                request.result_future.set_exception(e)
             self.errors_encountered += 1
 
     async def _connect_to_ib(self):
@@ -479,7 +481,8 @@ class IbConnection:
             logger.debug(f" Function {request.func.__name__} completed successfully")
 
             # Return successful result
-            request.result_future.set_result(result)
+            if request.result_future is not None:
+                request.result_future.set_result(result)
             self.requests_processed += 1
 
             logger.debug(f" Request {request.request_id} completed successfully")
@@ -488,7 +491,8 @@ class IbConnection:
             # Return error to caller
             logger.error(f"Async request {request.request_id} execution failed: {e}")
             logger.error(f"Exception type: {type(e)}")
-            request.result_future.set_exception(e)
+            if request.result_future is not None:
+                request.result_future.set_exception(e)
             self.errors_encountered += 1
 
     async def _disconnect_from_ib(self):

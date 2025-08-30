@@ -167,11 +167,12 @@ class ModelStorage:
             model_dir = self.base_path / strategy_name / f"{symbol}_{timeframe}_latest"
             if not model_dir.exists():
                 # Fallback: find latest version manually
-                model_dir = self._find_latest_version(strategy_name, symbol, timeframe)
-                if model_dir is None:
+                latest_dir = self._find_latest_version(strategy_name, symbol, timeframe)
+                if latest_dir is None:
                     raise FileNotFoundError(
                         f"No models found for {strategy_name}/{symbol}_{timeframe}"
                     )
+                model_dir = latest_dir
         else:
             model_dir = (
                 self.base_path / strategy_name / f"{symbol}_{timeframe}_{version}"

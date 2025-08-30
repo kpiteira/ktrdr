@@ -215,6 +215,7 @@ async def get_system_status_standardized() -> ApiResponse:
                     ),
                 },
             },
+            error=None,
         )
 
     except Exception as e:

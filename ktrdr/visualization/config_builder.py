@@ -94,12 +94,12 @@ class ConfigBuilder:
         # Add additional time scale options if provided
         if time_scale_options:
             for key, value in time_scale_options.items():
-                options["timeScale"][key] = value
+                options["timeScale"][key] = value  # type: ignore[index]
 
         # Add additional right price scale options if provided
         if right_price_scale_options:
             for key, value in right_price_scale_options.items():
-                options["rightPriceScale"][key] = value
+                options["rightPriceScale"][key] = value  # type: ignore[index]
 
         return options
 

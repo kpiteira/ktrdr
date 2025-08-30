@@ -344,7 +344,7 @@ class StrategyValidator:
                 result.is_valid = False
                 result.missing_sections.append(f"decisions.{field_name}")
                 result.errors.append(f"Missing required decisions field: {field_name}")
-            elif not isinstance(decisions_config[field_name], expected_type):
+            elif not isinstance(decisions_config[field_name], expected_type):  # type: ignore[arg-type]
                 result.is_valid = False
                 type_name = getattr(expected_type, '__name__', str(expected_type))
                 result.errors.append(

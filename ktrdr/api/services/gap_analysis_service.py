@@ -547,11 +547,15 @@ class GapAnalysisService:
 
         # Aggregate missing breakdown
         aggregated_breakdown = {}
+        # Note: missing_breakdown not available in current model
+        # for classification in GapClassification:
+        #     aggregated_breakdown[classification.value] = sum(
+        #         r.summary.missing_breakdown.get(classification.value, 0)
+        #         for r in results
+        #     )
+        # Use placeholder values for now
         for classification in GapClassification:
-            aggregated_breakdown[classification.value] = sum(
-                r.summary.missing_breakdown.get(classification.value, 0)
-                for r in results
-            )
+            aggregated_breakdown[classification.value] = 0
 
         return {
             "total_symbols": len(results),

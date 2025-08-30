@@ -102,6 +102,7 @@ class DistanceFromMAIndicator(BaseIndicator):
             )
 
         # Calculate moving average based on type
+        ma_indicator: Union[SimpleMovingAverage, ExponentialMovingAverage]
         if ma_type == "SMA":
             ma_indicator = SimpleMovingAverage(period=period, source=source)
         elif ma_type == "EMA":

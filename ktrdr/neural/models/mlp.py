@@ -1,6 +1,6 @@
 """Multi-Layer Perceptron implementation for trading decisions."""
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import pandas as pd
 import torch
@@ -122,6 +122,7 @@ class MLPTradingModel(BaseNeuralModel):
 
         # Setup optimizer and loss
         optimizer_name = training_config.get("optimizer", "adam").lower()
+        optimizer: Union[torch.optim.Adam, torch.optim.SGD]
         if optimizer_name == "adam":
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         elif optimizer_name == "sgd":

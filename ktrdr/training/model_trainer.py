@@ -341,7 +341,7 @@ class ModelTrainer:
                     val_outputs = model(X_val)
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = (val_predicted == y_val).float().mean().item()
+                    val_accuracy = float((val_predicted == y_val).float().mean().item())
                     val_loss = val_loss.item()
 
                 # Save best model
@@ -694,7 +694,7 @@ class ModelTrainer:
 
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = (val_predicted == y_val).float().mean().item()
+                    val_accuracy = float((val_predicted == y_val).float().mean().item())
                     val_loss = val_loss.item()
 
                 # Save best model

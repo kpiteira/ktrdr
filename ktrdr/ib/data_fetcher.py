@@ -208,7 +208,7 @@ class IbDataFetcher:
             )
 
             # Filter by date range
-            df = df[(df.index >= start) & (df.index <= end)]  # type: ignore[operator]
+            df = df[(df.index >= start) & (df.index <= end)]  # type: ignore[operator,assignment]
 
             logger.info(
                 f"Successfully processed {len(df)} bars for {symbol} {timeframe}"

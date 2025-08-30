@@ -84,7 +84,7 @@ class ProgressDisplayManager:
         self.console = console or Console()
         self.stats: Optional[ProgressStats] = None
         self._active_progress: Optional[Any] = None
-        self._active_task = None
+        self._active_task: Optional[Any] = None  # TaskID when active
 
     @contextmanager
     def progress_context(
