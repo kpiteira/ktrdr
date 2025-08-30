@@ -16,22 +16,15 @@ from typing import Optional
 import pandas as pd
 import typer
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
-from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callback
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.cli.error_handler import (
     display_ib_connection_required_message,
     handle_cli_error,
 )
+from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callback
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
@@ -482,13 +475,14 @@ async def _load_data_async(
             # Monitor operation progress with enhanced display
             if show_progress and not quiet:
                 # Create enhanced progress display
-                from ktrdr.data.components.progress_manager import ProgressState
                 from datetime import datetime
-                
+
+                from ktrdr.data.components.progress_manager import ProgressState
+
                 enhanced_callback, display = create_enhanced_progress_callback(
                     console=console, show_details=True
                 )
-                
+
                 operation_started = False
 
                 # Poll operation status with enhanced display
@@ -526,9 +520,7 @@ async def _load_data_async(
                         status = operation_data.get("status")
                         progress_info = operation_data.get("progress", {})
                         progress_percentage = progress_info.get("percentage", 0)
-                        current_step = progress_info.get(
-                            "current_step", "Loading..."
-                        )
+                        current_step = progress_info.get("current_step", "Loading...")
 
                         # Display warnings if any
                         warnings = operation_data.get("warnings", [])
@@ -555,13 +547,17 @@ async def _load_data_async(
                             items_processed=progress_info.get("items_processed", 0),
                             expected_items=progress_info.get("items_total", None),
                         )
-                        
+
                         # Start operation on first callback
                         if not operation_started:
                             display.start_operation(
                                 operation_name=f"load_data_{symbol}_{timeframe}",
                                 total_steps=progress_state.total_steps,
-                                context={"symbol": symbol, "timeframe": timeframe, "mode": mode}
+                                context={
+                                    "symbol": symbol,
+                                    "timeframe": timeframe,
+                                    "mode": mode,
+                                },
                             )
                             operation_started = True
 
