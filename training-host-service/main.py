@@ -10,7 +10,6 @@ endpoints that the containerized backend can call.
 """
 
 import sys
-import os
 import warnings
 from pathlib import Path
 
@@ -23,21 +22,22 @@ warnings.filterwarnings(
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-from datetime import datetime
 import logging
+from datetime import datetime
 
-# Import existing ktrdr modules
-from ktrdr.logging import get_logger
+import uvicorn
+from endpoints.health import router as health_router
 
 # Import endpoints
 from endpoints.training import router as training_router
-from endpoints.health import router as health_router
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import configuration
 from config import get_host_service_config
+
+# Import existing ktrdr modules
+from ktrdr.logging import get_logger
 
 # Get configuration
 service_config = get_host_service_config()

@@ -4,14 +4,12 @@ Training endpoints for Training Host Service
 Provides GPU-accelerated training functionality.
 """
 
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
-from datetime import datetime
-import logging
-import torch
-import asyncio
-import uuid
 
 # Import existing ktrdr modules
 from ktrdr.logging import get_logger

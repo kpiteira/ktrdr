@@ -8,17 +8,18 @@ handling and visualization.
 """
 
 import sys
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 # Add the project root to sys.path to allow importing ktrdr modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from ktrdr.indicators import SimpleMovingAverage, ExponentialMovingAverage, RSIIndicator
-from ktrdr.errors import DataError
 from ktrdr import get_logger
+from ktrdr.errors import DataError
+from ktrdr.indicators import ExponentialMovingAverage, RSIIndicator, SimpleMovingAverage
 
 # Set up logger
 logger = get_logger(__name__)

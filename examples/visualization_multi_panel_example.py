@@ -9,10 +9,12 @@ This example demonstrates:
 4. Adding overlays to each panel
 """
 
-from ktrdr.visualization import Visualizer
-import pandas as pd
-from pathlib import Path
 import os
+from pathlib import Path
+
+import pandas as pd
+
+from ktrdr.visualization import Visualizer
 
 
 def main():

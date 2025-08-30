@@ -10,9 +10,9 @@ This script shows how to:
 
 import logging
 from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 
 from ktrdr.fuzzy.config import FuzzyConfigLoader
 from ktrdr.fuzzy.membership import TriangularMF

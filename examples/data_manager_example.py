@@ -12,13 +12,13 @@ This script demonstrates the features of the DataManager class, including:
 
 """
 
+import logging
 import os
 import sys
-import pandas as pd
-import numpy as np
+
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-import logging
+import numpy as np
+import pandas as pd
 
 # Add the project root to the path so we can import ktrdr
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -31,7 +31,7 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
-from ktrdr.data import DataManager, DataCorruptionError
+from ktrdr.data import DataCorruptionError, DataManager
 
 
 def create_sample_data_with_outliers():

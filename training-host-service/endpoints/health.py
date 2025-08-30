@@ -4,16 +4,16 @@ Health check endpoints for Training Host Service
 Provides health monitoring and GPU status information.
 """
 
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+import torch
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
-from datetime import datetime
-import logging
-import torch
 
 # Import existing ktrdr modules
 from ktrdr.logging import get_logger
-from ktrdr.training.gpu_memory_manager import GPUMemoryManager, GPUMemoryConfig
+from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/health", tags=["health"])

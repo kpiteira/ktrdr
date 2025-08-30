@@ -105,3 +105,19 @@ ignore = [
 [tool.bandit]
 exclude_dirs = ["tests"]
 skips = ["B101"]  # skip assert_used test
+
+[tool.coverage.run]
+source = ["ktrdr"]
+omit = [
+    "ktrdr/scripts/*",
+    "tests/*",
+    "ktrdr/dev/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]

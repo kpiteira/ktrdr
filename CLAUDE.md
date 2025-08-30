@@ -209,22 +209,53 @@ Remember: You're not just writing code, you're building a system. Every line sho
 ### Commit Discipline
 - **NEVER commit more than 20-30 files at once** - Large commits are unmanageable
 - **Make frequent, focused commits** - Each commit should represent one logical change
-- **Always run tests before committing** - Use `uv run pytest` to catch regressions
-- **Always run linting before committing** - Use `uv run black ktrdr tests` and `uv run mypy ktrdr`
+- **Always run tests before committing** - Use `make test-fast` to catch regressions
+- **Always run linting before committing** - Use `make quality` for all quality checks
 
 ### Testing Discipline  
-- **Run unit tests systematically** before and after any significant changes
+- **Run unit tests systematically** - Use `make test-unit` for fast feedback (<2s)
+- **Run integration tests when needed** - Use `make test-integration` for component interaction tests
 - **Never skip failing tests** - Fix or properly skip tests that don't pass
 - **Test-driven development** - Write tests for new functionality
-- **Separate test types**: Unit, Integration, Real E2E tests
+- **Proper test categorization**: Unit (fast, mocked), Integration (slower, real components), E2E (full system)
+
+### Standard Testing Commands (Use Makefile)
+```bash
+# Fast development loop - run on every change
+make test-unit          # Unit tests only (<2s)
+make test-fast          # Alias for test-unit
+
+# Integration testing - run when testing component interactions  
+make test-integration   # Integration tests (<30s)
+
+# Full system testing - run before major commits
+make test-e2e          # End-to-end tests (<5min)
+
+# Coverage and reporting
+make test-coverage     # Unit tests with HTML coverage report
+
+# Code quality - run before committing
+make quality           # Lint + format + typecheck
+make lint              # Ruff linting only  
+make format            # Black formatting only
+make typecheck         # MyPy type checking only
+
+# CI simulation - matches GitHub Actions
+make ci                # Run unit tests + quality checks
+```
 
 ### Pre-Commit Checklist
-1. `uv run pytest` - All unit tests pass
-2. `uv run black ktrdr tests` - Code formatting
-3. `uv run mypy ktrdr` - Type checking
-4. Review changed files - No debug code or secrets
-5. Write meaningful commit message
-6. Keep commits small and focused (< 30 files)
+1. `make test-unit` - All unit tests pass (<2s)
+2. `make quality` - Lint, format, and type checking pass
+3. Review changed files - No debug code or secrets
+4. Write meaningful commit message
+5. Keep commits small and focused (< 30 files)
+
+### Test Performance Standards
+- **Unit tests**: Must complete in <2 seconds total
+- **Integration tests**: Should complete in <30 seconds total  
+- **E2E tests**: Should complete in <5 minutes total
+- **Collection time**: Should be <2 seconds
 
 ## CRITICAL FIXES - DO NOT REMOVE
 

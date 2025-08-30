@@ -8,10 +8,11 @@ This example demonstrates:
 3. Creating multiple line series in a single chart
 """
 
-import pandas as pd
 import os
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 from ktrdr.visualization import Visualizer
 

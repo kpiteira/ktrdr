@@ -6,9 +6,10 @@ This example shows the most concise way to create a basic chart
 with the KTRDR visualization module.
 """
 
-import pandas as pd
 import os
 from pathlib import Path
+
+import pandas as pd
 
 from ktrdr.visualization import Visualizer
 

@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, develop, test-suite-cleanup ]
+    branches: [ main, develop, test-suite-cleanup, fix/test-suite-performance ]
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:  # Allow manual triggers
@@ -28,16 +28,21 @@ jobs:
     - name: Install dependencies
       run: uv sync --all-extras --dev
     
-    - name: Run unit tests
+    - name: Run unit tests with coverage
       run: |
-        uv run pytest tests/ \
-          -m "not (integration or integration_slow or real_ib or real_cli or real_api or real_pipeline or real_error_scenarios or container_api or container_cli or container_e2e or e2e or exhaustive_resilience or exhaustive_api_resilience or exhaustive_cli_resilience or exhaustive_integration_resilience)" \
-          --tb=short \
-          -v \
-          --junit-xml=test-results.xml
+        make test-coverage-junit
       env:
         PYTHONDONTWRITEBYTECODE: "1"
         PYTHONUNBUFFERED: "1"
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-unit
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -66,11 +71,14 @@ jobs:
     - name: Install dependencies
       run: uv sync --all-extras --dev
     
+    - name: Run linting
+      run: make lint
+    
     - name: Check formatting with black
       run: uv run black --check ktrdr tests
     
     - name: Run type checking with mypy
-      run: uv run mypy ktrdr
+      run: make typecheck
       continue-on-error: true  # Don't fail CI for type issues, just report them
 
   container-e2e-tests:

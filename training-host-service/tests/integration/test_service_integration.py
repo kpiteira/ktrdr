@@ -5,11 +5,10 @@ These tests verify that the service components work together correctly
 and can be run against a live service instance.
 """
 
-import pytest
-import asyncio
-import requests
 import time
-from datetime import datetime, timedelta
+
+import pytest
+import requests
 
 
 @pytest.mark.integration

@@ -2,17 +2,17 @@
 Test configuration and fixtures for Training Host Service tests.
 """
 
-import pytest
 import asyncio
-import tempfile
 import shutil
-from pathlib import Path
-from unittest.mock import Mock, patch
-from typing import Dict, Any
-from datetime import datetime
 
 # Add parent directory to path for imports
 import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 

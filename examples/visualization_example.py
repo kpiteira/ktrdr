@@ -9,10 +9,10 @@ This example demonstrates:
 4. Theme configuration and customization
 """
 
-import pandas as pd
 import os
-import numpy as np
 from pathlib import Path
+
+import pandas as pd
 
 from ktrdr.visualization import Visualizer
 

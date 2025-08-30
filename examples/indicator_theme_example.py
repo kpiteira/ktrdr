@@ -3,10 +3,10 @@
 Indicator line chart example with theme support for KTRDR visualization module.
 """
 
-import pandas as pd
 import os
 from pathlib import Path
-import numpy as np
+
+import pandas as pd
 
 from ktrdr.visualization import Visualizer
 
