@@ -14,7 +14,7 @@ import pytest
 
 from ktrdr.errors import DataError
 from ktrdr.visualization.data_adapter import DataAdapter
-from tests.visualization.test_fixtures import (
+from tests.unit.visualization.test_fixtures import (
     edge_case_data,
     histogram_data,
     sample_indicators,
