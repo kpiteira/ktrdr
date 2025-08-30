@@ -64,9 +64,7 @@ async def validate_component_imports():
             return False
 
         try:
-            IbSymbolValidatorUnified(
-                component_name="validation_test"
-            )
+            IbSymbolValidatorUnified(component_name="validation_test")
             logger.info("  ✅ Symbol Validator Unified: OK")
         except Exception as e:
             logger.error(f"  ❌ Symbol Validator Unified: {e}")

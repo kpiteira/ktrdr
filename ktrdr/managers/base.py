@@ -8,7 +8,7 @@ patterns across all service managers (Data, Training, Backtesting, etc.).
 
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 from ktrdr.logging import get_logger
 
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 T = TypeVar("T")
 
 
-class ServiceOrchestrator(ABC):
+class ServiceOrchestrator(ABC, Generic[T]):
     """
     Base class for all service managers (Data, Training, Backtesting, etc.).
 

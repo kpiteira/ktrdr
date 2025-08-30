@@ -7,6 +7,7 @@ into logical groups that help traders understand their purpose and usage pattern
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class IndicatorCategory(str, Enum):
@@ -200,7 +201,7 @@ def get_category_info(category: IndicatorCategory) -> CategoryInfo:
     return CATEGORY_DESCRIPTIONS[category]
 
 
-def get_category_summary() -> dict[str, dict[str, any]]:
+def get_category_summary() -> dict[str, dict[str, Any]]:
     """
     Get a summary of all categories with their indicators.
 

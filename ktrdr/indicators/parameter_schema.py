@@ -84,7 +84,6 @@ class ParameterDefinition:
                     value = int(value)
                 except (ValueError, TypeError):
                     raise DataError(
-
                         message=f"Parameter '{self.name}' must be an integer",
                         error_code="PARAM-InvalidType",
                         details={
@@ -101,7 +100,6 @@ class ParameterDefinition:
                     value = float(value)
                 except (ValueError, TypeError):
                     raise DataError(
-
                         message=f"Parameter '{self.name}' must be a number",
                         error_code="PARAM-InvalidType",
                         details={
@@ -236,7 +234,6 @@ class ParameterConstraint:
         except KeyError as e:
             # Handle missing parameters in constraint validation
             raise DataError(
-
                 message=f"Constraint '{self.name}' requires parameter {e}",
                 error_code="PARAM-MissingForConstraint",
                 details={

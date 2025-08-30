@@ -292,4 +292,6 @@ async def force_gap_scan() -> dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error forcing gap scan: {e}")
-        raise HTTPException(status_code=500, detail=f"Error forcing gap scan: {str(e)}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error forcing gap scan: {str(e)}"
+        ) from e

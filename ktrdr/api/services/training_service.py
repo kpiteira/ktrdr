@@ -738,9 +738,7 @@ class TrainingService(BaseService):
                                     completed_batches = current_progress.get(
                                         "completed_batches", 0
                                     )
-                                    current_progress.get(
-                                        "total_batches", 1
-                                    )
+                                    current_progress.get("total_batches", 1)
                                     total_bars_processed = current_progress.get(
                                         "total_bars_processed", 0
                                     )
@@ -1149,9 +1147,7 @@ class TrainingService(BaseService):
                                     completed_batches = current_progress.get(
                                         "completed_batches", 0
                                     )
-                                    current_progress.get(
-                                        "total_batches", 1
-                                    )
+                                    current_progress.get("total_batches", 1)
                                     total_bars_processed = current_progress.get(
                                         "total_bars_processed", 0
                                     )

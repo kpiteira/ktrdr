@@ -156,7 +156,7 @@ class TestIbPaceManager(unittest.TestCase):
         """Test async wait functionality for historical requests."""
 
         async def run_test():
-            with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
                 # First request should be immediate
                 await self.pace_manager.wait_if_needed(is_historical=True)
                 mock_sleep.assert_not_called()
@@ -167,7 +167,9 @@ class TestIbPaceManager(unittest.TestCase):
                 # Verify that sleep was called with approximately 2.0 seconds
                 # (historical requests have 2-second minimum spacing)
                 mock_sleep.assert_called_once()
-                call_args = mock_sleep.call_args[0][0]  # Get the first argument (sleep duration)
+                call_args = mock_sleep.call_args[0][
+                    0
+                ]  # Get the first argument (sleep duration)
                 self.assertGreater(call_args, 1.9)  # Should wait close to 2 seconds
                 self.assertLess(call_args, 2.1)
 

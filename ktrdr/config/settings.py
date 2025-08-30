@@ -49,8 +49,6 @@ class LoggingSettings(BaseSettings):
     model_config = ConfigDict(env_prefix="KTRDR_LOGGING_")
 
 
-
-
 # Cache settings to avoid repeated disk/env access
 @lru_cache
 def get_api_settings() -> APISettings:

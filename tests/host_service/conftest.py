@@ -4,6 +4,7 @@ Shared fixtures for host service tests.
 These fixtures provide connections to real services and should only be used
 when those services are actually running and available.
 """
+
 import asyncio
 from typing import Optional
 

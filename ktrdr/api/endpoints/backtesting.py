@@ -219,7 +219,9 @@ async def get_backtest_status(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get backtest status: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get backtest status") from e
+        raise HTTPException(
+            status_code=500, detail="Failed to get backtest status"
+        ) from e
 
 
 @router.get("/{backtest_id}/results", response_model=BacktestResultsResponse)
@@ -253,7 +255,9 @@ async def get_backtest_results(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get backtest results: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get backtest results") from e
+        raise HTTPException(
+            status_code=500, detail="Failed to get backtest results"
+        ) from e
 
 
 @router.get("/{backtest_id}/trades", response_model=BacktestTradesResponse)
@@ -279,7 +283,9 @@ async def get_backtest_trades(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get backtest trades: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get backtest trades") from e
+        raise HTTPException(
+            status_code=500, detail="Failed to get backtest trades"
+        ) from e
 
 
 @router.get("/{backtest_id}/equity_curve", response_model=EquityCurveResponse)

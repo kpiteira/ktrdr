@@ -13,6 +13,7 @@ Usage:
     make test-host  # Run all host service tests including these
     uv run pytest tests/host_service/ib_integration/ -v  # Run only IB tests
 """
+
 import asyncio
 from datetime import datetime
 
@@ -44,8 +45,10 @@ class TestRealIbConnection:
 
         # Should have common account values
         summary_tags = {item.tag for item in account_summary}
-        expected_tags = {'NetLiquidation', 'TotalCashValue', 'BuyingPower'}
-        assert expected_tags.issubset(summary_tags), f"Missing tags: {expected_tags - summary_tags}"
+        expected_tags = {"NetLiquidation", "TotalCashValue", "BuyingPower"}
+        assert expected_tags.issubset(
+            summary_tags
+        ), f"Missing tags: {expected_tags - summary_tags}"
 
     @pytest.mark.asyncio
     async def test_market_data_request(self, real_ib_connection):
@@ -54,7 +57,8 @@ class TestRealIbConnection:
 
         # Request market data for SPY (common ETF)
         from ib_insync import Stock
-        contract = Stock('SPY', 'SMART', 'USD')
+
+        contract = Stock("SPY", "SMART", "USD")
 
         # Qualify the contract
         qualified_contracts = await ib.qualifyContractsAsync(contract)
@@ -63,7 +67,7 @@ class TestRealIbConnection:
         qualified_contract = qualified_contracts[0]
 
         # Request market data
-        ticker = ib.reqMktData(qualified_contract, '', False, False)
+        ticker = ib.reqMktData(qualified_contract, "", False, False)
 
         # Wait for data to arrive
         await asyncio.sleep(3.0)
@@ -81,7 +85,8 @@ class TestRealIbConnection:
         ib = real_ib_connection
 
         from ib_insync import Stock
-        contract = Stock('AAPL', 'SMART', 'USD')
+
+        contract = Stock("AAPL", "SMART", "USD")
 
         # Qualify the contract
         qualified_contracts = await ib.qualifyContractsAsync(contract)
@@ -93,22 +98,22 @@ class TestRealIbConnection:
         bars = await ib.reqHistoricalDataAsync(
             qualified_contract,
             endDateTime=end_time,
-            durationStr='1 D',  # 1 day of data
-            barSizeSetting='1 min',
-            whatToShow='TRADES',
-            useRTH=True
+            durationStr="1 D",  # 1 day of data
+            barSizeSetting="1 min",
+            whatToShow="TRADES",
+            useRTH=True,
         )
 
         assert len(bars) > 0
 
         # Verify bar structure
         bar = bars[0]
-        assert hasattr(bar, 'date')
-        assert hasattr(bar, 'open')
-        assert hasattr(bar, 'high')
-        assert hasattr(bar, 'low')
-        assert hasattr(bar, 'close')
-        assert hasattr(bar, 'volume')
+        assert hasattr(bar, "date")
+        assert hasattr(bar, "open")
+        assert hasattr(bar, "high")
+        assert hasattr(bar, "low")
+        assert hasattr(bar, "close")
+        assert hasattr(bar, "volume")
 
         # Verify reasonable price data
         assert bar.open > 0

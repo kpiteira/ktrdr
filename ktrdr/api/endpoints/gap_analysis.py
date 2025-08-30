@@ -280,4 +280,6 @@ async def health_check(
 
     except Exception as e:
         logger.error(f"Gap analysis health check failed: {e}")
-        raise HTTPException(status_code=500, detail="Service health check failed") from e
+        raise HTTPException(
+            status_code=500, detail="Service health check failed"
+        ) from e

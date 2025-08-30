@@ -112,12 +112,10 @@ class TrainingAdapter:
                 return response.json()
         except httpx.HTTPError as e:
             raise TrainingProviderConnectionError(
-
                 f"Host service request failed: {str(e)}", provider="Training"
             ) from e
         except Exception as e:
             raise TrainingProviderError(
-
                 f"Host service communication error: {str(e)}", provider="Training"
             ) from e
 
@@ -137,12 +135,10 @@ class TrainingAdapter:
                 return response.json()
         except httpx.HTTPError as e:
             raise TrainingProviderConnectionError(
-
                 f"Host service request failed: {str(e)}", provider="Training"
             ) from e
         except Exception as e:
             raise TrainingProviderError(
-
                 f"Host service communication error: {str(e)}", provider="Training"
             ) from e
 
@@ -254,7 +250,6 @@ class TrainingAdapter:
             # Wrap other exceptions
             self.errors_encountered += 1
             raise TrainingProviderError(
-
                 f"Training failed: {str(e)}", provider="Training"
             ) from e
 

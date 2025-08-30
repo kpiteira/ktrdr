@@ -248,6 +248,7 @@ class TestDataManager:
 
     def test_filter_data_by_condition(self, data_manager, sample_data):
         """Test filtering data with custom conditions."""
+
         # Define a condition: close > open (bullish candles)
         def bullish_condition(df):
             return df["close"] > df["open"]

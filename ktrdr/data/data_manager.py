@@ -1572,7 +1572,6 @@ class DataManager(ServiceOrchestrator):
             except Exception as e:
                 logger.error(f"❌ Symbol validation failed for {symbol}: {e}")
                 raise DataError(
-
                     message=f"Symbol validation failed: {e}",
                     error_code="DATA-SymbolValidationFailed",
                     details={"symbol": symbol, "timeframe": timeframe, "error": str(e)},

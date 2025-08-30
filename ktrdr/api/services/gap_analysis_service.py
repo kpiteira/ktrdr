@@ -198,7 +198,9 @@ class GapAnalysisService:
             return dt
 
         except ValueError as e:
-            raise ValueError(f"Invalid date format: {date_str}. Use ISO format: {e}") from e
+            raise ValueError(
+                f"Invalid date format: {date_str}. Use ISO format: {e}"
+            ) from e
 
     def _filter_data_to_period(
         self, df: pd.DataFrame, start_date: datetime, end_date: datetime

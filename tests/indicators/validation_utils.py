@@ -131,7 +131,6 @@ def validate_indicator_against_reference(
         result = indicator.compute(data)
     except Exception as e:
         raise DataError(
-
             message=f"Error computing indicator: {str(e)}",
             error_code="DATA-ComputationError",
             details={"indicator": indicator.name},

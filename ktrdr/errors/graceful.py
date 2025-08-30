@@ -110,7 +110,6 @@ def fallback(
                 elif strategy == FallbackStrategy.FALLBACK_FUNCTION:
                     if fallback_function is None:
                         raise FallbackNotAvailableError(
-
                             f"Fallback function strategy specified for {func.__name__}, but no function provided"
                         ) from None
                     return fallback_function(*args, **kwargs)
@@ -134,7 +133,9 @@ def fallback(
                 else:
                     # Log error and raise ValueError for unhandled strategy
                     log.error(f"Unhandled fallback strategy: {strategy}")
-                    raise ValueError(f"Unhandled fallback strategy: {strategy}") from None
+                    raise ValueError(
+                        f"Unhandled fallback strategy: {strategy}"
+                    ) from None
 
         return wrapper
 

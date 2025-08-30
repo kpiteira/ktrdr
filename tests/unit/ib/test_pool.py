@@ -288,7 +288,7 @@ class TestIbConnectionPool:
 
         # Now the pool is at max capacity, trying to acquire should trigger pool exhausted
         # Mock _find_healthy_connection to return None (simulate all connections busy)
-        with patch.object(pool, '_find_healthy_connection', return_value=None):
+        with patch.object(pool, "_find_healthy_connection", return_value=None):
             with pytest.raises(ConnectionError) as exc_info:
                 await pool.acquire_connection()
 
@@ -296,7 +296,7 @@ class TestIbConnectionPool:
         assert "pool exhausted" in str(exc_info.value)
 
         # Connection should not be stopped since it's healthy and we're just at limit
-        assert not hasattr(healthy_conn, 'stop') or not healthy_conn.stop.called
+        assert not hasattr(healthy_conn, "stop") or not healthy_conn.stop.called
 
     @pytest.mark.asyncio
     async def test_context_manager(self):

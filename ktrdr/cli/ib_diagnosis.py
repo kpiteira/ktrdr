@@ -126,7 +126,7 @@ def detect_ib_issue_from_api_response(
 
 
 def format_ib_diagnostic_message(
-    problem_type: IBProblemType, message: str, details: dict[str, Any] = None
+    problem_type: IBProblemType, message: str, details: Optional[dict[str, Any]] = None
 ) -> str:
     """
     Format a clear, actionable IB diagnostic message for CLI display.

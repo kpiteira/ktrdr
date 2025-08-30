@@ -23,7 +23,9 @@ class TestRealTrainingService:
         """Test that the training service is healthy and responding."""
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(f"{real_training_service_url}/health", timeout=5.0)
+                response = await client.get(
+                    f"{real_training_service_url}/health", timeout=5.0
+                )
                 assert response.status_code == 200
 
                 health_data = response.json()
@@ -38,7 +40,9 @@ class TestRealTrainingService:
         """Test retrieving available models from training service."""
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(f"{real_training_service_url}/models", timeout=10.0)
+                response = await client.get(
+                    f"{real_training_service_url}/models", timeout=10.0
+                )
                 assert response.status_code == 200
 
                 models_data = response.json()
@@ -64,30 +68,35 @@ class TestRealTrainingService:
                     "model_type": "test",
                     "parameters": {
                         "epochs": 1,
-                        "test_mode": True  # Flag to indicate this is a test
+                        "test_mode": True,  # Flag to indicate this is a test
                     },
                     "data": {
                         "source": "synthetic",  # Use synthetic data for testing
-                        "size": 100  # Small dataset for quick test
-                    }
+                        "size": 100,  # Small dataset for quick test
+                    },
                 }
 
                 response = await client.post(
                     f"{real_training_service_url}/train",
                     json=training_request,
-                    timeout=30.0
+                    timeout=30.0,
                 )
 
                 # Accept various success status codes
-                assert response.status_code in [200, 201, 202], f"Unexpected status: {response.status_code}"
+                assert response.status_code in [
+                    200,
+                    201,
+                    202,
+                ], f"Unexpected status: {response.status_code}"
 
                 result_data = response.json()
                 assert isinstance(result_data, dict)
 
                 # Should have some kind of job identifier or status
                 expected_fields = ["job_id", "task_id", "status", "message"]
-                assert any(field in result_data for field in expected_fields), \
-                    f"Response missing expected fields: {result_data}"
+                assert any(
+                    field in result_data for field in expected_fields
+                ), f"Response missing expected fields: {result_data}"
 
             except httpx.RequestError as e:
                 pytest.skip(f"Training service train endpoint not accessible: {e}")
@@ -101,7 +110,9 @@ class TestRealTrainingService:
         async with httpx.AsyncClient() as client:
             try:
                 # Try to get available models first
-                models_response = await client.get(f"{real_training_service_url}/models", timeout=10.0)
+                models_response = await client.get(
+                    f"{real_training_service_url}/models", timeout=10.0
+                )
                 if models_response.status_code != 200:
                     pytest.skip("Cannot retrieve models for inference test")
 
@@ -110,8 +121,16 @@ class TestRealTrainingService:
                 # Find a model to use for inference
                 model_name = None
                 if isinstance(models_data, list) and len(models_data) > 0:
-                    model_name = models_data[0] if isinstance(models_data[0], str) else models_data[0].get("name")
-                elif isinstance(models_data, dict) and "models" in models_data and len(models_data["models"]) > 0:
+                    model_name = (
+                        models_data[0]
+                        if isinstance(models_data[0], str)
+                        else models_data[0].get("name")
+                    )
+                elif (
+                    isinstance(models_data, dict)
+                    and "models" in models_data
+                    and len(models_data["models"]) > 0
+                ):
                     model_name = models_data["models"][0]
 
                 if not model_name:
@@ -121,27 +140,37 @@ class TestRealTrainingService:
                 inference_request = {
                     "model": model_name,
                     "input_data": {
-                        "features": [1.0, 2.0, 3.0, 4.0, 5.0],  # Simple numeric features
-                        "metadata": {"test": True}
-                    }
+                        "features": [
+                            1.0,
+                            2.0,
+                            3.0,
+                            4.0,
+                            5.0,
+                        ],  # Simple numeric features
+                        "metadata": {"test": True},
+                    },
                 }
 
                 response = await client.post(
                     f"{real_training_service_url}/predict",
                     json=inference_request,
-                    timeout=15.0
+                    timeout=15.0,
                 )
 
                 # Accept various success status codes
-                assert response.status_code in [200, 201], f"Unexpected status: {response.status_code}"
+                assert response.status_code in [
+                    200,
+                    201,
+                ], f"Unexpected status: {response.status_code}"
 
                 result_data = response.json()
                 assert isinstance(result_data, dict)
 
                 # Should have prediction results
                 expected_fields = ["prediction", "predictions", "result", "output"]
-                assert any(field in result_data for field in expected_fields), \
-                    f"Response missing prediction fields: {result_data}"
+                assert any(
+                    field in result_data for field in expected_fields
+                ), f"Response missing prediction fields: {result_data}"
 
             except httpx.RequestError as e:
                 pytest.skip(f"Training service inference endpoint not accessible: {e}")
@@ -160,18 +189,25 @@ class TestTrainingServicePerformance:
         async with httpx.AsyncClient() as client:
             try:
                 import time
+
                 start_time = time.time()
 
-                response = await client.get(f"{real_training_service_url}/health", timeout=10.0)
+                response = await client.get(
+                    f"{real_training_service_url}/health", timeout=10.0
+                )
 
                 response_time = time.time() - start_time
 
                 # Health check should respond within 2 seconds
-                assert response_time < 2.0, f"Health check too slow: {response_time:.2f}s"
+                assert (
+                    response_time < 2.0
+                ), f"Health check too slow: {response_time:.2f}s"
                 assert response.status_code == 200
 
             except httpx.RequestError as e:
-                pytest.skip(f"Training service not accessible for performance test: {e}")
+                pytest.skip(
+                    f"Training service not accessible for performance test: {e}"
+                )
 
 
 if __name__ == "__main__":

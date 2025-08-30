@@ -253,4 +253,6 @@ async def get_model_performance(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to get model performance: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get model performance") from e
+        raise HTTPException(
+            status_code=500, detail="Failed to get model performance"
+        ) from e

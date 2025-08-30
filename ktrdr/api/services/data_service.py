@@ -490,9 +490,7 @@ class DataService(BaseService):
 
             # Get result from the completed future
             completed_task = next(iter(done))
-            if asyncio.isfuture(completed_task) or asyncio.iscoroutine(
-                completed_task
-            ):
+            if asyncio.isfuture(completed_task) or asyncio.iscoroutine(completed_task):
                 # This was the data loading future
                 try:
                     result = completed_task.result()
@@ -511,9 +509,7 @@ class DataService(BaseService):
                     return result
                 except concurrent.futures.CancelledError:
                     # Future was cancelled - this is expected for cancellation
-                    logger.info(
-                        f"Data loading future was cancelled: {operation_id}"
-                    )
+                    logger.info(f"Data loading future was cancelled: {operation_id}")
                     raise asyncio.CancelledError("Operation was cancelled") from None
             else:
                 # This was the cancellation task completing

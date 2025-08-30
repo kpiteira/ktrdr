@@ -160,6 +160,8 @@ def emergency_operation_killer(max_duration: float = 60.0):
                 f"Actual duration: {duration:.2f}s. System may be in deadlock!"
             )
 
-            raise OperationTimeoutError(operation_name, max_duration, duration) from None
+            raise OperationTimeoutError(
+                operation_name, max_duration, duration
+            ) from None
 
     return killer
