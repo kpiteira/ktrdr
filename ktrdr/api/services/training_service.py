@@ -519,7 +519,13 @@ class TrainingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=5.0, current_step="Validating training configuration"
+                    percentage=5.0, 
+                    current_step="Validating training configuration",
+                    steps_completed=0,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None
                 ),
             )
 
@@ -573,7 +579,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=10.0,
                     current_step="Preparing training environment",
+                    steps_completed=1,
+                    steps_total=10,
+                    items_processed=0,
                     items_total=total_epochs,
+                    current_item=None
                 ),
             )
 
@@ -582,7 +592,13 @@ class TrainingService(BaseService):
                 await self.operations_service.update_progress(
                     operation_id,
                     OperationProgress(
-                        percentage=15.0, current_step="Initializing strategy trainer"
+                        percentage=15.0, 
+                        current_step="Initializing strategy trainer",
+                        steps_completed=2,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None
                     ),
                 )
 
@@ -615,8 +631,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step=f"Starting training for {total_epochs} epochs",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None
                     ),
                 )
 
@@ -626,8 +645,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step="Starting neural network training...",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None
                     ),
                 )
 
@@ -781,8 +803,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=epoch + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None
                                             ),
                                         )
                                         last_reported_batch = completed_batches
@@ -807,8 +832,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=epoch + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None
                                             ),
                                         )
                                     elif total_epochs > 0:
@@ -823,8 +851,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_epoch,
+                                                steps_total=total_epochs,
                                                 items_processed=current_epoch,
                                                 items_total=total_epochs,
+                                                current_item=None
                                             ),
                                         )
                         except Exception as e:
@@ -858,7 +889,13 @@ class TrainingService(BaseService):
                 await self.operations_service.update_progress(
                     operation_id,
                     OperationProgress(
-                        percentage=95.0, current_step="Processing training results"
+                        percentage=95.0, 
+                        current_step="Processing training results",
+                        steps_completed=9,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None
                     ),
                 )
 
@@ -938,6 +975,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=5.0,
                     current_step="Configuring multi-symbol training environment",
+                    steps_completed=0,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None
                 ),
             )
 
@@ -971,7 +1013,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=10.0,
                     current_step="Preparing multi-symbol training environment",
+                    steps_completed=1,
+                    steps_total=10,
+                    items_processed=0,
                     items_total=total_epochs,
+                    current_item=None
                 ),
             )
 
@@ -982,6 +1028,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=15.0,
                         current_step="Initializing multi-symbol strategy trainer",
+                        steps_completed=2,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None
                     ),
                 )
 
@@ -1014,8 +1065,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step=f"Starting multi-symbol training for {total_epochs} epochs",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None
                     ),
                 )
 
@@ -1025,8 +1079,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=20.0,
                         current_step=f"Starting multi-symbol neural network training for {len(symbols)} symbols...",
+                        steps_completed=3,
+                        steps_total=10,
                         items_processed=0,
                         items_total=total_epochs,
+                        current_item=None
                     ),
                 )
 
@@ -1190,8 +1247,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=epoch + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None
                                             ),
                                         )
                                         last_reported_batch = completed_batches
@@ -1216,8 +1276,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=epoch + 1,
+                                                steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
+                                                current_item=None
                                             ),
                                         )
                                     elif total_epochs > 0:
@@ -1232,8 +1295,11 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
+                                                steps_completed=current_epoch,
+                                                steps_total=total_epochs,
                                                 items_processed=current_epoch,
                                                 items_total=total_epochs,
+                                                current_item=None
                                             ),
                                         )
                         except Exception as e:
@@ -1269,6 +1335,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=95.0,
                         current_step="Processing multi-symbol training results",
+                        steps_completed=9,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None
                     ),
                 )
 

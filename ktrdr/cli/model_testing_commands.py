@@ -1,7 +1,7 @@
 """Model testing commands for debugging trained models."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import typer
 from rich.console import Console
@@ -128,7 +128,7 @@ def test_model_signals(
                     signal_color = "red"
 
                 table.add_row(
-                    current_bar.name.strftime("%Y-%m-%d"),
+                    cast(pd.Timestamp, current_bar.name).strftime("%Y-%m-%d"),
                     f"${current_bar['close']:.2f}",
                     f"[{signal_color}]{decision.signal.value}[/{signal_color}]",
                     f"{decision.confidence:.3f}",

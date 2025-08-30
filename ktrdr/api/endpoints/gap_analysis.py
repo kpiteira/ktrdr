@@ -102,7 +102,7 @@ async def analyze_symbol_gaps(
             f"{result.summary.total_missing} missing bars"
         )
 
-        return ApiResponse(success=True, data=result)
+        return ApiResponse(success=True, data=result, error=None)
 
     except ValueError as e:
         logger.warning(f"Invalid gap analysis request: {e}")
@@ -174,7 +174,7 @@ async def analyze_batch_gaps(
             f"Batch gap analysis completed: {success_count} successful, {error_count} failed"
         )
 
-        return ApiResponse(success=True, data=result)
+        return ApiResponse(success=True, data=result, error=None)
 
     except ValueError as e:
         logger.warning(f"Invalid batch gap analysis request: {e}")
@@ -240,7 +240,7 @@ async def get_gap_summary(
             "recommendations": result.recommendations,
         }
 
-        return ApiResponse(success=True, data=summary_data)
+        return ApiResponse(success=True, data=summary_data, error=None)
 
     except Exception as e:
         logger.error(f"Gap summary failed for {symbol}_{timeframe}: {e}")
