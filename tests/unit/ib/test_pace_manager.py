@@ -7,6 +7,7 @@ Tests the enforcement of official IB pacing rules.
 import asyncio
 import time
 import unittest
+from unittest.mock import patch, AsyncMock
 
 from ktrdr.ib.pace_manager import IbPaceManager, RequestInfo
 
@@ -155,18 +156,20 @@ class TestIbPaceManager(unittest.TestCase):
         """Test async wait functionality for historical requests."""
 
         async def run_test():
-            # First request should be immediate
-            start_time = time.time()
-            await self.pace_manager.wait_if_needed(is_historical=True)
-            elapsed = time.time() - start_time
-            self.assertLess(elapsed, 0.1)
+            with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+                # First request should be immediate
+                await self.pace_manager.wait_if_needed(is_historical=True)
+                mock_sleep.assert_not_called()
 
-            # Second request should wait
-            start_time = time.time()
-            await self.pace_manager.wait_if_needed(is_historical=True)
-            elapsed = time.time() - start_time
-            self.assertGreater(elapsed, 1.9)  # Should wait close to 2 seconds
-            self.assertLess(elapsed, 2.5)
+                # Second request should trigger sleep for historical rate limiting
+                await self.pace_manager.wait_if_needed(is_historical=True)
+                
+                # Verify that sleep was called with approximately 2.0 seconds
+                # (historical requests have 2-second minimum spacing)
+                mock_sleep.assert_called_once()
+                call_args = mock_sleep.call_args[0][0]  # Get the first argument (sleep duration)
+                self.assertGreater(call_args, 1.9)  # Should wait close to 2 seconds
+                self.assertLess(call_args, 2.1)
 
         asyncio.run(run_test())
 

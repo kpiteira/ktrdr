@@ -208,7 +208,7 @@ uv run pytest tests/e2e/real/ -v
 
 | Test Category | Target Time | Current Performance | Status |
 |---------------|-------------|-------------------|---------|
-| Unit Tests | <15s | 13.83s | ✅ EXCELLENT |
+| Unit Tests | <15s | 8.89s | ✅ EXCELLENT |
 | Integration | <30s | 6.67s (fast subset) | ✅ EXCELLENT |
 | E2E Container | <5min | ~8min (with startup) | ⚠️ ACCEPTABLE |
 | Host Service | Manual | N/A (skip in CI) | ⏭️ MANUAL |
