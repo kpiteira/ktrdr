@@ -450,7 +450,10 @@ class ErrorHandler:
                     raise error
 
         # All retries exhausted
-        raise last_error
+        if isinstance(last_error, BaseException):
+            raise last_error
+        else:
+            raise RuntimeError(f"All retries exhausted. Last error: {last_error}")
 
     def graceful_shutdown(self):
         """Perform graceful shutdown."""
@@ -474,8 +477,8 @@ class ErrorHandler:
 
         # Overall statistics
         total_errors = len(self.error_history)
-        severity_counts = {}
-        error_type_counts = {}
+        severity_counts: dict[str, int] = {}
+        error_type_counts: dict[str, int] = {}
 
         for error in self.error_history:
             # Severity distribution

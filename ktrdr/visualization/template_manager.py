@@ -6,7 +6,7 @@ templates used in the visualization module.
 """
 
 import json
-from typing import Optional
+from typing import Any, Optional
 
 # Setup logging
 import logging
@@ -395,8 +395,8 @@ class TemplateManager:
         overlay_scripts = ""
 
         # Maps to track charts for synchronization
-        chart_ids = []
-        charts_to_sync = {}
+        chart_ids: list[str] = []
+        charts_to_sync: dict[str, Any] = {}
 
         # Process chart configurations
         for config in chart_configs:

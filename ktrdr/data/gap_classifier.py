@@ -110,8 +110,8 @@ class GapClassifier:
             GapClassification enum value
         """
         # Ensure timestamps are UTC
-        start_time = TimestampManager.to_utc(start_time)
-        end_time = TimestampManager.to_utc(end_time)
+        start_time = TimestampManager.to_utc(start_time)  # type: ignore[assignment]
+        end_time = TimestampManager.to_utc(end_time)  # type: ignore[assignment]
 
         # Get symbol metadata
         symbol_data = self.symbol_metadata.get(symbol, {})
@@ -813,8 +813,8 @@ class GapClassifier:
             return False
 
         # Ensure timezone consistency - convert all to UTC timezone-aware
-        start_time = TimestampManager.to_utc(start_time)
-        end_time = TimestampManager.to_utc(end_time)
+        start_time = TimestampManager.to_utc(start_time)  # type: ignore[assignment]
+        end_time = TimestampManager.to_utc(end_time)  # type: ignore[assignment]
 
         # Look for volume=-1 in the period around the gap
         gap_window = timedelta(hours=6)  # Look 6 hours before and after gap

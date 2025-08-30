@@ -162,7 +162,7 @@ class TimestampManager:
         df_copy = df.copy()
 
         # Convert index to UTC
-        df_copy.index = TimestampManager.to_utc_series(df_copy.index)
+        df_copy.index = TimestampManager.to_utc_series(pd.DatetimeIndex(df_copy.index))
 
         return df_copy
 
@@ -450,7 +450,7 @@ class TimestampManager:
 
 
 # Convenience functions for backward compatibility
-def ensure_utc_timestamp(dt: Union[datetime, pd.Timestamp, str]) -> pd.Timestamp:
+def ensure_utc_timestamp(dt: Union[datetime, pd.Timestamp, str]) -> Optional[pd.Timestamp]:
     """Convenience function - alias for TimestampManager.to_utc()."""
     return TimestampManager.to_utc(dt)
 

@@ -69,7 +69,7 @@ def with_global_timeout(
                 logger.error(f"❌ {operation_name} failed after {duration:.2f}s: {e}")
                 raise
 
-        return wrapper
+        return wrapper  # type: ignore
 
     return decorator
 

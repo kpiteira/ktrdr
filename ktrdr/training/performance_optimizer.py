@@ -235,7 +235,7 @@ class PerformanceOptimizer:
         # Compile model for faster execution (PyTorch 2.0+)
         if self.config.compile_model and self.compile_available:
             try:
-                optimized_model = torch.compile(
+                optimized_model = torch.compile(  # type: ignore[assignment]
                     model,
                     mode=self.config.compile_mode,
                     fullgraph=False,  # Allow graph breaks for compatibility

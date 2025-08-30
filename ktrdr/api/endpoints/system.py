@@ -267,6 +267,7 @@ async def get_system_config() -> ApiResponse:
                     "data_fetcher",
                 ],
             },
+            error=None,
         )
 
     except Exception as e:

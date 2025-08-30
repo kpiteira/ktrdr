@@ -496,9 +496,9 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                     if self._is_multi_timeframe and isinstance(fuzzy_name, str) and fuzzy_name.endswith(
                         f"_{timeframe}"
                     ):
-                        clean_name = fuzzy_name[: -len(f"_{timeframe}")]
+                        clean_name = str(fuzzy_name)  # Ensure string type[: -len(f"_{timeframe}")]
                     else:
-                        clean_name = fuzzy_name
+                        clean_name = str(fuzzy_name)  # Ensure string type
                     result[clean_name] = membership
 
             except Exception as e:

@@ -734,7 +734,7 @@ class DataValidator:
             "1w",
         ]
 
-        timeframe_features = {}
+        timeframe_features: dict[str, Any] = {}
         unnamed_features = []
 
         for _i, name in enumerate(feature_names):

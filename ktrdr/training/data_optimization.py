@@ -356,7 +356,7 @@ class PrefetchingDataLoader:
         )
 
         # Prefetching setup
-        self.prefetch_queue = queue.Queue(maxsize=self.config.prefetch_queue_size)
+        self.prefetch_queue: queue.Queue[Any] = queue.Queue(maxsize=self.config.prefetch_queue_size)
         self.prefetch_thread = None
         self.stop_prefetching = threading.Event()
 
@@ -622,7 +622,7 @@ class DataLoadingOptimizer:
                     .sum()
                     .item()
                 )
-                stats["symbol_class_distribution"][symbol][f"class_{class_idx}"] = count
+                stats["symbol_class_distribution"][symbol][f"class_{class_idx}"] = count  # type: ignore
 
         # Feature statistics
         features = dataset.feature_tensor

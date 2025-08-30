@@ -249,7 +249,7 @@ class IbDataFetcher:
         elif instrument_type == "STK":
             # Stock contract
             logger.debug(f"Creating stock contract for {symbol}")
-            contract = Stock(symbol, "SMART", "USD")
+            contract = Stock(symbol, "SMART", "USD")  # type: ignore[assignment]
             logger.debug(f"Created stock contract: {contract}")
             return contract
         else:
@@ -257,7 +257,7 @@ class IbDataFetcher:
             logger.warning(
                 f"Unknown instrument type '{instrument_type}', defaulting to stock"
             )
-            contract = Stock(symbol, "SMART", "USD")
+            contract = Stock(symbol, "SMART", "USD")  # type: ignore[assignment]
             logger.debug(f"Created default stock contract: {contract}")
             return contract
 

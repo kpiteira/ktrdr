@@ -273,7 +273,7 @@ class ConfigLoader:
                 return full_config.indicators.multi_timeframe
             else:
                 logger.warning("No multi-timeframe indicator configuration found")
-                return MultiTimeframeIndicatorConfig()
+                return MultiTimeframeIndicatorConfig(column_standardization=True)
 
         except ConfigurationError:
             # Re-raise configuration errors

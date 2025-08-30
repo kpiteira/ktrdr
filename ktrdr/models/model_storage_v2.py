@@ -393,7 +393,7 @@ class ModelStorageV2:
                     logger.debug(f"Could not load metadata from {model_dir}: {e}")
 
         # Sort by creation date (newest first)
-        models.sort(key=lambda x: x["created_at"], reverse=True)
+        models.sort(key=lambda x: x["created_at"], reverse=True)  # type: ignore
         return models
 
     def delete_model(self, model_path: Union[str, Path], confirm: bool = False) -> bool:
@@ -493,13 +493,13 @@ class ModelStorageV2:
             if isinstance(strategy_config, StrategyConfigurationV2):
                 scope = strategy_config.scope
             else:
-                scope = ModelScope.SYMBOL_SPECIFIC  # Legacy models are symbol-specific
+                scope = ModelScope.SYMBOL_SPECIFIC  # type: ignore[assignment]  # Legacy models are symbol-specific
 
             metadata = self.metadata_manager.create_metadata(
                 strategy_name=strategy_config.name,
                 strategy_version=strategy_config.version or "1.0",
                 model_version=legacy_version,
-                scope=scope,
+                scope=ModelScope(scope.value) if hasattr(scope, 'value') else ModelScope(scope),
                 training_symbols=symbols or [legacy_symbol],
                 training_timeframes=timeframes or [legacy_timeframe],
             )

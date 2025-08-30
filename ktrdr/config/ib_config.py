@@ -127,7 +127,7 @@ class IbConfig:
             "readonly": self.readonly,
         }
 
-    def get_chunk_size(self, bar_size: str) -> int:
+    def get_chunk_size(self, bar_size: str) -> float:
         """
         Get maximum chunk size in days for a given bar size.
 

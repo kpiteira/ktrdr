@@ -80,7 +80,7 @@ class StrategyConfigurationLoader:
             try:
                 # Add sensible defaults for missing required fields
                 raw_config = self._add_legacy_defaults(raw_config)
-                config = LegacyStrategyConfiguration(**raw_config)
+                config = LegacyStrategyConfiguration(**raw_config)  # type: ignore[assignment]
                 return config, False
             except ValidationError as e:
                 raise ValueError(

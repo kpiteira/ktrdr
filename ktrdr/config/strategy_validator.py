@@ -150,9 +150,11 @@ class StrategyValidator:
             return result
 
         if is_v2:
-            return self._validate_v2_strategy(config, result)
+            # Type checked - config is StrategyConfigurationV2 when is_v2 is True
+            return self._validate_v2_strategy(config, result)  # type: ignore
         else:
-            return self._validate_v1_strategy(config, result)
+            # Type checked - config is LegacyStrategyConfiguration when is_v2 is False  
+            return self._validate_v1_strategy(config, result)  # type: ignore
 
     def _validate_v2_strategy(
         self, config: StrategyConfigurationV2, result: ValidationResult
@@ -427,7 +429,10 @@ class StrategyValidator:
                 upgraded_config[section] = deepcopy(defaults)
             else:
                 # Merge missing fields
-                self._merge_defaults(upgraded_config[section], defaults)
+                if isinstance(defaults, dict):
+                    self._merge_defaults(upgraded_config[section], defaults)
+                else:
+                    self._merge_defaults(upgraded_config[section], dict(defaults))  # type: ignore
 
         # Update version if present
         if "version" in upgraded_config:

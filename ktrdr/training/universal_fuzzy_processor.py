@@ -199,7 +199,7 @@ class UniversalFuzzyNeuralProcessor:
             temporal_features = pd.concat([temporal_features, lagged], axis=1)
 
         # Forward fill initial NaN values from lags
-        temporal_features = temporal_features.fillna(method="ffill").fillna(0)
+        temporal_features = temporal_features.ffill().fillna(0)
 
         logger.debug(
             f"Added temporal features, total: {len(temporal_features.columns)}"

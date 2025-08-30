@@ -433,7 +433,7 @@ class ModelMetadataManager:
     ) -> dict[str, list[dict[str, Any]]]:
         """Get model rankings by scope and performance."""
 
-        rankings = {"universal": [], "symbol_group": [], "symbol_specific": []}
+        rankings: dict[str, list[dict[str, Any]]] = {"universal": [], "symbol_group": [], "symbol_specific": []}
 
         for strategy_dir in self.models_base_path.iterdir():
             if not strategy_dir.is_dir():

@@ -561,7 +561,10 @@ class IbConnection:
 
             # Wait for result from the connection thread
             logger.debug(f" Waiting for result from request {request.request_id}")
-            result = request.result_future.result(timeout=30.0)
+            if request.result_future is not None:
+                result = request.result_future.result(timeout=30.0)
+            else:
+                raise ConnectionError("No result future available")
             logger.debug(f" Got result from request {request.request_id} successfully")
             return result
 
@@ -604,13 +607,14 @@ class IbConnection:
             raise ConnectionError(f"IB connection {self.client_id} is not healthy")
 
         # Create future for result
-        result_future = Future()
+        result_future: Future[Any] = Future()
 
         # Create request object
         request = ConnectionRequest(
             func=func,
             args=args,
             kwargs=kwargs,
+            request_id=f"req_{int(time.time() * 1000000)}",
             result_future=result_future,
             timestamp=time.time(),
         )

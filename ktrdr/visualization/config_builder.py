@@ -241,10 +241,10 @@ class ConfigBuilder:
             options.update(
                 {
                     "color": color,
-                    "lineWidth": line_width,
-                    "lineStyle": kwargs.get(
+                    "lineWidth": int(line_width),
+                    "lineStyle": int(kwargs.get(
                         "line_style", 0
-                    ),  # 0 = solid, 1 = dotted, 2 = dashed
+                    )),  # 0 = solid, 1 = dotted, 2 = dashed
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
@@ -259,8 +259,8 @@ class ConfigBuilder:
                     ),  # Add alpha for transparency
                     "bottomColor": kwargs.get("bottom_color", color + "10"),
                     "lineColor": kwargs.get("line_color", color),
-                    "lineWidth": line_width,
-                    "lineStyle": kwargs.get("line_style", 0),
+                    "lineWidth": int(line_width),
+                    "lineStyle": int(kwargs.get("line_style", 0)),
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),

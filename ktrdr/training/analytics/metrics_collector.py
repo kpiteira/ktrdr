@@ -5,7 +5,7 @@ from typing import Any, Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import precision_recall_fscore_support  # type: ignore
 
 from ktrdr import get_logger
 
@@ -354,7 +354,7 @@ class MetricsCollector:
 
         cv = std_support / mean_support
         # Convert to balance score (1 - normalized CV)
-        balance_score = max(0.0, 1.0 - min(1.0, cv))
+        balance_score = max(0.0, 1.0 - min(1.0, float(cv)))
         return float(balance_score)
 
     def _calculate_convergence_indicator(
