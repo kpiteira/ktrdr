@@ -57,8 +57,8 @@ class PositionState:
         self.symbol = symbol
         self.position = Position.FLAT
         self.entry_price = None
-        self.entry_time = None
-        self.last_signal_time = None
+        self.entry_time: Optional[pd.Timestamp] = None
+        self.last_signal_time: Optional[pd.Timestamp] = None
         self.unrealized_pnl = 0.0
 
     @property
@@ -86,7 +86,7 @@ class PositionState:
         """
         if decision.signal != Signal.HOLD:
             self.last_signal_time = (
-                current_bar.name if hasattr(current_bar, "name") else pd.Timestamp.now()
+                pd.Timestamp(str(current_bar.name)) if hasattr(current_bar, "name") else pd.Timestamp.now()
             )
 
             if decision.signal == Signal.BUY and self.position == Position.FLAT:
@@ -217,7 +217,7 @@ class DecisionOrchestrator:
             try:
                 # Use pre-computed cached features for fast lookup
                 mapped_indicators, fuzzy_values = (
-                    self.feature_cache.get_features_for_timestamp(current_timestamp)
+                    self.feature_cache.get_features_for_timestamp(pd.Timestamp(str(current_timestamp)))
                 )
                 logger.debug(
                     f"🚀 [{cast(pd.Timestamp, current_timestamp).strftime('%Y-%m-%d %H:%M')}] Using cached features: {len(mapped_indicators)} indicators, {len(fuzzy_values)} fuzzy"
@@ -254,19 +254,25 @@ class DecisionOrchestrator:
             self.model, self.model_metadata = self._load_model_for_symbol(
                 symbol, timeframe
             )
-            self.decision_engine.neural_model.model = self.model
-            self.decision_engine.neural_model.is_trained = True
-            # Set the saved scaler for consistent feature scaling
-            self.decision_engine.neural_model.feature_scaler = self.model_metadata.get(
-                "scaler"
-            )
-            logger.info(
-                f"🤖 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Model loaded successfully, is_trained: {self.decision_engine.neural_model.is_trained}"
-            )
+            if self.decision_engine.neural_model is not None:
+                self.decision_engine.neural_model.model = self.model
+                self.decision_engine.neural_model.is_trained = True
+                # Set the saved scaler for consistent feature scaling
+                self.decision_engine.neural_model.feature_scaler = self.model_metadata.get(
+                    "scaler"
+                )
+                logger.info(
+                    f"🤖 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Model loaded successfully, is_trained: {self.decision_engine.neural_model.is_trained}"
+                )
+            else:
+                logger.warning("Neural model not initialized")
         else:
-            logger.debug(
-                f"🤖 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Using existing model, is_trained: {self.decision_engine.neural_model.is_trained}"
-            )
+            if self.decision_engine.neural_model is not None:
+                logger.debug(
+                    f"🤖 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Using existing model, is_trained: {self.decision_engine.neural_model.is_trained}"
+                )
+            else:
+                logger.debug("Neural model not initialized")
 
         # Step 5: Generate decision using the decision engine
         logger.debug(
@@ -388,7 +394,7 @@ class DecisionOrchestrator:
                         break
 
         # Step 2: Generate fuzzy memberships
-        fuzzy_values = {}
+        fuzzy_values: dict[str, Any] = {}
         logger.debug(
             f"🔀 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Generating fuzzy memberships for {len(mapped_indicators)} indicators"
         )
@@ -437,11 +443,11 @@ class DecisionOrchestrator:
         Returns:
             Strategy configuration dictionary
         """
-        config_path = Path(config_path)
-        if not config_path.exists():
-            raise FileNotFoundError(f"Strategy config not found: {config_path}")
+        path_obj = Path(config_path)
+        if not path_obj.exists():
+            raise FileNotFoundError(f"Strategy config not found: {path_obj}")
 
-        with open(config_path) as f:
+        with open(path_obj) as f:
             config = yaml.safe_load(f)
 
         # Validate required sections

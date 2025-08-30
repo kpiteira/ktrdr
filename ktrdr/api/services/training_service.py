@@ -605,7 +605,7 @@ class TrainingService(BaseService):
                 trainer = StrategyTrainer(models_dir="models")
 
                 # If analytics is enabled, create a temporary strategy file with modified config
-                actual_strategy_path = strategy_path
+                actual_strategy_path = str(strategy_path)
                 if detailed_analytics:
                     temp_strategy_file = tempfile.NamedTemporaryFile(
                         mode="w", suffix=".yaml", delete=False
@@ -750,8 +750,8 @@ class TrainingService(BaseService):
                         actual_strategy_path,
                         symbol,
                         timeframes,
-                        start_date,
-                        end_date,
+                        start_date or "",
+                        end_date or "",
                         training_config.get("validation_split", 0.2),
                         "local",
                         sync_progress_callback,
@@ -803,7 +803,7 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
-                                                steps_completed=epoch + 1,
+                                                steps_completed=current_progress.get("current_epoch", 0) + 1,
                                                 steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
@@ -832,7 +832,7 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
-                                                steps_completed=epoch + 1,
+                                                steps_completed=current_progress.get("current_epoch", 0) + 1,
                                                 steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
@@ -1039,7 +1039,7 @@ class TrainingService(BaseService):
                 trainer = StrategyTrainer(models_dir="models")
 
                 # If analytics is enabled, create a temporary strategy file with modified config
-                actual_strategy_path = strategy_path
+                actual_strategy_path = str(strategy_path)
                 if detailed_analytics:
                     temp_strategy_file = tempfile.NamedTemporaryFile(
                         mode="w", suffix=".yaml", delete=False
@@ -1194,8 +1194,8 @@ class TrainingService(BaseService):
                         actual_strategy_path,
                         symbols,
                         timeframes,
-                        start_date,
-                        end_date,
+                        start_date or "",
+                        end_date or "",
                         training_config.get("validation_split", 0.2),
                         "local",
                         sync_progress_callback,
@@ -1247,7 +1247,7 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
-                                                steps_completed=epoch + 1,
+                                                steps_completed=current_progress.get("current_epoch", 0) + 1,
                                                 steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,
@@ -1276,7 +1276,7 @@ class TrainingService(BaseService):
                                             OperationProgress(
                                                 percentage=min(percentage, 90.0),
                                                 current_step=current_step,
-                                                steps_completed=epoch + 1,
+                                                steps_completed=current_progress.get("current_epoch", 0) + 1,
                                                 steps_total=total_epochs,
                                                 items_processed=total_bars_processed,
                                                 items_total=total_bars_all_epochs,

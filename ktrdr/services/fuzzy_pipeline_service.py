@@ -380,7 +380,7 @@ class FuzzyPipelineService:
         total_symbols = len(results)
         successful_symbols = sum(1 for r in results.values() if len(r.errors) == 0)
 
-        report = {
+        report: dict[str, Any] = {
             "summary": {
                 "total_symbols": total_symbols,
                 "successful_symbols": successful_symbols,

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 import yaml  # type: ignore[import-untyped]
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import f1_score, precision_score, recall_score  # type: ignore[import-untyped]
 
 from ..data.data_manager import DataManager
 from ..fuzzy.engine import FuzzyEngine
@@ -33,7 +33,7 @@ class StrategyTrainer:
         self.model_storage = ModelStorage(models_dir)
         self.data_manager = DataManager()
         self.indicator_engine = IndicatorEngine()
-        self.fuzzy_engine = None  # Will be initialized with strategy config
+        self.fuzzy_engine: Optional[FuzzyEngine] = None  # Will be initialized with strategy config
 
     def train_multi_symbol_strategy(
         self,
@@ -598,7 +598,7 @@ class StrategyTrainer:
         end = pd.to_datetime(end_date)
 
         # Make dates timezone-aware if needed
-        if data.index.tz is not None:
+        if hasattr(data.index, 'tz') and data.index.tz is not None:
             if start.tz is None:
                 start = start.tz_localize("UTC")
             if end.tz is None:
@@ -829,6 +829,9 @@ class StrategyTrainer:
             fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
             self.fuzzy_engine = FuzzyEngine(fuzzy_config)
 
+        # Ensure fuzzy engine is initialized
+        assert self.fuzzy_engine is not None
+
         # Handle single timeframe case (backward compatibility)
         if len(indicators) == 1 and isinstance(
             list(indicators.values())[0], pd.DataFrame
@@ -836,12 +839,12 @@ class StrategyTrainer:
             timeframe, tf_indicators = next(iter(indicators.items()))
 
             # Process each indicator (original single-timeframe logic)
-            fuzzy_results = {}
+            fuzzy_results: dict[str, Any] = {}
             for indicator_name, indicator_data in tf_indicators.items():
                 if indicator_name in fuzzy_configs:
                     # Fuzzify the indicator
                     membership_values = self.fuzzy_engine.fuzzify(
-                        indicator_name, indicator_data
+                        str(indicator_name), indicator_data
                     )
                     fuzzy_results.update(membership_values)
 

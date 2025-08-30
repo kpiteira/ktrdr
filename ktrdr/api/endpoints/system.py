@@ -15,7 +15,7 @@ from ktrdr import metadata
 from ktrdr.api.models.base import ApiResponse
 
 # Old architecture removed - using new ktrdr.ib module
-from ktrdr.data.ib_gap_filler import get_gap_filler
+from ktrdr.data.ib_gap_filler import get_gap_filler  # type: ignore[import-untyped]
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

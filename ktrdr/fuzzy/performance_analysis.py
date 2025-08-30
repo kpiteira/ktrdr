@@ -366,7 +366,7 @@ class FuzzyPerformanceAnalyzer:
         service: FuzzyPipelineService,
         indicator_config: dict[str, Any],
         fuzzy_config: dict[str, Any],
-        data_sizes: list[int] = None,
+        data_sizes: Optional[list[int]] = None,
         symbol: str = "AAPL",
     ) -> dict[str, Any]:
         """
@@ -510,7 +510,7 @@ class FuzzyPerformanceAnalyzer:
             r.metrics.throughput_fv_per_sec for r in self.benchmark_results
         ]
 
-        report = {
+        report: dict[str, Any] = {
             "summary": {
                 "total_benchmarks": len(self.benchmark_results),
                 "avg_optimization_score": np.mean(all_scores),
@@ -563,7 +563,7 @@ class FuzzyPerformanceAnalyzer:
             all_recommendations.extend(result.recommendations)
 
         # Count common recommendations
-        recommendation_counts = {}
+        recommendation_counts: dict[str, int] = {}
         for rec in all_recommendations:
             key = rec.split(".")[0]  # Use first sentence as key
             recommendation_counts[key] = recommendation_counts.get(key, 0) + 1

@@ -547,7 +547,7 @@ class DataService(BaseService):
             }
 
         # Format the dates as ISO strings
-        dates = df.index.strftime("%Y-%m-%dT%H:%M:%S").tolist()
+        dates = pd.to_datetime(df.index).strftime("%Y-%m-%dT%H:%M:%S").tolist()
 
         # Extract OHLCV data as nested list
         ohlcv = df[["open", "high", "low", "close", "volume"]].values.tolist()
@@ -592,7 +592,7 @@ class DataService(BaseService):
         )
 
         # Create a map of symbol to timeframes
-        symbol_timeframes = {}
+        symbol_timeframes: dict[str, list[str]] = {}
         for symbol, timeframe in available_files:
             if symbol not in symbol_timeframes:
                 symbol_timeframes[symbol] = []
@@ -663,7 +663,7 @@ class DataService(BaseService):
 
             # Try to get data directory from settings
             try:
-                from ktrdr.config.settings import get_settings
+                from ktrdr.config.settings import get_api_settings as get_settings
 
                 settings = get_settings()
                 data_dir = (
@@ -895,7 +895,7 @@ class DataService(BaseService):
                 details={"symbol": symbol, "timeframe": timeframe},
             ) from e
 
-    def _filter_trading_hours(
+    def _filter_trading_hours_advanced(
         self,
         df: pd.DataFrame,
         trading_hours: dict[str, Any],
@@ -933,15 +933,19 @@ class DataService(BaseService):
 
             # Convert index to the exchange timezone
             df_tz = df.copy()
-            if df_tz.index.tz is None:
+            if hasattr(df_tz.index, 'tz') and df_tz.index.tz is None:
                 df_tz.index = df_tz.index.tz_localize("UTC")
-            df_tz.index = df_tz.index.tz_convert(timezone)
+            if hasattr(df_tz.index, 'tz_convert'):
+                df_tz.index = df_tz.index.tz_convert(timezone)
 
             # Create boolean mask for filtering
             mask = pd.Series(False, index=df_tz.index)
 
             # Filter by trading days
-            day_mask = df_tz.index.dayofweek.isin(trading_days)
+            if hasattr(df_tz.index, 'dayofweek'):
+                day_mask = df_tz.index.dayofweek.isin(trading_days)
+            else:
+                day_mask = pd.Series(True, index=df_tz.index)
 
             # Add regular hours
             if regular_hours:
@@ -953,16 +957,19 @@ class DataService(BaseService):
                 end_hour, end_min = map(int, end_time.split(":"))
 
                 # Create time-based mask
-                time_mask = (
-                    (df_tz.index.hour > start_hour)
-                    | (
-                        (df_tz.index.hour == start_hour)
-                        & (df_tz.index.minute >= start_min)
+                if hasattr(df_tz.index, 'hour') and hasattr(df_tz.index, 'minute'):
+                    time_mask = (
+                        (df_tz.index.hour > start_hour)
+                        | (
+                            (df_tz.index.hour == start_hour)
+                            & (df_tz.index.minute >= start_min)
+                        )
+                    ) & (
+                        (df_tz.index.hour < end_hour)
+                        | ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
                     )
-                ) & (
-                    (df_tz.index.hour < end_hour)
-                    | ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
-                )
+                else:
+                    time_mask = pd.Series(True, index=df_tz.index)
 
                 mask |= day_mask & time_mask
 

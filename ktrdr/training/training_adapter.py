@@ -82,7 +82,7 @@ class TrainingAdapter:
             # Local training mode (existing behavior)
             from .train_strategy import StrategyTrainer
 
-            self.local_trainer = StrategyTrainer()
+            self.local_trainer: Optional[StrategyTrainer] = StrategyTrainer()
             logger.info("TrainingAdapter initialized for local training")
         else:
             # Host service mode
@@ -230,6 +230,11 @@ class TrainingAdapter:
             else:
                 # Use local training (existing behavior)
                 logger.info(f"Starting local training for {symbols} on {timeframes}")
+
+                if self.local_trainer is None:
+                    raise TrainingProviderError(
+                        "Local trainer not initialized", provider="Training"
+                    )
 
                 return self.local_trainer.train_multi_symbol_strategy(
                     strategy_config_path=strategy_config_path,
