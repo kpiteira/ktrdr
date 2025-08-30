@@ -86,7 +86,6 @@ async def analyze_symbol_gaps(
             start_date=start_date,
             end_date=end_date,
             mode=mode,
-            include_expected=include_expected,
         )
 
         logger.info(
@@ -225,7 +224,6 @@ async def get_gap_summary(
             start_date=start_date,
             end_date=end_date,
             mode=GapAnalysisMode.NORMAL,
-            include_expected=False,
         )
 
         # Perform analysis

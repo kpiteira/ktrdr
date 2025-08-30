@@ -150,10 +150,15 @@ class StrategyConfigurationLoader:
             symbol_config = SymbolConfiguration(
                 mode=SymbolMode.SINGLE,
                 symbol=legacy_symbols[0] if legacy_symbols else "PLACEHOLDER",
+                symbols=None,
+                selection_criteria=None,
             )
         else:
             symbol_config = SymbolConfiguration(
-                mode=SymbolMode.MULTI_SYMBOL, list=legacy_symbols
+                mode=SymbolMode.MULTI_SYMBOL, 
+                symbol=None,
+                symbols=legacy_symbols,
+                selection_criteria=None,
             )
 
         # Create timeframe configuration
@@ -161,11 +166,14 @@ class StrategyConfigurationLoader:
             timeframe_config = TimeframeConfiguration(
                 mode=TimeframeMode.SINGLE,
                 timeframe=legacy_timeframes[0] if legacy_timeframes else "1h",
+                timeframes=None,
+                base_timeframe=None,
             )
         else:
             timeframe_config = TimeframeConfiguration(
                 mode=TimeframeMode.MULTI_TIMEFRAME,
-                list=legacy_timeframes,
+                timeframe=None,
+                timeframes=legacy_timeframes,
                 base_timeframe=legacy_timeframes[0],  # Use first as base
             )
 
@@ -174,6 +182,8 @@ class StrategyConfigurationLoader:
             symbols=symbol_config,
             timeframes=timeframe_config,
             history_required=data_section.get("history_required", 200),
+            start_date=None,
+            end_date=None,
         )
 
         # Create deployment configuration
@@ -184,7 +194,10 @@ class StrategyConfigurationLoader:
         else:
             target_symbol_mode = TargetSymbolMode.UNIVERSAL
 
-        target_symbols = TargetSymbolConfiguration(mode=target_symbol_mode)
+        target_symbols = TargetSymbolConfiguration(
+            mode=target_symbol_mode,
+            restrictions=None
+        )
 
         target_timeframes = TargetTimeframeConfiguration(
             mode=timeframe_config.mode,

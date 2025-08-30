@@ -84,7 +84,6 @@ def analyze_gaps(
             start_date=start_date,
             end_date=end_date,
             mode=GapAnalysisMode(mode),
-            include_expected=include_expected,
         )
 
         # Run analysis
@@ -159,7 +158,6 @@ def analyze_batch_gaps(
             start_date=start_date,
             end_date=end_date,
             mode=GapAnalysisMode(mode),
-            include_expected=include_expected,
         )
 
         # Run batch analysis
