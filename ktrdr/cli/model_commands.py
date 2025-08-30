@@ -1005,7 +1005,7 @@ async def _make_prediction_async(
 
         # Filter by confidence threshold
         filtered_predictions = [
-            p for p in predictions if p["confidence"] >= confidence_threshold  # type: ignore[operator]
+            p for p in predictions if isinstance(p["confidence"], (int, float)) and p["confidence"] >= confidence_threshold
         ]
 
         # Format output

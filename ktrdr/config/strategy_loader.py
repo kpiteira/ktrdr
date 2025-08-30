@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import ValidationError
 
 from ktrdr import get_logger
@@ -80,7 +80,7 @@ class StrategyConfigurationLoader:
             try:
                 # Add sensible defaults for missing required fields
                 raw_config = self._add_legacy_defaults(raw_config)
-                config = LegacyStrategyConfiguration(**raw_config)  # type: ignore[assignment]
+                config = LegacyStrategyConfiguration(**raw_config)
                 return config, False
             except ValidationError as e:
                 raise ValueError(

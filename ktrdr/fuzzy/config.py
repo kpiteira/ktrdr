@@ -8,7 +8,7 @@ particularly focusing on triangular membership functions in Phase 1.
 from pathlib import Path
 from typing import Annotated, Literal, Optional, Union
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import (
     BaseModel,
     Field,

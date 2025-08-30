@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import typer
-from tabulate import tabulate  # type: ignore[import-untyped]
+from tabulate import tabulate
 
 from ktrdr.api.models.gap_analysis import (
     BatchGapAnalysisRequest,
@@ -18,7 +18,7 @@ from ktrdr.api.models.gap_analysis import (
     GapAnalysisRequest,
 )
 from ktrdr.api.services.gap_analysis_service import GapAnalysisService
-from ktrdr.data.ib_gap_filler import get_gap_filler  # type: ignore[import-untyped]
+from ktrdr.ib.gap_filler import get_gap_filler
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

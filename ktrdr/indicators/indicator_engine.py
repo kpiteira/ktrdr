@@ -66,7 +66,7 @@ class IndicatorEngine:
                 self.indicators = factory.build()
             elif isinstance(indicators[0], BaseIndicator):
                 # Use provided indicator instances directly
-                self.indicators = indicators  # type: ignore[assignment]
+                self.indicators = indicators
             else:
                 raise ConfigurationError(
                     "Invalid indicator specification type. Must be dict or BaseIndicator instance.",

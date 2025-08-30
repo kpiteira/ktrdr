@@ -381,7 +381,7 @@ class TimeframeSynchronizer:
                 # Check if most deltas are within tolerance of expected
                 tolerance = pd.Timedelta(minutes=tolerance_minutes)
                 consistent_count = (
-                    (actual_deltas - expected_delta).abs() <= tolerance  # type: ignore[operator]
+                    (actual_deltas - expected_delta).abs() <= tolerance
                 ).sum()
                 consistency_ratio = consistent_count / len(actual_deltas)
 
