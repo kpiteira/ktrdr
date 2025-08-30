@@ -47,7 +47,7 @@ class ConfigLoader:
     @ErrorHandler.with_error_handling(logger=logger)
     @log_entry_exit(logger=logger)
     def load(
-        self, config_path: Union[str, Path], model_type: type[T] = KtrdrConfig
+        self, config_path: Union[str, Path], model_type: type[T] = KtrdrConfig  # type: ignore
     ) -> T:
         """
         Load a YAML configuration file and validate it against a Pydantic model.
@@ -137,7 +137,7 @@ class ConfigLoader:
         self,
         env_var: str = "KTRDR_CONFIG",
         default_path: Optional[Union[str, Path]] = None,
-        model_type: type[T] = KtrdrConfig,
+        model_type: type[T] = KtrdrConfig,  # type: ignore
     ) -> T:
         """
         Load configuration from a path specified in an environment variable.

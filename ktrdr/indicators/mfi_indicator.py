@@ -188,12 +188,12 @@ class MFIIndicator(BaseIndicator):
                 money_flow = period_money_flows.iloc[j]
 
                 if pd.isna(
-                    change
+                    change  # type: ignore[call-overload]
                 ):  # Skip NaN values (first price change is always NaN)
                     continue
-                elif pd.notna(change) and change > 0:  # type: ignore[operator]
+                elif pd.notna(change) and change > 0:  # type: ignore[call-overload,operator]
                     positive_flow += money_flow
-                elif pd.notna(change) and change < 0:  # type: ignore[operator]
+                elif pd.notna(change) and change < 0:  # type: ignore[call-overload,operator]
                     negative_flow += money_flow
                 # If change == 0, money flow is not added to either positive or negative
 

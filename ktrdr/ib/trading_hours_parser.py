@@ -8,7 +8,7 @@ and converts it to our standardized trading hours format.
 import re
 from dataclasses import dataclass
 from datetime import time
-from typing import Optional
+from typing import Any, Optional
 
 from ktrdr.data.trading_hours import TradingHours, TradingSession
 from ktrdr.logging import get_logger
@@ -134,7 +134,7 @@ class IBTradingHoursParser:
         Returns:
             List of (start_time, end_time) tuples
         """
-        sessions = []
+        sessions: list[dict[str, Any]] = []
 
         if not hours_string or hours_string == "CLOSED":
             return sessions
@@ -217,7 +217,7 @@ class IBTradingHoursParser:
         """
         Extract extended hours by comparing all sessions with liquid sessions.
         """
-        extended = []
+        extended: list[dict[str, Any]] = []
 
         if not all_sessions or not regular_sessions:
             return extended

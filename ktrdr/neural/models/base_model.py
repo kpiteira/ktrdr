@@ -264,7 +264,7 @@ class BaseNeuralModel(ABC):
             )
 
         return {
-            "signal": signal_map[signal_idx],
+            "signal": signal_map[int(signal_idx)],
             "confidence": confidence,
             "probabilities": {
                 "BUY": float(probs[0]),

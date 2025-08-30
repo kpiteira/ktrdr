@@ -248,7 +248,7 @@ class ConfigBuilder:
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": kwargs.get("crosshair_marker_radius", 4),
+                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),
                 }
             )
         elif series_type == "area":
@@ -264,7 +264,7 @@ class ConfigBuilder:
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": kwargs.get("crosshair_marker_radius", 4),
+                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),
                 }
             )
         elif series_type == "histogram":

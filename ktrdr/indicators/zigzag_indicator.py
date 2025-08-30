@@ -5,6 +5,8 @@ This indicator creates a ZigZag line that connects significant price reversals,
 filtering out minor fluctuations based on a percentage threshold.
 """
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
@@ -134,9 +136,10 @@ class ZigZagIndicator(BaseIndicator):
 
         return pd.Series(zigzag, index=data.index, name=self.get_column_name())
 
-    def get_column_name(self) -> str:
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
         """Get the column name for this indicator."""
-        return f"ZigZag_{int(self.threshold*100)}"
+        base_name = f"ZigZag_{int(self.threshold*100)}"
+        return f"{base_name}_{suffix}" if suffix else base_name
 
     def get_zigzag_labels(self, data: pd.DataFrame) -> pd.Series:
         """
