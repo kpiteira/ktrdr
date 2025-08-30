@@ -633,7 +633,7 @@ class DataManager(ServiceOrchestrator):
         try:
             # Get basic file information from local loader
             # Note: Assuming basic file existence check since get_data_info may not exist
-            file_path = self.data_loader._get_file_path(symbol, timeframe)
+            file_path = self.data_loader._build_file_path(symbol, timeframe)
             import os
 
             if os.path.exists(file_path):

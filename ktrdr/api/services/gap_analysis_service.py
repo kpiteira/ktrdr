@@ -479,8 +479,8 @@ class GapAnalysisService:
         market_hours = getattr(gap_info, 'market_hours', True)
         
         return GapInfoModel(
-            start_time=gap_info.start_time,
-            end_time=gap_info.end_time,
+            start_time=gap_info.start_time.isoformat(),
+            end_time=gap_info.end_time.isoformat(),
             duration_hours=gap_info.duration_hours,
             gap_type=gap_type,
             severity=severity,

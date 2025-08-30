@@ -73,7 +73,7 @@ class DecisionEngine:
         if isinstance(current_data.name, pd.Timestamp):
             timestamp = current_data.name
         else:
-            timestamp = pd.Timestamp(current_data.name)
+            timestamp = pd.Timestamp(current_data.name)  # type: ignore[arg-type]
 
         # Get timestamp for logging
         timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M")

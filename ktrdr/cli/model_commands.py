@@ -700,7 +700,7 @@ async def _list_models_async(
         if pattern:
             pattern_upper = pattern.upper()  # Extract once to help mypy
             models = [
-                model for model in models if pattern_upper in model["name"].upper()
+                model for model in models if pattern_upper in str(model["name"]).upper()
             ]
 
         # Format output
@@ -731,12 +731,12 @@ async def _list_models_async(
 
             for model in models:
                 table.add_row(
-                    model["name"],
-                    model["symbol"],
-                    model["timeframe"],
-                    model["strategy"],
+                    str(model["name"]),
+                    str(model["symbol"]),
+                    str(model["timeframe"]),
+                    str(model["strategy"]),
                     f"{model['accuracy']:.1%}",
-                    model["size"],
+                    str(model["size"]),
                 )
 
             console.print(table)
@@ -1041,8 +1041,8 @@ async def _make_prediction_async(
 
                 for pred in filtered_predictions:
                     table.add_row(
-                        pred["timestamp"],
-                        pred["signal"],
+                        str(pred["timestamp"]),
+                        str(pred["signal"]),
                         f"{pred['confidence']:.1%}",
                         (
                             f"${pred['price_target']:.2f}"

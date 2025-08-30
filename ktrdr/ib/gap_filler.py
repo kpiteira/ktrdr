@@ -543,7 +543,7 @@ class GapFillerService:
         """Get gap filling statistics."""
         return {
             **self.stats,
-            "symbols_processed": list(self.stats["symbols_processed"]),
+            "symbols_processed": list(self.stats["symbols_processed"]),  # type: ignore[arg-type]
             "running": self._running,
             "check_interval": self.check_interval,
             "supported_timeframes": self.supported_timeframes,
@@ -562,7 +562,7 @@ class GapFillerService:
         """Force an immediate gap scan (for testing/debugging)."""
         try:
             # Check IB availability via DataManager
-            if not self.data_manager.enable_ib or not self.data_manager.ib_data_fetcher:
+            if not self.data_manager.enable_ib or not self.data_manager.external_provider:
                 return {"error": "IB not enabled in DataManager"}
 
             self._scan_and_fill_gaps()

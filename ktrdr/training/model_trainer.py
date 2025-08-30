@@ -52,7 +52,7 @@ class EarlyStopping:
         self.monitor = monitor
         self.mode = mode
         self.counter = 0
-        self.best_score = None
+        self.best_score: Optional[float] = None
         self.early_stop = False
 
     def __call__(self, metrics: TrainingMetrics) -> bool:
@@ -270,7 +270,7 @@ class ModelTrainer:
                         total_params = 0
                         for name, param in model.named_parameters():
                             if torch.isnan(param).any():
-                                nan_params += torch.isnan(param).sum().item()
+                                nan_params += int(torch.isnan(param).sum().item())
                                 print(f"  Parameter '{name}' has NaN values")
                             total_params += param.numel()
                         print(f"  Model has {nan_params}/{total_params} NaN parameters")
@@ -342,7 +342,7 @@ class ModelTrainer:
                     val_outputs = model(X_val)
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = float((val_predicted == y_val).float().mean().item())
+                    val_accuracy = (val_predicted == y_val).float().mean().item()
                     val_loss = val_loss.item()
 
                 # Save best model
@@ -695,7 +695,7 @@ class ModelTrainer:
 
                     val_loss = criterion(val_outputs, y_val)
                     _, val_predicted = torch.max(val_outputs.data, 1)
-                    val_accuracy = float((val_predicted == y_val).float().mean().item())
+                    val_accuracy = (val_predicted == y_val).float().mean().item()
                     val_loss = val_loss.item()
 
                 # Save best model
