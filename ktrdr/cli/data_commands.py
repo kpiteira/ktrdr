@@ -26,6 +26,7 @@ from rich.progress import (
 from rich.table import Table
 
 from ktrdr.cli.api_client import check_api_connection, get_api_client
+from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callback
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.cli.error_handler import (
     display_ib_connection_required_message,
@@ -478,113 +479,111 @@ async def _load_data_async(
                     api_client,
                 )
 
-            # Monitor operation progress
+            # Monitor operation progress with enhanced display
             if show_progress and not quiet:
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                    TimeElapsedColumn(),
-                    console=console,
-                    transient=False,  # Keep progress visible
-                    refresh_per_second=4,  # 🔧 FIX: Increase refresh rate to catch more progress states
-                ) as progress:
-                    task = progress.add_task("Loading data...", total=100)
+                # Create enhanced progress display
+                from ktrdr.data.components.progress_manager import ProgressState
+                from datetime import datetime
+                
+                enhanced_callback, display = create_enhanced_progress_callback(
+                    console=console, show_details=True
+                )
+                
+                operation_started = False
 
-                    # Poll operation status with higher frequency
-                    while True:
-                        try:
-                            # Check for cancellation and send cancel request immediately
-                            if cancelled:
-                                console.print(
-                                    "[yellow]🛑 Sending cancellation to server...[/yellow]"
+                # Poll operation status with enhanced display
+                while True:
+                    try:
+                        # Check for cancellation and send cancel request immediately
+                        if cancelled:
+                            console.print(
+                                "[yellow]🛑 Sending cancellation to server...[/yellow]"
+                            )
+                            try:
+                                cancel_response = await api_client.cancel_operation(
+                                    operation_id=operation_id,
+                                    reason="User requested cancellation via CLI",
                                 )
-                                try:
-                                    cancel_response = await api_client.cancel_operation(
-                                        operation_id=operation_id,
-                                        reason="User requested cancellation via CLI",
-                                    )
-                                    if cancel_response.get("success"):
-                                        console.print(
-                                            "✅ [yellow]Cancellation sent successfully[/yellow]"
-                                        )
-                                    else:
-                                        console.print(
-                                            f"[red]Cancel failed: {cancel_response}[/red]"
-                                        )
-                                except Exception as e:
+                                if cancel_response.get("success"):
                                     console.print(
-                                        f"[red]Cancel request failed: {str(e)}[/red]"
-                                    )
-                                break  # Exit the polling loop
-
-                            status_response = await api_client.get_operation_status(
-                                operation_id
-                            )
-                            operation_data = status_response.get("data", {})
-
-                            status = operation_data.get("status")
-                            progress_info = operation_data.get("progress", {})
-                            progress_percentage = progress_info.get("percentage", 0)
-                            current_step = progress_info.get(
-                                "current_step", "Loading..."
-                            )
-
-                            # Display warnings if any
-                            warnings = operation_data.get("warnings", [])
-                            if warnings:
-                                for warning in warnings[-2:]:  # Show last 2 warnings
-                                    console.print(f"[yellow]⚠️  {warning}[/yellow]")
-
-                            # Display errors if any
-                            errors = operation_data.get("errors", [])
-                            if errors:
-                                for error in errors[-2:]:  # Show last 2 errors
-                                    console.print(f"[red]❌ {error}[/red]")
-
-                            # Build enhanced description with segment info
-                            description = (
-                                current_step[:70] + "..."
-                                if len(current_step) > 70
-                                else current_step
-                            )
-
-                            # Add items processed info if available
-                            items_processed = progress_info.get("items_processed", 0)
-                            items_total = progress_info.get("items_total")
-                            if items_processed > 0:
-                                if items_total:
-                                    description += (
-                                        f" ({items_processed:,}/{items_total:,} items)"
+                                        "✅ [yellow]Cancellation sent successfully[/yellow]"
                                     )
                                 else:
-                                    description += f" ({items_processed:,} items)"
-
-                            # Update progress display with real data
-                            progress.update(
-                                task,
-                                completed=progress_percentage,
-                                description=description,
-                            )
-
-                            # Check if operation completed
-                            if status in ["completed", "failed", "cancelled"]:
-                                break
-
-                            # 🔧 FIX: Poll much more frequently to catch intermediate progress states
-                            await asyncio.sleep(
-                                0.3
-                            )  # Poll every 300ms instead of 1000ms
-
-                        except Exception as e:
-                            if not quiet:
+                                    console.print(
+                                        f"[red]Cancel failed: {cancel_response}[/red]"
+                                    )
+                            except Exception as e:
                                 console.print(
-                                    f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
+                                    f"[red]Cancel request failed: {str(e)}[/red]"
                                 )
-                            # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
-                            await asyncio.sleep(1.0)
-                            continue
+                            break  # Exit the polling loop
+
+                        status_response = await api_client.get_operation_status(
+                            operation_id
+                        )
+                        operation_data = status_response.get("data", {})
+
+                        status = operation_data.get("status")
+                        progress_info = operation_data.get("progress", {})
+                        progress_percentage = progress_info.get("percentage", 0)
+                        current_step = progress_info.get(
+                            "current_step", "Loading..."
+                        )
+
+                        # Display warnings if any
+                        warnings = operation_data.get("warnings", [])
+                        if warnings:
+                            for warning in warnings[-2:]:  # Show last 2 warnings
+                                console.print(f"[yellow]⚠️  {warning}[/yellow]")
+
+                        # Display errors if any
+                        errors = operation_data.get("errors", [])
+                        if errors:
+                            for error in errors[-2:]:  # Show last 2 errors
+                                console.print(f"[red]❌ {error}[/red]")
+
+                        # Create ProgressState for enhanced display
+                        progress_state = ProgressState(
+                            operation_id=operation_id,
+                            current_step=progress_info.get("steps_completed", 0),
+                            total_steps=progress_info.get("steps_total", 10),
+                            message=current_step,
+                            percentage=progress_percentage,
+                            start_time=datetime.now(),  # Approximate - could be improved
+                            steps_completed=progress_info.get("steps_completed", 0),
+                            steps_total=progress_info.get("steps_total", 10),
+                            items_processed=progress_info.get("items_processed", 0),
+                            expected_items=progress_info.get("items_total", None),
+                        )
+                        
+                        # Start operation on first callback
+                        if not operation_started:
+                            display.start_operation(
+                                operation_name=f"load_data_{symbol}_{timeframe}",
+                                total_steps=progress_state.total_steps,
+                                context={"symbol": symbol, "timeframe": timeframe, "mode": mode}
+                            )
+                            operation_started = True
+
+                        # Update enhanced progress display
+                        display.update_progress(progress_state)
+
+                        # Check if operation completed
+                        if status in ["completed", "failed", "cancelled"]:
+                            display.complete_operation(success=(status == "completed"))
+                            break
+
+                        # Poll every 300ms for responsive updates
+                        await asyncio.sleep(0.3)
+
+                    except Exception as e:
+                        if not quiet:
+                            console.print(
+                                f"[yellow]Warning: Failed to get operation status: {str(e)}[/yellow]"
+                            )
+                        # Continue polling instead of breaking - temporary status errors shouldn't kill the loop
+                        await asyncio.sleep(1.0)
+                        continue
             else:
                 # Simple polling without progress display
                 while True:
