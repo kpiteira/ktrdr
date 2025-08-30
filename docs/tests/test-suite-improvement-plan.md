@@ -212,6 +212,12 @@ tests/
 
 **Goal:** Fast, reliable integration tests with proper boundaries
 
+**Success Criteria:**
+- 20-30 integration test files covering component interactions
+- All integration tests complete in <30 seconds
+- External services properly mocked (IB, training hosts)
+- Clean separation between unit and integration concerns
+
 #### Day 7: API & Service Integration
 
 - [ ] **7.1** Move API endpoint tests to `tests/integration/api/`
@@ -226,9 +232,23 @@ tests/
 - [ ] **8.3** Optimize test data and fixtures for speed
 - [ ] **8.4** Target: All integration tests <30s total
 
+**Phase 3 Validation Checks:**
+- [ ] **V3.A** Integration test count: 20-30 integration test files in `tests/integration/`
+- [ ] **V3.B** Performance target: `make test-integration` < 30 seconds
+- [ ] **V3.C** Coverage target: Integration tests cover component interactions
+- [ ] **V3.D** Mock external services: No real network calls to IB/training services
+- [ ] **V3.E** Categories covered: API endpoints, data pipelines, CLI workflows, service orchestration
+- [ ] **V3.F** Test isolation: Integration tests can run independently of unit tests
+
 ### Phase 4: E2E & CI Pipeline (Day 9)
 
 **Goal:** Complete test automation and CI integration
+
+**Success Criteria:**
+- 3-5 E2E test files covering full system workflows
+- Complete CI/CD pipeline with all test categories
+- Comprehensive Makefile with all test commands
+- Documentation and coverage reporting fully operational
 
 #### Day 9: E2E & CI Integration
 
@@ -240,12 +260,54 @@ tests/
 - [ ] **9.6** Create actual Makefile in project root
 - [ ] **9.7** Verify all documentation updates are consistent
 
-**Final Validation Checks:**
-- [ ] **VF.1** Complete test pyramid: Unit (<2s), Integration (<30s), E2E (<5min)
-- [ ] **VF.2** CI pipeline works: GitHub Actions passes with new workflow
+**Phase 4 Validation Checks:**
+- [ ] **V4.A** E2E test structure: 3-5 E2E test files in `tests/e2e/`
+- [ ] **V4.B** Performance target: `make test-e2e` < 5 minutes
+- [ ] **V4.C** CI integration: GitHub Actions workflow updated and passing
+- [ ] **V4.D** Makefile complete: All test commands working (`test-unit`, `test-integration`, `test-e2e`, `test-coverage`)
+- [ ] **V4.E** Documentation complete: All files reference correct Makefile commands
+- [ ] **V4.F** Coverage reporting: Codecov integration working and tracking trends
+
+**FINAL PROJECT VALIDATION (All Phases Complete):**
+- [ ] **VF.1** Complete test pyramid: Unit (<15s), Integration (<30s), E2E (<5min)
+- [ ] **VF.2** CI pipeline excellence: GitHub Actions passes with comprehensive workflow
 - [ ] **VF.3** Documentation consistency: All files reference same Makefile commands
-- [ ] **VF.4** Developer workflow: `make test-unit` is default, fast development loop
-- [ ] **VF.5** Coverage tracking: Codecov integration working and reporting trends
+- [ ] **VF.4** Developer workflow optimized: `make test-unit` default, sub-15s feedback loop
+- [ ] **VF.5** Coverage tracking operational: Codecov integration reporting trends
+- [ ] **VF.6** Performance achievement: 90%+ improvement over original test suite
+- [ ] **VF.7** Quality assurance: All test categories isolated and independently runnable
+- [ ] **VF.8** Maintenance ready: Clear structure, documentation, and workflows established
+
+## 🔍 COMPREHENSIVE VALIDATION FRAMEWORK
+
+### Phase 2 Validation (COMPLETE ✅)
+**V2.A-V2.F**: All passed - 74 unit test files, 1,081 tests, 13.83s, 32% coverage
+
+### Phase 3 Validation (PENDING)
+**V3.A**: Integration test count (20-30 files in `tests/integration/`)  
+**V3.B**: Performance (`make test-integration` < 30s)  
+**V3.C**: Coverage (component interactions covered)  
+**V3.D**: Mocking (no real external service calls)  
+**V3.E**: Categories (API, data pipelines, CLI workflows, orchestration)  
+**V3.F**: Isolation (independent from unit tests)
+
+### Phase 4 Validation (PENDING)
+**V4.A**: E2E structure (3-5 files in `tests/e2e/`)  
+**V4.B**: Performance (`make test-e2e` < 5 min)  
+**V4.C**: CI integration (GitHub Actions passing)  
+**V4.D**: Makefile complete (all test commands working)  
+**V4.E**: Documentation complete (consistent references)  
+**V4.F**: Coverage reporting (Codecov operational)
+
+### Final Project Validation (PENDING)
+**VF.1**: Complete test pyramid (Unit <15s, Integration <30s, E2E <5min)  
+**VF.2**: CI pipeline excellence (comprehensive GitHub Actions)  
+**VF.3**: Documentation consistency (unified Makefile references)  
+**VF.4**: Developer workflow (optimized feedback loop)  
+**VF.5**: Coverage tracking (operational Codecov trends)  
+**VF.6**: Performance achievement (90%+ improvement)  
+**VF.7**: Quality assurance (isolated, independent test categories)  
+**VF.8**: Maintenance readiness (complete structure and workflows)
 
 ## 🔧 Technical Implementation Details
 
