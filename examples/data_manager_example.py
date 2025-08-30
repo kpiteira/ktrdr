@@ -31,7 +31,13 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
-from ktrdr.data import DataCorruptionError, DataManager
+# Import after sys.path is configured
+try:
+    from ktrdr.data import DataCorruptionError, DataManager
+except ImportError as e:
+    print(f"Error importing ktrdr modules: {e}")
+    print("Make sure you're running this from the correct directory")
+    sys.exit(1)
 
 
 def create_sample_data_with_outliers():

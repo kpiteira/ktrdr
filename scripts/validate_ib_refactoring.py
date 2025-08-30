@@ -14,13 +14,18 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from ktrdr.data.ib_client_id_registry import ClientIdPurpose, get_client_id_registry
-from ktrdr.data.ib_connection_pool import acquire_ib_connection, get_connection_pool
-from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
-from ktrdr.data.ib_health_monitor import get_health_monitor
-from ktrdr.data.ib_metrics_collector import get_metrics_collector
-from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
-from ktrdr.logging import get_logger
+try:
+    from ktrdr.data.ib_client_id_registry import ClientIdPurpose, get_client_id_registry
+    from ktrdr.data.ib_connection_pool import acquire_ib_connection, get_connection_pool
+    from ktrdr.data.ib_data_fetcher_unified import IbDataFetcherUnified
+    from ktrdr.data.ib_health_monitor import get_health_monitor
+    from ktrdr.data.ib_metrics_collector import get_metrics_collector
+    from ktrdr.data.ib_symbol_validator_unified import IbSymbolValidatorUnified
+    from ktrdr.logging import get_logger
+except ImportError as e:
+    print(f"Error importing ktrdr modules: {e}")
+    print("Make sure you're running this from the correct directory")
+    sys.exit(1)
 
 logger = get_logger(__name__)
 

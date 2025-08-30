@@ -9,9 +9,15 @@ This service imports existing ktrdr.training modules and exposes them via HTTP
 endpoints that the containerized backend can call.
 """
 
+import logging
 import sys
 import warnings
+from datetime import datetime
 from pathlib import Path
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Suppress PyTorch distributed future warnings that are triggered by tensor introspection
 warnings.filterwarnings(
@@ -22,22 +28,21 @@ warnings.filterwarnings(
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
-import logging
-from datetime import datetime
+try:
+    from endpoints.health import router as health_router
 
-import uvicorn
-from endpoints.health import router as health_router
+    # Import endpoints
+    from endpoints.training import router as training_router
 
-# Import endpoints
-from endpoints.training import router as training_router
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+    # Import configuration
+    from config import get_host_service_config
 
-# Import configuration
-from config import get_host_service_config
-
-# Import existing ktrdr modules
-from ktrdr.logging import get_logger
+    # Import existing ktrdr modules
+    from ktrdr.logging import get_logger
+except ImportError as e:
+    print(f"Error importing modules: {e}")
+    print("Make sure the parent directory contains ktrdr modules")
+    sys.exit(1)
 
 # Get configuration
 service_config = get_host_service_config()

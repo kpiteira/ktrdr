@@ -26,9 +26,14 @@ import httpx
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ktrdr.api.services.training_host_client import TrainingHostClient
-from services.management.health_monitor import HealthMonitor
-from services.management.service_manager import ServiceManager
+try:
+    from ktrdr.api.services.training_host_client import TrainingHostClient
+    from services.management.health_monitor import HealthMonitor
+    from services.management.service_manager import ServiceManager
+except ImportError as e:
+    print(f"Error importing modules: {e}")
+    print("Make sure you're running this from the correct directory")
+    sys.exit(1)
 
 # Setup logging
 logging.basicConfig(

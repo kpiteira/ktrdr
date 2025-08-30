@@ -20,8 +20,13 @@ from typing import Any, Optional
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from ktrdr.config.ib_config import get_ib_config
-from ktrdr.logging import get_logger
+try:
+    from ktrdr.config.ib_config import get_ib_config
+    from ktrdr.logging import get_logger
+except ImportError as e:
+    print(f"Error importing ktrdr modules: {e}")
+    print("Make sure you're running this from the correct directory")
+    sys.exit(1)
 
 logger = get_logger(__name__)
 

@@ -369,7 +369,7 @@ class LocalDataLoader:
                 message=f"Invalid CSV format in file: {file_path}",
                 error_code="DATA-InvalidFormat",
                 details={"file_path": str(file_path), "parser_error": str(e)},
-            )
+            ) from e
         except Exception as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataError(
@@ -377,7 +377,7 @@ class LocalDataLoader:
                 message=f"Error reading data file {file_path}: {str(e)}",
                 error_code="DATA-ReadError",
                 details={"file_path": str(file_path), "error": str(e)},
-            )
+            ) from e
 
     @retry_with_backoff(
         retryable_exceptions=[IOError, OSError], config=None, logger=logger
@@ -693,7 +693,7 @@ class LocalDataLoader:
                 message=f"Empty data file: {file_path}",
                 error_code="DATA-EmptyFile",
                 details={"file_path": str(file_path)},
-            )
+            ) from None
         except pd.errors.ParserError as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
@@ -701,7 +701,7 @@ class LocalDataLoader:
                 message=f"Invalid CSV format in file: {file_path}",
                 error_code="DATA-InvalidFormat",
                 details={"file_path": str(file_path), "parser_error": str(e)},
-            )
+            ) from e
         except Exception as e:
             log_error(e, logger=logger, extra={"file_path": str(file_path)})
             raise DataFormatError(
@@ -709,4 +709,4 @@ class LocalDataLoader:
                 message=f"Error extracting date range from {file_path}: {str(e)}",
                 error_code="DATA-DateRangeError",
                 details={"file_path": str(file_path), "error": str(e)},
-            )
+            ) from e
