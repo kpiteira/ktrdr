@@ -219,9 +219,9 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                     if mf_type == "triangular":
                         mf_instance = TriangularMFConfig(**mf_config)
                     elif mf_type == "trapezoidal":
-                        mf_instance = TrapezoidalMFConfig(**mf_config)
+                        mf_instance = TrapezoidalMFConfig(**mf_config)  # type: ignore
                     elif mf_type == "gaussian":
-                        mf_instance = GaussianMFConfig(**mf_config)
+                        mf_instance = GaussianMFConfig(**mf_config)  # type: ignore
                     else:
                         raise ConfigurationError(
                             message=f"Unknown membership function type: {mf_type}",
@@ -456,7 +456,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
         """
         logger.debug(f"Processing fuzzy logic for timeframe {timeframe}")
 
-        result = {}
+        result: dict[str, Any] = {}
 
         # Get timeframe configuration
         if self._is_multi_timeframe and timeframe in self._timeframe_configs:

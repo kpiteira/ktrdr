@@ -135,7 +135,7 @@ class MLPTradingModel(BaseNeuralModel):
         criterion = nn.CrossEntropyLoss()
 
         # Training history
-        history = {
+        history: dict[str, list[float]] = {
             "train_loss": [],
             "train_accuracy": [],
             "val_loss": [],

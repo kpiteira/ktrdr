@@ -74,14 +74,14 @@ class ZigZagLabeler:
             if max_gain >= self.threshold and max_gain > max_loss:
                 # Additional check: ensure gain happens before any significant loss
                 bars_to_max = (
-                    len(close_prices.loc[close_prices.index[i] : max_gain_idx]) - 1
+                    len(close_prices.loc[close_prices.index[i] : max_gain_idx]) - 1  # type: ignore
                 )
                 if bars_to_max >= self.min_swing_length:
                     labels.iloc[i] = 0  # BUY
             elif max_loss >= self.threshold and max_loss > max_gain:
                 # Additional check: ensure loss happens before any significant gain
                 bars_to_min = (
-                    len(close_prices.loc[close_prices.index[i] : max_loss_idx]) - 1
+                    len(close_prices.loc[close_prices.index[i] : max_loss_idx]) - 1  # type: ignore
                 )
                 if bars_to_min >= self.min_swing_length:
                     labels.iloc[i] = 2  # SELL

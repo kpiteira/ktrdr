@@ -481,7 +481,7 @@ class IbSymbolValidator:
 
             except Exception as e:
                 retry_count += 1
-                last_error = e
+                last_error = e  # type: ignore
 
                 logger.warning(f"Contract lookup error: {e}")
 
@@ -612,7 +612,7 @@ class IbSymbolValidator:
             )
 
         # Try to get contract details
-        contract_info = await self.get_contract_details_async(normalized)
+        contract_info = await self.get_contract_details_async(normalized)  # type: ignore
         if not contract_info:
             # Check for format suggestions
             suggested = self._suggest_forex_format(normalized)
@@ -821,7 +821,7 @@ class IbSymbolValidator:
         logger.info(f"📅 Fetching head timestamp from IB for {symbol}")
 
         # Get contract info first
-        contract_info = await self.get_contract_details_async(normalized)
+        contract_info = await self.get_contract_details_async(normalized)  # type: ignore
         if not contract_info:
             logger.warning(
                 f"Cannot fetch head timestamp for {symbol} - contract not found"
@@ -890,7 +890,7 @@ class IbSymbolValidator:
 
             except Exception as e:
                 retry_count += 1
-                last_error = e
+                last_error = e  # type: ignore
 
                 logger.warning(f"Head timestamp error: {e}")
 

@@ -473,7 +473,7 @@ class TrainingStabilizer:
 
     def get_recovery_recommendations(self) -> list[str]:
         """Get recommendations for training recovery."""
-        recommendations = []
+        recommendations: list[str] = []
 
         if not self.stability_history:
             return recommendations
