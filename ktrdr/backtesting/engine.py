@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import pandas as pd
 
@@ -204,7 +204,7 @@ class BacktestingEngine:
 
         for idx in range(start_idx, len(data)):
             current_bar = data.iloc[idx]
-            current_timestamp = current_bar.name
+            current_timestamp = cast(pd.Timestamp, current_bar.name)
             current_price = current_bar["close"]
 
             # DEBUG: Log first few bars to ensure loop is running
@@ -580,11 +580,11 @@ class BacktestingEngine:
         # This prevents unrealized losses from skewing performance metrics
         final_bar = data.iloc[-1]
         final_price = final_bar["close"]
-        final_timestamp = (
+        final_timestamp = cast(pd.Timestamp, (
             final_bar.name
             if hasattr(final_bar.name, "strftime")
-            else pd.Timestamp(final_bar.name)
-        )
+            else pd.Timestamp(cast(str, final_bar.name))
+        ))
 
         # CRITICAL DEBUG: Track force-close logic
         pm_final_position = self.position_manager.current_position_status

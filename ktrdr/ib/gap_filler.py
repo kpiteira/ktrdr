@@ -13,7 +13,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Set, Union
 
 import pandas as pd
 
@@ -84,7 +84,7 @@ class GapFillerService:
         self.gap_classifier = GapClassifier()
 
         # Statistics
-        self.stats = {
+        self.stats: Dict[str, Union[int, Optional[datetime], Set[str], List[Dict[str, Any]], Dict[str, int]]] = {
             "gaps_detected": 0,
             "gaps_filled": 0,
             "gaps_failed": 0,
@@ -205,6 +205,7 @@ class GapFillerService:
                     # Check if DataManager has IB integration enabled
                     if (
                         self.data_manager.enable_ib
+                        and hasattr(self.data_manager, 'ib_data_fetcher')
                         and self.data_manager.ib_data_fetcher
                     ):
                         # Try a simple IB operation to verify connectivity

@@ -180,8 +180,10 @@ class GapAnalysisService:
             overall_summary=overall_summary,
         )
 
-    def _parse_date(self, date_str: str) -> datetime:
+    def _parse_date(self, date_str: Optional[str]) -> datetime:
         """Parse date string to UTC datetime."""
+        if date_str is None:
+            raise ValueError("Date string cannot be None")
         try:
             # Handle various ISO formats
             if date_str.endswith("Z"):

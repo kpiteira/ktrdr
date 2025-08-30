@@ -140,6 +140,7 @@ class TrainingService(BaseService):
         metadata = OperationMetadata(
             symbol=symbols[0] if symbols else "MULTI",
             timeframe=timeframes[0] if timeframes else "1h",
+            mode="training",
             start_date=datetime.fromisoformat(start_date) if start_date else None,
             end_date=datetime.fromisoformat(end_date) if end_date else None,
             parameters={
@@ -213,6 +214,11 @@ class TrainingService(BaseService):
                         current_step=progress.get(
                             "current_step", "Training in progress"
                         ),
+                        steps_completed=progress.get("steps_completed", 0),
+                        steps_total=progress.get("steps_total", 100),
+                        items_processed=progress.get("items_processed", 0),
+                        items_total=progress.get("items_total", None),
+                        current_item=progress.get("current_item", None),
                     ),
                 )
 
@@ -247,6 +253,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=15.0,
                         current_step=f"Training started on host service (session: {session_id})",
+                        steps_completed=1,
+                        steps_total=10,
+                        items_processed=0,
+                        items_total=None,
+                        current_item=None,
                     ),
                 )
             else:
@@ -256,7 +267,11 @@ class TrainingService(BaseService):
                     OperationProgress(
                         percentage=100.0,
                         current_step="Training completed successfully",
-                        completed=True,
+                        steps_completed=10,
+                        steps_total=10,
+                        items_processed=100,
+                        items_total=100,
+                        current_item="Complete",
                     ),
                 )
                 logger.info(
@@ -270,7 +285,11 @@ class TrainingService(BaseService):
                 OperationProgress(
                     percentage=0.0,
                     current_step=f"Training failed: {str(e)}",
-                    error=str(e),
+                    steps_completed=0,
+                    steps_total=10,
+                    items_processed=0,
+                    items_total=None,
+                    current_item=None,
                 ),
             )
             logger.error(f"Training failed for operation {operation_id}: {str(e)}")
