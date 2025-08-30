@@ -581,7 +581,7 @@ class DataQualityValidator:
                 f"Unknown timeframe '{timeframe}', gap detection may be inaccurate"
             )
             # Try to infer the frequency from the data
-            freq = pd.infer_freq(df.index)
+            freq = pd.infer_freq(pd.DatetimeIndex(df.index))
             if not freq:
                 logger.warning(
                     "Could not infer frequency from data, using '1D' as fallback"
@@ -592,7 +592,7 @@ class DataQualityValidator:
         expected_index = pd.date_range(start=start_date, end=end_date, freq=freq)
 
         # Find missing times
-        missing_times = expected_index.difference(df.index)
+        missing_times = expected_index.difference(pd.DatetimeIndex(df.index))
 
         # Group consecutive missing times into gaps
         raw_gaps = []

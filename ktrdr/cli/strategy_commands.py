@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import (
     BarColumn,

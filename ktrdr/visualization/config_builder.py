@@ -5,7 +5,7 @@ This module contains the ConfigBuilder class that provides methods to create
 chart configuration objects for the visualization module.
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 
 class ConfigBuilder:
@@ -241,14 +241,14 @@ class ConfigBuilder:
             options.update(
                 {
                     "color": color,
-                    "lineWidth": int(line_width),
-                    "lineStyle": int(kwargs.get(
+                    "lineWidth": int(line_width),  # type: ignore[dict-item]
+                    "lineStyle": int(kwargs.get(  # type: ignore[dict-item]
                         "line_style", 0
                     )),  # 0 = solid, 1 = dotted, 2 = dashed
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),
+                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),  # type: ignore[dict-item]
                 }
             )
         elif series_type == "area":
@@ -259,12 +259,12 @@ class ConfigBuilder:
                     ),  # Add alpha for transparency
                     "bottomColor": kwargs.get("bottom_color", color + "10"),
                     "lineColor": kwargs.get("line_color", color),
-                    "lineWidth": int(line_width),
-                    "lineStyle": int(kwargs.get("line_style", 0)),
+                    "lineWidth": int(line_width),  # type: ignore[dict-item]
+                    "lineStyle": int(kwargs.get("line_style", 0)),  # type: ignore[dict-item]
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),
+                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),  # type: ignore[dict-item]
                 }
             )
         elif series_type == "histogram":

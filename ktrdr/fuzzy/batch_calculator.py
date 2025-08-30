@@ -217,8 +217,12 @@ class BatchFuzzyCalculator:
 
         # Convert DataFrame columns to individual Series
         result = {}
-        for column_name in membership_df.columns:
-            result[column_name] = membership_df[column_name]
+        if isinstance(membership_df, pd.DataFrame):
+            for column_name in membership_df.columns:
+                result[column_name] = membership_df[column_name]
+        else:
+            # membership_df is a dict for scalar inputs
+            result = membership_df  # type: ignore[assignment]
 
         return result
 
@@ -346,7 +350,7 @@ class BatchFuzzyCalculator:
             "cache_hits": self._cache_hits,
             "cache_misses": self._cache_misses,
             "hit_rate": self._cache_hits
-            / max(1, self._cache_hits + self._cache_misses),
+            / max(1, self._cache_hits + self._cache_misses),  # type: ignore[dict-item]
             "cache_size": cache_info.currsize if cache_info else 0,
             "max_size": cache_info.maxsize if cache_info else self._cache_size,
         }

@@ -171,7 +171,7 @@ class FuzzyEngine:
         # Handle scalar input
         if isinstance(values, (int, float)):
             logger.debug(f"Fuzzifying scalar value {values} for indicator {indicator}")
-            return self._fuzzify_scalar(indicator, values, membership_functions)
+            return self._fuzzify_scalar(indicator, values, membership_functions)  # type: ignore[return-value]
 
         # Handle pandas Series input
         elif isinstance(values, pd.Series):
@@ -213,12 +213,12 @@ class FuzzyEngine:
         Returns:
             Dictionary mapping fuzzy set names to membership degrees
         """
-        result = {}
+        result: dict[str, float] = {}
 
         for set_name, mf in membership_functions.items():
             # Generate standardized output column name
             output_name = self._get_output_name(indicator, set_name)
-            result[output_name] = mf.evaluate(value)
+            result[output_name] = float(mf.evaluate(value))
 
         return result
 

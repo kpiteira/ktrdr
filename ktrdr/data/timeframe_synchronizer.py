@@ -304,7 +304,7 @@ class TimeframeSynchronizer:
             failed_alignments=0,  # No alignment failures since we don't align
             reference_timeframe=reference_timeframe,
             reference_periods=len(data_dict[reference_timeframe]),
-            average_quality_score=np.mean(quality_scores) if quality_scores else 1.0,
+            average_quality_score=float(np.mean(quality_scores)) if quality_scores else 1.0,
             processing_time=processing_time,
         )
 
@@ -331,7 +331,7 @@ class TimeframeSynchronizer:
             DataFrame with interpolated values
         """
         interpolated_data = data.interpolate(
-            method=method, limit=limit, limit_direction="both"
+            method=method, limit=limit, limit_direction="both"  # type: ignore[call-overload]
         )
 
         # Log interpolation statistics
@@ -533,7 +533,7 @@ class TimeframeSynchronizer:
         Returns:
             Dictionary with memory usage estimates in MB
         """
-        estimates = {}
+        estimates: dict[str, float] = {}
 
         if target_timeframe not in data_dict:
             return estimates

@@ -75,13 +75,13 @@ class EarlyStopping:
             return False
 
         if self.best_score is None:
-            self.best_score = score
+            self.best_score = float(score)
         elif score < self.best_score + self.min_delta:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
-            self.best_score = score
+            self.best_score = float(score)
             self.counter = 0
 
         return self.early_stop
@@ -175,7 +175,8 @@ class ModelTrainer:
 
         if X_val is not None:
             X_val = X_val.to(self.device)
-            y_val = y_val.to(self.device)
+            if y_val is not None:
+                y_val = y_val.to(self.device)
 
         # Get training parameters
         learning_rate = self.config.get("learning_rate", 0.001)

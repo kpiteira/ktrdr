@@ -241,7 +241,7 @@ class GapClassifier:
 
             if is_24_5_market:
                 # For 24/5 markets, weekend is the gap between Friday close and Sunday open
-                return self._is_forex_weekend_gap(start_local, end_local, regular_hours)
+                return self._is_forex_weekend_gap(pd.Timestamp(start_local), pd.Timestamp(end_local), regular_hours)
             else:
                 # For regular markets, check if gap includes non-trading days
                 current = start_local
@@ -365,6 +365,8 @@ class GapClassifier:
         end_utc = TimestampManager.to_utc(end_time)
 
         # Check each day in the gap period
+        if start_utc is None or end_utc is None:
+            return False
         current = start_utc.date()
         end_date = end_utc.date()
 

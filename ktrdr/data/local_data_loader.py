@@ -535,7 +535,7 @@ class LocalDataLoader:
         Returns:
             List of tuples containing (symbol, timeframe) for available data files
         """
-        result = []
+        result: list[tuple[str, str]] = []
 
         try:
             if not self.data_dir.exists():

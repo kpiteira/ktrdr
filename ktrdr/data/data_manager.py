@@ -180,7 +180,7 @@ class DataManager(ServiceOrchestrator):
                     f"Failed to load host service config, using direct connection: {e}"
                 )
                 # Fallback to direct connection
-                self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter()
+                self.external_provider = IbDataAdapter()
                 logger.info("IB integration enabled (direct connection - fallback)")
         else:
             self.external_provider = None
@@ -343,8 +343,8 @@ class DataManager(ServiceOrchestrator):
             "symbol": symbol,
             "timeframe": timeframe,
             "mode": mode,
-            "start_date": start_date.isoformat() if start_date else None,
-            "end_date": end_date.isoformat() if end_date else None,
+            "start_date": start_date.isoformat() if start_date and hasattr(start_date, 'isoformat') else str(start_date) if start_date else None,
+            "end_date": end_date.isoformat() if end_date and hasattr(end_date, 'isoformat') else str(end_date) if end_date else None,
         }
 
         progress_manager = ProgressManager(progress_callback)
@@ -1021,7 +1021,7 @@ class DataManager(ServiceOrchestrator):
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
-        successful_data = []
+        successful_data: list[pd.DataFrame] = []
         successful_count = 0
         failed_count = 0
 

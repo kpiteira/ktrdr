@@ -7,7 +7,7 @@ Provides a bridge between the Docker backend and the host-based training service
 
 import asyncio
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import httpx
 
@@ -295,7 +295,7 @@ class TrainingHostClient:
         session_id: str,
         poll_interval: float = 2.0,
         timeout: Optional[float] = None,
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
     ) -> dict[str, Any]:
         """
         Wait for a training session to complete, polling for status updates.
