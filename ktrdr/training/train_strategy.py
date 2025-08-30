@@ -6,7 +6,11 @@ import numpy as np
 import pandas as pd
 import torch
 import yaml  # type: ignore[import-untyped]
-from sklearn.metrics import f1_score, precision_score, recall_score  # type: ignore[import-untyped]
+from sklearn.metrics import (  # type: ignore[import-untyped]
+    f1_score,
+    precision_score,
+    recall_score,
+)
 
 from ..data.data_manager import DataManager
 from ..fuzzy.engine import FuzzyEngine

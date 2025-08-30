@@ -13,7 +13,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 
@@ -84,10 +84,10 @@ class GapFillerService:
         self.gap_classifier = GapClassifier()
 
         # Statistics
-        self.stats: Dict[
+        self.stats: dict[
             str,
             Union[
-                int, Optional[datetime], Set[str], List[Dict[str, Any]], Dict[str, int]
+                int, Optional[datetime], set[str], list[dict[str, Any]], dict[str, int]
             ],
         ] = {
             "gaps_detected": 0,

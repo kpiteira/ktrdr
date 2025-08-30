@@ -6,9 +6,10 @@ This module provides classes for different types of moving averages:
 - ExponentialMovingAverage (EMA): A weighted average that gives more importance to recent data
 """
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
-from typing import Optional
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError

@@ -730,9 +730,7 @@ class TestExperimentWorkflow:
         mock_db_service.execute_query.return_value = mock_experiment
 
         # Step 3: Start experiment (mock execution)
-        with patch.object(
-            orchestrator, "_execute_experiment", new_callable=AsyncMock
-        ):
+        with patch.object(orchestrator, "_execute_experiment", new_callable=AsyncMock):
             await orchestrator.start_experiment(experiment_id)
 
             # Verify experiment is tracked

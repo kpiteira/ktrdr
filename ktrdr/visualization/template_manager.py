@@ -6,10 +6,10 @@ templates used in the visualization module.
 """
 
 import json
-from typing import Any, Optional
 
 # Setup logging
 import logging
+from typing import Any, Optional
 
 from ktrdr.errors import ConfigurationError
 

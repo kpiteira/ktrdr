@@ -9,7 +9,6 @@ import asyncio
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
 
 from ktrdr import get_logger
 from ktrdr.api.models.base import ApiResponse, ErrorResponse
@@ -121,7 +120,7 @@ async def check_ib_health(
 
         raise HTTPException(
             status_code=500, detail=f"Failed to check IB health: {str(e)}"
-        )
+        ) from e
 
 
 @router.get(
@@ -157,7 +156,7 @@ async def get_ib_resilience_status(
 
         raise HTTPException(
             status_code=500, detail=f"Failed to get IB resilience status: {str(e)}"
-        )
+        ) from e
 
 
 @router.get(

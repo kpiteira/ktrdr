@@ -5,7 +5,7 @@ This module contains the ConfigBuilder class that provides methods to create
 chart configuration objects for the visualization module.
 """
 
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 
 class ConfigBuilder:

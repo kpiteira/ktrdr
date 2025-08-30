@@ -262,7 +262,7 @@ class IndicatorService(BaseService):
                     # If custom output name is specified, store it for later
                     if indicator_config.output_name:
                         # Use setattr to safely set the output_name attribute
-                        setattr(indicator, "output_name", indicator_config.output_name)
+                        indicator.output_name = indicator_config.output_name
 
                     indicators.append(indicator)
 

@@ -80,7 +80,6 @@ class KTRDRAPIClient:
                 error_data = {"detail": e.response.text}
 
             raise KTRDRAPIError(
-
                 f"HTTP {e.response.status_code}: {error_data.get('detail', 'Unknown error')}",
                 status_code=e.response.status_code,
                 details=error_data,

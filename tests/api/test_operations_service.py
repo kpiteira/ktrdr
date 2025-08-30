@@ -360,7 +360,7 @@ class TestOperationsServiceCancellationEvents:
         await asyncio.sleep(0.05)
         cancellation_event.set()
 
-        result = await operation_task
+        await operation_task
         # The operation should have detected the cancellation signal
         assert operation_cancelled is True
 

@@ -4,7 +4,6 @@ Simple Tests for Results Analyzer
 Basic tests to verify core functionality works.
 """
 
-
 import pytest
 
 from research_agents.services.results_analyzer import (

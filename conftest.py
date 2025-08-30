@@ -3,7 +3,6 @@ Global pytest configuration for KTRDR project.
 """
 
 
-
 def pytest_configure(config):
     """Configure pytest markers."""
     config.addinivalue_line("markers", "asyncio: mark test as an asyncio coroutine")

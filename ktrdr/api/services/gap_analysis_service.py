@@ -99,7 +99,7 @@ class GapAnalysisService:
             )
 
             # Generate recommendations
-            recommendations = self._generate_recommendations(gaps, summary)
+            self._generate_recommendations(gaps, summary)
 
             # Create response
             return GapAnalysisResponse(
