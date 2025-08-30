@@ -5,7 +5,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypedDict, Union
 
 import torch
 import torch.nn as nn
@@ -13,6 +13,19 @@ import torch.nn as nn
 from ktrdr import get_logger
 
 logger = get_logger(__name__)
+
+
+class GPUMemorySummary(TypedDict):
+    """Type-safe structure for GPU memory summary."""
+
+    gpu_available: bool
+    num_devices: int
+    device_ids: list[int]
+    devices: dict[int, dict[str, Any]]
+    total_memory_mb: float
+    total_allocated_mb: float
+    total_free_mb: float
+    peak_usage: dict[int, float]
 
 
 @dataclass
@@ -519,12 +532,21 @@ class GPUMemoryManager:
 
         return final_batch_size
 
-    def get_memory_summary(self) -> dict[str, Any]:
+    def get_memory_summary(self) -> GPUMemorySummary:
         """Get comprehensive GPU memory summary."""
         if not self.enabled:
-            return {"gpu_available": False}
+            return {
+                "gpu_available": False,
+                "num_devices": 0,
+                "device_ids": [],
+                "devices": {},
+                "total_memory_mb": 0.0,
+                "total_allocated_mb": 0.0,
+                "total_free_mb": 0.0,
+                "peak_usage": {},
+            }
 
-        summary = {
+        summary: GPUMemorySummary = {
             "gpu_available": True,
             "num_devices": self.num_devices,
             "device_ids": self.device_ids,
@@ -545,9 +567,9 @@ class GPUMemoryManager:
             }
 
             summary["devices"][device_id] = device_info
-            summary["total_memory_mb"] = float(summary["total_memory_mb"]) + snapshot.total_mb
-            summary["total_allocated_mb"] = float(summary["total_allocated_mb"]) + snapshot.allocated_mb
-            summary["total_free_mb"] = float(summary["total_free_mb"]) + snapshot.free_mb
+            summary["total_memory_mb"] += snapshot.total_mb
+            summary["total_allocated_mb"] += snapshot.allocated_mb
+            summary["total_free_mb"] += snapshot.free_mb
 
         return summary
 

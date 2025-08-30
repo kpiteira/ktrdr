@@ -1212,7 +1212,9 @@ class StrategyTrainer:
                 )
 
             # Importance is the drop in accuracy
-            importance_scores[feature_name] = baseline_accuracy - permuted_accuracy
+            importance_scores[feature_name] = float(
+                baseline_accuracy - permuted_accuracy
+            )
 
         return importance_scores
 
@@ -1415,10 +1417,10 @@ class StrategyTrainer:
                 f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
 
                 per_symbol_metrics[symbol] = {
-                    "accuracy": accuracy,
-                    "precision": precision,
-                    "recall": recall,
-                    "f1_score": f1,
+                    "accuracy": float(accuracy),
+                    "precision": float(precision),
+                    "recall": float(recall),
+                    "f1_score": float(f1),
                     "sample_count": int(symbol_mask.sum()),
                 }
 

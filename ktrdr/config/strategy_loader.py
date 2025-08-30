@@ -69,8 +69,8 @@ class StrategyConfigurationLoader:
                 f"Loading v2 multi-scope strategy configuration: {config_path.name}"
             )
             try:
-                config = StrategyConfigurationV2(**raw_config)
-                return config, True
+                v2_config = StrategyConfigurationV2(**raw_config)
+                return v2_config, True
             except ValidationError as e:
                 raise ValueError(
                     f"V2 strategy validation failed for {config_path}: {e}"
@@ -80,8 +80,8 @@ class StrategyConfigurationLoader:
             try:
                 # Add sensible defaults for missing required fields
                 raw_config = self._add_legacy_defaults(raw_config)
-                config = LegacyStrategyConfiguration(**raw_config)
-                return config, False
+                legacy_config = LegacyStrategyConfiguration(**raw_config)
+                return legacy_config, False
             except ValidationError as e:
                 raise ValueError(
                     f"Legacy strategy validation failed for {config_path}: {e}"

@@ -5,7 +5,7 @@ This module provides the IndicatorEngine class, which is responsible for
 applying indicators to OHLCV data based on configuration.
 """
 
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
 import pandas as pd
 
@@ -66,7 +66,8 @@ class IndicatorEngine:
                 self.indicators = factory.build()
             elif isinstance(indicators[0], BaseIndicator):
                 # Use provided indicator instances directly
-                self.indicators = indicators
+                # Type narrowing: if first element is BaseIndicator, assume all are
+                self.indicators = cast(list[BaseIndicator], indicators)
             else:
                 raise ConfigurationError(
                     "Invalid indicator specification type. Must be dict or BaseIndicator instance.",

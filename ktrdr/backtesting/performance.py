@@ -259,10 +259,14 @@ class PerformanceTracker:
                 profit_factor = 0.0
 
             avg_win = (
-                np.mean([t.net_pnl for t in winning_trades]) if winning_trades else 0
+                float(np.mean([t.net_pnl for t in winning_trades]))
+                if winning_trades
+                else 0.0
             )
             avg_loss = (
-                np.mean([t.net_pnl for t in losing_trades]) if losing_trades else 0
+                float(np.mean([t.net_pnl for t in losing_trades]))
+                if losing_trades
+                else 0.0
             )
             largest_win = (
                 max([t.net_pnl for t in winning_trades]) if winning_trades else 0
@@ -272,16 +276,18 @@ class PerformanceTracker:
             )
 
             # Holding period analysis
-            avg_holding_period = np.mean([t.holding_period_hours for t in trades])
+            avg_holding_period = float(
+                np.mean([t.holding_period_hours for t in trades])
+            )
             avg_win_holding_period = (
-                np.mean([t.holding_period_hours for t in winning_trades])
+                float(np.mean([t.holding_period_hours for t in winning_trades]))
                 if winning_trades
-                else 0
+                else 0.0
             )
             avg_loss_holding_period = (
-                np.mean([t.holding_period_hours for t in losing_trades])
+                float(np.mean([t.holding_period_hours for t in losing_trades]))
                 if losing_trades
-                else 0
+                else 0.0
             )
         else:
             total_trades = win_count = loss_count = 0

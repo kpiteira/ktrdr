@@ -380,9 +380,16 @@ class TimeframeSynchronizer:
 
                 # Check if most deltas are within tolerance of expected
                 tolerance = pd.Timedelta(minutes=tolerance_minutes)
-                consistent_count = (
-                    (actual_deltas - expected_delta).abs() <= tolerance
-                ).sum()
+                # Calculate differences using numpy arrays to avoid MyPy operator issues
+                import numpy as np
+
+                actual_deltas_array = actual_deltas.values
+                expected_delta_ns = expected_delta.value  # Get nanoseconds
+                differences = np.abs(
+                    actual_deltas_array.astype("int64") - expected_delta_ns
+                )
+                tolerance_ns = tolerance.value
+                consistent_count = int(np.sum(differences <= tolerance_ns))
                 consistency_ratio = consistent_count / len(actual_deltas)
 
                 # Consider consistent if >90% of deltas are correct

@@ -216,8 +216,10 @@ class GapAnalysisService:
         else:
             df_utc.index = cast(pd.DatetimeIndex, df_utc.index).tz_convert("UTC")
 
-        # Filter to period
-        mask = (df_utc.index >= start_date) & (df_utc.index <= end_date)
+        # Filter to period - convert datetime to pandas Timestamp for proper comparison
+        start_ts = pd.Timestamp(start_date).tz_localize("UTC")
+        end_ts = pd.Timestamp(end_date).tz_localize("UTC")
+        mask = (df_utc.index >= start_ts) & (df_utc.index <= end_ts)
         return df_utc[mask]
 
     def _detect_gaps_in_period(

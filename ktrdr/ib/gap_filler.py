@@ -13,7 +13,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypedDict
 
 import pandas as pd
 
@@ -26,6 +26,19 @@ from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
+
+
+class GapFillerStats(TypedDict):
+    """Type-safe structure for gap filler statistics."""
+
+    gaps_detected: int
+    gaps_filled: int
+    gaps_failed: int
+    gaps_expected_skipped: int
+    last_scan_time: Optional[datetime]
+    symbols_processed: set[str]
+    errors: list[dict[str, Any]]
+    gap_classifications: dict[str, int]
 
 
 class GapFillerService:
@@ -84,12 +97,7 @@ class GapFillerService:
         self.gap_classifier = GapClassifier()
 
         # Statistics
-        self.stats: dict[
-            str,
-            Union[
-                int, Optional[datetime], set[str], list[dict[str, Any]], dict[str, int]
-            ],
-        ] = {
+        self.stats: GapFillerStats = {
             "gaps_detected": 0,
             "gaps_filled": 0,
             "gaps_failed": 0,
@@ -309,11 +317,11 @@ class GapFillerService:
                     logger.info(
                         "🛑 Stopping gap filling due to pacing limits - will retry in next cycle"
                     )
-                    self.stats["gaps_failed"] = int(self.stats["gaps_failed"]) + 1
+                    self.stats["gaps_failed"] += 1
                     break  # Stop processing and let regular cycle retry later
                 else:
                     logger.warning(f"Error checking gap for {symbol}_{timeframe}: {e}")
-                    self.stats["gaps_failed"] = int(self.stats["gaps_failed"]) + 1
+                    self.stats["gaps_failed"] += 1
 
         if processed > 0:
             logger.info(f"Gap filling cycle completed: processed {processed} symbols")
@@ -409,16 +417,15 @@ class GapFillerService:
 
             # Update classification statistics
             classification_key = gap_info.classification.value
-            gap_classifications = self.stats["gap_classifications"]
-            if isinstance(gap_classifications, dict) and classification_key in gap_classifications:
-                gap_classifications[classification_key] = int(gap_classifications[classification_key]) + 1
+            if classification_key in self.stats["gap_classifications"]:
+                self.stats["gap_classifications"][classification_key] += 1
 
             # Log gap detection with classification
             logger.info(
                 f"Gap detected for {symbol}_{timeframe}: {gap_hours:.1f}h "
                 f"[{gap_info.classification.value}] - {gap_info.note}"
             )
-            self.stats["gaps_detected"] = int(self.stats["gaps_detected"]) + 1
+            self.stats["gaps_detected"] += 1
 
             # Decide whether to fill based on classification and configuration
             should_fill = self._should_fill_gap(gap_info)
@@ -428,7 +435,7 @@ class GapFillerService:
                     f"Skipping gap for {symbol}_{timeframe}: "
                     f"{gap_info.classification.value} - {gap_info.note}"
                 )
-                self.stats["gaps_expected_skipped"] = int(self.stats["gaps_expected_skipped"]) + 1
+                self.stats["gaps_expected_skipped"] += 1
                 return False
 
             # Fill the gap using the enhanced DataManager (intelligent gap analysis)
@@ -450,24 +457,24 @@ class GapFillerService:
                     fetched_bars = len(new_data)
 
                     if fetched_bars > 0:
-                        self.stats["gaps_filled"] = int(self.stats["gaps_filled"]) + 1
+                        self.stats["gaps_filled"] += 1
                         logger.info(
                             f"Filled gap for {symbol}_{timeframe}: {fetched_bars} bars fetched"
                         )
                         return True
                     else:
-                        self.stats["gaps_failed"] = int(self.stats["gaps_failed"]) + 1
+                        self.stats["gaps_failed"] += 1
                         logger.warning(
                             f"No new data fetched for gap in {symbol}_{timeframe}"
                         )
                         return False
                 else:
-                    self.stats["gaps_failed"] = int(self.stats["gaps_failed"]) + 1
+                    self.stats["gaps_failed"] += 1
                     logger.warning(f"No data returned for gap in {symbol}_{timeframe}")
                     return False
 
             except Exception as e:
-                self.stats["gaps_failed"] = int(self.stats["gaps_failed"]) + 1
+                self.stats["gaps_failed"] += 1
                 logger.error(f" {e}")
                 return False
 
