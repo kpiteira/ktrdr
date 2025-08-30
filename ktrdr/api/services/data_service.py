@@ -933,7 +933,7 @@ class DataService(BaseService):
 
             # Convert index to the exchange timezone
             df_tz = df.copy()
-            if hasattr(df_tz.index, 'tz') and df_tz.index.tz is None:
+            if hasattr(df_tz.index, 'tz') and df_tz.index.tz is None and hasattr(df_tz.index, 'tz_localize'):
                 df_tz.index = df_tz.index.tz_localize("UTC")
             if hasattr(df_tz.index, 'tz_convert'):
                 df_tz.index = df_tz.index.tz_convert(timezone)
@@ -984,19 +984,22 @@ class DataService(BaseService):
                     end_hour, end_min = map(int, end_time.split(":"))
 
                     # Create time-based mask for extended session
-                    extended_mask = (
-                        (df_tz.index.hour > start_hour)
-                        | (
-                            (df_tz.index.hour == start_hour)
-                            & (df_tz.index.minute >= start_min)
+                    if hasattr(df_tz.index, 'hour') and hasattr(df_tz.index, 'minute'):
+                        extended_mask = (
+                            (df_tz.index.hour > start_hour)
+                            | (
+                                (df_tz.index.hour == start_hour)
+                                & (df_tz.index.minute >= start_min)
+                            )
+                        ) & (
+                            (df_tz.index.hour < end_hour)
+                            | (
+                                (df_tz.index.hour == end_hour)
+                                & (df_tz.index.minute <= end_min)
+                            )
                         )
-                    ) & (
-                        (df_tz.index.hour < end_hour)
-                        | (
-                            (df_tz.index.hour == end_hour)
-                            & (df_tz.index.minute <= end_min)
-                        )
-                    )
+                    else:
+                        extended_mask = pd.Series(True, index=df_tz.index)
 
                     mask |= day_mask & extended_mask
 

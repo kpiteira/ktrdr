@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
 from ktrdr.api.dependencies import get_data_service
-from ktrdr.api.models.base import ApiResponse
+from ktrdr.api.models.base import ApiResponse, ErrorResponse
 from ktrdr.api.models.data import (
     DataLoadApiResponse,
     DataLoadOperationResponse,
@@ -73,7 +73,7 @@ async def get_data_info(
 
         # Calculate statistics
         total_symbols = len(available_symbols)
-        symbol_types = {}
+        symbol_types: dict[str, str] = {}
         symbol_names = []
 
         for symbol in available_symbols:
@@ -113,6 +113,7 @@ async def get_data_info(
                     "real_time_updates",
                 ],
             },
+            error=None,
         )
 
     except Exception as e:
@@ -171,7 +172,7 @@ async def get_symbols(
         symbols = [SymbolInfo(**s) for s in symbols_data]
 
         logger.info(f"Retrieved {len(symbols)} symbols")
-        return SymbolsResponse(success=True, data=symbols)
+        return SymbolsResponse(success=True, data=symbols, error=None)
     except Exception as e:
         logger.error(f"Error retrieving symbols: {str(e)}")
         raise DataError(
@@ -234,7 +235,7 @@ async def get_timeframes(
         timeframes = [TimeframeInfo(**t) for t in timeframes_data]
 
         logger.info(f"Retrieved {len(timeframes)} timeframes")
-        return TimeframesResponse(success=True, data=timeframes)
+        return TimeframesResponse(success=True, data=timeframes, error=None)
     except Exception as e:
         logger.error(f"Error retrieving timeframes: {str(e)}")
         raise DataError(
@@ -364,7 +365,7 @@ async def get_cached_data(
 
                     # Apply trading hours filter using the data service helper
                     df = data_service._filter_trading_hours(
-                        df, trading_hours, include_extended
+                        df, trading_hours, include_extended or False
                     )
 
                     filtered_count = len(df) if df is not None else 0
@@ -394,6 +395,7 @@ async def get_cached_data(
                     "end": "",
                     "points": 0,
                 },
+                points=0,
             )
         else:
             # Convert DataFrame to API format
@@ -405,7 +407,7 @@ async def get_cached_data(
         logger.info(
             f"Retrieved {len(data.dates)} cached data points for {clean_symbol}"
         )
-        return DataLoadResponse(success=True, data=data)
+        return DataLoadResponse(success=True, data=data, error=None)
 
     except DataNotFoundError as e:
         logger.warning(
@@ -422,8 +424,9 @@ async def get_cached_data(
                 "end": "",
                 "points": 0,
             },
+            points=0,
         )
-        return DataLoadResponse(success=True, data=data)
+        return DataLoadResponse(success=True, data=data, error=None)
 
     except DataError as e:
         logger.error(f"Data error getting cached data for {clean_symbol}: {str(e)}")
@@ -622,11 +625,11 @@ async def load_data(
             return DataLoadApiResponse(
                 success=True,  # Still considered success for partial data
                 data=response_data,
-                error={
-                    "code": "DATA-PartialLoad",
-                    "message": "Data loading partially successful",
-                    "details": {"error_message": result.get("error_message")},
-                },
+                error=ErrorResponse(
+                    code="DATA-PartialLoad",
+                    message="Data loading partially successful",
+                    details={"error_message": result.get("error_message")},
+                ),
             )
         else:
             logger.error(
@@ -635,15 +638,15 @@ async def load_data(
             return DataLoadApiResponse(
                 success=False,
                 data=response_data,
-                error={
-                    "code": "DATA-LoadFailed",
-                    "message": result.get("error_message", "Data loading failed"),
-                    "details": {
+                error=ErrorResponse(
+                    code="DATA-LoadFailed",
+                    message=result.get("error_message", "Data loading failed"),
+                    details={
                         "symbol": clean_symbol,
                         "timeframe": request.timeframe,
                         "mode": request.mode,
                     },
-                },
+                ),
             )
 
     except DataError as e:
@@ -727,7 +730,7 @@ async def get_data_range(
         range_info = DataRangeInfo(**range_data)
 
         logger.info(f"Successfully retrieved date range for {request.symbol}")
-        return DataRangeResponse(success=True, data=range_info)
+        return DataRangeResponse(success=True, data=range_info, error=None)
     except DataNotFoundError as e:
         logger.error(f"Data not found: {str(e)}")
         raise HTTPException(

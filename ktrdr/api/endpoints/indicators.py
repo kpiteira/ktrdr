@@ -121,7 +121,7 @@ async def list_indicators(
     """
     try:
         indicators = await indicator_service.get_available_indicators()
-        return IndicatorsListResponse(success=True, data=indicators)
+        return IndicatorsListResponse(success=True, data=indicators, error=None)
     except ProcessingError as e:
         logger.error(f"Error in list_indicators: {str(e)}")
         raise HTTPException(
@@ -260,7 +260,7 @@ async def calculate_indicators(
 
         # Slice the data
         paginated_dates = dates[start_idx:end_idx]
-        paginated_indicators = {}
+        paginated_indicators: dict[str, list[float | None]] = {}
         for name, values in indicator_values.items():
             paginated_indicators[name] = values[start_idx:end_idx]
 

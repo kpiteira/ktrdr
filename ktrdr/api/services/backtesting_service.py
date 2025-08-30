@@ -420,7 +420,7 @@ class BacktestingService(BaseService):
 
         # Create a progress callback that gets REAL progress from the engine
         def progress_callback(
-            current_bar: int, total_bars: int, additional_data: dict = None
+            current_bar: int, total_bars: int, additional_data: Optional[dict[Any, Any]] = None
         ):
             """Real progress callback based on actual bars processed."""
             try:

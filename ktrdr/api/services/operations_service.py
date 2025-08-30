@@ -101,6 +101,10 @@ class OperationsService:
                 status=OperationStatus.PENDING,
                 created_at=datetime.now(timezone.utc),
                 metadata=metadata,
+                started_at=None,
+                completed_at=None,
+                error_message=None,
+                result_summary=None,
             )
 
             # Add to registry
@@ -493,6 +497,10 @@ class OperationsService:
                 status=OperationStatus.PENDING,
                 created_at=datetime.now(timezone.utc),
                 metadata=original_operation.metadata,
+                started_at=None,
+                completed_at=None,
+                error_message=None,
+                result_summary=None,
             )
 
             # Add to registry

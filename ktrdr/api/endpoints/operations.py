@@ -273,7 +273,7 @@ async def cancel_operation(
     try:
         # Default request if none provided
         if request is None:
-            request = CancelOperationRequest()
+            request = CancelOperationRequest(reason=None, force=False)
 
         logger.info(
             f"Cancelling operation {operation_id}: reason='{request.reason}', force={request.force}"
