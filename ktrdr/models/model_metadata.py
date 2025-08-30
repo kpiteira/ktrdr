@@ -273,16 +273,19 @@ class ModelMetadata:
         """Check if model is compatible with trading target."""
 
         # Check symbol restrictions
-        if self.deployment_capabilities.symbol_restrictions is not None:
+        if (self.deployment_capabilities and 
+            self.deployment_capabilities.symbol_restrictions is not None):
             if symbol not in self.deployment_capabilities.symbol_restrictions:
                 return False
 
         # Check timeframe restrictions
-        if timeframe not in self.deployment_capabilities.timeframe_restrictions:
+        if (self.deployment_capabilities and 
+            timeframe not in self.deployment_capabilities.timeframe_restrictions):
             return False
 
         # Check asset class compatibility
-        if asset_class and self.deployment_capabilities.asset_class_compatibility:
+        if (asset_class and self.deployment_capabilities and 
+            self.deployment_capabilities.asset_class_compatibility):
             if (
                 asset_class
                 not in self.deployment_capabilities.asset_class_compatibility
@@ -297,20 +300,23 @@ class ModelMetadata:
             "strategy": f"{self.strategy_name} v{self.strategy_version}",
             "model_version": self.model_version,
             "scope": self.scope.value,
-            "training_symbols": self.training_data.symbols,
-            "training_timeframes": self.training_data.timeframes,
+            "training_symbols": self.training_data.symbols if self.training_data else [],
+            "training_timeframes": self.training_data.timeframes if self.training_data else [],
             "performance": {
-                "accuracy": self.performance_metrics.overall_accuracy,
-                "cross_symbol_accuracy": self.performance_metrics.cross_symbol_accuracy,
-                "generalization_score": self.performance_metrics.generalization_score,
+                "accuracy": self.performance_metrics.overall_accuracy if self.performance_metrics else None,
+                "cross_symbol_accuracy": self.performance_metrics.cross_symbol_accuracy if self.performance_metrics else None,
+                "generalization_score": self.performance_metrics.generalization_score if self.performance_metrics else None,
             },
-            "feature_count": self.feature_architecture.input_size,
+            "feature_count": self.feature_architecture.input_size if self.feature_architecture else None,
             "training_status": self.training_status.value,
             "created_at": self.created_at,
         }
 
     def update_performance_metrics(self, metrics: dict[str, Any]) -> None:
         """Update performance metrics from training results."""
+        if self.performance_metrics is None:
+            return  # Cannot update metrics if None
+            
         pm = self.performance_metrics
 
         # Update overall metrics
@@ -414,8 +420,8 @@ class ModelMetadataManager:
         # Sort by performance (cross-symbol accuracy if available, then overall accuracy)
         compatible_models.sort(
             key=lambda x: (
-                x[1].performance_metrics.cross_symbol_accuracy or 0,
-                x[1].performance_metrics.overall_accuracy,
+                x[1].performance_metrics.cross_symbol_accuracy if x[1].performance_metrics else 0,
+                x[1].performance_metrics.overall_accuracy if x[1].performance_metrics else 0,
             ),
             reverse=True,
         )
@@ -443,6 +449,7 @@ class ModelMetadataManager:
                     # Filter by asset class if specified
                     if (
                         asset_class
+                        and metadata.deployment_capabilities
                         and metadata.deployment_capabilities.asset_class_compatibility
                     ):
                         if (
