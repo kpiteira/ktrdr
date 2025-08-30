@@ -2,22 +2,19 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, develop, test-suite-cleanup, fix/test-suite-performance ]
+    branches: [ main, develop, fix/test-suite-performance ]
   pull_request:
     branches: [ main, develop ]
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:
 
 jobs:
-  unit-tests:
-    name: Unit Tests (Fast)
+  unit-tests-and-quality:
+    name: Unit Tests & Code Quality
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
+    - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v3
       with:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
@@ -30,10 +27,7 @@ jobs:
     
     - name: Run unit tests with coverage
       run: |
-        make test-coverage-junit
-      env:
-        PYTHONDONTWRITEBYTECODE: "1"
-        PYTHONUNBUFFERED: "1"
+        make test-coverage
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -44,23 +38,25 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     
+    - name: Run quality checks
+      run: make quality
+    
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: unit-test-results
-        path: test-results.xml
+        path: unit-test-results.xml
 
-  lint-and-format:
-    name: Code Quality
+  integration-tests:
+    name: Integration Tests
     runs-on: ubuntu-latest
+    needs: unit-tests-and-quality
+    if: github.event_name == 'workflow_dispatch'
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
+    - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v3
       with:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
@@ -71,29 +67,29 @@ jobs:
     - name: Install dependencies
       run: uv sync --all-extras --dev
     
-    - name: Run linting
-      run: make lint
+    - name: Run integration tests
+      run: |
+        make test-integration
+      env:
+        PYTHONDONTWRITEBYTECODE: "1"
+        PYTHONUNBUFFERED: "1"
     
-    - name: Check formatting with black
-      run: uv run black --check ktrdr tests
-    
-    - name: Run type checking with mypy
-      run: make typecheck
-      continue-on-error: true  # Don't fail CI for type issues, just report them
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: integration-test-results
+        path: integration-test-results.xml
 
-  container-e2e-tests:
-    name: Container E2E Tests
+  e2e-tests:
+    name: E2E Tests
     runs-on: ubuntu-latest
-    needs: unit-tests
-    # Disabled for now - container tests not needed
-    if: false
+    needs: unit-tests-and-quality
+    if: github.event_name == 'workflow_dispatch'
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
+    - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v3
       with:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
@@ -141,25 +137,19 @@ jobs:
           sleep 5
         done
     
-    - name: Run container E2E tests
+    - name: Run E2E tests
       run: |
-        uv run pytest tests/e2e/ \
-          --run-container-e2e \
-          --run-container-cli \
-          --tb=short \
-          --maxfail=5 \
-          -v \
-          --junit-xml=container-test-results.xml
+        make test-e2e
       env:
         PYTHONDONTWRITEBYTECODE: "1"
         PYTHONUNBUFFERED: "1"
     
-    - name: Upload container test results
+    - name: Upload E2E test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: container-test-results
-        path: container-test-results.xml
+        name: e2e-test-results
+        path: e2e-test-results.xml
     
     - name: Show container logs on failure
       if: failure()
@@ -173,52 +163,11 @@ jobs:
       if: always()
       run: ./docker_dev.sh stop
 
-  # Manual workflow for integration tests (will use mocked IB)
-  integration-tests:
-    name: Integration Tests (Mocked IB)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        enable-cache: true
-        cache-dependency-glob: "uv.lock"
-    
-    - name: Set up Python
-      run: uv python install
-    
-    - name: Install dependencies
-      run: uv sync --all-extras --dev
-    
-    - name: Run integration tests (mocked)
-      run: |
-        # These tests will use mocked IB calls (exclude tests requiring real IB)
-        uv run pytest tests/integration/ \
-          -m "not (real_ib or real_cli or real_api or real_pipeline or real_error_scenarios or integration_slow)" \
-          --tb=short \
-          --maxfail=5 \
-          -v \
-          --junit-xml=integration-test-results.xml
-      env:
-        PYTHONDONTWRITEBYTECODE: "1"
-        PYTHONUNBUFFERED: "1"
-    
-    - name: Upload integration test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: integration-test-results
-        path: integration-test-results.xml
 
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [unit-tests, lint-and-format]
+    needs: [unit-tests-and-quality]
     if: always()
     
     steps:
@@ -231,18 +180,24 @@ jobs:
         echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        if [ -f unit-test-results/test-results.xml ]; then
-          echo "✅ Unit tests completed" >> $GITHUB_STEP_SUMMARY
+        if [ -f unit-test-results/unit-test-results.xml ]; then
+          echo "✅ Unit tests & code quality completed" >> $GITHUB_STEP_SUMMARY
         else
-          echo "❌ Unit tests failed or not run" >> $GITHUB_STEP_SUMMARY
+          echo "❌ Unit tests or code quality failed" >> $GITHUB_STEP_SUMMARY
         fi
         
-        if [ -f container-test-results/container-test-results.xml ]; then
-          echo "✅ Container E2E tests completed" >> $GITHUB_STEP_SUMMARY
+        if [ -f integration-test-results/integration-test-results.xml ]; then
+          echo "✅ Integration tests completed" >> $GITHUB_STEP_SUMMARY
         else
-          echo "⏭️ Container E2E tests skipped" >> $GITHUB_STEP_SUMMARY
+          echo "⏭️ Integration tests skipped (manual trigger only)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f e2e-test-results/e2e-test-results.xml ]; then
+          echo "✅ E2E tests completed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⏭️ E2E tests skipped (manual trigger only)" >> $GITHUB_STEP_SUMMARY
         fi
         
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Note**: Integration tests requiring real IB Gateway are not run in CI." >> $GITHUB_STEP_SUMMARY
-        echo "Use \`./scripts/run_real_e2e_tests.sh\` locally for complete testing." >> $GITHUB_STEP_SUMMARY
+        echo "**Note**: Integration and E2E tests require manual workflow_dispatch trigger." >> $GITHUB_STEP_SUMMARY
+        echo "Host service tests requiring real IB Gateway should be run locally with \`make test-host\`." >> $GITHUB_STEP_SUMMARY
