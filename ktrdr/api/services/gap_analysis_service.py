@@ -85,9 +85,9 @@ class GapAnalysisService:
                 df_filtered, start_date, end_date, request.symbol, request.timeframe
             )
 
-            # Filter gaps based on mode and include_expected
+            # Filter gaps based on mode (default include_expected=True)
             filtered_gaps = self._filter_gaps_by_mode(
-                gaps, request.mode, request.include_expected
+                gaps, request.mode, True
             )
 
             # Calculate summary statistics
@@ -107,19 +107,12 @@ class GapAnalysisService:
             return GapAnalysisResponse(
                 symbol=request.symbol,
                 timeframe=request.timeframe,
-                analysis_period={
-                    "start": start_date.isoformat(),
-                    "end": end_date.isoformat(),
-                    "total_duration_hours": (end_date - start_date).total_seconds()
-                    / 3600,
-                    "trading_days_in_period": self._count_trading_days(
-                        start_date, end_date, trading_metadata
-                    ),
-                },
-                trading_metadata=trading_metadata,
+                start_date=start_date.isoformat(),
+                end_date=end_date.isoformat(),
                 summary=summary,
                 gaps=[self._gap_info_to_model(gap) for gap in filtered_gaps],
-                recommendations=recommendations,
+                analysis_mode=request.mode,
+                generated_at=datetime.now().isoformat(),
             )
 
         except Exception as e:
@@ -152,7 +145,6 @@ class GapAnalysisService:
                     start_date=request.start_date,
                     end_date=request.end_date,
                     mode=request.mode,
-                    include_expected=request.include_expected,
                 )
 
                 # Analyze gaps for this symbol
@@ -166,18 +158,26 @@ class GapAnalysisService:
         # Calculate overall summary
         overall_summary = self._calculate_batch_summary(results)
 
+        # Convert results list to dict keyed by symbol
+        results_dict = {result.symbol: result for result in results}
+        
+        # Add request info to overall summary  
+        enhanced_summary = {
+            **overall_summary,
+            "symbols_requested": len(request.symbols),
+            "symbols_successful": len(results),
+            "symbols_failed": len(errors),
+            "mode": request.mode.value,
+            "errors": errors  # Include error info in summary
+        }
+        
         return BatchGapAnalysisResponse(
-            request_summary={
-                "symbols_requested": len(request.symbols),
-                "symbols_successful": len(results),
-                "symbols_failed": len(errors),
-                "timeframe": request.timeframe,
-                "analysis_period": f"{request.start_date} to {request.end_date}",
-                "mode": request.mode.value,
-            },
-            results=results,
-            errors=errors,
-            overall_summary=overall_summary,
+            timeframe=request.timeframe,
+            start_date=request.start_date or "",
+            end_date=request.end_date or "",
+            results=results_dict,
+            overall_summary=enhanced_summary,
+            generated_at=datetime.now().isoformat(),
         )
 
     def _parse_date(self, date_str: Optional[str]) -> datetime:
@@ -356,12 +356,26 @@ class GapAnalysisService:
                 gap.bars_missing for gap in gaps if gap.classification == classification
             )
 
+        # Convert bars to hours for new model
+        timeframe_hours = timeframe_minutes / 60
+        total_missing_hours = total_missing * timeframe_hours
+        
+        # Calculate gap counts by severity
+        critical_gaps = sum(1 for gap in gaps if gap.severity == "critical")
+        major_gaps = sum(1 for gap in gaps if gap.severity == "major") 
+        minor_gaps = sum(1 for gap in gaps if gap.severity == "minor")
+        
+        # Calculate data quality score (0-100)
+        quality_score = max(0.0, min(100.0, data_completeness_pct * 0.8))
+        
         return GapAnalysisSummary(
-            expected_bars=expected_bars,
-            actual_bars=actual_bars,
-            total_missing=total_missing,
-            data_completeness_pct=data_completeness_pct,
-            missing_breakdown=missing_breakdown,
+            total_gaps=len(gaps),
+            critical_gaps=critical_gaps,
+            major_gaps=major_gaps,
+            minor_gaps=minor_gaps,
+            total_missing_hours=total_missing_hours,
+            coverage_percentage=data_completeness_pct,
+            data_quality_score=quality_score,
         )
 
     def _count_trading_days(
@@ -442,14 +456,30 @@ class GapAnalysisService:
 
     def _gap_info_to_model(self, gap_info: GapInfo) -> GapInfoModel:
         """Convert GapInfo to API model."""
+        # Map classification to gap_type 
+        gap_type = gap_info.classification.value if hasattr(gap_info.classification, 'value') else str(gap_info.classification)
+        
+        # Determine severity based on duration or classification
+        if gap_info.duration_hours > 24:
+            severity = "critical"
+        elif gap_info.duration_hours > 4:
+            severity = "major" 
+        else:
+            severity = "minor"
+        
+        # Determine if during market hours (simplified logic)
+        market_hours = getattr(gap_info, 'market_hours', True)
+        
         return GapInfoModel(
             start_time=gap_info.start_time,
             end_time=gap_info.end_time,
-            classification=gap_info.classification,
-            bars_missing=gap_info.bars_missing,
             duration_hours=gap_info.duration_hours,
-            day_context=gap_info.day_context,
-            note=gap_info.note,
+            gap_type=gap_type,
+            severity=severity,
+            market_hours=market_hours,
+            trading_session=getattr(gap_info, 'day_context', None),
+            volume_impact=None,
+            price_impact=None,
         )
 
     def _create_empty_response(
@@ -465,35 +495,29 @@ class GapAnalysisService:
         timeframe_minutes = self.timeframe_minutes.get(request.timeframe, 60)
         expected_bars = int(total_duration_minutes / timeframe_minutes)
 
+        # Convert bars to hours for empty dataset
+        timeframe_hours = timeframe_minutes / 60
+        total_missing_hours = expected_bars * timeframe_hours
+        
         summary = GapAnalysisSummary(
-            expected_bars=expected_bars,
-            actual_bars=0,
-            total_missing=expected_bars,
-            data_completeness_pct=0.0,
-            missing_breakdown={
-                "unexpected": expected_bars,
-                "expected_weekend": 0,
-                "expected_trading_hours": 0,
-                "expected_holiday": 0,
-                "market_closure": 0,
-            },
+            total_gaps=0,  # No data means no specific gaps identified
+            critical_gaps=0,
+            major_gaps=0, 
+            minor_gaps=0,
+            total_missing_hours=total_missing_hours,
+            coverage_percentage=0.0,
+            data_quality_score=0.0,
         )
 
         return GapAnalysisResponse(
             symbol=request.symbol,
             timeframe=request.timeframe,
-            analysis_period={
-                "start": start_date.isoformat(),
-                "end": end_date.isoformat(),
-                "total_duration_hours": (end_date - start_date).total_seconds() / 3600,
-            },
-            trading_metadata=None,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
             summary=summary,
             gaps=[],
-            recommendations=[
-                f"No data available: {reason}",
-                "Complete data collection needed",
-            ],
+            analysis_mode=request.mode,
+            generated_at=datetime.now().isoformat(),
         )
 
     def _calculate_batch_summary(

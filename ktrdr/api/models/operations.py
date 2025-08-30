@@ -102,10 +102,26 @@ class OperationInfo(BaseModel):
         None, description="When operation completed"
     )
     progress: OperationProgress = Field(
-        default_factory=lambda: OperationProgress(), description="Progress information"
+        default_factory=lambda: OperationProgress(
+            percentage=0.0,
+            current_step=None,
+            steps_completed=0,
+            steps_total=0,
+            items_processed=0,
+            items_total=None,
+            current_item=None
+        ), 
+        description="Progress information"
     )
     metadata: OperationMetadata = Field(
-        default_factory=lambda: OperationMetadata(), description="Operation metadata"
+        default_factory=lambda: OperationMetadata(
+            symbol=None,
+            timeframe=None,
+            mode=None,
+            start_date=None,
+            end_date=None
+        ), 
+        description="Operation metadata"
     )
     error_message: Optional[str] = Field(None, description="Error message if failed")
     warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
