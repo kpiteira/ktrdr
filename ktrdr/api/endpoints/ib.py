@@ -550,6 +550,7 @@ async def discover_symbol(
                 data=SymbolDiscoveryResponse(
                     symbol_info=None, cached=False, discovery_time_ms=discovery_time_ms
                 ),
+                error=None
             )
 
         # Convert dict to SymbolInfo model
@@ -565,6 +566,7 @@ async def discover_symbol(
                 cached=cached,
                 discovery_time_ms=discovery_time_ms,
             ),
+            error=None
         )
 
     except Exception as e:
@@ -638,6 +640,7 @@ async def get_discovered_symbols(
                 instrument_types=instrument_type_counts,
                 cache_stats=cache_stats,
             ),
+            error=None
         )
 
     except Exception as e:

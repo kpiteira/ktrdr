@@ -354,7 +354,7 @@ class TrainingAnalyzer:
             f"Training finalized: {final_epoch} epochs, reason: {stopping_reason}"
         )
 
-    def export_csv(self) -> Path:
+    def export_csv(self) -> Optional[Path]:
         """Export LLM-friendly CSV file.
 
         Returns:
@@ -380,7 +380,7 @@ class TrainingAnalyzer:
             logger.error(f"Failed to export CSV: {e}")
             return None
 
-    def export_json(self) -> Path:
+    def export_json(self) -> Optional[Path]:
         """Export detailed JSON file.
 
         Returns:
@@ -419,7 +419,7 @@ class TrainingAnalyzer:
             logger.error(f"Failed to export JSON: {e}")
             return None
 
-    def export_alerts(self) -> Path:
+    def export_alerts(self) -> Optional[Path]:
         """Export human-readable alerts file.
 
         Returns:
@@ -465,7 +465,7 @@ class TrainingAnalyzer:
             logger.error(f"Failed to export alerts: {e}")
             return None
 
-    def export_config(self) -> Path:
+    def export_config(self) -> Optional[Path]:
         """Export training configuration for reproducibility.
 
         Returns:

@@ -136,7 +136,7 @@ class DataManager(ServiceOrchestrator):
                     host_service_config = config.ib_host_service
                 else:
                     # Use defaults if no config file
-                    host_service_config = IbHostServiceConfig()
+                    host_service_config = IbHostServiceConfig(enabled=False, url="http://localhost:5001")
 
                 # Check for environment override (for easy Docker toggle)
                 override_file = os.getenv("IB_HOST_SERVICE_CONFIG")

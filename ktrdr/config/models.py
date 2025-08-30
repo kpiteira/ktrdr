@@ -522,7 +522,7 @@ class KtrdrConfig(BaseModel):
     data: DataConfig
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
-    ib_host_service: IbHostServiceConfig = Field(default_factory=IbHostServiceConfig)
+    ib_host_service: IbHostServiceConfig = Field(default_factory=lambda: IbHostServiceConfig())
     debug: bool = Field(False, description="Global debug flag")
     indicators: Optional[IndicatorsConfig] = Field(
         None, description="Indicator configurations"

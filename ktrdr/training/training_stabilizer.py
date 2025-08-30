@@ -151,7 +151,7 @@ class TrainingStabilizer:
         model_config: dict[str, Any],
         training_config: dict[str, Any],
         force: bool = False,
-    ) -> Path:
+    ) -> Optional[Path]:
         """Save training checkpoint.
 
         Args:
@@ -710,7 +710,7 @@ class TrainingStabilizer:
             "recommendations": self.get_recovery_recommendations(),
         }
 
-    def export_stability_log(self, file_path: Optional[Path] = None) -> Path:
+    def export_stability_log(self, file_path: Optional[Path] = None) -> Optional[Path]:
         """Export training stability log.
 
         Args:

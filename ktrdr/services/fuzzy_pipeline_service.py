@@ -288,7 +288,7 @@ class FuzzyPipelineService:
         for timeframe in timeframes:
             try:
                 # Use data manager to load data
-                data = self.data_manager.get_data(
+                data = self.data_manager.load_data(
                     symbol=symbol, timeframe=timeframe, period_days=period_days
                 )
 

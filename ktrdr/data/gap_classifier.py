@@ -537,7 +537,7 @@ class GapClassifier:
 
         try:
             # Convert UTC times to exchange timezone
-            if hasattr(start_time, "tz_convert"):
+            if hasattr(start_time, "tz_convert") and hasattr(end_time, "tz_convert"):
                 # Already a pandas timestamp with timezone
                 start_local = start_time.tz_convert(timezone_str)
                 end_local = end_time.tz_convert(timezone_str)

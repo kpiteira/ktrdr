@@ -5,7 +5,7 @@ Provides comprehensive gap analysis functionality for the API layer.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import pandas as pd
 
@@ -213,10 +213,10 @@ class GapAnalysisService:
 
         # Convert timestamps to UTC for comparison
         df_utc = df.copy()
-        if df_utc.index.tz is None:
-            df_utc.index = df_utc.index.tz_localize("UTC")
+        if cast(pd.DatetimeIndex, df_utc.index).tz is None:
+            df_utc.index = cast(pd.DatetimeIndex, df_utc.index).tz_localize("UTC")
         else:
-            df_utc.index = df_utc.index.tz_convert("UTC")
+            df_utc.index = cast(pd.DatetimeIndex, df_utc.index).tz_convert("UTC")
 
         # Filter to period
         mask = (df_utc.index >= start_date) & (df_utc.index <= end_date)
@@ -242,10 +242,10 @@ class GapAnalysisService:
             return gaps
 
         # Convert index to ensure proper timezone handling
-        if df.index.tz is None:
-            df.index = df.index.tz_localize("UTC")
+        if cast(pd.DatetimeIndex, df.index).tz is None:
+            df.index = cast(pd.DatetimeIndex, df.index).tz_localize("UTC")
         else:
-            df.index = df.index.tz_convert("UTC")
+            df.index = cast(pd.DatetimeIndex, df.index).tz_convert("UTC")
 
         # Sort by timestamp
         df_sorted = df.sort_index()
