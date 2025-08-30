@@ -419,9 +419,9 @@ class TimestampManager:
 
             # Try to get data directory from settings
             try:
-                from ktrdr.config.settings import get_settings
+                from ktrdr.config.settings import get_api_settings
 
-                settings = get_settings()
+                settings = get_api_settings()
                 data_dir = (
                     Path(settings.data_dir)
                     if hasattr(settings, "data_dir")

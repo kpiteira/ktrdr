@@ -892,7 +892,8 @@ class DataManager(ServiceOrchestrator):
             # Calculate start_date based on days going backwards from end_date
             if isinstance(end_date, str):
                 end_date = pd.to_datetime(end_date)
-            start_date = end_date - timedelta(days=days)
+            if end_date is not None:
+                start_date = end_date - timedelta(days=days)
 
         # Call the original load_data method with the processed parameters
         return self.load_data(

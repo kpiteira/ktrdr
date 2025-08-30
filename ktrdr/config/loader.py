@@ -298,7 +298,7 @@ class ConfigLoader:
         Returns:
             Dictionary with validation results
         """
-        validation_results = {
+        validation_results: dict[str, Any] = {
             "valid": True,
             "warnings": [],
             "errors": [],

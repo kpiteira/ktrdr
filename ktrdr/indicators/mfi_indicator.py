@@ -191,9 +191,9 @@ class MFIIndicator(BaseIndicator):
                     change
                 ):  # Skip NaN values (first price change is always NaN)
                     continue
-                elif change > 0:
+                elif pd.notna(change) and change > 0:  # type: ignore[operator]
                     positive_flow += money_flow
-                elif change < 0:
+                elif pd.notna(change) and change < 0:  # type: ignore[operator]
                     negative_flow += money_flow
                 # If change == 0, money flow is not added to either positive or negative
 

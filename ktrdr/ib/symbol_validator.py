@@ -135,9 +135,9 @@ class IbSymbolValidator:
         else:
             # Default cache file in data directory
             try:
-                from ktrdr.config.settings import get_settings
+                from ktrdr.config.settings import get_api_settings
 
-                settings = get_settings()
+                settings = get_api_settings()
                 data_dir = (
                     Path(settings.data_dir)
                     if hasattr(settings, "data_dir")

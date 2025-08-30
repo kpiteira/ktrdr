@@ -8,6 +8,7 @@ This module provides classes for different types of moving averages:
 
 import numpy as np
 import pandas as pd
+from typing import Optional
 
 from ktrdr import get_logger
 from ktrdr.errors import DataError
@@ -230,7 +231,7 @@ class ExponentialMovingAverage(BaseIndicator):
 
         return params
 
-    def get_column_name(self, suffix: str = None) -> str:
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
         """
         Get the standardized column name for this indicator.
 

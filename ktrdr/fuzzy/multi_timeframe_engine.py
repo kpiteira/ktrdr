@@ -493,7 +493,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
                 # Remove timeframe suffix from output names for cleaner result
                 for fuzzy_name, membership in fuzzy_result.items():
-                    if self._is_multi_timeframe and fuzzy_name.endswith(
+                    if self._is_multi_timeframe and isinstance(fuzzy_name, str) and fuzzy_name.endswith(
                         f"_{timeframe}"
                     ):
                         clean_name = fuzzy_name[: -len(f"_{timeframe}")]

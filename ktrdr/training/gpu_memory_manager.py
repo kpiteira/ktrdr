@@ -529,9 +529,9 @@ class GPUMemoryManager:
             "num_devices": self.num_devices,
             "device_ids": self.device_ids,
             "devices": {},
-            "total_memory_mb": 0,
-            "total_allocated_mb": 0,
-            "total_free_mb": 0,
+            "total_memory_mb": 0.0,
+            "total_allocated_mb": 0.0,
+            "total_free_mb": 0.0,
             "peak_usage": self.peak_memory_usage,
         }
 
@@ -545,9 +545,9 @@ class GPUMemoryManager:
             }
 
             summary["devices"][device_id] = device_info
-            summary["total_memory_mb"] += snapshot.total_mb
-            summary["total_allocated_mb"] += snapshot.allocated_mb
-            summary["total_free_mb"] += snapshot.free_mb
+            summary["total_memory_mb"] += snapshot.total_mb  # type: ignore[operator]
+            summary["total_allocated_mb"] += snapshot.allocated_mb  # type: ignore[operator]
+            summary["total_free_mb"] += snapshot.free_mb  # type: ignore[operator]
 
         return summary
 

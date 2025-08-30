@@ -304,11 +304,11 @@ class GapFillerService:
                     logger.info(
                         "🛑 Stopping gap filling due to pacing limits - will retry in next cycle"
                     )
-                    self.stats["gaps_failed"] += 1
+                    self.stats["gaps_failed"] += 1  # type: ignore[operator]
                     break  # Stop processing and let regular cycle retry later
                 else:
                     logger.warning(f"Error checking gap for {symbol}_{timeframe}: {e}")
-                    self.stats["gaps_failed"] += 1
+                    self.stats["gaps_failed"] += 1  # type: ignore[operator]
 
         if processed > 0:
             logger.info(f"Gap filling cycle completed: processed {processed} symbols")
@@ -402,15 +402,15 @@ class GapFillerService:
 
             # Update classification statistics
             classification_key = gap_info.classification.value
-            if classification_key in self.stats["gap_classifications"]:
-                self.stats["gap_classifications"][classification_key] += 1
+            if classification_key in self.stats["gap_classifications"]:  # type: ignore[operator]
+                self.stats["gap_classifications"][classification_key] += 1  # type: ignore[operator]
 
             # Log gap detection with classification
             logger.info(
                 f"Gap detected for {symbol}_{timeframe}: {gap_hours:.1f}h "
                 f"[{gap_info.classification.value}] - {gap_info.note}"
             )
-            self.stats["gaps_detected"] += 1
+            self.stats["gaps_detected"] += 1  # type: ignore[operator]
 
             # Decide whether to fill based on classification and configuration
             should_fill = self._should_fill_gap(gap_info)
@@ -420,7 +420,7 @@ class GapFillerService:
                     f"Skipping gap for {symbol}_{timeframe}: "
                     f"{gap_info.classification.value} - {gap_info.note}"
                 )
-                self.stats["gaps_expected_skipped"] += 1
+                self.stats["gaps_expected_skipped"] += 1  # type: ignore[operator]
                 return False
 
             # Fill the gap using the enhanced DataManager (intelligent gap analysis)
@@ -442,24 +442,24 @@ class GapFillerService:
                     fetched_bars = len(new_data)
 
                     if fetched_bars > 0:
-                        self.stats["gaps_filled"] += 1
+                        self.stats["gaps_filled"] += 1  # type: ignore[operator]
                         logger.info(
                             f"Filled gap for {symbol}_{timeframe}: {fetched_bars} bars fetched"
                         )
                         return True
                     else:
-                        self.stats["gaps_failed"] += 1
+                        self.stats["gaps_failed"] += 1  # type: ignore[operator]
                         logger.warning(
                             f"No new data fetched for gap in {symbol}_{timeframe}"
                         )
                         return False
                 else:
-                    self.stats["gaps_failed"] += 1
+                    self.stats["gaps_failed"] += 1  # type: ignore[operator]
                     logger.warning(f"No data returned for gap in {symbol}_{timeframe}")
                     return False
 
             except Exception as e:
-                self.stats["gaps_failed"] += 1
+                self.stats["gaps_failed"] += 1  # type: ignore[operator]
                 logger.error(f" {e}")
                 return False
 

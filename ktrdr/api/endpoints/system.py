@@ -36,11 +36,14 @@ async def get_ib_status() -> dict[str, Any]:
         # Get connection pool statistics
         # TODO: Implement with new IB architecture
         pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
+        
+        # Extract available connections once to ensure type consistency
+        available_connections = pool_stats.get("available_connections", 0)
 
         return {
             "success": True,
             "connection_pool": {
-                "available_connections": pool_stats.get("available_connections", 0),
+                "available_connections": available_connections,
                 "total_connections": pool_stats.get("total_connections", 0),
                 "failed_connections": pool_stats.get("failed_connections", 0),
                 "host": pool_stats.get("host", ""),
@@ -50,7 +53,7 @@ async def get_ib_status() -> dict[str, Any]:
             },
             "status": (
                 "available"
-                if pool_stats.get("available_connections", 0) > 0
+                if isinstance(available_connections, int) and available_connections > 0
                 else "initializing"
             ),
             "timestamp": pool_stats.get("timestamp", ""),
@@ -118,7 +121,8 @@ async def get_system_status() -> dict[str, Any]:
         # Get IB connection status from pool
         # TODO: Implement with new IB architecture
         pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
-        ib_connected = pool_stats.get("available_connections", 0) > 0
+        available_conns = pool_stats.get("available_connections", 0)
+        ib_connected = isinstance(available_conns, int) and available_conns > 0
 
         # Get gap filler status
         gap_filler = get_gap_filler()
@@ -172,7 +176,8 @@ async def get_system_status_standardized() -> ApiResponse:
         # Get IB connection status from pool
         # TODO: Implement with new IB architecture
         pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
-        ib_connected = pool_stats.get("available_connections", 0) > 0
+        available_conns = pool_stats.get("available_connections", 0)
+        ib_connected = isinstance(available_conns, int) and available_conns > 0
 
         # Get gap filler status
         gap_filler = get_gap_filler()

@@ -379,7 +379,7 @@ class TimeframeSynchronizer:
                 # Check if most deltas are within tolerance of expected
                 tolerance = pd.Timedelta(minutes=tolerance_minutes)
                 consistent_count = (
-                    (actual_deltas - expected_delta).abs() <= tolerance
+                    (actual_deltas - expected_delta).abs() <= tolerance  # type: ignore[operator]
                 ).sum()
                 consistency_ratio = consistent_count / len(actual_deltas)
 
@@ -431,16 +431,16 @@ class TimeframeSynchronizer:
 
     def _ensure_utc_timezone(self, data: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """Ensure data has UTC timezone."""
-        if data.index.tz is None:
+        if data.index.tz is None:  # type: ignore[attr-defined]
             # Localize to UTC
             data = data.copy()
-            data.index = data.index.tz_localize("UTC")
+            data.index = data.index.tz_localize("UTC")  # type: ignore[attr-defined]
             logger.debug(f"Localized {timeframe} data to UTC")
-        elif str(data.index.tz) != "UTC":
+        elif str(data.index.tz) != "UTC":  # type: ignore[attr-defined]
             # Convert to UTC
             data = data.copy()
-            data.index = data.index.tz_convert("UTC")
-            logger.debug(f"Converted {timeframe} data to UTC from {data.index.tz}")
+            data.index = data.index.tz_convert("UTC")  # type: ignore[attr-defined]
+            logger.debug(f"Converted {timeframe} data to UTC from {data.index.tz}")  # type: ignore[attr-defined]
 
         return data
 

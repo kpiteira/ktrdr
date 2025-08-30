@@ -227,7 +227,7 @@ class PerformanceOptimizer:
         # Enable gradient checkpointing for memory efficiency
         if self.config.enable_gradient_checkpointing:
             if hasattr(model, "gradient_checkpointing_enable"):
-                model.gradient_checkpointing_enable()
+                model.gradient_checkpointing_enable()  # type: ignore[operator]
                 logger.info("Gradient checkpointing enabled")
             else:
                 logger.warning("Model does not support gradient checkpointing")

@@ -346,8 +346,9 @@ class StrategyValidator:
                 result.errors.append(f"Missing required decisions field: {field_name}")
             elif not isinstance(decisions_config[field_name], expected_type):
                 result.is_valid = False
+                type_name = getattr(expected_type, '__name__', str(expected_type))
                 result.errors.append(
-                    f"Decisions field '{field_name}' must be of type {expected_type.__name__}"
+                    f"Decisions field '{field_name}' must be of type {type_name}"
                 )
 
         return result

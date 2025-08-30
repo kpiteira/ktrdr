@@ -121,10 +121,11 @@ class OBVIndicator(BaseIndicator):
             current_volume = volume.iloc[i]
             price_diff = price_change.iloc[i]
 
-            if price_diff > 0:
+            # Handle NaN values and ensure numeric comparison
+            if pd.notna(price_diff) and price_diff > 0:  # type: ignore[operator]
                 # Price increased: add volume
                 obv.iloc[i] = prev_obv + current_volume
-            elif price_diff < 0:
+            elif pd.notna(price_diff) and price_diff < 0:  # type: ignore[operator]
                 # Price decreased: subtract volume
                 obv.iloc[i] = prev_obv - current_volume
             else:

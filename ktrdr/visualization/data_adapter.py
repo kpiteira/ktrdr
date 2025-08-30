@@ -350,7 +350,7 @@ class DataAdapter:
                     continue
 
                 value = float(value)
-                entry = {"time": unix_time, "value": value}  # Unix timestamp in seconds
+                entry: dict[str, Any] = {"time": unix_time, "value": value}  # Unix timestamp in seconds
 
                 # Determine color
                 if actual_color_col:

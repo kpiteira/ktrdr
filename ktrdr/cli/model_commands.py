@@ -698,8 +698,9 @@ async def _list_models_async(
 
         # Filter by pattern if specified
         if pattern:
+            pattern_upper = pattern.upper()  # Extract once to help mypy
             models = [
-                model for model in models if pattern.upper() in model["name"].upper()
+                model for model in models if pattern_upper in model["name"].upper()
             ]
 
         # Format output
@@ -1004,7 +1005,7 @@ async def _make_prediction_async(
 
         # Filter by confidence threshold
         filtered_predictions = [
-            p for p in predictions if p["confidence"] >= confidence_threshold
+            p for p in predictions if p["confidence"] >= confidence_threshold  # type: ignore[operator]
         ]
 
         # Format output

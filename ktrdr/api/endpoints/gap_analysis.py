@@ -97,8 +97,8 @@ async def analyze_symbol_gaps(
 
         logger.info(
             f"Gap analysis completed for {symbol}_{timeframe}: "
-            f"{result.summary.data_completeness_pct:.1f}% complete, "
-            f"{result.summary.total_missing} missing bars"
+            f"{result.summary.coverage_percentage:.1f}% complete, "
+            f"{result.summary.total_missing_hours:.1f} missing hours"
         )
 
         return ApiResponse(success=True, data=result, error=None)
