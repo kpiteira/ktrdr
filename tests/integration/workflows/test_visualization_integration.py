@@ -14,7 +14,7 @@ from ktrdr.visualization import (
 )
 
 # Import test fixtures
-from tests.visualization.test_fixtures import (
+from tests.unit.visualization.test_fixtures import (
     histogram_data,
     multiple_series_data,
     sample_indicators,
