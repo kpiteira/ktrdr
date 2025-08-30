@@ -525,9 +525,7 @@ class DataQualityChecker:
                 for col in ["open", "high", "low", "close"]:
                     if col in fixed_df.columns:
                         # Forward fill, then backward fill
-                        fixed_df[col] = (
-                            fixed_df[col].fillna(method="ffill").fillna(method="bfill")
-                        )
+                        fixed_df[col] = fixed_df[col].ffill().bfill()
 
                         # If still NaN, use a default value
                         if fixed_df[col].isna().any():
@@ -633,7 +631,7 @@ def process_with_comprehensive_error_handling(
     Returns:
         Tuple of (results, error report)
     """
-    error_report = {
+    error_report: dict[str, Any] = {
         "data_quality_issues": {},
         "processing_errors": [],
         "recovery_actions": [],

@@ -342,7 +342,15 @@ class IndicatorService(BaseService):
                 "points": len(dates),
             }
 
-            return dates, indicator_values, metadata
+            # Ensure proper types for return values
+            dates_list: list[str] = [str(d) for d in dates]
+            indicator_values_clean: dict[str, list[float]] = {
+                k: [float(val) if val is not None else 0.0 for val in v]
+                for k, v in indicator_values.items()
+            }
+            metadata_clean: dict[str, Any] = dict(metadata)
+            
+            return dates_list, indicator_values_clean, metadata_clean
 
         except (DataError, ConfigurationError, ProcessingError):
             # Re-raise known error types

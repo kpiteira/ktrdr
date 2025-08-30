@@ -190,8 +190,8 @@ class ComplexConfigurationHandler:
         Returns:
             Tuple of (issues found, corrected configurations)
         """
-        issues = []
-        corrected_configs = []
+        issues: list[ConfigurationIssue] = []
+        corrected_configs: list[TimeframeIndicatorConfig] = []
 
         for config in timeframe_configs:
             timeframe = config.timeframe
@@ -255,13 +255,13 @@ class ComplexConfigurationHandler:
                     corrected_indicators.append(indicator_config)
 
             # Create corrected timeframe config
-            corrected_config = TimeframeIndicatorConfig(
+            timeframe_config: TimeframeIndicatorConfig = TimeframeIndicatorConfig(
                 timeframe=config.timeframe,
                 indicators=corrected_indicators,
                 enabled=config.enabled,
                 weight=config.weight,
             )
-            corrected_configs.append(corrected_config)
+            corrected_configs.append(timeframe_config)
 
         return issues, corrected_configs
 
@@ -572,7 +572,7 @@ def validate_configuration_feasibility(
     issues, _ = handler.validate_configuration(timeframe_configs, availability)
 
     # Create report
-    report = {
+    report: dict[str, Any] = {
         "feasible": len(issues) == 0,
         "data_availability": {
             tf: {

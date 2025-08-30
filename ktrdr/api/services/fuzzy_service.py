@@ -51,6 +51,10 @@ class FuzzyService(BaseService):
         super().__init__()  # Initialize BaseService
         self.data_manager = DataManager()
         self.indicator_engine = IndicatorEngine()
+        
+        # Declare types for attributes that may be None in error cases
+        self.fuzzy_engine: Optional[FuzzyEngine] = None
+        self.batch_calculator: Optional[BatchFuzzyCalculator] = None
 
         # Load fuzzy configuration
         try:
