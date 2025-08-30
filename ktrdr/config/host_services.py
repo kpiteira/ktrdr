@@ -123,7 +123,9 @@ class TrainingHostServiceSettings(HostServiceSettings):
         description="Maximum session duration in seconds",
     )
 
-    model_config = SettingsConfigDict(env_prefix="TRAINING_HOST_SERVICE_", extra="forbid")
+    model_config = SettingsConfigDict(
+        env_prefix="TRAINING_HOST_SERVICE_", extra="forbid"
+    )
 
 
 class ApiServiceSettings(HostServiceSettings):

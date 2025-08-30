@@ -394,10 +394,27 @@ class ModelTrainer:
                             epoch=epoch,
                             model=model,
                             train_metrics={
-                                "loss": float(avg_train_loss) if avg_train_loss is not None else 0.0,
-                                "accuracy": float(train_accuracy) if train_accuracy is not None else 0.0,
+                                "loss": (
+                                    float(avg_train_loss)
+                                    if avg_train_loss is not None
+                                    else 0.0
+                                ),
+                                "accuracy": (
+                                    float(train_accuracy)
+                                    if train_accuracy is not None
+                                    else 0.0
+                                ),
                             },
-                            val_metrics={"loss": float(val_loss) if val_loss is not None else 0.0, "accuracy": float(val_accuracy) if val_accuracy is not None else 0.0},
+                            val_metrics={
+                                "loss": (
+                                    float(val_loss) if val_loss is not None else 0.0
+                                ),
+                                "accuracy": (
+                                    float(val_accuracy)
+                                    if val_accuracy is not None
+                                    else 0.0
+                                ),
+                            },
                             optimizer=optimizer,
                             y_pred=analytics_predicted,
                             y_true=analytics_true,
@@ -420,7 +437,7 @@ class ModelTrainer:
                     # Continue training even if analytics fail
 
             # Learning rate scheduling
-            if scheduler is not None and hasattr(scheduler, 'step'):
+            if scheduler is not None and hasattr(scheduler, "step"):
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss else avg_train_loss)
                 else:
@@ -725,7 +742,7 @@ class ModelTrainer:
             self.history.append(metrics)
 
             # Update learning rate scheduler
-            if scheduler is not None and hasattr(scheduler, 'step'):
+            if scheduler is not None and hasattr(scheduler, "step"):
                 if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss is not None else avg_train_loss)
                 else:
@@ -908,7 +925,7 @@ class ModelTrainer:
             summary["final_val_loss"] = val_losses[-1]
             summary["final_val_accuracy"] = val_accuracies[-1]
             summary["best_val_accuracy"] = self.best_val_accuracy
-            
+
             # Update history with validation data
             if isinstance(summary["history"], dict):
                 summary["history"]["val_loss"] = val_losses

@@ -107,9 +107,10 @@ async def check_ib_health(
         if not health.healthy:
             # Use HTTPException for proper FastAPI error handling
             from fastapi import HTTPException
+
             raise HTTPException(
                 status_code=503,
-                detail=f"IB connection is unhealthy: {health.error_message}"
+                detail=f"IB connection is unhealthy: {health.error_message}",
             )
 
         return ApiResponse(success=True, data=health, error=None)
@@ -117,9 +118,9 @@ async def check_ib_health(
     except Exception as e:
         logger.error(f"Error checking IB health: {e}")
         from fastapi import HTTPException
+
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to check IB health: {str(e)}"
+            status_code=500, detail=f"Failed to check IB health: {str(e)}"
         )
 
 
@@ -153,9 +154,9 @@ async def get_ib_resilience_status(
     except Exception as e:
         logger.error(f"Error getting IB resilience status: {e}")
         from fastapi import HTTPException
+
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get IB resilience status: {str(e)}"
+            status_code=500, detail=f"Failed to get IB resilience status: {str(e)}"
         )
 
 
@@ -530,7 +531,7 @@ async def discover_symbol(
                 data=SymbolDiscoveryResponse(
                     symbol_info=None, cached=False, discovery_time_ms=discovery_time_ms
                 ),
-                error=None
+                error=None,
             )
 
         # Convert dict to SymbolInfo model
@@ -546,7 +547,7 @@ async def discover_symbol(
                 cached=cached,
                 discovery_time_ms=discovery_time_ms,
             ),
-            error=None
+            error=None,
         )
 
     except Exception as e:
@@ -620,7 +621,7 @@ async def get_discovered_symbols(
                 instrument_types=instrument_type_counts,
                 cache_stats=cache_stats,
             ),
-            error=None
+            error=None,
         )
 
     except Exception as e:

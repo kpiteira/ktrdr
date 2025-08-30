@@ -580,11 +580,14 @@ class BacktestingEngine:
         # This prevents unrealized losses from skewing performance metrics
         final_bar = data.iloc[-1]
         final_price = final_bar["close"]
-        final_timestamp = cast(pd.Timestamp, (
-            final_bar.name
-            if hasattr(final_bar.name, "strftime")
-            else pd.Timestamp(cast(str, final_bar.name))
-        ))
+        final_timestamp = cast(
+            pd.Timestamp,
+            (
+                final_bar.name
+                if hasattr(final_bar.name, "strftime")
+                else pd.Timestamp(cast(str, final_bar.name))
+            ),
+        )
 
         # CRITICAL DEBUG: Track force-close logic
         pm_final_position = self.position_manager.current_position_status
@@ -696,14 +699,22 @@ class BacktestingEngine:
         if self.config.start_date:
             start_date = pd.to_datetime(self.config.start_date)
             # Make timezone-aware if needed to match data index
-            if hasattr(data.index, 'tz') and data.index.tz is not None and start_date.tz is None:
+            if (
+                hasattr(data.index, "tz")
+                and data.index.tz is not None
+                and start_date.tz is None
+            ):
                 start_date = start_date.tz_localize("UTC")
             data = data[data.index >= start_date]
 
         if self.config.end_date:
             end_date = pd.to_datetime(self.config.end_date)
             # Make timezone-aware if needed to match data index
-            if hasattr(data.index, 'tz') and data.index.tz is not None and end_date.tz is None:
+            if (
+                hasattr(data.index, "tz")
+                and data.index.tz is not None
+                and end_date.tz is None
+            ):
                 end_date = end_date.tz_localize("UTC")
             data = data[data.index <= end_date]
 

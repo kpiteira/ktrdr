@@ -76,7 +76,9 @@ def compute_fuzzy(
         indicator = InputValidator.validate_string(
             indicator, min_length=1, max_length=20
         )
-        period = int(InputValidator.validate_numeric(period, min_value=1, max_value=1000))
+        period = int(
+            InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        )
 
         if fuzzy_config:
             config_path = Path(fuzzy_config)
@@ -293,7 +295,9 @@ def visualize_fuzzy(
         indicator = InputValidator.validate_string(
             indicator, min_length=1, max_length=20
         )
-        period = int(InputValidator.validate_numeric(period, min_value=1, max_value=1000))
+        period = int(
+            InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        )
 
         if fuzzy_config:
             config_path = Path(fuzzy_config)

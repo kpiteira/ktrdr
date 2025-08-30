@@ -262,7 +262,7 @@ async def calculate_indicators(
         paginated_dates = dates[start_idx:end_idx]
         paginated_indicators: dict[str, list[float | None]] = {}
         for name, values in indicator_values.items():
-            paginated_indicators[name] = values[start_idx:end_idx]
+            paginated_indicators[name] = list(values[start_idx:end_idx])
 
         # Add pagination metadata
         pagination_metadata = {

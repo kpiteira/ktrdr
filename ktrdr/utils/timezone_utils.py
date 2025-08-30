@@ -364,7 +364,9 @@ class TimestampManager:
             return False
 
     @staticmethod
-    def get_market_status_enhanced(timestamp: pd.Timestamp, symbol: Optional[str] = None) -> str:
+    def get_market_status_enhanced(
+        timestamp: pd.Timestamp, symbol: Optional[str] = None
+    ) -> str:
         """
         Get detailed market status using symbol-specific trading hours.
 
@@ -450,7 +452,9 @@ class TimestampManager:
 
 
 # Convenience functions for backward compatibility
-def ensure_utc_timestamp(dt: Union[datetime, pd.Timestamp, str]) -> Optional[pd.Timestamp]:
+def ensure_utc_timestamp(
+    dt: Union[datetime, pd.Timestamp, str],
+) -> Optional[pd.Timestamp]:
     """Convenience function - alias for TimestampManager.to_utc()."""
     return TimestampManager.to_utc(dt)
 

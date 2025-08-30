@@ -356,7 +356,9 @@ class PrefetchingDataLoader:
         )
 
         # Prefetching setup
-        self.prefetch_queue: queue.Queue[Any] = queue.Queue(maxsize=self.config.prefetch_queue_size)
+        self.prefetch_queue: queue.Queue[Any] = queue.Queue(
+            maxsize=self.config.prefetch_queue_size
+        )
         self.prefetch_thread = None
         self.stop_prefetching = threading.Event()
 
@@ -563,7 +565,9 @@ class DataLoadingOptimizer:
             "min_batch_time_seconds": np.min(times),
             "max_batch_time_seconds": np.max(times),
             "batches_per_second": len(times) / total_time,
-            "samples_per_second": len(times) * (dataloader.batch_size or 1) / total_time,
+            "samples_per_second": len(times)
+            * (dataloader.batch_size or 1)
+            / total_time,
         }
 
         logger.info(

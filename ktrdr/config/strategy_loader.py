@@ -155,7 +155,7 @@ class StrategyConfigurationLoader:
             )
         else:
             symbol_config = SymbolConfiguration(
-                mode=SymbolMode.MULTI_SYMBOL, 
+                mode=SymbolMode.MULTI_SYMBOL,
                 symbol=None,
                 symbols=legacy_symbols,
                 selection_criteria=None,
@@ -195,8 +195,7 @@ class StrategyConfigurationLoader:
             target_symbol_mode = TargetSymbolMode.UNIVERSAL
 
         target_symbols = TargetSymbolConfiguration(
-            mode=target_symbol_mode,
-            restrictions=None
+            mode=target_symbol_mode, restrictions=None
         )
 
         target_timeframes = TargetTimeframeConfiguration(

@@ -51,7 +51,7 @@ class FuzzyService(BaseService):
         super().__init__()  # Initialize BaseService
         self.data_manager = DataManager()
         self.indicator_engine = IndicatorEngine()
-        
+
         # Declare types for attributes that may be None in error cases
         self.fuzzy_engine: Optional[FuzzyEngine] = None
         self.batch_calculator: Optional[BatchFuzzyCalculator] = None
@@ -303,19 +303,23 @@ class FuzzyService(BaseService):
 
             # Convert result to dictionary
             fuzzified_values = {}
-            if hasattr(result, 'columns'):  # It's a DataFrame
+            if hasattr(result, "columns"):  # It's a DataFrame
                 for col in result.columns:
                     col_data = result[col]
-                    if hasattr(col_data, 'tolist'):
+                    if hasattr(col_data, "tolist"):
                         fuzzified_values[col] = col_data.tolist()
                     else:
-                        fuzzified_values[col] = [col_data] if not isinstance(col_data, list) else col_data
+                        fuzzified_values[col] = (
+                            [col_data] if not isinstance(col_data, list) else col_data
+                        )
             else:  # It's already a dict
                 for key, value in result.items():
-                    if hasattr(value, 'tolist'):
+                    if hasattr(value, "tolist"):
                         fuzzified_values[key] = value.tolist()
                     else:
-                        fuzzified_values[key] = [value] if not isinstance(value, list) else value
+                        fuzzified_values[key] = (
+                            [value] if not isinstance(value, list) else value
+                        )
 
             end_tracking = perf_metrics["end_tracking"]
             performance_metrics = end_tracking()
@@ -469,7 +473,7 @@ class FuzzyService(BaseService):
                     fuzzified = await self.fuzzify_indicator(
                         indicator_name, indicator_values.tolist(), dates
                     )
-                    if hasattr(fuzzy_perf, '__getitem__'):  # It's dict-like
+                    if hasattr(fuzzy_perf, "__getitem__"):  # It's dict-like
                         fuzzy_perf["end_tracking"]()  # type: ignore[index]
                     else:
                         # Handle non-dict return case

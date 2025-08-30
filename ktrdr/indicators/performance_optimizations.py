@@ -435,8 +435,8 @@ class OptimizedMultiTimeframeEngine:
         results = {}
 
         max_workers = (
-            self.parallel_processor.max_workers 
-            if self.parallel_processor is not None 
+            self.parallel_processor.max_workers
+            if self.parallel_processor is not None
             else 4  # Default fallback
         )
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -469,6 +469,7 @@ class OptimizedMultiTimeframeEngine:
     def get_performance_metrics(self) -> dict[str, Any]:
         """Get performance metrics and recommendations."""
         from typing import Any
+
         metrics: dict[str, Any] = {
             "optimizations_enabled": {
                 "chunking": self.enable_chunking,

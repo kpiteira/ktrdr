@@ -75,7 +75,7 @@ class IbDataAdapter(ExternalDataProvider):
         # Declare Optional attributes
         self.symbol_validator: Optional[Any] = None
         self.data_fetcher: Optional[Any] = None
-        
+
         # Validate configuration
         if use_host_service and not HTTPX_AVAILABLE:
             raise DataProviderError(
@@ -208,20 +208,20 @@ class IbDataAdapter(ExternalDataProvider):
                     for tf, dt in head_timestamps.items():
                         if dt is not None:
                             head_timestamps_str[str(tf)] = dt.isoformat()
-                        
+
                 validation_result = ValidationResult(
                     is_valid=response.get("is_valid", False),
                     symbol=symbol,
                     error_message=response.get("error_message"),
                     contract_info=contract_info,
-                    head_timestamps=head_timestamps_str if head_timestamps_str else None,
+                    head_timestamps=(
+                        head_timestamps_str if head_timestamps_str else None
+                    ),
                 )
             else:
                 # Use direct IB connection (existing behavior)
-                validation_result = (
-                    await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
-                        symbol, timeframes
-                    )
+                validation_result = await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
+                    symbol, timeframes
                 )
 
             self._update_stats()
@@ -412,20 +412,20 @@ class IbDataAdapter(ExternalDataProvider):
                     for tf, dt in head_timestamps.items():
                         if dt is not None:
                             head_timestamps_str[str(tf)] = dt.isoformat()
-                        
+
                 validation_result = ValidationResult(
                     is_valid=response.get("is_valid", False),
                     symbol=symbol,
                     error_message=response.get("error_message"),
                     contract_info=contract_info,
-                    head_timestamps=head_timestamps_str if head_timestamps_str else None,
+                    head_timestamps=(
+                        head_timestamps_str if head_timestamps_str else None
+                    ),
                 )
             else:
                 # Use direct IB connection (existing behavior)
-                validation_result = (
-                    await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
-                        symbol, []
-                    )
+                validation_result = await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
+                    symbol, []
                 )
 
             self._update_stats()
@@ -477,10 +477,8 @@ class IbDataAdapter(ExternalDataProvider):
                 return None
             else:
                 # Use direct IB connection (existing behavior)
-                head_timestamp_iso = (
-                    await self.symbol_validator.fetch_head_timestamp_async(  # type: ignore[union-attr]
-                        symbol, timeframe
-                    )
+                head_timestamp_iso = await self.symbol_validator.fetch_head_timestamp_async(  # type: ignore[union-attr]
+                    symbol, timeframe
                 )
 
                 if head_timestamp_iso:

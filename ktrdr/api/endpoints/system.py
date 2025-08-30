@@ -36,7 +36,7 @@ async def get_ib_status() -> dict[str, Any]:
         # Get connection pool statistics
         # TODO: Implement with new IB architecture
         pool_stats = {"note": "New IB architecture - pool stats not yet implemented"}
-        
+
         # Extract available connections once to ensure type consistency
         available_connections = pool_stats.get("available_connections", 0)
 

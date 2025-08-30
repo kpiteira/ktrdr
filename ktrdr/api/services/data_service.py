@@ -423,8 +423,6 @@ class DataService(BaseService):
         cancellation_event = asyncio.Event()
 
         # Store the cancellation event so the operations service can signal it
-        if not hasattr(self.operations_service, "_cancellation_events"):
-            self.operations_service._cancellation_events = {}
         self.operations_service._cancellation_events[operation_id] = cancellation_event
 
         async def check_cancellation():
@@ -933,16 +931,20 @@ class DataService(BaseService):
 
             # Convert index to the exchange timezone
             df_tz = df.copy()
-            if hasattr(df_tz.index, 'tz') and df_tz.index.tz is None and hasattr(df_tz.index, 'tz_localize'):
+            if (
+                hasattr(df_tz.index, "tz")
+                and df_tz.index.tz is None
+                and hasattr(df_tz.index, "tz_localize")
+            ):
                 df_tz.index = df_tz.index.tz_localize("UTC")
-            if hasattr(df_tz.index, 'tz_convert'):
+            if hasattr(df_tz.index, "tz_convert"):
                 df_tz.index = df_tz.index.tz_convert(timezone)
 
             # Create boolean mask for filtering
             mask = pd.Series(False, index=df_tz.index)
 
             # Filter by trading days
-            if hasattr(df_tz.index, 'dayofweek'):
+            if hasattr(df_tz.index, "dayofweek"):
                 day_mask = df_tz.index.dayofweek.isin(trading_days)
             else:
                 day_mask = pd.Series(True, index=df_tz.index)
@@ -957,7 +959,7 @@ class DataService(BaseService):
                 end_hour, end_min = map(int, end_time.split(":"))
 
                 # Create time-based mask
-                if hasattr(df_tz.index, 'hour') and hasattr(df_tz.index, 'minute'):
+                if hasattr(df_tz.index, "hour") and hasattr(df_tz.index, "minute"):
                     time_mask = (
                         (df_tz.index.hour > start_hour)
                         | (
@@ -966,7 +968,10 @@ class DataService(BaseService):
                         )
                     ) & (
                         (df_tz.index.hour < end_hour)
-                        | ((df_tz.index.hour == end_hour) & (df_tz.index.minute <= end_min))
+                        | (
+                            (df_tz.index.hour == end_hour)
+                            & (df_tz.index.minute <= end_min)
+                        )
                     )
                 else:
                     time_mask = pd.Series(True, index=df_tz.index)
@@ -984,7 +989,7 @@ class DataService(BaseService):
                     end_hour, end_min = map(int, end_time.split(":"))
 
                     # Create time-based mask for extended session
-                    if hasattr(df_tz.index, 'hour') and hasattr(df_tz.index, 'minute'):
+                    if hasattr(df_tz.index, "hour") and hasattr(df_tz.index, "minute"):
                         extended_mask = (
                             (df_tz.index.hour > start_hour)
                             | (

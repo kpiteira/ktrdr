@@ -251,7 +251,7 @@ class FeatureCache:
         if self.fuzzy_df is None:
             logger.warning("No fuzzy data available for temporal features")
             return
-            
+
         logger.debug(
             f"⏰ Adding {lookback} lag periods for {len(self.fuzzy_df.columns)} base fuzzy features"
         )

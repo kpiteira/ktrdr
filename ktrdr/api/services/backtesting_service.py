@@ -139,13 +139,13 @@ class BacktestingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=5.0, 
+                    percentage=5.0,
                     current_step="Validating strategy configuration",
                     steps_completed=0,
                     steps_total=10,
                     items_processed=0,
                     items_total=None,
-                    current_item=None
+                    current_item=None,
                 ),
             )
 
@@ -158,13 +158,13 @@ class BacktestingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=10.0, 
+                    percentage=10.0,
                     current_step="Preparing data loading configuration",
                     steps_completed=1,
                     steps_total=10,
                     items_processed=0,
                     items_total=None,
-                    current_item=None
+                    current_item=None,
                 ),
             )
 
@@ -197,7 +197,7 @@ class BacktestingService(BaseService):
                     steps_total=10,
                     items_processed=0,
                     items_total=total_bars,
-                    current_item=None
+                    current_item=None,
                 ),
             )
 
@@ -213,13 +213,13 @@ class BacktestingService(BaseService):
             await self.operations_service.update_progress(
                 operation_id,
                 OperationProgress(
-                    percentage=95.0, 
+                    percentage=95.0,
                     current_step="Processing backtest results",
                     steps_completed=9,
                     steps_total=10,
                     items_processed=0,
                     items_total=None,
-                    current_item=None
+                    current_item=None,
                 ),
             )
 
@@ -403,7 +403,7 @@ class BacktestingService(BaseService):
                 steps_total=10,
                 items_processed=0,
                 items_total=None,
-                current_item=None
+                current_item=None,
             ),
         )
 
@@ -420,7 +420,9 @@ class BacktestingService(BaseService):
 
         # Create a progress callback that gets REAL progress from the engine
         def progress_callback(
-            current_bar: int, total_bars: int, additional_data: Optional[dict[Any, Any]] = None
+            current_bar: int,
+            total_bars: int,
+            additional_data: Optional[dict[Any, Any]] = None,
         ):
             """Real progress callback based on actual bars processed."""
             try:
@@ -478,7 +480,7 @@ class BacktestingService(BaseService):
                             steps_total=10,
                             items_processed=current_bar,
                             items_total=total_bars,
-                            current_item=None
+                            current_item=None,
                         ),
                     )
                     last_reported_percentage = real_percentage

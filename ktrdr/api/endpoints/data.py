@@ -73,14 +73,14 @@ async def get_data_info(
 
         # Calculate statistics
         total_symbols = len(available_symbols)
-        symbol_types: dict[str, str] = {}
+        symbol_types: dict[str, int] = {}
         symbol_names = []
 
         for symbol in available_symbols:
             # Handle both string and object types
             if hasattr(symbol, "symbol"):
                 symbol_name = symbol.symbol
-                instrument_type = getattr(symbol, "instrument_type", "unknown")
+                instrument_type = str(getattr(symbol, "instrument_type", "unknown"))
             else:
                 symbol_name = str(symbol)
                 instrument_type = "unknown"
@@ -395,7 +395,7 @@ async def get_cached_data(
                     "end": "",
                     "points": 0,
                 },
-                points=0,
+                points=None,
             )
         else:
             # Convert DataFrame to API format
@@ -424,7 +424,7 @@ async def get_cached_data(
                 "end": "",
                 "points": 0,
             },
-            points=0,
+            points=None,
         )
         return DataLoadResponse(success=True, data=data, error=None)
 

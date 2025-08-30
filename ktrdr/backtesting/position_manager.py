@@ -458,7 +458,9 @@ class PositionManager:
 
         return quantity
 
-    def _calculate_required_capital(self, price: float, quantity: Optional[int] = None) -> float:
+    def _calculate_required_capital(
+        self, price: float, quantity: Optional[int] = None
+    ) -> float:
         """Calculate required capital for a trade.
 
         Args:

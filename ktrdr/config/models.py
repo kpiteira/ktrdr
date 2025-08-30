@@ -520,16 +520,19 @@ class KtrdrConfig(BaseModel):
     """Root configuration model for KTRDR."""
 
     data: DataConfig
-    logging: LoggingConfig = Field(default_factory=lambda: LoggingConfig(
-        level="INFO",
-        file_path=None,
-        console_output=True
-    ))
-    security: SecurityConfig = Field(default_factory=lambda: SecurityConfig(validate_user_input=True))
-    ib_host_service: IbHostServiceConfig = Field(default_factory=lambda: IbHostServiceConfig(
-        enabled=False,
-        url="http://localhost:5001"
-    ))
+    logging: LoggingConfig = Field(
+        default_factory=lambda: LoggingConfig(
+            level="INFO", file_path=None, console_output=True
+        )
+    )
+    security: SecurityConfig = Field(
+        default_factory=lambda: SecurityConfig(validate_user_input=True)
+    )
+    ib_host_service: IbHostServiceConfig = Field(
+        default_factory=lambda: IbHostServiceConfig(
+            enabled=False, url="http://localhost:5001"
+        )
+    )
     debug: bool = Field(False, description="Global debug flag")
     indicators: Optional[IndicatorsConfig] = Field(
         None, description="Indicator configurations"

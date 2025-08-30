@@ -172,9 +172,12 @@ class ResilientProcessor:
                     error_type="",
                     error_message="",
                     timestamp=time.time(),
-                    data_info={"rows": len(standardized), "columns": list(standardized.columns)},
+                    data_info={
+                        "rows": len(standardized),
+                        "columns": list(standardized.columns),
+                    },
                 )
-                
+
                 return RecoveryResult(
                     successful=True,
                     data=standardized,
@@ -205,7 +208,7 @@ class ResilientProcessor:
                     return self._attempt_recovery(
                         timeframe_engine, timeframe, data, error_context
                     )
-        
+
         # Fallback return (should never reach here due to loop structure)
         error_context = ErrorContext(
             timeframe=timeframe,

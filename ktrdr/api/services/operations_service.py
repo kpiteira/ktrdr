@@ -39,6 +39,9 @@ class OperationsService:
         # Operation tasks registry (for cancellation)
         self._operation_tasks: dict[str, asyncio.Task] = {}
 
+        # Cancellation events registry (for data service integration)
+        self._cancellation_events: dict[str, asyncio.Event] = {}
+
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
 
@@ -653,7 +656,7 @@ class OperationsService:
                     steps_total=total_epochs,
                     items_processed=current_epoch,
                     items_total=total_epochs,
-                    current_item=None
+                    current_item=None,
                 )
 
                 return updated_operation
@@ -672,7 +675,7 @@ class OperationsService:
                     steps_total=100,
                     items_processed=100,
                     items_total=100,
-                    current_item=None
+                    current_item=None,
                 )
                 # Store host metrics in result summary
                 if not updated_operation.result_summary:

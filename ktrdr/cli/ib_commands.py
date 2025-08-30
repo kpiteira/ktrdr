@@ -102,7 +102,9 @@ def test_connection(
             symbol = InputValidator.validate_string(
                 symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
             )
-        timeout = int(InputValidator.validate_numeric(timeout, min_value=5, max_value=300))
+        timeout = int(
+            InputValidator.validate_numeric(timeout, min_value=5, max_value=300)
+        )
 
         # Run async operation
         asyncio.run(_test_connection_async(symbol, verbose, timeout))
@@ -180,7 +182,9 @@ def cleanup_connections(
     """
     try:
         # Input validation
-        timeout = int(InputValidator.validate_numeric(timeout, min_value=5, max_value=300))
+        timeout = int(
+            InputValidator.validate_numeric(timeout, min_value=5, max_value=300)
+        )
 
         # Run async operation
         asyncio.run(_cleanup_connections_async(force, timeout, verbose))

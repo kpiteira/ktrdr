@@ -282,7 +282,9 @@ class DecisionEngine:
 
         return active_filters
 
-    def update_position(self, executed_signal: Signal, timestamp: Optional[pd.Timestamp] = None):
+    def update_position(
+        self, executed_signal: Signal, timestamp: Optional[pd.Timestamp] = None
+    ):
         """Update internal position tracking after trade execution.
 
         Args:

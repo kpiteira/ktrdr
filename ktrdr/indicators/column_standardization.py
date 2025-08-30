@@ -394,7 +394,12 @@ class ColumnStandardizer:
         Returns:
             Dictionary with validation results
         """
-        results: dict[str, Any] = {"valid": [], "invalid": [], "warnings": [], "recommendations": []}
+        results: dict[str, Any] = {
+            "valid": [],
+            "invalid": [],
+            "warnings": [],
+            "recommendations": [],
+        }
 
         timeframes = self.get_timeframes(columns)
 

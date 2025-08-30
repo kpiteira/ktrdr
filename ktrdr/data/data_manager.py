@@ -136,7 +136,9 @@ class DataManager(ServiceOrchestrator):
                     host_service_config = config.ib_host_service
                 else:
                     # Use defaults if no config file
-                    host_service_config = IbHostServiceConfig(enabled=False, url="http://localhost:5001")
+                    host_service_config = IbHostServiceConfig(
+                        enabled=False, url="http://localhost:5001"
+                    )
 
                 # Check for environment override (for easy Docker toggle)
                 override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
@@ -343,8 +345,16 @@ class DataManager(ServiceOrchestrator):
             "symbol": symbol,
             "timeframe": timeframe,
             "mode": mode,
-            "start_date": start_date.isoformat() if start_date and hasattr(start_date, 'isoformat') else str(start_date) if start_date else None,
-            "end_date": end_date.isoformat() if end_date and hasattr(end_date, 'isoformat') else str(end_date) if end_date else None,
+            "start_date": (
+                start_date.isoformat()
+                if start_date and hasattr(start_date, "isoformat")
+                else str(start_date) if start_date else None
+            ),
+            "end_date": (
+                end_date.isoformat()
+                if end_date and hasattr(end_date, "isoformat")
+                else str(end_date) if end_date else None
+            ),
         }
 
         progress_manager = ProgressManager(progress_callback)

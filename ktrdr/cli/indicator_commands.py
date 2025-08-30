@@ -74,7 +74,9 @@ def compute_indicator(
         indicator_type = InputValidator.validate_string(
             indicator_type, min_length=1, max_length=20
         )
-        period = int(InputValidator.validate_numeric(period, min_value=1, max_value=1000))
+        period = int(
+            InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        )
 
         # Run async operation
         asyncio.run(
@@ -288,7 +290,9 @@ def plot_chart(
         symbol = InputValidator.validate_string(
             symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
         )
-        period = int(InputValidator.validate_numeric(period, min_value=1, max_value=1000))
+        period = int(
+            InputValidator.validate_numeric(period, min_value=1, max_value=1000)
+        )
 
         # Run async operation
         asyncio.run(

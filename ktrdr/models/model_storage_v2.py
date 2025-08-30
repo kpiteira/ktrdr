@@ -379,10 +379,26 @@ class ModelStorageV2:
                         "strategy_name": metadata.strategy_name,
                         "model_version": metadata.model_version,
                         "scope": metadata.scope.value,
-                        "training_symbols": metadata.training_data.symbols if metadata.training_data else [],
-                        "training_timeframes": metadata.training_data.timeframes if metadata.training_data else [],
-                        "accuracy": metadata.performance_metrics.overall_accuracy if metadata.performance_metrics else None,
-                        "cross_symbol_accuracy": metadata.performance_metrics.cross_symbol_accuracy if metadata.performance_metrics else None,
+                        "training_symbols": (
+                            metadata.training_data.symbols
+                            if metadata.training_data
+                            else []
+                        ),
+                        "training_timeframes": (
+                            metadata.training_data.timeframes
+                            if metadata.training_data
+                            else []
+                        ),
+                        "accuracy": (
+                            metadata.performance_metrics.overall_accuracy
+                            if metadata.performance_metrics
+                            else None
+                        ),
+                        "cross_symbol_accuracy": (
+                            metadata.performance_metrics.cross_symbol_accuracy
+                            if metadata.performance_metrics
+                            else None
+                        ),
                         "created_at": metadata.created_at,
                         "training_status": metadata.training_status.value,
                     }
@@ -499,7 +515,11 @@ class ModelStorageV2:
                 strategy_name=strategy_config.name,
                 strategy_version=strategy_config.version or "1.0",
                 model_version=legacy_version,
-                scope=ModelScope(scope.value) if hasattr(scope, 'value') else ModelScope(scope),
+                scope=(
+                    ModelScope(scope.value)
+                    if hasattr(scope, "value")
+                    else ModelScope(scope)
+                ),
                 training_symbols=symbols or [legacy_symbol],
                 training_timeframes=timeframes or [legacy_timeframe],
             )

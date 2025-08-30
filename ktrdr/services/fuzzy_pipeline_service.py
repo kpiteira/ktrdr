@@ -288,9 +288,7 @@ class FuzzyPipelineService:
         for timeframe in timeframes:
             try:
                 # Use data manager to load data
-                data = self.data_manager.load_data(
-                    symbol=symbol, timeframe=timeframe
-                )
+                data = self.data_manager.load_data(symbol=symbol, timeframe=timeframe)
 
                 if data is not None and not data.empty:
                     market_data[timeframe] = data
@@ -344,7 +342,8 @@ class FuzzyPipelineService:
         if fuzzy_values:
             # Filter to only numeric values for sorting
             numeric_values = {
-                k: float(v) for k, v in fuzzy_values.items() 
+                k: float(v)
+                for k, v in fuzzy_values.items()
                 if isinstance(v, (int, float))
             }
             if numeric_values:

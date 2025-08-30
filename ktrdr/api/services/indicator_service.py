@@ -262,7 +262,7 @@ class IndicatorService(BaseService):
                     # If custom output name is specified, store it for later
                     if indicator_config.output_name:
                         # Use setattr to safely set the output_name attribute
-                        setattr(indicator, 'output_name', indicator_config.output_name)
+                        setattr(indicator, "output_name", indicator_config.output_name)
 
                     indicators.append(indicator)
 
@@ -297,7 +297,7 @@ class IndicatorService(BaseService):
 
             # Extract dates and indicator values
             dates = [
-                dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(dt, 'strftime') else str(dt)
+                dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(dt, "strftime") else str(dt)
                 for dt in result_df.index
             ]
 
@@ -349,7 +349,7 @@ class IndicatorService(BaseService):
                 for k, v in indicator_values.items()
             }
             metadata_clean: dict[str, Any] = dict(metadata)
-            
+
             return dates_list, indicator_values_clean, metadata_clean
 
         except (DataError, ConfigurationError, ProcessingError):

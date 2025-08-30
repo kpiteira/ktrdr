@@ -84,7 +84,12 @@ class GapFillerService:
         self.gap_classifier = GapClassifier()
 
         # Statistics
-        self.stats: Dict[str, Union[int, Optional[datetime], Set[str], List[Dict[str, Any]], Dict[str, int]]] = {
+        self.stats: Dict[
+            str,
+            Union[
+                int, Optional[datetime], Set[str], List[Dict[str, Any]], Dict[str, int]
+            ],
+        ] = {
             "gaps_detected": 0,
             "gaps_filled": 0,
             "gaps_failed": 0,
@@ -205,7 +210,7 @@ class GapFillerService:
                     # Check if DataManager has IB integration enabled
                     if (
                         self.data_manager.enable_ib
-                        and hasattr(self.data_manager, 'ib_data_fetcher')
+                        and hasattr(self.data_manager, "ib_data_fetcher")
                         and self.data_manager.ib_data_fetcher
                     ):
                         # Try a simple IB operation to verify connectivity
@@ -562,7 +567,10 @@ class GapFillerService:
         """Force an immediate gap scan (for testing/debugging)."""
         try:
             # Check IB availability via DataManager
-            if not self.data_manager.enable_ib or not self.data_manager.external_provider:
+            if (
+                not self.data_manager.enable_ib
+                or not self.data_manager.external_provider
+            ):
                 return {"error": "IB not enabled in DataManager"}
 
             self._scan_and_fill_gaps()

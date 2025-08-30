@@ -385,7 +385,7 @@ def create_application() -> FastAPI:
         app.openapi_schema = openapi_schema
         return app.openapi_schema
 
-    app.openapi = custom_openapi
+    app.openapi = custom_openapi  # type: ignore[method-assign]
 
     logger.info(
         f"KTRDR API initialized: version={config.version}, environment={config.environment}"

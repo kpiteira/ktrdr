@@ -275,13 +275,17 @@ def backtest_strategy(
 
     # Validate inputs
     try:
-        InputValidator.validate_string(symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$")
+        InputValidator.validate_string(
+            symbol, min_length=1, max_length=10, pattern=r"^[A-Za-z0-9\-\.]+$"
+        )
     except ValidationError:
         console.print(f"[red]❌ Error: Invalid symbol format: {symbol}[/red]")
         raise typer.Exit(1)
 
     try:
-        InputValidator.validate_string(timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$")
+        InputValidator.validate_string(
+            timeframe, min_length=1, max_length=5, pattern=r"^[0-9]+[dhm]$"
+        )
     except ValidationError:
         console.print(f"[red]❌ Error: Invalid timeframe: {timeframe}[/red]")
         console.print("Valid timeframes: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w")

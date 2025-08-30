@@ -242,9 +242,9 @@ class ConfigBuilder:
                 {
                     "color": color,
                     "lineWidth": int(line_width),  # type: ignore[dict-item]
-                    "lineStyle": int(kwargs.get(  # type: ignore[dict-item]
-                        "line_style", 0
-                    )),  # 0 = solid, 1 = dotted, 2 = dashed
+                    "lineStyle": int(
+                        kwargs.get("line_style", 0)  # type: ignore[dict-item]
+                    ),  # 0 = solid, 1 = dotted, 2 = dashed
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),

@@ -153,7 +153,7 @@ class StrategyValidator:
             # Type checked - config is StrategyConfigurationV2 when is_v2 is True
             return self._validate_v2_strategy(config, result)  # type: ignore
         else:
-            # Type checked - config is LegacyStrategyConfiguration when is_v2 is False  
+            # Type checked - config is LegacyStrategyConfiguration when is_v2 is False
             return self._validate_v1_strategy(config, result)  # type: ignore
 
     def _validate_v2_strategy(
@@ -348,7 +348,7 @@ class StrategyValidator:
                 result.errors.append(f"Missing required decisions field: {field_name}")
             elif not isinstance(decisions_config[field_name], expected_type):  # type: ignore[arg-type]
                 result.is_valid = False
-                type_name = getattr(expected_type, '__name__', str(expected_type))
+                type_name = getattr(expected_type, "__name__", str(expected_type))
                 result.errors.append(
                     f"Decisions field '{field_name}' must be of type {type_name}"
                 )

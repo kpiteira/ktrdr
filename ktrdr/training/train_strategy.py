@@ -33,7 +33,9 @@ class StrategyTrainer:
         self.model_storage = ModelStorage(models_dir)
         self.data_manager = DataManager()
         self.indicator_engine = IndicatorEngine()
-        self.fuzzy_engine: Optional[FuzzyEngine] = None  # Will be initialized with strategy config
+        self.fuzzy_engine: Optional[FuzzyEngine] = (
+            None  # Will be initialized with strategy config
+        )
 
     def train_multi_symbol_strategy(
         self,
@@ -598,7 +600,7 @@ class StrategyTrainer:
         end = pd.to_datetime(end_date)
 
         # Make dates timezone-aware if needed
-        if hasattr(data.index, 'tz') and data.index.tz is not None:
+        if hasattr(data.index, "tz") and data.index.tz is not None:
             if start.tz is None:
                 start = start.tz_localize("UTC")
             if end.tz is None:
