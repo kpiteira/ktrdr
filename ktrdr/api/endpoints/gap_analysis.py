@@ -166,8 +166,8 @@ async def analyze_batch_gaps(
         # Perform batch analysis
         result = await service.analyze_gaps_batch(request)
 
-        success_count = result.request_summary["symbols_successful"]
-        error_count = result.request_summary["symbols_failed"]
+        success_count = result.overall_summary.get("symbols_successful", 0)
+        error_count = result.overall_summary.get("symbols_failed", 0)
 
         logger.info(
             f"Batch gap analysis completed: {success_count} successful, {error_count} failed"
@@ -229,13 +229,13 @@ async def get_gap_summary(
         # Perform analysis
         result = await service.analyze_gaps(request)
 
-        # Return just the summary and recommendations
+        # Return just the summary and analysis details
         summary_data = {
             "symbol": result.symbol,
             "timeframe": result.timeframe,
-            "analysis_period": result.analysis_period,
+            "analysis_mode": result.analysis_mode.value,
             "summary": result.summary.dict(),
-            "recommendations": result.recommendations,
+            "gaps": [gap.dict() for gap in result.gaps],
         }
 
         return ApiResponse(success=True, data=summary_data, error=None)
@@ -274,7 +274,7 @@ async def health_check(
             "version": "1.0.0",
         }
 
-        return ApiResponse(success=True, data=health_data)
+        return ApiResponse(success=True, data=health_data, error=None)
 
     except Exception as e:
         logger.error(f"Gap analysis health check failed: {e}")

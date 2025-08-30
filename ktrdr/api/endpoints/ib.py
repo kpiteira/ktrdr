@@ -603,7 +603,7 @@ async def get_discovered_symbols(
         symbols = [SymbolInfo(**symbol_dict) for symbol_dict in symbols_data]
 
         # Count by instrument type
-        instrument_type_counts = {}
+        instrument_type_counts: dict[str, int] = {}
         for symbol in symbols:
             instrument_type_counts[symbol.instrument_type] = (
                 instrument_type_counts.get(symbol.instrument_type, 0) + 1

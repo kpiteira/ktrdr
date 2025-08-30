@@ -87,14 +87,14 @@ class ComplexConfigurationHandler:
             "SimpleMovingAverage": IndicatorRequirement(
                 indicator_type="SimpleMovingAverage",
                 minimum_data_points=1,
-                recommended_data_points=None,  # Depends on period
+                recommended_data_points=50,  # Usually 2-3x the period
                 parameters={"period": 20},
                 fallback_parameters={"period": 10},
             ),
             "ExponentialMovingAverage": IndicatorRequirement(
                 indicator_type="ExponentialMovingAverage",
                 minimum_data_points=1,
-                recommended_data_points=None,
+                recommended_data_points=50,  # Usually 2-3x the period
                 parameters={"period": 20},
                 fallback_parameters={"period": 10},
             ),
@@ -112,7 +112,7 @@ class ComplexConfigurationHandler:
             "BollingerBands": IndicatorRequirement(
                 indicator_type="BollingerBands",
                 minimum_data_points=2,
-                recommended_data_points=None,
+                recommended_data_points=40,  # Usually 2x the period
                 parameters={"period": 20, "std_dev": 2},
                 fallback_parameters={"period": 10, "std_dev": 2},
             ),
@@ -126,7 +126,7 @@ class ComplexConfigurationHandler:
             "ATR": IndicatorRequirement(
                 indicator_type="ATR",
                 minimum_data_points=2,
-                recommended_data_points=None,
+                recommended_data_points=28,  # Usually 2x the period (14)
                 parameters={"period": 14},
                 fallback_parameters={"period": 7},
             ),
