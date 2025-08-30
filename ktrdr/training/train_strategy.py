@@ -5,7 +5,7 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 import torch
-import yaml
+import yaml  # type: ignore[import-untyped]
 from sklearn.metrics import f1_score, precision_score, recall_score
 
 from ..data.data_manager import DataManager

@@ -321,7 +321,7 @@ class TimestampManager:
     @staticmethod
     def is_market_hours_enhanced(
         timestamp: pd.Timestamp,
-        symbol: str = None,
+        symbol: Optional[str] = None,
         exchange_tz: str = "America/New_York",
     ) -> bool:
         """
@@ -364,7 +364,7 @@ class TimestampManager:
             return False
 
     @staticmethod
-    def get_market_status_enhanced(timestamp: pd.Timestamp, symbol: str = None) -> str:
+    def get_market_status_enhanced(timestamp: pd.Timestamp, symbol: Optional[str] = None) -> str:
         """
         Get detailed market status using symbol-specific trading hours.
 

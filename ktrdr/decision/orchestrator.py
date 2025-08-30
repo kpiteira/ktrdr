@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .. import get_logger
 from ..backtesting.model_loader import ModelLoader

@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Optional, TypeVar, Union
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, ValidationError
 
 # Import the new logging system

@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 # Path to project root
 PROJECT_ROOT = Path(__file__).parent.parent

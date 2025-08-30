@@ -175,7 +175,7 @@ class ErrorHandler:
     @classmethod
     def with_error_handling(
         cls,
-        func: Callable[..., T] = None,
+        func: Optional[Callable[..., T]] = None,
         log_error: bool = True,
         raise_error: bool = True,
         logger=None,

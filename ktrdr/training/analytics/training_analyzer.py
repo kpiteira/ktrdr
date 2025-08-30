@@ -9,7 +9,7 @@ from typing import Any, Optional
 import pandas as pd
 import torch
 import torch.nn as nn
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ktrdr import get_logger
 

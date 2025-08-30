@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import ValidationError
 
 from ktrdr import get_logger

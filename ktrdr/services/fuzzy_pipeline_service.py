@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 import pandas as pd
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ktrdr import get_logger
 from ktrdr.data.data_manager import DataManager

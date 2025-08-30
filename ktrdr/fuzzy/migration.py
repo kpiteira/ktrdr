@@ -8,7 +8,7 @@ to the new multi-timeframe format introduced in Phase 5.
 from pathlib import Path
 from typing import Any, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ktrdr import get_logger
 from ktrdr.errors import ConfigurationError

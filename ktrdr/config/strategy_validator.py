@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
 from ktrdr.config.strategy_loader import strategy_loader

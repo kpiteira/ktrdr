@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field
 
 # Configuration file path

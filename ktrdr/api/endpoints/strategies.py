@@ -7,7 +7,7 @@ This module implements the API endpoints for listing and managing trading strate
 from pathlib import Path
 from typing import Any, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 

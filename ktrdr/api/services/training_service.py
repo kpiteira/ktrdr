@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from ktrdr import get_logger
 from ktrdr.api.endpoints.strategies import _validate_strategy_config
