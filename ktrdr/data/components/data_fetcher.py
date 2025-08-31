@@ -156,7 +156,7 @@ class DataFetcher:
         progress_manager: Optional[ProgressManager] = None,
         cancellation_token: Optional[Any] = None,
         periodic_save_callback: Optional[Callable[[list[pd.DataFrame]], int]] = None,
-        periodic_save_minutes: float = 2.0,
+        periodic_save_minutes: float = 0.5,
     ) -> list[pd.DataFrame]:
         """
         Fetch multiple segments sequentially using persistent HTTP session.
@@ -169,7 +169,7 @@ class DataFetcher:
             progress_manager: Optional progress manager for segment-level progress
             cancellation_token: Optional cancellation token for direct cancellation checking
             periodic_save_callback: Optional callback for periodic saves during fetching
-            periodic_save_minutes: Save progress every N minutes (default: 2.0)
+            periodic_save_minutes: Save progress every N minutes (default: 0.5)
 
         Returns:
             List of successfully fetched DataFrames
@@ -192,7 +192,7 @@ class DataFetcher:
 
         if periodic_save_callback:
             logger.info(
-                f"💾 Periodic saves enabled: every {periodic_save_minutes} minutes"
+                f"💾 Periodic saves enabled: every {periodic_save_minutes} minutes ({periodic_save_minutes * 60:.0f} seconds)"
             )
 
         for i, segment in enumerate(segments):

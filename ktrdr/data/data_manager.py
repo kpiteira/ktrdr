@@ -327,7 +327,7 @@ class DataManager(ServiceOrchestrator):
         strict: bool = False,
         cancellation_token: Optional[Any] = None,
         progress_callback: Optional[Callable] = None,
-        periodic_save_minutes: float = 2.0,
+        periodic_save_minutes: float = 0.5,
     ) -> pd.DataFrame:
         """
         Load data with optional validation and repair using unified validator.
@@ -344,7 +344,7 @@ class DataManager(ServiceOrchestrator):
             strict: If True, raises an exception for integrity issues instead of warning (default: False)
             cancellation_token: Optional cancellation token to check for early termination
             progress_callback: Optional callback for progress updates during loading
-            periodic_save_minutes: Save progress every N minutes during long downloads (default: 2.0)
+            periodic_save_minutes: Save progress every N minutes during long downloads (default: 0.5)
 
         Returns:
             DataFrame containing validated (and optionally repaired) OHLCV data
@@ -989,7 +989,7 @@ class DataManager(ServiceOrchestrator):
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
         progress_manager: Optional[ProgressManager] = None,
-        periodic_save_minutes: float = 2.0,
+        periodic_save_minutes: float = 0.5,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Enhanced async fetching using DataFetcher component.
@@ -1258,7 +1258,7 @@ class DataManager(ServiceOrchestrator):
         mode: str = "tail",
         cancellation_token: Optional[Any] = None,
         progress_manager: Optional[ProgressManager] = None,
-        periodic_save_minutes: float = 2.0,
+        periodic_save_minutes: float = 0.5,
     ) -> Optional[pd.DataFrame]:
         """
         Load data with intelligent gap analysis and resilient segment fetching.
