@@ -21,6 +21,7 @@ from ktrdr import (
 )
 from ktrdr.data.components.data_fetcher import DataFetcher
 from ktrdr.data.components.data_health_checker import DataHealthChecker
+from ktrdr.data.components.data_processor import DataProcessor
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.gap_classifier import GapClassifier
@@ -210,6 +211,9 @@ class DataManager(ServiceOrchestrator):
 
         # Initialize the SegmentManager component
         self.segment_manager = SegmentManager()
+
+        # Initialize the DataProcessor component
+        self.data_processor = DataProcessor()
 
         # Initialize the progress manager (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
@@ -1784,16 +1788,7 @@ class DataManager(ServiceOrchestrator):
         Returns:
             List of (start_time, end_time) tuples representing significant gaps only
         """
-        if df.empty or len(df) <= 1:
-            return []
-
-        # Use the GapAnalyzer component for gap detection with intelligent classification
-        gaps = self.gap_analyzer.detect_internal_gaps(df, timeframe, gap_threshold)
-
-        logger.info(
-            f"Detected {len(gaps)} significant gaps using GapAnalyzer component with intelligent classification"
-        )
-        return gaps
+        return self.gap_analyzer.detect_gaps(df, timeframe, gap_threshold)
 
     @log_entry_exit(logger=logger, log_args=True)
     def repair_data(
@@ -1985,51 +1980,16 @@ class DataManager(ServiceOrchestrator):
         Raises:
             DataError: For data-related errors
         """
-        # Validate new data
-        self.data_loader._validate_dataframe(new_data)
-
+        # Load existing data 
         try:
-            # Try to load existing data
             existing_data = self.data_loader.load(symbol, timeframe)
-            logger.info(
-                f"Merging {len(new_data)} rows with existing {len(existing_data)} rows"
-            )
-
-            # Use concat to combine the DataFrames
-            merged_data = pd.concat([existing_data, new_data])
-
-            # Count how many unique dates we have before handling duplicates
-            total_unique_dates = len(merged_data.index.unique())
-
-            # If we have duplicates, handle based on overwrite_conflicts flag
-            if merged_data.index.duplicated().any():
-                if overwrite_conflicts:
-                    logger.info("Overwriting conflicting rows with new data")
-                    # Keep the last occurrence of each duplicated index
-                    merged_data = merged_data[
-                        ~merged_data.index.duplicated(keep="last")
-                    ]
-                else:
-                    logger.info("Preserving existing data for conflicting rows")
-                    # Keep the first occurrence of each duplicated index
-                    merged_data = merged_data[
-                        ~merged_data.index.duplicated(keep="first")
-                    ]
-
-                # Log how many rows were affected by conflicts
-                logger.debug(
-                    f"Found {len(merged_data.index.unique()) - total_unique_dates} conflicting rows"
-                )
-
         except DataNotFoundError:
-            # If no existing data, just use the new data
-            logger.info(
-                f"No existing data found, using {len(new_data)} rows of new data"
-            )
-            merged_data = new_data
+            existing_data = None
 
-        # Sort the index to ensure chronological order
-        merged_data = merged_data.sort_index()
+        # Delegate the core merging logic to DataProcessor component
+        merged_data = self.data_processor.merge_data(
+            existing_data, new_data, overwrite_conflicts, validate_data=True
+        )
 
         # Save if requested
         if save_result:
@@ -2064,99 +2024,15 @@ class DataManager(ServiceOrchestrator):
         Raises:
             DataError: For resampling-related errors
         """
-        if df.empty:
-            logger.warning("Cannot resample empty DataFrame")
-            return df
-
-        # Validate target_timeframe using centralized constants
-        timeframe_frequencies = {
-            "1m": "1min",
-            "5m": "5min",
-            "15m": "15min",
-            "30m": "30min",
-            "1h": "1H",
-            "4h": "4H",
-            "1d": "1D",
-            "1w": "1W",
-        }
-        target_freq = timeframe_frequencies.get(target_timeframe)
-        if not target_freq:
-            raise DataError(
-                message=f"Invalid target timeframe: {target_timeframe}",
-                error_code="DATA-InvalidParameter",
-                details={
-                    "parameter": "target_timeframe",
-                    "value": target_timeframe,
-                    "valid_options": list(timeframe_frequencies.keys()),
-                },
-            )
-
-        # If source_timeframe is provided, validate it
-        if source_timeframe:
-            source_freq = timeframe_frequencies.get(source_timeframe)
-            if not source_freq:
-                raise DataError(
-                    message=f"Invalid source timeframe: {source_timeframe}",
-                    error_code="DATA-InvalidParameter",
-                    details={
-                        "parameter": "source_timeframe",
-                        "value": source_timeframe,
-                        "valid_options": list(timeframe_frequencies.keys()),
-                    },
-                )
-
-            # Check if timeframe change makes sense (can only go from smaller to larger)
-            source_delta = pd.Timedelta(source_freq)
-            target_delta = pd.Timedelta(target_freq)
-
-            if target_delta < source_delta:
-                logger.warning(
-                    f"Cannot downsample from {source_timeframe} to {target_timeframe} "
-                    f"as it would require generating data points"
-                )
-
-        # Set default aggregation functions if not provided
-        if agg_functions is None:
-            agg_functions = {
-                "open": "first",
-                "high": "max",
-                "low": "min",
-                "close": "last",
-                "volume": "sum",
-            }
-
-        # Make sure all columns in agg_functions exist in the DataFrame
-        agg_functions = {k: v for k, v in agg_functions.items() if k in df.columns}
-
-        try:
-            logger.debug(
-                f"Resampling data to {target_timeframe} frequency ({target_freq})"
-            )
-            # Make sure the index is sorted
-            df_sorted = df.sort_index() if not df.index.is_monotonic_increasing else df
-
-            # Resample the data
-            resampled = df_sorted.resample(target_freq).agg(agg_functions)  # type: ignore[arg-type]
-
-            # Fill gaps if requested
-            if fill_gaps and not resampled.empty:
-                logger.debug("Filling gaps in resampled data")
-                resampled = self.repair_data(
-                    resampled, target_timeframe, method=self.default_repair_method
-                )
-
-            logger.info(
-                f"Successfully resampled data from {len(df)} rows to {len(resampled)} rows"
-            )
-            return resampled
-
-        except Exception as e:
-            logger.error(f"Error during resampling: {str(e)}")
-            raise DataError(
-                message=f"Failed to resample data: {str(e)}",
-                error_code="DATA-ResampleError",
-                details={"target_timeframe": target_timeframe, "error": str(e)},
-            ) from e
+        # Delegate to DataProcessor component with default repair method
+        return self.data_processor.resample_data(
+            df, 
+            target_timeframe,
+            source_timeframe,
+            fill_gaps,
+            agg_functions,
+            repair_method=self.default_repair_method
+        )
 
     @log_entry_exit(logger=logger)
     def filter_data_by_condition(
@@ -2176,17 +2052,4 @@ class DataManager(ServiceOrchestrator):
         Returns:
             Filtered DataFrame
         """
-        if df.empty:
-            return df
-
-        # Apply the condition
-        mask = condition(df)
-
-        # If inverse flag is set, invert the mask
-        if inverse:
-            mask = ~mask
-
-        # Apply the mask
-        result = df[mask]
-        logger.info(f"Filtered {len(df) - len(result)} rows out of {len(df)} total")
-        return result
+        return self.data_processor.filter_data_by_condition(df, condition, inverse)
