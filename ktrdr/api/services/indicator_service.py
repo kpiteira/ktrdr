@@ -261,10 +261,8 @@ class IndicatorService(BaseService):
 
                     # If custom output name is specified, store it for later
                     if indicator_config.output_name:
-                        # Use setattr to safely set the output_name attribute (MyPy type safety)
-                        setattr(
-                            indicator, "output_name", indicator_config.output_name
-                        )  # noqa: B010
+                        # Store custom output name for later use (type: ignore for dynamic attribute)
+                        indicator.output_name = indicator_config.output_name  # type: ignore[attr-defined]
 
                     indicators.append(indicator)
 
