@@ -6,9 +6,7 @@ and enhanced configuration management added to ServiceOrchestrator.
 """
 
 import asyncio
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Any, Dict, Optional
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -22,7 +20,7 @@ class MockServiceOrchestrator(ServiceOrchestrator):
         self._service_name = kwargs.get("service_name", "TestService")
         self._default_host_url = kwargs.get("default_host_url", "http://localhost:8000")
         self._env_var_prefix = kwargs.get("env_var_prefix", "TEST")
-        
+
         # Create a mock adapter
         self.adapter = MagicMock()
         self.adapter.use_host_service = kwargs.get("use_host_service", False)
@@ -53,7 +51,7 @@ class TestAsyncExecutionPatterns:
         """Test execute_with_progress with successful execution."""
         # Mock progress callback
         progress_callback = MagicMock()
-        
+
         # Mock async function
         async def mock_operation():
             await asyncio.sleep(0.01)  # Simulate work
@@ -61,11 +59,9 @@ class TestAsyncExecutionPatterns:
 
         # Now should work since method exists
         result = await orchestrator.execute_with_progress(
-            mock_operation(), 
-            progress_callback=progress_callback,
-            timeout=1.0
+            mock_operation(), progress_callback=progress_callback, timeout=1.0
         )
-        
+
         assert result == "success"
         # Should have called progress callback twice (start and end)
         assert progress_callback.call_count == 2
@@ -76,17 +72,16 @@ class TestAsyncExecutionPatterns:
         # Mock cancellation token
         cancellation_token = MagicMock()
         cancellation_token.is_cancelled_requested = False
-        
+
         async def mock_operation():
             await asyncio.sleep(0.01)
             return "success"
 
         # Now should work since method exists
         result = await orchestrator.execute_with_cancellation(
-            mock_operation(),
-            cancellation_token=cancellation_token
+            mock_operation(), cancellation_token=cancellation_token
         )
-        
+
         assert result == "success"
 
     @pytest.mark.asyncio
@@ -95,7 +90,7 @@ class TestAsyncExecutionPatterns:
         # Mock cancellation token that is already cancelled
         cancellation_token = MagicMock()
         cancellation_token.is_cancelled_requested = True
-        
+
         async def mock_operation():
             await asyncio.sleep(0.1)  # This should be cancelled
             return "should not reach here"
@@ -103,8 +98,7 @@ class TestAsyncExecutionPatterns:
         # Should raise CancelledError since cancellation is requested before start
         with pytest.raises(asyncio.CancelledError):
             await orchestrator.execute_with_cancellation(
-                mock_operation(),
-                cancellation_token=cancellation_token
+                mock_operation(), cancellation_token=cancellation_token
             )
 
 
@@ -126,13 +120,14 @@ class TestEnhancedErrorHandling:
     @pytest.mark.asyncio
     async def test_with_error_handling_success(self, orchestrator):
         """Test with_error_handling method with successful operation."""
+
         async def mock_operation():
             return "success"
 
         result = await orchestrator.with_error_handling(
             mock_operation(), "test_operation", symbol="AAPL"
         )
-        
+
         assert result == "success"
 
 
@@ -147,7 +142,7 @@ class TestEnhancedHealthCheck:
     async def test_standardized_health_check_format(self, orchestrator):
         """Test that health check follows standardized format."""
         health_status = await orchestrator.health_check()
-        
+
         # Should have standardized fields
         assert "orchestrator" in health_status
         assert "service" in health_status
@@ -157,8 +152,10 @@ class TestEnhancedHealthCheck:
     @pytest.mark.asyncio
     async def test_health_check_with_custom_checks(self, orchestrator):
         """Test enhanced health check with custom checks."""
-        health_status = await orchestrator.health_check_with_custom_checks(["db_connection"])
-        
+        health_status = await orchestrator.health_check_with_custom_checks(
+            ["db_connection"]
+        )
+
         # Should have standard health check fields plus enhancements
         assert "orchestrator" in health_status
         assert "configuration" in health_status
@@ -176,7 +173,7 @@ class TestEnhancedConfiguration:
     def test_validate_configuration(self, orchestrator):
         """Test configuration validation functionality."""
         validation_result = orchestrator.validate_configuration()
-        
+
         # Should have expected structure
         assert isinstance(validation_result, dict)
         assert "service" in validation_result
@@ -187,7 +184,7 @@ class TestEnhancedConfiguration:
     def test_get_configuration_schema(self, orchestrator):
         """Test configuration schema generation."""
         schema = orchestrator.get_configuration_schema()
-        
+
         # Should have expected structure
         assert isinstance(schema, dict)
         assert "service" in schema
@@ -196,7 +193,7 @@ class TestEnhancedConfiguration:
     def test_current_configuration_info_exists(self, orchestrator):
         """Test that current configuration method exists and works."""
         config_info = orchestrator.get_configuration_info()
-        
+
         # Should have expected structure
         assert isinstance(config_info, dict)
         assert "service" in config_info
@@ -216,13 +213,14 @@ class TestManagerOperationPatterns:
         """Test operation wrapper functionality."""
         # Test that wrapper can be created
         wrapper = orchestrator.wrap_operation("test_op")
-        
+
         # Should return a decorator function
         assert callable(wrapper)
 
     @pytest.mark.asyncio
     async def test_retry_with_backoff_success(self, orchestrator):
         """Test retry with backoff with successful operation."""
+
         async def mock_operation():
             return "success"
 
@@ -240,12 +238,12 @@ class TestBackwardCompatibility:
     def test_existing_methods_still_work(self, orchestrator):
         """Test that all existing methods still function."""
         # Test existing methods
-        assert orchestrator.is_using_host_service() == False
+        assert not orchestrator.is_using_host_service()
         assert orchestrator.get_host_service_url() is None
-        
+
         config_info = orchestrator.get_configuration_info()
         assert isinstance(config_info, dict)
-        
+
         # Mock the adapter to return a proper dict for get_adapter_statistics
         orchestrator.adapter.get_statistics = MagicMock(return_value={"test": "stats"})
         adapter_stats = orchestrator.get_adapter_statistics()

@@ -10,7 +10,7 @@ import asyncio
 import os
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Coroutine
+from collections.abc import Awaitable
 from contextlib import asynccontextmanager
 from typing import (
     Any,
@@ -276,11 +276,13 @@ class ServiceOrchestrator(ABC, Generic[T]):
         logger.debug(f"Starting {operation_name} with progress tracking")
 
         if progress_callback:
-            progress_callback({
-                "percentage": 0,
-                "message": f"Starting {operation_name}",
-                "operation": operation_name,
-            })
+            progress_callback(
+                {
+                    "percentage": 0,
+                    "message": f"Starting {operation_name}",
+                    "operation": operation_name,
+                }
+            )
 
         try:
             if timeout:
@@ -289,11 +291,13 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 result = await operation
 
             if progress_callback:
-                progress_callback({
-                    "percentage": 100,
-                    "message": f"Completed {operation_name}",
-                    "operation": operation_name,
-                })
+                progress_callback(
+                    {
+                        "percentage": 100,
+                        "message": f"Completed {operation_name}",
+                        "operation": operation_name,
+                    }
+                )
 
             logger.debug(f"Completed {operation_name}")
             return result
@@ -301,22 +305,26 @@ class ServiceOrchestrator(ABC, Generic[T]):
         except asyncio.TimeoutError:
             logger.warning(f"Operation {operation_name} timed out after {timeout}s")
             if progress_callback:
-                progress_callback({
-                    "percentage": 0,
-                    "message": f"Timeout: {operation_name}",
-                    "operation": operation_name,
-                    "error": "timeout",
-                })
+                progress_callback(
+                    {
+                        "percentage": 0,
+                        "message": f"Timeout: {operation_name}",
+                        "operation": operation_name,
+                        "error": "timeout",
+                    }
+                )
             raise
         except Exception as e:
             logger.error(f"Operation {operation_name} failed: {e}")
             if progress_callback:
-                progress_callback({
-                    "percentage": 0,
-                    "message": f"Failed: {operation_name}",
-                    "operation": operation_name,
-                    "error": str(e),
-                })
+                progress_callback(
+                    {
+                        "percentage": 0,
+                        "message": f"Failed: {operation_name}",
+                        "operation": operation_name,
+                        "error": str(e),
+                    }
+                )
             raise
 
     async def execute_with_cancellation(
@@ -355,6 +363,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
 
         # Create a task for cancellation checking if token provided
         if cancellation_token:
+
             async def check_cancellation():
                 while not operation_task.done():
                     if cancellation_token.is_cancelled_requested:
@@ -368,8 +377,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
             try:
                 # Wait for either operation completion or cancellation
                 done, pending = await asyncio.wait(
-                    [operation_task, cancel_task],
-                    return_when=asyncio.FIRST_COMPLETED
+                    [operation_task, cancel_task], return_when=asyncio.FIRST_COMPLETED
                 )
 
                 # Cancel any remaining tasks
@@ -383,7 +391,9 @@ class ServiceOrchestrator(ABC, Generic[T]):
                     return result
                 else:
                     # Cancellation was requested
-                    raise asyncio.CancelledError(f"Operation {operation_name} was cancelled")
+                    raise asyncio.CancelledError(
+                        f"Operation {operation_name} was cancelled"
+                    )
 
             except asyncio.CancelledError:
                 logger.info(f"Operation {operation_name} was cancelled")
@@ -422,23 +432,22 @@ class ServiceOrchestrator(ABC, Generic[T]):
             duration = time.time() - start_time
             logger.error(
                 f"Operation failed: {operation_name} after {duration:.3f}s - {e}",
-                extra={"context": context, "operation": operation_name}
+                extra={"context": context, "operation": operation_name},
             )
             # Re-raise with additional context if it's one of our custom errors
-            if hasattr(e, 'details') and isinstance(e, DataError):
-                e.details.update({
-                    "service": self._get_service_name(),
-                    "operation": operation_name,
-                    "duration": duration,
-                    **context
-                })
+            if hasattr(e, "details") and isinstance(e, DataError):
+                e.details.update(
+                    {
+                        "service": self._get_service_name(),
+                        "operation": operation_name,
+                        "duration": duration,
+                        **context,
+                    }
+                )
             raise
 
     async def with_error_handling(
-        self,
-        operation: Awaitable[T],
-        operation_name: str,
-        **context
+        self, operation: Awaitable[T], operation_name: str, **context
     ) -> T:
         """
         Execute an operation with standardized error handling.
@@ -485,26 +494,30 @@ class ServiceOrchestrator(ABC, Generic[T]):
         # Check for configuration consistency
         if env_enabled in ("true", "1", "yes"):
             if not host_url:
-                validation_report["warnings"].append({
-                    "type": "missing_url",
-                    "message": f"{url_env_var} not set but host service is enabled",
-                    "recommendation": f"Set {url_env_var} or use default: {self._get_default_host_url()}"
-                })
+                validation_report["warnings"].append(
+                    {
+                        "type": "missing_url",
+                        "message": f"{url_env_var} not set but host service is enabled",
+                        "recommendation": f"Set {url_env_var} or use default: {self._get_default_host_url()}",
+                    }
+                )
 
         # Validate adapter configuration
-        if hasattr(self.adapter, 'validate_configuration'):
+        if hasattr(self.adapter, "validate_configuration"):
             try:
                 adapter_validation = self.adapter.validate_configuration()
-                if not adapter_validation.get('valid', True):
-                    validation_report['valid'] = False
-                    validation_report['issues'].extend(
-                        adapter_validation.get('issues', [])
+                if not adapter_validation.get("valid", True):
+                    validation_report["valid"] = False
+                    validation_report["issues"].extend(
+                        adapter_validation.get("issues", [])
                     )
             except Exception as e:
-                validation_report['warnings'].append({
-                    "type": "adapter_validation_failed",
-                    "message": f"Could not validate adapter configuration: {e}"
-                })
+                validation_report["warnings"].append(
+                    {
+                        "type": "adapter_validation_failed",
+                        "message": f"Could not validate adapter configuration: {e}",
+                    }
+                )
 
         logger.debug(
             f"Configuration validation completed: "
@@ -527,16 +540,16 @@ class ServiceOrchestrator(ABC, Generic[T]):
                     "type": "boolean",
                     "description": "Whether to use host service or direct connection",
                     "values": ["true", "false", "1", "0", "yes", "no"],
-                    "default": "false"
+                    "default": "false",
                 },
                 f"{prefix}_HOST_SERVICE_URL": {
                     "type": "url",
                     "description": "URL for the host service",
                     "default": self._get_default_host_url(),
-                    "required_when": f"USE_{prefix}_HOST_SERVICE is true"
-                }
+                    "required_when": f"USE_{prefix}_HOST_SERVICE is true",
+                },
             },
-            "adapter_configuration": "Adapter-specific configuration (see adapter schema)"
+            "adapter_configuration": "Adapter-specific configuration (see adapter schema)",
         }
 
     # ==========================================
@@ -544,8 +557,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
     # ==========================================
 
     async def health_check_with_custom_checks(
-        self,
-        custom_checks: Optional[list[str]] = None
+        self, custom_checks: Optional[list[str]] = None
     ) -> dict[str, Any]:
         """
         Perform enhanced health check with optional custom checks.
@@ -573,7 +585,9 @@ class ServiceOrchestrator(ABC, Generic[T]):
             for check_name in custom_checks:
                 try:
                     if hasattr(self.adapter, f"health_check_{check_name}"):
-                        check_method = getattr(self.adapter, f"health_check_{check_name}")
+                        check_method = getattr(
+                            self.adapter, f"health_check_{check_name}"
+                        )
                         if asyncio.iscoroutinefunction(check_method):
                             custom_results[check_name] = await check_method()
                         else:
@@ -581,13 +595,10 @@ class ServiceOrchestrator(ABC, Generic[T]):
                     else:
                         custom_results[check_name] = {
                             "status": "not_implemented",
-                            "message": f"Check {check_name} not available"
+                            "message": f"Check {check_name} not available",
                         }
                 except Exception as e:
-                    custom_results[check_name] = {
-                        "status": "error",
-                        "error": str(e)
-                    }
+                    custom_results[check_name] = {"status": "error", "error": str(e)}
 
             health_status["custom_checks"] = custom_results
 
@@ -619,6 +630,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
         Returns:
             Decorator function for operations
         """
+
         def decorator(operation_func):
             async def wrapper(*args, **kwargs):
                 async def run_operation():
@@ -626,7 +638,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
                         return await self.execute_with_cancellation(
                             operation_func(*args, **kwargs),
                             cancellation_token=cancellation_token,
-                            operation_name=operation_name
+                            operation_name=operation_name,
                         )
                     else:
                         return await operation_func(*args, **kwargs)
@@ -635,10 +647,11 @@ class ServiceOrchestrator(ABC, Generic[T]):
                     run_operation(),
                     progress_callback=progress_callback,
                     timeout=timeout,
-                    operation_name=operation_name
+                    operation_name=operation_name,
                 )
 
             return wrapper
+
         return decorator
 
     async def retry_with_backoff(
@@ -671,11 +684,15 @@ class ServiceOrchestrator(ABC, Generic[T]):
 
         for attempt in range(max_retries + 1):
             try:
-                logger.debug(f"Attempting {operation_name} (attempt {attempt + 1}/{max_retries + 1})")
+                logger.debug(
+                    f"Attempting {operation_name} (attempt {attempt + 1}/{max_retries + 1})"
+                )
                 result = await operation()
 
                 if attempt > 0:
-                    logger.info(f"Operation {operation_name} succeeded on attempt {attempt + 1}")
+                    logger.info(
+                        f"Operation {operation_name} succeeded on attempt {attempt + 1}"
+                    )
 
                 return result
 
@@ -683,7 +700,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 last_exception = e
 
                 if attempt < max_retries:
-                    delay = min(base_delay * (exponential_factor ** attempt), max_delay)
+                    delay = min(base_delay * (exponential_factor**attempt), max_delay)
                     logger.warning(
                         f"Operation {operation_name} failed on attempt {attempt + 1}: {e}. "
                         f"Retrying in {delay:.1f}s..."
@@ -698,7 +715,9 @@ class ServiceOrchestrator(ABC, Generic[T]):
         if last_exception:
             raise last_exception
         else:
-            raise RuntimeError(f"Operation {operation_name} failed with no exception recorded")
+            raise RuntimeError(
+                f"Operation {operation_name} failed with no exception recorded"
+            )
 
     def __repr__(self) -> str:
         """String representation for debugging."""

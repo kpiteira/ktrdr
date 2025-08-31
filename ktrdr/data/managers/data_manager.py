@@ -16,7 +16,7 @@ The DataManager extends ServiceOrchestrator to provide:
 import asyncio
 import os
 from datetime import datetime
-from typing import Any, Optional, Protocol, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 
@@ -29,7 +29,7 @@ from ktrdr.data.managers.data_health_checker import DataHealthChecker
 from ktrdr.errors import DataCorruptionError, DataError, DataNotFoundError
 from ktrdr.logging import get_logger, log_entry_exit, log_performance
 from ktrdr.managers import ServiceOrchestrator
-from ktrdr.managers.base import ProgressCallback, CancellationToken
+from ktrdr.managers.base import CancellationToken, ProgressCallback
 
 logger = get_logger(__name__)
 
@@ -107,7 +107,7 @@ class DataManager(ServiceOrchestrator):
             max_gap_percentage=max_gap_percentage,
         )
         self.gap_classifier = GapClassifier()
-        
+
         # Initialize health checker after other components are ready
         self.health_checker = None
 
@@ -118,7 +118,7 @@ class DataManager(ServiceOrchestrator):
             # Skip IB adapter initialization for testing
             self.adapter = None
             logger.info("DataManager initialized without IB integration (testing mode)")
-        
+
         # Initialize health checker after all components are ready
         self.health_checker = DataHealthChecker(
             data_loader=self.data_loader,
@@ -260,7 +260,7 @@ class DataManager(ServiceOrchestrator):
         """
         # Use enhanced ServiceOrchestrator capabilities
         operation_name = f"load_data_{symbol}_{timeframe}_{mode}"
-        
+
         async def _load_operation():
             return await self._load_data_implementation(
                 symbol=symbol,
@@ -274,7 +274,7 @@ class DataManager(ServiceOrchestrator):
                 strict=strict,
                 periodic_save_minutes=periodic_save_minutes,
             )
-        
+
         # Use enhanced ServiceOrchestrator patterns
         if cancellation_token:
             df = await self.execute_with_cancellation(
@@ -294,9 +294,9 @@ class DataManager(ServiceOrchestrator):
                 timeout=timeout,
                 operation_name=operation_name,
             )
-        
+
         return df
-        
+
     async def _load_data_implementation(
         self,
         symbol: str,
@@ -312,15 +312,12 @@ class DataManager(ServiceOrchestrator):
     ) -> pd.DataFrame:
         """
         Core data loading implementation using enhanced error handling.
-        
+
         This method contains the actual data loading logic, wrapped by
         ServiceOrchestrator's enhanced capabilities.
         """
         async with self.error_context(
-            f"load_data_{mode}",
-            symbol=symbol,
-            timeframe=timeframe,
-            mode=mode
+            f"load_data_{mode}", symbol=symbol, timeframe=timeframe, mode=mode
         ):
             logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
 
@@ -602,16 +599,19 @@ class DataManager(ServiceOrchestrator):
         """
         # Get base health check from ServiceOrchestrator
         health_info = await super().health_check()
-        
+
         # Use DataHealthChecker for comprehensive component health checking
         if self.health_checker:
-            component_health = await self.health_checker.perform_comprehensive_health_check()
+            component_health = (
+                await self.health_checker.perform_comprehensive_health_check()
+            )
             health_info.update(component_health)
         else:
-            logger.warning("Health checker not initialized, skipping component health checks")
-            
-        return health_info
+            logger.warning(
+                "Health checker not initialized, skipping component health checks"
+            )
 
+        return health_info
 
     def get_data_summary(self, symbol: str, timeframe: str) -> dict[str, Any]:
         """
