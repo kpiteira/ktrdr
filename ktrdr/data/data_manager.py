@@ -1970,7 +1970,7 @@ class DataManager(ServiceOrchestrator):
         Raises:
             DataError: For data-related errors
         """
-        # Load existing data 
+        # Load existing data
         try:
             existing_data = self.data_loader.load(symbol, timeframe)
         except DataNotFoundError:
@@ -2016,12 +2016,12 @@ class DataManager(ServiceOrchestrator):
         """
         # Delegate to DataProcessor component with default repair method
         return self.data_processor.resample_data(
-            df, 
+            df,
             target_timeframe,
             source_timeframe,
             fill_gaps,
             agg_functions,
-            repair_method=self.default_repair_method
+            repair_method=self.default_repair_method,
         )
 
     @log_entry_exit(logger=logger)

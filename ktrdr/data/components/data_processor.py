@@ -7,12 +7,12 @@ while preserving all original functionality.
 
 This component handles:
 - Data merging with conflict resolution
-- Data resampling between timeframes  
+- Data resampling between timeframes
 - OHLCV aggregation functions
 - Data transformation utilities
 """
 
-from typing import Any, Callable, Optional, Union
+from typing import Callable, Optional
 
 import pandas as pd
 
@@ -25,7 +25,6 @@ logger = get_logger(__name__)
 class DataProcessor:
     """
     Component for processing and transforming OHLCV data.
-    
     Provides data processing functionality extracted from DataManager
     including merging, resampling, and data transformation operations.
     """
@@ -33,11 +32,11 @@ class DataProcessor:
     # Mapping of timeframes to pandas frequency strings
     TIMEFRAME_FREQUENCIES = {
         "1m": "1min",
-        "5m": "5min", 
+        "5m": "5min",
         "15m": "15min",
         "30m": "30min",
         "1h": "1H",
-        "4h": "4H", 
+        "4h": "4H",
         "1d": "1D",
         "1w": "1W",
     }
@@ -45,7 +44,7 @@ class DataProcessor:
     # Default OHLCV aggregation functions
     DEFAULT_OHLCV_AGGREGATION = {
         "open": "first",
-        "high": "max", 
+        "high": "max",
         "low": "min",
         "close": "last",
         "volume": "sum",
@@ -58,7 +57,7 @@ class DataProcessor:
     def merge_data(
         self,
         existing_data: pd.DataFrame,
-        new_data: pd.DataFrame, 
+        new_data: pd.DataFrame,
         overwrite_conflicts: bool = False,
         validate_data: bool = True,
     ) -> pd.DataFrame:
@@ -87,7 +86,9 @@ class DataProcessor:
 
         # Handle case where existing_data is None or empty
         if existing_data is None or existing_data.empty:
-            logger.info(f"No existing data found, using {len(new_data)} rows of new data")
+            logger.info(
+                f"No existing data found, using {len(new_data)} rows of new data"
+            )
             return new_data.sort_index()
 
         logger.info(
@@ -107,7 +108,7 @@ class DataProcessor:
                 # Keep the last occurrence of each duplicated index
                 merged_data = merged_data[~merged_data.index.duplicated(keep="last")]
             else:
-                logger.info("Preserving existing data for conflicting rows") 
+                logger.info("Preserving existing data for conflicting rows")
                 # Keep the first occurrence of each duplicated index
                 merged_data = merged_data[~merged_data.index.duplicated(keep="first")]
 
@@ -224,7 +225,7 @@ class DataProcessor:
             logger.error(f"Error during resampling: {str(e)}")
             raise DataError(
                 message=f"Failed to resample data: {str(e)}",
-                error_code="DATA-ResampleError", 
+                error_code="DATA-ResampleError",
                 details={"target_timeframe": target_timeframe, "error": str(e)},
             ) from e
 
@@ -276,7 +277,7 @@ class DataProcessor:
         # Check for required columns (at least some OHLCV data should be present)
         required_columns = ["open", "high", "low", "close"]
         missing_columns = [col for col in required_columns if col not in df.columns]
-        
+
         if missing_columns:
             raise DataError(
                 message=f"Missing required columns: {missing_columns}",

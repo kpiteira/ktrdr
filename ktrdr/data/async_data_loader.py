@@ -119,7 +119,7 @@ class AsyncDataLoader:
         Args:
             data_manager: DataManager instance (creates default if None)
         """
-        self.data_manager = data_manager or DataManager(enable_ib=True)
+        self.data_manager = data_manager or DataManager()
         self.jobs: dict[str, DataLoadingJob] = {}
         self.active_jobs: dict[str, asyncio.Task] = {}
 

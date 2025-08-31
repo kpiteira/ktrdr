@@ -66,10 +66,9 @@ class GapFillerService:
         if data_manager:
             self.data_manager = data_manager
         else:
-            # Create default DataManager with IB integration enabled
+            # Create default DataManager (IB integration always enabled)
             self.data_manager = DataManager(
                 data_dir=self.data_dir,
-                enable_ib=True,  # Enable IB integration for gap filling
             )
 
         # Service control
@@ -215,9 +214,10 @@ class GapFillerService:
             try:
                 # Check if IB is available via DataManager
                 try:
-                    # Check if DataManager has IB integration enabled
+                    # Check if DataManager has IB external provider
                     if (
-                        self.data_manager.enable_ib
+                        hasattr(self.data_manager, "external_provider")
+                        and self.data_manager.external_provider
                         and hasattr(self.data_manager, "ib_data_fetcher")
                         and self.data_manager.ib_data_fetcher
                     ):
@@ -575,11 +575,8 @@ class GapFillerService:
         """Force an immediate gap scan (for testing/debugging)."""
         try:
             # Check IB availability via DataManager
-            if (
-                not self.data_manager.enable_ib
-                or not self.data_manager.external_provider
-            ):
-                return {"error": "IB not enabled in DataManager"}
+            if not self.data_manager.external_provider:
+                return {"error": "IB external provider not available in DataManager"}
 
             self._scan_and_fill_gaps()
             return {"success": True, "stats": self.get_stats()}

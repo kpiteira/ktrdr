@@ -273,7 +273,7 @@ class GapAnalyzer:
         Args:
             df: DataFrame containing OHLCV data
             timeframe: The timeframe of the data (e.g., '1h', '1d')
-            gap_threshold: Number of consecutive missing periods to consider as a gap 
+            gap_threshold: Number of consecutive missing periods to consider as a gap
                           (legacy parameter, maintained for compatibility)
 
         Returns:
