@@ -1,10 +1,7 @@
 """
 Data Manager modules for ktrdr data management system.
 
-This package contains the new async DataManager that extends ServiceOrchestrator
-for unified data loading, validation, and management operations.
+This package contains manager utilities for data operations.
 """
 
-from .data_manager import DataManager
-
-__all__ = ["DataManager"]
+__all__ = []
