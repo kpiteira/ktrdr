@@ -14,7 +14,7 @@ This component handles:
 
 import asyncio
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 import pandas as pd
@@ -99,7 +99,6 @@ class SegmentManager:
                 f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})"
             )
         return segments
-
 
     def prioritize_segments(
         self,

@@ -1556,7 +1556,9 @@ class DataManager(ServiceOrchestrator):
             f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments..."
         )
         self._check_cancellation(cancellation_token, "segmentation")
-        segments = self.segment_manager.create_segments(gaps, DataLoadingMode(mode), timeframe)
+        segments = self.segment_manager.create_segments(
+            gaps, DataLoadingMode(mode), timeframe
+        )
         logger.info(
             f"⚡ SEGMENTATION COMPLETE: Created {len(segments)} segments for IB fetching"
         )

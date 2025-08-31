@@ -317,7 +317,9 @@ class TestSegmentManager:
         assert segments == []
 
     @patch("ktrdr.config.ib_limits.IbLimitsRegistry.get_duration_limit")
-    def test_consistent_segment_sizing_across_modes(self, mock_duration_limit, segment_manager):
+    def test_consistent_segment_sizing_across_modes(
+        self, mock_duration_limit, segment_manager
+    ):
         """Test that all modes create identical segments using only IB limits."""
         # Arrange
         mock_duration_limit.return_value = timedelta(days=30)  # 30-day IB limit
@@ -342,13 +344,13 @@ class TestSegmentManager:
         # Assert - all modes should create identical segments using IB limit (30 days)
         expected_segments = 2  # 59 days / 30 days = 2 segments
         assert len(tail_segments) == expected_segments
-        assert len(backfill_segments) == expected_segments  
+        assert len(backfill_segments) == expected_segments
         assert len(full_segments) == expected_segments
-        
+
         # All segments should be limited by IB duration limit (30 days)
         for segments in [tail_segments, backfill_segments, full_segments]:
             for start, end in segments:
                 assert (end - start) <= timedelta(days=30)
-                
+
         # All modes should produce identical results
         assert tail_segments == backfill_segments == full_segments
