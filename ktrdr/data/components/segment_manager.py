@@ -46,15 +46,14 @@ class SegmentManager:
         timeframe: str,
     ) -> list[tuple[datetime, datetime]]:
         """
-        Create optimal fetch segments from gaps based on mode and timeframe.
+        Split large gaps into IB-compliant segments.
 
         Takes gaps that might exceed IB duration limits and splits them
-        into smaller segments that can be fetched individually, with
-        mode-specific sizing strategies.
+        into smaller segments that can be fetched individually.
 
         Args:
             gaps: List of gaps to potentially split
-            mode: Data loading mode for sizing strategy
+            mode: Data loading mode (stored for context but doesn't affect segmentation)
             timeframe: Data timeframe for limit checking
 
         Returns:
@@ -69,15 +68,10 @@ class SegmentManager:
         # Get IB duration limit for this timeframe
         max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
 
-        # Apply mode-specific segment sizing
-        effective_max_duration = self._get_mode_specific_duration_limit(
-            mode, max_duration, timeframe
-        )
-
         for gap_start, gap_end in gaps:
             gap_duration = gap_end - gap_start
 
-            if gap_duration <= effective_max_duration:
+            if gap_duration <= max_duration:
                 # Gap fits in single request
                 segments.append((gap_start, gap_end))
                 logger.debug(
@@ -86,19 +80,18 @@ class SegmentManager:
             else:
                 # Split into multiple segments
                 logger.info(
-                    f"Splitting large gap {gap_start} to {gap_end} ({gap_duration}) "
-                    f"into segments (max: {effective_max_duration}, mode: {mode})"
+                    f"Splitting large gap {gap_start} to {gap_end} ({gap_duration}) into segments (max: {max_duration})"
                 )
 
                 current_start = gap_start
                 while current_start < gap_end:
-                    segment_end = min(current_start + effective_max_duration, gap_end)
+                    segment_end = min(current_start + max_duration, gap_end)
                     segments.append((current_start, segment_end))
                     logger.debug(f"Created segment: {current_start} to {segment_end}")
                     current_start = segment_end
 
         logger.info(
-            f"⚡ SEGMENTATION ({mode}): Split {len(gaps)} gaps into {len(segments)} IB-compliant segments"
+            f"⚡ SEGMENTATION: Split {len(gaps)} gaps into {len(segments)} IB-compliant segments"
         )
         for i, (seg_start, seg_end) in enumerate(segments):
             duration = seg_end - seg_start
@@ -107,47 +100,6 @@ class SegmentManager:
             )
         return segments
 
-    def _get_mode_specific_duration_limit(
-        self, mode: DataLoadingMode, base_duration: timedelta, timeframe: str
-    ) -> timedelta:
-        """
-        Get mode-specific duration limit for optimal segment sizing.
-
-        Different modes use different segment sizes to optimize for their use cases:
-        - tail mode: Small segments (1-7 days) for recent data
-        - backfill mode: Larger segments (30-90 days) for historical data
-        - full mode: Mixed strategy based on base duration
-        - local mode: Not applicable (no segments needed)
-
-        Args:
-            mode: Data loading mode
-            base_duration: IB API limit for this timeframe
-            timeframe: Data timeframe
-
-        Returns:
-            Effective duration limit for this mode
-        """
-        if mode == DataLoadingMode.LOCAL:
-            # Local mode doesn't use segments
-            return base_duration
-
-        elif mode == DataLoadingMode.TAIL:
-            # Tail mode: Use smaller segments for recent data (max 7 days)
-            return min(base_duration, timedelta(days=7))
-
-        elif mode == DataLoadingMode.BACKFILL:
-            # Backfill mode: Use larger segments for historical data
-            # But respect IB limits - use up to 75% of IB limit for efficiency
-            max_backfill = min(base_duration, timedelta(days=90))
-            return min(max_backfill, base_duration * 0.75)
-
-        elif mode == DataLoadingMode.FULL:
-            # Full mode: Mixed strategy - use 50% of IB limit for balance
-            return base_duration * 0.5
-
-        else:
-            # Default: Use IB limit as-is
-            return base_duration
 
     def prioritize_segments(
         self,

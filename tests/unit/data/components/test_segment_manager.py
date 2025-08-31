@@ -317,8 +317,8 @@ class TestSegmentManager:
         assert segments == []
 
     @patch("ktrdr.config.ib_limits.IbLimitsRegistry.get_duration_limit")
-    def test_mode_specific_segment_sizing(self, mock_duration_limit, segment_manager):
-        """Test that different modes create appropriately sized segments."""
+    def test_consistent_segment_sizing_across_modes(self, mock_duration_limit, segment_manager):
+        """Test that all modes create identical segments using only IB limits."""
         # Arrange
         mock_duration_limit.return_value = timedelta(days=30)  # 30-day IB limit
         large_gap = [
@@ -328,7 +328,7 @@ class TestSegmentManager:
             )
         ]
 
-        # Act & Assert for different modes
+        # Act - test different modes
         tail_segments = segment_manager.create_segments(
             large_gap, DataLoadingMode.TAIL, "1d"
         )
@@ -339,88 +339,16 @@ class TestSegmentManager:
             large_gap, DataLoadingMode.FULL, "1d"
         )
 
-        # Tail mode should create smaller segments (max 7 days)
-        for start, end in tail_segments:
-            assert (end - start) <= timedelta(days=7)
-
-        # Backfill mode should create larger segments (up to 75% of IB limit = 22.5 days)
-        for start, end in backfill_segments:
-            assert (end - start) <= timedelta(days=22.5)
-
-        # Full mode should be between tail and backfill (50% of IB limit = 15 days)
-        for start, end in full_segments:
-            assert (end - start) <= timedelta(days=15)
-
-
-class TestSegmentManagerModeSpecific:
-    """Test mode-specific behavior for SegmentManager."""
-
-    @pytest.fixture
-    def segment_manager(self):
-        return SegmentManager()
-
-    @patch("ktrdr.config.ib_limits.IbLimitsRegistry.get_duration_limit")
-    def test_tail_mode_small_segments(self, mock_duration_limit, segment_manager):
-        """Test tail mode creates small segments (1-7 days)."""
-        # Arrange
-        mock_duration_limit.return_value = timedelta(days=30)
-        large_gap = [
-            (
-                datetime(2023, 1, 1, tzinfo=timezone.utc),
-                datetime(2023, 2, 1, tzinfo=timezone.utc),
-            )
-        ]
-
-        # Act
-        segments = segment_manager.create_segments(
-            large_gap, DataLoadingMode.TAIL, "1h"
-        )
-
-        # Assert - should split into segments of max 7 days each
-        assert len(segments) >= 5  # 31 days / 7 days = at least 5 segments
-        for start, end in segments:
-            assert (end - start) <= timedelta(days=7)
-
-    @patch("ktrdr.config.ib_limits.IbLimitsRegistry.get_duration_limit")
-    def test_backfill_mode_large_segments(self, mock_duration_limit, segment_manager):
-        """Test backfill mode creates larger segments (30-90 days)."""
-        # Arrange
-        mock_duration_limit.return_value = timedelta(days=100)  # Large IB limit
-        large_gap = [
-            (
-                datetime(2023, 1, 1, tzinfo=timezone.utc),
-                datetime(2023, 4, 1, tzinfo=timezone.utc),
-            )
-        ]
-
-        # Act
-        segments = segment_manager.create_segments(
-            large_gap, DataLoadingMode.BACKFILL, "1d"
-        )
-
-        # Assert - should use larger segments (75% of IB limit = 75 days)
-        assert len(segments) <= 2  # 90 days / 75 days = at most 2 segments
-        for start, end in segments:
-            assert (end - start) <= timedelta(days=75)
-
-    @patch("ktrdr.config.ib_limits.IbLimitsRegistry.get_duration_limit")
-    def test_full_mode_mixed_strategy(self, mock_duration_limit, segment_manager):
-        """Test full mode uses mixed strategy based on gap characteristics."""
-        # Arrange
-        mock_duration_limit.return_value = timedelta(days=60)
-        large_gap = [
-            (
-                datetime(2023, 1, 1, tzinfo=timezone.utc),
-                datetime(2023, 3, 1, tzinfo=timezone.utc),
-            )
-        ]
-
-        # Act
-        segments = segment_manager.create_segments(
-            large_gap, DataLoadingMode.FULL, "1d"
-        )
-
-        # Assert - should use 50% of IB limit = 30 days
-        assert len(segments) == 2  # 59 days / 30 days = 2 segments
-        for start, end in segments:
-            assert (end - start) <= timedelta(days=30)
+        # Assert - all modes should create identical segments using IB limit (30 days)
+        expected_segments = 2  # 59 days / 30 days = 2 segments
+        assert len(tail_segments) == expected_segments
+        assert len(backfill_segments) == expected_segments  
+        assert len(full_segments) == expected_segments
+        
+        # All segments should be limited by IB duration limit (30 days)
+        for segments in [tail_segments, backfill_segments, full_segments]:
+            for start, end in segments:
+                assert (end - start) <= timedelta(days=30)
+                
+        # All modes should produce identical results
+        assert tail_segments == backfill_segments == full_segments
