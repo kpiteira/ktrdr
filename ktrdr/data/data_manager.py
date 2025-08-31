@@ -19,6 +19,7 @@ from ktrdr import (
     log_entry_exit,
     log_performance,
 )
+from ktrdr.data.components.data_fetcher import DataFetcher
 from ktrdr.data.components.data_health_checker import DataHealthChecker
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
@@ -212,6 +213,9 @@ class DataManager(ServiceOrchestrator):
 
         # Initialize the progress manager (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
+        
+        # Initialize the DataFetcher component (will be configured per operation)
+        self._data_fetcher: Optional[DataFetcher] = None
 
         logger.info(
             f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
@@ -967,6 +971,20 @@ class DataManager(ServiceOrchestrator):
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
 
+    def _ensure_data_fetcher(self, progress_manager: Optional[ProgressManager]) -> DataFetcher:
+        """
+        Ensure DataFetcher component is initialized with current progress manager.
+        
+        Args:
+            progress_manager: Current progress manager instance
+            
+        Returns:
+            DataFetcher component instance
+        """
+        if self._data_fetcher is None or self._data_fetcher.progress_manager != progress_manager:
+            self._data_fetcher = DataFetcher(progress_manager)
+        return self._data_fetcher
+
     def _fetch_segments_with_component(
         self,
         symbol: str,
@@ -977,10 +995,11 @@ class DataManager(ServiceOrchestrator):
         periodic_save_minutes: float = 2.0,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
-        Synchronous wrapper for SegmentManager.fetch_segments_with_resilience.
+        Enhanced async fetching using DataFetcher component.
 
         This method provides compatibility with the current synchronous DataManager
-        while delegating to the async SegmentManager component.
+        while delegating to the enhanced DataFetcher component for optimal
+        performance with connection pooling and advanced progress tracking.
 
         Args:
             symbol: Trading symbol
@@ -988,40 +1007,61 @@ class DataManager(ServiceOrchestrator):
             segments: List of (start, end) segments to fetch
             cancellation_token: Optional cancellation token
             progress_manager: Optional progress manager
-            periodic_save_minutes: Save progress every N minutes
+            periodic_save_minutes: Save progress every N minutes (preserved for compatibility)
 
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
+        if not self.external_provider:
+            logger.error("No external provider available for fetching")
+            return [], 0, len(segments)
 
-        def periodic_save_callback(successful_data: list[pd.DataFrame]) -> int:
-            """Callback for periodic progress saving."""
-            return self._save_periodic_progress(
-                successful_data,
-                symbol,
-                timeframe,
-                0,  # TODO: Track previous bars properly
-            )
+        # Ensure DataFetcher is initialized
+        data_fetcher = self._ensure_data_fetcher(progress_manager)
 
-        # Run the async SegmentManager method
+        # Run the enhanced async DataFetcher method
         try:
-            return asyncio.run(
-                self.segment_manager.fetch_segments_with_resilience(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    segments=segments,
-                    external_provider=self.external_provider,
-                    cancellation_token=cancellation_token,
-                    progress_manager=progress_manager,
-                    periodic_save_callback=periodic_save_callback,
-                    periodic_save_minutes=periodic_save_minutes,
-                )
-            )
+            async def fetch_with_data_fetcher():
+                """Async wrapper for DataFetcher with periodic save integration."""
+                try:
+                    # Use DataFetcher for enhanced fetching
+                    successful_data = await data_fetcher.fetch_segments_async(
+                        segments=segments,
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        external_provider=self.external_provider,
+                        cancellation_token=cancellation_token,
+                    )
+                    
+                    # Periodic save integration (if we have successful data)
+                    if successful_data and periodic_save_minutes > 0:
+                        try:
+                            self._save_periodic_progress(
+                                successful_data,
+                                symbol,
+                                timeframe,
+                                0,  # TODO: Track previous bars properly
+                            )
+                        except Exception as e:
+                            logger.warning(f"Periodic save failed: {e}")
+                    
+                    successful_count = len(successful_data)
+                    failed_count = len(segments) - successful_count
+                    
+                    return successful_data, successful_count, failed_count
+                    
+                finally:
+                    # Clean up DataFetcher resources after operation
+                    await data_fetcher.cleanup()
+
+            return asyncio.run(fetch_with_data_fetcher())
+            
         except asyncio.CancelledError:
             # Re-raise cancellation errors properly
+            logger.info("Data fetching cancelled")
             raise
         except Exception as e:
-            logger.error(f"Segment fetching failed: {e}")
+            logger.error(f"Enhanced data fetching failed: {e}")
             return [], 0, len(segments)
 
     # Segmentation methods have been extracted to SegmentManager component
@@ -1094,6 +1134,8 @@ class DataManager(ServiceOrchestrator):
     def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
         """
         Sync wrapper for async head timestamp fetching.
+        
+        Simplified async/sync handling for better maintainability.
 
         Args:
             symbol: Trading symbol
@@ -1102,8 +1144,9 @@ class DataManager(ServiceOrchestrator):
         Returns:
             ISO formatted head timestamp string or None if failed
         """
-        import asyncio
-
+        if not self.external_provider:
+            return None
+            
         async def fetch_head_timestamp_async():
             """Async head timestamp fetch function."""
             return await self.external_provider.get_head_timestamp(
@@ -1111,26 +1154,9 @@ class DataManager(ServiceOrchestrator):
             )
 
         try:
-            # Run the async function in the current event loop or create a new one
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # We're in an async context, need to run in executor
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            asyncio.run, fetch_head_timestamp_async()
-                        )
-                        return future.result(timeout=30)  # 30 second timeout
-                else:
-                    return loop.run_until_complete(fetch_head_timestamp_async())
-            except RuntimeError:
-                # No event loop, create a new one
-                return asyncio.run(fetch_head_timestamp_async())
-
+            return asyncio.run(fetch_head_timestamp_async())
         except Exception as e:
-            logger.error(f"Sync head timestamp fetch failed for {symbol}: {e}")
+            logger.error(f"Head timestamp fetch failed for {symbol}: {e}")
             return None
 
     @log_entry_exit(logger=logger, log_args=True)
@@ -1160,26 +1186,13 @@ class DataManager(ServiceOrchestrator):
             return True, None, None
 
         try:
-            # Get head timestamp from external provider
-            import asyncio
-
+            # Get head timestamp from external provider using simplified async handling
             async def get_head_async():
                 return await self.external_provider.get_head_timestamp(
                     symbol, timeframe
                 )
 
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, get_head_async())
-                        head_timestamp = future.result(timeout=30)
-                else:
-                    head_timestamp = loop.run_until_complete(get_head_async())
-            except RuntimeError:
-                head_timestamp = asyncio.run(get_head_async())
+            head_timestamp = asyncio.run(get_head_async())
 
             if head_timestamp is None:
                 return True, None, None  # No head timestamp available, assume valid
@@ -1216,29 +1229,7 @@ class DataManager(ServiceOrchestrator):
             return False
 
         try:
-            # Check if we can get head timestamp from external provider
-            import asyncio
-
-            async def check_head_async():
-                head_timestamp = await self.external_provider.get_head_timestamp(
-                    symbol, timeframe
-                )
-                return head_timestamp is not None
-
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, check_head_async())
-                        return future.result(timeout=10)
-                else:
-                    return loop.run_until_complete(check_head_async())
-            except RuntimeError:
-                return asyncio.run(check_head_async())
-
-            # Use a sync wrapper for async head timestamp fetching
+            # Simplified check using existing method
             head_timestamp = self._fetch_head_timestamp_sync(symbol, timeframe)
 
             if head_timestamp:
@@ -1307,23 +1298,13 @@ class DataManager(ServiceOrchestrator):
 
         if self.enable_ib and self.external_provider:
             try:
-                # Use sync wrapper for async validation call
-                import asyncio
-
+                # Simplified async validation call
                 async def validate_async():
                     return await self.external_provider.validate_and_get_metadata(
                         symbol, [timeframe]
                     )
 
-                try:
-                    validation_result = asyncio.run(validate_async())
-                except RuntimeError:
-                    # We're in an async context, need to run in executor
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, validate_async())
-                        validation_result = future.result(timeout=30)
+                validation_result = asyncio.run(validate_async())
 
                 logger.info(f"✅ Symbol {symbol} validated successfully")
 
