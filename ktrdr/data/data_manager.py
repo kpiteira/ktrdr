@@ -1027,7 +1027,17 @@ class DataManager(ServiceOrchestrator):
                         logger.error("No external provider available for data fetching")
                         return [], 0, 0
 
-                    # Use DataFetcher for HTTP session persistence with progress reporting
+                    # Create periodic save callback for time-based saving during fetch
+                    def periodic_save_callback(successful_data_list: list[pd.DataFrame]) -> int:
+                        """Callback for periodic progress saving during fetch."""
+                        return self._save_periodic_progress(
+                            successful_data_list,
+                            symbol,
+                            timeframe,
+                            0,  # TODO: Track previous bars properly
+                        )
+
+                    # Use DataFetcher with periodic save callback for time-based saves
                     successful_data = await data_fetcher.fetch_segments_async(
                         segments=segments,
                         symbol=symbol,
@@ -1035,19 +1045,9 @@ class DataManager(ServiceOrchestrator):
                         external_provider=self.external_provider,
                         progress_manager=progress_manager,
                         cancellation_token=cancellation_token,
+                        periodic_save_callback=periodic_save_callback if periodic_save_minutes > 0 else None,
+                        periodic_save_minutes=periodic_save_minutes,
                     )
-
-                    # Periodic save integration (if we have successful data)
-                    if successful_data and periodic_save_minutes > 0:
-                        try:
-                            self._save_periodic_progress(
-                                successful_data,
-                                symbol,
-                                timeframe,
-                                0,  # TODO: Track previous bars properly
-                            )
-                        except Exception as e:
-                            logger.warning(f"Periodic save failed: {e}")
 
                     successful_count = len(successful_data)
                     failed_count = len(segments) - successful_count
