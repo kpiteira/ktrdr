@@ -209,9 +209,6 @@ class DataManager(ServiceOrchestrator):
         # Initialize the DataProcessor component
         self.data_processor = DataProcessor()
 
-        # Initialize the MultiTimeframeCoordinator service
-        from ktrdr.data.services.multi_timeframe_coordinator import MultiTimeframeCoordinator
-        self.multi_timeframe_coordinator = MultiTimeframeCoordinator(self)
 
         # Initialize the progress manager (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
@@ -509,59 +506,6 @@ class DataManager(ServiceOrchestrator):
         )
         return df
 
-    @log_entry_exit(logger=logger, log_args=True)
-    def load_multi_timeframe_data(
-        self,
-        symbol: str,
-        timeframes: list[str],
-        start_date: Optional[Union[str, datetime]] = None,
-        end_date: Optional[Union[str, datetime]] = None,
-        base_timeframe: str = "1h",
-        mode: str = "local",
-        validate: bool = True,
-        repair: bool = False,
-        cancellation_token: Optional[Any] = None,
-        progress_callback: Optional[Callable] = None,
-    ) -> dict[str, pd.DataFrame]:
-        """
-        Load OHLCV data for multiple timeframes with temporal alignment.
-
-        This method delegates to MultiTimeframeCoordinator for complex
-        multi-timeframe coordination while using DataManager's single-timeframe primitives.
-
-        Args:
-            symbol: The trading symbol (e.g., 'EURUSD', 'AAPL')
-            timeframes: List of timeframes to load (e.g., ['15m', '1h', '4h'])
-            start_date: Optional start date for filtering data
-            end_date: Optional end date for filtering data
-            base_timeframe: Reference timeframe for alignment (default: '1h')
-            mode: Loading mode - 'local', 'tail', 'backfill', 'full'
-            validate: Whether to validate data integrity
-            repair: Whether to repair any detected issues
-            cancellation_token: Optional cancellation token for early termination
-            progress_callback: Optional callback for progress updates
-
-        Returns:
-            Dictionary mapping timeframes to aligned DataFrames
-            Format: {timeframe: aligned_ohlcv_dataframe}
-
-        Raises:
-            DataError: If loading fails for critical timeframes
-            DataValidationError: If base_timeframe not in timeframes list
-        """
-        # Delegate to MultiTimeframeCoordinator service
-        return self.multi_timeframe_coordinator.load_multi_timeframe_data(
-            symbol=symbol,
-            timeframes=timeframes,
-            start_date=start_date,
-            end_date=end_date,
-            base_timeframe=base_timeframe,
-            mode=mode,
-            validate=validate,
-            repair=repair,
-            cancellation_token=cancellation_token,
-            progress_callback=progress_callback,
-        )
 
 
     @log_entry_exit(logger=logger, log_args=True)

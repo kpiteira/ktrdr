@@ -13,6 +13,7 @@ from sklearn.metrics import (
 )
 
 from ..data.data_manager import DataManager
+from ..data.multi_timeframe_coordinator import MultiTimeframeCoordinator
 from ..fuzzy.engine import FuzzyEngine
 from ..indicators.indicator_engine import IndicatorEngine
 from ..logging import get_logger
@@ -36,6 +37,7 @@ class StrategyTrainer:
         """
         self.model_storage = ModelStorage(models_dir)
         self.data_manager = DataManager()
+        self.multi_timeframe_coordinator = MultiTimeframeCoordinator(self.data_manager)
         self.indicator_engine = IndicatorEngine()
         self.fuzzy_engine: Optional[FuzzyEngine] = (
             None  # Will be initialized with strategy config
@@ -567,7 +569,7 @@ class StrategyTrainer:
 
         # Multi-timeframe case - use first timeframe (highest frequency) as base
         base_timeframe = timeframes[0]  # Always use first timeframe as base
-        multi_data = self.data_manager.load_multi_timeframe_data(
+        multi_data = self.multi_timeframe_coordinator.load_multi_timeframe_data(
             symbol=symbol,
             timeframes=timeframes,
             start_date=start_date,
