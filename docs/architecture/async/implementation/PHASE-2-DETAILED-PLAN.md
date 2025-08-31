@@ -12,16 +12,18 @@ Phase 2 focuses on decomposing the 2600-line DataManager god class into focused,
 
 ## Core Architecture
 
-The decomposition follows the component pipeline pattern:
+The decomposition follows incremental extraction + integration pattern:
 
 ```
-DataManager (orchestrator) 
-├── GapAnalyzer (gap detection & classification)
-├── SegmentManager (request segmentation & batching)  
-├── DataFetcher (IB communication & retries)
-├── DataValidator (quality checks & repair)
-└── DataProcessor (merge, resample, transform)
+DataManager (existing orchestrator - refactored incrementally)
+├── self.gap_analyzer = GapAnalyzer()        # Extract → Integrate → Replace methods
+├── self.segment_manager = SegmentManager()  # Extract → Integrate → Replace methods  
+├── self.data_fetcher = DataFetcher()        # Extract → Integrate → Replace methods
+├── self.data_validator = DataValidator()    # Extract → Integrate → Replace methods
+└── self.data_processor = DataProcessor()    # Extract → Integrate → Replace methods
 ```
+
+**Key Principle**: Each component is extracted AND immediately integrated into the existing DataManager, replacing the corresponding god-class methods while maintaining 100% API compatibility.
 
 ## Task List
 
@@ -33,7 +35,7 @@ DataManager (orchestrator)
 **Dependencies**: Phase 1 complete (ProgressManager available)
 
 #### Description
-Extract gap analysis logic from DataManager into a focused component that handles gap detection and classification based on loading modes.
+Extract gap analysis logic from DataManager into a focused component that handles gap detection and classification based on loading modes. **Immediately integrate the component into DataManager and replace the corresponding god-class methods.**
 
 #### Acceptance Criteria
 - [ ] GapAnalyzer handles all four modes (local, tail, backfill, full)
@@ -42,6 +44,9 @@ Extract gap analysis logic from DataManager into a focused component that handle
 - [ ] Integrates with ProgressManager for operation reporting
 - [ ] Handles edge cases (no local data, overlapping gaps, invalid date ranges)
 - [ ] Performance matches or exceeds current implementation
+- [ ] **Integrated into DataManager constructor: `self.gap_analyzer = GapAnalyzer()`**
+- [ ] **DataManager methods delegate to component (e.g., `self.gap_analyzer.analyze_gaps()`)**
+- [ ] **Original god-class gap analysis methods removed after integration**
 
 #### Test-Driven Development Approach
 
@@ -399,22 +404,23 @@ Test processing performance with large datasets to ensure the component doesn't 
 
 **Review Focus**: Processing accuracy, performance optimization, memory management
 
-### TASK-2.6: Implement New DataManager Orchestrator
+### TASK-2.6: Complete DataManager Component Integration
 
-**Type**: Major refactoring  
-**Branch**: `feature/new-datamanager-orchestrator` (branches from `feature/datamanager-decomposition`)  
-**Files**: `ktrdr/data/data_manager.py` (complete rewrite), tests  
-**Dependencies**: All Phase 2 components (TASK-2.1 through TASK-2.5)
+**Type**: Integration cleanup and god-class method removal  
+**Branch**: `feature/datamanager-integration-cleanup` (branches from `feature/datamanager-decomposition`)  
+**Files**: `ktrdr/data/data_manager.py` (refactored incrementally), tests  
+**Dependencies**: All Phase 2 components integrated (TASK-2.1 through TASK-2.5)
 
 #### Description
-Replace the existing 2600-line DataManager with a clean orchestrator that coordinates the specialized components. The new DataManager becomes a focused async workflow coordinator.
+Complete the DataManager refactoring by removing any remaining god-class methods and ensuring all functionality delegates to the extracted and integrated components. The DataManager should be a clean orchestrator that coordinates the specialized components while maintaining 100% API compatibility.
 
 #### Acceptance Criteria
-- [ ] New DataManager under 400 lines focusing on orchestration only
+- [ ] All god-class methods removed from DataManager (reduced from 2600+ to ~800 lines)
 - [ ] Maintains 100% API compatibility with existing DataManager
+- [ ] All functionality delegates to integrated components (`self.gap_analyzer`, `self.data_fetcher`, etc.)
 - [ ] Implements clean async patterns throughout the workflow
 - [ ] Coordinates all components with proper error handling
-- [ ] Provides equivalent or better performance than current implementation
+- [ ] Provides equivalent or better performance than original implementation
 - [ ] Supports all existing loading modes and options
 
 #### Test-Driven Development Approach
@@ -430,30 +436,37 @@ Create benchmarks comparing the new orchestrator performance against the current
 
 #### Implementation Details
 
-**Location**: `ktrdr/data/data_manager.py` (complete replacement)
+**Location**: `ktrdr/data/data_manager.py` (incremental refactoring)
 
-**New Architecture**:
+**Current Architecture** (already partially implemented):
 ```python
-class DataManager(AsyncHostService):
+class DataManager(ServiceOrchestrator):
+    def __init__(self):
+        # Components already integrated:
+        self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)        # ✅ Done
+        self.segment_manager = SegmentManager()                                    # ✅ Done  
+        self._data_fetcher = DataFetcher()                                        # ✅ Done
+        self.data_validator = DataQualityValidator()                              # ✅ Done
+        # TODO: Remaining integrations and cleanup
+
     async def load_data(self, symbol: str, timeframe: str, **options) -> pd.DataFrame:
-        # Clean orchestration of component pipeline
-        # 1. Analyze gaps
-        # 2. Create segments  
-        # 3. Fetch data
-        # 4. Validate data
-        # 5. Process data
-        # Each step delegates to specialized component
+        # Already delegates to components in _load_with_fallback():
+        # 1. gaps = self.gap_analyzer.analyze_gaps(...)          # ✅ Line 1523
+        # 2. segments = self.segment_manager.create_segments(...) # ✅ Line 1556  
+        # 3. await self._data_fetcher.fetch_segments_async(...)  # ✅ Line 1044
+        # 4. self.data_validator.validate_data(...)             # ✅ Line 448
+        # TODO: Complete remaining method delegations
 ```
 
 #### Branching Strategy
 
-1. **Merge all component branches** into `feature/datamanager-decomposition` first
-2. **Create orchestrator branch**: `git checkout -b feature/new-datamanager-orchestrator feature/datamanager-decomposition`
+1. **Continue incremental approach** - components are already being integrated
+2. **Create cleanup branch**: `git checkout -b feature/datamanager-integration-cleanup feature/datamanager-decomposition`
 3. **Implementation approach**: 
-   - Create new DataManager in parallel with existing one
-   - Use feature flags to gradually migrate functionality
-   - Maintain backward compatibility throughout transition
-4. **PR Requirements**: Full regression testing, performance analysis
+   - **NO parallel implementation** - continue refactoring existing DataManager
+   - Remove remaining god-class methods after verifying component delegation works
+   - Each component integration maintains backward compatibility
+4. **PR Requirements**: Regression testing focused on method delegation, performance analysis
 
 #### User Testing Integration
 
