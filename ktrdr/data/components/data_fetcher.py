@@ -7,7 +7,7 @@ Focused on HTTP session persistence for 30%+ performance improvement.
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 import aiohttp
 import pandas as pd
@@ -34,6 +34,47 @@ class DataFetcher:
         """
         self._session: Optional[aiohttp.ClientSession] = None
         # Simple design - no internal task tracking or cancellation
+
+    def _check_cancellation(
+        self,
+        cancellation_token: Optional[Any],
+        operation_description: str = "operation",
+    ) -> bool:
+        """
+        Check if cancellation has been requested.
+
+        Args:
+            cancellation_token: Token to check for cancellation
+            operation_description: Description of current operation for logging
+
+        Returns:
+            True if cancellation was requested, False otherwise
+
+        Raises:
+            asyncio.CancelledError: If cancellation was requested
+        """
+        if cancellation_token is None:
+            return False
+
+        # Check if token has cancellation method
+        is_cancelled = False
+        if hasattr(cancellation_token, "is_cancelled_requested"):
+            is_cancelled = cancellation_token.is_cancelled_requested
+        elif hasattr(cancellation_token, "is_set"):
+            is_cancelled = cancellation_token.is_set()
+        elif hasattr(cancellation_token, "cancelled"):
+            is_cancelled = cancellation_token.cancelled()
+
+        if is_cancelled:
+            logger.info(f"🛑 Cancellation requested during {operation_description}")
+            # Import here to avoid circular imports
+            import asyncio
+
+            raise asyncio.CancelledError(
+                f"Operation cancelled during {operation_description}"
+            )
+
+        return False
 
     async def _setup_http_session(self) -> None:
         """Set up persistent HTTP session with connection pooling."""
@@ -112,6 +153,7 @@ class DataFetcher:
         timeframe: str,
         external_provider: ExternalDataProvider,
         progress_manager: Optional[ProgressManager] = None,
+        cancellation_token: Optional[Any] = None,
     ) -> list[pd.DataFrame]:
         """
         Fetch multiple segments sequentially using persistent HTTP session.
@@ -122,6 +164,7 @@ class DataFetcher:
             timeframe: Data timeframe
             external_provider: External data provider
             progress_manager: Optional progress manager for segment-level progress
+            cancellation_token: Optional cancellation token for direct cancellation checking
 
         Returns:
             List of successfully fetched DataFrames
@@ -138,6 +181,11 @@ class DataFetcher:
         successful_results = []
 
         for i, segment in enumerate(segments):
+            # Check for cancellation before processing each segment using extracted method
+            self._check_cancellation(
+                cancellation_token, f"segment {i+1}/{len(segments)} processing"
+            )
+
             # Update progress within the current step (step 6: 10% to 96%)
             if progress_manager:
                 start_date, end_date = segment

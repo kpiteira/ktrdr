@@ -576,7 +576,6 @@ async def load_data(
                 end_date=request.end_date,
                 mode=request.mode,
                 filters=filters_dict,
-                periodic_save_minutes=request.periodic_save_minutes,
             )
 
             # Return operation ID for tracking
@@ -606,7 +605,6 @@ async def load_data(
                 mode=request.mode,
                 include_metadata=True,
                 filters=filters_dict,
-                periodic_save_minutes=request.periodic_save_minutes,
             )
 
         # Convert to response model

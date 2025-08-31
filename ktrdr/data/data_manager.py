@@ -327,7 +327,6 @@ class DataManager(ServiceOrchestrator):
         strict: bool = False,
         cancellation_token: Optional[Any] = None,
         progress_callback: Optional[Callable] = None,
-        periodic_save_minutes: float = 2.0,
     ) -> pd.DataFrame:
         """
         Load data with optional validation and repair using unified validator.
@@ -344,7 +343,6 @@ class DataManager(ServiceOrchestrator):
             strict: If True, raises an exception for integrity issues instead of warning (default: False)
             cancellation_token: Optional cancellation token to check for early termination
             progress_callback: Optional callback for progress updates during loading
-            periodic_save_minutes: Save progress every N minutes during long downloads (default: 2.0)
 
         Returns:
             DataFrame containing validated (and optionally repaired) OHLCV data
@@ -412,7 +410,6 @@ class DataManager(ServiceOrchestrator):
                 mode,
                 cancellation_token,
                 progress_manager,  # Pass ProgressManager for clean integration
-                periodic_save_minutes,
             )
 
         # Check if df is None (happens when fallback returns None)
@@ -989,7 +986,6 @@ class DataManager(ServiceOrchestrator):
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
         progress_manager: Optional[ProgressManager] = None,
-        periodic_save_minutes: float = 2.0,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Enhanced async fetching using DataFetcher component.
@@ -1004,11 +1000,12 @@ class DataManager(ServiceOrchestrator):
             segments: List of (start, end) segments to fetch
             cancellation_token: Optional cancellation token
             progress_manager: Optional progress manager
-            periodic_save_minutes: Save progress every N minutes (preserved for compatibility)
-
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
+        # Internal save interval - not exposed externally
+        INTERNAL_SAVE_INTERVAL = 0.5
+
         if not self.external_provider:
             logger.error("No external provider available for fetching")
             return [], 0, len(segments)
@@ -1027,29 +1024,35 @@ class DataManager(ServiceOrchestrator):
                         logger.error("No external provider available for data fetching")
                         return [], 0, 0
 
-                    # Use DataFetcher for HTTP session persistence with progress reporting
-                    successful_data = await data_fetcher.fetch_segments_async(
-                        segments=segments,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        external_provider=self.external_provider,
-                        progress_manager=progress_manager,
+                    # Create periodic save callback for time-based saving during fetch
+                    def periodic_save_callback(
+                        successful_data_list: list[pd.DataFrame],
+                    ) -> int:
+                        """Callback for periodic progress saving during fetch."""
+                        return self._save_periodic_progress(
+                            successful_data_list,
+                            symbol,
+                            timeframe,
+                            0,  # TODO: Track previous bars properly
+                        )
+
+                    # Use SegmentManager for resilient fetching with periodic save support
+                    successful_data, successful_count, failed_count = (
+                        await self.segment_manager.fetch_segments_with_resilience(
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            segments=segments,
+                            external_provider=self.external_provider,
+                            progress_manager=progress_manager,
+                            cancellation_token=cancellation_token,
+                            periodic_save_callback=(
+                                periodic_save_callback
+                                if INTERNAL_SAVE_INTERVAL > 0
+                                else None
+                            ),
+                            periodic_save_minutes=INTERNAL_SAVE_INTERVAL,
+                        )
                     )
-
-                    # Periodic save integration (if we have successful data)
-                    if successful_data and periodic_save_minutes > 0:
-                        try:
-                            self._save_periodic_progress(
-                                successful_data,
-                                symbol,
-                                timeframe,
-                                0,  # TODO: Track previous bars properly
-                            )
-                        except Exception as e:
-                            logger.warning(f"Periodic save failed: {e}")
-
-                    successful_count = len(successful_data)
-                    failed_count = len(segments) - successful_count
 
                     return successful_data, successful_count, failed_count
 
@@ -1257,7 +1260,6 @@ class DataManager(ServiceOrchestrator):
         mode: str = "tail",
         cancellation_token: Optional[Any] = None,
         progress_manager: Optional[ProgressManager] = None,
-        periodic_save_minutes: float = 2.0,
     ) -> Optional[pd.DataFrame]:
         """
         Load data with intelligent gap analysis and resilient segment fetching.
@@ -1576,7 +1578,6 @@ class DataManager(ServiceOrchestrator):
                     segments,
                     cancellation_token,
                     progress_manager,
-                    periodic_save_minutes,
                 )
             )
             fetched_data_frames = successful_frames

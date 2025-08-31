@@ -256,7 +256,7 @@ class SegmentManager:
         cancellation_token: Optional[Any] = None,
         progress_manager: Optional[ProgressManager] = None,
         periodic_save_callback: Optional[Callable[[list[pd.DataFrame]], int]] = None,
-        periodic_save_minutes: float = 2.0,
+        periodic_save_minutes: float = 0.5,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Fetch multiple segments with failure resilience and periodic progress saves.
@@ -272,7 +272,7 @@ class SegmentManager:
             cancellation_token: Optional cancellation token
             progress_manager: Optional progress manager for reporting
             periodic_save_callback: Optional callback for periodic saves
-            periodic_save_minutes: Save progress every N minutes (default: 2.0)
+            periodic_save_minutes: Save progress every N minutes (default: 0.5)
 
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
