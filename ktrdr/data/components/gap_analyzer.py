@@ -134,7 +134,11 @@ class GapAnalyzer:
 
         # Gaps within existing data (holes in the dataset)
         # For backfill/full mode, skip micro-gap analysis to avoid thousands of tiny segments
-        if requested_start < data_end and requested_end > data_start and mode == "tail":
+        if (
+            requested_start < data_end
+            and requested_end > data_start
+            and mode == DataLoadingMode.TAIL
+        ):
             internal_gaps = self._find_internal_gaps(
                 existing_data,
                 max(requested_start, data_start),
@@ -244,8 +248,6 @@ class GapAnalyzer:
 
             # Only include gaps that are classified as significant data quality issues
             # (unexpected gaps and market closures, following existing pattern in DataQualityValidator)
-            from ktrdr.data.gap_classifier import GapClassification
-
             if gap_classification in [
                 GapClassification.UNEXPECTED,
                 GapClassification.MARKET_CLOSURE,
