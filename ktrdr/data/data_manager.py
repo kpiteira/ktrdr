@@ -25,6 +25,7 @@ from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.gap_classifier import GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
+from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.errors import (
@@ -1764,8 +1765,15 @@ class DataManager(ServiceOrchestrator):
             )
         else:
             logger.debug("🔍 GAP ANALYSIS: No existing data found")
+        # Convert string mode to DataLoadingMode enum
+        loading_mode = DataLoadingMode[mode.upper()] if isinstance(mode, str) else mode
         gaps = self.gap_analyzer.analyze_gaps(
-            existing_data, requested_start, requested_end, timeframe, symbol, mode
+            existing_data,
+            requested_start,
+            requested_end,
+            timeframe,
+            symbol,
+            loading_mode,
         )
 
         if not gaps:
