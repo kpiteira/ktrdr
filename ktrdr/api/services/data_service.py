@@ -64,7 +64,6 @@ class DataService(BaseService):
         mode: str = "local",
         include_metadata: bool = True,
         filters: Optional[dict[str, Any]] = None,
-        periodic_save_minutes: float = 2.0,
     ) -> dict[str, Any]:
         """
         Load OHLCV data for a symbol and timeframe.
@@ -98,7 +97,6 @@ class DataService(BaseService):
                 mode=mode,  # Pass through the mode - DataManager decides whether to use IB
                 validate=True,
                 repair=False,
-                periodic_save_minutes=periodic_save_minutes,
                 # Note: No progress callback for sync operations
             )
 
@@ -163,7 +161,6 @@ class DataService(BaseService):
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
         filters: Optional[dict[str, Any]] = None,
-        periodic_save_minutes: float = 2.0,
     ) -> str:
         """
         Start a data loading operation that can be tracked and cancelled.
@@ -211,7 +208,6 @@ class DataService(BaseService):
                 end_date,
                 mode,
                 filters,
-                periodic_save_minutes,
             )
         )
 
@@ -229,7 +225,6 @@ class DataService(BaseService):
         end_date: Optional[Union[str, datetime]],
         mode: str,
         filters: Optional[dict[str, Any]],
-        periodic_save_minutes: float,
     ) -> None:
         """
         Run the actual data loading operation with progress tracking.
@@ -251,7 +246,6 @@ class DataService(BaseService):
                     end_date=end_date,
                     mode=mode,
                     filters=filters,
-                    periodic_save_minutes=periodic_save_minutes,
                 )
 
                 # Complete the operation with real results
@@ -308,7 +302,6 @@ class DataService(BaseService):
         end_date: Optional[Union[str, datetime]],
         mode: str,
         filters: Optional[dict[str, Any]],
-        periodic_save_minutes: float,
     ) -> dict[str, Any]:
         """
         Run data loading with cancellation support and real progress updates.
@@ -380,7 +373,6 @@ class DataService(BaseService):
                     repair=False,
                     cancellation_token=cancel_event,  # Pass cancellation event
                     progress_callback=progress_callback_fn,  # Real progress updates
-                    periodic_save_minutes=periodic_save_minutes,
                 )
 
                 # Convert result to API format

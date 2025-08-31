@@ -363,14 +363,12 @@ class KtrdrApiClient:
         include_extended: bool = False,
         async_mode: bool = False,
         timeout: Optional[float] = None,
-        periodic_save_minutes: float = 2.0,
     ) -> dict[str, Any]:
         """Load data via DataManager with IB integration."""
-        payload = {
+        payload: dict[str, Any] = {
             "symbol": symbol,
             "timeframe": timeframe,
             "mode": mode,
-            "periodic_save_minutes": periodic_save_minutes,
         }
 
         if start_date:

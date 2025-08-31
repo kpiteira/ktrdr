@@ -6,9 +6,8 @@ Focused on HTTP session persistence for 30%+ performance improvement.
 """
 
 import logging
-import time
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import aiohttp
 import pandas as pd
@@ -155,8 +154,6 @@ class DataFetcher:
         external_provider: ExternalDataProvider,
         progress_manager: Optional[ProgressManager] = None,
         cancellation_token: Optional[Any] = None,
-        periodic_save_callback: Optional[Callable[[list[pd.DataFrame]], int]] = None,
-        periodic_save_minutes: float = 0.5,
     ) -> list[pd.DataFrame]:
         """
         Fetch multiple segments sequentially using persistent HTTP session.
@@ -168,8 +165,6 @@ class DataFetcher:
             external_provider: External data provider
             progress_manager: Optional progress manager for segment-level progress
             cancellation_token: Optional cancellation token for direct cancellation checking
-            periodic_save_callback: Optional callback for periodic saves during fetching
-            periodic_save_minutes: Save progress every N minutes (default: 0.5)
 
         Returns:
             List of successfully fetched DataFrames
@@ -185,22 +180,12 @@ class DataFetcher:
 
         successful_results = []
 
-        # Periodic save tracking
-        last_save_time = time.time()
-        save_interval_seconds = periodic_save_minutes * 60
-        total_bars_saved = 0
-
-        if periodic_save_callback:
-            logger.info(
-                f"💾 Periodic saves enabled: every {periodic_save_minutes} minutes ({periodic_save_minutes * 60:.0f} seconds)"
-            )
-
         for i, segment in enumerate(segments):
             # Check for cancellation before processing each segment using extracted method
             self._check_cancellation(
                 cancellation_token, f"segment {i+1}/{len(segments)} processing"
             )
-            
+
             # Update progress within the current step (step 6: 10% to 96%)
             if progress_manager:
                 start_date, end_date = segment
@@ -220,35 +205,6 @@ class DataFetcher:
                     logger.info(
                         f"✅ Segment {i+1}/{len(segments)}: Successfully fetched {len(result)} bars"
                     )
-
-                # Periodic save: Check if it's time to save progress
-                if periodic_save_callback:
-                    current_time = time.time()
-                    time_since_last_save = current_time - last_save_time
-
-                    if (
-                        time_since_last_save >= save_interval_seconds
-                        or i == len(segments) - 1
-                    ):
-                        try:
-                            if successful_results:
-                                bars_to_save = periodic_save_callback(successful_results)
-                                total_bars_saved += bars_to_save
-                                last_save_time = current_time
-
-                                logger.info(
-                                    f"💾 Progress saved: {bars_to_save:,} new bars "
-                                    f"({total_bars_saved:,} total) after {time_since_last_save/60:.1f} minutes"
-                                )
-
-                                if progress_manager:
-                                    progress_manager.update_step_progress(
-                                        current=i + 1,
-                                        total=len(segments),
-                                        detail=f"💾 Saved {total_bars_saved:,} bars to CSV",
-                                    )
-                        except Exception as e:
-                            logger.warning(f"⚠️ Failed to save periodic progress: {e}")
 
         # Final progress update within step
         if progress_manager:
