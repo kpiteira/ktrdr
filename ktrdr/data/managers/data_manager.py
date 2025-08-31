@@ -25,24 +25,13 @@ from ktrdr.data.data_quality_validator import DataQualityValidator
 from ktrdr.data.gap_classifier import GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.local_data_loader import LocalDataLoader
+from ktrdr.data.managers.data_health_checker import DataHealthChecker
 from ktrdr.errors import DataCorruptionError, DataError, DataNotFoundError
 from ktrdr.logging import get_logger, log_entry_exit, log_performance
 from ktrdr.managers import ServiceOrchestrator
+from ktrdr.managers.base import ProgressCallback, CancellationToken
 
 logger = get_logger(__name__)
-
-
-class ProgressCallback(Protocol):
-    """Type protocol for progress callback functions."""
-
-    def __call__(self, progress: dict[str, Any]) -> None: ...
-
-
-class CancellationToken(Protocol):
-    """Type protocol for cancellation tokens."""
-
-    @property
-    def is_cancelled_requested(self) -> bool: ...
 
 
 class DataManager(ServiceOrchestrator):
@@ -118,6 +107,9 @@ class DataManager(ServiceOrchestrator):
             max_gap_percentage=max_gap_percentage,
         )
         self.gap_classifier = GapClassifier()
+        
+        # Initialize health checker after other components are ready
+        self.health_checker = None
 
         # Initialize via ServiceOrchestrator (this calls _initialize_adapter)
         if enable_ib:
@@ -126,6 +118,18 @@ class DataManager(ServiceOrchestrator):
             # Skip IB adapter initialization for testing
             self.adapter = None
             logger.info("DataManager initialized without IB integration (testing mode)")
+        
+        # Initialize health checker after all components are ready
+        self.health_checker = DataHealthChecker(
+            data_loader=self.data_loader,
+            data_validator=self.data_validator,
+            gap_classifier=self.gap_classifier,
+            ib_adapter=self.adapter,
+            enable_ib=self.enable_ib,
+            max_gap_percentage=self.max_gap_percentage,
+            default_repair_method=self.default_repair_method,
+            repair_methods=self.REPAIR_METHODS,
+        )
 
     def _validate_init_parameters(
         self, max_gap_percentage: float, default_repair_method: str
@@ -220,12 +224,13 @@ class DataManager(ServiceOrchestrator):
         cancellation_token: Optional[CancellationToken] = None,
         progress_callback: Optional[ProgressCallback] = None,
         periodic_save_minutes: float = 2.0,
+        timeout: Optional[float] = None,
     ) -> pd.DataFrame:
         """
         Load data asynchronously with optional validation and repair.
 
-        This method provides the same interface as the legacy DataManager.load_data
-        but with full async execution to eliminate sync/async bottlenecks.
+        Enhanced with ServiceOrchestrator capabilities for better error handling,
+        progress tracking, and cancellation support.
 
         Args:
             symbol: The trading symbol (e.g., 'EURUSD', 'AAPL')
@@ -241,6 +246,7 @@ class DataManager(ServiceOrchestrator):
             cancellation_token: Optional cancellation token to check for early termination
             progress_callback: Optional callback for progress updates during loading
             periodic_save_minutes: Save progress every N minutes during long downloads (default: 2.0)
+            timeout: Optional timeout in seconds for the entire operation
 
         Returns:
             DataFrame containing validated (and optionally repaired) OHLCV data
@@ -249,27 +255,80 @@ class DataManager(ServiceOrchestrator):
             DataNotFoundError: If the data file is not found
             DataCorruptionError: If data has integrity issues and strict=True
             DataError: For other data-related errors
+            asyncio.TimeoutError: If operation exceeds timeout
+            asyncio.CancelledError: If operation is cancelled
         """
-        logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
-
-        # Check for cancellation before starting
-        if cancellation_token and getattr(
-            cancellation_token, "is_cancelled_requested", False
+        # Use enhanced ServiceOrchestrator capabilities
+        operation_name = f"load_data_{symbol}_{timeframe}_{mode}"
+        
+        async def _load_operation():
+            return await self._load_data_implementation(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                mode=mode,
+                validate=validate,
+                repair=repair,
+                repair_outliers=repair_outliers,
+                strict=strict,
+                periodic_save_minutes=periodic_save_minutes,
+            )
+        
+        # Use enhanced ServiceOrchestrator patterns
+        if cancellation_token:
+            df = await self.execute_with_cancellation(
+                self.execute_with_progress(
+                    _load_operation(),
+                    progress_callback=progress_callback,
+                    timeout=timeout,
+                    operation_name=operation_name,
+                ),
+                cancellation_token=cancellation_token,
+                operation_name=operation_name,
+            )
+        else:
+            df = await self.execute_with_progress(
+                _load_operation(),
+                progress_callback=progress_callback,
+                timeout=timeout,
+                operation_name=operation_name,
+            )
+        
+        return df
+        
+    async def _load_data_implementation(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[Union[str, datetime]] = None,
+        end_date: Optional[Union[str, datetime]] = None,
+        mode: str = "local",
+        validate: bool = True,
+        repair: bool = False,
+        repair_outliers: bool = True,
+        strict: bool = False,
+        periodic_save_minutes: float = 2.0,
+    ) -> pd.DataFrame:
+        """
+        Core data loading implementation using enhanced error handling.
+        
+        This method contains the actual data loading logic, wrapped by
+        ServiceOrchestrator's enhanced capabilities.
+        """
+        async with self.error_context(
+            f"load_data_{mode}",
+            symbol=symbol,
+            timeframe=timeframe,
+            mode=mode
         ):
-            logger.info("Data loading cancelled before start")
-            raise asyncio.CancelledError("Data loading was cancelled")
+            logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
 
-        try:
             # Load data based on mode
             if mode == "local":
                 # Local-only mode: use basic loader without IB integration
                 df = await self._load_local_data_async(
-                    symbol,
-                    timeframe,
-                    start_date,
-                    end_date,
-                    cancellation_token,
-                    progress_callback,
+                    symbol, timeframe, start_date, end_date
                 )
             else:
                 # Enhanced modes: use IB integration for gaps/missing data
@@ -281,14 +340,7 @@ class DataManager(ServiceOrchestrator):
                     )
 
                 df = await self._load_with_ib_fallback_async(
-                    symbol,
-                    timeframe,
-                    start_date,
-                    end_date,
-                    mode,
-                    cancellation_token,
-                    progress_callback,
-                    periodic_save_minutes,
+                    symbol, timeframe, start_date, end_date, mode, periodic_save_minutes
                 )
 
             # Check if df is None (happens when fallback returns None)
@@ -302,13 +354,7 @@ class DataManager(ServiceOrchestrator):
             # Apply validation if requested
             if validate:
                 df = await self._validate_data_async(
-                    df,
-                    symbol,
-                    timeframe,
-                    repair,
-                    repair_outliers,
-                    strict,
-                    cancellation_token,
+                    df, symbol, timeframe, repair, repair_outliers, strict
                 )
 
             logger.debug(
@@ -316,21 +362,12 @@ class DataManager(ServiceOrchestrator):
             )
             return df
 
-        except asyncio.CancelledError:
-            logger.info(f"Data loading cancelled for {symbol} ({timeframe})")
-            raise
-        except Exception as e:
-            logger.error(f"Failed to load data for {symbol} ({timeframe}): {e}")
-            raise
-
     async def _load_local_data_async(
         self,
         symbol: str,
         timeframe: str,
         start_date: Optional[Union[str, datetime]],
         end_date: Optional[Union[str, datetime]],
-        cancellation_token: Optional[CancellationToken] = None,
-        progress_callback: Optional[ProgressCallback] = None,
     ) -> pd.DataFrame:
         """Load data from local files asynchronously."""
         # Run the sync data loader in thread pool to avoid blocking
@@ -340,17 +377,6 @@ class DataManager(ServiceOrchestrator):
             return self.data_loader.load(symbol, timeframe, start_date, end_date)
 
         df = await loop.run_in_executor(None, _sync_load)
-
-        # Call progress callback if provided
-        if progress_callback:
-            progress_callback(
-                {
-                    "percentage": 100.0,
-                    "current_step": "Local data loading completed",
-                    "items_processed": len(df) if df is not None else 0,
-                }
-            )
-
         return df
 
     async def _load_with_ib_fallback_async(
@@ -360,8 +386,6 @@ class DataManager(ServiceOrchestrator):
         start_date: Optional[Union[str, datetime]],
         end_date: Optional[Union[str, datetime]],
         mode: str,
-        cancellation_token: Optional[CancellationToken] = None,
-        progress_callback: Optional[ProgressCallback] = None,
         periodic_save_minutes: float = 2.0,
     ) -> pd.DataFrame:
         """
@@ -372,16 +396,8 @@ class DataManager(ServiceOrchestrator):
         """
         # Try local data first
         df_local = await self._load_local_data_async(
-            symbol, timeframe, start_date, end_date, cancellation_token
+            symbol, timeframe, start_date, end_date
         )
-
-        if progress_callback:
-            progress_callback(
-                {
-                    "percentage": 50.0,
-                    "current_step": "Checking for gaps and missing data",
-                }
-            )
 
         # If we have local data and mode doesn't require IB enhancement, return it
         if df_local is not None and not df_local.empty and mode == "local":
@@ -395,14 +411,6 @@ class DataManager(ServiceOrchestrator):
                 start_date=start_date,
                 end_date=end_date,
             )
-
-            if progress_callback:
-                progress_callback(
-                    {
-                        "percentage": 90.0,
-                        "current_step": "Merging local and IB data",
-                    }
-                )
 
             # Merge local and IB data if both exist
             if (
@@ -436,14 +444,8 @@ class DataManager(ServiceOrchestrator):
         repair: bool,
         repair_outliers: bool,
         strict: bool,
-        cancellation_token: Optional[CancellationToken] = None,
     ) -> pd.DataFrame:
         """Validate data asynchronously."""
-        if cancellation_token and getattr(
-            cancellation_token, "is_cancelled_requested", False
-        ):
-            raise asyncio.CancelledError("Data validation was cancelled")
-
         # Run validation in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
 
@@ -592,36 +594,24 @@ class DataManager(ServiceOrchestrator):
         """
         Perform comprehensive health check on data manager and components.
 
+        Enhanced to use ServiceOrchestrator's health check capabilities and
+        delegated health check functionality to DataHealthChecker component.
+
         Returns:
             Dictionary with health status of all components
         """
-        # Get base orchestrator health check
+        # Get base health check from ServiceOrchestrator
         health_info = await super().health_check()
-
-        # Add data manager specific health information
-        health_info.update(
-            {
-                "data_loader": {
-                    "status": "healthy",
-                    "type": type(self.data_loader).__name__,
-                },
-                "data_validator": {
-                    "status": "healthy",
-                    "type": type(self.data_validator).__name__,
-                },
-                "gap_classifier": {
-                    "status": "healthy",
-                    "type": type(self.gap_classifier).__name__,
-                },
-                "configuration": {
-                    "max_gap_percentage": self.max_gap_percentage,
-                    "default_repair_method": self.default_repair_method,
-                    "enable_ib": self.enable_ib,
-                },
-            }
-        )
-
+        
+        # Use DataHealthChecker for comprehensive component health checking
+        if self.health_checker:
+            component_health = await self.health_checker.perform_comprehensive_health_check()
+            health_info.update(component_health)
+        else:
+            logger.warning("Health checker not initialized, skipping component health checks")
+            
         return health_info
+
 
     def get_data_summary(self, symbol: str, timeframe: str) -> dict[str, Any]:
         """

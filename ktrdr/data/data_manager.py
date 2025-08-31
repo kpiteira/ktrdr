@@ -22,6 +22,7 @@ from ktrdr import (
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.data_quality_validator import DataQualityValidator
+from ktrdr.data.managers.data_health_checker import DataHealthChecker
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.gap_classifier import GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
@@ -219,6 +220,18 @@ class DataManager(ServiceOrchestrator):
         else:
             # Set adapter to None when IB is disabled for ServiceOrchestrator compatibility
             self.adapter = None
+        
+        # Initialize health checker after all components are ready
+        self.health_checker = DataHealthChecker(
+            data_loader=self.data_loader,
+            data_validator=self.data_validator,
+            gap_classifier=self.gap_classifier,
+            ib_adapter=self.adapter,
+            enable_ib=self.enable_ib,
+            max_gap_percentage=self.max_gap_percentage,
+            default_repair_method=self.default_repair_method,
+            repair_methods=self.REPAIR_METHODS,
+        )
 
     # ServiceOrchestrator abstract method implementations
     def _initialize_adapter(self) -> IbDataAdapter:
@@ -2370,6 +2383,28 @@ class DataManager(ServiceOrchestrator):
 
         logger.info(f"Generated data summary for {symbol} ({timeframe})")
         return summary
+
+    async def health_check(self) -> dict[str, Any]:
+        """
+        Perform comprehensive health check on data manager and components.
+        
+        Uses the DataHealthChecker component to provide detailed health information
+        about all data-related components and their status.
+        
+        Returns:
+            Dictionary with health status of all components
+        """
+        # Get base health check from ServiceOrchestrator
+        health_info = await super().health_check()
+        
+        # Use DataHealthChecker for comprehensive component health checking
+        if self.health_checker:
+            component_health = await self.health_checker.perform_comprehensive_health_check()
+            health_info.update(component_health)
+        else:
+            logger.warning("Health checker not initialized, skipping component health checks")
+            
+        return health_info
 
     @log_entry_exit(logger=logger)
     def merge_data(
