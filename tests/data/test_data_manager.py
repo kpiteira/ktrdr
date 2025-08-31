@@ -205,7 +205,7 @@ class TestDataManager:
 
     def test_detect_gaps(self, data_manager, corrupt_data):
         """Test gap detection in time series data."""
-        gaps = data_manager.detect_gaps(corrupt_data, "1d")
+        gaps = data_manager.gap_analyzer.detect_gaps(corrupt_data, "1d")
 
         # Note: Gap detection might be affected by validation errors
         # We expect 1 gap (5 days removed from indices 50-54), but validation issues
@@ -247,8 +247,9 @@ class TestDataManager:
     def test_resample_data(self, data_manager, sample_data):
         """Test resampling data to different timeframes."""
         # Original data is daily, resample to weekly
-        resampled = data_manager.resample_data(
-            sample_data, target_timeframe="1w", source_timeframe="1d"
+        resampled = data_manager.data_processor.resample_data(
+            sample_data, target_timeframe="1w", source_timeframe="1d",
+            fill_gaps=True, agg_functions=None, repair_method=data_manager.default_repair_method
         )
 
         # Should have fewer rows after resampling to a larger timeframe
@@ -287,14 +288,14 @@ class TestDataManager:
             return df["close"] > df["open"]
 
         # Filter for bullish candles
-        bullish_df = data_manager.filter_data_by_condition(
+        bullish_df = data_manager.data_processor.filter_data_by_condition(
             sample_data, bullish_condition
         )
         assert len(bullish_df) <= len(sample_data)
         assert (bullish_df["close"] > bullish_df["open"]).all()
 
         # Filter for bearish candles (inverse)
-        bearish_df = data_manager.filter_data_by_condition(
+        bearish_df = data_manager.data_processor.filter_data_by_condition(
             sample_data, bullish_condition, inverse=True
         )
         assert len(bearish_df) <= len(sample_data)

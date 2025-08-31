@@ -459,36 +459,6 @@ class DataManager(ServiceOrchestrator):
             repair=repair,
         )
 
-    def _normalize_timezone(
-        self, dt: Union[str, datetime, pd.Timestamp, None], default_tz: str = "UTC"
-    ) -> Optional[pd.Timestamp]:
-        """
-        Normalize datetime to UTC timezone-aware timestamp.
-
-        Note: Using TimestampManager for consistent timezone handling.
-
-        Args:
-            dt: Input datetime (string, datetime, or Timestamp)
-            default_tz: Default timezone to assume for naive datetimes (deprecated, always UTC)
-
-        Returns:
-            UTC timezone-aware Timestamp or None
-        """
-        return TimestampManager.to_utc(dt)
-
-    def _normalize_dataframe_timezone(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Normalize DataFrame index to UTC timezone-aware.
-
-        Note: Using TimestampManager for consistent timezone handling.
-
-        Args:
-            df: DataFrame with datetime index
-
-        Returns:
-            DataFrame with UTC timezone-aware index
-        """
-        return TimestampManager.convert_dataframe_index(df)
 
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
@@ -776,26 +746,6 @@ class DataManager(ServiceOrchestrator):
             logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
             return False
 
-    @log_entry_exit(logger=logger)
-    def detect_gaps(
-        self, df: pd.DataFrame, timeframe: str, gap_threshold: int = 1
-    ) -> list[tuple[datetime, datetime]]:
-        """
-        Detect significant gaps in time series data using intelligent gap classification.
-
-        This method finds gaps that would be considered data quality issues
-        (excludes weekends, holidays, and non-trading hours) using the GapAnalyzer component.
-
-        Args:
-            df: DataFrame containing OHLCV data
-            timeframe: The timeframe of the data (e.g., '1h', '1d')
-            gap_threshold: Number of consecutive missing periods to consider as a gap (legacy parameter, maintained for compatibility)
-
-        Returns:
-            List of (start_time, end_time) tuples representing significant gaps only
-        """
-        return self.gap_analyzer.detect_gaps(df, timeframe, gap_threshold)
-
     @log_entry_exit(logger=logger, log_args=True)
     def repair_data(
         self,
@@ -925,7 +875,7 @@ class DataManager(ServiceOrchestrator):
             "rows": len(df),
             "columns": list(df.columns),
             "missing_values": df.isnull().sum().to_dict(),
-            "has_gaps": len(self.detect_gaps(df, timeframe)) > 0,
+            "has_gaps": len(self.gap_analyzer.detect_gaps(df, timeframe)) > 0,
             "min_price": df["low"].min(),
             "max_price": df["high"].max(),
             "avg_price": df["close"].mean(),
@@ -1004,58 +954,4 @@ class DataManager(ServiceOrchestrator):
 
         return merged_data
 
-    @log_entry_exit(logger=logger, log_args=True)
-    def resample_data(
-        self,
-        df: pd.DataFrame,
-        target_timeframe: str,
-        source_timeframe: Optional[str] = None,
-        fill_gaps: bool = True,
-        agg_functions: Optional[dict[str, str]] = None,
-    ) -> pd.DataFrame:
-        """
-        Resample data to a different timeframe.
 
-        Args:
-            df: DataFrame to resample
-            target_timeframe: Target timeframe (e.g., '1h', '1d')
-            source_timeframe: Source timeframe (optional, used for validation)
-            fill_gaps: Whether to fill gaps in the resampled data
-            agg_functions: Dictionary of aggregation functions by column
-                         (default uses standard OHLCV aggregation)
-
-        Returns:
-            Resampled DataFrame
-
-        Raises:
-            DataError: For resampling-related errors
-        """
-        # Delegate to DataProcessor component with default repair method
-        return self.data_processor.resample_data(
-            df,
-            target_timeframe,
-            source_timeframe,
-            fill_gaps,
-            agg_functions,
-            repair_method=self.default_repair_method,
-        )
-
-    @log_entry_exit(logger=logger)
-    def filter_data_by_condition(
-        self,
-        df: pd.DataFrame,
-        condition: Callable[[pd.DataFrame], pd.Series],
-        inverse: bool = False,
-    ) -> pd.DataFrame:
-        """
-        Filter data based on a custom condition function.
-
-        Args:
-            df: DataFrame to filter
-            condition: Function that takes a DataFrame and returns a boolean Series
-            inverse: If True, returns rows that don't match the condition
-
-        Returns:
-            Filtered DataFrame
-        """
-        return self.data_processor.filter_data_by_condition(df, condition, inverse)

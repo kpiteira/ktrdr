@@ -12,6 +12,7 @@ from typing import Any, Optional, Union
 import pandas as pd
 
 from ktrdr.data.loading_modes import DataLoadingMode
+from ktrdr.utils.timezone_utils import TimestampManager
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -123,9 +124,7 @@ class DataLoadingOrchestrator:
             elif mode == "backfill" or mode == "full":
                 # Use head timestamp if available, otherwise fall back to IB limits
                 if cached_head_timestamp:
-                    normalized_ts = self.data_manager._normalize_timezone(
-                        cached_head_timestamp
-                    )
+                    normalized_ts = TimestampManager.to_utc(cached_head_timestamp)
                     if normalized_ts is not None:
                         requested_start = normalized_ts
                     logger.info(
@@ -148,7 +147,7 @@ class DataLoadingOrchestrator:
                 requested_start = pd.Timestamp.now(tz="UTC") - max_duration
         else:
             # ALWAYS respect user-provided start_date regardless of mode
-            normalized_start = self.data_manager._normalize_timezone(start_date)
+            normalized_start = TimestampManager.to_utc(start_date)
             if normalized_start is not None:
                 requested_start = normalized_start
 
@@ -156,7 +155,7 @@ class DataLoadingOrchestrator:
             requested_end = pd.Timestamp.now(tz="UTC")
         else:
             # ALWAYS respect user-provided end_date regardless of mode
-            normalized_end = self.data_manager._normalize_timezone(end_date)
+            normalized_end = TimestampManager.to_utc(end_date)
             if normalized_end is not None:
                 requested_end = normalized_end
 
@@ -266,9 +265,7 @@ class DataLoadingOrchestrator:
             )
             existing_data = self.data_manager.data_loader.load(symbol, timeframe)
             if existing_data is not None and not existing_data.empty:
-                existing_data = self.data_manager._normalize_dataframe_timezone(
-                    existing_data
-                )
+                existing_data = TimestampManager.convert_dataframe_index(existing_data)
                 logger.info(
                     f"✅ Found existing data: {len(existing_data)} bars ({existing_data.index.min()} to {existing_data.index.max()})"
                 )
