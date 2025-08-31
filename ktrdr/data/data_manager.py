@@ -8,7 +8,7 @@ and handling gaps or missing values in time series data.
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Callable, Optional, Union
 
 import pandas as pd
@@ -20,25 +20,17 @@ from ktrdr import (
     log_performance,
 )
 from ktrdr.data.components.data_fetcher import DataFetcher
-from ktrdr.data.components.data_health_checker import DataHealthChecker
-from ktrdr.data.components.data_processor import DataProcessor
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
-from ktrdr.data.components.gap_analyzer import GapAnalyzer
-from ktrdr.data.components.gap_classifier import GapClassifier
 from ktrdr.data.components.progress_manager import ProgressManager
-from ktrdr.data.components.segment_manager import SegmentManager
-from ktrdr.data.components.timeframe_synchronizer import TimeframeSynchronizer
-from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
-from ktrdr.data.data_manager_builder import DataManagerBuilder, create_default_datamanager_builder
-from ktrdr.data.external_data_interface import ExternalDataProvider
+from ktrdr.data.data_manager_builder import (
+    DataManagerBuilder,
+    create_default_datamanager_builder,
+)
 from ktrdr.data.ib_data_adapter import IbDataAdapter
-from ktrdr.data.loading_modes import DataLoadingMode
-from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.errors import (
     DataCorruptionError,
     DataError,
     DataNotFoundError,
-    DataValidationError,
 )
 from ktrdr.managers import ServiceOrchestrator
 from ktrdr.utils.timezone_utils import TimestampManager
@@ -98,15 +90,28 @@ class DataManager(ServiceOrchestrator):
         """
         # Use provided builder or create default one
         if builder is None:
-            builder = (create_default_datamanager_builder()
-                      .with_data_directory(data_dir)
-                      .with_gap_settings(max_gap_percentage)
-                      .with_repair_method(default_repair_method))
-        
+            builder = (
+                create_default_datamanager_builder()
+                .with_data_directory(data_dir)
+                .with_gap_settings(max_gap_percentage)
+                .with_repair_method(default_repair_method)
+            )
+
         # Build the configuration
         config = builder.build_configuration()
-        
+
         # Initialize all components from the built configuration
+        # Assert components are non-None after builder.build_configuration()
+        assert config.data_loader is not None, "Builder must create data_loader"
+        assert (
+            config.external_provider is not None
+        ), "Builder must create external_provider"
+        assert config.data_validator is not None, "Builder must create data_validator"
+        assert config.gap_classifier is not None, "Builder must create gap_classifier"
+        assert config.gap_analyzer is not None, "Builder must create gap_analyzer"
+        assert config.segment_manager is not None, "Builder must create segment_manager"
+        assert config.data_processor is not None, "Builder must create data_processor"
+
         self.data_loader = config.data_loader
         self.external_provider = config.external_provider
         self.max_gap_percentage = config.max_gap_percentage
@@ -116,16 +121,21 @@ class DataManager(ServiceOrchestrator):
         self.gap_analyzer = config.gap_analyzer
         self.segment_manager = config.segment_manager
         self.data_processor = config.data_processor
-        
+
         # Initialize operational components (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
         self._data_fetcher: Optional[DataFetcher] = None
-        
+
         # Initialize ServiceOrchestrator (always enabled - container mode removed)
         super().__init__()
-        
+
         # Finalize configuration with components that need DataManager reference
         config = builder.finalize_configuration(self)
+        assert (
+            config.data_loading_orchestrator is not None
+        ), "Builder must create data_loading_orchestrator"
+        assert config.health_checker is not None, "Builder must create health_checker"
+
         self.data_loading_orchestrator = config.data_loading_orchestrator
         self.health_checker = config.health_checker
 
@@ -398,8 +408,6 @@ class DataManager(ServiceOrchestrator):
             f"Successfully loaded and processed {len(df)} rows of data for {symbol} ({timeframe})"
         )
         return df
-
-
 
     @log_entry_exit(logger=logger, log_args=True)
     def load(
@@ -767,7 +775,6 @@ class DataManager(ServiceOrchestrator):
         except Exception as e:
             logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
             return False
-
 
     @log_entry_exit(logger=logger)
     def detect_gaps(
