@@ -29,6 +29,7 @@ from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.components.segment_manager import SegmentManager
 from ktrdr.data.components.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
+from ktrdr.data.data_manager_builder import DataManagerBuilder, create_default_datamanager_builder
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.loading_modes import DataLoadingMode
@@ -80,164 +81,53 @@ class DataManager(ServiceOrchestrator):
         data_dir: Optional[str] = None,
         max_gap_percentage: float = 5.0,
         default_repair_method: str = "ffill",
+        builder: Optional[DataManagerBuilder] = None,
     ):
         """
-        Initialize the DataManager.
+        Initialize the DataManager using builder pattern.
 
         Args:
             data_dir: Path to the directory containing data files.
-                     If None, will use the path from configuration.
             max_gap_percentage: Maximum allowed percentage of gaps in data (default: 5.0)
             default_repair_method: Default method for repairing missing values
-                                  (default: 'ffill', options: 'ffill', 'bfill',
-                                  'interpolate', 'zero', 'mean', 'median', 'drop')
-            IB integration is always enabled (container mode removed)
-                      Use configuration files to disable host service if needed
+            builder: Optional custom builder. If None, creates default builder.
+                    IB integration is always enabled (container mode removed)
 
         Raises:
             DataError: If initialization parameters are invalid
         """
-        # Validate parameters
-        if max_gap_percentage < 0 or max_gap_percentage > 100:
-            raise DataError(
-                message=f"Invalid max_gap_percentage: {max_gap_percentage}. Must be between 0 and 100.",
-                error_code="DATA-InvalidParameter",
-                details={
-                    "parameter": "max_gap_percentage",
-                    "value": max_gap_percentage,
-                    "valid_range": "0-100",
-                },
-            )
-
-        if default_repair_method not in self.REPAIR_METHODS:
-            raise DataError(
-                message=f"Invalid repair method: {default_repair_method}",
-                error_code="DATA-InvalidParameter",
-                details={
-                    "parameter": "default_repair_method",
-                    "value": default_repair_method,
-                    "valid_options": list(self.REPAIR_METHODS.keys()),
-                },
-            )
-
-        # Initialize the LocalDataLoader
-        self.data_loader = LocalDataLoader(data_dir=data_dir)
-
-        # Initialize external data provider (using adapter pattern)
-        # Always use IB host service - container mode removed
-        try:
-            import os
-            from pathlib import Path
-
-            from ktrdr.config.loader import ConfigLoader
-            from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
-
-            config_loader = ConfigLoader()
-            config_path = Path("config/settings.yaml")
-            if config_path.exists():
-                config = config_loader.load(config_path, KtrdrConfig)
-                host_service_config = config.ib_host_service
-            else:
-                # Use defaults if no config file
-                host_service_config = IbHostServiceConfig(
-                    enabled=False, url="http://localhost:5001"
-                )
-
-            # Check for environment override (for easy Docker toggle)
-            override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
-            if override_file:
-                override_path = Path(f"config/environment/{override_file}.yaml")
-                if override_path.exists():
-                    # Load override config and merge
-                    override_config = config_loader.load(override_path, KtrdrConfig)
-                    if override_config.ib_host_service:
-                        host_service_config = override_config.ib_host_service
-                        logger.info(
-                            f"Loaded IB host service override from {override_path}"
-                        )
-
-            # Environment variable override for enabled flag (quick toggle)
-            env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
-            if env_enabled in ("true", "1", "yes"):
-                host_service_config.enabled = True
-                # Use environment URL if provided
-                env_url = os.getenv("IB_HOST_SERVICE_URL")
-                if env_url:
-                    host_service_config.url = env_url
-            elif env_enabled in ("false", "0", "no"):
-                host_service_config.enabled = False
-
-            # Initialize IbDataAdapter with host service configuration
-            self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter(
-                use_host_service=host_service_config.enabled,
-                host_service_url=host_service_config.url,
-            )
-
-            if host_service_config.enabled:
-                logger.info(
-                    f"IB integration enabled using host service at {host_service_config.url}"
-                )
-            else:
-                logger.info("IB integration enabled (direct connection)")
-
-        except Exception as e:
-            logger.warning(
-                f"Failed to load host service config, using direct connection: {e}"
-            )
-            # Fallback to direct connection
-            self.external_provider = IbDataAdapter()
-            logger.info("IB integration enabled (direct connection - fallback)")
-
-        # Store parameters
-        self.max_gap_percentage = max_gap_percentage
-        self.default_repair_method = default_repair_method
-
-        # Initialize the unified data quality validator
-        self.data_validator = DataQualityValidator(
-            auto_correct=True,  # Enable auto-correction by default
-            max_gap_percentage=max_gap_percentage,
-        )
-
-        # Initialize the intelligent gap classifier
-        self.gap_classifier = GapClassifier()
-
-        # Initialize the GapAnalyzer component
-        self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)
-
-        # Initialize the SegmentManager component
-        self.segment_manager = SegmentManager()
-
-        # Initialize the DataProcessor component
-        self.data_processor = DataProcessor()
-
-        # Initialize the DataLoadingOrchestrator component
-        self.data_loading_orchestrator = DataLoadingOrchestrator(self)
-
-        # Initialize the progress manager (will be configured per operation)
+        # Use provided builder or create default one
+        if builder is None:
+            builder = (create_default_datamanager_builder()
+                      .with_data_directory(data_dir)
+                      .with_gap_settings(max_gap_percentage)
+                      .with_repair_method(default_repair_method))
+        
+        # Build the configuration
+        config = builder.build_configuration()
+        
+        # Initialize all components from the built configuration
+        self.data_loader = config.data_loader
+        self.external_provider = config.external_provider
+        self.max_gap_percentage = config.max_gap_percentage
+        self.default_repair_method = config.default_repair_method
+        self.data_validator = config.data_validator
+        self.gap_classifier = config.gap_classifier
+        self.gap_analyzer = config.gap_analyzer
+        self.segment_manager = config.segment_manager
+        self.data_processor = config.data_processor
+        
+        # Initialize operational components (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
-
-        # Initialize the DataFetcher component (will be configured per operation)
         self._data_fetcher: Optional[DataFetcher] = None
-
-        logger.info(
-            f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
-            f"default_repair_method='{default_repair_method}'"
-        )
-
+        
         # Initialize ServiceOrchestrator (always enabled - container mode removed)
         super().__init__()
-
-        # Initialize health checker after all components are ready
-        self.health_checker = DataHealthChecker(
-            data_loader=self.data_loader,
-            data_validator=self.data_validator,
-            gap_classifier=self.gap_classifier,
-            ib_adapter=self.adapter,
-            enable_ib=True,  # Always enabled - container mode removed
-            max_gap_percentage=self.max_gap_percentage,
-            default_repair_method=self.default_repair_method,
-            repair_methods=self.REPAIR_METHODS,
-        )
+        
+        # Finalize configuration with components that need DataManager reference
+        config = builder.finalize_configuration(self)
+        self.data_loading_orchestrator = config.data_loading_orchestrator
+        self.health_checker = config.health_checker
 
     # ServiceOrchestrator abstract method implementations
     def _initialize_adapter(self) -> IbDataAdapter:
