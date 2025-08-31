@@ -365,7 +365,7 @@ class TestGapAnalyzerIntegration:
 
         from ktrdr.data.data_manager import DataManager
 
-        dm = DataManager(enable_ib=False)
+        dm = DataManager()
 
         # DataManager should now have a gap_analyzer component
         assert hasattr(dm, "gap_analyzer")

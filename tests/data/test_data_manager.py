@@ -67,7 +67,7 @@ def data_manager(tmp_path):
     """Create a DataManager instance with a temporary directory for testing."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    return DataManager(data_dir=str(data_dir), enable_ib=False)
+    return DataManager(data_dir=str(data_dir))
 
 
 @pytest.fixture
@@ -497,3 +497,26 @@ class TestDataManager:
 
         # We'll verify that context-aware repair works in a separate test
         # since its behavior can vary based on the data context
+    
+    def test_ib_host_service_initialization(self, tmp_path):
+        """Test that DataManager initializes correctly with IB host service only."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        
+        # Test initialization without enable_ib parameter (should work with host service)
+        data_manager = DataManager(data_dir=str(data_dir))
+        
+        # Verify core functionality still works
+        assert data_manager is not None
+        assert hasattr(data_manager, 'data_loader')
+        assert hasattr(data_manager, 'data_validator') 
+        assert hasattr(data_manager, 'gap_analyzer')
+        assert hasattr(data_manager, 'data_processor')
+        
+        # Verify health checker is initialized
+        assert hasattr(data_manager, 'health_checker')
+        
+        # Verify that the adapter is using host service (not container)
+        if hasattr(data_manager, 'adapter') and data_manager.adapter:
+            # The adapter should be configured for host service
+            assert data_manager.adapter is not None

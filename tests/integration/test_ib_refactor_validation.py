@@ -181,14 +181,14 @@ class TestIbRefactorValidation:
         assert hasattr(adapter, "data_fetcher")
 
     def test_error_handling_graceful_degradation(self):
-        """Test that the system degrades gracefully when IB is unavailable."""
-        # Test with IB disabled - this is lightweight and doesn't need IB setup
-        dm_no_ib = DataManager(enable_ib=False)
-        assert dm_no_ib.external_provider is None
+        """Test that the system works with IB host service configuration."""
+        # Test with default configuration - this is lightweight and doesn't need IB setup
+        dm = DataManager()
+        assert dm.external_provider is not None
 
         # Should still work for local operations
         try:
-            df = dm_no_ib.load_data("TEST", "1h", mode="local")
+            df = dm.load_data("TEST", "1h", mode="local")
             # Either gets data or fails gracefully
             assert df is None or isinstance(df, pd.DataFrame)
         except Exception as e:

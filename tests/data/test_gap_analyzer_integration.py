@@ -24,7 +24,7 @@ class TestGapAnalyzerIntegration:
         to ensure backward compatibility is maintained.
         """
         # Arrange
-        data_manager = DataManager(enable_ib=False)
+        data_manager = DataManager()
 
         # Create sample data with intentional gaps
         timestamps = pd.date_range(
@@ -81,7 +81,7 @@ class TestGapAnalyzerIntegration:
         and PASS after we update the method to use GapAnalyzer.
         """
         # Arrange
-        data_manager = DataManager(enable_ib=False)
+        data_manager = DataManager()
 
         # Create sample data with proper length matching
         timestamps = pd.date_range(
@@ -134,7 +134,7 @@ class TestGapAnalyzerIntegration:
     def test_detect_gaps_empty_data_handling(self):
         """Test detect_gaps handles empty data correctly."""
         # Arrange
-        data_manager = DataManager(enable_ib=False)
+        data_manager = DataManager()
         empty_df = pd.DataFrame()
 
         # Act
@@ -146,7 +146,7 @@ class TestGapAnalyzerIntegration:
     def test_detect_gaps_single_row_handling(self, sample_ohlcv_data):
         """Test detect_gaps handles single-row data correctly."""
         # Arrange
-        data_manager = DataManager(enable_ib=False)
+        data_manager = DataManager()
         single_row = sample_ohlcv_data.iloc[:1].copy()
         single_row.index = pd.DatetimeIndex(["2024-01-01 09:30:00+00:00"])
 

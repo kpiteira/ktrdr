@@ -79,7 +79,6 @@ class DataManager(ServiceOrchestrator):
         data_dir: Optional[str] = None,
         max_gap_percentage: float = 5.0,
         default_repair_method: str = "ffill",
-        enable_ib: bool = True,
     ):
         """
         Initialize the DataManager.
@@ -91,8 +90,8 @@ class DataManager(ServiceOrchestrator):
             default_repair_method: Default method for repairing missing values
                                   (default: 'ffill', options: 'ffill', 'bfill',
                                   'interpolate', 'zero', 'mean', 'median', 'drop')
-            enable_ib: Whether to enable IB integration (default: True)
-                      Set to False for unit tests to avoid network connections
+            IB integration is always enabled (container mode removed)
+                      Use configuration files to disable host service if needed
 
         Raises:
             DataError: If initialization parameters are invalid
@@ -124,74 +123,69 @@ class DataManager(ServiceOrchestrator):
         self.data_loader = LocalDataLoader(data_dir=data_dir)
 
         # Initialize external data provider (using adapter pattern)
-        self.enable_ib = enable_ib
-        if enable_ib:
-            # Load configuration to determine if host service should be used
-            try:
-                import os
-                from pathlib import Path
+        # Always use IB host service - container mode removed
+        try:
+            import os
+            from pathlib import Path
 
-                from ktrdr.config.loader import ConfigLoader
-                from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
+            from ktrdr.config.loader import ConfigLoader
+            from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
 
-                config_loader = ConfigLoader()
-                config_path = Path("config/settings.yaml")
-                if config_path.exists():
-                    config = config_loader.load(config_path, KtrdrConfig)
-                    host_service_config = config.ib_host_service
-                else:
-                    # Use defaults if no config file
-                    host_service_config = IbHostServiceConfig(
-                        enabled=False, url="http://localhost:5001"
-                    )
-
-                # Check for environment override (for easy Docker toggle)
-                override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
-                if override_file:
-                    override_path = Path(f"config/environment/{override_file}.yaml")
-                    if override_path.exists():
-                        # Load override config and merge
-                        override_config = config_loader.load(override_path, KtrdrConfig)
-                        if override_config.ib_host_service:
-                            host_service_config = override_config.ib_host_service
-                            logger.info(
-                                f"Loaded IB host service override from {override_path}"
-                            )
-
-                # Environment variable override for enabled flag (quick toggle)
-                env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
-                if env_enabled in ("true", "1", "yes"):
-                    host_service_config.enabled = True
-                    # Use environment URL if provided
-                    env_url = os.getenv("IB_HOST_SERVICE_URL")
-                    if env_url:
-                        host_service_config.url = env_url
-                elif env_enabled in ("false", "0", "no"):
-                    host_service_config.enabled = False
-
-                # Initialize IbDataAdapter with host service configuration
-                self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter(
-                    use_host_service=host_service_config.enabled,
-                    host_service_url=host_service_config.url,
+            config_loader = ConfigLoader()
+            config_path = Path("config/settings.yaml")
+            if config_path.exists():
+                config = config_loader.load(config_path, KtrdrConfig)
+                host_service_config = config.ib_host_service
+            else:
+                # Use defaults if no config file
+                host_service_config = IbHostServiceConfig(
+                    enabled=False, url="http://localhost:5001"
                 )
 
-                if host_service_config.enabled:
-                    logger.info(
-                        f"IB integration enabled using host service at {host_service_config.url}"
-                    )
-                else:
-                    logger.info("IB integration enabled (direct connection)")
+            # Check for environment override (for easy Docker toggle)
+            override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
+            if override_file:
+                override_path = Path(f"config/environment/{override_file}.yaml")
+                if override_path.exists():
+                    # Load override config and merge
+                    override_config = config_loader.load(override_path, KtrdrConfig)
+                    if override_config.ib_host_service:
+                        host_service_config = override_config.ib_host_service
+                        logger.info(
+                            f"Loaded IB host service override from {override_path}"
+                        )
 
-            except Exception as e:
-                logger.warning(
-                    f"Failed to load host service config, using direct connection: {e}"
+            # Environment variable override for enabled flag (quick toggle)
+            env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
+            if env_enabled in ("true", "1", "yes"):
+                host_service_config.enabled = True
+                # Use environment URL if provided
+                env_url = os.getenv("IB_HOST_SERVICE_URL")
+                if env_url:
+                    host_service_config.url = env_url
+            elif env_enabled in ("false", "0", "no"):
+                host_service_config.enabled = False
+
+            # Initialize IbDataAdapter with host service configuration
+            self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter(
+                use_host_service=host_service_config.enabled,
+                host_service_url=host_service_config.url,
+            )
+
+            if host_service_config.enabled:
+                logger.info(
+                    f"IB integration enabled using host service at {host_service_config.url}"
                 )
-                # Fallback to direct connection
-                self.external_provider = IbDataAdapter()
-                logger.info("IB integration enabled (direct connection - fallback)")
-        else:
-            self.external_provider = None
-            logger.info("IB integration disabled")
+            else:
+                logger.info("IB integration enabled (direct connection)")
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to load host service config, using direct connection: {e}"
+            )
+            # Fallback to direct connection
+            self.external_provider = IbDataAdapter()
+            logger.info("IB integration enabled (direct connection - fallback)")
 
         # Store parameters
         self.max_gap_percentage = max_gap_percentage
@@ -226,12 +220,8 @@ class DataManager(ServiceOrchestrator):
             f"default_repair_method='{default_repair_method}'"
         )
 
-        # Initialize ServiceOrchestrator if IB is enabled
-        if enable_ib:
-            super().__init__()
-        else:
-            # Set adapter to None when IB is disabled for ServiceOrchestrator compatibility
-            self.adapter = None
+        # Initialize ServiceOrchestrator (always enabled - container mode removed)
+        super().__init__()
 
         # Initialize health checker after all components are ready
         self.health_checker = DataHealthChecker(
@@ -239,7 +229,7 @@ class DataManager(ServiceOrchestrator):
             data_validator=self.data_validator,
             gap_classifier=self.gap_classifier,
             ib_adapter=self.adapter,
-            enable_ib=self.enable_ib,
+            enable_ib=True,  # Always enabled - container mode removed
             max_gap_percentage=self.max_gap_percentage,
             default_repair_method=self.default_repair_method,
             repair_methods=self.REPAIR_METHODS,
@@ -1192,7 +1182,7 @@ class DataManager(ServiceOrchestrator):
         Returns:
             Tuple of (is_valid, error_message, adjusted_start_date)
         """
-        if not self.enable_ib or not self.external_provider:
+        if not self.external_provider:
             return True, None, None
 
         try:
@@ -1235,7 +1225,7 @@ class DataManager(ServiceOrchestrator):
         Returns:
             True if head timestamp is available, False otherwise
         """
-        if not self.enable_ib or not self.external_provider:
+        if not self.external_provider:
             return False
 
         try:
@@ -1305,7 +1295,7 @@ class DataManager(ServiceOrchestrator):
         validation_result = None
         cached_head_timestamp = None
 
-        if self.enable_ib and self.external_provider:
+        if self.external_provider:
             try:
                 # Simplified async validation call
                 async def validate_async():
@@ -1560,7 +1550,7 @@ class DataManager(ServiceOrchestrator):
         # Step 4: Fetch segments via IB fetcher (handles connection issues internally)
         fetched_data_frames = []
 
-        if self.enable_ib and self.external_provider:
+        if self.external_provider:
             # Step 6: Start segment fetching with expected bars if we can estimate (10% → 96%)
             if progress_manager:
                 progress_manager.start_step(
