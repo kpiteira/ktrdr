@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ktrdr.data.timeframe_synchronizer import (
+from ktrdr.data.components.timeframe_synchronizer import (
     AlignmentResult,
     SynchronizationStats,
     TimeframeRelation,

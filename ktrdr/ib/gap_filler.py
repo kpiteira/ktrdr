@@ -19,8 +19,8 @@ import pandas as pd
 
 from ktrdr.config.ib_limits import IbLimitsRegistry
 from ktrdr.config.loader import ConfigLoader
+from ktrdr.data.components.gap_classifier import GapClassifier
 from ktrdr.data.data_manager import DataManager
-from ktrdr.data.gap_classifier import GapClassifier
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
