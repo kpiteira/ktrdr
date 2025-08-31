@@ -13,6 +13,7 @@ import pandas as pd
 
 from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.logging import get_logger
+from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
 
@@ -20,7 +21,7 @@ logger = get_logger(__name__)
 class DataLoadingOrchestrator:
     """
     Orchestrates complex data loading operations extracted from DataManager.
-    
+
     This class handles the _load_with_fallback logic with minimal changes,
     using dependency injection to avoid tight coupling with DataManager.
     """
@@ -104,6 +105,7 @@ class DataLoadingOrchestrator:
             except Exception as e:
                 logger.error(f"❌ Symbol validation failed for {symbol}: {e}")
                 from ktrdr.errors import DataError
+
                 raise DataError(
                     message=f"Symbol validation failed: {e}",
                     error_code="DATA-SymbolValidationFailed",
@@ -122,7 +124,7 @@ class DataLoadingOrchestrator:
             elif mode == "backfill" or mode == "full":
                 # Use head timestamp if available, otherwise fall back to IB limits
                 if cached_head_timestamp:
-                    normalized_ts = self.data_manager._normalize_timezone(cached_head_timestamp)
+                    normalized_ts = TimestampManager.to_utc(cached_head_timestamp)
                     if normalized_ts is not None:
                         requested_start = normalized_ts
                     logger.info(
@@ -145,7 +147,7 @@ class DataLoadingOrchestrator:
                 requested_start = pd.Timestamp.now(tz="UTC") - max_duration
         else:
             # ALWAYS respect user-provided start_date regardless of mode
-            normalized_start = self.data_manager._normalize_timezone(start_date)
+            normalized_start = TimestampManager.to_utc(start_date)
             if normalized_start is not None:
                 requested_start = normalized_start
 
@@ -153,7 +155,7 @@ class DataLoadingOrchestrator:
             requested_end = pd.Timestamp.now(tz="UTC")
         else:
             # ALWAYS respect user-provided end_date regardless of mode
-            normalized_end = self.data_manager._normalize_timezone(end_date)
+            normalized_end = TimestampManager.to_utc(end_date)
             if normalized_end is not None:
                 requested_end = normalized_end
 
@@ -174,7 +176,9 @@ class DataLoadingOrchestrator:
             )
 
         logger.info("📅 STEP 0B: Validating request against head timestamp data")
-        self.data_manager._check_cancellation(cancellation_token, "head timestamp validation")
+        self.data_manager._check_cancellation(
+            cancellation_token, "head timestamp validation"
+        )
 
         # Use cached head timestamp from validation step if available
         if cached_head_timestamp:
@@ -214,8 +218,10 @@ class DataLoadingOrchestrator:
             # Fallback to old method if no cached head timestamp
             logger.info("📅 No cached head timestamp, trying fallback method")
             try:
-                has_head_timestamp = self.data_manager._ensure_symbol_has_head_timestamp(
-                    symbol, timeframe
+                has_head_timestamp = (
+                    self.data_manager._ensure_symbol_has_head_timestamp(
+                        symbol, timeframe
+                    )
                 )
 
                 if has_head_timestamp:
@@ -254,10 +260,12 @@ class DataLoadingOrchestrator:
         existing_data = None
         try:
             logger.info(f"📁 Loading existing local data for {symbol}")
-            self.data_manager._check_cancellation(cancellation_token, "loading existing data")
+            self.data_manager._check_cancellation(
+                cancellation_token, "loading existing data"
+            )
             existing_data = self.data_manager.data_loader.load(symbol, timeframe)
             if existing_data is not None and not existing_data.empty:
-                existing_data = self.data_manager._normalize_dataframe_timezone(existing_data)
+                existing_data = TimestampManager.convert_dataframe_index(existing_data)
                 logger.info(
                     f"✅ Found existing data: {len(existing_data)} bars ({existing_data.index.min()} to {existing_data.index.max()})"
                 )
@@ -349,7 +357,9 @@ class DataLoadingOrchestrator:
             logger.info(
                 f"🚀 Fetching {len(segments)} segments using resilient strategy..."
             )
-            self.data_manager._check_cancellation(cancellation_token, "IB fetch preparation")
+            self.data_manager._check_cancellation(
+                cancellation_token, "IB fetch preparation"
+            )
             successful_frames, successful_count, failed_count = (
                 self.data_manager._fetch_segments_with_component(
                     symbol,
@@ -385,6 +395,7 @@ class DataLoadingOrchestrator:
                     # For modes that require IB data, complete failure should fail the operation
                     # instead of returning stale cached data
                     from ktrdr.errors import DataError
+
                     raise DataError(
                         message=error_msg,
                         error_code="DATA-IBCompleteFail",

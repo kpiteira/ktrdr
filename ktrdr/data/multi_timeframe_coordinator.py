@@ -10,7 +10,7 @@ to coordinate loading and alignment of multiple timeframes.
 """
 
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 
@@ -25,10 +25,10 @@ logger = get_logger(__name__)
 class MultiTimeframeCoordinator:
     """
     Coordinates multi-timeframe data loading and synchronization.
-    
+
     This service orchestrates the complex process of loading multiple timeframes,
     finding common data coverage, and temporally aligning the data for analysis.
-    
+
     It delegates single-timeframe loading to DataManager while handling the
     coordination logic for multiple timeframes.
     """
@@ -36,7 +36,7 @@ class MultiTimeframeCoordinator:
     def __init__(self, data_manager):
         """
         Initialize the MultiTimeframeCoordinator.
-        
+
         Args:
             data_manager: DataManager instance to use for single-timeframe operations
         """

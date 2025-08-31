@@ -8,7 +8,7 @@ and handling gaps or missing values in time series data.
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Callable, Optional, Union
 
 import pandas as pd
@@ -20,24 +20,17 @@ from ktrdr import (
     log_performance,
 )
 from ktrdr.data.components.data_fetcher import DataFetcher
-from ktrdr.data.components.data_health_checker import DataHealthChecker
-from ktrdr.data.components.data_processor import DataProcessor
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
-from ktrdr.data.components.gap_analyzer import GapAnalyzer
-from ktrdr.data.components.gap_classifier import GapClassifier
 from ktrdr.data.components.progress_manager import ProgressManager
-from ktrdr.data.components.segment_manager import SegmentManager
-from ktrdr.data.components.timeframe_synchronizer import TimeframeSynchronizer
-from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
-from ktrdr.data.external_data_interface import ExternalDataProvider
+from ktrdr.data.data_manager_builder import (
+    DataManagerBuilder,
+    create_default_datamanager_builder,
+)
 from ktrdr.data.ib_data_adapter import IbDataAdapter
-from ktrdr.data.loading_modes import DataLoadingMode
-from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.errors import (
     DataCorruptionError,
     DataError,
     DataNotFoundError,
-    DataValidationError,
 )
 from ktrdr.managers import ServiceOrchestrator
 from ktrdr.utils.timezone_utils import TimestampManager
@@ -80,164 +73,71 @@ class DataManager(ServiceOrchestrator):
         data_dir: Optional[str] = None,
         max_gap_percentage: float = 5.0,
         default_repair_method: str = "ffill",
+        builder: Optional[DataManagerBuilder] = None,
     ):
         """
-        Initialize the DataManager.
+        Initialize the DataManager using builder pattern.
 
         Args:
             data_dir: Path to the directory containing data files.
-                     If None, will use the path from configuration.
             max_gap_percentage: Maximum allowed percentage of gaps in data (default: 5.0)
             default_repair_method: Default method for repairing missing values
-                                  (default: 'ffill', options: 'ffill', 'bfill',
-                                  'interpolate', 'zero', 'mean', 'median', 'drop')
-            IB integration is always enabled (container mode removed)
-                      Use configuration files to disable host service if needed
+            builder: Optional custom builder. If None, creates default builder.
+                    IB integration is always enabled (container mode removed)
 
         Raises:
             DataError: If initialization parameters are invalid
         """
-        # Validate parameters
-        if max_gap_percentage < 0 or max_gap_percentage > 100:
-            raise DataError(
-                message=f"Invalid max_gap_percentage: {max_gap_percentage}. Must be between 0 and 100.",
-                error_code="DATA-InvalidParameter",
-                details={
-                    "parameter": "max_gap_percentage",
-                    "value": max_gap_percentage,
-                    "valid_range": "0-100",
-                },
+        # Use provided builder or create default one
+        if builder is None:
+            builder = (
+                create_default_datamanager_builder()
+                .with_data_directory(data_dir)
+                .with_gap_settings(max_gap_percentage)
+                .with_repair_method(default_repair_method)
             )
 
-        if default_repair_method not in self.REPAIR_METHODS:
-            raise DataError(
-                message=f"Invalid repair method: {default_repair_method}",
-                error_code="DATA-InvalidParameter",
-                details={
-                    "parameter": "default_repair_method",
-                    "value": default_repair_method,
-                    "valid_options": list(self.REPAIR_METHODS.keys()),
-                },
-            )
+        # Build the configuration
+        config = builder.build_configuration()
 
-        # Initialize the LocalDataLoader
-        self.data_loader = LocalDataLoader(data_dir=data_dir)
+        # Initialize all components from the built configuration
+        # Assert components are non-None after builder.build_configuration()
+        assert config.data_loader is not None, "Builder must create data_loader"
+        assert (
+            config.external_provider is not None
+        ), "Builder must create external_provider"
+        assert config.data_validator is not None, "Builder must create data_validator"
+        assert config.gap_classifier is not None, "Builder must create gap_classifier"
+        assert config.gap_analyzer is not None, "Builder must create gap_analyzer"
+        assert config.segment_manager is not None, "Builder must create segment_manager"
+        assert config.data_processor is not None, "Builder must create data_processor"
 
-        # Initialize external data provider (using adapter pattern)
-        # Always use IB host service - container mode removed
-        try:
-            import os
-            from pathlib import Path
+        self.data_loader = config.data_loader
+        self.external_provider = config.external_provider
+        self.max_gap_percentage = config.max_gap_percentage
+        self.default_repair_method = config.default_repair_method
+        self.data_validator = config.data_validator
+        self.gap_classifier = config.gap_classifier
+        self.gap_analyzer = config.gap_analyzer
+        self.segment_manager = config.segment_manager
+        self.data_processor = config.data_processor
 
-            from ktrdr.config.loader import ConfigLoader
-            from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
-
-            config_loader = ConfigLoader()
-            config_path = Path("config/settings.yaml")
-            if config_path.exists():
-                config = config_loader.load(config_path, KtrdrConfig)
-                host_service_config = config.ib_host_service
-            else:
-                # Use defaults if no config file
-                host_service_config = IbHostServiceConfig(
-                    enabled=False, url="http://localhost:5001"
-                )
-
-            # Check for environment override (for easy Docker toggle)
-            override_file = os.getenv("IB_HOST_SERVICE_CONFIG")
-            if override_file:
-                override_path = Path(f"config/environment/{override_file}.yaml")
-                if override_path.exists():
-                    # Load override config and merge
-                    override_config = config_loader.load(override_path, KtrdrConfig)
-                    if override_config.ib_host_service:
-                        host_service_config = override_config.ib_host_service
-                        logger.info(
-                            f"Loaded IB host service override from {override_path}"
-                        )
-
-            # Environment variable override for enabled flag (quick toggle)
-            env_enabled = os.getenv("USE_IB_HOST_SERVICE", "").lower()
-            if env_enabled in ("true", "1", "yes"):
-                host_service_config.enabled = True
-                # Use environment URL if provided
-                env_url = os.getenv("IB_HOST_SERVICE_URL")
-                if env_url:
-                    host_service_config.url = env_url
-            elif env_enabled in ("false", "0", "no"):
-                host_service_config.enabled = False
-
-            # Initialize IbDataAdapter with host service configuration
-            self.external_provider: Optional[ExternalDataProvider] = IbDataAdapter(
-                use_host_service=host_service_config.enabled,
-                host_service_url=host_service_config.url,
-            )
-
-            if host_service_config.enabled:
-                logger.info(
-                    f"IB integration enabled using host service at {host_service_config.url}"
-                )
-            else:
-                logger.info("IB integration enabled (direct connection)")
-
-        except Exception as e:
-            logger.warning(
-                f"Failed to load host service config, using direct connection: {e}"
-            )
-            # Fallback to direct connection
-            self.external_provider = IbDataAdapter()
-            logger.info("IB integration enabled (direct connection - fallback)")
-
-        # Store parameters
-        self.max_gap_percentage = max_gap_percentage
-        self.default_repair_method = default_repair_method
-
-        # Initialize the unified data quality validator
-        self.data_validator = DataQualityValidator(
-            auto_correct=True,  # Enable auto-correction by default
-            max_gap_percentage=max_gap_percentage,
-        )
-
-        # Initialize the intelligent gap classifier
-        self.gap_classifier = GapClassifier()
-
-        # Initialize the GapAnalyzer component
-        self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)
-
-        # Initialize the SegmentManager component
-        self.segment_manager = SegmentManager()
-
-        # Initialize the DataProcessor component
-        self.data_processor = DataProcessor()
-
-        # Initialize the DataLoadingOrchestrator component
-        self.data_loading_orchestrator = DataLoadingOrchestrator(self)
-
-        # Initialize the progress manager (will be configured per operation)
+        # Initialize operational components (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
-
-        # Initialize the DataFetcher component (will be configured per operation)
         self._data_fetcher: Optional[DataFetcher] = None
-
-        logger.info(
-            f"Initialized DataManager with max_gap_percentage={max_gap_percentage}%, "
-            f"default_repair_method='{default_repair_method}'"
-        )
 
         # Initialize ServiceOrchestrator (always enabled - container mode removed)
         super().__init__()
 
-        # Initialize health checker after all components are ready
-        self.health_checker = DataHealthChecker(
-            data_loader=self.data_loader,
-            data_validator=self.data_validator,
-            gap_classifier=self.gap_classifier,
-            ib_adapter=self.adapter,
-            enable_ib=True,  # Always enabled - container mode removed
-            max_gap_percentage=self.max_gap_percentage,
-            default_repair_method=self.default_repair_method,
-            repair_methods=self.REPAIR_METHODS,
-        )
+        # Finalize configuration with components that need DataManager reference
+        config = builder.finalize_configuration(self)
+        assert (
+            config.data_loading_orchestrator is not None
+        ), "Builder must create data_loading_orchestrator"
+        assert config.health_checker is not None, "Builder must create health_checker"
+
+        self.data_loading_orchestrator = config.data_loading_orchestrator
+        self.health_checker = config.health_checker
 
     # ServiceOrchestrator abstract method implementations
     def _initialize_adapter(self) -> IbDataAdapter:
@@ -509,8 +409,6 @@ class DataManager(ServiceOrchestrator):
         )
         return df
 
-
-
     @log_entry_exit(logger=logger, log_args=True)
     def load(
         self,
@@ -560,37 +458,6 @@ class DataManager(ServiceOrchestrator):
             validate=validate,
             repair=repair,
         )
-
-    def _normalize_timezone(
-        self, dt: Union[str, datetime, pd.Timestamp, None], default_tz: str = "UTC"
-    ) -> Optional[pd.Timestamp]:
-        """
-        Normalize datetime to UTC timezone-aware timestamp.
-
-        Note: Using TimestampManager for consistent timezone handling.
-
-        Args:
-            dt: Input datetime (string, datetime, or Timestamp)
-            default_tz: Default timezone to assume for naive datetimes (deprecated, always UTC)
-
-        Returns:
-            UTC timezone-aware Timestamp or None
-        """
-        return TimestampManager.to_utc(dt)
-
-    def _normalize_dataframe_timezone(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Normalize DataFrame index to UTC timezone-aware.
-
-        Note: Using TimestampManager for consistent timezone handling.
-
-        Args:
-            df: DataFrame with datetime index
-
-        Returns:
-            DataFrame with UTC timezone-aware index
-        """
-        return TimestampManager.convert_dataframe_index(df)
 
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
@@ -878,27 +745,6 @@ class DataManager(ServiceOrchestrator):
             logger.warning(f"Error ensuring head timestamp for {symbol}: {e}")
             return False
 
-
-    @log_entry_exit(logger=logger)
-    def detect_gaps(
-        self, df: pd.DataFrame, timeframe: str, gap_threshold: int = 1
-    ) -> list[tuple[datetime, datetime]]:
-        """
-        Detect significant gaps in time series data using intelligent gap classification.
-
-        This method finds gaps that would be considered data quality issues
-        (excludes weekends, holidays, and non-trading hours) using the GapAnalyzer component.
-
-        Args:
-            df: DataFrame containing OHLCV data
-            timeframe: The timeframe of the data (e.g., '1h', '1d')
-            gap_threshold: Number of consecutive missing periods to consider as a gap (legacy parameter, maintained for compatibility)
-
-        Returns:
-            List of (start_time, end_time) tuples representing significant gaps only
-        """
-        return self.gap_analyzer.detect_gaps(df, timeframe, gap_threshold)
-
     @log_entry_exit(logger=logger, log_args=True)
     def repair_data(
         self,
@@ -1028,7 +874,7 @@ class DataManager(ServiceOrchestrator):
             "rows": len(df),
             "columns": list(df.columns),
             "missing_values": df.isnull().sum().to_dict(),
-            "has_gaps": len(self.detect_gaps(df, timeframe)) > 0,
+            "has_gaps": len(self.gap_analyzer.detect_gaps(df, timeframe)) > 0,
             "min_price": df["low"].min(),
             "max_price": df["high"].max(),
             "avg_price": df["close"].mean(),
@@ -1106,59 +952,3 @@ class DataManager(ServiceOrchestrator):
             logger.info(f"Saved merged data with {len(merged_data)} rows")
 
         return merged_data
-
-    @log_entry_exit(logger=logger, log_args=True)
-    def resample_data(
-        self,
-        df: pd.DataFrame,
-        target_timeframe: str,
-        source_timeframe: Optional[str] = None,
-        fill_gaps: bool = True,
-        agg_functions: Optional[dict[str, str]] = None,
-    ) -> pd.DataFrame:
-        """
-        Resample data to a different timeframe.
-
-        Args:
-            df: DataFrame to resample
-            target_timeframe: Target timeframe (e.g., '1h', '1d')
-            source_timeframe: Source timeframe (optional, used for validation)
-            fill_gaps: Whether to fill gaps in the resampled data
-            agg_functions: Dictionary of aggregation functions by column
-                         (default uses standard OHLCV aggregation)
-
-        Returns:
-            Resampled DataFrame
-
-        Raises:
-            DataError: For resampling-related errors
-        """
-        # Delegate to DataProcessor component with default repair method
-        return self.data_processor.resample_data(
-            df,
-            target_timeframe,
-            source_timeframe,
-            fill_gaps,
-            agg_functions,
-            repair_method=self.default_repair_method,
-        )
-
-    @log_entry_exit(logger=logger)
-    def filter_data_by_condition(
-        self,
-        df: pd.DataFrame,
-        condition: Callable[[pd.DataFrame], pd.Series],
-        inverse: bool = False,
-    ) -> pd.DataFrame:
-        """
-        Filter data based on a custom condition function.
-
-        Args:
-            df: DataFrame to filter
-            condition: Function that takes a DataFrame and returns a boolean Series
-            inverse: If True, returns rows that don't match the condition
-
-        Returns:
-            Filtered DataFrame
-        """
-        return self.data_processor.filter_data_by_condition(df, condition, inverse)
