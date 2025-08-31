@@ -1034,6 +1034,7 @@ class DataManager(ServiceOrchestrator):
                         timeframe=timeframe,
                         external_provider=self.external_provider,
                         progress_manager=progress_manager,
+                        cancellation_token=cancellation_token,
                     )
 
                     # Periodic save integration (if we have successful data)

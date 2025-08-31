@@ -569,6 +569,9 @@ class ProgressManager:
             # Support both attribute and callable patterns
             if hasattr(self._cancellation_token, "is_cancelled"):
                 return bool(self._cancellation_token.is_cancelled)
+            elif hasattr(self._cancellation_token, "is_set"):
+                # Handle asyncio.Event pattern
+                return bool(self._cancellation_token.is_set())
             elif callable(self._cancellation_token):
                 return bool(self._cancellation_token())
 
