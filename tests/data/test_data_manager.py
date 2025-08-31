@@ -248,8 +248,12 @@ class TestDataManager:
         """Test resampling data to different timeframes."""
         # Original data is daily, resample to weekly
         resampled = data_manager.data_processor.resample_data(
-            sample_data, target_timeframe="1w", source_timeframe="1d",
-            fill_gaps=True, agg_functions=None, repair_method=data_manager.default_repair_method
+            sample_data,
+            target_timeframe="1w",
+            source_timeframe="1d",
+            fill_gaps=True,
+            agg_functions=None,
+            repair_method=data_manager.default_repair_method,
         )
 
         # Should have fewer rows after resampling to a larger timeframe

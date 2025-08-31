@@ -459,7 +459,6 @@ class DataManager(ServiceOrchestrator):
             repair=repair,
         )
 
-
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
 
@@ -953,5 +952,3 @@ class DataManager(ServiceOrchestrator):
             logger.info(f"Saved merged data with {len(merged_data)} rows")
 
         return merged_data
-
-

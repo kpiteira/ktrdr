@@ -12,8 +12,8 @@ from typing import Any, Optional, Union
 import pandas as pd
 
 from ktrdr.data.loading_modes import DataLoadingMode
-from ktrdr.utils.timezone_utils import TimestampManager
 from ktrdr.logging import get_logger
+from ktrdr.utils.timezone_utils import TimestampManager
 
 logger = get_logger(__name__)
 
