@@ -1036,24 +1036,23 @@ class DataManager(ServiceOrchestrator):
                             0,  # TODO: Track previous bars properly
                         )
 
-                    # Use DataFetcher with periodic save callback for time-based saves
-                    successful_data = await data_fetcher.fetch_segments_async(
-                        segments=segments,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        external_provider=self.external_provider,
-                        progress_manager=progress_manager,
-                        cancellation_token=cancellation_token,
-                        periodic_save_callback=(
-                            periodic_save_callback
-                            if INTERNAL_SAVE_INTERVAL > 0
-                            else None
-                        ),
-                        periodic_save_minutes=INTERNAL_SAVE_INTERVAL,
+                    # Use SegmentManager for resilient fetching with periodic save support
+                    successful_data, successful_count, failed_count = (
+                        await self.segment_manager.fetch_segments_with_resilience(
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            segments=segments,
+                            external_provider=self.external_provider,
+                            progress_manager=progress_manager,
+                            cancellation_token=cancellation_token,
+                            periodic_save_callback=(
+                                periodic_save_callback
+                                if INTERNAL_SAVE_INTERVAL > 0
+                                else None
+                            ),
+                            periodic_save_minutes=INTERNAL_SAVE_INTERVAL,
+                        )
                     )
-
-                    successful_count = len(successful_data)
-                    failed_count = len(segments) - successful_count
 
                     return successful_data, successful_count, failed_count
 
