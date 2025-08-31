@@ -978,10 +978,10 @@ class DataManager(ServiceOrchestrator):
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Synchronous wrapper for SegmentManager.fetch_segments_with_resilience.
-        
+
         This method provides compatibility with the current synchronous DataManager
         while delegating to the async SegmentManager component.
-        
+
         Args:
             symbol: Trading symbol
             timeframe: Data timeframe
@@ -989,17 +989,20 @@ class DataManager(ServiceOrchestrator):
             cancellation_token: Optional cancellation token
             progress_manager: Optional progress manager
             periodic_save_minutes: Save progress every N minutes
-            
+
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
-        
+
         def periodic_save_callback(successful_data: list[pd.DataFrame]) -> int:
             """Callback for periodic progress saving."""
             return self._save_periodic_progress(
-                successful_data, symbol, timeframe, 0  # TODO: Track previous bars properly
+                successful_data,
+                symbol,
+                timeframe,
+                0,  # TODO: Track previous bars properly
             )
-        
+
         # Run the async SegmentManager method
         try:
             return asyncio.run(
@@ -1023,8 +1026,6 @@ class DataManager(ServiceOrchestrator):
 
     # Segmentation methods have been extracted to SegmentManager component
     # See: ktrdr.data.components.segment_manager.SegmentManager
-
-
 
     def _save_periodic_progress(
         self,
@@ -1089,7 +1090,6 @@ class DataManager(ServiceOrchestrator):
         except Exception as e:
             logger.error(f"Failed to save periodic progress: {e}")
             raise
-
 
     def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
         """
@@ -1556,7 +1556,7 @@ class DataManager(ServiceOrchestrator):
             f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments..."
         )
         self._check_cancellation(cancellation_token, "segmentation")
-        segments = self.segment_manager.create_segments(gaps, mode, timeframe)
+        segments = self.segment_manager.create_segments(gaps, DataLoadingMode(mode), timeframe)
         logger.info(
             f"⚡ SEGMENTATION COMPLETE: Created {len(segments)} segments for IB fetching"
         )
