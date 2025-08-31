@@ -199,6 +199,65 @@ class GapAnalyzer:
         )
         return gaps_to_fill
 
+    def detect_internal_gaps(
+        self, data: pd.DataFrame, timeframe: str, gap_threshold: int = 1
+    ) -> list[tuple[datetime, datetime]]:
+        """
+        Detect gaps within existing data using intelligent gap classification.
+
+        Public method for detecting gaps in existing data, replacing the need
+        for external components like DataQualityValidator to handle gap detection.
+
+        Args:
+            data: DataFrame containing OHLCV data with timezone-aware index
+            timeframe: The timeframe of the data (e.g., '1h', '1d') for gap analysis
+            gap_threshold: Legacy parameter maintained for compatibility
+                          (gap analysis uses intelligent classification instead)
+
+        Returns:
+            List of (start_time, end_time) tuples representing significant gaps only
+            (excludes weekends, holidays, and non-trading hours using intelligent classification)
+        """
+        if data.empty or len(data) <= 1:
+            return []
+
+        # Ensure timezone consistency - make sure data has timezone-aware index
+        if data.index.tz is None:  # type: ignore
+            data.index = data.index.tz_localize("UTC")  # type: ignore
+
+        # Use the internal method to find gaps within the entire data range
+        data_start = data.index.min()
+        data_end = data.index.max()
+
+        # Find internal gaps within the data range
+        internal_gaps = self._find_internal_gaps(data, data_start, data_end, timeframe)
+
+        # Apply intelligent gap classification to filter out non-significant gaps
+        significant_gaps = []
+        for gap_start, gap_end in internal_gaps:
+            gap_classification = self.gap_classifier.classify_gap(
+                start_time=gap_start,
+                end_time=gap_end,
+                symbol="GENERIC",  # Use generic symbol for internal gap classification
+                timeframe=timeframe,
+            )
+
+            # Only include gaps that are classified as significant data quality issues
+            # (unexpected gaps and market closures, following existing pattern in DataQualityValidator)
+            from ktrdr.data.gap_classifier import GapClassification
+
+            if gap_classification in [
+                GapClassification.UNEXPECTED,
+                GapClassification.MARKET_CLOSURE,
+            ]:
+                significant_gaps.append((gap_start, gap_end))
+
+        logger.debug(
+            f"Found {len(internal_gaps)} raw gaps, {len(significant_gaps)} significant gaps after classification"
+        )
+
+        return significant_gaps
+
     def _find_internal_gaps(
         self,
         data: pd.DataFrame,

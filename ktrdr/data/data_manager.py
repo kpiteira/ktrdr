@@ -2085,7 +2085,7 @@ class DataManager(ServiceOrchestrator):
         Detect significant gaps in time series data using intelligent gap classification.
 
         This method finds gaps that would be considered data quality issues
-        (excludes weekends, holidays, and non-trading hours).
+        (excludes weekends, holidays, and non-trading hours) using the GapAnalyzer component.
 
         Args:
             df: DataFrame containing OHLCV data
@@ -2098,26 +2098,11 @@ class DataManager(ServiceOrchestrator):
         if df.empty or len(df) <= 1:
             return []
 
-        # Use the unified validator which now uses intelligent gap classification
-        _, quality_report = self.data_validator.validate_data(
-            df, "GAP_CHECK", timeframe, validation_type="local"
-        )
-
-        # Extract gap information from the quality report (only significant gaps)
-        gaps = []
-        gap_issues = quality_report.get_issues_by_type("timestamp_gaps")
-        for issue in gap_issues:
-            if "gaps" in issue.metadata:
-                # Parse the gaps from metadata (they're stored as ISO string tuples)
-                for gap_start_str, gap_end_str in issue.metadata["gaps"]:
-                    gap_start = datetime.fromisoformat(
-                        gap_start_str.replace("Z", "+00:00")
-                    )
-                    gap_end = datetime.fromisoformat(gap_end_str.replace("Z", "+00:00"))
-                    gaps.append((gap_start, gap_end))
+        # Use the GapAnalyzer component for gap detection with intelligent classification
+        gaps = self.gap_analyzer.detect_internal_gaps(df, timeframe, gap_threshold)
 
         logger.info(
-            f"Detected {len(gaps)} significant gaps using intelligent classification"
+            f"Detected {len(gaps)} significant gaps using GapAnalyzer component with intelligent classification"
         )
         return gaps
 
