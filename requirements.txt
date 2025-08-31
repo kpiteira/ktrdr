@@ -20,4 +20,5 @@ tomli>=2.0.0  # For reading pyproject.toml in version module
 tomli-w>=1.0.0  # For writing to pyproject.toml in metadata sync script
 python-json-logger>=2.0.7  # For structured JSON logging in Docker environment
 httpx>=0.25.0  # For HTTP client communication with host services
+aiohttp>=3.9.0  # For DataFetcher HTTP session management and connection pooling
 tabulate>=0.9.0  # For CLI table formatting

@@ -213,7 +213,7 @@ class DataManager(ServiceOrchestrator):
 
         # Initialize the progress manager (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
-        
+
         # Initialize the DataFetcher component (will be configured per operation)
         self._data_fetcher: Optional[DataFetcher] = None
 
@@ -971,18 +971,15 @@ class DataManager(ServiceOrchestrator):
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
 
-    def _ensure_data_fetcher(self, progress_manager: Optional[ProgressManager]) -> DataFetcher:
+    def _ensure_data_fetcher(self) -> DataFetcher:
         """
-        Ensure DataFetcher component is initialized with current progress manager.
-        
-        Args:
-            progress_manager: Current progress manager instance
-            
+        Ensure DataFetcher component is initialized for HTTP session persistence.
+
         Returns:
             DataFetcher component instance
         """
-        if self._data_fetcher is None or self._data_fetcher.progress_manager != progress_manager:
-            self._data_fetcher = DataFetcher(progress_manager)
+        if self._data_fetcher is None:
+            self._data_fetcher = DataFetcher()
         return self._data_fetcher
 
     def _fetch_segments_with_component(
@@ -1017,22 +1014,28 @@ class DataManager(ServiceOrchestrator):
             return [], 0, len(segments)
 
         # Ensure DataFetcher is initialized
-        data_fetcher = self._ensure_data_fetcher(progress_manager)
+        data_fetcher = self._ensure_data_fetcher()
 
         # Run the enhanced async DataFetcher method
         try:
+
             async def fetch_with_data_fetcher():
                 """Async wrapper for DataFetcher with periodic save integration."""
                 try:
-                    # Use DataFetcher for enhanced fetching
+                    # Check if external provider is available
+                    if self.external_provider is None:
+                        logger.error("No external provider available for data fetching")
+                        return [], 0, 0
+
+                    # Use DataFetcher for HTTP session persistence with progress reporting
                     successful_data = await data_fetcher.fetch_segments_async(
                         segments=segments,
                         symbol=symbol,
                         timeframe=timeframe,
                         external_provider=self.external_provider,
-                        cancellation_token=cancellation_token,
+                        progress_manager=progress_manager,
                     )
-                    
+
                     # Periodic save integration (if we have successful data)
                     if successful_data and periodic_save_minutes > 0:
                         try:
@@ -1044,18 +1047,18 @@ class DataManager(ServiceOrchestrator):
                             )
                         except Exception as e:
                             logger.warning(f"Periodic save failed: {e}")
-                    
+
                     successful_count = len(successful_data)
                     failed_count = len(segments) - successful_count
-                    
+
                     return successful_data, successful_count, failed_count
-                    
+
                 finally:
                     # Clean up DataFetcher resources after operation
                     await data_fetcher.cleanup()
 
             return asyncio.run(fetch_with_data_fetcher())
-            
+
         except asyncio.CancelledError:
             # Re-raise cancellation errors properly
             logger.info("Data fetching cancelled")
@@ -1134,7 +1137,7 @@ class DataManager(ServiceOrchestrator):
     def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
         """
         Sync wrapper for async head timestamp fetching.
-        
+
         Simplified async/sync handling for better maintainability.
 
         Args:
@@ -1146,7 +1149,7 @@ class DataManager(ServiceOrchestrator):
         """
         if not self.external_provider:
             return None
-            
+
         async def fetch_head_timestamp_async():
             """Async head timestamp fetch function."""
             return await self.external_provider.get_head_timestamp(

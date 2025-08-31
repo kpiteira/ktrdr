@@ -224,8 +224,8 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Data Components"
-        DM[DataManager<br/>ASYNC Orchestrator<br/>Coordinates pipeline]
+    subgraph "Data Components (Incremental Extraction + Integration)"
+        DM[DataManager<br/>ASYNC Orchestrator<br/>Refactored incrementally]
         
         GA[GapAnalyzer<br/>SYNC Computer<br/>Identifies missing data]
         SM[SegmentManager<br/>SYNC Computer<br/>Plans fetch strategy]
@@ -235,12 +235,12 @@ graph TB
         PM[ProgressManager<br/>THREAD-SAFE<br/>Tracks all progress]
     end
     
-    DM --> GA
-    DM --> SM
-    DM --> DF
-    DM --> DV
-    DM --> DP
-    DM --> PM
+    DM -->|self.gap_analyzer| GA
+    DM -->|self.segment_manager| SM
+    DM -->|self._data_fetcher| DF
+    DM -->|self.data_validator| DV
+    DM -->|self.data_processor| DP
+    DM -->|self._progress_manager| PM
     
     PM --> GA
     PM --> SM
@@ -487,70 +487,71 @@ Migration success validated through:
 
 ### Component Implementation Patterns
 
-#### ✅ Orchestrator (Async) - Correct Pattern
+#### ✅ Orchestrator (Async) - Incremental Extraction Pattern
 
 ```python
-class DataManager:
-    """GOOD: Async orchestrator with clear boundaries"""
+class DataManager(ServiceOrchestrator):
+    """GOOD: Incrementally refactored orchestrator with component integration"""
     
     def __init__(self):
-        # Sync initialization - components, config, etc.
-        self.progress_manager = ProgressManager()
-        self.gap_analyzer = GapAnalyzer()  # Sync component
-        self.data_fetcher = DataFetcher()  # Async component
+        super().__init__()
+        # Component extraction + immediate integration
+        self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)
+        self.segment_manager = SegmentManager()
+        self._data_fetcher = DataFetcher()  # Lazy initialization
+        self.data_validator = DataQualityValidator()
+        self._progress_manager = None  # Per-operation initialization
     
-    async def load_data(self, symbol: str, mode: str, progress_callback=None) -> pd.DataFrame:
-        """Orchestrates pipeline with clear async boundaries"""
+    def load_data(self, symbol: str, mode: str, progress_callback=None) -> pd.DataFrame:
+        """Delegates to components while maintaining API compatibility"""
         
-        # 1. Initialize progress (sync)
-        progress = self.progress_manager.start_operation(
-            total_steps=4, 
-            operation_name=f"Loading {symbol} data",
-            callback=progress_callback
-        )
+        # Delegate to _load_with_fallback which uses components
+        return self._load_with_fallback(symbol, timeframe, mode=mode, 
+                                      progress_callback=progress_callback)
+    
+    def _load_with_fallback(self, symbol: str, timeframe: str, mode: str, ...) -> pd.DataFrame:
+        """Component delegation (already implemented)"""
         
-        # 2. Analysis phase (sync components)
-        gaps = self.gap_analyzer.analyze_gaps(symbol, mode)  # Sync call
-        if not gaps:
-            progress.complete_operation()
-            return self._load_local_data(symbol)  # Sync fallback
+        # 1. Gap analysis delegation (✅ Line 1523 in current code)
+        gaps = self.gap_analyzer.analyze_gaps(existing_data, requested_start, 
+                                            requested_end, timeframe, symbol, loading_mode)
         
-        segments = self.segment_manager.plan_segments(gaps, mode)  # Sync call
+        # 2. Segmentation delegation (✅ Line 1556 in current code)  
+        segments = self.segment_manager.create_segments(gaps, DataLoadingMode(mode), timeframe)
         
-        # 3. Fetching phase (async component)
-        progress.start_step("Fetching data", step=2)
-        raw_data = await self.data_fetcher.fetch_segments(segments, progress)  # Async call
+        # 3. Async fetching delegation (✅ Line 1044 in current code)
+        successful_frames = await self._data_fetcher.fetch_segments_async(...)
         
-        # 4. Processing phase (sync components)  
-        progress.start_step("Validating data", step=3)
-        validated = self.data_validator.validate(raw_data)  # Sync call
-        processed = self.data_processor.process(validated)  # Sync call
+        # 4. Validation delegation (✅ Line 448 in current code)
+        df_validated, quality_report = self.data_validator.validate_data(df, symbol, timeframe)
         
-        progress.complete_operation()
-        return processed
+        return processed_data
 ```
 
 #### ❌ Orchestrator Anti-Patterns
 
 ```python
 class BadDataManager:
-    """BAD: Mixed async/sync, unclear boundaries"""
+    """BAD: Wrong decomposition approaches"""
+    
+    def __init__(self):
+        # ❌ BAD: Creating "new" DataManager instead of refactoring existing
+        pass  # Parallel implementation that breaks compatibility
     
     async def load_data(self, symbol: str) -> pd.DataFrame:
+        # ❌ BAD: Big-bang replacement instead of incremental extraction
+        # ❌ BAD: Not leveraging existing working methods
+        # ❌ BAD: Breaking API compatibility during transition
+        
         # ❌ BAD: Making sync operation async for no reason
         gaps = await asyncio.to_thread(self.gap_analyzer.analyze_gaps, symbol)
         
-        # ❌ BAD: Sync operation in async context without proper handling
-        segments = self.segment_manager.plan_segments(gaps)  # Blocks event loop
+        # ❌ BAD: Not integrating components during extraction
+        segments = self._old_segmentation_method(gaps)  # God-class method still there
         
-        # ❌ BAD: No progress reporting in long operation
+        # ❌ BAD: Creating components but not using them
         data = await self.data_fetcher.fetch_segments(segments)
-        
-        # ❌ BAD: Exception handling that loses context
-        try:
-            return self.process_data(data)
-        except Exception:
-            return None  # Lost error information
+        return self._old_processing_method(data)  # Still using god-class method
 ```
 
 #### ✅ Async Fetcher - Correct Pattern
