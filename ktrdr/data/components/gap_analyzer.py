@@ -13,8 +13,8 @@ This component handles:
 """
 
 import time
-from datetime import datetime, timedelta
-from typing import Any, Optional, Union
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -72,7 +72,7 @@ class GapAnalyzer:
         requested_end: datetime,
         timeframe: str,
         symbol: str,
-        mode: Union[str, DataLoadingMode] = "tail",
+        mode: DataLoadingMode = DataLoadingMode.TAIL,
     ) -> list[tuple[datetime, datetime]]:
         """
         Analyze gaps between existing data and requested range using intelligent gap classification.
@@ -92,12 +92,8 @@ class GapAnalyzer:
         Returns:
             List of (start_time, end_time) tuples representing gaps to fill
         """
-        # Normalize mode parameter to string for consistent comparison
-        if isinstance(mode, DataLoadingMode):
-            mode = mode.value
-
         # Local mode returns no gaps - use existing data only
-        if mode == "local":
+        if mode == DataLoadingMode.LOCAL:
             return []
 
         gaps_to_fill = []
@@ -396,25 +392,9 @@ class GapAnalyzer:
             if gap_duration <= timedelta(days=3):  # Normal weekend
                 return "market_closure"
 
-        # Check trading hours for intraday timeframes
-        if timeframe in ["1m", "5m", "15m", "30m", "1h"]:
-            # LIMITATION: Simplified US market hours approximation
-            # This is a basic implementation with known issues:
-            # 1. Does NOT handle DST transitions (off by 1 hour ~8 months/year)
-            # 2. Assumes NYSE/NASDAQ hours for ALL symbols (ignores other exchanges)
-            # 3. Fixed UTC offsets ignore seasonal time changes
-            # TODO: Replace with pandas_market_calendars for production use
-            # TODO: Add symbol-specific exchange detection and timezone handling
-            market_open_utc = 14  # 9:30 AM ET in UTC (APPROXIMATE - ignores DST)
-            market_close_utc = 21  # 4:00 PM ET in UTC (APPROXIMATE - ignores DST)
-
-            # Check if gap occurs during standard trading hours
-            if (
-                gap_start.hour >= market_open_utc
-                and gap_end.hour <= market_close_utc
-                and gap_start.weekday() < 5
-            ):  # Weekday
-                return "missing_data"
+        # NOTE: Trading hours classification is not implemented
+        # This would require proper timezone handling and exchange-specific calendars
+        # For production use, integrate pandas_market_calendars or similar library
 
         # Default classification
         if gap_duration > timedelta(days=3):
@@ -565,7 +545,10 @@ class GapAnalyzer:
         **kwargs,
     ) -> list[tuple[datetime, datetime]]:
         """
-        Focus on recent gaps from last data point to now.
+        TAIL MODE: Analyze gaps from last existing data point to requested end.
+
+        This method implements TRUE tail-specific logic by only analyzing
+        gaps that occur AFTER the existing data, ignoring historical gaps.
 
         Returns:
             List of recent gaps to fill
@@ -574,30 +557,39 @@ class GapAnalyzer:
             self.progress_manager.start_operation(1, "Analyzing recent gaps")
 
         try:
-            # TAIL MODE: Focus on recent gaps with optimized strategy
-            gaps = self.analyze_gaps(
-                existing_data,
-                requested_start,
-                requested_end,
-                timeframe,
-                symbol,
-                mode="tail",
-            )
+            gaps_to_fill = []
 
-            # TAIL-SPECIFIC OPTIMIZATION: Prioritize most recent gaps first
-            if gaps and len(gaps) > 1:
-                # Sort gaps by end time (most recent first) for tail mode efficiency
-                gaps = sorted(gaps, key=lambda g: g[1], reverse=True)
-                logger.debug(
-                    f"🎯 TAIL MODE: Reordered {len(gaps)} gaps by recency (most recent first)"
-                )
+            # TAIL-SPECIFIC: Only analyze from last data point forward
+            if existing_data is None or existing_data.empty:
+                # No existing data - entire range is a gap
+                gaps_to_fill.append((requested_start, requested_end))
+            else:
+                # Find the last timestamp in existing data
+                last_data_time = existing_data.index[-1]
 
-            return gaps
+                # Convert to timezone-aware if needed
+                if last_data_time.tzinfo is None and requested_end.tzinfo is not None:
+                    last_data_time = last_data_time.replace(tzinfo=timezone.utc)
+                elif last_data_time.tzinfo is not None and requested_end.tzinfo is None:
+                    requested_end = requested_end.replace(tzinfo=timezone.utc)
+
+                # TAIL-SPECIFIC: Only gaps AFTER existing data matter
+                if last_data_time < requested_end:
+                    # Calculate next expected data point
+                    next_expected = self._calculate_next_expected_time(
+                        last_data_time, timeframe
+                    )
+
+                    # Only add gap if there's meaningful time difference
+                    if self._is_meaningful_gap(next_expected, requested_end, timeframe):
+                        gaps_to_fill.append((next_expected, requested_end))
+
+            logger.debug(f"🎯 TAIL MODE: Found {len(gaps_to_fill)} recent gaps to fill")
+            return gaps_to_fill
+
         finally:
             if self.progress_manager:
                 self.progress_manager.complete_operation()
-
-        return gaps
 
     def _analyze_historical_gaps(
         self,
@@ -609,7 +601,10 @@ class GapAnalyzer:
         **kwargs,
     ) -> list[tuple[datetime, datetime]]:
         """
-        Focus on historical gaps from start to first data point.
+        BACKFILL MODE: Analyze gaps from requested start to first existing data point.
+
+        This method implements TRUE backfill-specific logic by only analyzing
+        gaps that occur BEFORE the existing data, ignoring future gaps.
 
         Returns:
             List of historical gaps to fill
@@ -618,25 +613,46 @@ class GapAnalyzer:
             self.progress_manager.start_operation(1, "Analyzing historical gaps")
 
         try:
-            # BACKFILL MODE: Focus on historical gaps with bulk processing optimization
-            gaps = self.analyze_gaps(
-                existing_data,
-                requested_start,
-                requested_end,
-                timeframe,
-                symbol,
-                mode="backfill",
+            gaps_to_fill = []
+
+            # BACKFILL-SPECIFIC: Only analyze up to first data point
+            if existing_data is None or existing_data.empty:
+                # No existing data - entire range is a gap
+                gaps_to_fill.append((requested_start, requested_end))
+            else:
+                # Find the first timestamp in existing data
+                first_data_time = existing_data.index[0]
+
+                # Convert to timezone-aware if needed
+                if (
+                    first_data_time.tzinfo is None
+                    and requested_start.tzinfo is not None
+                ):
+                    first_data_time = first_data_time.tz_localize("UTC")
+                elif (
+                    first_data_time.tzinfo is not None
+                    and requested_start.tzinfo is None
+                ):
+                    requested_start = requested_start.replace(tzinfo=timezone.utc)
+
+                # BACKFILL-SPECIFIC: Only gaps BEFORE existing data matter
+                if requested_start < first_data_time:
+                    # Calculate previous expected data point
+                    prev_expected = self._calculate_previous_expected_time(
+                        first_data_time, timeframe
+                    )
+
+                    # Only add gap if there's meaningful time difference
+                    if self._is_meaningful_gap(
+                        requested_start, prev_expected, timeframe
+                    ):
+                        gaps_to_fill.append((requested_start, prev_expected))
+
+            logger.debug(
+                f"📚 BACKFILL MODE: Found {len(gaps_to_fill)} historical gaps to fill"
             )
+            return gaps_to_fill
 
-            # BACKFILL-SPECIFIC OPTIMIZATION: Prioritize oldest gaps first for historical consistency
-            if gaps and len(gaps) > 1:
-                # Sort gaps by start time (oldest first) for backfill mode efficiency
-                gaps = sorted(gaps, key=lambda g: g[0])
-                logger.debug(
-                    f"📚 BACKFILL MODE: Reordered {len(gaps)} gaps chronologically (oldest first)"
-                )
-
-            return gaps
         finally:
             if self.progress_manager:
                 self.progress_manager.complete_operation()
@@ -651,46 +667,94 @@ class GapAnalyzer:
         **kwargs,
     ) -> list[tuple[datetime, datetime]]:
         """
-        Comprehensive analysis combining tail + backfill strategies.
+        FULL MODE: Comprehensive gap analysis for entire requested range.
+
+        This method implements TRUE full-range logic by combining:
+        1. Backfill gaps (before existing data)
+        2. Internal gaps (within existing data)
+        3. Tail gaps (after existing data)
 
         Returns:
-            List of all gaps to fill
+            List of all gaps to fill, ordered for optimal fetching
         """
         if self.progress_manager:
             self.progress_manager.start_operation(1, "Analyzing complete range")
 
         try:
-            # FULL MODE: Comprehensive analysis with balanced prioritization
-            gaps = self.analyze_gaps(
-                existing_data,
-                requested_start,
-                requested_end,
-                timeframe,
-                symbol,
-                mode="full",
-            )
+            gaps_to_fill = []
 
-            # FULL-SPECIFIC OPTIMIZATION: Smart prioritization balancing recency and chronology
-            if gaps and len(gaps) > 1:
-                # Sort gaps with mixed strategy: recent gaps first, then historical
+            # FULL-SPECIFIC: Comprehensive three-phase analysis
+            if existing_data is None or existing_data.empty:
+                # No existing data - entire range is a gap
+                gaps_to_fill.append((requested_start, requested_end))
+            else:
+                first_data_time = existing_data.index[0]
+                last_data_time = existing_data.index[-1]
+
+                # Ensure timezone consistency
+                if (
+                    first_data_time.tzinfo is None
+                    and requested_start.tzinfo is not None
+                ):
+                    first_data_time = first_data_time.tz_localize("UTC")
+                    last_data_time = last_data_time.tz_localize("UTC")
+                elif (
+                    first_data_time.tzinfo is not None
+                    and requested_start.tzinfo is None
+                ):
+                    requested_start = requested_start.replace(tzinfo=timezone.utc)
+                    requested_end = requested_end.replace(tzinfo=timezone.utc)
+
+                # Phase 1: Backfill gaps (before existing data)
+                if requested_start < first_data_time:
+                    prev_expected = self._calculate_previous_expected_time(
+                        first_data_time, timeframe
+                    )
+                    if self._is_meaningful_gap(
+                        requested_start, prev_expected, timeframe
+                    ):
+                        gaps_to_fill.append((requested_start, prev_expected))
+
+                # Phase 2: Internal gaps (within existing data range)
+                internal_gaps = self._find_internal_gaps(
+                    existing_data,
+                    max(requested_start, first_data_time),
+                    min(requested_end, last_data_time),
+                    timeframe,
+                )
+                gaps_to_fill.extend(internal_gaps)
+
+                # Phase 3: Tail gaps (after existing data)
+                if last_data_time < requested_end:
+                    next_expected = self._calculate_next_expected_time(
+                        last_data_time, timeframe
+                    )
+                    if self._is_meaningful_gap(next_expected, requested_end, timeframe):
+                        gaps_to_fill.append((next_expected, requested_end))
+
+            # FULL-SPECIFIC: Intelligent ordering for optimal fetch strategy
+            if gaps_to_fill:
                 current_time = datetime.now(tz=requested_end.tzinfo)
 
-                # Separate into recent (within 30 days) and historical
-                recent_gaps = [g for g in gaps if (current_time - g[1]).days <= 30]
-                historical_gaps = [g for g in gaps if (current_time - g[1]).days > 30]
+                # Separate by recency for smart ordering
+                recent_gaps = [
+                    g for g in gaps_to_fill if (current_time - g[1]).days <= 7
+                ]
+                older_gaps = [g for g in gaps_to_fill if (current_time - g[1]).days > 7]
 
-                # Sort recent gaps by recency (most recent first)
+                # Recent gaps: most recent first (tail-like behavior)
                 recent_gaps.sort(key=lambda g: g[1], reverse=True)
-                # Sort historical gaps chronologically (oldest first)
-                historical_gaps.sort(key=lambda g: g[0])
+                # Older gaps: chronological order (backfill-like behavior)
+                older_gaps.sort(key=lambda g: g[0])
 
-                # Combine: recent first, then historical
-                gaps = recent_gaps + historical_gaps
-                logger.debug(
-                    f"⚡ FULL MODE: Smart reordering - {len(recent_gaps)} recent gaps first, then {len(historical_gaps)} historical gaps"
-                )
+                # Combine with recent gaps prioritized
+                gaps_to_fill = recent_gaps + older_gaps
 
-            return gaps
+            logger.debug(
+                f"⚡ FULL MODE: Found {len(gaps_to_fill)} total gaps across complete range"
+            )
+            return gaps_to_fill
+
         finally:
             if self.progress_manager:
                 self.progress_manager.complete_operation()
@@ -741,6 +805,35 @@ class GapAnalyzer:
             )
 
         return timedelta(seconds=total_seconds)
+
+    def _calculate_next_expected_time(
+        self, current_time: datetime, timeframe: str
+    ) -> datetime:
+        """Calculate the next expected data point based on timeframe."""
+        timeframe_minutes = self._timeframe_to_minutes(timeframe)
+        return current_time + timedelta(minutes=timeframe_minutes)
+
+    def _calculate_previous_expected_time(
+        self, current_time: datetime, timeframe: str
+    ) -> datetime:
+        """Calculate the previous expected data point based on timeframe."""
+        timeframe_minutes = self._timeframe_to_minutes(timeframe)
+        return current_time - timedelta(minutes=timeframe_minutes)
+
+    def _timeframe_to_minutes(self, timeframe: str) -> int:
+        """Convert timeframe string to minutes."""
+        timeframe_map = {
+            "1m": 1,
+            "2m": 2,
+            "5m": 5,
+            "15m": 15,
+            "30m": 30,
+            "1h": 60,
+            "2h": 120,
+            "4h": 240,
+            "1d": 1440,
+        }
+        return timeframe_map.get(timeframe, 60)  # Default to 1 hour
 
     def get_mode_step_descriptions(self, mode: DataLoadingMode) -> list[str]:
         """
