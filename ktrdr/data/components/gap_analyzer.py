@@ -260,6 +260,36 @@ class GapAnalyzer:
 
         return significant_gaps
 
+    def detect_gaps(
+        self, df: pd.DataFrame, timeframe: str, gap_threshold: int = 1
+    ) -> list[tuple[datetime, datetime]]:
+        """
+        Detect significant gaps in time series data using intelligent gap classification.
+
+        This method provides the exact interface as DataManager's detect_gaps method
+        for seamless delegation. It finds gaps that would be considered data quality issues
+        (excludes weekends, holidays, and non-trading hours) using the GapAnalyzer component.
+
+        Args:
+            df: DataFrame containing OHLCV data
+            timeframe: The timeframe of the data (e.g., '1h', '1d')
+            gap_threshold: Number of consecutive missing periods to consider as a gap
+                          (legacy parameter, maintained for compatibility)
+
+        Returns:
+            List of (start_time, end_time) tuples representing significant gaps only
+        """
+        if df.empty or len(df) <= 1:
+            return []
+
+        # Use the existing detect_internal_gaps method for the core functionality
+        gaps = self.detect_internal_gaps(df, timeframe, gap_threshold)
+
+        logger.info(
+            f"Detected {len(gaps)} significant gaps using GapAnalyzer component with intelligent classification"
+        )
+        return gaps
+
     def _find_internal_gaps(
         self,
         data: pd.DataFrame,

@@ -19,7 +19,7 @@ from ktrdr.data.ib_data_adapter import IbDataAdapter
 @pytest.fixture(scope="class")
 def shared_data_manager():
     """Shared DataManager instance to avoid repeated initialization."""
-    return DataManager(enable_ib=True)
+    return DataManager()  # IB integration is always enabled now
 
 
 @pytest.fixture(scope="class")
@@ -45,8 +45,7 @@ class TestIbRefactorValidation:
         """Test DataManager initializes with new IB adapter."""
         dm = shared_data_manager
 
-        # Verify external provider is initialized
-        assert dm.enable_ib is True
+        # Verify external provider is initialized (IB always enabled now)
         assert dm.external_provider is not None
         assert isinstance(dm.external_provider, IbDataAdapter)
 
@@ -74,8 +73,7 @@ class TestIbRefactorValidation:
         assert ds.data_manager is not None
         assert ds.operations_service is not None
 
-        # Verify DataManager has IB components
-        assert ds.data_manager.enable_ib is True
+        # Verify DataManager has IB components (IB always enabled now)
         assert ds.data_manager.external_provider is not None
 
     @pytest.mark.asyncio
@@ -181,14 +179,14 @@ class TestIbRefactorValidation:
         assert hasattr(adapter, "data_fetcher")
 
     def test_error_handling_graceful_degradation(self):
-        """Test that the system degrades gracefully when IB is unavailable."""
-        # Test with IB disabled - this is lightweight and doesn't need IB setup
-        dm_no_ib = DataManager(enable_ib=False)
-        assert dm_no_ib.external_provider is None
+        """Test that the system works with IB host service configuration."""
+        # Test with default configuration - this is lightweight and doesn't need IB setup
+        dm = DataManager()
+        assert dm.external_provider is not None
 
         # Should still work for local operations
         try:
-            df = dm_no_ib.load_data("TEST", "1h", mode="local")
+            df = dm.load_data("TEST", "1h", mode="local")
             # Either gets data or fails gracefully
             assert df is None or isinstance(df, pd.DataFrame)
         except Exception as e:
