@@ -14,7 +14,7 @@ This component handles:
 
 import time
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import pandas as pd
 
@@ -72,7 +72,7 @@ class GapAnalyzer:
         requested_end: datetime,
         timeframe: str,
         symbol: str,
-        mode: str = "tail",
+        mode: Union[str, DataLoadingMode] = "tail",
     ) -> list[tuple[datetime, datetime]]:
         """
         Analyze gaps between existing data and requested range using intelligent gap classification.
@@ -92,6 +92,10 @@ class GapAnalyzer:
         Returns:
             List of (start_time, end_time) tuples representing gaps to fill
         """
+        # Normalize mode parameter to string for consistent comparison
+        if isinstance(mode, DataLoadingMode):
+            mode = mode.value
+
         # Local mode returns no gaps - use existing data only
         if mode == "local":
             return []
@@ -394,11 +398,15 @@ class GapAnalyzer:
 
         # Check trading hours for intraday timeframes
         if timeframe in ["1m", "5m", "15m", "30m", "1h"]:
-            # Standard US market hours: 9:30 AM - 4:00 PM ET
-            # TODO: Integrate with pandas_market_calendars for production
-            # TODO: Handle timezone conversions properly (ET <-> UTC)
-            market_open_utc = 14  # 9:30 AM ET approximate in UTC (varies with DST)
-            market_close_utc = 21  # 4:00 PM ET approximate in UTC
+            # LIMITATION: Simplified US market hours approximation
+            # This is a basic implementation with known issues:
+            # 1. Does NOT handle DST transitions (off by 1 hour ~8 months/year)
+            # 2. Assumes NYSE/NASDAQ hours for ALL symbols (ignores other exchanges)
+            # 3. Fixed UTC offsets ignore seasonal time changes
+            # TODO: Replace with pandas_market_calendars for production use
+            # TODO: Add symbol-specific exchange detection and timezone handling
+            market_open_utc = 14  # 9:30 AM ET in UTC (APPROXIMATE - ignores DST)
+            market_close_utc = 21  # 4:00 PM ET in UTC (APPROXIMATE - ignores DST)
 
             # Check if gap occurs during standard trading hours
             if (
@@ -563,20 +571,31 @@ class GapAnalyzer:
             List of recent gaps to fill
         """
         if self.progress_manager:
-            self.progress_manager.start_step("Analyzing recent gaps", 1)
+            self.progress_manager.start_operation(1, "Analyzing recent gaps")
 
-        # Use existing analyze_gaps logic but focus on tail
-        gaps = self.analyze_gaps(
-            existing_data,
-            requested_start,
-            requested_end,
-            timeframe,
-            symbol,
-            mode="tail",
-        )
+        try:
+            # TAIL MODE: Focus on recent gaps with optimized strategy
+            gaps = self.analyze_gaps(
+                existing_data,
+                requested_start,
+                requested_end,
+                timeframe,
+                symbol,
+                mode="tail",
+            )
 
-        if self.progress_manager:
-            self.progress_manager.complete_step()
+            # TAIL-SPECIFIC OPTIMIZATION: Prioritize most recent gaps first
+            if gaps and len(gaps) > 1:
+                # Sort gaps by end time (most recent first) for tail mode efficiency
+                gaps = sorted(gaps, key=lambda g: g[1], reverse=True)
+                logger.debug(
+                    f"🎯 TAIL MODE: Reordered {len(gaps)} gaps by recency (most recent first)"
+                )
+
+            return gaps
+        finally:
+            if self.progress_manager:
+                self.progress_manager.complete_operation()
 
         return gaps
 
@@ -596,22 +615,31 @@ class GapAnalyzer:
             List of historical gaps to fill
         """
         if self.progress_manager:
-            self.progress_manager.start_step("Analyzing historical gaps", 1)
+            self.progress_manager.start_operation(1, "Analyzing historical gaps")
 
-        # Use existing analyze_gaps logic but focus on backfill
-        gaps = self.analyze_gaps(
-            existing_data,
-            requested_start,
-            requested_end,
-            timeframe,
-            symbol,
-            mode="backfill",
-        )
+        try:
+            # BACKFILL MODE: Focus on historical gaps with bulk processing optimization
+            gaps = self.analyze_gaps(
+                existing_data,
+                requested_start,
+                requested_end,
+                timeframe,
+                symbol,
+                mode="backfill",
+            )
 
-        if self.progress_manager:
-            self.progress_manager.complete_step()
+            # BACKFILL-SPECIFIC OPTIMIZATION: Prioritize oldest gaps first for historical consistency
+            if gaps and len(gaps) > 1:
+                # Sort gaps by start time (oldest first) for backfill mode efficiency
+                gaps = sorted(gaps, key=lambda g: g[0])
+                logger.debug(
+                    f"📚 BACKFILL MODE: Reordered {len(gaps)} gaps chronologically (oldest first)"
+                )
 
-        return gaps
+            return gaps
+        finally:
+            if self.progress_manager:
+                self.progress_manager.complete_operation()
 
     def _analyze_complete_range(
         self,
@@ -629,22 +657,43 @@ class GapAnalyzer:
             List of all gaps to fill
         """
         if self.progress_manager:
-            self.progress_manager.start_step("Analyzing complete range", 1)
+            self.progress_manager.start_operation(1, "Analyzing complete range")
 
-        # Use existing analyze_gaps logic for full analysis
-        gaps = self.analyze_gaps(
-            existing_data,
-            requested_start,
-            requested_end,
-            timeframe,
-            symbol,
-            mode="full",
-        )
+        try:
+            # FULL MODE: Comprehensive analysis with balanced prioritization
+            gaps = self.analyze_gaps(
+                existing_data,
+                requested_start,
+                requested_end,
+                timeframe,
+                symbol,
+                mode="full",
+            )
 
-        if self.progress_manager:
-            self.progress_manager.complete_step()
+            # FULL-SPECIFIC OPTIMIZATION: Smart prioritization balancing recency and chronology
+            if gaps and len(gaps) > 1:
+                # Sort gaps with mixed strategy: recent gaps first, then historical
+                current_time = datetime.now(tz=requested_end.tzinfo)
 
-        return gaps
+                # Separate into recent (within 30 days) and historical
+                recent_gaps = [g for g in gaps if (current_time - g[1]).days <= 30]
+                historical_gaps = [g for g in gaps if (current_time - g[1]).days > 30]
+
+                # Sort recent gaps by recency (most recent first)
+                recent_gaps.sort(key=lambda g: g[1], reverse=True)
+                # Sort historical gaps chronologically (oldest first)
+                historical_gaps.sort(key=lambda g: g[0])
+
+                # Combine: recent first, then historical
+                gaps = recent_gaps + historical_gaps
+                logger.debug(
+                    f"⚡ FULL MODE: Smart reordering - {len(recent_gaps)} recent gaps first, then {len(historical_gaps)} historical gaps"
+                )
+
+            return gaps
+        finally:
+            if self.progress_manager:
+                self.progress_manager.complete_operation()
 
     def estimate_analysis_time(
         self, start_date: datetime, end_date: datetime, mode: DataLoadingMode
