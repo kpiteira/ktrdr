@@ -24,6 +24,7 @@ from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.gap_classifier import GapClassifier
 from ktrdr.data.components.progress_manager import ProgressManager
+from ktrdr.data.components.segment_manager import SegmentManager
 from ktrdr.data.components.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.data.external_data_interface import ExternalDataProvider
 from ktrdr.data.ib_data_adapter import IbDataAdapter
@@ -205,6 +206,9 @@ class DataManager(ServiceOrchestrator):
 
         # Initialize the GapAnalyzer component
         self.gap_analyzer = GapAnalyzer(gap_classifier=self.gap_classifier)
+
+        # Initialize the SegmentManager component
+        self.segment_manager = SegmentManager()
 
         # Initialize the progress manager (will be configured per operation)
         self._progress_manager: Optional[ProgressManager] = None
@@ -963,62 +967,7 @@ class DataManager(ServiceOrchestrator):
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
 
-    def _split_into_segments(
-        self,
-        gaps: list[tuple[datetime, datetime]],
-        timeframe: str,
-    ) -> list[tuple[datetime, datetime]]:
-        """
-        Split large gaps into IB-compliant segments.
-
-        Takes gaps that might exceed IB duration limits and splits them
-        into smaller segments that can be fetched individually.
-
-        Args:
-            gaps: List of gaps to potentially split
-            timeframe: Data timeframe for limit checking
-
-        Returns:
-            List of segments ready for IB fetching
-        """
-        from ktrdr.config.ib_limits import IbLimitsRegistry
-
-        segments = []
-        max_duration = IbLimitsRegistry.get_duration_limit(timeframe)
-
-        for gap_start, gap_end in gaps:
-            gap_duration = gap_end - gap_start
-
-            if gap_duration <= max_duration:
-                # Gap fits in single request
-                segments.append((gap_start, gap_end))
-                logger.debug(
-                    f"Gap fits in single segment: {gap_start} to {gap_end} ({gap_duration})"
-                )
-            else:
-                # Split into multiple segments
-                logger.info(
-                    f"Splitting large gap {gap_start} to {gap_end} ({gap_duration}) into segments (max: {max_duration})"
-                )
-
-                current_start = gap_start
-                while current_start < gap_end:
-                    segment_end = min(current_start + max_duration, gap_end)
-                    segments.append((current_start, segment_end))
-                    logger.debug(f"Created segment: {current_start} to {segment_end}")
-                    current_start = segment_end
-
-        logger.info(
-            f"⚡ SEGMENTATION: Split {len(gaps)} gaps into {len(segments)} IB-compliant segments"
-        )
-        for i, (seg_start, seg_end) in enumerate(segments):
-            duration = seg_end - seg_start
-            logger.debug(
-                f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})"
-            )
-        return segments
-
-    def _fetch_segments_with_resilience(
+    def _fetch_segments_with_component(
         self,
         symbol: str,
         timeframe: str,
@@ -1028,165 +977,55 @@ class DataManager(ServiceOrchestrator):
         periodic_save_minutes: float = 2.0,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
-        Fetch multiple segments with failure resilience and periodic progress saves.
+        Synchronous wrapper for SegmentManager.fetch_segments_with_resilience.
 
-        Attempts to fetch each segment individually, continuing with other segments
-        if some fail. This ensures partial success rather than complete failure.
-
-        NEW: Saves progress every periodic_save_minutes to prevent data loss
-        during long downloads if container restarts.
+        This method provides compatibility with the current synchronous DataManager
+        while delegating to the async SegmentManager component.
 
         Args:
             symbol: Trading symbol
             timeframe: Data timeframe
             segments: List of (start, end) segments to fetch
-            periodic_save_minutes: Save progress every N minutes (default: 2.0)
+            cancellation_token: Optional cancellation token
+            progress_manager: Optional progress manager
+            periodic_save_minutes: Save progress every N minutes
 
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
-        successful_data: list[pd.DataFrame] = []
-        successful_count = 0
-        failed_count = 0
 
-        if not self.enable_ib or not self.external_provider:
-            logger.warning("External data provider not available for segment fetching")
-            return successful_data, successful_count, len(segments)
-
-        logger.info(f"Fetching {len(segments)} segments with failure resilience")
-
-        # Periodic save tracking
-        import time
-
-        last_save_time = time.time()
-        save_interval_seconds = periodic_save_minutes * 60
-        total_bars_saved = 0
-
-        logger.info(f"💾 Periodic saves enabled: every {periodic_save_minutes} minutes")
-
-        for i, (segment_start, segment_end) in enumerate(segments):
-            # Check for cancellation before each segment
-            self._check_cancellation(
-                cancellation_token, f"segment {i+1}/{len(segments)}"
+        def periodic_save_callback(successful_data: list[pd.DataFrame]) -> int:
+            """Callback for periodic progress saving."""
+            return self._save_periodic_progress(
+                successful_data,
+                symbol,
+                timeframe,
+                0,  # TODO: Track previous bars properly
             )
 
-            # Update progress for current segment using ProgressManager
-            if progress_manager:
-                segment_detail = f"Segment {i+1}/{len(segments)}: {segment_start.strftime('%Y-%m-%d %H:%M')} to {segment_end.strftime('%Y-%m-%d %H:%M')}"
-                progress_manager.update_step_progress(
-                    current=i + 1,
-                    total=len(segments),
-                    items_processed=total_bars_saved,  # Track total bars loaded so far
-                    detail=segment_detail,
-                )
-
-            try:
-                duration = segment_end - segment_start
-                logger.info(
-                    f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} from {segment_start} to {segment_end} (duration: {duration})"
-                )
-
-                # Use the unified IB data fetcher to fetch exactly what we ask for
-                # Convert to async call - this method should be made async in the future
-                # For now, we'll use a wrapper to handle the async call
-                segment_data = self._fetch_segment_sync(
+        # Run the async SegmentManager method
+        try:
+            return asyncio.run(
+                self.segment_manager.fetch_segments_with_resilience(
                     symbol=symbol,
                     timeframe=timeframe,
-                    start=segment_start,
-                    end=segment_end,
+                    segments=segments,
+                    external_provider=self.external_provider,
                     cancellation_token=cancellation_token,
+                    progress_manager=progress_manager,
+                    periodic_save_callback=periodic_save_callback,
+                    periodic_save_minutes=periodic_save_minutes,
                 )
-
-                if segment_data is not None and not segment_data.empty:
-                    successful_data.append(segment_data)
-                    successful_count += 1
-                    logger.info(
-                        f"✅ IB SUCCESS {i+1}: Received {len(segment_data)} bars from IB"
-                    )
-
-                    # Update progress with successful segment completion
-                    if progress_manager:
-                        # Update total bars processed
-                        total_items_processed = sum(len(df) for df in successful_data)
-                        progress_manager.update_step_progress(
-                            current=successful_count,
-                            total=len(segments),
-                            items_processed=total_items_processed,
-                            detail=f"✅ Loaded {len(segment_data)} bars from segment {i+1}/{len(segments)}",
-                        )
-
-                    # 💾 PERIODIC SAVE: Check if it's time to save progress
-                    current_time = time.time()
-                    time_since_last_save = current_time - last_save_time
-
-                    if (
-                        time_since_last_save >= save_interval_seconds
-                        or i == len(segments) - 1
-                    ):
-                        # Time to save! Merge accumulated data and save to CSV
-                        try:
-                            if successful_data:
-                                bars_to_save = self._save_periodic_progress(
-                                    successful_data, symbol, timeframe, total_bars_saved
-                                )
-                                total_bars_saved += bars_to_save
-                                last_save_time = current_time
-
-                                logger.info(
-                                    f"💾 Progress saved: {bars_to_save:,} new bars "
-                                    f"({total_bars_saved:,} total) after {time_since_last_save/60:.1f} minutes"
-                                )
-
-                                # Update progress to show save occurred
-                                if progress_manager:
-                                    progress_manager.update_step_progress(
-                                        current=i + 1,
-                                        total=len(segments),
-                                        items_processed=total_bars_saved,
-                                        detail=f"💾 Saved {total_bars_saved:,} bars to CSV",
-                                    )
-                        except Exception as e:
-                            logger.warning(f"⚠️ Failed to save periodic progress: {e}")
-                            # Continue fetching even if save fails
-                else:
-                    failed_count += 1
-                    logger.warning(f"❌ IB FAILURE {i+1}: No data returned from IB")
-
-            except asyncio.CancelledError:
-                # Cancellation detected - stop processing immediately
-                logger.info(
-                    f"🛑 Segment fetching cancelled at segment {i+1}/{len(segments)}"
-                )
-                break
-            except Exception as e:
-                failed_count += 1
-                logger.error(f"❌ IB ERROR {i+1}: Request failed - {e}")
-                # Continue with next segment rather than failing completely
-                continue
-
-        # Check if operation was cancelled during segment fetching
-        was_cancelled = False
-        if (
-            cancellation_token
-            and hasattr(cancellation_token, "is_set")
-            and cancellation_token.is_set()
-        ):
-            was_cancelled = True
-            logger.info(
-                f"🛑 Segment fetching cancelled after {successful_count} successful segments"
             )
-        else:
-            logger.info(
-                f"Segment fetching complete: {successful_count} successful, {failed_count} failed"
-            )
+        except asyncio.CancelledError:
+            # Re-raise cancellation errors properly
+            raise
+        except Exception as e:
+            logger.error(f"Segment fetching failed: {e}")
+            return [], 0, len(segments)
 
-        # If cancelled, raise CancelledError to stop the entire data loading operation
-        if was_cancelled:
-            raise asyncio.CancelledError(
-                f"Data loading cancelled during segment {successful_count + 1}"
-            )
-
-        return successful_data, successful_count, failed_count
+    # Segmentation methods have been extracted to SegmentManager component
+    # See: ktrdr.data.components.segment_manager.SegmentManager
 
     def _save_periodic_progress(
         self,
@@ -1251,102 +1090,6 @@ class DataManager(ServiceOrchestrator):
         except Exception as e:
             logger.error(f"Failed to save periodic progress: {e}")
             raise
-
-    def _fetch_segment_sync(
-        self,
-        symbol: str,
-        timeframe: str,
-        start: datetime,
-        end: datetime,
-        cancellation_token: Optional[Any] = None,
-    ) -> Optional[pd.DataFrame]:
-        """
-        Sync wrapper for async segment fetching using unified components.
-
-        This method provides a synchronous interface to the async data fetcher.
-        In the future, the entire DataManager should be made async.
-
-        Args:
-            symbol: Trading symbol
-            timeframe: Data timeframe
-            start: Start datetime
-            end: End datetime
-            cancellation_token: Optional cancellation token
-
-        Returns:
-            DataFrame with fetched data or None if failed
-        """
-        import asyncio
-
-        try:
-            # Check for cancellation before expensive operation
-            if (
-                cancellation_token
-                and hasattr(cancellation_token, "is_set")
-                and cancellation_token.is_set()
-            ):
-                logger.info(f"🛑 Cancellation detected before IB fetch for {symbol}")
-                return None
-
-            # Create a cancellable async wrapper that polls for cancellation
-            async def fetch_with_cancellation_polling():
-                """Fetch with periodic cancellation checks."""
-
-                # Start the IB fetch in a separate task
-                fetch_task = asyncio.create_task(
-                    self.external_provider.fetch_historical_data(
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        start=start,
-                        end=end,
-                        instrument_type=None,  # Auto-detect
-                    )
-                )
-
-                # Poll for cancellation every 0.5 seconds
-                while not fetch_task.done():
-                    # Check cancellation token from worker thread
-                    if (
-                        cancellation_token
-                        and hasattr(cancellation_token, "is_set")
-                        and cancellation_token.is_set()
-                    ):
-                        logger.info(
-                            f"🛑 Cancelling IB fetch for {symbol} during operation"
-                        )
-                        fetch_task.cancel()
-                        try:
-                            await fetch_task
-                        except asyncio.CancelledError:
-                            pass
-                        raise asyncio.CancelledError(
-                            "Operation cancelled during IB fetch"
-                        )
-
-                    # Wait up to 0.5 seconds for fetch completion
-                    try:
-                        await asyncio.wait_for(asyncio.shield(fetch_task), timeout=0.5)
-                        break
-                    except asyncio.TimeoutError:
-                        # Continue checking for cancellation
-                        continue
-
-                return await fetch_task
-
-            # Run with cancellation polling
-            return asyncio.run(fetch_with_cancellation_polling())
-
-        except asyncio.TimeoutError:
-            logger.error(
-                f"⏰ Data fetch timeout for {symbol} {timeframe} (15s limit) - possible IB Gateway issue"
-            )
-            return None
-        except asyncio.CancelledError:
-            logger.info(f"🛑 Data fetch cancelled for {symbol} {timeframe}")
-            return None
-        except Exception as e:
-            logger.error(f"Sync fetch wrapper failed for {symbol} {timeframe}: {e}")
-            return None
 
     def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
         """
@@ -1813,7 +1556,9 @@ class DataManager(ServiceOrchestrator):
             f"⚡ SEGMENTATION: Splitting {len(gaps)} gaps into IB-compliant segments..."
         )
         self._check_cancellation(cancellation_token, "segmentation")
-        segments = self._split_into_segments(gaps, timeframe)
+        segments = self.segment_manager.create_segments(
+            gaps, DataLoadingMode(mode), timeframe
+        )
         logger.info(
             f"⚡ SEGMENTATION COMPLETE: Created {len(segments)} segments for IB fetching"
         )
@@ -1841,7 +1586,7 @@ class DataManager(ServiceOrchestrator):
             )
             self._check_cancellation(cancellation_token, "IB fetch preparation")
             successful_frames, successful_count, failed_count = (
-                self._fetch_segments_with_resilience(
+                self._fetch_segments_with_component(
                     symbol,
                     timeframe,
                     segments,

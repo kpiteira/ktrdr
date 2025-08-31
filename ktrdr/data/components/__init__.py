@@ -5,6 +5,7 @@ from .data_quality_validator import DataQualityValidator
 from .gap_analyzer import GapAnalyzer
 from .gap_classifier import GapClassifier
 from .progress_manager import ProgressManager, ProgressState
+from .segment_manager import SegmentManager
 from .timeframe_synchronizer import TimeframeSynchronizer
 
 __all__ = [
@@ -14,5 +15,6 @@ __all__ = [
     "GapClassifier",
     "ProgressManager",
     "ProgressState",
+    "SegmentManager",
     "TimeframeSynchronizer",
 ]

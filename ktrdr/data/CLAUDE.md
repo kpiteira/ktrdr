@@ -4,7 +4,8 @@
 
 **MUST READ**: `docs/ib-connection-lessons-learned.md` before ANY IB changes
 
-### Connection Rules:
+### Connection Rules
+
 1. **Wait for "Synchronization complete"** (minimum 2 seconds after connect)
 2. **Max 3 client ID retry attempts** to avoid corrupting IB Gateway
 3. **1-2 second delays** between connection attempts
@@ -15,6 +16,7 @@
 ## 📊 DATA MODULE PATTERNS
 
 ### DataManager is the ONLY Entry Point
+
 ```python
 # ❌ Bad - Direct IB access
 ib_client = IBClient()
@@ -25,7 +27,10 @@ data_manager = DataManager()
 data = data_manager.load_data(symbol, timeframe)
 ```
 
+### Components go into the components folder
+
 ### Timezone-Aware Timestamps
+
 ```python
 # ❌ Bad - Naive timestamp
 timestamp = pd.Timestamp.now()
@@ -53,13 +58,15 @@ timestamp = pd.Timestamp.now(tz='UTC')
 CSV files location: `data/{timeframe}/{symbol}_{timeframe}.csv`
 
 Format:
+
 - Index: UTC timestamps
 - Columns: open, high, low, close, volume
 - No missing values in saved data
 
 ## 🔧 COMMON DATA TASKS
 
-### Loading with gap detection:
+### Loading with gap detection
+
 ```python
 data = data_manager.load_data(
     symbol="AAPL",
@@ -68,7 +75,8 @@ data = data_manager.load_data(
 )
 ```
 
-### Handling IB errors:
+### Handling IB errors
+
 - Pace violations: Automatic backoff
 - Connection lost: Reconnect with new client ID
 - No data: Return empty with proper error
