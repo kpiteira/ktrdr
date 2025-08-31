@@ -122,7 +122,7 @@ class TestIbNewArchitectureIntegration:
 
     async def test_data_manager_uses_new_adapter(self):
         """Test that DataManager uses the new ExternalDataProvider interface."""
-        data_manager = DataManager(enable_ib=True)
+        data_manager = DataManager()  # IB integration is always enabled now
 
         # Verify it uses the new adapter
         assert data_manager.external_provider is not None
@@ -254,7 +254,7 @@ class TestIbNewArchitectureIntegration:
 
     async def test_data_manager_end_to_end(self):
         """Test DataManager with new architecture end-to-end."""
-        data_manager = DataManager(enable_ib=True)
+        data_manager = DataManager()  # IB integration is always enabled now
 
         # Test that it can validate symbols
         try:
