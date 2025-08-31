@@ -335,7 +335,9 @@ class TestDataManager:
             else:
                 # Count outliers from the quality report
                 outlier_issues = quality_report.get_issues_by_type("price_outliers")
-                outlier_count = sum(issue.metadata.get("count", 0) for issue in outlier_issues)
+                outlier_count = sum(
+                    issue.metadata.get("count", 0) for issue in outlier_issues
+                )
 
         except Exception:
             # If validation raises an exception, use fallback behavior (outlier count = 0)
@@ -350,8 +352,12 @@ class TestDataManager:
             _, clean_quality_report = data_manager.data_validator.validate_data(
                 sample_data, "OUTLIER_CHECK", "1h", validation_type="local"
             )
-            clean_outlier_issues = clean_quality_report.get_issues_by_type("price_outliers")
-            clean_outlier_count = sum(issue.metadata.get("count", 0) for issue in clean_outlier_issues)
+            clean_outlier_issues = clean_quality_report.get_issues_by_type(
+                "price_outliers"
+            )
+            clean_outlier_count = sum(
+                issue.metadata.get("count", 0) for issue in clean_outlier_issues
+            )
         except Exception:
             clean_outlier_count = 0
 
