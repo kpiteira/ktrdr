@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ktrdr.data.data_quality_validator import (
+from ktrdr.data.components.data_quality_validator import (
     DataQualityIssue,
     DataQualityReport,
     DataQualityValidator,

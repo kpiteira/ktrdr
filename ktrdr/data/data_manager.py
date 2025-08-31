@@ -19,16 +19,16 @@ from ktrdr import (
     log_entry_exit,
     log_performance,
 )
+from ktrdr.data.components.data_health_checker import DataHealthChecker
+from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
+from ktrdr.data.components.gap_classifier import GapClassifier
 from ktrdr.data.components.progress_manager import ProgressManager
-from ktrdr.data.data_quality_validator import DataQualityValidator
+from ktrdr.data.components.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.data.external_data_interface import ExternalDataProvider
-from ktrdr.data.gap_classifier import GapClassifier
 from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.data.local_data_loader import LocalDataLoader
-from ktrdr.data.managers.data_health_checker import DataHealthChecker
-from ktrdr.data.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.errors import (
     DataCorruptionError,
     DataError,

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ktrdr.data.managers.data_health_checker import DataHealthChecker
+from ktrdr.data.components.data_health_checker import DataHealthChecker
 
 
 class TestDataHealthChecker:

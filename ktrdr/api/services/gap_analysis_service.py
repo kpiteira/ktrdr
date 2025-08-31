@@ -18,7 +18,11 @@ from ktrdr.api.models.gap_analysis import (
     GapAnalysisSummary,
     GapInfoModel,
 )
-from ktrdr.data.gap_classifier import GapClassification, GapClassifier, GapInfo
+from ktrdr.data.components.gap_classifier import (
+    GapClassification,
+    GapClassifier,
+    GapInfo,
+)
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.logging import get_logger

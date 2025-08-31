@@ -19,8 +19,12 @@ import pandas as pd
 import pytest
 
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
+from ktrdr.data.components.gap_classifier import (
+    GapClassification,
+    GapClassifier,
+    GapInfo,
+)
 from ktrdr.data.components.progress_manager import ProgressManager
-from ktrdr.data.gap_classifier import GapClassification, GapClassifier, GapInfo
 from ktrdr.data.loading_modes import DataLoadingMode
 
 
