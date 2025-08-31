@@ -13,11 +13,13 @@ This component handles:
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 
+from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.gap_classifier import GapClassification, GapClassifier
+from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.logging import get_logger
 
@@ -41,7 +43,18 @@ class GapAnalyzer:
                            If None, a default instance will be created.
         """
         self.gap_classifier = gap_classifier or GapClassifier()
-        logger.debug("Initialized GapAnalyzer component")
+
+        # Mode-aware analysis state
+        self.current_mode: Optional[DataLoadingMode] = None
+        self.progress_manager: Optional[ProgressManager] = None
+        self.config: dict[str, Any] = {
+            "min_gap_threshold": timedelta(hours=1),
+            "max_gaps_per_mode": 1000,
+            "prioritize_weekends": True,
+            "skip_holiday_analysis": False,
+        }
+
+        logger.debug("Initialized GapAnalyzer component with mode-aware capabilities")
 
     def analyze_gaps(
         self,
@@ -294,3 +307,365 @@ class GapAnalyzer:
             current += timedelta(days=1)
 
         return False
+
+    # Mode-aware functionality starts here
+
+    def set_analysis_mode(self, mode: DataLoadingMode) -> None:
+        """
+        Configure mode-specific behavior for gap analysis.
+
+        Args:
+            mode: DataLoadingMode enum value
+
+        Raises:
+            ValueError: If mode is invalid
+        """
+        if not isinstance(mode, DataLoadingMode):
+            raise ValueError(f"Invalid analysis mode: {mode}")
+
+        self.current_mode = mode
+        logger.debug(f"Set analysis mode to {mode.value}")
+
+    def set_progress_manager(self, progress_manager: ProgressManager) -> None:
+        """
+        Set the ProgressManager for analysis progress reporting.
+
+        Args:
+            progress_manager: ProgressManager instance
+        """
+        self.progress_manager = progress_manager
+        logger.debug("Set ProgressManager for gap analysis progress reporting")
+
+    def set_configuration(self, config: dict[str, Any]) -> None:
+        """
+        Set configuration options for analysis strategies and thresholds.
+
+        Args:
+            config: Configuration dictionary
+        """
+        self.config.update(config)
+        logger.debug(f"Updated gap analyzer configuration: {config}")
+
+    def classify_gap_type(
+        self,
+        gap_start: datetime,
+        gap_end: datetime,
+        market_calendar: Any,
+        symbol: str,
+        timeframe: str,
+    ) -> str:
+        """
+        Classify gap type with market calendar integration.
+
+        Args:
+            gap_start: Gap start time
+            gap_end: Gap end time
+            market_calendar: Market calendar instance
+            symbol: Trading symbol
+            timeframe: Data timeframe
+
+        Returns:
+            Gap type classification string
+        """
+        gap_duration = gap_end - gap_start
+
+        # Check for holidays
+        try:
+            if hasattr(market_calendar, "holidays"):
+                holidays = market_calendar.holidays(gap_start.date(), gap_end.date())
+                if len(holidays) > 0:
+                    return "holiday"
+        except Exception as e:
+            logger.debug(f"Holiday check failed: {e}")
+
+        # Check for weekends
+        if gap_start.weekday() >= 5 or gap_end.weekday() >= 5:  # Saturday/Sunday
+            if gap_duration <= timedelta(days=3):  # Normal weekend
+                return "market_closure"
+
+        # Check trading hours for intraday timeframes
+        if timeframe in ["1m", "5m", "15m", "30m", "1h"]:
+            # During normal market hours (9:30 AM - 4:00 PM ET)
+            gap_start.replace(hour=14, minute=30)  # 9:30 AM ET in UTC
+            gap_start.replace(hour=21, minute=0)  # 4:00 PM ET in UTC
+
+            if gap_start.hour >= 14 and gap_end.hour <= 21:
+                if gap_start.weekday() < 5:  # Weekday
+                    return "missing_data"
+
+        # Default classification
+        if gap_duration > timedelta(days=3):
+            return "market_closure"
+        else:
+            return "missing_data"
+
+    def prioritize_gaps_by_mode(
+        self, gaps: list[Any], mode: DataLoadingMode
+    ) -> list[Any]:
+        """
+        Prioritize gaps based on mode and data characteristics.
+
+        Args:
+            gaps: List of gap objects
+            mode: Loading mode
+
+        Returns:
+            Prioritized list of gaps
+        """
+        if mode == DataLoadingMode.LOCAL:
+            return []  # No gaps needed for local mode
+
+        if not gaps:
+            return []
+
+        prioritized = gaps.copy()
+
+        if mode == DataLoadingMode.TAIL:
+            # Prioritize recent gaps first (newest to oldest)
+            prioritized.sort(key=lambda g: g.start_time, reverse=True)
+
+        elif mode == DataLoadingMode.BACKFILL:
+            # Prioritize historical gaps first (oldest to newest)
+            prioritized.sort(key=lambda g: g.start_time)
+
+        elif mode == DataLoadingMode.FULL:
+            # Prioritize by importance first, then strategically
+            def gap_priority_key(gap):
+                # Higher priority numbers come first
+                priority = getattr(gap, "priority", 1)
+                # Missing data is more important than market closures
+                type_priority = (
+                    2 if getattr(gap, "gap_type", "") == "missing_data" else 1
+                )
+                return (-priority, -type_priority, gap.start_time)
+
+            prioritized.sort(key=gap_priority_key)
+
+        # Limit gaps per mode configuration
+        max_gaps = self.config.get("max_gaps_per_mode", 1000)
+        return prioritized[:max_gaps]
+
+    def analyze_gaps_by_mode(
+        self,
+        mode: DataLoadingMode,
+        existing_data: Optional[pd.DataFrame],
+        requested_start: datetime,
+        requested_end: datetime,
+        timeframe: str,
+        symbol: str,
+        **kwargs,
+    ) -> list[tuple[datetime, datetime]]:
+        """
+        Analyze gaps using mode-specific strategies.
+
+        Args:
+            mode: Data loading mode
+            existing_data: Existing DataFrame with data
+            requested_start: Start of requested range
+            requested_end: End of requested range
+            timeframe: Data timeframe
+            symbol: Trading symbol
+            **kwargs: Additional arguments
+
+        Returns:
+            List of gaps to fill as (start, end) tuples
+        """
+        # Validate inputs
+        if requested_start >= requested_end:
+            raise ValueError("Start date must be before end date")
+
+        # Validate timeframe
+        valid_timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+        if timeframe not in valid_timeframes:
+            raise ValueError(f"Unsupported timeframe: {timeframe}")
+
+        if mode == DataLoadingMode.LOCAL:
+            return []  # No analysis needed
+        elif mode == DataLoadingMode.TAIL:
+            return self._analyze_recent_gaps(
+                existing_data,
+                requested_start,
+                requested_end,
+                timeframe,
+                symbol,
+                **kwargs,
+            )
+        elif mode == DataLoadingMode.BACKFILL:
+            return self._analyze_historical_gaps(
+                existing_data,
+                requested_start,
+                requested_end,
+                timeframe,
+                symbol,
+                **kwargs,
+            )
+        elif mode == DataLoadingMode.FULL:
+            return self._analyze_complete_range(
+                existing_data,
+                requested_start,
+                requested_end,
+                timeframe,
+                symbol,
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+    def _analyze_recent_gaps(
+        self,
+        existing_data: Optional[pd.DataFrame],
+        requested_start: datetime,
+        requested_end: datetime,
+        timeframe: str,
+        symbol: str,
+        **kwargs,
+    ) -> list[tuple[datetime, datetime]]:
+        """
+        Focus on recent gaps from last data point to now.
+
+        Returns:
+            List of recent gaps to fill
+        """
+        if self.progress_manager:
+            self.progress_manager.start_step("Analyzing recent gaps", 1)
+
+        # Use existing analyze_gaps logic but focus on tail
+        gaps = self.analyze_gaps(
+            existing_data,
+            requested_start,
+            requested_end,
+            timeframe,
+            symbol,
+            mode="tail",
+        )
+
+        if self.progress_manager:
+            self.progress_manager.complete_step()
+
+        return gaps
+
+    def _analyze_historical_gaps(
+        self,
+        existing_data: Optional[pd.DataFrame],
+        requested_start: datetime,
+        requested_end: datetime,
+        timeframe: str,
+        symbol: str,
+        **kwargs,
+    ) -> list[tuple[datetime, datetime]]:
+        """
+        Focus on historical gaps from start to first data point.
+
+        Returns:
+            List of historical gaps to fill
+        """
+        if self.progress_manager:
+            self.progress_manager.start_step("Analyzing historical gaps", 1)
+
+        # Use existing analyze_gaps logic but focus on backfill
+        gaps = self.analyze_gaps(
+            existing_data,
+            requested_start,
+            requested_end,
+            timeframe,
+            symbol,
+            mode="backfill",
+        )
+
+        if self.progress_manager:
+            self.progress_manager.complete_step()
+
+        return gaps
+
+    def _analyze_complete_range(
+        self,
+        existing_data: Optional[pd.DataFrame],
+        requested_start: datetime,
+        requested_end: datetime,
+        timeframe: str,
+        symbol: str,
+        **kwargs,
+    ) -> list[tuple[datetime, datetime]]:
+        """
+        Comprehensive analysis combining tail + backfill strategies.
+
+        Returns:
+            List of all gaps to fill
+        """
+        if self.progress_manager:
+            self.progress_manager.start_step("Analyzing complete range", 1)
+
+        # Use existing analyze_gaps logic for full analysis
+        gaps = self.analyze_gaps(
+            existing_data,
+            requested_start,
+            requested_end,
+            timeframe,
+            symbol,
+            mode="full",
+        )
+
+        if self.progress_manager:
+            self.progress_manager.complete_step()
+
+        return gaps
+
+    def estimate_analysis_time(
+        self, start_date: datetime, end_date: datetime, mode: DataLoadingMode
+    ) -> timedelta:
+        """
+        Estimate time needed for gap analysis based on date range and mode.
+
+        Args:
+            start_date: Analysis start date
+            end_date: Analysis end date
+            mode: Loading mode
+
+        Returns:
+            Estimated analysis time
+        """
+        if mode == DataLoadingMode.LOCAL:
+            return timedelta(0)  # No analysis needed
+
+        date_range_days = (end_date - start_date).days
+
+        # Base time estimates by mode (in seconds per day)
+        time_per_day = {
+            DataLoadingMode.LOCAL: 0,
+            DataLoadingMode.TAIL: 0.001,  # 1ms per day
+            DataLoadingMode.BACKFILL: 0.001,  # 1ms per day
+            DataLoadingMode.FULL: 0.002,  # 2ms per day
+        }
+
+        base_seconds = time_per_day[mode] * date_range_days
+        # Add fixed overhead
+        overhead = 0.1  # 100ms overhead
+
+        total_seconds = base_seconds + overhead
+        return timedelta(seconds=total_seconds)
+
+    def get_mode_step_descriptions(self, mode: DataLoadingMode) -> list[str]:
+        """
+        Get mode-specific step descriptions for progress reporting.
+
+        Args:
+            mode: Data loading mode
+
+        Returns:
+            List of step descriptions for the mode
+        """
+        descriptions = {
+            DataLoadingMode.LOCAL: ["Skipping analysis (local mode)"],
+            DataLoadingMode.TAIL: ["Analyzing recent gaps", "Prioritizing tail data"],
+            DataLoadingMode.BACKFILL: [
+                "Analyzing historical gaps",
+                "Prioritizing backfill data",
+            ],
+            DataLoadingMode.FULL: [
+                "Analyzing complete range",
+                "Combining strategies",
+                "Prioritizing all gaps",
+            ],
+        }
+
+        return descriptions.get(mode, ["Analyzing gaps"])
