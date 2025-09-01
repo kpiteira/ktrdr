@@ -5,20 +5,18 @@ Following TDD approach - these tests will FAIL initially and drive the implement
 """
 
 import asyncio
-import pytest
-import pytest_asyncio
-from abc import ABC
-from typing import Dict, Any, Optional
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, patch
 
 import httpx
+import pytest
+import pytest_asyncio
 
 from ktrdr.managers.async_host_service import (
     AsyncHostService,
-    HostServiceError,
-    HostServiceConnectionError,
-    HostServiceTimeoutError,
     HostServiceConfig,
+    HostServiceConnectionError,
+    HostServiceError,
+    HostServiceTimeoutError,
 )
 
 
@@ -439,15 +437,18 @@ class TestAsyncHostServiceStatistics:
     def test_performance_benchmarking_metrics(self, mock_host_service):
         """Test performance benchmarking capabilities for TASK-1.5b."""
         # Test performance tracking methods
-        assert hasattr(mock_host_service, 'get_performance_summary')
-        assert hasattr(mock_host_service, 'reset_metrics')
-        assert hasattr(mock_host_service, 'get_connection_pool_stats')
-        
+        assert hasattr(mock_host_service, "get_performance_summary")
+        assert hasattr(mock_host_service, "reset_metrics")
+        assert hasattr(mock_host_service, "get_connection_pool_stats")
+
         # Performance summary should include key metrics
         perf_summary = mock_host_service.get_performance_summary()
         expected_keys = [
-            "uptime", "requests_per_second", "error_rate",
-            "average_response_time", "connection_pool_utilization"
+            "uptime",
+            "requests_per_second",
+            "error_rate",
+            "average_response_time",
+            "connection_pool_utilization",
         ]
         assert all(key in perf_summary for key in expected_keys)
 
@@ -456,8 +457,12 @@ class TestAsyncHostServiceStatistics:
         # Connection pool stats should be available
         pool_stats = mock_host_service.get_connection_pool_stats()
         expected_keys = [
-            "active_connections", "idle_connections", "total_connections",
-            "connection_pool_limit", "connections_created", "connections_closed"
+            "active_connections",
+            "idle_connections",
+            "total_connections",
+            "connection_pool_limit",
+            "connections_created",
+            "connections_closed",
         ]
         assert all(key in pool_stats for key in expected_keys)
 
@@ -475,7 +480,7 @@ class TestAsyncHostServiceStatistics:
             trace_id = await mock_host_service._call_host_service_post_with_tracing(
                 "/create", {"data": "test"}
             )
-            
+
             # Should return a trace ID for request correlation
             assert trace_id is not None
             assert isinstance(trace_id, str)
@@ -539,18 +544,18 @@ class TestAsyncHostServiceConfiguration:
             connection_keep_alive=True,
             max_connection_age=3600,  # 1 hour
         )
-        
+
         # This should not fail when enhanced config is implemented
         service = MockHostService(config)
-        
+
         async with service:
             # Should be able to access new configuration options
-            assert hasattr(service.config, 'health_check_interval')
-            assert hasattr(service.config, 'health_check_timeout')
-            assert hasattr(service.config, 'enable_metrics_collection')
-            assert hasattr(service.config, 'enable_request_tracing')
-            assert hasattr(service.config, 'connection_keep_alive')
-            assert hasattr(service.config, 'max_connection_age')
+            assert hasattr(service.config, "health_check_interval")
+            assert hasattr(service.config, "health_check_timeout")
+            assert hasattr(service.config, "enable_metrics_collection")
+            assert hasattr(service.config, "enable_request_tracing")
+            assert hasattr(service.config, "connection_keep_alive")
+            assert hasattr(service.config, "max_connection_age")
 
 
 class TestAsyncHostServiceIntegration:
@@ -615,9 +620,7 @@ class TestAsyncHostServicePerformanceBenchmarks:
         async with service:
             # Run throughput benchmark (method to be implemented)
             benchmark_result = await service.run_throughput_benchmark(
-                duration_seconds=5,
-                concurrent_requests=10,
-                endpoint="/benchmark"
+                duration_seconds=5, concurrent_requests=10, endpoint="/benchmark"
             )
 
             # Should return comprehensive benchmark data
@@ -646,7 +649,7 @@ class TestAsyncHostServicePerformanceBenchmarks:
 
                 # Get latency distribution (method to be implemented)
                 latency_dist = service.get_latency_distribution()
-                
+
                 assert "percentiles" in latency_dist
                 assert "histogram" in latency_dist
                 assert "min" in latency_dist
@@ -658,10 +661,13 @@ class TestAsyncHostServicePerformanceBenchmarks:
         """Test memory usage tracking for connection pool."""
         # Memory usage should be tracked
         memory_stats = mock_host_service.get_memory_usage_stats()
-        
+
         expected_keys = [
-            "current_memory_mb", "peak_memory_mb", "connection_pool_memory_mb",
-            "request_cache_memory_mb", "metrics_memory_mb"
+            "current_memory_mb",
+            "peak_memory_mb",
+            "connection_pool_memory_mb",
+            "request_cache_memory_mb",
+            "metrics_memory_mb",
         ]
         assert all(key in memory_stats for key in expected_keys)
 
@@ -677,7 +683,7 @@ class TestAsyncHostServicePerformanceBenchmarks:
                 max_concurrent_requests=100,
                 ramp_up_time_seconds=10,
                 sustain_time_seconds=30,
-                endpoint="/stress"
+                endpoint="/stress",
             )
 
             # Should track system behavior under stress
