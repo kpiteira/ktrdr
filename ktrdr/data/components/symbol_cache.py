@@ -6,6 +6,8 @@ layer to reduce redundant host service calls while maintaining the same cancella
 patterns as data loading.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from dataclasses import dataclass, asdict
@@ -14,7 +16,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 from ktrdr import get_logger
-from ktrdr.ib import ValidationResult
+# Lazy import to avoid circular dependency
 
 logger = get_logger(__name__)
 
@@ -30,8 +32,11 @@ class CachedSymbolInfo:
         """Check if cached data has expired."""
         return time.time() - self.cached_at > self.ttl_seconds
         
-    def to_validation_result(self) -> ValidationResult:
+    def to_validation_result(self):
         """Convert back to ValidationResult object."""
+        # Lazy import to avoid circular dependency
+        from ktrdr.ib import ValidationResult
+        
         data = self.validation_result
         return ValidationResult(
             is_valid=data["is_valid"],
@@ -69,7 +74,7 @@ class SymbolCache:
             logger.debug(f"💾 Cache miss for {symbol_key}")
         return None
     
-    def store(self, symbol: str, validation_result: ValidationResult) -> None:
+    def store(self, symbol: str, validation_result: "ValidationResult") -> None:
         """Cache validation result with TTL."""
         symbol_key = symbol.upper()
         
