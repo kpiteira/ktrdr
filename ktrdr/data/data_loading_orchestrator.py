@@ -82,11 +82,17 @@ class DataLoadingOrchestrator:
 
         if self.data_manager.external_provider:
             try:
-                # Simplified async validation call
+                # Async validation call with proper context management
                 async def validate_async():
-                    return await self.data_manager.external_provider.validate_and_get_metadata(
-                        symbol, [timeframe]
-                    )
+                    # Check if provider needs async context manager (AsyncHostService)
+                    provider = self.data_manager.external_provider
+                    if hasattr(provider, 'use_host_service') and provider.use_host_service:
+                        # Use async context manager for AsyncHostService providers
+                        async with provider:
+                            return await provider.validate_and_get_metadata(symbol, [timeframe])
+                    else:
+                        # Direct call for non-AsyncHostService providers
+                        return await provider.validate_and_get_metadata(symbol, [timeframe])
 
                 validation_result = asyncio.run(validate_async())
 

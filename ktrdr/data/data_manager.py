@@ -591,6 +591,7 @@ class DataManager(ServiceOrchestrator):
 
         Provides a single asyncio.run() entry point for backward compatibility
         while maintaining proper async/sync boundary separation.
+        Handles AsyncHostService context management automatically.
 
         Args:
             async_method: The async method to execute
@@ -600,7 +601,19 @@ class DataManager(ServiceOrchestrator):
         Returns:
             The result of the async method execution
         """
-        return asyncio.run(async_method(*args, **kwargs))
+        async def run_with_context():
+            # Check if external provider needs async context manager
+            if (self.external_provider and 
+                hasattr(self.external_provider, 'use_host_service') and 
+                self.external_provider.use_host_service):
+                # Use async context manager for AsyncHostService providers
+                async with self.external_provider:
+                    return await async_method(*args, **kwargs)
+            else:
+                # Direct call for non-AsyncHostService providers
+                return await async_method(*args, **kwargs)
+        
+        return asyncio.run(run_with_context())
 
     def _fetch_segments_with_component(
         self,
