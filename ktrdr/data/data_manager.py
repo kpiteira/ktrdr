@@ -7,9 +7,10 @@ and handling gaps or missing values in time series data.
 """
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 
@@ -473,7 +474,28 @@ class DataManager(ServiceOrchestrator):
             self._data_fetcher = DataFetcher()
         return self._data_fetcher
 
-    def _fetch_segments_with_component(
+    async def cleanup_resources(self) -> None:
+        """
+        Clean up all persistent resources for proper shutdown.
+
+        This method should be called when shutting down long-running applications
+        to ensure all HTTP connections and resources are properly closed.
+        """
+        if self._data_fetcher is not None:
+            await self._data_fetcher.cleanup()
+            self._data_fetcher = None
+            logger.info("DataManager resources cleaned up")
+
+    def cleanup_resources_sync(self) -> None:
+        """
+        Sync wrapper for cleaning up all persistent resources.
+
+        Convenient method for cleanup during application shutdown
+        when not in async context.
+        """
+        return self._run_async_method(self.cleanup_resources)
+
+    async def _fetch_segments_with_component_async(
         self,
         symbol: str,
         timeframe: str,
@@ -484,9 +506,8 @@ class DataManager(ServiceOrchestrator):
         """
         Enhanced async fetching using DataFetcher component.
 
-        This method provides compatibility with the current synchronous DataManager
-        while delegating to the enhanced DataFetcher component for optimal
-        performance with connection pooling and advanced progress tracking.
+        This method provides optimal async performance with connection pooling
+        and advanced progress tracking, without creating new event loops.
 
         Args:
             symbol: Trading symbol
@@ -507,54 +528,49 @@ class DataManager(ServiceOrchestrator):
         # Ensure DataFetcher is initialized
         data_fetcher = self._ensure_data_fetcher()
 
-        # Run the enhanced async DataFetcher method
+        # Run the enhanced async DataFetcher method directly
         try:
+            # Check if external provider is available
+            if self.external_provider is None:
+                logger.error("No external provider available for data fetching")
+                return [], 0, 0
 
-            async def fetch_with_data_fetcher():
-                """Async wrapper for DataFetcher with periodic save integration."""
-                try:
-                    # Check if external provider is available
-                    if self.external_provider is None:
-                        logger.error("No external provider available for data fetching")
-                        return [], 0, 0
+            # Create periodic save callback for time-based saving during fetch
+            def periodic_save_callback(
+                successful_data_list: list[pd.DataFrame],
+            ) -> int:
+                """Callback for periodic progress saving during fetch."""
+                return self._save_periodic_progress(
+                    successful_data_list,
+                    symbol,
+                    timeframe,
+                    0,  # TODO: Track previous bars properly
+                )
 
-                    # Create periodic save callback for time-based saving during fetch
-                    def periodic_save_callback(
-                        successful_data_list: list[pd.DataFrame],
-                    ) -> int:
-                        """Callback for periodic progress saving during fetch."""
-                        return self._save_periodic_progress(
-                            successful_data_list,
-                            symbol,
-                            timeframe,
-                            0,  # TODO: Track previous bars properly
-                        )
-
-                    # Use SegmentManager for resilient fetching with periodic save support
-                    successful_data, successful_count, failed_count = (
-                        await self.segment_manager.fetch_segments_with_resilience(
-                            symbol=symbol,
-                            timeframe=timeframe,
-                            segments=segments,
-                            external_provider=self.external_provider,
-                            progress_manager=progress_manager,
-                            cancellation_token=cancellation_token,
-                            periodic_save_callback=(
-                                periodic_save_callback
-                                if INTERNAL_SAVE_INTERVAL > 0
-                                else None
-                            ),
-                            periodic_save_minutes=INTERNAL_SAVE_INTERVAL,
-                        )
+            try:
+                # Use SegmentManager for resilient fetching with periodic save support
+                successful_data, successful_count, failed_count = (
+                    await self.segment_manager.fetch_segments_with_resilience(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        segments=segments,
+                        external_provider=self.external_provider,
+                        progress_manager=progress_manager,
+                        cancellation_token=cancellation_token,
+                        periodic_save_callback=(
+                            periodic_save_callback
+                            if INTERNAL_SAVE_INTERVAL > 0
+                            else None
+                        ),
+                        periodic_save_minutes=INTERNAL_SAVE_INTERVAL,
                     )
+                )
 
-                    return successful_data, successful_count, failed_count
+                return successful_data, successful_count, failed_count
 
-                finally:
-                    # Clean up DataFetcher resources after operation
-                    await data_fetcher.cleanup()
-
-            return asyncio.run(fetch_with_data_fetcher())
+            finally:
+                # Clean up DataFetcher resources after operation
+                await data_fetcher.cleanup()
 
         except asyncio.CancelledError:
             # Re-raise cancellation errors properly
@@ -562,7 +578,61 @@ class DataManager(ServiceOrchestrator):
             raise
         except Exception as e:
             logger.error(f"Enhanced data fetching failed: {e}")
+            # Preserve timeout exceptions for proper error context
+            if isinstance(e, asyncio.TimeoutError):
+                raise  # Re-raise to maintain async timeout semantics
             return [], 0, len(segments)
+
+    def _run_async_method(
+        self, async_method: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Any:
+        """
+        Reusable utility to execute async methods from sync context.
+
+        Provides a single asyncio.run() entry point for backward compatibility
+        while maintaining proper async/sync boundary separation.
+
+        Args:
+            async_method: The async method to execute
+            *args: Positional arguments for the async method
+            **kwargs: Keyword arguments for the async method
+
+        Returns:
+            The result of the async method execution
+        """
+        return asyncio.run(async_method(*args, **kwargs))
+
+    def _fetch_segments_with_component(
+        self,
+        symbol: str,
+        timeframe: str,
+        segments: list[tuple[datetime, datetime]],
+        cancellation_token: Optional[Any] = None,
+        progress_manager: Optional[ProgressManager] = None,
+    ) -> tuple[list[pd.DataFrame], int, int]:
+        """
+        Sync wrapper for enhanced async fetching using DataFetcher component.
+
+        This method maintains backward compatibility by providing a sync interface
+        to the async implementation, with a single asyncio.run() at the entry point.
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            segments: List of (start, end) segments to fetch
+            cancellation_token: Optional cancellation token
+            progress_manager: Optional progress manager
+        Returns:
+            Tuple of (successful_dataframes, successful_count, failed_count)
+        """
+        return self._run_async_method(
+            self._fetch_segments_with_component_async,
+            symbol,
+            timeframe,
+            segments,
+            cancellation_token,
+            progress_manager,
+        )
 
     # Segmentation methods have been extracted to SegmentManager component
     # See: ktrdr.data.components.segment_manager.SegmentManager
@@ -631,11 +701,11 @@ class DataManager(ServiceOrchestrator):
             logger.error(f"Failed to save periodic progress: {e}")
             raise
 
-    def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
+    async def _fetch_head_timestamp_async(
+        self, symbol: str, timeframe: str
+    ) -> Optional[str]:
         """
-        Sync wrapper for async head timestamp fetching.
-
-        Simplified async/sync handling for better maintainability.
+        Async head timestamp fetching without event loop creation.
 
         Args:
             symbol: Trading symbol
@@ -647,20 +717,39 @@ class DataManager(ServiceOrchestrator):
         if not self.external_provider:
             return None
 
-        async def fetch_head_timestamp_async():
-            """Async head timestamp fetch function."""
-            return await self.external_provider.get_head_timestamp(
+        try:
+            result = await self.external_provider.get_head_timestamp(
                 symbol=symbol, timeframe=timeframe
             )
-
-        try:
-            return asyncio.run(fetch_head_timestamp_async())
+            # Convert datetime to string if needed
+            if result is not None and hasattr(result, "isoformat"):
+                return result.isoformat()
+            return str(result) if result is not None else None
         except Exception as e:
             logger.error(f"Head timestamp fetch failed for {symbol}: {e}")
+            # Preserve async-specific exceptions for proper error context
+            if isinstance(e, (asyncio.CancelledError, asyncio.TimeoutError)):
+                raise  # Re-raise to maintain async error semantics
             return None
 
-    @log_entry_exit(logger=logger, log_args=True)
-    def _validate_request_against_head_timestamp(
+    def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
+        """
+        Sync wrapper for async head timestamp fetching.
+
+        Maintains backward compatibility with a single asyncio.run() call.
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+
+        Returns:
+            ISO formatted head timestamp string or None if failed
+        """
+        return self._run_async_method(
+            self._fetch_head_timestamp_async, symbol, timeframe
+        )
+
+    async def _validate_request_against_head_timestamp_async(
         self,
         symbol: str,
         timeframe: str,
@@ -668,7 +757,7 @@ class DataManager(ServiceOrchestrator):
         end_date: datetime,
     ) -> tuple[bool, Optional[str], Optional[datetime]]:
         """
-        Validate request date range against cached head timestamp data.
+        Async validate request date range against head timestamp data.
 
         This method checks if the requested start date is within the available
         data range for the symbol, helping prevent unnecessary error 162s.
@@ -686,16 +775,21 @@ class DataManager(ServiceOrchestrator):
             return True, None, None
 
         try:
-            # Get head timestamp from external provider using simplified async handling
-            async def get_head_async():
-                return await self.external_provider.get_head_timestamp(
-                    symbol, timeframe
-                )
+            # Get head timestamp using async method (no nested event loop)
+            head_timestamp_str = await self._fetch_head_timestamp_async(
+                symbol, timeframe
+            )
 
-            head_timestamp = asyncio.run(get_head_async())
+            if head_timestamp_str is None:
+                return True, None, None  # No head timestamp available, assume valid
+
+            # Convert string back to datetime for comparison
+            from ktrdr.utils.timezone_utils import TimestampManager
+
+            head_timestamp = TimestampManager.to_utc(head_timestamp_str)
 
             if head_timestamp is None:
-                return True, None, None  # No head timestamp available, assume valid
+                return True, None, None  # No valid timestamp, assume valid
 
             # Check if start_date is before head timestamp
             if start_date < head_timestamp:
@@ -711,8 +805,41 @@ class DataManager(ServiceOrchestrator):
 
         except Exception as e:
             logger.warning(f"Head timestamp validation failed for {symbol}: {e}")
+            # Preserve async-specific exceptions for proper error context
+            if isinstance(e, (asyncio.CancelledError, asyncio.TimeoutError)):
+                raise  # Re-raise to maintain async error semantics
             # Don't block requests if validation fails
             return True, None, None
+
+    @log_entry_exit(logger=logger, log_args=True)
+    def _validate_request_against_head_timestamp(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> tuple[bool, Optional[str], Optional[datetime]]:
+        """
+        Sync wrapper for async head timestamp validation.
+
+        Maintains backward compatibility with a single asyncio.run() call.
+
+        Args:
+            symbol: Trading symbol
+            timeframe: Data timeframe
+            start_date: Requested start date
+            end_date: Requested end date
+
+        Returns:
+            Tuple of (is_valid, error_message, adjusted_start_date)
+        """
+        return self._run_async_method(
+            self._validate_request_against_head_timestamp_async,
+            symbol,
+            timeframe,
+            start_date,
+            end_date,
+        )
 
     def _ensure_symbol_has_head_timestamp(self, symbol: str, timeframe: str) -> bool:
         """
