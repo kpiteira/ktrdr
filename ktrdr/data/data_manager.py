@@ -1092,3 +1092,21 @@ class DataManager(ServiceOrchestrator):
             logger.info(f"Saved merged data with {len(merged_data)} rows")
 
         return merged_data
+
+    def clear_symbol_cache(self) -> None:
+        """Clear backend symbol cache."""
+        if hasattr(self.data_loading_orchestrator, 'symbol_cache'):
+            self.data_loading_orchestrator.symbol_cache.clear()
+            logger.info("💾 Backend symbol cache cleared")
+        else:
+            logger.warning("💾 Symbol cache not available")
+            
+    def get_symbol_cache_stats(self) -> dict:
+        """Get backend symbol cache statistics."""
+        if hasattr(self.data_loading_orchestrator, 'symbol_cache'):
+            stats = self.data_loading_orchestrator.symbol_cache.get_stats()
+            logger.info(f"💾 Symbol cache stats: {stats}")
+            return stats
+        else:
+            logger.warning("💾 Symbol cache not available")
+            return {"cached_symbols": 0}

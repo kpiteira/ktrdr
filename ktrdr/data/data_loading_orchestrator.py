@@ -12,6 +12,7 @@ from typing import Any, Optional, Union
 import pandas as pd
 
 from ktrdr.data.loading_modes import DataLoadingMode
+from ktrdr.data.components.symbol_cache import SymbolCache
 from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
 
@@ -29,6 +30,8 @@ class DataLoadingOrchestrator:
     def __init__(self, data_manager):
         """Initialize with DataManager reference for access to all methods."""
         self.data_manager = data_manager
+        # Add symbol cache for backend validation caching
+        self.symbol_cache = SymbolCache()
 
     def load_with_fallback(
         self,
@@ -81,21 +84,36 @@ class DataLoadingOrchestrator:
         cached_head_timestamp = None
 
         if self.data_manager.external_provider:
-            try:
-                # Async validation call with proper context management
-                async def validate_async():
-                    # Check if provider needs async context manager (AsyncHostService)
-                    provider = self.data_manager.external_provider
-                    if hasattr(provider, 'use_host_service') and provider.use_host_service:
-                        # Use async context manager for AsyncHostService providers
-                        async with provider:
-                            return await provider.validate_and_get_metadata(symbol, [timeframe])
-                    else:
-                        # Direct call for non-AsyncHostService providers
-                        return await provider.validate_and_get_metadata(symbol, [timeframe])
+            # NEW: Check backend cache first
+            cached_info = self.symbol_cache.get(symbol)
+            if cached_info:
+                logger.info(f"💾 Backend cache HIT for {symbol}")
+                validation_result = cached_info.to_validation_result()
+            else:
+                logger.info(f"💾 Backend cache MISS for {symbol} - validating via host service")
+                try:
+                    # Use DataManager's async method runner (handles AsyncHostService context properly)
+                    async def validate_async():
+                        return await self.data_manager.external_provider.validate_and_get_metadata(symbol, [timeframe])
 
-                validation_result = asyncio.run(validate_async())
+                    validation_result = self.data_manager._run_async_method(validate_async)
+                    
+                    # NEW: Cache the result in backend  
+                    self.symbol_cache.store(symbol, validation_result)
+                    logger.info(f"💾 Cached validation result for {symbol} in backend")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Symbol validation failed for {symbol}: {e}")
+                    from ktrdr.errors import DataError
 
+                    raise DataError(
+                        message=f"Symbol validation failed: {e}",
+                        error_code="DATA-SymbolValidationFailed",
+                        details={"symbol": symbol, "timeframe": timeframe, "error": str(e)},
+                    ) from e
+            
+            # Success path - handle both cache hit and cache miss
+            if validation_result:
                 logger.info(f"✅ Symbol {symbol} validated successfully")
 
                 # Cache head timestamp for later use
@@ -107,16 +125,6 @@ class DataLoadingOrchestrator:
                     logger.info(
                         f"📅 Cached head timestamp for {symbol} ({timeframe}): {cached_head_timestamp}"
                     )
-
-            except Exception as e:
-                logger.error(f"❌ Symbol validation failed for {symbol}: {e}")
-                from ktrdr.errors import DataError
-
-                raise DataError(
-                    message=f"Symbol validation failed: {e}",
-                    error_code="DATA-SymbolValidationFailed",
-                    details={"symbol": symbol, "timeframe": timeframe, "error": str(e)},
-                ) from e
         else:
             logger.warning("External data provider not available for symbol validation")
 
