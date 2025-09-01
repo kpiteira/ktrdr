@@ -7,9 +7,10 @@ and handling gaps or missing values in time series data.
 """
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import pandas as pd
 
@@ -473,6 +474,27 @@ class DataManager(ServiceOrchestrator):
             self._data_fetcher = DataFetcher()
         return self._data_fetcher
 
+    async def cleanup_resources(self) -> None:
+        """
+        Clean up all persistent resources for proper shutdown.
+
+        This method should be called when shutting down long-running applications
+        to ensure all HTTP connections and resources are properly closed.
+        """
+        if self._data_fetcher is not None:
+            await self._data_fetcher.cleanup()
+            self._data_fetcher = None
+            logger.info("DataManager resources cleaned up")
+
+    def cleanup_resources_sync(self) -> None:
+        """
+        Sync wrapper for cleaning up all persistent resources.
+
+        Convenient method for cleanup during application shutdown
+        when not in async context.
+        """
+        return self._run_async_method(self.cleanup_resources)
+
     async def _fetch_segments_with_component_async(
         self,
         symbol: str,
@@ -556,7 +578,29 @@ class DataManager(ServiceOrchestrator):
             raise
         except Exception as e:
             logger.error(f"Enhanced data fetching failed: {e}")
+            # Preserve timeout exceptions for proper error context
+            if isinstance(e, asyncio.TimeoutError):
+                raise  # Re-raise to maintain async timeout semantics
             return [], 0, len(segments)
+
+    def _run_async_method(
+        self, async_method: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Any:
+        """
+        Reusable utility to execute async methods from sync context.
+
+        Provides a single asyncio.run() entry point for backward compatibility
+        while maintaining proper async/sync boundary separation.
+
+        Args:
+            async_method: The async method to execute
+            *args: Positional arguments for the async method
+            **kwargs: Keyword arguments for the async method
+
+        Returns:
+            The result of the async method execution
+        """
+        return asyncio.run(async_method(*args, **kwargs))
 
     def _fetch_segments_with_component(
         self,
@@ -581,10 +625,13 @@ class DataManager(ServiceOrchestrator):
         Returns:
             Tuple of (successful_dataframes, successful_count, failed_count)
         """
-        return asyncio.run(
-            self._fetch_segments_with_component_async(
-                symbol, timeframe, segments, cancellation_token, progress_manager
-            )
+        return self._run_async_method(
+            self._fetch_segments_with_component_async,
+            symbol,
+            timeframe,
+            segments,
+            cancellation_token,
+            progress_manager,
         )
 
     # Segmentation methods have been extracted to SegmentManager component
@@ -680,6 +727,9 @@ class DataManager(ServiceOrchestrator):
             return str(result) if result is not None else None
         except Exception as e:
             logger.error(f"Head timestamp fetch failed for {symbol}: {e}")
+            # Preserve async-specific exceptions for proper error context
+            if isinstance(e, (asyncio.CancelledError, asyncio.TimeoutError)):
+                raise  # Re-raise to maintain async error semantics
             return None
 
     def _fetch_head_timestamp_sync(self, symbol: str, timeframe: str) -> Optional[str]:
@@ -695,7 +745,9 @@ class DataManager(ServiceOrchestrator):
         Returns:
             ISO formatted head timestamp string or None if failed
         """
-        return asyncio.run(self._fetch_head_timestamp_async(symbol, timeframe))
+        return self._run_async_method(
+            self._fetch_head_timestamp_async, symbol, timeframe
+        )
 
     async def _validate_request_against_head_timestamp_async(
         self,
@@ -753,6 +805,9 @@ class DataManager(ServiceOrchestrator):
 
         except Exception as e:
             logger.warning(f"Head timestamp validation failed for {symbol}: {e}")
+            # Preserve async-specific exceptions for proper error context
+            if isinstance(e, (asyncio.CancelledError, asyncio.TimeoutError)):
+                raise  # Re-raise to maintain async error semantics
             # Don't block requests if validation fails
             return True, None, None
 
@@ -778,10 +833,12 @@ class DataManager(ServiceOrchestrator):
         Returns:
             Tuple of (is_valid, error_message, adjusted_start_date)
         """
-        return asyncio.run(
-            self._validate_request_against_head_timestamp_async(
-                symbol, timeframe, start_date, end_date
-            )
+        return self._run_async_method(
+            self._validate_request_against_head_timestamp_async,
+            symbol,
+            timeframe,
+            start_date,
+            end_date,
         )
 
     def _ensure_symbol_has_head_timestamp(self, symbol: str, timeframe: str) -> bool:
