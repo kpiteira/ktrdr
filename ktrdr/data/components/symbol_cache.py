@@ -14,7 +14,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 
 from ktrdr import get_logger
-from ktrdr.ib.symbol_validator import ValidationResult
+from ktrdr.ib import ValidationResult
 
 logger = get_logger(__name__)
 
