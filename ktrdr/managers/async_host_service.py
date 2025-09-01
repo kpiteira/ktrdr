@@ -26,6 +26,12 @@ import httpx
 
 from ktrdr.logging import get_logger
 
+# Optional dependency import with graceful fallback
+try:
+    import psutil
+except ImportError:
+    psutil = None  # type: ignore[assignment]
+
 logger = get_logger(__name__)
 
 
@@ -70,6 +76,12 @@ class HostServiceConfig:
     max_connection_age: int = 3600  # 1 hour max connection age
 
 
+# Memory management constants
+MAX_RESPONSE_TIMES = 1000  # Keep last 1000 response times
+MAX_TRACE_DATA = 100  # Keep last 100 traces
+MAX_ENDPOINT_STATS = 200  # Keep stats for last 200 endpoints
+
+
 # Abstract Base Class
 class AsyncHostService(ABC):
     """
@@ -110,7 +122,7 @@ class AsyncHostService(ABC):
         self._errors_encountered = 0
         self._last_request_time: Optional[datetime] = None
 
-        # Enhanced metrics for TASK-1.5b
+        # Enhanced metrics for TASK-1.5b (with memory bounds)
         self._start_time = time.time()
         self._response_times: list[float] = []
         self._requests_by_status_code: dict[int, int] = defaultdict(int)
@@ -122,7 +134,7 @@ class AsyncHostService(ABC):
         self._health_check_cache: Optional[dict[str, Any]] = None
         self._health_check_cache_time: Optional[float] = None
 
-        # Request tracing
+        # Request tracing (with memory bounds)
         self._trace_data: dict[str, dict[str, Any]] = {}
 
         logger.info(
@@ -180,12 +192,18 @@ class AsyncHostService(ABC):
         )
 
     async def _cleanup_connection_pool(self) -> None:
-        """Cleanup HTTP client and close connections."""
+        """Cleanup HTTP client and close connections with proper exception handling."""
         if self._http_client:
-            await self._http_client.aclose()
-            self._http_client = None
-            self._connection_pool = None
-            logger.debug(f"{self.get_service_name()}: Connection pool cleaned up")
+            try:
+                await self._http_client.aclose()
+            except Exception as e:
+                logger.warning(
+                    f"{self.get_service_name()}: Error during connection cleanup: {e}"
+                )
+            finally:
+                self._http_client = None
+                self._connection_pool = None
+                logger.debug(f"{self.get_service_name()}: Connection pool cleaned up")
 
     # HTTP Communication Methods
     async def _call_host_service_post(
@@ -216,6 +234,7 @@ class AsyncHostService(ABC):
 
         for attempt in range(self.max_retries + 1):
             try:
+                request_start_time = time.time()
                 response = await self._http_client.post(
                     url, json=data, timeout=self.timeout
                 )
@@ -223,9 +242,10 @@ class AsyncHostService(ABC):
                 # Handle HTTP errors
                 response.raise_for_status()
 
-                # Update statistics
-                self._requests_made += 1
-                self._last_request_time = datetime.now(timezone.utc)
+                # Update statistics (optimized for performance)
+                response_time = time.time() - request_start_time
+                self._add_response_time(response_time)
+                self._update_request_statistics(response, endpoint, "POST")
 
                 logger.debug(
                     f"{self.get_service_name()}: POST {endpoint} successful "
@@ -296,6 +316,7 @@ class AsyncHostService(ABC):
 
         for attempt in range(self.max_retries + 1):
             try:
+                request_start_time = time.time()
                 response = await self._http_client.get(
                     url, params=params or {}, timeout=self.timeout
                 )
@@ -303,9 +324,10 @@ class AsyncHostService(ABC):
                 # Handle HTTP errors
                 response.raise_for_status()
 
-                # Update statistics
-                self._requests_made += 1
-                self._last_request_time = datetime.now(timezone.utc)
+                # Update statistics (optimized for performance)
+                response_time = time.time() - request_start_time
+                self._add_response_time(response_time)
+                self._update_request_statistics(response, endpoint, "GET")
 
                 logger.debug(
                     f"{self.get_service_name()}: GET {endpoint} successful "
@@ -400,6 +422,74 @@ class AsyncHostService(ABC):
         self._health_check_cache = None
         self._health_check_cache_time = None
         logger.debug(f"{self.get_service_name()}: Health check cache cleared")
+
+    # Helper Methods for Performance and Memory Management
+    def _add_response_time(self, time_seconds: float) -> None:
+        """Add response time with memory bounds."""
+        self._response_times.append(time_seconds)
+        if len(self._response_times) > MAX_RESPONSE_TIMES:
+            self._response_times.pop(0)
+
+    def _track_endpoint_usage(self, endpoint: str) -> None:
+        """Track endpoint usage with memory bounds."""
+        self._requests_by_endpoint[endpoint] += 1
+
+        # Prevent unbounded growth
+        if len(self._requests_by_endpoint) > MAX_ENDPOINT_STATS:
+            # Remove least used endpoints
+            sorted_endpoints = sorted(
+                self._requests_by_endpoint.items(), key=lambda x: x[1]
+            )
+            endpoints_to_remove = len(sorted_endpoints) - MAX_ENDPOINT_STATS + 1
+            for endpoint_name, _ in sorted_endpoints[:endpoints_to_remove]:
+                del self._requests_by_endpoint[endpoint_name]
+
+    def _update_request_statistics(self, response, endpoint: str, method: str) -> None:
+        """Update request statistics efficiently."""
+        # Basic counters
+        self._requests_made += 1
+        self._last_request_time = datetime.now(timezone.utc)
+
+        # Track by status code and endpoint (with safe extraction)
+        try:
+            status_code = getattr(response, "status_code", 200)
+            if isinstance(status_code, int):
+                self._requests_by_status_code[status_code] += 1
+        except (TypeError, AttributeError):
+            # Fallback for mock objects or unexpected response types
+            self._requests_by_status_code[200] += 1
+
+        self._track_endpoint_usage(endpoint)
+
+        # Track bytes if available
+        try:
+            if hasattr(response, "num_bytes_downloaded"):
+                bytes_downloaded = getattr(response, "num_bytes_downloaded", 0)
+                if isinstance(bytes_downloaded, (int, float)):
+                    self._total_bytes_received += int(bytes_downloaded)
+        except (TypeError, AttributeError):
+            pass
+
+        # Estimate content size from response (fallback method)
+        try:
+            if hasattr(response, "headers") and response.headers:
+                content_length = response.headers.get("content-length")
+                if content_length and isinstance(content_length, (str, int)):
+                    self._total_bytes_received += int(content_length)
+        except (ValueError, TypeError, AttributeError):
+            pass
+
+    def _add_trace_data(self, trace_id: str, trace_data: dict[str, Any]) -> None:
+        """Add trace data with memory bounds."""
+        self._trace_data[trace_id] = trace_data
+
+        # Prevent unbounded growth
+        if len(self._trace_data) > MAX_TRACE_DATA:
+            # Remove oldest traces
+            oldest_trace = min(
+                self._trace_data.items(), key=lambda x: x[1].get("start_time", 0)
+            )
+            del self._trace_data[oldest_trace[0]]
 
     # Statistics and Monitoring
     def get_request_count(self) -> int:
@@ -504,21 +594,40 @@ class AsyncHostService(ABC):
         }
 
     def get_memory_usage_stats(self) -> dict[str, Any]:
-        """Return memory usage statistics."""
-        import os
+        """Return memory usage statistics with graceful psutil handling."""
+        if psutil is None:
+            return {
+                "error": "psutil not available",
+                "current_memory_mb": 0,
+                "peak_memory_mb": 0,
+                "connection_pool_memory_mb": 0,
+                "request_cache_memory_mb": 0,
+                "metrics_memory_mb": 0,
+            }
 
-        import psutil
+        try:
+            import os
 
-        process = psutil.Process(os.getpid())
-        memory_info = process.memory_info()
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
 
-        return {
-            "current_memory_mb": memory_info.rss / 1024 / 1024,
-            "peak_memory_mb": memory_info.vms / 1024 / 1024,
-            "connection_pool_memory_mb": 0,  # Would need httpx pool memory stats
-            "request_cache_memory_mb": 0,  # Would need cache memory calculation
-            "metrics_memory_mb": 0,  # Would need metrics memory calculation
-        }
+            return {
+                "current_memory_mb": memory_info.rss / 1024 / 1024,
+                "peak_memory_mb": memory_info.vms / 1024 / 1024,
+                "connection_pool_memory_mb": 0,  # Would need httpx pool memory stats
+                "request_cache_memory_mb": 0,  # Would need cache memory calculation
+                "metrics_memory_mb": 0,  # Would need metrics memory calculation
+            }
+        except Exception as e:
+            logger.warning(f"Error getting memory stats: {e}")
+            return {
+                "error": f"Failed to get memory stats: {e}",
+                "current_memory_mb": 0,
+                "peak_memory_mb": 0,
+                "connection_pool_memory_mb": 0,
+                "request_cache_memory_mb": 0,
+                "metrics_memory_mb": 0,
+            }
 
     # Request Tracing for TASK-1.5b
     async def _call_host_service_post_with_tracing(
@@ -532,8 +641,8 @@ class AsyncHostService(ABC):
             await self._call_host_service_post(endpoint, data)
             end_time = time.time()
 
-            # Store trace data
-            self._trace_data[trace_id] = {
+            # Store trace data with memory bounds
+            trace_data = {
                 "request_id": trace_id,
                 "start_time": start_time,
                 "end_time": end_time,
@@ -542,12 +651,13 @@ class AsyncHostService(ABC):
                 "method": "POST",
                 "success": True,
             }
+            self._add_trace_data(trace_id, trace_data)
 
             return trace_id
 
         except Exception as e:
             end_time = time.time()
-            self._trace_data[trace_id] = {
+            trace_data = {
                 "request_id": trace_id,
                 "start_time": start_time,
                 "end_time": end_time,
@@ -557,6 +667,7 @@ class AsyncHostService(ABC):
                 "success": False,
                 "error": str(e),
             }
+            self._add_trace_data(trace_id, trace_data)
             raise
 
     def get_trace_data(self, trace_id: str) -> Optional[dict[str, Any]]:
@@ -570,8 +681,11 @@ class AsyncHostService(ABC):
         concurrent_requests: int = 10,
         endpoint: str = "/benchmark",
     ) -> dict[str, Any]:
-        """Run throughput benchmark."""
-        # Placeholder implementation for benchmarking
+        """Run throughput benchmark.
+
+        WARNING: This is a placeholder implementation returning zeros.
+        Use get_performance_summary() for basic metrics until fully implemented.
+        """
         return {
             "requests_per_second": 0,
             "average_latency_ms": 0,
@@ -617,8 +731,11 @@ class AsyncHostService(ABC):
         sustain_time_seconds: int = 30,
         endpoint: str = "/stress",
     ) -> dict[str, Any]:
-        """Run stress test."""
-        # Placeholder implementation for stress testing
+        """Run stress test.
+
+        WARNING: This is a placeholder implementation returning zeros.
+        Use get_detailed_metrics() for current performance data until fully implemented.
+        """
         return {
             "max_concurrent_achieved": 0,
             "requests_per_second_peak": 0,
