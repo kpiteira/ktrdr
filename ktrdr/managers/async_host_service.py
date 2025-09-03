@@ -278,6 +278,9 @@ class AsyncHostService(ABC):
 
         for attempt in range(self.max_retries + 1):
             try:
+                # Check for cancellation before each attempt
+                self._check_cancellation(self._current_cancellation_token, f"POST {endpoint} attempt {attempt + 1}")
+                
                 request_start_time = time.time()
                 response = await self._http_client.post(
                     url, json=data, timeout=self.timeout
@@ -363,6 +366,9 @@ class AsyncHostService(ABC):
 
         for attempt in range(self.max_retries + 1):
             try:
+                # Check for cancellation before each attempt
+                self._check_cancellation(self._current_cancellation_token, f"GET {endpoint} attempt {attempt + 1}")
+                
                 request_start_time = time.time()
                 response = await self._http_client.get(
                     url, params=params or {}, timeout=self.timeout

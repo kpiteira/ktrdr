@@ -165,8 +165,11 @@ class KtrdrApiClient:
                         except Exception:
                             error_detail = {"message": response.text}
 
+                        # FastAPI HTTPException uses 'detail', our custom errors use 'message'
+                        error_message = error_detail.get('detail') or error_detail.get('message', 'Unknown error')
+
                         raise ValidationError(
-                            message=f"API request failed: {error_detail.get('message', 'Unknown error')}",
+                            message=f"API request failed: {error_message}",
                             error_code=f"API-{response.status_code}",
                             details={
                                 "url": url,
@@ -704,20 +707,37 @@ class KtrdrApiClient:
         if force:
             payload["force"] = str(force)
 
-        response = await self._make_request(
-            "DELETE",
-            f"/operations/{operation_id}",
-            json_data=payload if payload else None,
-            timeout=5.0,  # Quick timeout for cancellation
-        )
-
-        if not response.get("success"):
-            raise DataError(
-                message=f"Failed to cancel operation {operation_id}",
-                error_code="API-CancelOperationError",
-                details={"response": response, "operation_id": operation_id},
+        try:
+            response = await self._make_request(
+                "DELETE",
+                f"/operations/{operation_id}",
+                json_data=payload if payload else None,
+                timeout=60.0,  # Longer timeout to allow AsyncHostService retry delays to complete
             )
-        return response
+
+            if not response.get("success"):
+                raise DataError(
+                    message=f"Failed to cancel operation {operation_id}",
+                    error_code="API-CancelOperationError",
+                    details={"response": response, "operation_id": operation_id},
+                )
+            return response
+
+        except ValidationError as e:
+            # Check if this is an "operation already finished" error (HTTP 400)
+            error_details = e.details.get("error_detail", {}) if e.details else {}
+            error_message = error_details.get("detail", "") or error_details.get("message", "")
+
+            if "cannot be cancelled" in error_message.lower() and "already" in error_message.lower():
+                # Operation is already cancelled/completed - treat as success
+                return {
+                    "success": True,
+                    "message": f"Operation {operation_id} was already finished",
+                    "already_finished": True
+                }
+            else:
+                # Re-raise for other validation errors
+                raise
 
     async def retry_operation(self, operation_id: str) -> dict[str, Any]:
         """Retry a failed operation."""
