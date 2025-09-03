@@ -593,6 +593,10 @@ class DataManager(ServiceOrchestrator):
         while maintaining proper async/sync boundary separation.
         Handles AsyncHostService context management automatically.
 
+        IMPORTANT: When called from within an existing event loop (e.g., API server),
+        this will detect the context and avoid creating nested event loops that
+        break exception propagation.
+
         Args:
             async_method: The async method to execute
             *args: Positional arguments for the async method
@@ -603,8 +607,8 @@ class DataManager(ServiceOrchestrator):
         """
         async def run_with_context():
             # Check if external provider needs async context manager
-            if (self.external_provider and 
-                hasattr(self.external_provider, 'use_host_service') and 
+            if (self.external_provider and
+                hasattr(self.external_provider, 'use_host_service') and
                 self.external_provider.use_host_service):
                 # Use async context manager for AsyncHostService providers
                 async with self.external_provider:
@@ -612,8 +616,22 @@ class DataManager(ServiceOrchestrator):
             else:
                 # Direct call for non-AsyncHostService providers
                 return await async_method(*args, **kwargs)
-        
-        return asyncio.run(run_with_context())
+
+        # Check if we're already in an event loop (e.g., from API server)
+        try:
+            # This will raise RuntimeError if no event loop is running
+            asyncio.get_running_loop()
+            # If we're here, we're already in an event loop
+            # We cannot use asyncio.run() as it would create a nested loop
+            # Instead, we need to run this as a task in the current loop
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                # Run the async method in a thread pool to avoid nested event loop
+                future = executor.submit(asyncio.run, run_with_context())
+                return future.result()
+        except RuntimeError:
+            # No running event loop, safe to use asyncio.run()
+            return asyncio.run(run_with_context())
 
     def _fetch_segments_with_component(
         self,
@@ -1100,7 +1118,7 @@ class DataManager(ServiceOrchestrator):
             logger.info("💾 Backend symbol cache cleared")
         else:
             logger.warning("💾 Symbol cache not available")
-            
+
     def get_symbol_cache_stats(self) -> dict:
         """Get backend symbol cache statistics."""
         if hasattr(self.data_loading_orchestrator, 'symbol_cache'):
