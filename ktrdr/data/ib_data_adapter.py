@@ -18,8 +18,9 @@ from typing import Any, Optional
 import pandas as pd
 
 # Import IB module components
-from ktrdr.ib import IbErrorClassifier, IbErrorType
+from ktrdr.ib import IbDataFetcher, IbErrorClassifier, IbErrorType, IbSymbolValidator
 from ktrdr.logging import get_logger
+from ktrdr.managers.async_host_service import AsyncHostService, HostServiceConfig
 
 from .external_data_interface import (
     DataProviderConnectionError,
@@ -29,18 +30,13 @@ from .external_data_interface import (
     ExternalDataProvider,
 )
 
-# HTTP client for host service communication
-try:
-    import httpx
-
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
+# HTTP client for host service communication - Now handled by AsyncHostService
+HTTPX_AVAILABLE = True  # Assume available since AsyncHostService handles this
 
 logger = get_logger(__name__)
 
 
-class IbDataAdapter(ExternalDataProvider):
+class IbDataAdapter(ExternalDataProvider, AsyncHostService):
     """
     Adapter that implements ExternalDataProvider interface using the IB module.
 
@@ -72,9 +68,14 @@ class IbDataAdapter(ExternalDataProvider):
         self.use_host_service = use_host_service
         self.host_service_url = host_service_url or "http://localhost:5001"
 
-        # Declare Optional attributes
-        self.symbol_validator: Optional[Any] = None
-        self.data_fetcher: Optional[Any] = None
+        # Initialize AsyncHostService for host service mode
+        if use_host_service:
+            config = HostServiceConfig(base_url=self.host_service_url)
+            AsyncHostService.__init__(self, config)
+
+        # Declare Optional attributes with specific types
+        self.symbol_validator: Optional[IbSymbolValidator] = None
+        self.data_fetcher: Optional[IbDataFetcher] = None
 
         # Validate configuration
         if use_host_service and not HTTPX_AVAILABLE:
@@ -86,8 +87,6 @@ class IbDataAdapter(ExternalDataProvider):
         # Initialize appropriate components based on mode
         if not use_host_service:
             # Direct IB connection mode (existing behavior)
-            from ktrdr.ib import IbDataFetcher, IbSymbolValidator
-
             self.symbol_validator = IbSymbolValidator(
                 component_name="data_adapter_validator"
             )
@@ -108,51 +107,73 @@ class IbDataAdapter(ExternalDataProvider):
         self.errors_encountered = 0
         self.last_request_time: Optional[datetime] = None
 
+    # AsyncHostService abstract method implementations
+    def get_service_name(self) -> str:
+        """Return service identifier for logging and metrics."""
+        return "IB Data Service"
+
+    def get_base_url(self) -> str:
+        """Return service base URL from configuration."""
+        return self.host_service_url
+
+    async def get_health_check_endpoint(self) -> str:
+        """Return endpoint for health checking."""
+        return "/health"
+
     async def _call_host_service_post(
         self, endpoint: str, data: dict[str, Any]
     ) -> dict[str, Any]:
-        """Make POST request to host service."""
+        """Make POST request to host service using AsyncHostService."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
 
-        url = f"{self.host_service_url}{endpoint}"
-
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(url, json=data)
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPError as e:
-            raise DataProviderConnectionError(
-                f"Host service request failed: {str(e)}", provider="IB"
-            ) from e
+            return await AsyncHostService._call_host_service_post(self, endpoint, data)
         except Exception as e:
-            raise DataProviderError(
-                f"Host service communication error: {str(e)}", provider="IB"
-            ) from e
+            # Translate AsyncHostService errors to DataProvider errors for compatibility
+            self._translate_host_service_error(e)
+            # This line should never be reached since _translate_host_service_error always raises
+            raise  # pragma: no cover
 
     async def _call_host_service_get(
         self, endpoint: str, params: Optional[dict[str, Any]] = None
     ) -> dict[str, Any]:
-        """Make GET request to host service."""
+        """Make GET request to host service using AsyncHostService."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
 
-        url = f"{self.host_service_url}{endpoint}"
-
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(url, params=params or {})
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPError as e:
-            raise DataProviderConnectionError(
-                f"Host service request failed: {str(e)}", provider="IB"
-            ) from e
+            return await AsyncHostService._call_host_service_get(self, endpoint, params)
         except Exception as e:
+            # Translate AsyncHostService errors to DataProvider errors for compatibility
+            self._translate_host_service_error(e)
+            # This line should never be reached since _translate_host_service_error always raises
+            raise  # pragma: no cover
+
+    def _translate_host_service_error(self, error: Exception) -> None:
+        """Translate AsyncHostService errors to DataProvider errors for compatibility."""
+        from ktrdr.managers.async_host_service import (
+            HostServiceConnectionError,
+            HostServiceError,
+            HostServiceTimeoutError,
+        )
+
+        if isinstance(error, HostServiceConnectionError):
+            raise DataProviderConnectionError(
+                f"Host service connection failed: {error.message}", provider="IB"
+            ) from error
+        elif isinstance(error, HostServiceTimeoutError):
+            raise DataProviderConnectionError(
+                f"Host service timeout: {error.message}", provider="IB"
+            ) from error
+        elif isinstance(error, HostServiceError):
             raise DataProviderError(
-                f"Host service communication error: {str(e)}", provider="IB"
-            ) from e
+                f"Host service error: {error.message}", provider="IB"
+            ) from error
+        else:
+            raise DataProviderError(
+                f"Host service communication error: {str(error)}", provider="IB"
+            ) from error
 
     async def validate_and_get_metadata(self, symbol: str, timeframes: list[str]):
         """
@@ -179,7 +200,7 @@ class IbDataAdapter(ExternalDataProvider):
 
                 if not response["success"]:
                     raise DataProviderDataError(
-                        response.get("error", f"Validation failed for {symbol}"),
+                        response.get("error", f"Symbol validation failed for {symbol}"),
                         provider="IB",
                     )
 
@@ -313,7 +334,8 @@ class IbDataAdapter(ExternalDataProvider):
                     timeframe=timeframe,
                     start=start,
                     end=end,
-                    instrument_type=instrument_type,
+                    instrument_type=instrument_type
+                    or "STK",  # Default to stock if not specified
                 )
 
             self._update_stats()
@@ -646,7 +668,7 @@ class IbDataAdapter(ExternalDataProvider):
         error_type, wait_time = IbErrorClassifier.classify(error_code, error_message)
 
         logger.error(
-            f"IB error in {operation}: {error_message} (type={error_type.value})"
+            f"IB {operation} failed: {error_message} (type={error_type.value})"
         )
 
         # Translate to appropriate data provider error

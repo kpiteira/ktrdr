@@ -20,9 +20,14 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
+
+from ktrdr.managers.base import CancellationToken
+
+if TYPE_CHECKING:
+    pass
 
 from ktrdr.logging import get_logger
 
@@ -113,6 +118,9 @@ class AsyncHostService(ABC):
         self.timeout = timeout if timeout != 30 else config.timeout
         self.max_retries = max_retries if max_retries != 3 else config.max_retries
 
+        # Cancellation support - set by calling code before operations
+        self._current_cancellation_token: Optional[CancellationToken] = None
+
         # HTTP client and connection pool (initialized in async context)
         self._http_client: Optional[httpx.AsyncClient] = None
         self._connection_pool: Optional[httpx.AsyncClient] = None
@@ -167,6 +175,47 @@ class AsyncHostService(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Cleanup HTTP client and connection pool."""
         await self._cleanup_connection_pool()
+
+    def _check_cancellation(
+        self,
+        cancellation_token: Optional[CancellationToken],
+        operation_description: str = "operation",
+    ) -> bool:
+        """
+        Check if cancellation has been requested.
+
+        Args:
+            cancellation_token: Token to check for cancellation
+            operation_description: Description of current operation for logging
+
+        Returns:
+            True if cancellation was requested, False otherwise
+
+        Raises:
+            asyncio.CancelledError: If cancellation was requested
+        """
+        if cancellation_token is None:
+            return False
+
+        # Check if token has cancellation method
+        is_cancelled = False
+        if hasattr(cancellation_token, "is_cancelled_requested"):
+            is_cancelled = cancellation_token.is_cancelled_requested
+        elif hasattr(cancellation_token, "is_set"):
+            is_cancelled = cancellation_token.is_set()
+        elif hasattr(cancellation_token, "cancelled"):
+            is_cancelled = cancellation_token.cancelled()
+
+        if is_cancelled:
+            logger.info(f"🛑 Cancellation requested during {operation_description}")
+            # Import here to avoid circular imports
+            import asyncio
+
+            raise asyncio.CancelledError(
+                f"Operation cancelled during {operation_description}"
+            )
+
+        return False
 
     # Connection Pool Management
     async def _setup_connection_pool(self) -> None:
@@ -234,6 +283,12 @@ class AsyncHostService(ABC):
 
         for attempt in range(self.max_retries + 1):
             try:
+                # Check for cancellation before each attempt
+                self._check_cancellation(
+                    self._current_cancellation_token,
+                    f"POST {endpoint} attempt {attempt + 1}",
+                )
+
                 request_start_time = time.time()
                 response = await self._http_client.post(
                     url, json=data, timeout=self.timeout
@@ -261,6 +316,11 @@ class AsyncHostService(ABC):
                         f"Request timed out after {attempt + 1} attempts: {str(e)}",
                         self.get_service_name(),
                     ) from e
+
+                # Check for cancellation before retry delay
+                self._check_cancellation(
+                    self._current_cancellation_token, f"POST {endpoint} retry delay"
+                )
 
                 # Exponential backoff
                 delay = 2**attempt
@@ -316,6 +376,12 @@ class AsyncHostService(ABC):
 
         for attempt in range(self.max_retries + 1):
             try:
+                # Check for cancellation before each attempt
+                self._check_cancellation(
+                    self._current_cancellation_token,
+                    f"GET {endpoint} attempt {attempt + 1}",
+                )
+
                 request_start_time = time.time()
                 response = await self._http_client.get(
                     url, params=params or {}, timeout=self.timeout
@@ -343,6 +409,11 @@ class AsyncHostService(ABC):
                         f"Request timed out after {attempt + 1} attempts: {str(e)}",
                         self.get_service_name(),
                     ) from e
+
+                # Check for cancellation before retry delay
+                self._check_cancellation(
+                    self._current_cancellation_token, f"GET {endpoint} retry delay"
+                )
 
                 # Exponential backoff
                 delay = 2**attempt

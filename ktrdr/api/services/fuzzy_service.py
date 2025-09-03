@@ -500,7 +500,7 @@ class FuzzyService(BaseService):
             # Re-raise known error types
             raise
         except Exception as e:
-            self.logger.error(f"Unexpected error in data fuzzification: {str(e)}")
+            self.logger.error(f"Data fuzzification failed unexpectedly: {str(e)}")
             raise ProcessingError(
                 message="An unexpected error occurred during data fuzzification",
                 error_code="PROC-UnexpectedFuzzificationError",
@@ -716,7 +716,7 @@ class FuzzyService(BaseService):
             # Re-raise known error types
             raise
         except Exception as e:
-            self.logger.error(f"Unexpected error in fuzzy overlay generation: {str(e)}")
+            self.logger.error(f"Fuzzy overlay generation failed unexpectedly: {str(e)}")
             raise ProcessingError(
                 message="An unexpected error occurred during fuzzy overlay generation",
                 error_code="PROC-UnexpectedFuzzyOverlayError",

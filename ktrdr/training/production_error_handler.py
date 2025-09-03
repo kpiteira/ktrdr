@@ -497,7 +497,7 @@ class ProductionErrorHandler:
 
         # Log to production logger
         self.prod_logger.error(
-            f"Production error in {component}.{operation}: {error_message}",
+            f"Production {component}.{operation} failed: {error_message}",
             extra={"error_context": enhanced_context},
         )
 
@@ -515,7 +515,7 @@ class ProductionErrorHandler:
         self.send_alert(
             alert_level,
             component,
-            f"Production error in {operation}: {error_message}",
+            f"Production {operation} failed: {error_message}",
             enhanced_context,
             self._capture_system_health(),
         )
