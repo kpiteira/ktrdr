@@ -94,6 +94,8 @@ class DataLoadingOrchestrator:
                 try:
                     # Use DataManager's async method runner (handles AsyncHostService context properly)
                     async def validate_async():
+                        # Pass cancellation_token to the host service context
+                        self.data_manager.external_provider._current_cancellation_token = cancellation_token
                         return await self.data_manager.external_provider.validate_and_get_metadata(symbol, [timeframe])
 
                     validation_result = self.data_manager._run_async_method(validate_async)

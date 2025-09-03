@@ -112,6 +112,9 @@ class AsyncHostService(ABC):
         self.config = config
         self.timeout = timeout if timeout != 30 else config.timeout
         self.max_retries = max_retries if max_retries != 3 else config.max_retries
+        
+        # Cancellation support - set by calling code before operations
+        self._current_cancellation_token: Optional[Any] = None
 
         # HTTP client and connection pool (initialized in async context)
         self._http_client: Optional[httpx.AsyncClient] = None
@@ -167,6 +170,47 @@ class AsyncHostService(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Cleanup HTTP client and connection pool."""
         await self._cleanup_connection_pool()
+
+    def _check_cancellation(
+        self,
+        cancellation_token: Optional[Any],
+        operation_description: str = "operation",
+    ) -> bool:
+        """
+        Check if cancellation has been requested.
+
+        Args:
+            cancellation_token: Token to check for cancellation
+            operation_description: Description of current operation for logging
+
+        Returns:
+            True if cancellation was requested, False otherwise
+
+        Raises:
+            asyncio.CancelledError: If cancellation was requested
+        """
+        if cancellation_token is None:
+            return False
+
+        # Check if token has cancellation method
+        is_cancelled = False
+        if hasattr(cancellation_token, "is_cancelled_requested"):
+            is_cancelled = cancellation_token.is_cancelled_requested
+        elif hasattr(cancellation_token, "is_set"):
+            is_cancelled = cancellation_token.is_set()
+        elif hasattr(cancellation_token, "cancelled"):
+            is_cancelled = cancellation_token.cancelled()
+
+        if is_cancelled:
+            logger.info(f"🛑 Cancellation requested during {operation_description}")
+            # Import here to avoid circular imports
+            import asyncio
+
+            raise asyncio.CancelledError(
+                f"Operation cancelled during {operation_description}"
+            )
+
+        return False
 
     # Connection Pool Management
     async def _setup_connection_pool(self) -> None:
@@ -262,6 +306,9 @@ class AsyncHostService(ABC):
                         self.get_service_name(),
                     ) from e
 
+                # Check for cancellation before retry delay
+                self._check_cancellation(self._current_cancellation_token, f"POST {endpoint} retry delay")
+                
                 # Exponential backoff
                 delay = 2**attempt
                 logger.warning(
@@ -344,6 +391,9 @@ class AsyncHostService(ABC):
                         self.get_service_name(),
                     ) from e
 
+                # Check for cancellation before retry delay
+                self._check_cancellation(self._current_cancellation_token, f"GET {endpoint} retry delay")
+                
                 # Exponential backoff
                 delay = 2**attempt
                 logger.warning(
