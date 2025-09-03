@@ -18,7 +18,7 @@ from typing import Any, Optional
 import pandas as pd
 
 # Import IB module components
-from ktrdr.ib import IbErrorClassifier, IbErrorType
+from ktrdr.ib import IbDataFetcher, IbErrorClassifier, IbErrorType, IbSymbolValidator
 from ktrdr.logging import get_logger
 from ktrdr.managers.async_host_service import AsyncHostService, HostServiceConfig
 
@@ -73,9 +73,9 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
             config = HostServiceConfig(base_url=self.host_service_url)
             AsyncHostService.__init__(self, config)
 
-        # Declare Optional attributes
-        self.symbol_validator: Optional[Any] = None
-        self.data_fetcher: Optional[Any] = None
+        # Declare Optional attributes with specific types
+        self.symbol_validator: Optional[IbSymbolValidator] = None
+        self.data_fetcher: Optional[IbDataFetcher] = None
 
         # Validate configuration
         if use_host_service and not HTTPX_AVAILABLE:
@@ -87,8 +87,6 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
         # Initialize appropriate components based on mode
         if not use_host_service:
             # Direct IB connection mode (existing behavior)
-            from ktrdr.ib import IbDataFetcher, IbSymbolValidator
-
             self.symbol_validator = IbSymbolValidator(
                 component_name="data_adapter_validator"
             )
@@ -202,7 +200,7 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
 
                 if not response["success"]:
                     raise DataProviderDataError(
-                        response.get("error", f"Validation failed for {symbol}"),
+                        response.get("error", f"Symbol validation failed for {symbol}"),
                         provider="IB",
                     )
 
@@ -336,7 +334,8 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
                     timeframe=timeframe,
                     start=start,
                     end=end,
-                    instrument_type=instrument_type,
+                    instrument_type=instrument_type
+                    or "STK",  # Default to stock if not specified
                 )
 
             self._update_stats()
@@ -669,7 +668,7 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
         error_type, wait_time = IbErrorClassifier.classify(error_code, error_message)
 
         logger.error(
-            f"IB error in {operation}: {error_message} (type={error_type.value})"
+            f"IB {operation} failed: {error_message} (type={error_type.value})"
         )
 
         # Translate to appropriate data provider error

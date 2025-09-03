@@ -20,9 +20,14 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
+
+from ktrdr.managers.base import CancellationToken
+
+if TYPE_CHECKING:
+    pass
 
 from ktrdr.logging import get_logger
 
@@ -114,7 +119,7 @@ class AsyncHostService(ABC):
         self.max_retries = max_retries if max_retries != 3 else config.max_retries
 
         # Cancellation support - set by calling code before operations
-        self._current_cancellation_token: Optional[Any] = None
+        self._current_cancellation_token: Optional[CancellationToken] = None
 
         # HTTP client and connection pool (initialized in async context)
         self._http_client: Optional[httpx.AsyncClient] = None
@@ -173,7 +178,7 @@ class AsyncHostService(ABC):
 
     def _check_cancellation(
         self,
-        cancellation_token: Optional[Any],
+        cancellation_token: Optional[CancellationToken],
         operation_description: str = "operation",
     ) -> bool:
         """

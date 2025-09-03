@@ -136,7 +136,7 @@ async def list_indicators(
             },
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected error in list_indicators: {str(e)}")
+        logger.error(f"List indicators failed unexpectedly: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -285,7 +285,7 @@ async def calculate_indicators(
         )
 
     except DataError as e:
-        logger.error(f"Data error in calculate_indicators: {str(e)}")
+        logger.error(f"Calculate indicators data validation failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -298,7 +298,7 @@ async def calculate_indicators(
             },
         ) from e
     except ConfigurationError as e:
-        logger.error(f"Configuration error in calculate_indicators: {str(e)}")
+        logger.error(f"Calculate indicators configuration failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -311,7 +311,7 @@ async def calculate_indicators(
             },
         ) from e
     except ProcessingError as e:
-        logger.error(f"Processing error in calculate_indicators: {str(e)}")
+        logger.error(f"Calculate indicators processing failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

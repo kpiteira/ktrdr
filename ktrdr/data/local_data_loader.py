@@ -155,7 +155,7 @@ class LocalDataLoader:
                     file_format, allowed_values={"csv"}
                 )
         except ValidationError as e:
-            logger.error(f"Validation error in _build_file_path: {e}")
+            logger.error(f"File path validation failed: {e}")
             raise
 
         format_to_use = file_format if file_format is not None else self.default_format

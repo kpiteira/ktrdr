@@ -356,7 +356,7 @@ class IndicatorService(BaseService):
             # Re-raise known error types
             raise
         except Exception as e:
-            logger.error(f"Unexpected error in indicator calculation: {str(e)}")
+            logger.error(f"Indicator calculation failed unexpectedly: {str(e)}")
             raise ProcessingError(
                 message="An unexpected error occurred during indicator calculation",
                 error_code="PROC-UnexpectedError",
