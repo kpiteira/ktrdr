@@ -605,11 +605,14 @@ class DataManager(ServiceOrchestrator):
         Returns:
             The result of the async method execution
         """
+
         async def run_with_context():
             # Check if external provider needs async context manager
-            if (self.external_provider and
-                hasattr(self.external_provider, 'use_host_service') and
-                self.external_provider.use_host_service):
+            if (
+                self.external_provider
+                and hasattr(self.external_provider, "use_host_service")
+                and self.external_provider.use_host_service
+            ):
                 # Use async context manager for AsyncHostService providers
                 async with self.external_provider:
                     return await async_method(*args, **kwargs)
@@ -625,6 +628,7 @@ class DataManager(ServiceOrchestrator):
             # We cannot use asyncio.run() as it would create a nested loop
             # Instead, we need to run this as a task in the current loop
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 # Run the async method in a thread pool to avoid nested event loop
                 future = executor.submit(asyncio.run, run_with_context())
@@ -1113,7 +1117,7 @@ class DataManager(ServiceOrchestrator):
 
     def clear_symbol_cache(self) -> None:
         """Clear backend symbol cache."""
-        if hasattr(self.data_loading_orchestrator, 'symbol_cache'):
+        if hasattr(self.data_loading_orchestrator, "symbol_cache"):
             self.data_loading_orchestrator.symbol_cache.clear()
             logger.info("💾 Backend symbol cache cleared")
         else:
@@ -1121,7 +1125,7 @@ class DataManager(ServiceOrchestrator):
 
     def get_symbol_cache_stats(self) -> dict:
         """Get backend symbol cache statistics."""
-        if hasattr(self.data_loading_orchestrator, 'symbol_cache'):
+        if hasattr(self.data_loading_orchestrator, "symbol_cache"):
             stats = self.data_loading_orchestrator.symbol_cache.get_stats()
             logger.info(f"💾 Symbol cache stats: {stats}")
             return stats

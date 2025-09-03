@@ -467,7 +467,11 @@ class DataService(BaseService):
                         future.cancel()
                     # Retrieve result/exception to satisfy asyncio warning prevention
                     future.result()
-                except (concurrent.futures.CancelledError, asyncio.CancelledError, Exception):
+                except (
+                    concurrent.futures.CancelledError,
+                    asyncio.CancelledError,
+                    Exception,
+                ):
                     # Expected for cancellation - ignore silently
                     pass
 

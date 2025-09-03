@@ -166,7 +166,9 @@ class KtrdrApiClient:
                             error_detail = {"message": response.text}
 
                         # FastAPI HTTPException uses 'detail', our custom errors use 'message'
-                        error_message = error_detail.get('detail') or error_detail.get('message', 'Unknown error')
+                        error_message = error_detail.get("detail") or error_detail.get(
+                            "message", "Unknown error"
+                        )
 
                         raise ValidationError(
                             message=f"API request failed: {error_message}",
@@ -726,14 +728,19 @@ class KtrdrApiClient:
         except ValidationError as e:
             # Check if this is an "operation already finished" error (HTTP 400)
             error_details = e.details.get("error_detail", {}) if e.details else {}
-            error_message = error_details.get("detail", "") or error_details.get("message", "")
+            error_message = error_details.get("detail", "") or error_details.get(
+                "message", ""
+            )
 
-            if "cannot be cancelled" in error_message.lower() and "already" in error_message.lower():
+            if (
+                "cannot be cancelled" in error_message.lower()
+                and "already" in error_message.lower()
+            ):
                 # Operation is already cancelled/completed - treat as success
                 return {
                     "success": True,
                     "message": f"Operation {operation_id} was already finished",
-                    "already_finished": True
+                    "already_finished": True,
                 }
             else:
                 # Re-raise for other validation errors

@@ -5,14 +5,13 @@ Extracted from DataManager's _load_with_fallback method to separate
 orchestration logic from primitive data operations.
 """
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any, Optional, Union
 
 import pandas as pd
 
-from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.data.components.symbol_cache import SymbolCache
+from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
 
@@ -90,20 +89,28 @@ class DataLoadingOrchestrator:
                 logger.info(f"💾 Backend cache HIT for {symbol}")
                 validation_result = cached_info.to_validation_result()
             else:
-                logger.info(f"💾 Backend cache MISS for {symbol} - validating via host service")
+                logger.info(
+                    f"💾 Backend cache MISS for {symbol} - validating via host service"
+                )
                 try:
                     # Use DataManager's async method runner (handles AsyncHostService context properly)
                     async def validate_async():
                         # Pass cancellation_token to the host service context
-                        self.data_manager.external_provider._current_cancellation_token = cancellation_token
-                        return await self.data_manager.external_provider.validate_and_get_metadata(symbol, [timeframe])
+                        self.data_manager.external_provider._current_cancellation_token = (
+                            cancellation_token
+                        )
+                        return await self.data_manager.external_provider.validate_and_get_metadata(
+                            symbol, [timeframe]
+                        )
 
-                    validation_result = self.data_manager._run_async_method(validate_async)
-                    
-                    # NEW: Cache the result in backend  
+                    validation_result = self.data_manager._run_async_method(
+                        validate_async
+                    )
+
+                    # NEW: Cache the result in backend
                     self.symbol_cache.store(symbol, validation_result)
                     logger.info(f"💾 Cached validation result for {symbol} in backend")
-                    
+
                 except Exception as e:
                     logger.error(f"❌ Symbol validation failed for {symbol}: {e}")
                     from ktrdr.errors import DataError
@@ -111,9 +118,13 @@ class DataLoadingOrchestrator:
                     raise DataError(
                         message=f"Symbol validation failed: {e}",
                         error_code="DATA-SymbolValidationFailed",
-                        details={"symbol": symbol, "timeframe": timeframe, "error": str(e)},
+                        details={
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "error": str(e),
+                        },
                     ) from e
-            
+
             # Success path - handle both cache hit and cache miss
             if validation_result:
                 logger.info(f"✅ Symbol {symbol} validated successfully")

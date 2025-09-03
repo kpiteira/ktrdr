@@ -112,7 +112,7 @@ class AsyncHostService(ABC):
         self.config = config
         self.timeout = timeout if timeout != 30 else config.timeout
         self.max_retries = max_retries if max_retries != 3 else config.max_retries
-        
+
         # Cancellation support - set by calling code before operations
         self._current_cancellation_token: Optional[Any] = None
 
@@ -279,8 +279,11 @@ class AsyncHostService(ABC):
         for attempt in range(self.max_retries + 1):
             try:
                 # Check for cancellation before each attempt
-                self._check_cancellation(self._current_cancellation_token, f"POST {endpoint} attempt {attempt + 1}")
-                
+                self._check_cancellation(
+                    self._current_cancellation_token,
+                    f"POST {endpoint} attempt {attempt + 1}",
+                )
+
                 request_start_time = time.time()
                 response = await self._http_client.post(
                     url, json=data, timeout=self.timeout
@@ -310,8 +313,10 @@ class AsyncHostService(ABC):
                     ) from e
 
                 # Check for cancellation before retry delay
-                self._check_cancellation(self._current_cancellation_token, f"POST {endpoint} retry delay")
-                
+                self._check_cancellation(
+                    self._current_cancellation_token, f"POST {endpoint} retry delay"
+                )
+
                 # Exponential backoff
                 delay = 2**attempt
                 logger.warning(
@@ -367,8 +372,11 @@ class AsyncHostService(ABC):
         for attempt in range(self.max_retries + 1):
             try:
                 # Check for cancellation before each attempt
-                self._check_cancellation(self._current_cancellation_token, f"GET {endpoint} attempt {attempt + 1}")
-                
+                self._check_cancellation(
+                    self._current_cancellation_token,
+                    f"GET {endpoint} attempt {attempt + 1}",
+                )
+
                 request_start_time = time.time()
                 response = await self._http_client.get(
                     url, params=params or {}, timeout=self.timeout
@@ -398,8 +406,10 @@ class AsyncHostService(ABC):
                     ) from e
 
                 # Check for cancellation before retry delay
-                self._check_cancellation(self._current_cancellation_token, f"GET {endpoint} retry delay")
-                
+                self._check_cancellation(
+                    self._current_cancellation_token, f"GET {endpoint} retry delay"
+                )
+
                 # Exponential backoff
                 delay = 2**attempt
                 logger.warning(
