@@ -1,759 +1,958 @@
-# Vertical Implementation Plan: DataManager-Focused Refactoring
+# 🏗️ **VERTICAL IMPLEMENTATION PLAN: SLICE-BY-SLICE ASYNC INFRASTRUCTURE**
 
-## Overview
+## 🎯 **CORE PRINCIPLE: BUILD SMALL, TEST IMMEDIATELY, INTEGRATE CONTINUOUSLY**
 
-This implementation plan follows a vertical, incremental approach focused on decomposing and improving DataManager. Each task delivers immediate, testable value while building toward the unified async architecture. No code is created without immediate integration and testing.
+This plan implements generic async infrastructure through **complete vertical slices** that deliver working functionality at each step. Each slice builds one piece of the infrastructure while integrating it with real, testable functionality.
 
-## Planning Principles
+## 🧩 **VERTICAL SLICE STRATEGY**
 
-### Vertical Development
-Each task adds a component to DataManager and immediately integrates it, ensuring every piece of code is tested and working from day one.
+Instead of building all infrastructure first, we implement **one complete feature slice at a time**:
+- Each slice adds one piece of infrastructure
+- Each slice integrates immediately with working code  
+- Each slice is fully tested before moving to the next
+- Always have a working, improved system
 
-### Immediate Value Delivery
-Every task improves the current DataManager's maintainability, testability, or performance, providing tangible benefits even if the full migration isn't completed.
+## 📋 **IMPLEMENTATION SLICES**
 
-### Atomic Improvements
-Each task is self-contained and can be deployed independently. If we need to stop mid-migration, we're left with an improved DataManager, not broken code.
+---
 
-### Test-Driven Decomposition
-Extract components by first writing tests that validate current behavior, then refactor to use the component while maintaining identical behavior.
+## 🎯 **SLICE 1: GENERIC PROGRESS FOUNDATION**
+**Duration**: 1 week  
+**Goal**: Create working generic progress system integrated with DataManager.load_data()
 
-## Phase 1: DataManager Decomposition Foundation
-**Duration**: 3 weeks  
-**Goal**: Begin breaking down DataManager while maintaining and improving functionality
+### **Day 1: Build Minimal GenericProgressManager**
 
-### Phase 1 Success Criteria
-- DataManager complexity reduced by extracting first components
-- All existing tests continue to pass
-- New components are fully tested and integrated
-- Performance maintained or improved
-- Clear foundation for further decomposition
+**Create**: `ktrdr/async/progress.py`
+```python
+@dataclass
+class GenericProgressState:
+    """Generic progress state - no domain knowledge."""
+    operation_id: str
+    current_step: int
+    total_steps: int
+    percentage: float
+    message: str
+    context: dict[str, Any] = field(default_factory=dict)
+    start_time: datetime = field(default_factory=datetime.now)
 
-### Task 1.1a: Create ProgressManager Component
-**Priority**: High  
-**Type**: Create new component
+class ProgressRenderer(ABC):
+    """Abstract progress renderer for domain-specific display."""
+    
+    @abstractmethod
+    def render_message(self, state: GenericProgressState) -> str:
+        """Render progress message for this domain."""
+        pass
 
-**Description**: Create the ProgressManager component by analyzing and extracting progress reporting patterns from the current DataManager.
+class GenericProgressManager:
+    """Domain-agnostic progress manager - minimal implementation."""
+    
+    def __init__(self, 
+                 callback: Optional[Callable[[GenericProgressState], None]] = None,
+                 renderer: Optional[ProgressRenderer] = None):
+        self.callback = callback
+        self.renderer = renderer
+        self._state: Optional[GenericProgressState] = None
+        self._lock = threading.RLock()
+    
+    def start_operation(self, operation_id: str, total_steps: int, context: dict = None):
+        """Start tracking operation."""
+        with self._lock:
+            self._state = GenericProgressState(
+                operation_id=operation_id,
+                current_step=0,
+                total_steps=total_steps,
+                percentage=0.0,
+                message=f"Starting {operation_id}",
+                context=context or {}
+            )
+            self._trigger_callback()
+    
+    def update_progress(self, step: int, message: str, context: dict = None):
+        """Update progress with domain-agnostic information."""
+        with self._lock:
+            if not self._state:
+                return
+                
+            self._state.current_step = step
+            self._state.percentage = min(100.0, (step / self._state.total_steps) * 100.0)
+            
+            # Update context
+            if context:
+                self._state.context.update(context)
+            
+            # Use renderer if available, otherwise use message directly
+            if self.renderer:
+                self._state.message = self.renderer.render_message(self._state)
+            else:
+                self._state.message = message
+            
+            self._trigger_callback()
+    
+    def complete_operation(self):
+        """Mark operation complete."""
+        with self._lock:
+            if self._state:
+                self._state.current_step = self._state.total_steps
+                self._state.percentage = 100.0
+                self._state.message = f"Operation {self._state.operation_id} completed"
+                self._trigger_callback()
+    
+    def _trigger_callback(self):
+        """Trigger progress callback."""
+        if self.callback and self._state:
+            try:
+                self.callback(self._state)
+            except Exception as e:
+                logger.warning(f"Progress callback failed: {e}")
+```
 
-**Acceptance Criteria**:
-- ProgressManager handles all current DataManager progress patterns
-- Thread-safe progress state management implemented
-- Compatible interface with existing progress callback system
-- Component can be instantiated and used independently
+### **Day 2: Build Data Progress Renderer**
 
-**Deliverables**:
-- `ktrdr/data/components/progress_manager.py` with complete implementation
-- Unit tests for ProgressManager with >95% coverage
+**Create**: `ktrdr/data/async/__init__.py` and `data_progress_renderer.py`
+```python
+# ktrdr/data/async/data_progress_renderer.py
+from ktrdr.async.progress import ProgressRenderer, GenericProgressState
 
-### Task 1.1b: Integrate ProgressManager into DataManager  
-**Priority**: High  
-**Type**: Integration  
-**Depends on**: Task 1.1a
+class DataProgressRenderer(ProgressRenderer):
+    """Renders progress messages for data operations."""
+    
+    def render_message(self, state: GenericProgressState) -> str:
+        """Render progress message with data context."""
+        context = state.context
+        base_message = self._extract_base_message(state.message)
+        
+        # Add data-specific context
+        parts = [base_message]
+        
+        symbol = context.get('symbol')
+        timeframe = context.get('timeframe')
+        mode = context.get('mode')
+        
+        if symbol and timeframe:
+            context_str = f"({symbol} {timeframe}"
+            if mode:
+                context_str += f", {mode} mode"
+            context_str += ")"
+            parts.append(context_str)
+        
+        # Add step progress if available
+        if state.total_steps > 0:
+            parts.append(f"[{state.current_step}/{state.total_steps}]")
+        
+        return " ".join(parts)
+    
+    def _extract_base_message(self, message: str) -> str:
+        """Extract base message without previous context."""
+        # Simple implementation - just return the message
+        # Can be enhanced later to strip previous context
+        return message
+```
 
-**Description**: Replace embedded progress logic in DataManager with ProgressManager instance while maintaining backward compatibility.
+### **Day 3: Integrate with DataManager.load_data()**
 
-**Acceptance Criteria**:
-- All existing DataManager progress behavior unchanged
-- ProgressManager used in `load_data`, `load_multi_timeframe_data`, and related methods
-- All existing progress-related tests continue to pass
-- No performance regression
+**Update**: `ktrdr/data/data_manager.py`
+```python
+# Add to DataManager.__init__()
+from ktrdr.async.progress import GenericProgressManager
+from ktrdr.data.async.data_progress_renderer import DataProgressRenderer
 
-**Deliverables**:
-- DataManager using ProgressManager instead of embedded progress logic
-- Integration tests validating backward compatibility
+def __init__(self):
+    # ... existing initialization
+    self._generic_progress_renderer = DataProgressRenderer()
 
-### Task 1.1c: Enhance Progress Reporting Capabilities
-**Priority**: Medium  
-**Type**: Enhancement  
-**Depends on**: Task 1.1b
+def load_data(self, symbol: str, timeframe: str, mode: str = "local", 
+              progress_callback: Optional[Callable] = None, **kwargs) -> pd.DataFrame:
+    """Load data using new generic progress system."""
+    
+    # Create progress manager with data renderer
+    progress_manager = GenericProgressManager(
+        callback=self._wrap_legacy_callback(progress_callback),
+        renderer=self._generic_progress_renderer
+    )
+    
+    # Start operation with data context
+    progress_manager.start_operation(
+        operation_id=f"load_data_{symbol}_{timeframe}",
+        total_steps=5,  # Existing step count
+        context={
+            'symbol': symbol,
+            'timeframe': timeframe, 
+            'mode': mode
+        }
+    )
+    
+    # Call existing implementation with new progress manager
+    return self._load_with_fallback(
+        symbol=symbol,
+        timeframe=timeframe,
+        mode=mode,
+        progress_manager=progress_manager,  # Pass new progress manager
+        **kwargs
+    )
 
-**Description**: Add enhanced progress reporting features using the new ProgressManager component.
+def _wrap_legacy_callback(self, legacy_callback: Optional[Callable]) -> Optional[Callable]:
+    """Wrap legacy progress callback to work with GenericProgressState."""
+    if not legacy_callback:
+        return None
+        
+    def wrapper(state: GenericProgressState):
+        # Convert to legacy format if needed
+        legacy_callback(state)
+    
+    return wrapper
+```
 
-**Acceptance Criteria**:
-- Better step descriptions for user feedback
-- Time estimates for long operations  
-- Enhanced CLI progress display validation
-- No breaking changes to existing API
+### **Day 4: Update _load_with_fallback() to Use GenericProgressManager**
 
-**Deliverables**:
-- Enhanced progress reporting in CLI commands
-- Validation tests for improved user experience
+**Update**: Internal method to use new progress system
+```python
+def _load_with_fallback(self, symbol: str, timeframe: str, mode: str,
+                       progress_manager: GenericProgressManager, **kwargs) -> pd.DataFrame:
+    """Updated to use GenericProgressManager instead of embedded progress."""
+    
+    # Step 1: Validate symbol
+    progress_manager.update_progress(
+        step=1, 
+        message="Validating symbol and timeframe",
+        context={'current_operation': 'validation'}
+    )
+    # ... existing validation logic
+    
+    # Step 2: Check local data
+    progress_manager.update_progress(
+        step=2,
+        message="Checking local data availability",
+        context={'current_operation': 'local_check'}
+    )
+    # ... existing local data logic
+    
+    # Continue with existing steps using progress_manager.update_progress()
+    # ...
+    
+    # Final step
+    progress_manager.complete_operation()
+    return result
+```
 
-### Task 1.2a: Extract GapAnalyzer Core Logic
-**Priority**: High  
-**Type**: Extract component
-
-**Description**: Extract gap analysis methods from DataManager into a standalone GapAnalyzer component.
-
-**Acceptance Criteria**:
-- Extract `_analyze_gaps`, `_find_internal_gaps`, `_is_meaningful_gap`, `_gap_contains_trading_days` methods
-- GapAnalyzer preserves all existing gap detection behavior
-- Clean interface with clear inputs/outputs
-- Component can be tested independently
-
-**Deliverables**:
-- `ktrdr/data/components/gap_analyzer.py` with extracted logic
-- Unit tests replicating existing gap analysis behavior
-
-### Task 1.2b: Add Mode-Aware Gap Analysis
-**Priority**: High  
-**Type**: Feature enhancement  
-**Depends on**: Task 1.2a
-
-**Description**: Enhance GapAnalyzer with mode-specific analysis strategies for local, tail, backfill, and full modes.
-
-**Acceptance Criteria**:
-- Different analysis strategies implemented for each mode
-- Intelligent gap classification (market closure vs missing data)
-- Configuration options for analysis strategies
-- ProgressManager integration for analysis progress
-
-**Deliverables**:
-- Mode-aware gap analysis capabilities
-- Enhanced gap classification logic
-- Progress reporting during gap analysis
-
-### Task 1.2c: Integrate GapAnalyzer into DataManager
-**Priority**: High  
-**Type**: Integration  
-**Depends on**: Task 1.2b
-
-**Description**: Replace DataManager's gap analysis methods with GapAnalyzer usage while maintaining full backward compatibility.
-
-**Acceptance Criteria**:
-- DataManager uses GapAnalyzer instead of embedded gap analysis
-- All existing gap analysis behavior preserved
-- Mode parameters passed correctly to GapAnalyzer
-- All existing tests continue to pass
-
-**Deliverables**:
-- DataManager integration with GapAnalyzer
-- Integration tests validating behavior preservation
-
-### Task 1.2d: Validate Enhanced Gap Analysis
-**Priority**: Medium  
-**Type**: Validation  
-**Depends on**: Task 1.2c
-
-**Description**: Comprehensive testing and validation of enhanced gap analysis capabilities.
-
-**Acceptance Criteria**:
-- Mode-specific gap analysis thoroughly tested
-- Performance validation with large datasets
-- Edge case testing completed
-- Enhanced capabilities validated in real scenarios
-
-**Deliverables**:
-- Comprehensive test suite for enhanced gap analysis
-- Performance benchmarks
-- Validation report
-
-### Task 1.3: Extract and Integrate SegmentManager Component
-**Duration**: 5 days  
-**Priority**: High  
-**End-to-End Impact**: None (internal refactoring with enhanced capabilities)
-
-**Description**: Extract the segment management logic from DataManager into a component that handles the complex task of splitting data requests into IB-compliant segments.
-
-**Why This Next**: Segment management is tightly coupled with gap analysis but has clear responsibilities. Extracting it creates a clean pipeline: GapAnalyzer → SegmentManager → DataFetcher.
-
-**Detailed Actions**:
-1. **Day 1-2: Create SegmentManager with current logic**
-   - Extract `_split_into_segments` and related segmentation logic from DataManager
-   - Create `ktrdr/data/components/segment_manager.py` with clean interface
-   - Preserve all existing IB Gateway compatibility logic
-   - Add comprehensive error handling and validation
-
-2. **Day 3: Add mode-aware segmentation enhancements**
-   - Implement different segment sizing strategies for different modes
-   - Add intelligent segment optimization based on timeframe and historical performance
-   - Integrate with ProgressManager for segmentation progress
-   - Add segment validation and compatibility checking
-
-3. **Day 4: Integrate back into DataManager**
-   - Replace segmentation logic in DataManager with SegmentManager
-   - Update `_load_with_fallback` to use GapAnalyzer → SegmentManager pipeline
-   - Ensure seamless integration with existing fetching logic
-   - Maintain all existing segment behavior
-
-4. **Day 5: Test and validate**
-   - Comprehensive segmentation testing across all scenarios
-   - IB Gateway compatibility validation
-   - Mode-specific segmentation strategy testing
-   - Integration testing with GapAnalyzer and existing fetch logic
+### **Day 5: Test and Validate Slice 1**
 
 **Testing Requirements**:
-- All existing segmentation tests pass
-- Mode-specific segmentation strategy tests
-- IB Gateway compatibility tests
-- SegmentManager unit tests with edge cases
-- Integration tests with GapAnalyzer
+- [ ] All existing `load_data()` tests pass
+- [ ] Progress messages now include data context (symbol, timeframe, mode)
+- [ ] Progress callbacks still work with legacy code
+- [ ] New progress system provides better information than before
+- [ ] No performance regressions
 
 **Deliverables**:
-- SegmentManager component integrated into DataManager
-- Enhanced segmentation strategies
-- DataManager with cleaner segmentation logic
-- Improved IB Gateway compatibility
+- ✅ Working GenericProgressManager with domain-agnostic core
+- ✅ DataProgressRenderer providing data-specific display
+- ✅ One complete DataManager method using new infrastructure
+- ✅ All existing functionality preserved with enhanced progress
 
-### Task 1.4: Improve ServiceOrchestrator and Apply to DataManager
-**Duration**: 3 days  
-**Priority**: Medium  
-**End-to-End Impact**: Positive (better configuration and health checking)
+---
 
-**Description**: Enhance ServiceOrchestrator with lessons learned from DataManager usage, then apply the improvements directly to DataManager to improve configuration management and health checking.
+## 🛑 **SLICE 2: CANCELLATION SYSTEM INTEGRATION**
+**Duration**: 1 week  
+**Goal**: Add universal cancellation to the same DataManager.load_data() operation
 
-**Why Now**: With three components extracted, we have a better understanding of what ServiceOrchestrator needs. Rather than creating another base class, improve the existing one and apply benefits immediately.
+### **Day 1: Build Minimal CancellationSystem**
 
-**Detailed Actions**:
-1. **Day 1: Enhance ServiceOrchestrator**
-   - Add common async execution patterns (`execute_with_progress`, `execute_with_cancellation`)
-   - Improve error handling integration points
-   - Add standardized health check interface
-   - Enhance configuration management with validation
+**Create**: `ktrdr/async/cancellation.py`
+```python
+import asyncio
+import threading
+from typing import Optional
 
-2. **Day 2: Apply enhancements to DataManager**
-   - Update DataManager to use enhanced ServiceOrchestrator capabilities
-   - Implement standardized health checks for data operations
-   - Use improved configuration management for IB host service settings
-   - Add async execution pattern usage where beneficial
+class OperationCancelledException(Exception):
+    """Exception raised when an operation is cancelled."""
+    
+    def __init__(self, operation_id: str):
+        self.operation_id = operation_id
+        super().__init__(f"Operation '{operation_id}' was cancelled")
 
-3. **Day 3: Test and validate**
-   - Validate enhanced ServiceOrchestrator functionality
-   - Test DataManager integration with improvements
-   - Health check functionality testing
-   - Configuration management validation
+class CancellationToken:
+    """Generic cancellation token."""
+    
+    def __init__(self, operation_id: str):
+        self.operation_id = operation_id
+        self._cancelled = False
+        self._lock = threading.Lock()
+    
+    def cancel(self) -> None:
+        """Cancel the operation."""
+        with self._lock:
+            self._cancelled = True
+    
+    def is_cancelled(self) -> bool:
+        """Check if cancellation was requested."""
+        with self._lock:
+            return self._cancelled
+    
+    def check_cancellation(self, context: str = "operation") -> None:
+        """Check for cancellation and raise if cancelled."""
+        if self.is_cancelled():
+            raise OperationCancelledException(f"{self.operation_id} during {context}")
+
+class CancellationSystem:
+    """Universal cancellation system."""
+    
+    def __init__(self):
+        self._tokens: dict[str, CancellationToken] = {}
+        self._lock = threading.Lock()
+    
+    def create_token(self, operation_id: str) -> CancellationToken:
+        """Create cancellation token for operation."""
+        with self._lock:
+            token = CancellationToken(operation_id)
+            self._tokens[operation_id] = token
+            return token
+    
+    def cancel_operation(self, operation_id: str) -> bool:
+        """Cancel specific operation."""
+        with self._lock:
+            token = self._tokens.get(operation_id)
+            if token:
+                token.cancel()
+                return True
+            return False
+    
+    def cleanup_token(self, operation_id: str) -> None:
+        """Clean up completed operation token."""
+        with self._lock:
+            self._tokens.pop(operation_id, None)
+```
+
+### **Day 2: Integrate Cancellation with GenericProgressManager**
+
+**Update**: `ktrdr/async/progress.py`
+```python
+class GenericProgressManager:
+    def __init__(self, callback=None, renderer=None, cancellation_token=None):
+        # ... existing init
+        self.cancellation_token = cancellation_token
+    
+    def set_cancellation_token(self, token: CancellationToken):
+        """Set cancellation token for this operation."""
+        self.cancellation_token = token
+    
+    def update_progress(self, step: int, message: str, context: dict = None):
+        """Update progress with cancellation check."""
+        # Check for cancellation first
+        if self.cancellation_token:
+            self.cancellation_token.check_cancellation(f"step {step}")
+        
+        # ... existing progress logic
+```
+
+### **Day 3: Add Cancellation to DataManager.load_data()**
+
+**Update**: `ktrdr/data/data_manager.py`
+```python
+from ktrdr.async.cancellation import CancellationSystem
+
+class DataManager:
+    def __init__(self):
+        # ... existing init
+        self._cancellation_system = CancellationSystem()
+    
+    def load_data(self, symbol: str, timeframe: str, mode: str = "local",
+                  progress_callback: Optional[Callable] = None, **kwargs) -> pd.DataFrame:
+        """Load data with cancellation support."""
+        
+        operation_id = f"load_data_{symbol}_{timeframe}_{datetime.now().isoformat()}"
+        
+        # Create cancellation token
+        cancellation_token = self._cancellation_system.create_token(operation_id)
+        
+        try:
+            # Create progress manager with cancellation
+            progress_manager = GenericProgressManager(
+                callback=self._wrap_legacy_callback(progress_callback),
+                renderer=self._generic_progress_renderer,
+                cancellation_token=cancellation_token
+            )
+            
+            # ... rest of existing logic
+            
+            result = self._load_with_fallback(
+                symbol=symbol,
+                timeframe=timeframe, 
+                mode=mode,
+                progress_manager=progress_manager,
+                cancellation_token=cancellation_token,  # Pass to internal methods
+                **kwargs
+            )
+            
+            return result
+            
+        except OperationCancelledException:
+            logger.info(f"Data load operation {operation_id} was cancelled")
+            raise
+        finally:
+            # Clean up cancellation token
+            self._cancellation_system.cleanup_token(operation_id)
+    
+    def cancel_operation(self, operation_id: str) -> bool:
+        """Cancel a data loading operation."""
+        return self._cancellation_system.cancel_operation(operation_id)
+```
+
+### **Day 4: Add Cancellation Checks in _load_with_fallback()**
+
+**Update**: Add cancellation checks at key points
+```python
+def _load_with_fallback(self, symbol: str, timeframe: str, mode: str,
+                       progress_manager: GenericProgressManager,
+                       cancellation_token: CancellationToken, **kwargs) -> pd.DataFrame:
+    
+    # Check cancellation before each major step
+    cancellation_token.check_cancellation("validation")
+    progress_manager.update_progress(1, "Validating symbol and timeframe")
+    # ... validation logic
+    
+    cancellation_token.check_cancellation("local data check")
+    progress_manager.update_progress(2, "Checking local data")
+    # ... local data logic
+    
+    # Continue adding cancellation checks at each step
+    # ...
+```
+
+### **Day 5: Test and Validate Slice 2**
 
 **Testing Requirements**:
-- ServiceOrchestrator enhancement tests
-- DataManager integration tests with enhancements
-- Health check functionality tests
-- Configuration management tests
+- [ ] All existing functionality preserved
+- [ ] Cancellation works during data loading operations
+- [ ] Cancellation response time < 1 second
+- [ ] Proper cleanup when operations are cancelled
+- [ ] No resource leaks from cancellation tokens
 
 **Deliverables**:
-- Enhanced ServiceOrchestrator with new capabilities
-- DataManager using improved ServiceOrchestrator features
-- Better configuration and health checking
-- Foundation for training manager improvements
+- ✅ Universal cancellation system
+- ✅ DataManager.load_data() supports cancellation
+- ✅ Clean exception handling for cancelled operations
+- ✅ Token cleanup prevents memory leaks
 
-### Task 1.5a: Create AsyncHostService Base Class
-**Priority**: High  
-**Type**: Create new component
+---
 
-**Description**: Create the AsyncHostService abstract base class to provide unified host service communication patterns.
+## 🎭 **SLICE 3: ORCHESTRATION FRAMEWORK**
+**Duration**: 1 week  
+**Goal**: Add coordinated async execution to the same DataManager operation
 
-**Acceptance Criteria**:
-- Abstract base class with service identification and configuration methods
-- HTTP client lifecycle management with async context manager patterns
-- Custom exception hierarchy for host service communication failures
-- Clean interface suitable for both IB and Training adapters
+### **Day 1-2: Build Minimal AsyncOrchestrationFramework**
 
-**Deliverables**:
-- `ktrdr/managers/async_host_service.py` with complete base class implementation
-- Unit tests for base class functionality
+**Create**: `ktrdr/async/orchestration.py`
+```python
+@dataclass
+class AsyncOperation:
+    """Generic async operation definition."""
+    operation_id: str
+    operation_type: str  # "data_load", "model_train", etc.
+    total_steps: int
+    context: dict[str, Any] = field(default_factory=dict)
+    estimated_duration: Optional[timedelta] = None
 
-### Task 1.5b: Implement Connection Management and Health Checking
-**Priority**: High  
-**Type**: Feature implementation  
-**Depends on**: Task 1.5a
+class AsyncOrchestrationFramework:
+    """Generic orchestration for all async operations."""
+    
+    def __init__(self):
+        self.cancellation_system = CancellationSystem()
+    
+    def execute_operation(self, 
+                         operation: AsyncOperation,
+                         operation_func: Callable,
+                         progress_renderer: Optional[ProgressRenderer] = None,
+                         progress_callback: Optional[Callable] = None) -> Any:
+        """Execute operation with full orchestration."""
+        
+        # Create cancellation token
+        cancellation_token = self.cancellation_system.create_token(operation.operation_id)
+        
+        # Create progress manager
+        progress_manager = GenericProgressManager(
+            callback=progress_callback,
+            renderer=progress_renderer,
+            cancellation_token=cancellation_token
+        )
+        
+        try:
+            # Start operation tracking
+            progress_manager.start_operation(
+                operation_id=operation.operation_id,
+                total_steps=operation.total_steps,
+                context=operation.context
+            )
+            
+            # Execute the operation function
+            result = operation_func(
+                operation=operation,
+                progress_manager=progress_manager,
+                cancellation_token=cancellation_token
+            )
+            
+            progress_manager.complete_operation()
+            return result
+            
+        except OperationCancelledException:
+            logger.info(f"Operation {operation.operation_id} was cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Operation {operation.operation_id} failed: {e}")
+            raise
+        finally:
+            self.cancellation_system.cleanup_token(operation.operation_id)
+    
+    def cancel_operation(self, operation_id: str) -> bool:
+        """Cancel a running operation."""
+        return self.cancellation_system.cancel_operation(operation_id)
+```
 
-**Description**: Add connection pooling, health checking, and retry logic to AsyncHostService.
+### **Day 3-4: Integrate Orchestration with DataManager**
 
-**Acceptance Criteria**:
-- Connection pooling with configurable limits and timeouts
-- Standardized health check interface
-- Retry logic with exponential backoff
-- Request metrics and monitoring capabilities
+**Update**: `ktrdr/data/data_manager.py`
+```python
+from ktrdr.async.orchestration import AsyncOrchestrationFramework, AsyncOperation
 
-**Deliverables**:
-- Enhanced AsyncHostService with connection management
-- Health checking capabilities
-- Tests for connection pooling and retry logic
+class DataManager(ServiceOrchestrator):
+    def __init__(self):
+        # ... existing init
+        self._async_orchestration = AsyncOrchestrationFramework()
+    
+    def load_data(self, symbol: str, timeframe: str, mode: str = "local",
+                  progress_callback: Optional[Callable] = None, **kwargs) -> pd.DataFrame:
+        """Load data using orchestration framework."""
+        
+        # Create operation definition
+        operation = AsyncOperation(
+            operation_id=f"load_data_{symbol}_{timeframe}_{datetime.now().isoformat()}",
+            operation_type="data_load",
+            total_steps=5,
+            context={
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'mode': mode,
+                **kwargs  # Additional context
+            }
+        )
+        
+        # Execute through orchestration framework
+        return self._async_orchestration.execute_operation(
+            operation=operation,
+            operation_func=self._perform_data_load,
+            progress_renderer=self._generic_progress_renderer,
+            progress_callback=progress_callback
+        )
+    
+    def _perform_data_load(self, 
+                          operation: AsyncOperation, 
+                          progress_manager: GenericProgressManager,
+                          cancellation_token: CancellationToken) -> pd.DataFrame:
+        """Actual data loading implementation."""
+        
+        # Extract parameters from operation context
+        symbol = operation.context['symbol']
+        timeframe = operation.context['timeframe']
+        mode = operation.context['mode']
+        
+        # Use existing _load_with_fallback with orchestration components
+        return self._load_with_fallback(
+            symbol=symbol,
+            timeframe=timeframe,
+            mode=mode,
+            progress_manager=progress_manager,
+            cancellation_token=cancellation_token,
+            **{k: v for k, v in operation.context.items() 
+               if k not in ['symbol', 'timeframe', 'mode']}
+        )
+    
+    def cancel_data_load(self, operation_id: str) -> bool:
+        """Cancel data loading operation."""
+        return self._async_orchestration.cancel_operation(operation_id)
+```
 
-### Task 1.5c: Refactor IbDataAdapter to Use AsyncHostService
-**Priority**: High  
-**Type**: Refactor existing component  
-**Depends on**: Task 1.5b
-
-**Description**: Update IbDataAdapter to extend AsyncHostService instead of implementing its own HTTP patterns.
-
-**Acceptance Criteria**:
-- IbDataAdapter inherits from AsyncHostService
-- Remove duplicate connection management code
-- Maintain full backward compatibility with existing IB operations
-- All existing IB tests continue to pass
-
-**Deliverables**:
-- Refactored IbDataAdapter using unified base class
-- Integration tests validating maintained functionality
-
-### Task 1.5d: Refactor TrainingAdapter to Use AsyncHostService
-**Priority**: High  
-**Type**: Refactor existing component  
-**Depends on**: Task 1.5b
-
-**Description**: Update TrainingAdapter to extend AsyncHostService for consistency with IB adapter.
-
-**Acceptance Criteria**:
-- TrainingAdapter inherits from AsyncHostService
-- Eliminate duplicate HTTP client management code
-- Training host service operations benefit from connection pooling
-- All existing training tests continue to pass
-
-**Deliverables**:
-- Refactored TrainingAdapter using unified base class
-- Integration tests validating training functionality
-
-### Task 1.5e: Validate Host Service Harmonization
-**Priority**: Medium  
-**Type**: Validation  
-**Depends on**: Task 1.5c, Task 1.5d
-
-**Description**: Comprehensive testing and validation of unified host service patterns.
-
-**Acceptance Criteria**:
-- Connection pool behavior validated across both IB and Training scenarios
-- Error handling consistency verified for both adapter types
-- Health checking functionality working for both services
-- Performance benefits from connection pooling measured
-
-**Deliverables**:
-- Comprehensive integration test suite
-- Performance benchmarks showing connection pooling benefits
-- Validation report for host service harmonization
-
-## Phase 2: DataManager Async Transformation
-**Duration**: 2.5 weeks  
-**Goal**: Transform DataManager's sync/async patterns and complete decomposition
-
-### Phase 2 Success Criteria
-- All DataManager async/sync issues resolved
-- Remaining components extracted and integrated
-- DataManager becomes a clean orchestrator
-- Performance improvements measurable
-- All functionality preserved
-
-### Task 2.1: Fix DataManager Async/Sync Boundaries
-**Duration**: 4 days  
-**Priority**: High  
-**End-to-End Impact**: Positive (major performance improvement)
-
-**Description**: Eliminate all `asyncio.run()` calls inside DataManager by creating proper async internal methods, delivering the major performance improvement.
-
-**Why Now**: With components extracted, the async boundaries are clearer. This task delivers the biggest performance improvement while components are still fresh.
-
-**Detailed Actions**:
-1. **Day 1-2: Create async versions of all internal methods**
-   - Replace `_fetch_segment_sync` with `_fetch_segment_async`
-   - Replace `_fetch_head_timestamp_sync` with `_fetch_head_timestamp_async`
-   - Remove all `asyncio.run()` calls from internal methods
-   - Use `asyncio.to_thread()` for CPU-bound operations that need async wrapper
-
-2. **Day 3: Update method call chains to be properly async**
-   - Ensure all internal method calls use await instead of sync calls
-   - Update `_load_with_fallback` to be fully async internally
-   - Maintain sync public API for backward compatibility
-   - Add proper async context management
-
-3. **Day 4: Test and validate performance improvements**
-   - Comprehensive async behavior testing
-   - Performance benchmarking showing elimination of event loop overhead
-   - Memory usage validation
-   - Regression testing for all functionality
+### **Day 5: Test and Validate Slice 3**
 
 **Testing Requirements**:
-- All existing DataManager functionality tests pass
-- Async behavior validation tests
-- Performance improvement benchmarks (target: 30-50% improvement)
-- Memory usage regression tests
-- Concurrent operation tests
+- [ ] All existing functionality preserved
+- [ ] Operations now go through orchestration framework
+- [ ] Better error handling and resource management
+- [ ] Operation cancellation works through orchestration
+- [ ] Clean logging and monitoring of operations
 
 **Deliverables**:
-- DataManager with proper async/sync boundaries
-- Major performance improvement (30-50% faster operations)
-- Eliminated event loop creation overhead
-- Foundation for further async improvements
+- ✅ Complete orchestration framework
+- ✅ DataManager using orchestrated execution
+- ✅ Unified progress, cancellation, and error handling
+- ✅ Foundation ready for training system integration
 
-### Task 2.2: Extract and Integrate DataValidator Component
-**Duration**: 4 days  
-**Priority**: Medium  
-**End-to-End Impact**: None (internal refactoring with enhanced capabilities)
+---
 
-**Description**: Extract data validation and repair functionality from DataManager into a focused component, then integrate it back with enhanced validation capabilities.
+## 🧠 **SLICE 4: TRAINING SYSTEM INTEGRATION**
+**Duration**: 1 week  
+**Goal**: Use same infrastructure for training operations
 
-**Detailed Actions**:
-1. **Day 1-2: Create DataValidator with current logic**
-   - Extract all validation methods from DataManager
-   - Create `ktrdr/data/components/data_validator.py`
-   - Include all repair strategies (ffill, bfill, interpolate, etc.)
-   - Preserve existing validation behavior
+### **Day 1: Build Training Progress Renderer**
 
-2. **Day 3: Add enhanced validation capabilities**
-   - Improve outlier detection with configurable thresholds
-   - Add data quality scoring and reporting
-   - Integrate with ProgressManager for validation progress
-   - Add validation rule configuration system
+**Create**: `ktrdr/training/async/training_progress_renderer.py`
+```python
+from ktrdr.async.progress import ProgressRenderer, GenericProgressState
 
-3. **Day 4: Integrate back into DataManager**
-   - Replace validation logic with DataValidator usage
-   - Ensure seamless integration with existing workflows
-   - Test enhanced validation capabilities
-   - Validate performance and accuracy
+class TrainingProgressRenderer(ProgressRenderer):
+    """Renders progress messages for training operations."""
+    
+    def render_message(self, state: GenericProgressState) -> str:
+        """Render progress message with training context."""
+        context = state.context
+        base_message = self._extract_base_message(state.message)
+        
+        # Add training-specific context
+        parts = [base_message]
+        
+        model_type = context.get('model_type')
+        symbols = context.get('symbols', [])
+        timeframes = context.get('timeframes', [])
+        
+        if model_type:
+            context_parts = [model_type]
+            
+            if symbols:
+                # Show first 2 symbols, indicate if more
+                symbol_str = ', '.join(symbols[:2])
+                if len(symbols) > 2:
+                    symbol_str += f" (+{len(symbols)-2} more)"
+                context_parts.append(f"on {symbol_str}")
+            
+            if timeframes:
+                tf_str = ', '.join(timeframes[:2])
+                if len(timeframes) > 2:
+                    tf_str += f" (+{len(timeframes)-2} more)"
+                context_parts.append(f"[{tf_str}]")
+            
+            parts.append(f"({' '.join(context_parts)})")
+        
+        # Add step progress
+        if state.total_steps > 0:
+            parts.append(f"[{state.current_step}/{state.total_steps}]")
+        
+        return " ".join(parts)
+    
+    def _extract_base_message(self, message: str) -> str:
+        """Extract base message without previous context."""
+        return message
+```
+
+### **Day 2-3: Create Training Domain Interface**
+
+**Create**: `ktrdr/training/async/training_domain_interface.py`
+```python
+from ktrdr.async.orchestration import AsyncOrchestrationFramework, AsyncOperation
+from ktrdr.training.async.training_progress_renderer import TrainingProgressRenderer
+
+class TrainingDomainInterface:
+    """Bridges training operations to generic async framework."""
+    
+    def __init__(self, orchestrator: Optional[AsyncOrchestrationFramework] = None):
+        self.orchestrator = orchestrator or AsyncOrchestrationFramework()
+        self.progress_renderer = TrainingProgressRenderer()
+    
+    def execute_training(self,
+                        strategy_config_path: str,
+                        symbols: list[str],
+                        timeframes: list[str],
+                        start_date: str,
+                        end_date: str,
+                        validation_split: float = 0.2,
+                        data_mode: str = "local",
+                        progress_callback: Optional[Callable] = None) -> dict[str, Any]:
+        """Execute training using generic async framework."""
+        
+        operation = AsyncOperation(
+            operation_id=f"train_{len(symbols)}symbols_{datetime.now().isoformat()}",
+            operation_type="model_train",
+            total_steps=4,  # Training-specific step count
+            context={
+                'model_type': 'mlp',  # Could extract from config
+                'symbols': symbols,
+                'timeframes': timeframes,
+                'strategy_config_path': strategy_config_path,
+                'start_date': start_date,
+                'end_date': end_date,
+                'validation_split': validation_split,
+                'data_mode': data_mode
+            }
+        )
+        
+        return self.orchestrator.execute_operation(
+            operation=operation,
+            operation_func=self._perform_training,
+            progress_renderer=self.progress_renderer,
+            progress_callback=progress_callback
+        )
+    
+    def _perform_training(self,
+                         operation: AsyncOperation,
+                         progress_manager: GenericProgressManager,
+                         cancellation_token: CancellationToken) -> dict[str, Any]:
+        """Actual training implementation using orchestration components."""
+        
+        # Extract parameters from operation context
+        context = operation.context
+        
+        # Step 1: Setup
+        progress_manager.update_progress(1, "Setting up training environment")
+        # ... setup logic with cancellation checks
+        
+        # Step 2: Data preparation
+        cancellation_token.check_cancellation("data preparation")
+        progress_manager.update_progress(2, "Preparing training data")
+        # ... data prep logic
+        
+        # Step 3: Model training
+        cancellation_token.check_cancellation("model training")
+        progress_manager.update_progress(3, "Training model")
+        # ... actual training logic
+        
+        # Step 4: Validation
+        cancellation_token.check_cancellation("validation")
+        progress_manager.update_progress(4, "Validating results")
+        # ... validation logic
+        
+        return {
+            "success": True,
+            "operation_id": operation.operation_id,
+            # ... other results
+        }
+    
+    def cancel_training(self, operation_id: str) -> bool:
+        """Cancel training operation."""
+        return self.orchestrator.cancel_operation(operation_id)
+```
+
+### **Day 4: Update TrainingManager to Use Domain Interface**
+
+**Update**: `ktrdr/training/training_manager.py`
+```python
+from ktrdr.training.async.training_domain_interface import TrainingDomainInterface
+
+class TrainingManager(ServiceOrchestrator):
+    def __init__(self):
+        # ... existing init
+        self._training_domain = TrainingDomainInterface()
+    
+    def train_multi_symbol_strategy(self,
+                                   strategy_config_path: str,
+                                   symbols: list[str],
+                                   timeframes: list[str],
+                                   start_date: str,
+                                   end_date: str,
+                                   validation_split: float = 0.2,
+                                   data_mode: str = "local",
+                                   progress_callback=None) -> dict[str, Any]:
+        """Train strategy using generic async infrastructure."""
+        
+        return self._training_domain.execute_training(
+            strategy_config_path=strategy_config_path,
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date,
+            end_date=end_date,
+            validation_split=validation_split,
+            data_mode=data_mode,
+            progress_callback=progress_callback
+        )
+    
+    def cancel_training(self, operation_id: str) -> bool:
+        """Cancel training operation."""
+        return self._training_domain.cancel_training(operation_id)
+```
+
+### **Day 5: Test and Validate Slice 4**
 
 **Testing Requirements**:
-- All existing validation tests pass
-- Enhanced validation capability tests
-- DataValidator unit tests with edge cases
-- Performance validation tests
-- Integration tests with other components
+- [ ] Training operations use same infrastructure as data operations
+- [ ] Training-specific progress messages with model/symbol context
+- [ ] Training operations can be cancelled consistently
+- [ ] Same orchestration patterns for both data and training
+- [ ] All existing training functionality preserved
 
 **Deliverables**:
-- DataValidator component integrated into DataManager
-- Enhanced validation and repair capabilities
-- DataManager with cleaner validation logic
-- Improved data quality assurance
+- ✅ Training system using generic async infrastructure
+- ✅ Training-specific progress rendering
+- ✅ Consistent patterns between data and training systems
+- ✅ Both systems benefit from shared infrastructure
 
-### Task 2.3: Extract and Integrate DataProcessor Component
-**Duration**: 3 days  
-**Priority**: Medium  
-**End-to-End Impact**: None (internal refactoring with enhanced capabilities)
+---
 
-**Description**: Extract data processing functionality (merging, resampling, transformation) from DataManager into a focused component.
+## 🌐 **SLICE 5: HOST SERVICE INTEGRATION**
+**Duration**: 1 week  
+**Goal**: Add generic host service support to orchestration framework
 
-**Detailed Actions**:
-1. **Day 1: Create DataProcessor with current logic**
-   - Extract merging, resampling, and transformation methods
-   - Create `ktrdr/data/components/data_processor.py`
-   - Preserve all existing processing behavior
-   - Add comprehensive error handling
+### **Day 1-2: Extract Generic AsyncHostService**
 
-2. **Day 2: Add enhanced processing capabilities**
-   - Optimize DataFrame operations for better memory usage
-   - Add flexible processing pipelines
-   - Integrate with ProgressManager for processing progress
-   - Add processing validation and quality checks
+**Update**: `ktrdr/async/host_service.py` (move from managers)
+```python
+# Remove all domain-specific integrations
+# Use CancellationSystem instead of embedded cancellation
+# Make it pure HTTP infrastructure
 
-3. **Day 3: Integrate back into DataManager and test**
-   - Replace processing logic with DataProcessor usage
-   - Test enhanced processing capabilities
-   - Validate performance improvements
-   - Ensure integration with other components
+class AsyncHostService(ABC):
+    """Generic host service base - no domain knowledge."""
+    
+    def __init__(self, config: HostServiceConfig):
+        self.config = config
+        self._http_client: Optional[httpx.AsyncClient] = None
+        # Remove _current_cancellation_token - will use CancellationSystem
+    
+    # Remove _check_cancellation method
+    # Cancellation handled by CancellationSystem at operation level
+    
+    async def _call_host_service_post(self, endpoint: str, data: dict[str, Any],
+                                     cancellation_token: Optional[CancellationToken] = None) -> dict[str, Any]:
+        """POST request with external cancellation token."""
+        
+        for attempt in range(self.max_retries + 1):
+            try:
+                # Check cancellation using external token
+                if cancellation_token:
+                    cancellation_token.check_cancellation(f"POST {endpoint} attempt {attempt + 1}")
+                
+                # ... rest of HTTP logic
+                
+            except OperationCancelledException:
+                # Let cancellation bubble up
+                raise
+            # ... rest of retry logic
+```
+
+### **Day 3-4: Integrate Host Services with Orchestration**
+
+**Update**: Both IB and Training adapters to use generic host service
+```python
+# Update IbDataAdapter and TrainingAdapter to:
+# 1. Use generic AsyncHostService
+# 2. Pass cancellation tokens from orchestration
+# 3. Benefit from shared connection pooling
+
+class IbDataAdapter(AsyncHostService):
+    async def fetch_data(self, symbol: str, timeframe: str,
+                        cancellation_token: Optional[CancellationToken] = None) -> pd.DataFrame:
+        """Fetch data with orchestration-provided cancellation."""
+        
+        return await self._call_host_service_post(
+            "/data/fetch",
+            {"symbol": symbol, "timeframe": timeframe},
+            cancellation_token=cancellation_token
+        )
+
+class TrainingAdapter(AsyncHostService):
+    async def start_training(self, config: dict,
+                            cancellation_token: Optional[CancellationToken] = None) -> dict:
+        """Start training with orchestration-provided cancellation."""
+        
+        return await self._call_host_service_post(
+            "/training/start",
+            config,
+            cancellation_token=cancellation_token
+        )
+```
+
+### **Day 5: Test and Validate Slice 5**
 
 **Testing Requirements**:
-- All existing processing tests pass
-- Enhanced processing capability tests
-- DataProcessor unit tests
-- Performance and memory usage tests
-- Integration tests
+- [ ] Both IB and training host services use generic infrastructure
+- [ ] Connection pooling benefits both systems
+- [ ] Consistent cancellation behavior across all host service calls
+- [ ] No domain-specific coupling in AsyncHostService
+- [ ] Performance improvements measurable
 
 **Deliverables**:
-- DataProcessor component integrated into DataManager
-- Enhanced processing capabilities
-- Better memory usage and performance
-- DataManager with cleaner processing logic
+- ✅ Generic AsyncHostService without domain coupling
+- ✅ Both data and training systems benefit from connection pooling
+- ✅ Unified cancellation across all host service communication
+- ✅ Complete generic async infrastructure serving both systems
 
-### Task 2.4: Create Async DataFetcher and Final Integration
-**Duration**: 4 days  
-**Priority**: High  
-**End-to-End Impact**: Positive (better fetching performance and reliability)
+---
 
-**Description**: Create the fully async DataFetcher component that handles all network I/O, then integrate it to complete the DataManager decomposition.
+## 🎯 **SLICE COMPLETION CRITERIA**
 
-**Detailed Actions**:
-1. **Day 1-2: Create async DataFetcher**
-   - Extract and async-ify all fetching logic from DataManager
-   - Create `ktrdr/data/components/data_fetcher.py` as the only truly async component
-   - Implement proper retry logic with exponential backoff
-   - Add concurrent fetching capabilities with rate limiting
-   - Integrate with connection management system for optimal performance
+Each slice is considered complete when:
 
-2. **Day 3: Integrate with existing adapter and progress systems**
-   - Integrate with IbDataAdapter for actual data fetching
-   - Add ProgressManager integration for fetch progress
-   - Implement periodic progress saving to prevent data loss
-   - Add proper error handling and resilience with connection health monitoring
+### **Functional Requirements**
+- [ ] All existing functionality preserved
+- [ ] New capabilities working and tested
+- [ ] Integration tests pass
+- [ ] No breaking changes to public APIs
 
-3. **Day 4: Final integration and testing**
-   - Integrate DataFetcher into DataManager
-   - Complete the component pipeline: GapAnalyzer → SegmentManager → DataFetcher → DataProcessor → DataValidator
-   - Test complete integrated system with connection pooling
-   - Validate performance and reliability improvements
+### **Quality Requirements**  
+- [ ] Code coverage maintained or improved
+- [ ] Performance maintained or improved
+- [ ] Memory usage stable
+- [ ] Error handling comprehensive
 
-**Testing Requirements**:
-- DataFetcher async operation tests
-- Integration tests with all other components and connection management
-- Performance tests with concurrent fetching and connection reuse
-- Error handling and resilience tests with connection failures
-- Complete DataManager integration tests
+### **Documentation Requirements**
+- [ ] New APIs documented
+- [ ] Integration examples provided
+- [ ] Migration notes updated
+- [ ] Architecture diagrams current
 
-**Deliverables**:
-- Async DataFetcher component fully integrated
-- Complete DataManager decomposition achieved
-- DataManager as clean orchestrator of components
-- Improved fetching performance and reliability with connection pooling
+### **Integration Requirements**
+- [ ] Works with rest of system
+- [ ] No conflicts with existing patterns
+- [ ] Clean interfaces between components
+- [ ] Proper error propagation
 
-### Task 2.5: DataManager Orchestrator Finalization
-**Duration**: 3 days  
-**Priority**: High  
-**End-to-End Impact**: None (internal cleanup and optimization)
+## 🚀 **BENEFITS OF VERTICAL SLICE APPROACH**
 
-**Description**: Transform DataManager into a clean orchestrator that coordinates all components with optimal async patterns.
+### **1. Continuous Value Delivery**
+- **Slice 1**: Better progress reporting for data operations
+- **Slice 2**: Cancellation support for data operations
+- **Slice 3**: Full orchestration benefits for data operations  
+- **Slice 4**: Training automatically gets all benefits
+- **Slice 5**: Both systems benefit from host service improvements
 
-**Detailed Actions**:
-1. **Day 1: Clean up DataManager orchestration logic**
-   - Simplify DataManager to pure orchestration
-   - Optimize component interaction patterns
-   - Add comprehensive logging for debugging
-   - Clean up any remaining legacy code
+### **2. Risk Mitigation**
+- Small, testable changes at each step
+- Can rollback individual slices without affecting others
+- Problems discovered immediately when they're small
+- Always have working system to fall back to
 
-2. **Day 2: Optimize async patterns**
-   - Ensure optimal async/await usage throughout
-   - Add concurrent operations where beneficial
-   - Optimize memory usage and resource management
-   - Fine-tune performance characteristics
+### **3. Early Validation**
+- Architecture decisions validated with real code
+- Performance impacts measured incrementally
+- User experience improvements visible early
+- Adjustments possible based on learning
 
-3. **Day 3: Final testing and validation**
-   - Complete system testing with all components
-   - Performance benchmarking against original DataManager
-   - Memory usage validation
-   - Comprehensive regression testing
+### **4. Flexible Timeline**
+- Can pause after any slice with improved system
+- Each slice independently valuable
+- Priorities can be adjusted between slices
+- Clear checkpoints for stakeholder review
 
-**Testing Requirements**:
-- Complete functional equivalence with original DataManager
-- Performance improvement validation (target: 50%+ improvement)
-- Memory usage optimization validation
-- All existing tests passing
-- New integration test suite completion
+## 📊 **SUCCESS METRICS**
 
-**Deliverables**:
-- DataManager as clean, efficient orchestrator
-- All components working together optimally
-- Major performance improvements achieved
-- Complete decomposition with maintained functionality
+### **After Slice 1**
+- [ ] GenericProgressManager working in production
+- [ ] Better progress messages for data operations
+- [ ] Foundation established for further slices
 
-## Phase 3: Training Path Alignment and CLI Updates
-**Duration**: 2 weeks  
-**Goal**: Align training path with new patterns and update CLI to use async patterns
+### **After Slice 3**  
+- [ ] Complete orchestration framework operational
+- [ ] One subsystem (data) fully integrated
+- [ ] Performance improvements measurable
 
-### Phase 3 Success Criteria
-- TrainingManager uses enhanced ServiceOrchestrator patterns
-- Training operations benefit from connection management improvements
-- CLI commands use async patterns for better performance
-- Consistent architecture across data and training paths
-- User experience improvements visible
+### **After Slice 5**
+- [ ] Both data and training systems use shared infrastructure
+- [ ] Zero domain knowledge in generic components
+- [ ] 30%+ performance improvement from connection pooling
+- [ ] Easy to add new operation types in any domain
 
-### Task 3.1: Apply DataManager Lessons to TrainingManager
-**Duration**: 3 days  
-**Priority**: Medium  
-**End-to-End Impact**: Positive (consistency and improved training management)
+## 🎉 **FINAL OUTCOME**
 
-**Description**: Apply the enhanced ServiceOrchestrator patterns and component lessons learned from DataManager to TrainingManager for consistency, including connection management benefits.
+This vertical implementation delivers:
+- **Working improvements every week**
+- **Complete generic async infrastructure**
+- **Both data and training systems integrated**
+- **Easy extensibility for future systems**
+- **Proven architecture through incremental validation**
 
-**Detailed Actions**:
-1. **Day 1: Analyze TrainingManager for improvement opportunities**
-   - Compare TrainingManager with enhanced DataManager patterns
-   - Identify areas where enhanced ServiceOrchestrator can be applied
-   - Plan integration of ProgressManager for training operations
-   - Design consistent error handling patterns
-
-2. **Day 2: Apply enhancements to TrainingManager**
-   - Integrate ProgressManager for training progress reporting
-   - Use enhanced ServiceOrchestrator capabilities
-   - Apply consistent error handling patterns
-   - Add health checking capabilities
-   - Integrate TrainingAdapter with connection management system
-
-3. **Day 3: Test and validate TrainingManager improvements**
-   - Test enhanced training progress reporting
-   - Validate health check functionality
-   - Test error handling improvements
-   - Validate connection pooling benefits for training host service
-   - Ensure no regression in training functionality
-
-**Testing Requirements**:
-- All existing training tests pass
-- Enhanced progress reporting tests
-- Health check functionality tests
-- Error handling validation tests
-- Connection pooling performance tests
-- Integration tests with training host service
-
-**Deliverables**:
-- TrainingManager with consistent architecture patterns
-- Enhanced training progress reporting
-- Improved error handling and health checking
-- Connection management benefits for training operations
-- Architectural consistency between data and training paths
-
-### Task 3.2: Update CLI Commands to Use Async Patterns
-**Duration**: 4 days  
-**Priority**: High  
-**End-to-End Impact**: Positive (major CLI performance improvement)
-
-**Description**: Update CLI commands to use async patterns and connection reuse, delivering significant performance improvements and better user experience.
-
-**Why Now**: With DataManager async issues fixed and connection management in place, CLI can benefit from proper async usage and connection pooling.
-
-**Detailed Actions**:
-1. **Day 1: Create AsyncCLIClient pattern**
-   - Design reusable async CLI client with connection pooling
-   - Create base pattern that all CLI commands can use
-   - Add progress display capabilities for long operations
-   - Design cancellation support (Ctrl+C handling)
-   - Integrate with existing connection management system
-
-2. **Day 2: Update data CLI commands**
-   - Update `ktrdr data show`, `ktrdr data load`, and related commands
-   - Implement AsyncCLIClient pattern usage with connection reuse
-   - Add real-time progress display for data operations
-   - Add enhanced error reporting with actionable messages
-
-3. **Day 3: Update training CLI commands**
-   - Update `ktrdr models train` and related commands
-   - Implement consistent async patterns with connection pooling
-   - Add progress reporting for training operations
-   - Ensure consistent user experience
-
-4. **Day 4: Test and validate CLI improvements**
-   - Test CLI command performance improvements
-   - Validate progress reporting functionality
-   - Test cancellation behavior
-   - User experience validation and feedback
-
-**Testing Requirements**:
-- CLI command functionality tests
-- Performance improvement validation (target: 50%+ faster)
-- Progress reporting tests
-- Cancellation behavior tests
-- Connection reuse validation tests
-- User experience validation
-
-**Deliverables**:
-- CLI commands with async patterns and connection reuse
-- Major CLI performance improvements
-- Enhanced user experience with progress reporting
-- Consistent CLI patterns across all commands
-
-### Task 3.3: End-to-End Integration and Optimization
-**Duration**: 3 days  
-**Priority**: Medium  
-**End-to-End Impact**: Positive (complete system optimization)
-
-**Description**: Optimize the complete flow from CLI to host services and ensure all improvements work together optimally.
-
-**Detailed Actions**:
-1. **Day 1: End-to-end flow optimization**
-   - Trace complete request flow from CLI to host services
-   - Optimize connection pooling and reuse patterns across all layers
-   - Identify and resolve any remaining bottlenecks
-   - Add comprehensive request tracing for debugging
-
-2. **Day 2: Integration testing and validation**
-   - Test complete workflows with both data and training operations
-   - Validate performance improvements across entire system
-   - Test concurrent operations and resource usage
-   - Validate error handling across all layers with connection management
-
-3. **Day 3: Final optimization and tuning**
-   - Fine-tune performance parameters based on testing
-   - Optimize memory usage patterns
-   - Add monitoring and alerting integration
-   - Document performance characteristics and recommendations
-
-**Testing Requirements**:
-- End-to-end system performance tests
-- Concurrent operation tests
-- Memory usage validation
-- Error handling integration tests
-- Connection management integration tests
-- Performance regression prevention tests
-
-**Deliverables**:
-- Fully optimized end-to-end system performance
-- Complete integration validation
-- Performance monitoring and alerting
-- System optimization documentation
-
-### Task 3.4: Documentation and Migration Completion
-**Duration**: 4 days  
-**Priority**: Low  
-**End-to-End Impact**: None (documentation and cleanup)
-
-**Description**: Complete the migration with comprehensive documentation, cleanup, and knowledge transfer.
-
-**Detailed Actions**:
-1. **Day 1-2: Update architecture documentation**
-   - Update system architecture diagrams
-   - Document new component relationships and responsibilities
-   - Update API documentation and integration guides
-   - Create troubleshooting and debugging guides
-   - Document connection management and performance optimizations
-
-2. **Day 3: Clean up legacy code and patterns**
-   - Remove unused imports and dependencies
-   - Clean up temporary migration code
-   - Archive legacy implementations properly
-   - Update configuration documentation
-
-3. **Day 4: Knowledge transfer and training**
-   - Create developer onboarding documentation
-   - Document maintenance procedures
-   - Create performance monitoring guides
-   - Conduct knowledge transfer sessions
-
-**Testing Requirements**:
-- Documentation accuracy validation
-- Example code testing
-- Migration completeness verification
-
-**Deliverables**:
-- Complete architecture documentation
-- Clean codebase with legacy code properly archived
-- Developer knowledge base and training materials
-- Migration completion validation
-
-## Benefits of This Vertical Approach
-
-### Immediate Value Delivery
-Every task improves DataManager immediately. If we stop at any point, we have a better DataManager than when we started.
-
-### Continuous Testing
-Every component is tested as soon as it's created because it's immediately integrated into DataManager.
-
-### Risk Mitigation
-No untested code accumulates. Problems are discovered and fixed immediately.
-
-### Clear Progress
-Each task delivers visible improvements in functionality, performance, or maintainability.
-
-### Flexibility
-Tasks can be reordered or skipped based on priorities without breaking the overall plan.
-
-### Learning Integration
-Lessons learned from early tasks inform later tasks, improving the overall implementation.
-
-## Success Metrics
-
-### Performance Improvements
-- **Phase 1**: 15-25% improvement from progress, components, and connection pooling
-- **Phase 2**: 30-50% improvement from complete async transformation
-- **Phase 3**: Additional 20% improvement from CLI async patterns
-
-### Code Quality Improvements
-- **Reduced complexity**: From 2600-line god class to orchestrator + focused components
-- **Improved testability**: Each component testable in isolation
-- **Better maintainability**: Clear responsibilities and separation of concerns
-- **Enhanced reliability**: Better error handling and resilience patterns
-
-### User Experience Improvements
-- **Better progress reporting**: Clear feedback during long operations
-- **Faster CLI commands**: Significant latency reduction from connection reuse
-- **Cancellation support**: Ability to stop long operations gracefully
-- **Enhanced error messages**: More actionable error reporting
-
-### Host Service Integration Benefits
-- **Connection reuse**: Significant performance improvements from connection pooling
-- **Better resilience**: Improved error handling and retry logic
-- **Health monitoring**: Better visibility into host service connectivity
-- **Consistent patterns**: Same connection management across data and training paths
-
-This vertical approach ensures we make continuous progress toward the unified async architecture while delivering immediate value at every step, including the crucial host service improvements that were in the original plan.
+Each slice builds on the previous one while delivering immediate value, ensuring you always have a working, improved system that can be shipped at any point.
