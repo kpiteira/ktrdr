@@ -18,7 +18,7 @@ from typing import Any, Optional
 import pandas as pd
 
 # Import IB module components
-from ktrdr.ib import IbDataFetcher, IbErrorClassifier, IbErrorType, IbSymbolValidator
+from ktrdr.ib import IbDataFetcher, IbErrorClassifier, IbErrorType
 from ktrdr.logging import get_logger
 from ktrdr.managers.async_host_service import AsyncHostService, HostServiceConfig
 
@@ -74,7 +74,7 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
             AsyncHostService.__init__(self, config)
 
         # Declare Optional attributes with specific types
-        self.symbol_validator: Optional[IbSymbolValidator] = None
+        self.symbol_validator: Optional[Any] = None  # IbSymbolValidator
         self.data_fetcher: Optional[IbDataFetcher] = None
 
         # Validate configuration
@@ -87,6 +87,9 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
         # Initialize appropriate components based on mode
         if not use_host_service:
             # Direct IB connection mode (existing behavior)
+            # Import here to avoid circular import during module initialization
+            from ktrdr.ib import IbSymbolValidator
+
             self.symbol_validator = IbSymbolValidator(
                 component_name="data_adapter_validator"
             )
