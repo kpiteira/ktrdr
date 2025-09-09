@@ -10,7 +10,14 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+if TYPE_CHECKING:
+    from ktrdr.data.async_infrastructure.data_progress_renderer import (
+        DataProgressRenderer,
+    )
+    from ktrdr.data.components.progress_manager import TimeEstimationEngine
+    from ktrdr.data.data_manager_builder import DataManagerConfiguration
 
 import pandas as pd
 
@@ -75,6 +82,7 @@ class DataManager(ServiceOrchestrator):
         max_gap_percentage: float = 5.0,
         default_repair_method: str = "ffill",
         builder: Optional[DataManagerBuilder] = None,
+        builder_config: Optional["DataManagerConfiguration"] = None,
     ):
         """
         Initialize the DataManager using builder pattern.
@@ -85,21 +93,28 @@ class DataManager(ServiceOrchestrator):
             default_repair_method: Default method for repairing missing values
             builder: Optional custom builder. If None, creates default builder.
                     IB integration is always enabled (container mode removed)
+            builder_config: Optional pre-built configuration from enhanced DataManagerBuilder.
+                          If provided, takes precedence over other parameters.
 
         Raises:
             DataError: If initialization parameters are invalid
         """
-        # Use provided builder or create default one
-        if builder is None:
-            builder = (
-                create_default_datamanager_builder()
-                .with_data_directory(data_dir)
-                .with_gap_settings(max_gap_percentage)
-                .with_repair_method(default_repair_method)
-            )
+        # Use provided configuration or build from builder
+        if builder_config is not None:
+            # Use provided enhanced configuration
+            config = builder_config
+        else:
+            # Use provided builder or create default one
+            if builder is None:
+                builder = (
+                    create_default_datamanager_builder()
+                    .with_data_directory(data_dir)
+                    .with_gap_settings(max_gap_percentage)
+                    .with_repair_method(default_repair_method)
+                )
 
-        # Build the configuration
-        config = builder.build_configuration()
+            # Build the configuration
+            config = builder.build_configuration()
 
         # Initialize all components from the built configuration
         # Assert components are non-None after builder.build_configuration()
@@ -130,8 +145,24 @@ class DataManager(ServiceOrchestrator):
         # Initialize ServiceOrchestrator (always enabled - container mode removed)
         super().__init__()
 
+        # NEW: Override async infrastructure components with enhanced ones if available
+        # Note: _generic_progress_manager is already initialized by ServiceOrchestrator
+        # We'll override it if we have an enhanced one from the builder
+        enhanced_progress_manager = getattr(config, "generic_progress_manager", None)
+        if enhanced_progress_manager is not None:
+            self._generic_progress_manager = enhanced_progress_manager
+
+        self._data_progress_renderer: Optional[DataProgressRenderer] = getattr(
+            config, "data_progress_renderer", None
+        )
+        self._time_estimation_engine: Optional[TimeEstimationEngine] = getattr(
+            config, "time_estimation_engine", None
+        )
+
         # Finalize configuration with components that need DataManager reference
-        config = builder.finalize_configuration(self)
+        if builder is not None:
+            config = builder.finalize_configuration(self)
+
         assert (
             config.data_loading_orchestrator is not None
         ), "Builder must create data_loading_orchestrator"
@@ -139,6 +170,10 @@ class DataManager(ServiceOrchestrator):
 
         self.data_loading_orchestrator = config.data_loading_orchestrator
         self.health_checker = config.health_checker
+
+        logger.info(
+            f"DataManager initialized with async infrastructure: {self._generic_progress_manager is not None}"
+        )
 
     # ServiceOrchestrator abstract method implementations
     def _initialize_adapter(self) -> IbDataAdapter:
