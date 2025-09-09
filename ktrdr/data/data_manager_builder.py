@@ -10,16 +10,24 @@ This builder pattern reduces the complexity of DataManager initialization by:
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from ktrdr.data.data_manager import DataManager
 
 from ktrdr import get_logger
+
+# NEW: Async infrastructure imports
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.config.loader import ConfigLoader
 from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
+from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
 from ktrdr.data.components.data_health_checker import DataHealthChecker
 from ktrdr.data.components.data_processor import DataProcessor
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.gap_classifier import GapClassifier
+from ktrdr.data.components.progress_manager import TimeEstimationEngine
 from ktrdr.data.components.segment_manager import SegmentManager
 from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
 from ktrdr.data.ib_data_adapter import IbDataAdapter
@@ -51,6 +59,11 @@ class DataManagerConfiguration:
         self.data_processor: Optional[DataProcessor] = None
         self.data_loading_orchestrator: Optional[DataLoadingOrchestrator] = None
         self.health_checker: Optional[DataHealthChecker] = None
+
+        # NEW: Generic async infrastructure components
+        self.generic_progress_manager: Optional[GenericProgressManager] = None
+        self.data_progress_renderer: Optional[DataProgressRenderer] = None
+        self.time_estimation_engine: Optional[TimeEstimationEngine] = None
 
 
 class IbConfigurationLoader:
@@ -235,6 +248,27 @@ class DataManagerBuilder:
             repair_methods=repair_methods,
         )
 
+    def _create_async_infrastructure(self, config: DataManagerConfiguration) -> None:
+        """Create generic async infrastructure with existing features."""
+
+        # Create time estimation engine (preserve existing logic)
+        cache_dir = Path.home() / ".ktrdr" / "cache"
+        cache_file = cache_dir / "progress_time_estimation.pkl"
+        config.time_estimation_engine = TimeEstimationEngine(cache_file)
+
+        # Create data progress renderer with existing features
+        config.data_progress_renderer = DataProgressRenderer(
+            time_estimation_engine=config.time_estimation_engine,
+            enable_hierarchical_progress=True,
+        )
+
+        # Create generic progress manager
+        config.generic_progress_manager = GenericProgressManager(
+            renderer=config.data_progress_renderer
+        )
+
+        logger.info("Created generic async infrastructure with preserved features")
+
     def build_configuration(self) -> DataManagerConfiguration:
         """
         Build and return the complete configuration.
@@ -244,12 +278,31 @@ class DataManagerBuilder:
         # Build core components first
         self._build_core_components()
 
+        # NEW: Create async infrastructure
+        self._create_async_infrastructure(self._config)
+
         logger.info(
             f"Built DataManager configuration with max_gap_percentage={self._config.max_gap_percentage}%, "
             f"default_repair_method='{self._config.default_repair_method}'"
         )
 
         return self._config
+
+    def build(self) -> "DataManager":
+        """Build DataManager with enhanced async infrastructure."""
+        # Build the configuration with all components including async infrastructure
+        config = self.build_configuration()
+
+        # Create DataManager with enhanced configuration and builder reference
+        from ktrdr.data.data_manager import DataManager
+
+        return DataManager(
+            data_dir=config.data_dir,
+            max_gap_percentage=config.max_gap_percentage,
+            default_repair_method=config.default_repair_method,
+            builder=self,  # Pass builder so finalize_configuration gets called
+            builder_config=config,  # Pass full configuration
+        )
 
     def finalize_configuration(self, data_manager) -> DataManagerConfiguration:
         """

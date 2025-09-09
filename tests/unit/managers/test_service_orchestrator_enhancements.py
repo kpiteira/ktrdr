@@ -26,6 +26,14 @@ class MockServiceOrchestrator(ServiceOrchestrator):
         self.adapter.use_host_service = kwargs.get("use_host_service", False)
         self.adapter.host_service_url = kwargs.get("host_service_url", None)
 
+        # Initialize progress infrastructure that new ServiceOrchestrator expects
+        from ktrdr.async_infrastructure.progress import GenericProgressManager
+        from ktrdr.managers.base import DefaultServiceProgressRenderer
+
+        self._progress_renderer = DefaultServiceProgressRenderer(self._service_name)
+        self._generic_progress_manager = GenericProgressManager()
+        self._current_operation_progress = None
+
     def _initialize_adapter(self):
         return self.adapter
 

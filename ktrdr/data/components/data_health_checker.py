@@ -6,12 +6,14 @@ components, extracted to keep DataManager lean and maintain separation of concer
 """
 
 import os
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_classifier import GapClassifier
-from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.data.local_data_loader import LocalDataLoader
+
+if TYPE_CHECKING:
+    from ktrdr.data.ib_data_adapter import IbDataAdapter
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -31,7 +33,7 @@ class DataHealthChecker:
         data_loader: LocalDataLoader,
         data_validator: DataQualityValidator,
         gap_classifier: GapClassifier,
-        ib_adapter: Optional[IbDataAdapter] = None,
+        ib_adapter: Optional["IbDataAdapter"] = None,
         enable_ib: bool = True,
         max_gap_percentage: float = 5.0,
         default_repair_method: str = "ffill",

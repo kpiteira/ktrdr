@@ -21,6 +21,11 @@ from typing import (
     TypeVar,
 )
 
+from ktrdr.async_infrastructure.progress import (
+    GenericProgressManager,
+    GenericProgressState,
+    ProgressRenderer,
+)
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
 
@@ -41,6 +46,74 @@ class CancellationToken(Protocol):
 
     @property
     def is_cancelled_requested(self) -> bool: ...
+
+
+class DefaultServiceProgressRenderer(ProgressRenderer):
+    """Default progress renderer for ServiceOrchestrator operations."""
+
+    def __init__(self, service_name: str = "Service"):
+        self.service_name = service_name
+
+    def render_message(self, state: GenericProgressState) -> str:
+        """Render basic progress message with service context."""
+        base_message = state.message
+
+        parts = [base_message]
+
+        # Add service context if available
+        if state.context:
+            service_context = []
+
+            # Add operation name if different from message
+            operation = state.context.get("operation")
+            if operation and operation != state.operation_id:
+                service_context.append(operation)
+
+            # Add any domain-specific context
+            for key in ["symbol", "timeframe", "mode"]:
+                if key in state.context:
+                    service_context.append(f"{key}={state.context[key]}")
+
+            if service_context:
+                parts.append(f"({', '.join(service_context)})")
+
+        # Add step progress
+        if state.total_steps > 0:
+            parts.append(f"[{state.current_step}/{state.total_steps}]")
+
+        # Add percentage if available
+        if state.percentage > 0:
+            parts.append(f"({state.percentage:.1f}%)")
+
+        # Add time estimation if available
+        if state.estimated_remaining:
+            remaining_seconds = int(state.estimated_remaining.total_seconds())
+            if remaining_seconds > 0:
+                if remaining_seconds < 60:
+                    eta_str = f"{remaining_seconds}s"
+                elif remaining_seconds < 3600:
+                    eta_str = f"{remaining_seconds // 60}m {remaining_seconds % 60}s"
+                else:
+                    hours = remaining_seconds // 3600
+                    minutes = (remaining_seconds % 3600) // 60
+                    eta_str = f"{hours}h {minutes}m"
+                parts.append(f"ETA: {eta_str}")
+
+        return " ".join(parts)
+
+    def enhance_state(self, state: GenericProgressState) -> GenericProgressState:
+        """Basic state enhancement with timing estimation."""
+        # Add simple time estimation if we have progress information
+        if state.current_step > 0 and state.total_steps > 0 and state.start_time:
+            from datetime import datetime, timedelta
+
+            elapsed = datetime.now() - state.start_time
+            if state.percentage > 0:
+                estimated_total = elapsed.total_seconds() / (state.percentage / 100.0)
+                estimated_remaining = max(0, estimated_total - elapsed.total_seconds())
+                state.estimated_remaining = timedelta(seconds=estimated_remaining)
+
+        return state
 
 
 class ServiceOrchestrator(ABC, Generic[T]):
@@ -73,6 +146,16 @@ class ServiceOrchestrator(ABC, Generic[T]):
         """
         logger.debug(f"Initializing {self._get_service_name()} orchestrator")
         self.adapter: T = self._initialize_adapter()
+
+        # Initialize enhanced progress infrastructure
+        self._progress_renderer = DefaultServiceProgressRenderer(
+            self._get_service_name()
+        )
+        self._generic_progress_manager = GenericProgressManager(
+            renderer=self._progress_renderer
+        )
+        self._current_operation_progress: Optional[GenericProgressManager] = None
+
         logger.info(
             f"{self._get_service_name()} orchestrator initialized "
             f"(mode: {'host_service' if self.is_using_host_service() else 'local'})"
@@ -253,18 +336,22 @@ class ServiceOrchestrator(ABC, Generic[T]):
         progress_callback: Optional[ProgressCallback] = None,
         timeout: Optional[float] = None,
         operation_name: str = "operation",
+        total_steps: int = 0,
+        context: Optional[dict[str, Any]] = None,
     ) -> T:
         """
-        Execute an async operation with progress tracking and optional timeout.
+        Execute an async operation with enhanced progress tracking and optional timeout.
 
-        This pattern provides standardized progress reporting and timeout handling
-        for long-running operations across all service managers.
+        This enhanced version uses GenericProgressManager to provide rich progress features
+        including TimeEstimationEngine integration, hierarchical progress, and context awareness.
 
         Args:
             operation: The async operation to execute
-            progress_callback: Optional callback for progress updates
+            progress_callback: Optional callback for progress updates (backward compatible)
             timeout: Optional timeout in seconds
             operation_name: Name for logging purposes
+            total_steps: Total steps for hierarchical progress tracking
+            context: Optional context for domain-specific information
 
         Returns:
             Result of the operation
@@ -273,16 +360,50 @@ class ServiceOrchestrator(ABC, Generic[T]):
             asyncio.TimeoutError: If operation exceeds timeout
             asyncio.CancelledError: If operation is cancelled
         """
-        logger.debug(f"Starting {operation_name} with progress tracking")
+        logger.debug(f"Starting {operation_name} with enhanced progress tracking")
 
+        # Create enhanced progress callback wrapper for backward compatibility
+        enhanced_callback = None
         if progress_callback:
-            progress_callback(
-                {
-                    "percentage": 0,
-                    "message": f"Starting {operation_name}",
-                    "operation": operation_name,
-                }
-            )
+
+            def smart_wrapper(state: GenericProgressState):
+                # Try GenericProgressState first, fall back to dict format for backward compatibility
+                try:
+                    # First attempt: pass GenericProgressState directly
+                    progress_callback(state)  # type: ignore[arg-type]
+                except (TypeError, AssertionError):
+                    # Fallback: convert to legacy dict format for backward compatibility
+                    # AssertionError catches cases where callback tests isinstance(data, dict)
+                    legacy_dict = {
+                        "percentage": state.percentage,
+                        "message": state.message,
+                        "operation": state.operation_id,
+                        "current_step": state.current_step,
+                        "total_steps": state.total_steps,
+                    }
+                    if state.context.get("error"):
+                        legacy_dict["error"] = state.context["error"]
+                    progress_callback(legacy_dict)
+
+            enhanced_callback = smart_wrapper
+
+        # Create operation-specific progress manager
+        operation_context = context or {}
+        operation_context["operation"] = operation_name
+
+        operation_progress = GenericProgressManager(
+            callback=enhanced_callback, renderer=self._progress_renderer
+        )
+
+        # Store for use by update_operation_progress method
+        self._current_operation_progress = operation_progress
+
+        # Start the operation tracking
+        operation_progress.start_operation(
+            operation_id=operation_name,
+            total_steps=max(total_steps, 1),  # Ensure at least 1 step
+            context=operation_context,
+        )
 
         try:
             if timeout:
@@ -290,42 +411,68 @@ class ServiceOrchestrator(ABC, Generic[T]):
             else:
                 result = await operation
 
-            if progress_callback:
-                progress_callback(
-                    {
-                        "percentage": 100,
-                        "message": f"Completed {operation_name}",
-                        "operation": operation_name,
-                    }
-                )
+            # Complete the operation
+            operation_progress.complete_operation()
 
             logger.debug(f"Completed {operation_name}")
             return result
 
         except asyncio.TimeoutError:
             logger.warning(f"Operation {operation_name} timed out after {timeout}s")
-            if progress_callback:
-                progress_callback(
-                    {
-                        "percentage": 0,
-                        "message": f"Timeout: {operation_name}",
-                        "operation": operation_name,
-                        "error": "timeout",
-                    }
-                )
+            # Update with timeout error
+            operation_progress.update_progress(
+                step=0,
+                message=f"Timeout: {operation_name}",
+                context={"error": "timeout"},
+            )
             raise
         except Exception as e:
             logger.error(f"Operation {operation_name} failed: {e}")
-            if progress_callback:
-                progress_callback(
-                    {
-                        "percentage": 0,
-                        "message": f"Failed: {operation_name}",
-                        "operation": operation_name,
-                        "error": str(e),
-                    }
-                )
+            # Update with error information
+            operation_progress.update_progress(
+                step=0, message=f"Failed: {operation_name}", context={"error": str(e)}
+            )
             raise
+        finally:
+            # Clear current operation
+            self._current_operation_progress = None
+
+    def update_operation_progress(
+        self,
+        step: int,
+        message: str = "",
+        items_processed: int = 0,
+        context: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """
+        Update the progress of the current operation.
+
+        This method can be called from within operations running under
+        execute_with_progress to provide step-by-step progress updates.
+
+        Args:
+            step: Current step number or percentage (0-100)
+            message: Progress message
+            items_processed: Number of items processed
+            context: Additional context information
+        """
+        if self._current_operation_progress:
+            # Convert percentage to step if step > 100
+            if step > 100:
+                # Treat as percentage, convert to step based on total_steps
+                if (
+                    hasattr(self._current_operation_progress, "_state")
+                    and self._current_operation_progress._state
+                ):
+                    total = self._current_operation_progress._state.total_steps
+                    step = min(int((step / 100.0) * total), total)
+
+            self._current_operation_progress.update_progress(
+                step=step,
+                message=message,
+                items_processed=items_processed,
+                context=context,
+            )
 
     async def execute_with_cancellation(
         self,
