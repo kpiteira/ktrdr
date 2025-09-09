@@ -77,13 +77,8 @@ class TimeEstimationEngine:
         # Create key based on operation type and relevant context
         key_parts = [operation_type]
 
-        # Add relevant context parts for better estimation
-        if "symbol" in context:
-            key_parts.append(f"symbol:{context['symbol']}")
-        if "timeframe" in context:
-            key_parts.append(f"tf:{context['timeframe']}")
-        if "mode" in context:
-            key_parts.append(f"mode:{context['mode']}")
+        # Add generic context parts for better estimation
+        # Domain-specific logic moved to domain renderers (e.g., DataProgressRenderer)
         if "data_points" in context:
             # Group by data size ranges for better estimation
             size = int(context["data_points"])
@@ -285,10 +280,8 @@ class ProgressManager:
                         seconds=estimated_duration
                     )
 
-            # Create enhanced start message with context
-            start_message = self._create_enhanced_message(
-                f"Starting {operation_name}", self._current_context
-            )
+            # Create simple start message (domain-specific enhancement moved to renderers)
+            start_message = f"Starting {operation_name}"
 
             self._current_state = ProgressState(
                 operation_id=operation_name,
@@ -536,12 +529,10 @@ class ProgressManager:
             self._current_state.percentage = 100.0
             self._current_state.overall_percentage = 100.0
 
-            # Create enhanced completion message
-            completion_message = self._create_enhanced_message(
-                f"Operation '{self._current_state.operation_id}' completed successfully",
-                {},
+            # Create simple completion message (domain-specific enhancement moved to renderers)
+            self._current_state.message = (
+                f"Operation '{self._current_state.operation_id}' completed successfully"
             )
-            self._current_state.message = completion_message
             self._current_state.estimated_remaining = timedelta(0)
 
             logger.info(
@@ -684,56 +675,10 @@ class ProgressManager:
             logger.debug("Time estimation failed: %s", e)
             self._current_state.estimated_remaining = None
 
-    def _create_enhanced_message(
-        self,
-        base_message: str,
-        context: Optional[dict[str, Any]] = None,
-        current_item_detail: Optional[str] = None,
-    ) -> str:
-        """
-        Create enhanced progress message with contextual information.
-
-        Args:
-            base_message: Base progress message
-            context: Optional context information
-            current_item_detail: Optional detail about current item being processed
-
-        Returns:
-            Enhanced message with context information
-        """
-        enhanced_context = {**self._current_context, **(context or {})}
-        message_parts = [base_message]
-
-        # Add symbol and timeframe if available
-        if "symbol" in enhanced_context and "timeframe" in enhanced_context:
-            context_info = (
-                f"({enhanced_context['symbol']} {enhanced_context['timeframe']}"
-            )
-
-            # Add mode if available
-            if "mode" in enhanced_context:
-                context_info += f", {enhanced_context['mode']} mode"
-
-            context_info += ")"
-            message_parts.append(context_info)
-
-        # Add current item detail if provided
-        if current_item_detail:
-            message_parts.append(f"- {current_item_detail}")
-
-        # Add time estimate if available and significant
-        if (
-            self.enable_time_estimation
-            and self._current_state
-            and self._current_state.estimated_remaining
-            and self._current_state.estimated_remaining.total_seconds() > 5
-        ):
-
-            remaining = self._current_state.estimated_remaining
-            time_str = self._format_time_remaining(remaining)
-            message_parts.append(f"(Est: {time_str})")
-
-        return " ".join(message_parts)
+    # Domain-specific message enhancement logic REMOVED
+    # This functionality has been moved to domain-specific progress renderers
+    # (e.g., DataProgressRenderer for data operations)
+    # Legacy ProgressManager now provides basic functionality only
 
     def _format_time_remaining(self, remaining: timedelta) -> str:
         """Format remaining time in user-friendly format."""
@@ -775,14 +720,9 @@ class ProgressManager:
             if self._current_state is None:
                 return  # Skip if no operation active
 
-            # Create enhanced message with context
-            enhanced_message = self._create_enhanced_message(
-                base_message, context, current_item_detail
-            )
-
             # Update current item detail in state
             if current_item_detail:
                 self._current_state.current_item_detail = current_item_detail
 
-            # Update using existing method with enhanced message
-            self.update_progress(step, enhanced_message)
+            # Use simple message (domain-specific enhancement moved to renderers)
+            self.update_progress(step, base_message)

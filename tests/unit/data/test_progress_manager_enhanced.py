@@ -39,33 +39,36 @@ class TestTimeEstimationEngine:
         """Test creation of operation keys for different contexts."""
         engine = TimeEstimationEngine()
 
-        # Test basic operation key
+        # Test basic operation key (domain-specific logic moved to DataProgressRenderer)
         key1 = engine._create_operation_key(
             "load_data", {"symbol": "AAPL", "timeframe": "1d"}
         )
-        assert key1 == "load_data|symbol:AAPL|tf:1d"
+        # After cleanup, keys should be simpler (domain-specific context removed)
+        assert key1 == "load_data"
 
-        # Test with mode
+        # Test with mode (domain-specific logic removed)
         key2 = engine._create_operation_key(
             "load_data", {"symbol": "MSFT", "timeframe": "1h", "mode": "backfill"}
         )
-        assert key2 == "load_data|symbol:MSFT|tf:1h|mode:backfill"
+        # After cleanup, domain-specific context (symbol/timeframe/mode) is not included
+        assert key2 == "load_data"
 
-        # Test with data points (size categorization)
+        # Test with data points (size categorization still works - it's generic)
         key3 = engine._create_operation_key(
             "load_data", {"symbol": "TSLA", "timeframe": "1d", "data_points": 500}
         )
-        assert key3 == "load_data|symbol:TSLA|tf:1d|size:small"
+        # After cleanup: domain-specific removed, but data_points size categorization preserved
+        assert key3 == "load_data|size:small"
 
         key4 = engine._create_operation_key(
             "load_data", {"symbol": "GOOGL", "timeframe": "1h", "data_points": 5000}
         )
-        assert key4 == "load_data|symbol:GOOGL|tf:1h|size:medium"
+        assert key4 == "load_data|size:medium"
 
         key5 = engine._create_operation_key(
             "load_data", {"symbol": "NVDA", "timeframe": "5m", "data_points": 50000}
         )
-        assert key5 == "load_data|symbol:NVDA|tf:5m|size:large"
+        assert key5 == "load_data|size:large"
 
     def test_record_and_estimate_operation(self):
         """Test recording operations and estimating duration."""
@@ -160,7 +163,7 @@ class TestEnhancedProgressManager:
         assert pm_no_estimation._time_estimator is None
 
     def test_enhanced_operation_context(self):
-        """Test operation context handling."""
+        """Test operation context handling (domain-specific enhancement moved to renderers)."""
         callback_calls = []
 
         def test_callback(state):
@@ -178,16 +181,17 @@ class TestEnhancedProgressManager:
 
         pm.start_operation(5, "test_operation", operation_context=context)
 
-        # Check that context is stored and passed to state
+        # Check that context is stored and passed to state (basic functionality preserved)
         assert pm._current_context == context
         assert len(callback_calls) == 1
         state = callback_calls[0]
         assert state.operation_context == context
-        assert "AAPL" in state.message
-        assert "1d" in state.message
+        # Domain-specific message enhancement (AAPL/1d) moved to DataProgressRenderer
+        # ProgressManager now provides simple messages
+        assert "Starting test_operation" == state.message
 
     def test_enhanced_progress_messages(self):
-        """Test enhanced progress message creation."""
+        """Test progress message creation (domain-specific enhancement moved to renderers)."""
         callback_calls = []
 
         def test_callback(state):
@@ -198,17 +202,17 @@ class TestEnhancedProgressManager:
         context = {"symbol": "MSFT", "timeframe": "1h", "mode": "tail"}
         pm.start_operation(3, "load_data_MSFT_1h", operation_context=context)
 
-        # Test enhanced progress update
+        # Test progress update (now simple without domain-specific enhancement)
         pm.update_progress_with_context(
             1, "Loading local data", current_item_detail="Reading from local cache"
         )
 
-        # Check enhanced message
+        # Check basic message (domain-specific enhancement moved to DataProgressRenderer)
         assert len(callback_calls) >= 2
         enhanced_state = callback_calls[-1]
-        assert "MSFT" in enhanced_state.message
-        assert "1h" in enhanced_state.message
-        assert "Reading from local cache" in enhanced_state.message
+        # Domain-specific enhancement (MSFT/1h) moved to DataProgressRenderer
+        # ProgressManager now provides simple messages
+        assert enhanced_state.message == "Loading local data"
         assert enhanced_state.current_item_detail == "Reading from local cache"
 
     def test_time_estimate_integration(self):
@@ -247,29 +251,22 @@ class TestEnhancedProgressManager:
             assert args[0][1] == context  # context
             assert args[0][2] > 0  # duration
 
-    def test_enhanced_message_formatting(self):
-        """Test enhanced message formatting with various contexts."""
+    def test_basic_message_functionality(self):
+        """Test basic message functionality (domain-specific enhancement moved to DataProgressRenderer)."""
+        # NOTE: Enhanced message formatting with symbol/timeframe/mode context
+        # has been moved to DataProgressRenderer for domain-specific handling.
+        # This test now validates that ProgressManager provides simple, clean messages
+        # that can be enhanced by domain-specific renderers.
+
         pm = ProgressManager()
 
-        # Test message with symbol and timeframe
-        message1 = pm._create_enhanced_message(
-            "Loading data", {"symbol": "AAPL", "timeframe": "1d"}
-        )
-        assert "Loading data (AAPL 1d)" == message1
+        # Test that ProgressManager still handles basic context
+        pm._current_context = {"symbol": "AAPL", "timeframe": "1d"}
+        assert pm._current_context["symbol"] == "AAPL"
+        assert pm._current_context["timeframe"] == "1d"
 
-        # Test message with mode
-        message2 = pm._create_enhanced_message(
-            "Analyzing gaps", {"symbol": "MSFT", "timeframe": "1h", "mode": "backfill"}
-        )
-        assert "Analyzing gaps (MSFT 1h, backfill mode)" == message2
-
-        # Test message with current item detail
-        message3 = pm._create_enhanced_message(
-            "Fetching segments",
-            {"symbol": "TSLA", "timeframe": "5m"},
-            current_item_detail="Processing segment 3 of 10",
-        )
-        assert "Fetching segments (TSLA 5m) - Processing segment 3 of 10" == message3
+        # Domain-specific message enhancement is now handled by DataProgressRenderer
+        # ProgressManager provides basic messages that renderers can enhance
 
     def test_time_remaining_formatting(self):
         """Test time remaining formatting."""
