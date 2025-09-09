@@ -27,6 +27,10 @@ from ktrdr import (
     log_entry_exit,
     log_performance,
 )
+from ktrdr.async_infrastructure.progress import (
+    GenericProgressManager,
+    GenericProgressState,
+)
 from ktrdr.data.components.data_fetcher import DataFetcher
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.progress_manager import ProgressManager
@@ -145,12 +149,14 @@ class DataManager(ServiceOrchestrator):
         # Initialize ServiceOrchestrator (always enabled - container mode removed)
         super().__init__()
 
-        # NEW: Override async infrastructure components with enhanced ones if available
-        # Note: _generic_progress_manager is already initialized by ServiceOrchestrator
-        # We'll override it if we have an enhanced one from the builder
+        # NEW: Store async infrastructure components with enhanced ones if available
+        # Initialize with enhanced components from the builder configuration
+        # If enhanced components are not available, use the base class components
         enhanced_progress_manager = getattr(config, "generic_progress_manager", None)
         if enhanced_progress_manager is not None:
+            # Override the base class generic progress manager with enhanced one
             self._generic_progress_manager = enhanced_progress_manager
+        # Otherwise, use the one already created by the base class
 
         self._data_progress_renderer: Optional[DataProgressRenderer] = getattr(
             config, "data_progress_renderer", None
@@ -172,7 +178,7 @@ class DataManager(ServiceOrchestrator):
         self.health_checker = config.health_checker
 
         logger.info(
-            f"DataManager initialized with async infrastructure: {self._generic_progress_manager is not None}"
+            f"DataManager initialized with async infrastructure: {getattr(self, '_generic_progress_manager', None) is not None}"
         )
 
     # ServiceOrchestrator abstract method implementations
@@ -246,6 +252,37 @@ class DataManager(ServiceOrchestrator):
     # Legacy _create_progress_wrapper method removed
     # Now using ProgressManager directly with ProgressState callbacks
 
+    def _create_legacy_callback_wrapper(self, legacy_callback: Callable) -> Callable:
+        """
+        Wrap legacy progress callback to work with GenericProgressState.
+
+        This method provides 100% backward compatibility by converting GenericProgressState
+        instances to the legacy ProgressState format that existing callbacks expect.
+
+        Args:
+            legacy_callback: Callback function expecting ProgressState instances
+
+        Returns:
+            Wrapper function that converts GenericProgressState to ProgressState
+        """
+
+        def wrapper(generic_state: GenericProgressState) -> None:
+            # Convert to legacy ProgressState using the DataProgressRenderer
+            if self._data_progress_renderer is not None:
+                legacy_state = (
+                    self._data_progress_renderer.create_legacy_compatible_state(
+                        generic_state
+                    )
+                )
+                legacy_callback(legacy_state)
+            else:
+                # Fallback if no renderer available - should not happen in normal operation
+                logger.warning(
+                    "Legacy callback wrapper called without data progress renderer"
+                )
+
+        return wrapper
+
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
     def load_data(
@@ -291,14 +328,42 @@ class DataManager(ServiceOrchestrator):
             When mode is 'tail', 'backfill', or 'full', it uses intelligent gap analysis
             and IB fetching for missing data segments.
         """
-        # Initialize clean ProgressManager (no legacy DataLoadingProgress)
+        # Create legacy-compatible progress callback wrapper
+        enhanced_callback = None
+        if progress_callback:
+            enhanced_callback = self._create_legacy_callback_wrapper(progress_callback)
+
+        # Initialize progress manager - use GenericProgressManager if available
         total_steps = 5 if mode == "local" else 10  # More steps for IB-enabled modes
+
+        if self._data_progress_renderer:
+            # Use enhanced async infrastructure (DataProgressRenderer indicates enhanced setup)
+            operation_progress = GenericProgressManager(
+                callback=enhanced_callback, renderer=self._data_progress_renderer
+            )
+        else:
+            # Fallback to existing ProgressManager if enhanced infrastructure not available
+            legacy_progress_manager = ProgressManager(progress_callback)
+            return self._load_with_fallback_legacy(
+                symbol,
+                timeframe,
+                mode,
+                start_date,
+                end_date,
+                validate,
+                repair,
+                repair_outliers,
+                strict,
+                cancellation_token,
+                legacy_progress_manager,
+            )
 
         # Create enhanced context for better progress descriptions
         operation_context = {
             "symbol": symbol,
             "timeframe": timeframe,
             "mode": mode,
+            "operation_type": "data_load",
             "start_date": (
                 start_date.isoformat()
                 if start_date and hasattr(start_date, "isoformat")
@@ -311,40 +376,44 @@ class DataManager(ServiceOrchestrator):
             ),
         }
 
-        progress_manager = ProgressManager(progress_callback)
-        progress_manager.start_operation(
-            total_steps,
+        # Start operation with data context
+        operation_progress.start_operation(
             f"load_data_{symbol}_{timeframe}",
-            operation_context=operation_context,
+            total_steps,
+            context=operation_context,
         )
-
-        # Set cancellation token if provided
-        if cancellation_token:
-            progress_manager.set_cancellation_token(cancellation_token)
 
         # Load data based on mode
         logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
 
-        if mode == "local":
-            # Local-only mode: use basic loader without IB integration
-            progress_manager.update_progress_with_context(
-                1,
-                "Loading local data from cache",
-                current_item_detail=f"Reading {symbol} {timeframe} from local storage",
-            )
+        try:
+            if mode == "local":
+                # Local-only mode: use basic loader without IB integration
+                operation_progress.update_progress(
+                    step=1,
+                    message="Loading local data from cache",
+                    context={
+                        "current_item_detail": f"Reading {symbol} {timeframe} from local storage"
+                    },
+                )
 
-            df = self.data_loader.load(symbol, timeframe, start_date, end_date)
-        else:
-            # Enhanced modes: use intelligent gap analysis with IB integration
-            df = self.data_loading_orchestrator.load_with_fallback(
-                symbol,
-                timeframe,
-                start_date,
-                end_date,
-                mode,
-                cancellation_token,
-                progress_manager,  # Pass ProgressManager for clean integration
-            )
+                df = self.data_loader.load(symbol, timeframe, start_date, end_date)
+            else:
+                # Enhanced modes: use intelligent gap analysis with IB integration
+                # Note: The orchestrator expects ProgressManager, so we need to handle this
+                # For now, we'll use the enhanced progress in the future when orchestrator supports GenericProgressManager
+                df = self._load_with_enhanced_orchestrator(
+                    symbol,
+                    timeframe,
+                    start_date,
+                    end_date,
+                    mode,
+                    cancellation_token,
+                    operation_progress,
+                )
+        except Exception as e:
+            logger.error(f"Data load failed: {e}")
+            raise
 
         # Check if df is None (happens when fallback returns None)
         if df is None:
@@ -356,10 +425,12 @@ class DataManager(ServiceOrchestrator):
 
         if validate:
             # Update progress for validation step with context
-            progress_manager.update_progress_with_context(
-                total_steps,
-                "Validating data quality",
-                current_item_detail=f"Checking {len(df)} data points for completeness and accuracy",
+            operation_progress.update_progress(
+                step=total_steps,
+                message="Validating data quality",
+                context={
+                    "current_item_detail": f"Checking {len(df)} data points for completeness and accuracy"
+                },
             )
 
             # Use the unified data quality validator
@@ -438,7 +509,7 @@ class DataManager(ServiceOrchestrator):
                         )
 
         # Complete operation with final item count
-        progress_manager.complete_operation()
+        operation_progress.complete_operation()
 
         logger.debug(
             f"Successfully loaded and processed {len(df)} rows of data for {symbol} ({timeframe})"
@@ -497,6 +568,229 @@ class DataManager(ServiceOrchestrator):
 
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
+
+    def _load_with_fallback_legacy(
+        self,
+        symbol: str,
+        timeframe: str,
+        mode: str,
+        start_date,
+        end_date,
+        validate: bool,
+        repair: bool,
+        repair_outliers: bool,
+        strict: bool,
+        cancellation_token,
+        progress_manager: ProgressManager,
+    ) -> pd.DataFrame:
+        """
+        Fallback to existing ProgressManager logic when async infrastructure is unavailable.
+
+        This method preserves the original load_data behavior for backward compatibility
+        when GenericProgressManager is not available.
+        """
+        # Create enhanced context for better progress descriptions
+        operation_context = {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "mode": mode,
+            "start_date": (
+                start_date.isoformat()
+                if start_date and hasattr(start_date, "isoformat")
+                else str(start_date) if start_date else None
+            ),
+            "end_date": (
+                end_date.isoformat()
+                if end_date and hasattr(end_date, "isoformat")
+                else str(end_date) if end_date else None
+            ),
+        }
+
+        progress_manager.start_operation(
+            5 if mode == "local" else 10,  # total_steps
+            f"load_data_{symbol}_{timeframe}",
+            operation_context=operation_context,
+        )
+
+        # Set cancellation token if provided
+        if cancellation_token:
+            progress_manager.set_cancellation_token(cancellation_token)
+
+        try:
+            # Load data based on mode
+            logger.info(
+                f"Loading data for {symbol} ({timeframe}) - mode: {mode} (legacy)"
+            )
+
+            if mode == "local":
+                # Local-only mode: use basic loader without IB integration
+                progress_manager.update_progress_with_context(
+                    1,
+                    "Loading local data from cache",
+                    current_item_detail=f"Reading {symbol} {timeframe} from local storage",
+                )
+                df = self.data_loader.load(symbol, timeframe, start_date, end_date)
+            else:
+                # Enhanced modes: use intelligent gap analysis with IB integration
+                df = self.data_loading_orchestrator.load_with_fallback(
+                    symbol,
+                    timeframe,
+                    start_date,
+                    end_date,
+                    mode,
+                    cancellation_token,
+                    progress_manager,
+                )
+
+            # Check if df is None (happens when fallback returns None)
+            if df is None:
+                raise DataNotFoundError(
+                    message=f"Data not found for {symbol} ({timeframe})",
+                    error_code="DATA-FileNotFound",
+                    details={"symbol": symbol, "timeframe": timeframe},
+                )
+
+            if validate:
+                # Update progress for validation step with context
+                progress_manager.update_progress_with_context(
+                    5 if mode == "local" else 10,  # total_steps
+                    "Validating data quality",
+                    current_item_detail=f"Checking {len(df)} data points for completeness and accuracy",
+                )
+
+                # Use the unified data quality validator with same logic as enhanced version
+                validation_type = "local"
+
+                if not repair:
+                    validator = DataQualityValidator(
+                        auto_correct=False, max_gap_percentage=self.max_gap_percentage
+                    )
+                else:
+                    validator = self.data_validator
+
+                df_validated, quality_report = validator.validate_data(
+                    df, symbol, timeframe, validation_type
+                )
+
+                # Handle validation results (same logic as enhanced version)
+                if repair and not repair_outliers:
+                    logger.info(
+                        "Outlier repair was skipped as requested (repair_outliers=False)"
+                    )
+
+                is_healthy = quality_report.is_healthy(
+                    max_critical=0, max_high=0 if strict else 5
+                )
+
+                if not is_healthy:
+                    issues_summary = quality_report.get_summary()
+                    issues_str = f"{issues_summary['total_issues']} issues found"
+
+                    if strict:
+                        logger.error(
+                            f"Data quality issues found and strict mode enabled: {issues_str}"
+                        )
+                        raise DataCorruptionError(
+                            message=f"Data quality issues found: {issues_str}",
+                            error_code="DATA-IntegrityIssue",
+                            details={
+                                "issues": issues_summary,
+                                "symbol": symbol,
+                                "timeframe": timeframe,
+                                "quality_report": quality_report.get_summary(),
+                            },
+                        )
+                    else:
+                        logger.warning(f"Data quality issues found: {issues_str}")
+                        if repair:
+                            df = df_validated
+                            logger.info(
+                                f"Data automatically repaired by validator: {quality_report.corrections_made} corrections made"
+                            )
+                        else:
+                            for issue in quality_report.issues:
+                                logger.warning(
+                                    f"  - {issue.issue_type}: {issue.description}"
+                                )
+                else:
+                    if repair:
+                        df = df_validated
+                        if quality_report.corrections_made > 0:
+                            logger.info(
+                                f"Minor data corrections applied: {quality_report.corrections_made} corrections made"
+                            )
+
+            # Complete operation
+            progress_manager.complete_operation()
+            return df
+
+        except Exception as e:
+            logger.error(f"Legacy data load failed: {e}")
+            raise
+
+    def _load_with_enhanced_orchestrator(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date,
+        end_date,
+        mode: str,
+        cancellation_token,
+        operation_progress: GenericProgressManager,
+    ) -> pd.DataFrame:
+        """
+        Load data using enhanced orchestrator for non-local modes.
+
+        This method handles the enhanced modes (tail, backfill, full) using the orchestrator
+        while properly integrating with GenericProgressManager.
+        """
+        # For now, we need to create a legacy ProgressManager for the orchestrator
+        # until the orchestrator is updated to support GenericProgressManager
+        # This is a temporary bridge solution
+
+        def bridge_callback(state):
+            """Bridge legacy ProgressManager callbacks to GenericProgressManager updates."""
+            if hasattr(state, "current_step") and hasattr(state, "message"):
+                # Extract context from legacy state
+                context = {}
+                if hasattr(state, "current_item_detail") and state.current_item_detail:
+                    context["current_item_detail"] = state.current_item_detail
+                if hasattr(state, "step_detail") and state.step_detail:
+                    context["step_detail"] = state.step_detail
+
+                # Update the GenericProgressManager
+                operation_progress.update_progress(
+                    step=state.current_step, message=state.message, context=context
+                )
+
+        # Create a legacy ProgressManager that bridges to our GenericProgressManager
+        bridge_progress_manager = ProgressManager(bridge_callback)
+        bridge_progress_manager.start_operation(
+            total_steps=10,  # Non-local modes use more steps
+            operation_name=f"orchestrator_{symbol}_{timeframe}",
+            operation_context={},
+        )
+
+        if cancellation_token:
+            bridge_progress_manager.set_cancellation_token(cancellation_token)
+
+        # Use the orchestrator with the bridge
+        result = self.data_loading_orchestrator.load_with_fallback(
+            symbol,
+            timeframe,
+            start_date,
+            end_date,
+            mode,
+            cancellation_token,
+            bridge_progress_manager,
+        )
+
+        # Ensure we return a DataFrame (orchestrator should handle fallbacks)
+        if result is None:
+            # This shouldn't happen with proper orchestrator fallbacks, but ensure type safety
+            result = pd.DataFrame()
+
+        return result
 
     def _ensure_data_fetcher(self) -> DataFetcher:
         """

@@ -293,13 +293,14 @@ class DataManagerBuilder:
         # Build the configuration with all components including async infrastructure
         config = self.build_configuration()
 
-        # Create DataManager with enhanced configuration
+        # Create DataManager with enhanced configuration and builder reference
         from ktrdr.data.data_manager import DataManager
 
         return DataManager(
             data_dir=config.data_dir,
             max_gap_percentage=config.max_gap_percentage,
             default_repair_method=config.default_repair_method,
+            builder=self,  # Pass builder so finalize_configuration gets called
             builder_config=config,  # Pass full configuration
         )
 

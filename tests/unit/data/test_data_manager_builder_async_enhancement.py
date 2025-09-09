@@ -231,6 +231,7 @@ class TestDataManagerBuilderEnhancedBuild:
                 data_dir="/tmp/test_data",
                 max_gap_percentage=7.5,
                 default_repair_method="interpolate",
+                builder=builder,  # Builder reference for finalize_configuration
                 builder_config=builder._config,  # NEW: Enhanced configuration passed
             )
 
