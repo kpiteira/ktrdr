@@ -12,7 +12,7 @@ features from the existing ProgressManager including:
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from ktrdr.async_infrastructure.progress import GenericProgressState, ProgressRenderer
 from ktrdr.data.components.progress_manager import ProgressState, TimeEstimationEngine
@@ -53,6 +53,9 @@ class DataProgressRenderer(ProgressRenderer):
         self.time_estimator = time_estimation_engine
         self.enable_hierarchical = enable_hierarchical_progress
 
+        # Initialize current context tracking (like ProgressManager._current_context)
+        self._current_context: dict[str, Any] = {}
+
         # Track operation context for time estimation (preserve existing pattern)
         self._operation_start_time: Optional[datetime] = None
         self._operation_type: Optional[str] = None
@@ -65,63 +68,182 @@ class DataProgressRenderer(ProgressRenderer):
 
     def render_message(self, state: GenericProgressState) -> str:
         """
-        Render data-specific progress message with ALL existing enhancements.
+        Render data-specific progress message with ALL existing sophisticated enhancements.
 
-        Preserves the existing ProgressManager message format with:
-        - Base message content
-        - Data-specific context (symbol, timeframe, mode)
-        - Step progress [current/total]
-        - Item progress (bars, data points, etc.)
-        - Time estimation display
+        This method contains ALL the complex message building logic from the original
+        ProgressManager, including step detail processing, hierarchical progress,
+        and rich context messaging that produces messages like:
+        - "Loading Step: ✅ Loaded 1500 bars (15/50) (AAPL 1h, backfill mode) ETA: 45s"
+        - "Data Processing: 💾 Saved 2400 bars to CSV (MSFT 5m) [3/5]"
 
         Args:
             state: Current progress state
 
         Returns:
-            Enhanced message string preserving existing format
+            Enhanced message string preserving ALL existing ProgressManager formats
+        """
+        # Handle step detail processing (CRITICAL for ✅ and 💾 indicators)
+        step_detail = state.context.get("step_detail", "")
+        current_item_detail = state.context.get("current_item_detail")
+
+        if step_detail:
+            # This is where ✅ Loaded X bars and 💾 Saved X bars messages come from!
+            # Preserve EXACT ProgressManager logic (lines 427-451)
+            return self._build_step_detail_message(state, step_detail)
+
+        # Handle regular progress messages (preserve existing enhanced message logic)
+        return self._create_enhanced_message(state, current_item_detail)
+
+    def _build_step_detail_message(
+        self, state: GenericProgressState, detail: str
+    ) -> str:
+        """
+        Build step detail message - preserves EXACT ProgressManager logic (lines 427-451).
+
+        This handles the sophisticated message building that creates:
+        - "Loading Step: ✅ Loaded 1500 bars (15/50) (1500/3000 items)"
+        - "Data Processing: 💾 Saved 2400 bars to CSV (2400/4000 items)"
+
+        Args:
+            state: Current progress state
+            detail: Step detail (contains ✅, 💾, and other indicators)
+
+        Returns:
+            Sophisticated step detail message
+        """
+        # Get step name (preserve existing logic)
+        step_name = (
+            state.context.get("current_step_name") or f"Step {state.current_step}"
+        )
+
+        # Build rich message with item information (preserve exact logic)
+        message_parts = [f"{step_name}: {detail}"]  # This includes ✅ and 💾!
+
+        # Add sub-step progress if available (preserve existing logic)
+        step_current = state.context.get("step_current", 0)
+        step_total = state.context.get("step_total", 0)
+        if step_total > 0:
+            message_parts.append(f"({step_current}/{step_total})")
+
+        # Add item count if available (preserve existing complex logic)
+        if state.items_processed > 0:
+            if state.total_items and state.total_items > 0:
+                message_parts.append(
+                    f"({state.items_processed}/{state.total_items} items)"
+                )
+            else:
+                message_parts.append(f"({state.items_processed} items)")
+
+        # Build final message
+        base_message = " ".join(message_parts)
+
+        # Add data-specific context enhancement
+        return self._add_data_context(base_message, state.context)
+
+    def _create_enhanced_message(
+        self, state: GenericProgressState, current_item_detail: Optional[str] = None
+    ) -> str:
+        """
+        Create enhanced progress message - preserves ProgressManager _create_enhanced_message logic.
+
+        This handles the sophisticated context-aware message building from lines 687-736
+        of the original ProgressManager.
+
+        Args:
+            state: Current progress state
+            current_item_detail: Optional detail about current item being processed
+
+        Returns:
+            Enhanced message with full context
         """
         base_message = self._extract_base_message(state.message)
+        message_parts = [base_message]
 
-        # Build message parts preserving existing ProgressManager format
-        context = state.context
-        parts = [base_message]
-
-        # Add data-specific context (preserve existing logic)
-        symbol = context.get("symbol", "Unknown")
-        timeframe = context.get("timeframe", "Unknown")
-        mode = context.get("mode", "Unknown")
-
-        if symbol != "Unknown" or timeframe != "Unknown":
-            context_str = f"({symbol} {timeframe}"
-            if mode != "Unknown":
-                context_str += f", {mode} mode"
-            context_str += ")"
-            parts.append(context_str)
+        # Add data-specific context (preserve exact existing logic)
+        context_str = self._build_data_context_string(state.context)
+        if context_str:
+            message_parts.append(context_str)
 
         # Add step progress (preserve existing functionality)
         if state.total_steps > 0:
-            parts.append(f"[{state.current_step}/{state.total_steps}]")
+            message_parts.append(f"[{state.current_step}/{state.total_steps}]")
+
+        # Add current item detail if provided (preserve existing logic)
+        if current_item_detail:
+            message_parts.append(f"- {current_item_detail}")
 
         # Add item progress (preserve existing functionality)
         if state.total_items and state.total_items > 0:
             items_str = f"{state.items_processed}/{state.total_items} items"
-            parts.append(f"({items_str})")
+            message_parts.append(f"({items_str})")
 
-        # Add time estimation (preserve existing functionality)
-        if state.estimated_remaining:
-            parts.append(f"ETA: {self._format_timedelta(state.estimated_remaining)}")
+        # Add time estimate if available and significant (preserve existing logic)
+        if state.estimated_remaining and state.estimated_remaining.total_seconds() > 5:
+            time_str = self._format_timedelta(state.estimated_remaining)
+            message_parts.append(f"ETA: {time_str}")
 
-        return " ".join(parts)
+        return " ".join(message_parts)
+
+    def _add_data_context(self, base_message: str, context: dict) -> str:
+        """
+        Add data-specific context to message.
+
+        Args:
+            base_message: Base message to enhance
+            context: Progress context
+
+        Returns:
+            Message with data context added
+        """
+        message_parts = [base_message]
+
+        # Add data context string
+        context_str = self._build_data_context_string(context)
+        if context_str:
+            message_parts.append(context_str)
+
+        return " ".join(message_parts)
+
+    def _build_data_context_string(self, context: dict) -> str:
+        """
+        Build data-specific context string (symbol, timeframe, mode).
+
+        Args:
+            context: Progress context
+
+        Returns:
+            Context string like "(AAPL 1h, backfill mode)" or empty string
+        """
+        symbol = context.get("symbol")
+        timeframe = context.get("timeframe")
+        mode = context.get("mode")
+
+        if symbol or timeframe:
+            context_parts = []
+            if symbol and timeframe:
+                context_parts.append(f"{symbol} {timeframe}")
+            elif symbol:
+                context_parts.append(symbol)
+            elif timeframe:
+                context_parts.append(timeframe)
+
+            if mode:
+                context_parts.append(f"{mode} mode")
+
+            return f"({', '.join(context_parts)})"
+
+        return ""
 
     def enhance_state(self, state: GenericProgressState) -> GenericProgressState:
         """
         Enhance generic state with ALL existing ProgressManager features.
 
-        Preserves and enhances:
-        - Time estimation based on current progress
+        This method preserves and enhances all the sophisticated state management
+        from the original ProgressManager including:
         - Learning-based time estimation using TimeEstimationEngine
-        - Hierarchical progress context
+        - Hierarchical progress context tracking
         - Operation tracking for time estimation accuracy
+        - Current context management (like _current_context in ProgressManager)
 
         Args:
             state: Generic progress state to enhance
@@ -130,7 +252,8 @@ class DataProgressRenderer(ProgressRenderer):
             Enhanced state with all existing ProgressManager capabilities
         """
         # Time estimation enhancement (preserve existing logic)
-        if self.time_estimator and state.context:
+        if self.time_estimator:
+            # Track operation start for time estimation
             if not self._operation_start_time and state.current_step == 0:
                 self._operation_start_time = state.start_time
                 self._operation_type = state.operation_id
@@ -144,14 +267,22 @@ class DataProgressRenderer(ProgressRenderer):
                     estimated_remaining = max(0, estimated_total - elapsed)
                     state.estimated_remaining = timedelta(seconds=estimated_remaining)
 
-        # Add hierarchical progress context (preserve existing functionality)
-        if self.enable_hierarchical and state.context:
+        # Hierarchical progress context enhancement (preserve existing functionality)
+        if self.enable_hierarchical:
+            # Preserve current context like _current_context in ProgressManager
+            if not hasattr(self, "_current_context"):
+                self._current_context = {}
+
+            # Update current context with state context
+            if state.context:
+                self._current_context.update(state.context)
+
             # Extract step details if available (preserve existing pattern)
             step_name = state.context.get("current_step_name")
             if step_name:
                 state.context["enhanced_step_name"] = step_name
 
-            # Add sub-step progress (preserve existing format)
+            # Add sub-step progress tracking (preserve existing format)
             step_current = state.context.get("step_current", 0)
             step_total = state.context.get("step_total", 0)
             if step_total > 0:
@@ -174,7 +305,8 @@ class DataProgressRenderer(ProgressRenderer):
         Returns:
             ProgressState with all existing fields populated
         """
-        # Create full ProgressState with all existing fields (preserve exact compatibility)
+        # Create full ProgressState with ALL existing fields (preserve exact compatibility)
+        # This ensures 100% backward compatibility with existing code expecting ProgressState
         return ProgressState(
             # Core progress fields
             operation_id=generic_state.operation_id,
@@ -190,17 +322,21 @@ class DataProgressRenderer(ProgressRenderer):
             expected_items=generic_state.total_items,
             items_processed=generic_state.items_processed,
             operation_context=generic_state.context,
-            # Extract hierarchical fields from context if available
+            # Extract hierarchical fields from context (CRITICAL for existing functionality)
             current_step_name=generic_state.context.get("current_step_name"),
             step_current=generic_state.context.get("step_current", 0),
             step_total=generic_state.context.get("step_total", 0),
-            step_detail=generic_state.context.get("step_detail", ""),
+            step_detail=generic_state.context.get(
+                "step_detail", ""
+            ),  # CRITICAL for ✅ and 💾 messages
             current_item_detail=generic_state.context.get("current_item_detail"),
-            # Additional existing fields with sensible defaults
-            step_start_percentage=0.0,
-            step_end_percentage=100.0,
+            # Additional existing fields with sensible defaults (preserve all fields)
+            step_start_percentage=generic_state.context.get(
+                "step_start_percentage", 0.0
+            ),
+            step_end_percentage=generic_state.context.get("step_end_percentage", 100.0),
             step_items_processed=generic_state.items_processed,
-            estimated_completion=None,
+            estimated_completion=generic_state.context.get("estimated_completion"),
             overall_percentage=generic_state.percentage,
         )
 
@@ -221,6 +357,8 @@ class DataProgressRenderer(ProgressRenderer):
     def _format_timedelta(self, td: timedelta) -> str:
         """
         Format timedelta for display (preserve existing logic).
+
+        This method preserves the existing time formatting logic for ETA display.
 
         Args:
             td: Time delta to format
