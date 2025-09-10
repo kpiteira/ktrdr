@@ -231,19 +231,9 @@ class DataManager(ServiceOrchestrator):
         if cancellation_token is None:
             return False
 
-        # Use unified cancellation protocol only
-        is_cancelled = False
+        # Use unified cancellation protocol only - no legacy patterns
         try:
-            # All tokens should implement is_cancelled() method
-            if hasattr(cancellation_token, "is_cancelled") and callable(
-                cancellation_token.is_cancelled
-            ):
-                is_cancelled = cancellation_token.is_cancelled()
-            else:
-                logger.warning(
-                    f"Cancellation token does not implement unified protocol: {type(cancellation_token)}"
-                )
-                return False
+            return cancellation_token.is_cancelled()
         except Exception as e:
             logger.warning(f"Error checking cancellation token: {e}")
             return False
@@ -405,19 +395,12 @@ class DataManager(ServiceOrchestrator):
                 progress_callback,
             )
 
-        # Execute with ServiceOrchestrator cancellation patterns
-        # Handle case where ServiceOrchestrator is not properly initialized (e.g., in tests)
-        if hasattr(self, "execute_with_cancellation") and callable(
-            self.execute_with_cancellation
-        ):
-            return await self.execute_with_cancellation(
-                operation=data_loading_operation(),
-                cancellation_token=effective_token,
-                operation_name=f"Loading {symbol} {timeframe} data",
-            )
-        else:
-            # Fallback for testing or when ServiceOrchestrator is not available
-            return await data_loading_operation()
+        # Execute with unified ServiceOrchestrator cancellation system
+        return await self.execute_with_cancellation(
+            operation=data_loading_operation(),
+            cancellation_token=effective_token,
+            operation_name=f"Loading {symbol} {timeframe} data",
+        )
 
     def _load_data_core_logic(
         self,

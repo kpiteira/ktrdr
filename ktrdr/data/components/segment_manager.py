@@ -45,15 +45,7 @@ class SegmentManager:
             return False
 
         try:
-            if hasattr(cancellation_token, "is_cancelled") and callable(
-                cancellation_token.is_cancelled
-            ):
-                return cancellation_token.is_cancelled()
-            else:
-                logger.warning(
-                    f"Cancellation token does not implement unified protocol: {type(cancellation_token)}"
-                )
-                return False
+            return cancellation_token.is_cancelled()
         except Exception as e:
             logger.warning(f"Error checking cancellation token: {e}")
             return False

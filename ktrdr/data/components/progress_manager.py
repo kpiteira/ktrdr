@@ -556,20 +556,9 @@ class ProgressManager:
             if self._cancellation_token is None:
                 return False
 
-            # Use unified cancellation protocol with backward compatibility
+            # Use unified cancellation protocol only - no legacy patterns
             try:
-                if hasattr(self._cancellation_token, "is_cancelled"):
-                    if callable(self._cancellation_token.is_cancelled):
-                        # New unified protocol: is_cancelled() method
-                        return bool(self._cancellation_token.is_cancelled())
-                    else:
-                        # Backward compatibility: is_cancelled attribute
-                        return bool(self._cancellation_token.is_cancelled)
-                else:
-                    logger.warning(
-                        f"Cancellation token does not implement is_cancelled: {type(self._cancellation_token)}"
-                    )
-                    return False
+                return bool(self._cancellation_token.is_cancelled())
             except Exception as e:
                 logger.warning(f"Error checking cancellation token: {e}")
                 return False
