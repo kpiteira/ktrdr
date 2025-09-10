@@ -11,6 +11,7 @@ Update your imports to use the new async infrastructure.
 """
 
 import warnings
+from typing import Any, Callable, Optional
 
 # Deprecated imports for backward compatibility - will be removed in future version
 from ktrdr.async_infrastructure.time_estimation import (
@@ -25,6 +26,45 @@ warnings.warn(
     DeprecationWarning,
     stacklevel=2,
 )
+
+
+# TEMPORARY COMPATIBILITY STUBS - REMOVE AFTER OTHER MODULES ARE MIGRATED
+class ProgressManager:
+    """DEPRECATED: Temporary stub to prevent import errors. Use GenericProgressManager instead."""
+    
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "ProgressManager is deprecated and will be removed. "
+            "Use GenericProgressManager with DataProgressRenderer instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        # Minimal stub - methods will raise NotImplementedError if called
+    
+    def __getattr__(self, name):
+        raise NotImplementedError(
+            f"ProgressManager.{name}() is deprecated and removed. "
+            "Use GenericProgressManager with DataProgressRenderer instead. "
+            "See migration guide in this module."
+        )
+
+
+class ProgressState:
+    """DEPRECATED: Temporary stub to prevent import errors. Use GenericProgressState instead."""
+    
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "ProgressState is deprecated and will be removed. "
+            "Use GenericProgressState instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        # Minimal stub - prevent crashes during imports
+        self.operation_id = kwargs.get("operation_id", "deprecated")
+        self.current_step = kwargs.get("current_step", 0)
+        self.total_steps = kwargs.get("total_steps", 1)
+        self.message = kwargs.get("message", "Deprecated")
+        self.percentage = kwargs.get("percentage", 0.0)
 
 # Note: ProgressManager and ProgressState classes have been REMOVED.
 # Use GenericProgressManager and GenericProgressState instead:
