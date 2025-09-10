@@ -351,7 +351,6 @@ class TestBacktestingService:
                 "ktrdr.api.services.backtesting_service.BacktestingEngine"
             ) as mock_engine_class,
         ):
-
             # Mock the engine and its methods
             mock_engine = MagicMock()
             mock_engine_class.return_value = mock_engine

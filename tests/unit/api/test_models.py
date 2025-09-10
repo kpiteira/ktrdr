@@ -88,7 +88,8 @@ class TestApiResponse:
         try:
             # This should raise an error with Pydantic V2
             ApiResponse[dict](
-                success="not a boolean", data={"key": "value"}  # Type error
+                success="not a boolean",
+                data={"key": "value"},  # Type error
             )
             pytest.fail("ValidationError not raised for invalid success type")
         except ValidationError:

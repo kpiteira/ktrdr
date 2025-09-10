@@ -225,14 +225,16 @@ class TestSegmentManager:
         )
 
         # Act
-        successful_data, successful_count, failed_count = (
-            await segment_manager.fetch_segments_with_resilience(
-                symbol="AAPL",
-                timeframe="1h",
-                segments=segments,
-                external_provider=mock_external_provider,
-                progress_manager=mock_progress_manager,
-            )
+        (
+            successful_data,
+            successful_count,
+            failed_count,
+        ) = await segment_manager.fetch_segments_with_resilience(
+            symbol="AAPL",
+            timeframe="1h",
+            segments=segments,
+            external_provider=mock_external_provider,
+            progress_manager=mock_progress_manager,
         )
 
         # Assert
@@ -271,14 +273,16 @@ class TestSegmentManager:
         ]
 
         # Act
-        successful_data, successful_count, failed_count = (
-            await segment_manager.fetch_segments_with_resilience(
-                symbol="AAPL",
-                timeframe="1h",
-                segments=segments,
-                external_provider=mock_external_provider,
-                progress_manager=mock_progress_manager,
-            )
+        (
+            successful_data,
+            successful_count,
+            failed_count,
+        ) = await segment_manager.fetch_segments_with_resilience(
+            symbol="AAPL",
+            timeframe="1h",
+            segments=segments,
+            external_provider=mock_external_provider,
+            progress_manager=mock_progress_manager,
         )
 
         # Assert

@@ -77,7 +77,7 @@ This slice focuses on **consolidating 90% of cancellation logic in ServiceOrches
 
 **Implementation Details**:
 ```python
-# File: ktrdr/async/operations.py (extracted from AsyncDataLoader patterns)
+# File: ktrdr/async_infrastructure/operations.py (extracted from AsyncDataLoader patterns)
 from abc import ABC, abstractmethod
 from typing import Protocol, Optional, Any
 import asyncio
@@ -200,7 +200,7 @@ class OperationCancelledException(Exception):
 - [ ] Quality checks: `make quality` must pass
 
 **Deliverables**:
-- [ ] `ktrdr/async/operations.py` with extracted operation patterns
+- [ ] `ktrdr/async_infrastructure/operations.py` with extracted operation patterns
 - [ ] `tests/unit/async/test_operations.py` comprehensive test suite
 - [ ] CancellationToken protocol based on AsyncDataLoader success
 - [ ] Generic operation management based on proven AsyncDataLoader patterns
@@ -312,12 +312,12 @@ class DataManager(ServiceOrchestrator):
 
 **Implementation Details**:
 ```python
-# File: ktrdr/async/cancellation.py (unified interface)
+# File: ktrdr/async_infrastructure/cancellation.py (unified interface)
 
 import signal
 import asyncio
 from typing import Optional, Callable, Any
-from ktrdr.async.operations import CancellationToken, OperationCancelledException
+from ktrdr.async_infrastructure.operations import CancellationToken, OperationCancelledException
 
 class CancellationCoordinator:
     """Unified cancellation coordinator for all operation types."""
@@ -411,7 +411,7 @@ class AsyncCancellationToken:
 - [ ] Quality checks: `make quality` must pass
 
 **Deliverables**:
-- [ ] `ktrdr/async/cancellation.py` with unified interface
+- [ ] `ktrdr/async_infrastructure/cancellation.py` with unified interface
 - [ ] `tests/unit/async/test_cancellation.py` comprehensive test suite
 - [ ] CLI cancellation integration for all operation types
 - [ ] ServiceOrchestrator bridge implementation
@@ -421,98 +421,146 @@ class AsyncCancellationToken:
 
 ---
 
-### Task 2.4: Create Unified Cancellation Interface
+### Task 2.4: Unified Cancellation System Cleanup
 **Day**: 4  
+**Branch**: `slice-2-unified-cancellation-cleanup`
 **Assignee**: AI IDE Agent  
-**Priority**: 8  
+**Priority**: 10  
 **Depends on**: Task 2.3
 
-**Description**: Create a unified interface that bridges all existing cancellation patterns (CancellationToken protocol, asyncio.Event, hasattr() checking) while preserving compatibility with existing implementations.
+**Description**: **ELIMINATE** all legacy cancellation patterns and standardize the entire system on the unified `CancellationToken` protocol. This is a comprehensive cleanup that removes technical debt and creates a single, consistent cancellation system across all KTRDR components.
+
+**🎯 GOAL**: One cancellation system, zero bridges, zero legacy patterns.
 
 **Acceptance Criteria**:
-- [ ] Unified interface supports all existing cancellation checking patterns
-- [ ] Backward compatibility with current AsyncDataLoader implementations
-- [ ] Integration with ServiceOrchestrator.execute_with_cancellation()
-- [ ] CLI KeyboardInterrupt properly routes through unified interface
-- [ ] Performance equivalent to existing direct cancellation checks
+- [ ] **AsyncDataLoader migration**: Replace `asyncio.Event` with `CancellationToken` parameter
+- [ ] **DataManager cleanup**: Remove all `hasattr()` multi-pattern checking logic
+- [ ] **ServiceOrchestrator cleanup**: Eliminate legacy token bridging and multi-pattern support
+- [ ] **Operations API update**: Replace `asyncio.Event` registry with `CancellationToken` integration  
+- [ ] **CLI integration**: Update KeyboardInterrupt handling to use global cancellation coordinator
+- [ ] **Host service integration**: Ensure training host service uses unified cancellation protocol
+- [ ] **Complete migration**: All components use ONLY `CancellationToken` protocol
+- [ ] **Performance maintained**: No performance regression from simplification
+- [ ] **Zero legacy patterns**: No `asyncio.Event`, boolean flags, or `hasattr()` checking remains
 
-**Implementation Details**:
+## 📋 **MIGRATION SCOPE**
+
+### **Phase 1: Core Component Migration**
+
+**AsyncDataLoader → Unified Cancellation**:
 ```python
-# File: ktrdr/async/cancellation_bridge.py
+# OLD: asyncio.Event pattern
+_cancel_event: asyncio.Event = field(default_factory=asyncio.Event, init=False)
+def is_cancelled_requested(self) -> bool:
+    return self._cancel_event.is_set()
 
-class CancellationBridge:
-    """Bridge different cancellation patterns into unified interface."""
-    
-    @staticmethod
-    def check_any_cancellation(*cancellation_sources) -> bool:
-        """Check cancellation from multiple sources."""
-        for source in cancellation_sources:
-            if CancellationBridge._is_cancelled(source):
-                return True
-        return False
-    
-    @staticmethod
-    def _is_cancelled(source) -> bool:
-        """Check cancellation from any source type."""
-        # CancellationToken protocol
-        if hasattr(source, 'is_cancelled'):
-            return source.is_cancelled()
-        
-        # asyncio.Event
-        if hasattr(source, 'is_set'):
-            return source.is_set()
-        
-        # Boolean flag
-        if isinstance(source, bool):
-            return source
-        
-        # None/missing source
-        return False
-    
-    @staticmethod
-    def create_unified_token(*sources) -> 'UnifiedCancellationToken':
-        """Create unified token from multiple sources."""
-        return UnifiedCancellationToken(sources)
-
-class UnifiedCancellationToken:
-    """Unified token that aggregates multiple cancellation sources."""
-    
-    def __init__(self, sources):
-        self.sources = sources
-    
-    def is_cancelled(self) -> bool:
-        return CancellationBridge.check_any_cancellation(*self.sources)
-    
-    def cancel(self, reason: str = "Unified cancellation") -> None:
-        """Cancel all sources that support cancellation."""
-        for source in self.sources:
-            if hasattr(source, 'cancel'):
-                source.cancel(reason)
-            elif hasattr(source, 'set'):
-                source.set()
+# NEW: CancellationToken protocol
+cancellation_token: CancellationToken 
+def is_cancelled_requested(self) -> bool:
+    return self.cancellation_token.is_cancelled()
+def cancel(self, reason: str = "Job cancelled") -> None:
+    self.cancellation_token.cancel(reason)
 ```
 
-**Testing Requirements**:
-- [ ] All existing cancellation patterns supported
-- [ ] Backward compatibility with AsyncDataLoader maintained
-- [ ] Integration with ServiceOrchestrator working
-- [ ] Performance benchmarking shows no regression
-- [ ] Bridge pattern handles all existing source types
-- [ ] Complete test suite: `make test` must pass
-- [ ] Quality checks: `make quality` must pass
+**DataManager → Single Pattern**:
+```python
+# OLD: Multi-pattern checking (ELIMINATE THIS)
+def _check_cancellation(self, cancellation_token):
+    if hasattr(cancellation_token, "is_cancelled_requested"):
+        return cancellation_token.is_cancelled_requested
+    elif hasattr(cancellation_token, "is_set"):
+        return cancellation_token.is_set()
+    elif hasattr(cancellation_token, "cancelled"):
+        return cancellation_token.cancelled()
 
-**Deliverables**:
-- [ ] `ktrdr/async/cancellation_bridge.py` with bridge implementations
-- [ ] `tests/unit/async/test_cancellation_bridge.py` compatibility test suite
-- [ ] Performance benchmark validation
-- [ ] Backward compatibility verification
-- [ ] All tests pass: `make test`
-- [ ] Code quality checks pass: `make quality`
+# NEW: Single protocol only
+def _check_cancellation(self, cancellation_token: CancellationToken) -> bool:
+    return cancellation_token.is_cancelled()
+```
+
+### **Phase 2: API and Service Integration**
+
+**Operations API → CancellationToken Registry**:
+```python
+# OLD: asyncio.Event registry
+self._cancellation_events: dict[str, asyncio.Event] = {}
+
+# NEW: CancellationToken integration with global coordinator
+from ktrdr.async_infrastructure.cancellation import get_global_coordinator
+coordinator = get_global_coordinator()
+# Use coordinator.cancel_operation(operation_id, reason)
+```
+
+**ServiceOrchestrator → Simplified Logic**:
+```python
+# OLD: Multi-pattern bridge logic (ELIMINATE THIS)
+def _is_token_cancelled(self, token):
+    if hasattr(token, "is_cancelled_requested"):
+        return token.is_cancelled_requested
+    elif hasattr(token, "is_cancelled"):
+        return token.is_cancelled()
+
+# NEW: Single protocol requirement
+def _is_token_cancelled(self, token: CancellationToken) -> bool:
+    return token.is_cancelled()
+```
+
+### **Phase 3: CLI and Host Service Integration**
+
+**CLI → Global Coordinator Integration**:
+```python
+# Enhanced KeyboardInterrupt handling
+from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
+setup_cli_cancellation_handler()  # Automatically integrates with global coordinator
+```
+
+**Host Service → Unified Protocol**:
+- Ensure training host service cancellation uses `CancellationToken` protocol
+- Update cross-service cancellation API calls
+
+## 🧪 **TESTING STRATEGY**
+
+**Migration Validation Tests**:
+- [ ] All existing functionality preserved with new cancellation system
+- [ ] No legacy patterns (`asyncio.Event`, `hasattr()` checks) remain in migrated code
+- [ ] Performance benchmarking shows no regression
+- [ ] CLI KeyboardInterrupt cancellation works end-to-end
+- [ ] Operations API cancellation requests work with unified system
+- [ ] Training host service cancellation integration working
+- [ ] Concurrent cancellation operations remain thread-safe
+
+**Quality Requirements**:
+- [ ] Complete test suite: `make test` must pass
+- [ ] Quality checks: `make quality` must pass  
+- [ ] Code coverage maintained or improved
+- [ ] No breaking changes to public APIs
+
+## 📦 **DELIVERABLES**
+
+**Updated Components**:
+- [ ] `ktrdr/data/async_data_loader.py` - Migrated to use `CancellationToken`
+- [ ] `ktrdr/data/data_manager.py` - Simplified cancellation checking
+- [ ] `ktrdr/managers/base.py` - Cleaned up ServiceOrchestrator patterns
+- [ ] `ktrdr/api/services/operations_service.py` - Integrated with global coordinator
+- [ ] `ktrdr/cli/data_commands.py` - Enhanced KeyboardInterrupt handling
+- [ ] **ZERO** bridge files - no `cancellation_bridge.py` created
+
+**Test Updates**:
+- [ ] `tests/unit/async/test_cancellation.py` - Updated for unified system
+- [ ] `tests/unit/data/test_async_data_loader.py` - Migration validation  
+- [ ] `tests/unit/data/test_data_manager_cancellation.py` - Simplified logic tests
+- [ ] New integration tests for end-to-end cancellation flows
+
+**Documentation**:
+- [ ] Updated migration notes for future development
+- [ ] Performance comparison results
+- [ ] API documentation updates reflecting unified interface
 
 ---
 
 ### Task 2.5: Create DataJobManager with ServiceOrchestrator Integration
 **Day**: 5  
+**Branch**: `slice-2-unified-cancellation-cleanup`
 **Assignee**: AI IDE Agent  
 **Priority**: 8  
 **Depends on**: Task 2.4
@@ -530,7 +578,7 @@ class UnifiedCancellationToken:
 ```python
 # File: ktrdr/data/components/data_job_manager.py (renamed from async_data_loader.py)
 
-from ktrdr.async.cancellation import CancellationToken, AsyncCancellationToken
+from ktrdr.async_infrastructure.cancellation import CancellationToken, AsyncCancellationToken
 from ktrdr.managers import ServiceOrchestrator
 
 class DataJobManager:

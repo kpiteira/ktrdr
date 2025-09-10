@@ -340,7 +340,7 @@ class ResearchAgentMVP(BaseResearchAgent):
                 config = await self.researcher.design_experiment(
                     hypothesis=hypothesis,
                     session_id=self.current_session_id,
-                    experiment_name=f"Cycle-{self.current_cycle.cycle_id.hex[:8]}-Exp-{i+1}",
+                    experiment_name=f"Cycle-{self.current_cycle.cycle_id.hex[:8]}-Exp-{i + 1}",
                 )
 
                 experiment_configs.append(config)

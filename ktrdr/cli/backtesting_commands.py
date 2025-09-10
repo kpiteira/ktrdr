@@ -358,7 +358,7 @@ async def _run_backtest_async(
                     f"📉 Max Drawdown: [red]${metrics.get('max_drawdown', 0):,.2f}[/red]"
                 )
                 console.print(
-                    f"🎯 Win Rate: [blue]{metrics.get('win_rate', 0)*100:.1f}%[/blue]"
+                    f"🎯 Win Rate: [blue]{metrics.get('win_rate', 0) * 100:.1f}%[/blue]"
                 )
                 console.print(
                     f"🏷️ Total Trades: [blue]{metrics.get('total_trades', 0)}[/blue]"

@@ -144,7 +144,7 @@ class FuzzyPerformanceAnalyzer:
 
         for i, config in enumerate(test_configurations):
             logger.info(
-                f"Benchmarking configuration {i+1}/{len(test_configurations)}: {config.get('name', 'Unnamed')}"
+                f"Benchmarking configuration {i + 1}/{len(test_configurations)}: {config.get('name', 'Unnamed')}"
             )
 
             # Extract indicator and fuzzy configs
@@ -163,7 +163,7 @@ class FuzzyPerformanceAnalyzer:
                         data_period_days=data_period_days,
                     )
                 except Exception as e:
-                    logger.warning(f"Warmup run {warmup+1} failed: {e}")
+                    logger.warning(f"Warmup run {warmup + 1} failed: {e}")
 
             # Benchmark runs
             run_metrics = []
@@ -179,11 +179,11 @@ class FuzzyPerformanceAnalyzer:
                     )
                     run_metrics.append(metrics)
                     logger.debug(
-                        f"Run {run+1}: {metrics.total_time:.3f}s, {metrics.fuzzy_values_count} FV"
+                        f"Run {run + 1}: {metrics.total_time:.3f}s, {metrics.fuzzy_values_count} FV"
                     )
 
                 except Exception as e:
-                    logger.error(f"Benchmark run {run+1} failed: {e}")
+                    logger.error(f"Benchmark run {run + 1} failed: {e}")
 
             if run_metrics:
                 # Average the metrics
@@ -194,7 +194,7 @@ class FuzzyPerformanceAnalyzer:
 
                 # Create benchmark result
                 result = BenchmarkResult(
-                    test_name=config.get("name", f"Config_{i+1}"),
+                    test_name=config.get("name", f"Config_{i + 1}"),
                     metrics=avg_metrics,
                     configuration=config,
                     recommendations=recommendations,
@@ -205,7 +205,7 @@ class FuzzyPerformanceAnalyzer:
                 self.benchmark_results.append(result)
 
                 logger.info(
-                    f"Configuration {i+1} average: {avg_metrics.total_time:.3f}s, "
+                    f"Configuration {i + 1} average: {avg_metrics.total_time:.3f}s, "
                     f"score: {avg_metrics.optimization_score:.1f}"
                 )
 

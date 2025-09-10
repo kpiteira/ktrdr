@@ -178,10 +178,12 @@ class TestDataManagerAsyncBoundaries:
 
             start_date = pd.Timestamp("2023-01-01", tz="UTC")
             end_date = pd.Timestamp("2023-01-02", tz="UTC")
-            is_valid, error, timestamp = (
-                await data_manager._validate_request_against_head_timestamp_async(
-                    symbol, timeframe, start_date, end_date
-                )
+            (
+                is_valid,
+                error,
+                timestamp,
+            ) = await data_manager._validate_request_against_head_timestamp_async(
+                symbol, timeframe, start_date, end_date
             )
             assert isinstance(is_valid, bool)
 

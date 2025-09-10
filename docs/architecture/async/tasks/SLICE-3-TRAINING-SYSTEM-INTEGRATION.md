@@ -5,6 +5,24 @@
 **Priority**: High
 **Depends on**: Slice 1 and 2 completion
 
+## 🔄 **UNIFIED CANCELLATION INTEGRATION**
+
+**CRITICAL**: This slice **MUST** use the unified `CancellationToken` protocol established in Slice 2 Task 2.4. 
+
+**Key Requirements**:
+- All training operations **ONLY** use `CancellationToken` protocol (no `asyncio.Event` or legacy patterns)
+- TrainingManager integrates with global cancellation coordinator
+- Training host service uses unified cancellation for cross-service operations
+- Training loops check `token.is_cancelled()` at appropriate boundaries
+- CLI cancellation (Ctrl+C) properly cancels training operations through unified system
+
+**Integration Points**:
+- TrainingManager → ServiceOrchestrator (inherits unified cancellation)
+- TrainingAdapter → CancellationToken parameter passing
+- LocalTrainer → CancellationToken checking during training loops
+- Host Service → Unified cancellation API calls
+- CLI → Global cancellation coordinator integration
+
 ## Overview
 
 This slice makes TrainingManager inherit from ServiceOrchestrator, following the same pattern as DataManager. This provides training operations with structured progress information and eliminates the complex string parsing in CLI commands.

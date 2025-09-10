@@ -197,7 +197,6 @@ class TestResearchAgentMVPInitialization:
                             "research_agents.agents.research_agent_mvp.AssistantAgent",
                             return_value=mock_assistant,
                         ):
-
                             await research_agent_mvp.initialize()
 
                             # Verify services initialized
@@ -322,7 +321,6 @@ class TestResearchCycleExecution:
                     research_agent_mvp, "_should_explore", return_value=True
                 ):
                     with patch.object(research_agent_mvp, "_refresh_knowledge_cache"):
-
                         await research_agent_mvp._execute_research_cycle()
 
                         # Verify all phases executed
@@ -365,8 +363,9 @@ class TestResearchCycleExecution:
                                     with patch.object(
                                         research_agent_mvp, "_complete_research_cycle"
                                     ):
-
-                                        await research_agent_mvp._execute_research_cycle()
+                                        await (
+                                            research_agent_mvp._execute_research_cycle()
+                                        )
 
                                         # Verify automatic session creation
                                         mock_start_session.assert_called_once()
@@ -392,7 +391,6 @@ class TestResearchCycleExecution:
             with patch.object(
                 research_agent_mvp, "_record_cycle_failure"
             ) as mock_record_failure:
-
                 with pytest.raises(Exception) as exc_info:
                     await research_agent_mvp._execute_research_cycle()
 
@@ -424,7 +422,6 @@ class TestResearchPhases:
 
         with patch.object(research_agent_mvp, "_get_recent_insights", return_value=[]):
             with patch.object(research_agent_mvp, "_should_explore", return_value=True):
-
                 await research_agent_mvp._phase_hypothesis_generation()
 
                 # Verify exploratory generation called
@@ -465,7 +462,6 @@ class TestResearchPhases:
                 with patch.object(
                     research_agent_mvp, "_get_successful_patterns", return_value=[]
                 ):
-
                     await research_agent_mvp._phase_hypothesis_generation()
 
                     # Verify focused generation called
@@ -999,7 +995,6 @@ class TestMainExecutionLoop:
             with patch.object(research_agent_mvp, "_update_status"):
                 with patch.object(research_agent_mvp, "_cleanup"):
                     with patch("asyncio.sleep", new_callable=AsyncMock):
-
                         await research_agent_mvp.run()
 
                         assert cycle_count == 1
@@ -1026,7 +1021,6 @@ class TestMainExecutionLoop:
             with patch.object(research_agent_mvp, "_update_status"):
                 with patch.object(research_agent_mvp, "_cleanup"):
                     with patch("asyncio.sleep", new_callable=AsyncMock):
-
                         await research_agent_mvp.run()
 
                         assert call_count == 2  # Should retry after error
@@ -1099,7 +1093,6 @@ class TestIntegrationScenarios:
                     research_agent_mvp, "_should_explore", return_value=True
                 ):
                     with patch.object(research_agent_mvp, "_refresh_knowledge_cache"):
-
                         # Execute multiple cycles
                         for _i in range(3):
                             await research_agent_mvp._execute_research_cycle()

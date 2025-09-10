@@ -248,7 +248,9 @@ class ConfigBuilder:
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),  # type: ignore[dict-item]
+                    "crosshairMarkerRadius": int(
+                        kwargs.get("crosshair_marker_radius", 4)
+                    ),  # type: ignore[dict-item]
                 }
             )
         elif series_type == "area":
@@ -264,7 +266,9 @@ class ConfigBuilder:
                     "crosshairMarkerVisible": kwargs.get(
                         "crosshair_marker_visible", True
                     ),
-                    "crosshairMarkerRadius": int(kwargs.get("crosshair_marker_radius", 4)),  # type: ignore[dict-item]
+                    "crosshairMarkerRadius": int(
+                        kwargs.get("crosshair_marker_radius", 4)
+                    ),  # type: ignore[dict-item]
                 }
             )
         elif series_type == "histogram":

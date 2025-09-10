@@ -192,7 +192,9 @@ class ProductionErrorHandler:
         # File handler with rotation
         log_file = self.log_dir / "production.log"
         file_handler = logging.handlers.RotatingFileHandler(
-            log_file, maxBytes=10 * 1024 * 1024, backupCount=10  # 10MB files, keep 10
+            log_file,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=10,  # 10MB files, keep 10
         )
         file_handler.setLevel(logging.DEBUG)
 

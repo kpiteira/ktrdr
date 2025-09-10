@@ -8,6 +8,7 @@ and generates Markdown files for each endpoint.
 Usage:
     python -m scripts.generate_api_docs
 """
+
 import json
 import os
 import sys

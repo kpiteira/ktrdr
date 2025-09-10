@@ -798,7 +798,6 @@ class IbSymbolValidator:
                 contract_info.head_timestamp_fetched_at
                 and time.time() - contract_info.head_timestamp_fetched_at < 86400
             ):  # 24 hour cache
-
                 # Try to get timeframe-specific timestamp first
                 if timeframe and contract_info.head_timestamp_timeframes:
                     timeframe_timestamp = contract_info.head_timestamp_timeframes.get(

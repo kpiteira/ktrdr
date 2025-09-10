@@ -251,7 +251,7 @@ class BacktestingEngine:
 
             # Generate trading decision using orchestrator
             logger.debug(
-                f"🎯 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Calling orchestrator.make_decision for bar {idx+1}/{len(data)}"
+                f"🎯 [{current_timestamp.strftime('%Y-%m-%d %H:%M')}] Calling orchestrator.make_decision for bar {idx + 1}/{len(data)}"
             )
 
             try:
@@ -524,7 +524,7 @@ class BacktestingEngine:
                             current_dd = self.performance_tracker.get_current_drawdown()
                             if current_dd > 0.5:  # > 50% drawdown
                                 logger.warning(
-                                    f"High drawdown detected: {current_dd*100:.1f}%"
+                                    f"High drawdown detected: {current_dd * 100:.1f}%"
                                 )
                         except Exception:
                             pass
@@ -548,7 +548,7 @@ class BacktestingEngine:
                                 )
                                 if current_dd > 0.5:  # > 50% drawdown
                                     drawdown_info = (
-                                        f" | 🚨 Drawdown: {current_dd*100:.1f}%"
+                                        f" | 🚨 Drawdown: {current_dd * 100:.1f}%"
                                     )
                             except Exception:
                                 pass
@@ -654,7 +654,7 @@ class BacktestingEngine:
                 print("\n📊 FIRST 5 NON-HOLD SIGNALS:")
                 for i, signal in enumerate(non_hold_signals[:5]):
                     print(
-                        f"   {i+1}. {signal['timestamp']} | {signal['signal']} | "
+                        f"   {i + 1}. {signal['timestamp']} | {signal['signal']} | "
                         f"Confidence: {signal['confidence']:.4f} | Price: ${signal['price']:.2f}"
                     )
 
@@ -671,7 +671,7 @@ class BacktestingEngine:
                         [t for t in trade_attempts if not t["trade_executed"]][:5]
                     ):
                         print(
-                            f"   {i+1}. {attempt['timestamp']} | {attempt['signal']} | "
+                            f"   {i + 1}. {attempt['timestamp']} | {attempt['signal']} | "
                             f"Confidence: {attempt['confidence']:.4f} | Price: ${attempt['price']:.2f}"
                         )
 
@@ -822,19 +822,19 @@ class BacktestingEngine:
         # Performance metrics (only show if trades were made)
         print("💰 Performance Metrics:")
         print(
-            f"   Total Return: ${metrics.total_return:,.2f} ({metrics.total_return_pct*100:.2f}%)"
+            f"   Total Return: ${metrics.total_return:,.2f} ({metrics.total_return_pct * 100:.2f}%)"
         )
-        print(f"   Annualized Return: {metrics.annualized_return*100:.2f}%")
+        print(f"   Annualized Return: {metrics.annualized_return * 100:.2f}%")
         print(f"   Sharpe Ratio: {metrics.sharpe_ratio:.3f}")
         print(
-            f"   Max Drawdown: ${metrics.max_drawdown:,.2f} ({metrics.max_drawdown_pct*100:.2f}%)"
+            f"   Max Drawdown: ${metrics.max_drawdown:,.2f} ({metrics.max_drawdown_pct * 100:.2f}%)"
         )
-        print(f"   Volatility: {metrics.volatility*100:.2f}%")
+        print(f"   Volatility: {metrics.volatility * 100:.2f}%")
 
         print("\n📈 Trade Statistics:")
         print(f"   Total Trades: {metrics.total_trades}")
         print(
-            f"   Win Rate: {metrics.win_rate*100:.1f}% ({metrics.winning_trades}/{metrics.total_trades})"
+            f"   Win Rate: {metrics.win_rate * 100:.1f}% ({metrics.winning_trades}/{metrics.total_trades})"
         )
         print(f"   Profit Factor: {metrics.profit_factor:.2f}")
         print(f"   Avg Win: ${metrics.avg_win:.2f} | Avg Loss: ${metrics.avg_loss:.2f}")

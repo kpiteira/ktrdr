@@ -34,7 +34,6 @@ class TestDataCommandsEndpointFix:
             patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class,
             patch("ktrdr.cli.data_commands.console"),
         ):
-
             # Setup the context manager behavior
             mock_cli_class.return_value.__aenter__.return_value = mock_cli
             mock_cli_class.return_value.__aexit__.return_value = None
@@ -81,7 +80,6 @@ class TestDataCommandsEndpointFix:
                 patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class,
                 patch("ktrdr.cli.data_commands.console"),
             ):
-
                 # Setup the context manager behavior
                 mock_cli_class.return_value.__aenter__.return_value = mock_cli
                 mock_cli_class.return_value.__aexit__.return_value = None
@@ -114,7 +112,6 @@ class TestDataCommandsEndpointFix:
             patch("ktrdr.cli.data_commands.AsyncCLIClient") as mock_cli_class,
             patch("ktrdr.cli.data_commands.console"),
         ):
-
             # Setup the context manager behavior
             mock_cli_class.return_value.__aenter__.return_value = mock_cli
             mock_cli_class.return_value.__aexit__.return_value = None

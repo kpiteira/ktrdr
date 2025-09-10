@@ -518,7 +518,6 @@ class ProgressManager:
                 and self._operation_start_time
                 and self._current_operation_type
             ):
-
                 duration = (datetime.now() - self._operation_start_time).total_seconds()
                 self._time_estimator.record_operation_completion(
                     self._current_operation_type, self._current_context, duration

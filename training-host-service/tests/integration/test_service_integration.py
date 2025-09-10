@@ -301,9 +301,9 @@ class TestServicePerformance:
         response_time = time.time() - start_time
 
         assert response.status_code == 200
-        assert (
-            response_time < max_response_time
-        ), f"Health check took {response_time:.3f}s, expected < {max_response_time:.3f}s"
+        assert response_time < max_response_time, (
+            f"Health check took {response_time:.3f}s, expected < {max_response_time:.3f}s"
+        )
 
         # Test detailed health check response time
         start_time = time.time()
@@ -311,9 +311,9 @@ class TestServicePerformance:
         response_time = time.time() - start_time
 
         assert response.status_code == 200
-        assert (
-            response_time < max_response_time * 2
-        ), f"Detailed health check took {response_time:.3f}s"
+        assert response_time < max_response_time * 2, (
+            f"Detailed health check took {response_time:.3f}s"
+        )
 
     def test_concurrent_requests(self, integration_config, performance_config):
         """Test service handling of concurrent requests."""
@@ -343,6 +343,6 @@ class TestServicePerformance:
         success_rate = sum(results) / len(results)
         acceptable_success_rate = 1.0 - performance_config["acceptable_error_rate"]
 
-        assert (
-            success_rate >= acceptable_success_rate
-        ), f"Success rate {success_rate:.2%} below acceptable {acceptable_success_rate:.2%}"
+        assert success_rate >= acceptable_success_rate, (
+            f"Success rate {success_rate:.2%} below acceptable {acceptable_success_rate:.2%}"
+        )

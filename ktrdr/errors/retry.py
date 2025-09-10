@@ -173,7 +173,7 @@ def retry_with_backoff(
                     # Log the retry using the new logging system
                     log.warning(
                         f"Retrying {func.__name__} due to {type(e).__name__}: {str(e)}. "
-                        f"Attempt {attempt+1}/{config.max_retries} after {delay:.2f}s delay."
+                        f"Attempt {attempt + 1}/{config.max_retries} after {delay:.2f}s delay."
                     )
 
                     # Call on_retry callback if provided

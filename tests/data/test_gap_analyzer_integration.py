@@ -114,7 +114,6 @@ class TestGapAnalyzerIntegration:
                 )
             ],
         ) as mock_gap_finder:
-
             # Act
             detected_gaps = data_manager.detect_gaps(gap_data, "1h")
 

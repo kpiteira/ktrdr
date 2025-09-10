@@ -375,7 +375,7 @@ def simple_progress(
                 progress.update_progress(
                     advance=1,
                     current_item=str(item),
-                    status_message=f"{title} ({i+1}/{len(items)})",
+                    status_message=f"{title} ({i + 1}/{len(items)})",
                 )
             except Exception as e:
                 progress.report_error(str(e), str(item))

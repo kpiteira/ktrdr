@@ -35,7 +35,9 @@ def get_shared_ib_pool() -> IbConnectionPool:
 
         # Use consistent settings for all IB operations
         _shared_pool = IbConnectionPool(
-            host=config.host, port=config.port, max_connections=5  # Conservative limit
+            host=config.host,
+            port=config.port,
+            max_connections=5,  # Conservative limit
         )
 
         logger.info(f"Shared IB pool created for {config.host}:{config.port}")

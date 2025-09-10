@@ -333,7 +333,9 @@ class TimeframeSynchronizer:
             DataFrame with interpolated values
         """
         interpolated_data = data.interpolate(
-            method=method, limit=limit, limit_direction="both"  # type: ignore[call-overload]
+            method=method,
+            limit=limit,
+            limit_direction="both",  # type: ignore[call-overload]
         )
 
         # Log interpolation statistics

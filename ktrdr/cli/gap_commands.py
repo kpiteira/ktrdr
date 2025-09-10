@@ -253,7 +253,7 @@ def gap_service_start(
         None,
         "--frequency",
         help="Override sync frequency (manual/hourly/daily/disabled)",
-    )
+    ),
 ):
     """Start the gap filler service."""
     try:
@@ -299,7 +299,7 @@ def gap_service_stop():
 def gap_service_scan_now(
     force: bool = typer.Option(
         False, "--force", help="Force scan even if frequency is disabled"
-    )
+    ),
 ):
     """Trigger immediate gap scan."""
     try:

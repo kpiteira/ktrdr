@@ -93,14 +93,16 @@ async def list_operations(
         )
 
         # Get operations from service
-        operations, total_count, active_count = (
-            await operations_service.list_operations(
-                status=status,
-                operation_type=operation_type,
-                limit=limit,
-                offset=offset,
-                active_only=active_only,
-            )
+        (
+            operations,
+            total_count,
+            active_count,
+        ) = await operations_service.list_operations(
+            status=status,
+            operation_type=operation_type,
+            limit=limit,
+            offset=offset,
+            active_only=active_only,
         )
 
         # Convert to summary format

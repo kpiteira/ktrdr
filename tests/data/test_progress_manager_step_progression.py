@@ -58,7 +58,7 @@ class TestProgressManagerStepProgression:
                 current=i,
                 total=13,
                 items_processed=i * 125,  # ~125 bars per segment
-                detail=f"Segment {i}/13: 2022-01-{i:02d} 00:00 to 2022-01-{i+1:02d} 00:00",
+                detail=f"Segment {i}/13: 2022-01-{i:02d} 00:00 to 2022-01-{i + 1:02d} 00:00",
             )
 
         # Step 7: Merge data sources (70%)
@@ -91,10 +91,10 @@ class TestProgressManagerStepProgression:
             jump = percentages[i] - percentages[i - 1]
             assert (
                 jump >= 0
-            ), f"Progress should not go backwards: {percentages[i-1]}% -> {percentages[i]}%"
+            ), f"Progress should not go backwards: {percentages[i - 1]}% -> {percentages[i]}%"
             assert (
                 jump <= 40
-            ), f"Progress jump too large: {percentages[i-1]}% -> {percentages[i]}% (jump: {jump}%)"
+            ), f"Progress jump too large: {percentages[i - 1]}% -> {percentages[i]}% (jump: {jump}%)"
 
         # Verify steps_total is consistent
         steps_totals = [

@@ -250,7 +250,9 @@ class TestOperationsService:
         """Test operation metadata validation."""
         # Test with invalid metadata
         invalid_metadata = OperationMetadata(
-            symbol="", timeframe="1h", parameters={}  # Invalid empty symbol
+            symbol="",
+            timeframe="1h",
+            parameters={},  # Invalid empty symbol
         )
 
         # OperationsService doesn't validate metadata content, just stores it

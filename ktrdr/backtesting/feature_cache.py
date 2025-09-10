@@ -214,7 +214,7 @@ class FeatureCache:
             time_diff = (timestamp - actual_timestamp).total_seconds()
             if time_diff > 3600:  # 1 hour in seconds
                 raise ValueError(
-                    f"Closest past timestamp {actual_timestamp} is {time_diff/3600:.1f}h before {timestamp}"
+                    f"Closest past timestamp {actual_timestamp} is {time_diff / 3600:.1f}h before {timestamp}"
                 )
 
             timestamp = actual_timestamp

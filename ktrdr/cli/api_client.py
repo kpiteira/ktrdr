@@ -766,9 +766,9 @@ class KtrdrApiClient:
         if seconds < 60:
             return f"{seconds:.1f}s"
         elif seconds < 3600:
-            return f"{seconds/60:.1f}m"
+            return f"{seconds / 60:.1f}m"
         else:
-            return f"{seconds/3600:.1f}h"
+            return f"{seconds / 3600:.1f}h"
 
     async def health_check(self) -> bool:
         """Check if the API server is healthy."""

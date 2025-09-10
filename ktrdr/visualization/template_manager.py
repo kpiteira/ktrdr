@@ -689,7 +689,7 @@ class TemplateManager:
 
         // Create series with explicit options
         const {chart_id}_series = {chart_id}.{method_name}({{
-            {', '.join([f'{k}: "{v}"' if isinstance(v, str) else f'{k}: {str(v).lower()}' if isinstance(v, bool) else f'{k}: {v}' for k, v in series_options.items()])}
+            {", ".join([f'{k}: "{v}"' if isinstance(v, str) else f"{k}: {str(v).lower()}" if isinstance(v, bool) else f"{k}: {v}" for k, v in series_options.items()])}
         }});
 
         // Register main series for toggling

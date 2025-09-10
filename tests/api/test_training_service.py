@@ -198,7 +198,6 @@ class TestTrainingService:
             patch("pathlib.Path.exists", return_value=True),
             patch("pathlib.Path.stat") as mock_stat,
         ):
-
             mock_stat.return_value.st_size = 15728640  # 15MB in bytes
 
             result = await training_service.save_trained_model(
@@ -261,7 +260,6 @@ class TestTrainingService:
             ),
             patch("pathlib.Path.exists", return_value=True),
         ):
-
             result = await training_service.load_trained_model("test_model")
 
             assert result["success"] is True
@@ -286,7 +284,6 @@ class TestTrainingService:
             "ktrdr.api.services.training_service._loaded_models",
             {"test_model": {"model": "mock_model", "info": {}}},
         ):
-
             result = await training_service.test_model_prediction(
                 "test_model", "AAPL", "1h", "2024-01-01"
             )
@@ -359,7 +356,6 @@ class TestTrainingService:
                 "ktrdr.api.services.training_service.StrategyTrainer"
             ) as mock_trainer_class,
         ):
-
             # Mock temporary file
             mock_temp_file.return_value.__enter__.return_value.name = (
                 "/tmp/temp_strategy.yaml"
@@ -415,7 +411,6 @@ class TestTrainingService:
                 "ktrdr.api.services.training_service.StrategyTrainer"
             ) as mock_trainer_class,
         ):
-
             # Mock trainer to raise an exception
             mock_trainer = MagicMock()
             mock_trainer_class.return_value = mock_trainer

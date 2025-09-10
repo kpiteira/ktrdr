@@ -1,12 +1,14 @@
 """
-Async Data Loading System with Cancellation Support
+Data Job Management System with ServiceOrchestrator Integration
 
-Provides async operations for data loading with:
+This module provides async data loading job management with:
+- ServiceOrchestrator cancellation integration
 - Real-time progress tracking
-- Graceful cancellation
-- Job management
-- Status monitoring
-- CLI integration support
+- Unified cancellation patterns
+- Job lifecycle management
+
+Renamed from AsyncDataLoader to DataJobManager for better architectural clarity.
+DataJob renamed to DataLoadingJob for more specific naming.
 """
 
 import asyncio
@@ -18,6 +20,11 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
+from ktrdr.async_infrastructure.cancellation import (
+    AsyncCancellationToken,
+    CancellationToken,
+    create_cancellation_token,
+)
 from ktrdr.data.data_manager import DataManager
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
@@ -27,7 +34,7 @@ logger = get_logger(__name__)
 
 
 class JobStatus(Enum):
-    """Status of async data loading jobs."""
+    """Status of data loading jobs."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -62,7 +69,12 @@ class ProgressInfo:
 
 @dataclass
 class DataLoadingJob:
-    """Data loading job with async support."""
+    """
+    Data loading job with unified cancellation support.
+
+    Renamed from DataJob, enhanced with ServiceOrchestrator integration.
+    Implements CancellationToken protocol for unified cancellation patterns.
+    """
 
     job_id: str
     symbol: str
@@ -77,8 +89,44 @@ class DataLoadingJob:
     completed_at: Optional[datetime] = None
     result_path: Optional[str] = None
     error_message: Optional[str] = None
-    _cancel_event: asyncio.Event = field(default_factory=asyncio.Event, init=False)
+
+    # Unified cancellation support
+    _cancellation_token: AsyncCancellationToken = field(init=False)
     _task: Optional[asyncio.Task] = field(default=None, init=False)
+
+    def __post_init__(self):
+        """Initialize unified cancellation token."""
+        self._cancellation_token = create_cancellation_token(f"data-job-{self.job_id}")
+
+    # CancellationToken protocol implementation
+    def is_cancelled(self) -> bool:
+        """Check if cancellation has been requested."""
+        return self._cancellation_token.is_cancelled()
+
+    @property
+    def is_cancelled_requested(self) -> bool:
+        """Compatibility property for ServiceOrchestrator integration."""
+        return self.is_cancelled()
+
+    def cancel(self, reason: str = "Job cancelled") -> None:
+        """Request cancellation with reason."""
+        logger.info(f"🛑 Cancellation requested for job {self.job_id}: {reason}")
+        self._cancellation_token.cancel(reason)
+        if self._task and not self._task.done():
+            self._task.cancel()
+
+    async def wait_for_cancellation(self) -> None:
+        """Async wait for cancellation signal."""
+        await self._cancellation_token.wait_for_cancellation()
+
+    def check_cancellation(self, context: str = "") -> None:
+        """Check cancellation and raise if cancelled."""
+        self._cancellation_token.check_cancellation(context)
+
+    @property
+    def cancellation_token(self) -> CancellationToken:
+        """Get the cancellation token for this job."""
+        return self._cancellation_token
 
     @property
     def duration_seconds(self) -> Optional[float]:
@@ -88,33 +136,21 @@ class DataLoadingJob:
         end_time = self.completed_at or TimestampManager.now_utc()
         return (end_time - self.started_at).total_seconds()
 
-    def cancel(self):
-        """Request cancellation of the job."""
-        logger.info(f"🛑 Cancellation requested for job {self.job_id}")
-        self._cancel_event.set()
-        if self._task and not self._task.done():
-            self._task.cancel()
 
-    @property
-    def is_cancelled_requested(self) -> bool:
-        """Check if cancellation has been requested."""
-        return self._cancel_event.is_set()
-
-
-class AsyncDataLoader:
+class DataJobManager:
     """
-    Async data loader with cancellation support and progress tracking.
+    Data job manager with ServiceOrchestrator integration.
 
-    Provides non-blocking data loading operations with:
-    - Real-time progress updates
-    - Graceful cancellation
-    - Job status tracking
-    - Error resilience
+    Renamed from AsyncDataLoader, enhanced with:
+    - Unified cancellation system integration
+    - ServiceOrchestrator patterns
+    - Enhanced job lifecycle management
+    - Thread-safe operation management
     """
 
     def __init__(self, data_manager: Optional[DataManager] = None):
         """
-        Initialize async data loader.
+        Initialize data job manager.
 
         Args:
             data_manager: DataManager instance (creates default if None)
@@ -123,7 +159,7 @@ class AsyncDataLoader:
         self.jobs: dict[str, DataLoadingJob] = {}
         self.active_jobs: dict[str, asyncio.Task] = {}
 
-        logger.info("AsyncDataLoader initialized")
+        logger.info("DataJobManager initialized with unified cancellation support")
 
     def create_job(
         self,
@@ -158,7 +194,9 @@ class AsyncDataLoader:
         )
 
         self.jobs[job_id] = job
-        logger.info(f"🆕 Created job {job_id}: {symbol} {timeframe} ({mode})")
+        logger.info(
+            f"🆕 Created data loading job {job_id}: {symbol} {timeframe} ({mode})"
+        )
         return job_id
 
     async def start_job(
@@ -167,7 +205,7 @@ class AsyncDataLoader:
         progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
     ) -> str:
         """
-        Start a data loading job asynchronously.
+        Start a data loading job asynchronously with unified cancellation.
 
         Args:
             job_id: Job ID to start
@@ -188,23 +226,27 @@ class AsyncDataLoader:
                 f"Job {job_id} is not in pending status (current: {job.status.value})"
             )
 
-        # Create and start the async task
+        # Create and start the async task with unified cancellation
         task = asyncio.create_task(
-            self._execute_job(job, progress_callback), name=f"data_load_{job_id}"
+            self._execute_job_with_cancellation(job, progress_callback),
+            name=f"data_load_{job_id}",
         )
         job._task = task
         self.active_jobs[job_id] = task
 
-        logger.info(f"🚀 Started job {job_id} asynchronously")
+        logger.info(f"🚀 Started data loading job {job_id} with unified cancellation")
         return job_id
 
-    async def _execute_job(
+    async def _execute_job_with_cancellation(
         self,
         job: DataLoadingJob,
         progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
     ):
         """
-        Execute a data loading job with progress tracking and cancellation support.
+        Execute a data loading job with unified cancellation patterns.
+
+        This method integrates with ServiceOrchestrator cancellation while
+        maintaining all the job management functionality.
 
         Args:
             job: Job to execute
@@ -214,12 +256,12 @@ class AsyncDataLoader:
         job.started_at = TimestampManager.now_utc()
 
         try:
-            logger.info(f"📊 Executing job {job.job_id}: {job.symbol} {job.timeframe}")
+            logger.info(
+                f"📊 Executing data loading job {job.job_id}: {job.symbol} {job.timeframe}"
+            )
 
             # Check for cancellation before starting
-            if job.is_cancelled_requested:
-                job.status = JobStatus.CANCELLED
-                return
+            job.check_cancellation("job start")
 
             # Estimate segments for progress tracking
             job.progress.total_segments = self._estimate_segments(job)
@@ -228,35 +270,34 @@ class AsyncDataLoader:
             if progress_callback:
                 progress_callback(job.progress)
 
-            # Load data with progress tracking
-            result_df = await self._load_data_with_progress(job, progress_callback)
+            # Load data with progress tracking and cancellation support
+            result_df = await self._load_data_with_cancellation(job, progress_callback)
 
             # Check for cancellation after completion
-            if job.is_cancelled_requested:
-                job.status = JobStatus.CANCELLED
-                logger.info(f"🛑 Job {job.job_id} was cancelled during execution")
-                return
+            job.check_cancellation("job completion")
 
             # Save result and mark complete
             if result_df is not None and not result_df.empty:
                 job.progress.bars_fetched = len(result_df)
                 job.status = JobStatus.COMPLETED
                 logger.info(
-                    f"✅ Job {job.job_id} completed successfully: {len(result_df)} bars"
+                    f"✅ Data loading job {job.job_id} completed successfully: {len(result_df)} bars"
                 )
             else:
                 job.error_message = "No data returned"
                 job.status = JobStatus.FAILED
-                logger.warning(f"❌ Job {job.job_id} failed: No data returned")
+                logger.warning(
+                    f"❌ Data loading job {job.job_id} failed: No data returned"
+                )
 
         except asyncio.CancelledError:
             job.status = JobStatus.CANCELLED
-            logger.info(f"🛑 Job {job.job_id} was cancelled")
+            logger.info(f"🛑 Data loading job {job.job_id} was cancelled")
             raise
         except Exception as e:
             job.status = JobStatus.FAILED
             job.error_message = str(e)
-            logger.error(f"❌ Job {job.job_id} failed: {e}")
+            logger.error(f"❌ Data loading job {job.job_id} failed: {e}")
         finally:
             job.completed_at = TimestampManager.now_utc()
             # Clean up active job tracking
@@ -291,13 +332,13 @@ class AsyncDataLoader:
             else:  # full
                 return 10
 
-    async def _load_data_with_progress(
+    async def _load_data_with_cancellation(
         self,
         job: DataLoadingJob,
         progress_callback: Optional[Callable[[ProgressInfo], None]] = None,
     ) -> Optional[pd.DataFrame]:
         """
-        Load data with progress tracking and cancellation checks.
+        Load data with progress tracking and unified cancellation.
 
         Args:
             job: Job to execute
@@ -307,18 +348,12 @@ class AsyncDataLoader:
             Loaded DataFrame or None
         """
         try:
-            # Simulate progress updates by intercepting the data manager's segment loading
-            # For now, we'll use the existing data manager but add progress simulation
-
+            # Use unified cancellation for fine-grained control
             segment_delay = 0.1  # Small delay to allow cancellation checks
 
             for i in range(job.progress.total_segments):
-                # Check for cancellation
-                if job.is_cancelled_requested:
-                    logger.info(
-                        f"🛑 Job {job.job_id} cancelled at segment {i + 1}/{job.progress.total_segments}"
-                    )
-                    raise asyncio.CancelledError()
+                # Check for cancellation using unified system
+                job.check_cancellation(f"segment {i + 1}/{job.progress.total_segments}")
 
                 # Update current segment
                 job.progress.current_segment = (
@@ -335,21 +370,23 @@ class AsyncDataLoader:
                 if progress_callback:
                     progress_callback(job.progress)
 
-            # Actually load the data (this runs in thread pool to avoid blocking)
+            # Actually load the data with unified cancellation token
             loop = asyncio.get_event_loop()
-            result_df = await loop.run_in_executor(None, self._sync_load_data, job)
+            result_df = await loop.run_in_executor(
+                None, self._sync_load_data_with_cancellation, job
+            )
 
             return result_df
 
-        except asyncio.CancelledError:
-            raise
         except Exception as e:
             job.progress.errors.append(str(e))
             raise
 
-    def _sync_load_data(self, job: DataLoadingJob) -> Optional[pd.DataFrame]:
+    def _sync_load_data_with_cancellation(
+        self, job: DataLoadingJob
+    ) -> Optional[pd.DataFrame]:
         """
-        Synchronous data loading in thread pool.
+        Synchronous data loading with unified cancellation support.
 
         Args:
             job: Job to execute
@@ -357,6 +394,9 @@ class AsyncDataLoader:
         Returns:
             Loaded DataFrame or None
         """
+        # Check cancellation before actual data loading
+        job.check_cancellation("data manager load")
+
         return self.data_manager.load_data(
             symbol=job.symbol,
             timeframe=job.timeframe,
@@ -365,7 +405,7 @@ class AsyncDataLoader:
             mode=job.mode,
             validate=True,
             repair=False,
-            cancellation_token=job,  # Pass the job itself as cancellation token
+            cancellation_token=job.cancellation_token,  # Pass unified token
         )
 
     def get_job_status(self, job_id: str) -> Optional[dict[str, Any]]:
@@ -396,6 +436,7 @@ class AsyncDataLoader:
             "bars_fetched": job.progress.bars_fetched,
             "errors": job.progress.errors,
             "duration_seconds": job.duration_seconds,
+            "is_cancelled": job.is_cancelled(),
             "created_at": job.created_at.isoformat(),
             "started_at": job.started_at.isoformat() if job.started_at else None,
             "completed_at": job.completed_at.isoformat() if job.completed_at else None,
@@ -425,12 +466,13 @@ class AsyncDataLoader:
         jobs.sort(key=lambda x: x["created_at"], reverse=True)
         return jobs
 
-    def cancel_job(self, job_id: str) -> bool:
+    def cancel_job(self, job_id: str, reason: str = "Job cancelled by request") -> bool:
         """
-        Cancel a running job.
+        Cancel a running job using unified cancellation.
 
         Args:
             job_id: Job ID to cancel
+            reason: Cancellation reason
 
         Returns:
             True if cancellation was requested, False if job not found
@@ -443,8 +485,27 @@ class AsyncDataLoader:
             logger.info(f"Job {job_id} is already {job.status.value}, cannot cancel")
             return False
 
-        job.cancel()
+        job.cancel(reason)
         return True
+
+    def cancel_all_jobs(self, reason: str = "All jobs cancelled") -> int:
+        """
+        Cancel all active jobs using unified cancellation.
+
+        Args:
+            reason: Cancellation reason
+
+        Returns:
+            Number of jobs cancelled
+        """
+        cancelled_count = 0
+        for job in self.jobs.values():
+            if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+                job.cancel(reason)
+                cancelled_count += 1
+
+        logger.info(f"Cancelled {cancelled_count} active jobs: {reason}")
+        return cancelled_count
 
     def cleanup_old_jobs(self, max_age_hours: int = 24):
         """
@@ -467,19 +528,19 @@ class AsyncDataLoader:
 
         for job_id in to_remove:
             del self.jobs[job_id]
-            logger.debug(f"Cleaned up old job {job_id}")
+            logger.debug(f"Cleaned up old data loading job {job_id}")
 
         if to_remove:
-            logger.info(f"Cleaned up {len(to_remove)} old jobs")
+            logger.info(f"Cleaned up {len(to_remove)} old data loading jobs")
 
 
-# Global async data loader instance for CLI/API usage
-_async_data_loader = None
+# Global data job manager instance for CLI/API usage
+_data_job_manager = None
 
 
-def get_async_data_loader() -> AsyncDataLoader:
-    """Get the global async data loader instance."""
-    global _async_data_loader
-    if _async_data_loader is None:
-        _async_data_loader = AsyncDataLoader()
-    return _async_data_loader
+def get_data_job_manager() -> DataJobManager:
+    """Get the global data job manager instance."""
+    global _data_job_manager
+    if _data_job_manager is None:
+        _data_job_manager = DataJobManager()
+    return _data_job_manager

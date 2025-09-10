@@ -371,7 +371,6 @@ class OperationsService:
                 operation.operation_type == OperationType.TRAINING
                 and operation.status == OperationStatus.RUNNING
             ):
-
                 try:
                     # Get training host service status
                     updated_operation = (

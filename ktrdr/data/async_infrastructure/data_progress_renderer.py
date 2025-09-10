@@ -115,8 +115,10 @@ class DataProgressRenderer(ProgressRenderer):
         step_name = (
             state.context.get("current_step_name") or f"Step {state.current_step}"
         )
-        # Add lightning bolt to indicate enhanced async infrastructure is active
-        enhanced_step_name = f"⚡ {step_name}"
+        # Add lightning bolt to indicate enhanced async infrastructure is active (only if not already present)
+        enhanced_step_name = (
+            f"⚡ {step_name}" if not step_name.startswith("⚡") else step_name
+        )
 
         # Build rich message with item information (preserve exact logic)
         message_parts = [f"{enhanced_step_name}: {detail}"]  # This includes ✅ and 💾!
@@ -159,8 +161,10 @@ class DataProgressRenderer(ProgressRenderer):
             Enhanced message with full context
         """
         base_message = self._extract_base_message(state.message)
-        # Add small indicator that enhanced async infrastructure is active
-        enhanced_base = f"⚡ {base_message}"
+        # Add small indicator that enhanced async infrastructure is active (only if not already present)
+        enhanced_base = (
+            f"⚡ {base_message}" if not base_message.startswith("⚡") else base_message
+        )
         message_parts = [enhanced_base]
 
         # Add data-specific context (preserve exact existing logic)
@@ -255,21 +259,56 @@ class DataProgressRenderer(ProgressRenderer):
         Returns:
             Enhanced state with all existing ProgressManager capabilities
         """
-        # Time estimation enhancement (preserve existing logic)
+        # Enhanced time estimation using hierarchical progress
         if self.time_estimator:
             # Track operation start for time estimation
             if not self._operation_start_time and state.current_step == 0:
                 self._operation_start_time = state.start_time
                 self._operation_type = state.operation_id
 
-            # Calculate estimated remaining time (preserve existing calculation)
-            if self._operation_start_time and state.current_step > 0:
+            # Better time estimation using actual progress data
+            if self._operation_start_time and state.percentage > 0:
                 elapsed = (datetime.now() - self._operation_start_time).total_seconds()
-                if state.percentage > 0:
-                    # Use the same estimation logic as existing ProgressManager
-                    estimated_total = elapsed / (state.percentage / 100.0)
-                    estimated_remaining = max(0, estimated_total - elapsed)
-                    state.estimated_remaining = timedelta(seconds=estimated_remaining)
+
+                # Skip estimation if too early (need at least 2 seconds for meaningful estimate)
+                if elapsed >= 2.0:
+                    # Use progress percentage for time estimation (now that it's accurate!)
+                    progress_fraction = state.percentage / 100.0
+                    if progress_fraction >= 1.0:
+                        state.estimated_remaining = timedelta(0)
+                    else:
+                        # Estimate based on current rate of progress
+                        estimated_total_time = elapsed / progress_fraction
+                        remaining_time = estimated_total_time - elapsed
+
+                        # Cap estimates at reasonable values (avoid showing hours for short operations)
+                        if remaining_time > 3600:  # More than 1 hour
+                            remaining_time = 3600  # Cap at 1 hour
+                        elif remaining_time < 0:
+                            remaining_time = 0
+
+                        state.estimated_remaining = timedelta(seconds=remaining_time)
+
+                        # For segment-based operations, enhance with segment-based estimation
+                        if state.step_total > 0 and state.step_current > 0:
+                            # Calculate time per segment and use for more accurate estimation
+                            segments_completed = state.step_current
+                            segments_total = state.step_total
+                            segments_remaining = segments_total - segments_completed
+
+                            if (
+                                segments_completed >= 2
+                            ):  # Need at least 2 segments for estimation
+                                time_per_segment = elapsed / segments_completed
+                                segment_based_estimate = (
+                                    segments_remaining * time_per_segment
+                                )
+
+                                # Use the more conservative of the two estimates
+                                if segment_based_estimate < remaining_time:
+                                    state.estimated_remaining = timedelta(
+                                        seconds=segment_based_estimate
+                                    )
 
         # Hierarchical progress context enhancement (preserve existing functionality)
         if self.enable_hierarchical:
@@ -286,11 +325,29 @@ class DataProgressRenderer(ProgressRenderer):
             if step_name:
                 state.context["enhanced_step_name"] = step_name
 
-            # Add sub-step progress tracking (preserve existing format)
-            step_current = state.context.get("step_current", 0)
-            step_total = state.context.get("step_total", 0)
+            # Add sub-step progress tracking using hierarchical fields
+            # Handle both context-based (old way) and field-based (new way) step progress
+            step_current = state.step_current or state.context.get("step_current", 0)
+            step_total = state.step_total or state.context.get("step_total", 0)
+
             if step_total > 0:
                 state.context["step_progress"] = f"{step_current}/{step_total}"
+                # Add detailed progress context for better message rendering
+                state.context["step_progress_detail"] = {
+                    "current": step_current,
+                    "total": step_total,
+                    "percentage": (
+                        (step_current / step_total * 100) if step_total > 0 else 0
+                    ),
+                    "range_start": state.step_start_percentage,
+                    "range_end": state.step_end_percentage,
+                }
+
+                # Update the GenericProgressState fields if they were set via context
+                if state.step_current == 0 and step_current > 0:
+                    state.step_current = step_current
+                if state.step_total == 0 and step_total > 0:
+                    state.step_total = step_total
 
         return state
 
@@ -326,19 +383,20 @@ class DataProgressRenderer(ProgressRenderer):
             expected_items=generic_state.total_items,
             items_processed=generic_state.items_processed,
             operation_context=generic_state.context,
-            # Extract hierarchical fields from context (CRITICAL for existing functionality)
+            # Extract hierarchical fields from generic state (CRITICAL for existing functionality)
             current_step_name=generic_state.context.get("current_step_name"),
-            step_current=generic_state.context.get("step_current", 0),
-            step_total=generic_state.context.get("step_total", 0),
+            # Handle both context-based (old way) and field-based (new way) step progress
+            step_current=generic_state.step_current
+            or generic_state.context.get("step_current", 0),
+            step_total=generic_state.step_total
+            or generic_state.context.get("step_total", 0),
             step_detail=generic_state.context.get(
                 "step_detail", ""
             ),  # CRITICAL for ✅ and 💾 messages
             current_item_detail=generic_state.context.get("current_item_detail"),
-            # Additional existing fields with sensible defaults (preserve all fields)
-            step_start_percentage=generic_state.context.get(
-                "step_start_percentage", 0.0
-            ),
-            step_end_percentage=generic_state.context.get("step_end_percentage", 100.0),
+            # Use hierarchical progress fields from GenericProgressState
+            step_start_percentage=generic_state.step_start_percentage,
+            step_end_percentage=generic_state.step_end_percentage,
             step_items_processed=generic_state.items_processed,
             estimated_completion=generic_state.context.get("estimated_completion"),
             overall_percentage=generic_state.percentage,

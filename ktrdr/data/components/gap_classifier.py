@@ -935,7 +935,7 @@ class GapClassifier:
             return f"Likely holiday gap ({duration_hours:.1f}h) - adjacent to weekend{ib_note}"
 
         elif classification == GapClassification.MARKET_CLOSURE:
-            return f"Extended market closure ({duration_hours/24:.1f} days) - investigate broker/exchange{ib_note}"
+            return f"Extended market closure ({duration_hours / 24:.1f} days) - investigate broker/exchange{ib_note}"
 
         elif classification == GapClassification.UNEXPECTED:
             base_note = f"Unexpected gap ({duration_hours:.1f}h) during trading period - needs investigation"

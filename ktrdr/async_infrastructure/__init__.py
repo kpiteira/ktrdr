@@ -1,7 +1,10 @@
 """
-Async infrastructure package for KTRDR.
+KTRDR Async Infrastructure
 
-This package provides generic async patterns and infrastructure that can be
-used across different domains (data, training, etc.) while maintaining
-domain-specific customization through renderer and adapter patterns.
+Core infrastructure for async operations, progress tracking, and cancellation
+management across all KTRDR services.
+
+Components:
+- progress: Generic progress tracking with domain-specific renderers
+- cancellation: Unified cancellation system with ServiceOrchestrator integration
 """

@@ -181,7 +181,6 @@ class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
                         adapter, "_call_host_service_get", new=AsyncMock()
                     ) as mock_get,
                 ):
-
                     # validate_symbol should work identically
                     mock_post.return_value = {"success": True, "is_valid": True}
                     result = await adapter.validate_symbol("AAPL")

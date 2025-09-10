@@ -141,7 +141,6 @@ class TestDataManagerBuilderAsyncInfrastructure:
             ) as mock_renderer,
             patch("ktrdr.data.data_manager_builder.GenericProgressManager"),
         ):
-
             mock_time_engine = Mock()
             mock_engine.return_value = mock_time_engine
 
@@ -166,7 +165,6 @@ class TestDataManagerBuilderAsyncInfrastructure:
                 "ktrdr.data.data_manager_builder.GenericProgressManager"
             ) as mock_progress_manager_class,
         ):
-
             mock_renderer = Mock()
             mock_renderer_class.return_value = mock_renderer
 

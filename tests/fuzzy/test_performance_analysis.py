@@ -338,7 +338,8 @@ class TestFuzzyPerformanceAnalyzer:
         )
 
         recommendations = analyzer._generate_recommendations(
-            poor_metrics, {"timeframes": ["1h", "4h", "1d", "1w"]}  # Many timeframes
+            poor_metrics,
+            {"timeframes": ["1h", "4h", "1d", "1w"]},  # Many timeframes
         )
 
         assert len(recommendations) > 0

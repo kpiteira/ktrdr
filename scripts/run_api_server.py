@@ -5,6 +5,7 @@ Run KTRDR API server.
 This script provides a convenient way to start the KTRDR API server
 with the ability to override configuration via command line arguments.
 """
+
 import argparse
 import logging
 import sys
