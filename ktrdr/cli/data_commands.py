@@ -28,6 +28,7 @@ from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callbac
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
+from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
 
 # Setup logging and console
 logger = get_logger(__name__)
@@ -310,6 +311,9 @@ def load_data(
         ktrdr data load MSFT --timeframe 1h --mode tail
         ktrdr data load TSLA --start 2024-01-01 --end 2024-06-01
     """
+    # Setup unified CLI cancellation handler
+    setup_cli_cancellation_handler()
+    
     try:
         # Input validation
         symbol = InputValidator.validate_string(

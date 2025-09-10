@@ -56,14 +56,20 @@ class DataFetcher:
         if cancellation_token is None:
             return False
 
-        # Check if token has cancellation method
+        # Use unified cancellation protocol only
         is_cancelled = False
-        if hasattr(cancellation_token, "is_cancelled_requested"):
-            is_cancelled = cancellation_token.is_cancelled_requested
-        elif hasattr(cancellation_token, "is_set"):
-            is_cancelled = cancellation_token.is_set()
-        elif hasattr(cancellation_token, "cancelled"):
-            is_cancelled = cancellation_token.cancelled()
+        try:
+            # All tokens should implement is_cancelled() method
+            if hasattr(cancellation_token, 'is_cancelled') and callable(cancellation_token.is_cancelled):
+                is_cancelled = cancellation_token.is_cancelled()
+            else:
+                logger.warning(
+                    f"Cancellation token does not implement unified protocol: {type(cancellation_token)}"
+                )
+                return False
+        except Exception as e:
+            logger.warning(f"Error checking cancellation token: {e}")
+            return False
 
         if is_cancelled:
             logger.info(f"🛑 Cancellation requested during {operation_description}")

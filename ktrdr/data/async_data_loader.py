@@ -22,6 +22,10 @@ from ktrdr.data.data_manager import DataManager
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
+from ktrdr.async_infrastructure.cancellation import (
+    AsyncCancellationToken, 
+    create_cancellation_token
+)
 
 logger = get_logger(__name__)
 
@@ -62,7 +66,7 @@ class ProgressInfo:
 
 @dataclass
 class DataLoadingJob:
-    """Data loading job with async support."""
+    """Data loading job with unified cancellation support."""
 
     job_id: str
     symbol: str
@@ -77,8 +81,13 @@ class DataLoadingJob:
     completed_at: Optional[datetime] = None
     result_path: Optional[str] = None
     error_message: Optional[str] = None
-    _cancel_event: asyncio.Event = field(default_factory=asyncio.Event, init=False)
+    _cancellation_token: Optional[AsyncCancellationToken] = field(default=None, init=False)
     _task: Optional[asyncio.Task] = field(default=None, init=False)
+    
+    def __post_init__(self):
+        """Initialize cancellation token after dataclass creation."""
+        if self._cancellation_token is None:
+            self._cancellation_token = create_cancellation_token(f"data-job-{self.job_id}")
 
     @property
     def duration_seconds(self) -> Optional[float]:
@@ -88,17 +97,23 @@ class DataLoadingJob:
         end_time = self.completed_at or TimestampManager.now_utc()
         return (end_time - self.started_at).total_seconds()
 
-    def cancel(self):
-        """Request cancellation of the job."""
-        logger.info(f"🛑 Cancellation requested for job {self.job_id}")
-        self._cancel_event.set()
+    def cancel(self, reason: str = "Job cancelled"):
+        """Request cancellation of the job using unified protocol."""
+        logger.info(f"🛑 Cancellation requested for job {self.job_id}: {reason}")
+        if self._cancellation_token:
+            self._cancellation_token.cancel(reason)
         if self._task and not self._task.done():
             self._task.cancel()
 
     @property
     def is_cancelled_requested(self) -> bool:
-        """Check if cancellation has been requested."""
-        return self._cancel_event.is_set()
+        """Check if cancellation has been requested using unified protocol."""
+        return self._cancellation_token.is_cancelled() if self._cancellation_token else False
+    
+    @property
+    def cancellation_token(self) -> Optional[AsyncCancellationToken]:
+        """Get the job's cancellation token for unified protocol usage."""
+        return self._cancellation_token
 
 
 class AsyncDataLoader:
@@ -365,7 +380,7 @@ class AsyncDataLoader:
             mode=job.mode,
             validate=True,
             repair=False,
-            cancellation_token=job,  # Pass the job itself as cancellation token
+            cancellation_token=job.cancellation_token,  # Pass unified cancellation token
         )
 
     def get_job_status(self, job_id: str) -> Optional[dict[str, Any]]:
