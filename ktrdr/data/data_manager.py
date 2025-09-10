@@ -33,7 +33,7 @@ from ktrdr.async_infrastructure.progress import (
 )
 from ktrdr.data.components.data_fetcher import DataFetcher
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
-from ktrdr.data.components.progress_manager import ProgressManager
+# Old ProgressManager no longer needed - using GenericProgressManager directly
 from ktrdr.data.data_manager_builder import (
     DataManagerBuilder,
     create_default_datamanager_builder,
@@ -143,7 +143,8 @@ class DataManager(ServiceOrchestrator):
         self.data_processor = config.data_processor
 
         # Initialize operational components (will be configured per operation)
-        self._progress_manager: Optional[ProgressManager] = None
+        # Old progress manager no longer used - replaced with GenericProgressManager
+        self._progress_manager = None
         self._data_fetcher: Optional[DataFetcher] = None
 
         # Initialize ServiceOrchestrator (always enabled - container mode removed)
@@ -437,27 +438,17 @@ class DataManager(ServiceOrchestrator):
         # Initialize progress manager - use GenericProgressManager if available
         total_steps = 5 if mode == "local" else 10  # More steps for IB-enabled modes
 
-        if self._data_progress_renderer:
-            # Use enhanced async infrastructure (DataProgressRenderer indicates enhanced setup)
-            operation_progress = GenericProgressManager(
-                callback=enhanced_callback, renderer=self._data_progress_renderer
+        # Always use the new async infrastructure (eliminate old ProgressManager)
+        if not self._data_progress_renderer:
+            # Create default DataProgressRenderer if not provided
+            from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
+            self._data_progress_renderer = DataProgressRenderer(
+                time_estimation_engine=self._time_estimation_engine
             )
-        else:
-            # Fallback to existing ProgressManager if enhanced infrastructure not available
-            legacy_progress_manager = ProgressManager(progress_callback)
-            return self._load_with_fallback_legacy(
-                symbol,
-                timeframe,
-                mode,
-                start_date,
-                end_date,
-                validate,
-                repair,
-                repair_outliers,
-                strict,
-                cancellation_token,
-                legacy_progress_manager,
-            )
+        
+        operation_progress = GenericProgressManager(
+            callback=enhanced_callback, renderer=self._data_progress_renderer
+        )
 
         # Create enhanced context for better progress descriptions
         operation_context = {
@@ -682,7 +673,7 @@ class DataManager(ServiceOrchestrator):
         repair_outliers: bool,
         strict: bool,
         cancellation_token,
-        progress_manager: ProgressManager,
+        progress_manager: Any,  # Legacy method - to be removed
     ) -> pd.DataFrame:
         """
         Fallback to existing ProgressManager logic when async infrastructure is unavailable.
@@ -843,64 +834,16 @@ class DataManager(ServiceOrchestrator):
         Load data using enhanced orchestrator for non-local modes.
 
         This method handles the enhanced modes (tail, backfill, full) using the orchestrator
-        while properly integrating with GenericProgressManager.
+        with direct GenericProgressManager integration (no bridge pattern needed).
         """
-        # For now, we need to create a legacy ProgressManager for the orchestrator
-        # until the orchestrator is updated to support GenericProgressManager
-        # This is a temporary bridge solution
-
-        def bridge_callback(state):
-            """Bridge legacy ProgressManager callbacks to GenericProgressManager updates."""
-            if hasattr(state, "current_step") and hasattr(state, "message"):
-                # Check if this is a step start with percentage ranges
-                if (hasattr(state, "step_start_percentage") and 
-                    hasattr(state, "step_end_percentage") and
-                    hasattr(state, "current_step_name") and
-                    state.step_start_percentage != state.step_end_percentage):
-                    
-                    # This is a start_step() call - preserve step ranges
-                    operation_progress.start_step(
-                        step_name=state.current_step_name or f"Step {state.current_step}",
-                        step_number=state.current_step,
-                        step_percentage=state.step_start_percentage,
-                        step_end_percentage=state.step_end_percentage,
-                        expected_items=getattr(state, "expected_items", None)
-                    )
-                elif (hasattr(state, "step_current") and hasattr(state, "step_total") and
-                      state.step_total > 0):
-                    
-                    # This is an update_step_progress() call - use hierarchical progress  
-                    operation_progress.update_step_progress(
-                        current=state.step_current,
-                        total=state.step_total,
-                        items_processed=getattr(state, "items_processed", 0),
-                        detail=getattr(state, "step_detail", "")
-                    )
-                else:
-                    # Fallback to simple progress update
-                    context = {}
-                    if hasattr(state, "current_item_detail") and state.current_item_detail:
-                        context["current_item_detail"] = state.current_item_detail
-                    if hasattr(state, "step_detail") and state.step_detail:
-                        context["step_detail"] = state.step_detail
-
-                    # Update the GenericProgressManager
-                    operation_progress.update_progress(
-                        step=state.current_step, message=state.message, context=context
-                    )
-
-        # Create a legacy ProgressManager that bridges to our GenericProgressManager
-        bridge_progress_manager = ProgressManager(bridge_callback)
-        bridge_progress_manager.start_operation(
-            total_steps=10,  # Non-local modes use more steps
-            operation_name=f"orchestrator_{symbol}_{timeframe}",
-            operation_context={},
+        # Start operation on the GenericProgressManager for orchestrator steps
+        operation_progress.start_operation(
+            operation_id=f"load_data_{symbol}_{timeframe}",
+            total_steps=10,  # Non-local modes use multiple steps
+            context={"symbol": symbol, "timeframe": timeframe, "mode": mode}
         )
 
-        if cancellation_token:
-            bridge_progress_manager.set_cancellation_token(cancellation_token)
-
-        # Use the orchestrator with the bridge
+        # Use the orchestrator directly with GenericProgressManager (no bridge needed)
         result = self.data_loading_orchestrator.load_with_fallback(
             symbol,
             timeframe,
@@ -908,7 +851,7 @@ class DataManager(ServiceOrchestrator):
             end_date,
             mode,
             cancellation_token,
-            bridge_progress_manager,
+            operation_progress,  # Pass GenericProgressManager directly
         )
 
         # Ensure we return a DataFrame (orchestrator should handle fallbacks)
@@ -956,7 +899,7 @@ class DataManager(ServiceOrchestrator):
         timeframe: str,
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[ProgressManager] = None,
+        progress_manager: Optional[Any] = None,  # Legacy parameter - will be updated to GenericProgressManager
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Enhanced async fetching using DataFetcher component.
@@ -1102,7 +1045,7 @@ class DataManager(ServiceOrchestrator):
         timeframe: str,
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[ProgressManager] = None,
+        progress_manager: Optional[Any] = None,  # Legacy parameter - will be updated to GenericProgressManager
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Sync wrapper for enhanced async fetching using DataFetcher component.

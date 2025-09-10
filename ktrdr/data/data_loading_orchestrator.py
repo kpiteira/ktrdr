@@ -10,6 +10,7 @@ from typing import Any, Optional, Union
 
 import pandas as pd
 
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.data.components.symbol_cache import SymbolCache
 from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.logging import get_logger
@@ -40,7 +41,7 @@ class DataLoadingOrchestrator:
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[Any] = None,
+        progress_manager: Optional[GenericProgressManager] = None,
     ) -> Optional[pd.DataFrame]:
         """
         Load data with intelligent gap analysis and resilient segment fetching.
@@ -70,10 +71,10 @@ class DataLoadingOrchestrator:
 
         # Step 1: FAIL FAST - Validate symbol and get metadata FIRST (2%)
         if progress_manager:
-            progress_manager.update_progress_with_context(
-                1,
-                "Validating symbol with IB Gateway",
-                current_item_detail=f"Checking if {symbol} is valid and tradeable",
+            progress_manager.update_progress(
+                step=1,
+                message=f"Checking if {symbol} is valid and tradeable",
+                context={"operation": "symbol_validation"}
             )
 
         logger.info("📋 STEP 0A: Symbol validation and metadata lookup")
