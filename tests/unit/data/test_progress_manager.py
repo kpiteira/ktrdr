@@ -232,17 +232,17 @@ class TestProgressManagerCancellation:
         assert progress_manager.check_cancelled() is False
 
     def test_cancellation_token_integration(self):
-        """Test cancellation token with is_cancelled attribute."""
+        """Test cancellation token with unified is_cancelled() method."""
         progress_manager = ProgressManager()
 
-        # Mock cancellation token
+        # Mock cancellation token with unified protocol
         mock_token = Mock()
-        mock_token.is_cancelled = False
+        mock_token.is_cancelled.return_value = False
 
         progress_manager.set_cancellation_token(mock_token)
         assert progress_manager.check_cancelled() is False
 
-        mock_token.is_cancelled = True
+        mock_token.is_cancelled.return_value = True
         assert progress_manager.check_cancelled() is True
 
 

@@ -18,6 +18,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
 from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.cli.error_handler import (
@@ -310,6 +311,9 @@ def load_data(
         ktrdr data load MSFT --timeframe 1h --mode tail
         ktrdr data load TSLA --start 2024-01-01 --end 2024-06-01
     """
+    # Setup unified CLI cancellation handler
+    setup_cli_cancellation_handler()
+
     try:
         # Input validation
         symbol = InputValidator.validate_string(

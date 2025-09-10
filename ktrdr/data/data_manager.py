@@ -216,10 +216,10 @@ class DataManager(ServiceOrchestrator):
         operation_description: str = "operation",
     ) -> bool:
         """
-        Check if cancellation has been requested.
+        Check if cancellation has been requested using unified protocol.
 
         Args:
-            cancellation_token: Token to check for cancellation
+            cancellation_token: Token to check for cancellation (must implement CancellationToken protocol)
             operation_description: Description of current operation for logging
 
         Returns:
@@ -231,14 +231,12 @@ class DataManager(ServiceOrchestrator):
         if cancellation_token is None:
             return False
 
-        # Check if token has cancellation method
-        is_cancelled = False
-        if hasattr(cancellation_token, "is_cancelled_requested"):
-            is_cancelled = cancellation_token.is_cancelled_requested
-        elif hasattr(cancellation_token, "is_set"):
-            is_cancelled = cancellation_token.is_set()
-        elif hasattr(cancellation_token, "cancelled"):
-            is_cancelled = cancellation_token.cancelled()
+        # Use unified cancellation protocol only - no legacy patterns
+        try:
+            is_cancelled = cancellation_token.is_cancelled()
+        except Exception as e:
+            logger.warning(f"Error checking cancellation token: {e}")
+            return False
 
         if is_cancelled:
             logger.info(f"🛑 Cancellation requested during {operation_description}")
@@ -397,19 +395,12 @@ class DataManager(ServiceOrchestrator):
                 progress_callback,
             )
 
-        # Execute with ServiceOrchestrator cancellation patterns
-        # Handle case where ServiceOrchestrator is not properly initialized (e.g., in tests)
-        if hasattr(self, "execute_with_cancellation") and callable(
-            self.execute_with_cancellation
-        ):
-            return await self.execute_with_cancellation(
-                operation=data_loading_operation(),
-                cancellation_token=effective_token,
-                operation_name=f"Loading {symbol} {timeframe} data",
-            )
-        else:
-            # Fallback for testing or when ServiceOrchestrator is not available
-            return await data_loading_operation()
+        # Execute with unified ServiceOrchestrator cancellation system
+        return await self.execute_with_cancellation(
+            operation=data_loading_operation(),
+            cancellation_token=effective_token,
+            operation_name=f"Loading {symbol} {timeframe} data",
+        )
 
     def _load_data_core_logic(
         self,

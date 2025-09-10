@@ -39,6 +39,17 @@ class SegmentManager:
         """Initialize the SegmentManager."""
         self.current_mode: Optional[DataLoadingMode] = None
 
+    def _is_cancelled(self, cancellation_token: Any) -> bool:
+        """Check if cancellation token is cancelled using unified protocol."""
+        if cancellation_token is None:
+            return False
+
+        try:
+            return cancellation_token.is_cancelled()
+        except Exception as e:
+            logger.warning(f"Error checking cancellation token: {e}")
+            return False
+
     def create_segments(
         self,
         gaps: list[tuple[datetime, datetime]],
@@ -394,11 +405,7 @@ class SegmentManager:
                 continue
 
         # Check if operation was cancelled
-        was_cancelled = (
-            cancellation_token
-            and hasattr(cancellation_token, "is_set")
-            and cancellation_token.is_set()
-        )
+        was_cancelled = self._is_cancelled(cancellation_token)
 
         if was_cancelled:
             logger.info(
@@ -438,11 +445,7 @@ class SegmentManager:
             DataFrame with fetched data or None if failed
         """
         # Check for cancellation before expensive operation
-        if (
-            cancellation_token
-            and hasattr(cancellation_token, "is_set")
-            and cancellation_token.is_set()
-        ):
+        if self._is_cancelled(cancellation_token):
             logger.info(f"🛑 Cancellation detected before IB fetch for {symbol}")
             return None
 
@@ -460,11 +463,7 @@ class SegmentManager:
         # Poll for cancellation every 0.5 seconds
         while not fetch_task.done():
             # Check cancellation token
-            if (
-                cancellation_token
-                and hasattr(cancellation_token, "is_set")
-                and cancellation_token.is_set()
-            ):
+            if self._is_cancelled(cancellation_token):
                 logger.info(f"🛑 Cancelling IB fetch for {symbol} during operation")
                 fetch_task.cancel()
                 try:
@@ -493,11 +492,7 @@ class SegmentManager:
         Raises:
             asyncio.CancelledError: If cancellation is detected
         """
-        if (
-            cancellation_token
-            and hasattr(cancellation_token, "is_set")
-            and cancellation_token.is_set()
-        ):
+        if self._is_cancelled(cancellation_token):
             logger.info(
                 f"🛑 Cancellation detected{' during ' + context if context else ''}"
             )
