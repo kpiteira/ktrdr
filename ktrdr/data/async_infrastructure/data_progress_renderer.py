@@ -115,8 +115,8 @@ class DataProgressRenderer(ProgressRenderer):
         step_name = (
             state.context.get("current_step_name") or f"Step {state.current_step}"
         )
-        # Add lightning bolt to indicate enhanced async infrastructure is active
-        enhanced_step_name = f"⚡ {step_name}"
+        # Add lightning bolt to indicate enhanced async infrastructure is active (only if not already present)
+        enhanced_step_name = f"⚡ {step_name}" if not step_name.startswith("⚡") else step_name
 
         # Build rich message with item information (preserve exact logic)
         message_parts = [f"{enhanced_step_name}: {detail}"]  # This includes ✅ and 💾!
@@ -159,8 +159,8 @@ class DataProgressRenderer(ProgressRenderer):
             Enhanced message with full context
         """
         base_message = self._extract_base_message(state.message)
-        # Add small indicator that enhanced async infrastructure is active
-        enhanced_base = f"⚡ {base_message}"
+        # Add small indicator that enhanced async infrastructure is active (only if not already present)
+        enhanced_base = f"⚡ {base_message}" if not base_message.startswith("⚡") else base_message
         message_parts = [enhanced_base]
 
         # Add data-specific context (preserve exact existing logic)
