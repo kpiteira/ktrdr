@@ -6,6 +6,24 @@
 **Priority**: High  
 **Depends on**: Slice 1, 2, and 3 completion
 
+## 🔄 **UNIFIED CANCELLATION REQUIREMENT**
+
+**CRITICAL**: This slice **MUST** exclusively use the unified `CancellationToken` protocol established in Slice 2 Task 2.4.
+
+**Unified Cancellation Integration**:
+- Host service communication uses **ONLY** `CancellationToken` protocol
+- Cross-service cancellation requests use unified cancellation APIs
+- Connection pooling infrastructure respects cancellation tokens
+- Both client adapters AND host services use same cancellation patterns
+- No legacy patterns (`asyncio.Event`, boolean flags, `hasattr()` checking) allowed
+
+**Implementation Requirements**:
+- AsyncServiceAdapter → CancellationToken integration for HTTP requests
+- IbDataAdapter → CancellationToken parameter passing to host services
+- TrainingAdapter → CancellationToken integration with training host service
+- Host Services → Unified cancellation handling for incoming requests
+- Connection pooling → Cancellation-aware connection management
+
 ## Overview
 
 This final slice completes the unified async architecture by creating shared infrastructure that serves both client-side adapters (IbDataAdapter, TrainingAdapter) AND host services themselves. This ensures consistent patterns, shared connection pooling, and unified error handling across the entire system.

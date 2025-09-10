@@ -621,10 +621,14 @@ class TestUnifiedCancellationInterface:
     def test_cancellation_token_protocol_consistency(self):
         """Test CancellationToken protocol works across all domains."""
         # Reset global state to ensure clean test
-        from ktrdr.async_infrastructure.cancellation import _global_coordinator, CancellationState
+        from ktrdr.async_infrastructure.cancellation import (
+            CancellationState,
+            _global_coordinator,
+        )
+
         if _global_coordinator is not None:
             _global_coordinator._global_state = CancellationState()
-        
+
         # Create tokens from different sources with unique operation IDs
         coordinator = (
             CancellationCoordinator()
