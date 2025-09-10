@@ -852,17 +852,42 @@ class DataManager(ServiceOrchestrator):
         def bridge_callback(state):
             """Bridge legacy ProgressManager callbacks to GenericProgressManager updates."""
             if hasattr(state, "current_step") and hasattr(state, "message"):
-                # Extract context from legacy state
-                context = {}
-                if hasattr(state, "current_item_detail") and state.current_item_detail:
-                    context["current_item_detail"] = state.current_item_detail
-                if hasattr(state, "step_detail") and state.step_detail:
-                    context["step_detail"] = state.step_detail
+                # Check if this is a step start with percentage ranges
+                if (hasattr(state, "step_start_percentage") and 
+                    hasattr(state, "step_end_percentage") and
+                    hasattr(state, "current_step_name") and
+                    state.step_start_percentage != state.step_end_percentage):
+                    
+                    # This is a start_step() call - preserve step ranges
+                    operation_progress.start_step(
+                        step_name=state.current_step_name or f"Step {state.current_step}",
+                        step_number=state.current_step,
+                        step_percentage=state.step_start_percentage,
+                        step_end_percentage=state.step_end_percentage,
+                        expected_items=getattr(state, "expected_items", None)
+                    )
+                elif (hasattr(state, "step_current") and hasattr(state, "step_total") and
+                      state.step_total > 0):
+                    
+                    # This is an update_step_progress() call - use hierarchical progress  
+                    operation_progress.update_step_progress(
+                        current=state.step_current,
+                        total=state.step_total,
+                        items_processed=getattr(state, "items_processed", 0),
+                        detail=getattr(state, "step_detail", "")
+                    )
+                else:
+                    # Fallback to simple progress update
+                    context = {}
+                    if hasattr(state, "current_item_detail") and state.current_item_detail:
+                        context["current_item_detail"] = state.current_item_detail
+                    if hasattr(state, "step_detail") and state.step_detail:
+                        context["step_detail"] = state.step_detail
 
-                # Update the GenericProgressManager
-                operation_progress.update_progress(
-                    step=state.current_step, message=state.message, context=context
-                )
+                    # Update the GenericProgressManager
+                    operation_progress.update_progress(
+                        step=state.current_step, message=state.message, context=context
+                    )
 
         # Create a legacy ProgressManager that bridges to our GenericProgressManager
         bridge_progress_manager = ProgressManager(bridge_callback)
