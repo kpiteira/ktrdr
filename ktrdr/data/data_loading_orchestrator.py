@@ -74,7 +74,7 @@ class DataLoadingOrchestrator:
             progress_manager.update_progress(
                 step=1,
                 message=f"Checking if {symbol} is valid and tradeable",
-                context={"operation": "symbol_validation"}
+                context={"operation": "symbol_validation"},
             )
 
         logger.info("📋 STEP 0A: Symbol validation and metadata lookup")

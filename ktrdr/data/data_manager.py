@@ -33,6 +33,7 @@ from ktrdr.async_infrastructure.progress import (
 )
 from ktrdr.data.components.data_fetcher import DataFetcher
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
+
 # Old ProgressManager no longer needed - using GenericProgressManager directly
 from ktrdr.data.data_manager_builder import (
     DataManagerBuilder,
@@ -441,11 +442,14 @@ class DataManager(ServiceOrchestrator):
         # Always use the new async infrastructure (eliminate old ProgressManager)
         if not self._data_progress_renderer:
             # Create default DataProgressRenderer if not provided
-            from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
+            from ktrdr.data.async_infrastructure.data_progress_renderer import (
+                DataProgressRenderer,
+            )
+
             self._data_progress_renderer = DataProgressRenderer(
                 time_estimation_engine=self._time_estimation_engine
             )
-        
+
         operation_progress = GenericProgressManager(
             callback=enhanced_callback, renderer=self._data_progress_renderer
         )
@@ -840,7 +844,7 @@ class DataManager(ServiceOrchestrator):
         operation_progress.start_operation(
             operation_id=f"load_data_{symbol}_{timeframe}",
             total_steps=10,  # Non-local modes use multiple steps
-            context={"symbol": symbol, "timeframe": timeframe, "mode": mode}
+            context={"symbol": symbol, "timeframe": timeframe, "mode": mode},
         )
 
         # Use the orchestrator directly with GenericProgressManager (no bridge needed)
@@ -899,7 +903,9 @@ class DataManager(ServiceOrchestrator):
         timeframe: str,
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[Any] = None,  # Legacy parameter - will be updated to GenericProgressManager
+        progress_manager: Optional[
+            Any
+        ] = None,  # Legacy parameter - will be updated to GenericProgressManager
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Enhanced async fetching using DataFetcher component.
@@ -1045,7 +1051,9 @@ class DataManager(ServiceOrchestrator):
         timeframe: str,
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[Any] = None,  # Legacy parameter - will be updated to GenericProgressManager
+        progress_manager: Optional[
+            Any
+        ] = None,  # Legacy parameter - will be updated to GenericProgressManager
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Sync wrapper for enhanced async fetching using DataFetcher component.

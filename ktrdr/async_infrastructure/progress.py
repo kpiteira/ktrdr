@@ -50,11 +50,11 @@ class GenericProgressState:
     # Generic item tracking - can be bars, data points, files, etc.
     items_processed: int = 0
     total_items: Optional[int] = None
-    
+
     # Step percentage ranges for hierarchical progress (preserve ProgressManager functionality)
     step_start_percentage: float = 0.0
     step_end_percentage: float = 0.0
-    
+
     # Current step progress tracking
     step_current: int = 0
     step_total: int = 0
@@ -190,13 +190,13 @@ class GenericProgressManager:
     ) -> None:
         """
         Start a new step with percentage range support (preserve ProgressManager functionality).
-        
+
         This method supports the hierarchical progress that data loading orchestrator uses,
         where steps have custom percentage ranges like Step 6: 10% → 96%.
 
         Args:
             step_name: Name of the step being started
-            step_number: Step number (1-based) 
+            step_number: Step number (1-based)
             step_percentage: Custom start percentage for this step (e.g., 10.0 for segment fetching)
             step_end_percentage: Custom end percentage for this step (e.g., 96.0 for segment fetching)
             expected_items: Expected number of items to process in this step
@@ -209,7 +209,7 @@ class GenericProgressManager:
             self._state.current_step = step_number
             self._state.step_current = 0
             self._state.step_total = 0
-            
+
             # Update expected items for this step
             if expected_items is not None:
                 self._state.total_items = expected_items
@@ -219,7 +219,7 @@ class GenericProgressManager:
                 # Use custom percentage ranges (like data loading orchestrator does)
                 self._state.percentage = step_percentage
                 self._state.step_start_percentage = step_percentage
-                
+
                 if step_end_percentage is not None:
                     self._state.step_end_percentage = step_end_percentage
                 else:
@@ -229,23 +229,27 @@ class GenericProgressManager:
                         if self._state.total_steps > 0
                         else 10.0
                     )
-                    self._state.step_end_percentage = step_percentage + default_increment
+                    self._state.step_end_percentage = (
+                        step_percentage + default_increment
+                    )
             else:
                 # Use default equal increment calculation
                 if self._state.total_steps > 0:
                     start_pct = (step_number - 1) / self._state.total_steps * 100.0
                     end_pct = step_number / self._state.total_steps * 100.0
-                    
+
                     self._state.percentage = start_pct
                     self._state.step_start_percentage = start_pct
                     self._state.step_end_percentage = end_pct
 
             # Update context with step info
-            self._state.context.update({
-                'current_step_name': step_name,
-                'step_start_percentage': self._state.step_start_percentage,
-                'step_end_percentage': self._state.step_end_percentage,
-            })
+            self._state.context.update(
+                {
+                    "current_step_name": step_name,
+                    "step_start_percentage": self._state.step_start_percentage,
+                    "step_end_percentage": self._state.step_end_percentage,
+                }
+            )
 
             # Use renderer for enhanced message
             if self.renderer:
@@ -254,23 +258,22 @@ class GenericProgressManager:
             else:
                 self._state.message = f"Starting {step_name}"
 
-            logger.debug("Started step %d (%s): %.1f%% → %.1f%%", 
-                        step_number, step_name, 
-                        self._state.step_start_percentage, 
-                        self._state.step_end_percentage)
-            
+            logger.debug(
+                "Started step %d (%s): %.1f%% → %.1f%%",
+                step_number,
+                step_name,
+                self._state.step_start_percentage,
+                self._state.step_end_percentage,
+            )
+
             self._trigger_callback()
 
     def update_step_progress(
-        self, 
-        current: int, 
-        total: int, 
-        items_processed: int = 0, 
-        detail: str = ""
+        self, current: int, total: int, items_processed: int = 0, detail: str = ""
     ) -> None:
         """
         Update progress within the current step using percentage ranges.
-        
+
         This is the key method that calculates progress within step percentage ranges,
         enabling smooth progress from 10% → 96% during segment fetching.
 
@@ -304,12 +307,14 @@ class GenericProgressManager:
                 self._state.percentage = step_start
 
             # Update context with step progress details
-            self._state.context.update({
-                'step_current': current,
-                'step_total': total,
-                'step_detail': detail,
-                'step_progress_ratio': current / total if total > 0 else 0.0,
-            })
+            self._state.context.update(
+                {
+                    "step_current": current,
+                    "step_total": total,
+                    "step_detail": detail,
+                    "step_progress_ratio": current / total if total > 0 else 0.0,
+                }
+            )
 
             # Use renderer for enhanced message
             if self.renderer:
@@ -341,16 +346,19 @@ class GenericProgressManager:
 
             # Update core progress fields
             self._state.current_step = step
-            
+
             # Only update percentage if no step ranges are defined
             # (preserve hierarchical progress when step ranges are active)
-            if self._state.step_start_percentage == 0.0 and self._state.step_end_percentage == 0.0:
+            if (
+                self._state.step_start_percentage == 0.0
+                and self._state.step_end_percentage == 0.0
+            ):
                 self._state.percentage = (
                     min(100.0, (step / self._state.total_steps) * 100.0)
                     if self._state.total_steps > 0
                     else 100.0
                 )
-            
+
             self._state.items_processed = items_processed
 
             # Update context
