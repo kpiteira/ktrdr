@@ -40,7 +40,7 @@ class ZigZagIndicator(BaseIndicator):
             raise ValueError(f"Threshold must be between 0 and 1, got {threshold}")
 
         # Generate name based on threshold
-        name = f"ZigZag_{int(threshold*100)}"
+        name = f"ZigZag_{int(threshold * 100)}"
 
         # Call parent constructor with required name parameter
         super().__init__(name=name, display_as_overlay=True, **kwargs)
@@ -138,7 +138,7 @@ class ZigZagIndicator(BaseIndicator):
 
     def get_column_name(self, suffix: Optional[str] = None) -> str:
         """Get the column name for this indicator."""
-        base_name = f"ZigZag_{int(self.threshold*100)}"
+        base_name = f"ZigZag_{int(self.threshold * 100)}"
         return f"{base_name}_{suffix}" if suffix else base_name
 
     def get_zigzag_labels(self, data: pd.DataFrame) -> pd.Series:

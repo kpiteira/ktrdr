@@ -289,7 +289,6 @@ class KTRDRIntegrationService:
             async with self._session.post(
                 f"{self.training_endpoint}/submit", json=training_payload
             ) as response:
-
                 if response.status == 201:
                     result = await response.json()
                     training_id = result["training_id"]
@@ -335,7 +334,6 @@ class KTRDRIntegrationService:
             async with self._session.get(
                 f"{self.training_endpoint}/{training_id}/status"
             ) as response:
-
                 if response.status == 200:
                     data = await response.json()
 
@@ -455,7 +453,6 @@ class KTRDRIntegrationService:
             async with self._session.post(
                 f"{self.backtest_endpoint}/submit", json=backtest_payload
             ) as response:
-
                 if response.status == 201:
                     result = await response.json()
                     backtest_id = result["backtest_id"]
@@ -494,7 +491,6 @@ class KTRDRIntegrationService:
             async with self._session.get(
                 f"{self.backtest_endpoint}/{backtest_id}/results"
             ) as response:
-
                 if response.status == 200:
                     data = await response.json()
 
@@ -588,7 +584,6 @@ class KTRDRIntegrationService:
             async with self._session.post(
                 f"{self.training_endpoint}/{training_id}/cancel"
             ) as response:
-
                 if response.status == 200:
                     logger.info(f"Training cancelled successfully: {training_id}")
                 elif response.status == 404:

@@ -96,7 +96,7 @@ class SegmentManager:
         for i, (seg_start, seg_end) in enumerate(segments):
             duration = seg_end - seg_start
             logger.debug(
-                f"🔷 SEGMENT {i+1}: {seg_start} → {seg_end} (duration: {duration})"
+                f"🔷 SEGMENT {i + 1}: {seg_start} → {seg_end} (duration: {duration})"
             )
         return segments
 
@@ -300,12 +300,12 @@ class SegmentManager:
         for i, (segment_start, segment_end) in enumerate(segments):
             # Check for cancellation before each segment
             self._check_cancellation(
-                cancellation_token, f"segment {i+1}/{len(segments)}"
+                cancellation_token, f"segment {i + 1}/{len(segments)}"
             )
 
             # Update progress for current segment
             if progress_manager:
-                segment_detail = f"Segment {i+1}/{len(segments)}: {segment_start.strftime('%Y-%m-%d %H:%M')} to {segment_end.strftime('%Y-%m-%d %H:%M')}"
+                segment_detail = f"Segment {i + 1}/{len(segments)}: {segment_start.strftime('%Y-%m-%d %H:%M')} to {segment_end.strftime('%Y-%m-%d %H:%M')}"
                 progress_manager.update_step_progress(
                     current=i + 1,
                     total=len(segments),
@@ -316,7 +316,7 @@ class SegmentManager:
             try:
                 duration = segment_end - segment_start
                 logger.info(
-                    f"🚀 IB REQUEST {i+1}/{len(segments)}: Fetching {symbol} {timeframe} "
+                    f"🚀 IB REQUEST {i + 1}/{len(segments)}: Fetching {symbol} {timeframe} "
                     f"from {segment_start} to {segment_end} (duration: {duration})"
                 )
 
@@ -333,7 +333,7 @@ class SegmentManager:
                     successful_data.append(segment_data)
                     successful_count += 1
                     logger.info(
-                        f"✅ IB SUCCESS {i+1}: Received {len(segment_data)} bars from IB"
+                        f"✅ IB SUCCESS {i + 1}: Received {len(segment_data)} bars from IB"
                     )
 
                     # Update progress with successful segment completion
@@ -343,7 +343,7 @@ class SegmentManager:
                             current=successful_count,
                             total=len(segments),
                             items_processed=total_items_processed,
-                            detail=f"✅ Loaded {len(segment_data)} bars from segment {i+1}/{len(segments)}",
+                            detail=f"✅ Loaded {len(segment_data)} bars from segment {i + 1}/{len(segments)}",
                         )
 
                     # Periodic save: Check if it's time to save progress
@@ -365,7 +365,7 @@ class SegmentManager:
 
                                     logger.info(
                                         f"💾 Progress saved: {bars_to_save:,} new bars "
-                                        f"({total_bars_saved:,} total) after {time_since_last_save/60:.1f} minutes"
+                                        f"({total_bars_saved:,} total) after {time_since_last_save / 60:.1f} minutes"
                                     )
 
                                     if progress_manager:
@@ -381,16 +381,16 @@ class SegmentManager:
                                 )
                 else:
                     failed_count += 1
-                    logger.warning(f"❌ IB FAILURE {i+1}: No data returned from IB")
+                    logger.warning(f"❌ IB FAILURE {i + 1}: No data returned from IB")
 
             except asyncio.CancelledError:
                 logger.info(
-                    f"🛑 Segment fetching cancelled at segment {i+1}/{len(segments)}"
+                    f"🛑 Segment fetching cancelled at segment {i + 1}/{len(segments)}"
                 )
                 break
             except Exception as e:
                 failed_count += 1
-                logger.error(f"❌ IB ERROR {i+1}: Request failed - {e}")
+                logger.error(f"❌ IB ERROR {i + 1}: Request failed - {e}")
                 continue
 
         # Check if operation was cancelled

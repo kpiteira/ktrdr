@@ -529,16 +529,16 @@ class DataValidator:
                 rule_name="valid_label_range",
                 passed=False,
                 severity="error",
-                message=f"Found {invalid_count} labels outside valid range [0, {num_classes-1}]: {unique_invalid}",
+                message=f"Found {invalid_count} labels outside valid range [0, {num_classes - 1}]: {unique_invalid}",
                 affected_indices=affected_indices,
-                suggested_fix=f"Map invalid labels to valid range [0, {num_classes-1}]",
+                suggested_fix=f"Map invalid labels to valid range [0, {num_classes - 1}]",
             )
         else:
             return ValidationResult(
                 rule_name="valid_label_range",
                 passed=True,
                 severity="error",
-                message=f"All labels are in valid range [0, {num_classes-1}]",
+                message=f"All labels are in valid range [0, {num_classes - 1}]",
             )
 
     def _check_label_distribution(
@@ -594,14 +594,14 @@ class DataValidator:
                 severity="error",
                 message=f"Found {invalid_count} invalid symbol indices: {unique_invalid}",
                 affected_indices=affected_indices,
-                suggested_fix=f"Map invalid indices to valid range [0, {num_symbols-1}]",
+                suggested_fix=f"Map invalid indices to valid range [0, {num_symbols - 1}]",
             )
         else:
             return ValidationResult(
                 rule_name="symbol_indices_valid",
                 passed=True,
                 severity="error",
-                message=f"All symbol indices are valid [0, {num_symbols-1}]",
+                message=f"All symbol indices are valid [0, {num_symbols - 1}]",
             )
 
     def _check_symbol_balance(

@@ -590,7 +590,6 @@ class TestErrorHandlingAndRecovery:
                     "_initialize_experiment",
                     side_effect=Exception("Test error"),
                 ):
-
                     # Execute experiment (should handle the error)
                     try:
                         await orchestrator._execute_experiment(

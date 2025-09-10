@@ -70,9 +70,9 @@ class TestOBVIndicator:
         expected_values = [0, 1500, 700, 2700, 1500, 3300, 2400, 4900]
 
         for i, expected in enumerate(expected_values):
-            assert (
-                result.iloc[i] == expected
-            ), f"Mismatch at index {i}: got {result.iloc[i]}, expected {expected}"
+            assert result.iloc[i] == expected, (
+                f"Mismatch at index {i}: got {result.iloc[i]}, expected {expected}"
+            )
 
     def test_obv_with_flat_prices(self):
         """Test OBV with flat prices (no price movement)."""

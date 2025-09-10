@@ -198,7 +198,7 @@ class TestVisualizationIntegration:
                 chart=chart,
                 data=sample_indicators,
                 column=col,
-                color=f"#FF{i*3:02d}FF",
+                color=f"#FF{i * 3:02d}FF",
                 title=f"Bollinger {col.split('_')[1].capitalize()}",
             )
 

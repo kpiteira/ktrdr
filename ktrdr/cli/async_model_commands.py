@@ -595,19 +595,19 @@ async def _train_model_async_impl(
                     # Display real results
                     console.print("📊 [bold green]Training Results:[/bold green]")
                     console.print(
-                        f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0)*100:.1f}%"
+                        f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0) * 100:.1f}%"
                     )
                     console.print(
-                        f"📊 Precision: {test_metrics.get('precision', 0)*100:.1f}%"
+                        f"📊 Precision: {test_metrics.get('precision', 0) * 100:.1f}%"
                     )
                     console.print(
-                        f"📊 Recall: {test_metrics.get('recall', 0)*100:.1f}%"
+                        f"📊 Recall: {test_metrics.get('recall', 0) * 100:.1f}%"
                     )
                     console.print(
-                        f"📊 F1 Score: {test_metrics.get('f1_score', 0)*100:.1f}%"
+                        f"📊 F1 Score: {test_metrics.get('f1_score', 0) * 100:.1f}%"
                     )
                     console.print(
-                        f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0)*100:.1f}%"
+                        f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0) * 100:.1f}%"
                     )
                     console.print(
                         f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}"

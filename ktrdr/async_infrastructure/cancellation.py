@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 class CancellationToken(Protocol):
     """
     Protocol for cancellation tokens used across KTRDR operations.
-    
+
     This protocol is compatible with both ServiceOrchestrator patterns
     and AsyncDataLoader job cancellation patterns.
     """
@@ -55,7 +55,7 @@ class CancellationToken(Protocol):
     def is_cancelled_requested(self) -> bool:
         """
         Compatibility property for ServiceOrchestrator integration.
-        
+
         Maps to is_cancelled() for backward compatibility.
         """
         ...
@@ -64,7 +64,12 @@ class CancellationToken(Protocol):
 class CancellationError(Exception):
     """Exception raised when an operation is cancelled."""
 
-    def __init__(self, message: str, operation_id: Optional[str] = None, reason: Optional[str] = None):
+    def __init__(
+        self,
+        message: str,
+        operation_id: Optional[str] = None,
+        reason: Optional[str] = None,
+    ):
         super().__init__(message)
         self.operation_id = operation_id
         self.reason = reason
@@ -73,7 +78,7 @@ class CancellationError(Exception):
 class CancellationState:
     """
     Thread-safe cancellation state management.
-    
+
     Manages both individual operation cancellation and global cancellation
     using proper synchronization primitives.
     """
@@ -117,7 +122,7 @@ class CancellationState:
                     loop.call_soon_threadsafe(self._event.set)
                 except RuntimeError:
                     # No running loop, set event directly
-                    if hasattr(self._event, '_loop') and self._event._loop:
+                    if hasattr(self._event, "_loop") and self._event._loop:
                         self._event.set()
 
     def set_global_cancelled(self, reason: str = "Global cancellation") -> None:
@@ -136,7 +141,7 @@ class CancellationState:
                     loop.call_soon_threadsafe(self._event.set)
                 except RuntimeError:
                     # No running loop, set event directly
-                    if hasattr(self._event, '_loop') and self._event._loop:
+                    if hasattr(self._event, "_loop") and self._event._loop:
                         self._event.set()
 
     async def wait(self) -> None:
@@ -149,7 +154,7 @@ class CancellationState:
 class AsyncCancellationToken:
     """
     Thread-safe async cancellation token implementation.
-    
+
     Compatible with both ServiceOrchestrator patterns and AsyncDataLoader
     job cancellation patterns.
     """
@@ -170,7 +175,9 @@ class AsyncCancellationToken:
     def cancel(self, reason: str = "Operation cancelled") -> None:
         """Request cancellation with reason."""
         self._state.cancel(reason)
-        logger.info(f"Cancellation requested for operation {self.operation_id}: {reason}")
+        logger.info(
+            f"Cancellation requested for operation {self.operation_id}: {reason}"
+        )
 
     async def wait_for_cancellation(self) -> None:
         """Async wait for cancellation signal."""
@@ -179,10 +186,10 @@ class AsyncCancellationToken:
     def check_cancellation(self, context: str = "") -> None:
         """
         Check cancellation and raise exception if cancelled.
-        
+
         Args:
             context: Optional context information for better error messages
-            
+
         Raises:
             CancellationError: If operation has been cancelled
         """
@@ -196,7 +203,7 @@ class AsyncCancellationToken:
             raise CancellationError(
                 ": ".join(message_parts),
                 operation_id=self.operation_id,
-                reason=self.reason
+                reason=self.reason,
             )
 
     @property
@@ -212,7 +219,7 @@ class AsyncCancellationToken:
 class CancellationCoordinator:
     """
     Centralized coordination of cancellation across all operations.
-    
+
     Manages multiple operations, supports global cancellation, and provides
     integration points for CLI interrupt handling and ServiceOrchestrator patterns.
     """
@@ -226,10 +233,10 @@ class CancellationCoordinator:
     def create_token(self, operation_id: str) -> AsyncCancellationToken:
         """
         Create a new cancellation token for an operation.
-        
+
         Args:
             operation_id: Unique identifier for the operation
-            
+
         Returns:
             AsyncCancellationToken instance registered with coordinator
         """
@@ -240,19 +247,23 @@ class CancellationCoordinator:
 
             # Apply global cancellation if active
             if self._global_state.is_cancelled:
-                token.set_global_cancelled(self._global_state.reason or "Global cancellation active")
+                token.set_global_cancelled(
+                    self._global_state.reason or "Global cancellation active"
+                )
 
         logger.debug(f"Created cancellation token for operation {operation_id}")
         return token
 
-    def cancel_operation(self, operation_id: str, reason: str = "Operation cancelled") -> bool:
+    def cancel_operation(
+        self, operation_id: str, reason: str = "Operation cancelled"
+    ) -> bool:
         """
         Cancel a specific operation.
-        
+
         Args:
             operation_id: Operation to cancel
             reason: Cancellation reason
-            
+
         Returns:
             True if operation was found and cancelled, False if not found
         """
@@ -268,7 +279,7 @@ class CancellationCoordinator:
     def cancel_all_operations(self, reason: str = "Global cancellation") -> None:
         """
         Cancel all registered operations.
-        
+
         Args:
             reason: Global cancellation reason
         """
@@ -281,12 +292,14 @@ class CancellationCoordinator:
                 token.set_global_cancelled(reason)
                 logger.debug(f"Globally cancelled operation {operation_id}")
 
-            logger.info(f"Global cancellation applied to {len(self._tokens)} operations: {reason}")
+            logger.info(
+                f"Global cancellation applied to {len(self._tokens)} operations: {reason}"
+            )
 
     def _cleanup_token(self, operation_id: str) -> None:
         """
         Clean up completed operation token.
-        
+
         Args:
             operation_id: Operation to clean up
         """
@@ -303,22 +316,24 @@ class CancellationCoordinator:
     ) -> Any:
         """
         Execute an operation with unified cancellation support.
-        
+
         This method integrates with ServiceOrchestrator patterns while providing
         enhanced cancellation capabilities from AsyncDataLoader patterns.
-        
+
         Args:
             operation_id: Unique identifier for this operation execution
             operation_func: Async function that takes a CancellationToken
             operation_name: Human-readable name for logging
-            
+
         Returns:
             Result of the operation
-            
+
         Raises:
             CancellationError: If operation is cancelled
         """
-        logger.debug(f"Starting {operation_name} (id: {operation_id}) with cancellation support")
+        logger.debug(
+            f"Starting {operation_name} (id: {operation_id}) with cancellation support"
+        )
 
         # Create token for this operation
         token = self.create_token(operation_id)
@@ -329,7 +344,7 @@ class CancellationCoordinator:
                 raise CancellationError(
                     f"Operation {operation_name} cancelled before start: {self._global_state.reason}",
                     operation_id=operation_id,
-                    reason=self._global_state.reason
+                    reason=self._global_state.reason,
                 )
 
             # Execute the operation
@@ -339,7 +354,9 @@ class CancellationCoordinator:
             return result
 
         except CancellationError:
-            logger.info(f"Operation {operation_name} (id: {operation_id}) was cancelled")
+            logger.info(
+                f"Operation {operation_name} (id: {operation_id}) was cancelled"
+            )
             raise
         except Exception as e:
             logger.error(f"Operation {operation_name} (id: {operation_id}) failed: {e}")
@@ -351,7 +368,7 @@ class CancellationCoordinator:
     def get_status(self) -> dict[str, Any]:
         """
         Get coordinator status for monitoring and debugging.
-        
+
         Returns:
             Dictionary with coordinator status information
         """
@@ -360,7 +377,7 @@ class CancellationCoordinator:
                 "active_operations": len(self._tokens),
                 "global_cancelled": self._global_state.is_cancelled,
                 "global_reason": self._global_state.reason,
-                "operations": list(self._tokens.keys())
+                "operations": list(self._tokens.keys()),
             }
 
 
@@ -371,7 +388,7 @@ _global_coordinator: Optional[CancellationCoordinator] = None
 def get_global_coordinator() -> CancellationCoordinator:
     """
     Get the global cancellation coordinator instance.
-    
+
     Returns:
         Global CancellationCoordinator instance (creates if needed)
     """
@@ -383,15 +400,15 @@ def get_global_coordinator() -> CancellationCoordinator:
 
 def create_cancellation_token(
     operation_id: Optional[str] = None,
-    coordinator: Optional[CancellationCoordinator] = None
+    coordinator: Optional[CancellationCoordinator] = None,
 ) -> AsyncCancellationToken:
     """
     Factory function for creating cancellation tokens.
-    
+
     Args:
         operation_id: Optional operation ID (generates UUID if not provided)
         coordinator: Optional coordinator (uses global if not provided)
-        
+
     Returns:
         AsyncCancellationToken instance
     """
@@ -407,10 +424,10 @@ def create_cancellation_token(
 def cancel_all_operations(reason: str = "System shutdown") -> None:
     """
     Cancel all operations globally.
-    
+
     This function provides a convenient way to cancel all operations,
     typically used for system shutdown or emergency cancellation.
-    
+
     Args:
         reason: Cancellation reason
     """
@@ -421,7 +438,7 @@ def cancel_all_operations(reason: str = "System shutdown") -> None:
 def setup_cli_cancellation_handler():
     """
     Set up CLI cancellation handlers for KeyboardInterrupt (Ctrl+C).
-    
+
     This integrates the cancellation system with CLI interrupt handling,
     ensuring that Ctrl+C properly cancels all running operations.
     """
@@ -433,4 +450,3 @@ def setup_cli_cancellation_handler():
 
     signal.signal(signal.SIGINT, handle_interrupt)
     logger.info("CLI cancellation handler registered for KeyboardInterrupt")
-

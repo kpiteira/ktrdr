@@ -119,7 +119,8 @@ class TestResilienceScenarios:
         """
         # Test with very short timeout to simulate slow conditions
         quick_client = httpx.Client(
-            base_url="http://localhost:8000", timeout=0.1  # Very short timeout
+            base_url="http://localhost:8000",
+            timeout=0.1,  # Very short timeout
         )
 
         try:

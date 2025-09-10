@@ -478,9 +478,9 @@ class TestDataProgressRenderer:
         for test_case in test_cases:
             message = renderer.render_message(test_case["state"])
             for pattern in test_case["expected_patterns"]:
-                assert (
-                    pattern in message
-                ), f"Pattern '{pattern}' not found in message: {message}"
+                assert pattern in message, (
+                    f"Pattern '{pattern}' not found in message: {message}"
+                )
 
     def test_format_time_remaining_edge_cases(self):
         """Test time remaining formatting for various durations."""

@@ -166,7 +166,7 @@ class StrategyTrainer:
         }
         for symbol, count in symbol_counts.items():
             print(
-                f"  {symbol}: {count} samples ({count/len(combined_features)*100:.1f}%)"
+                f"  {symbol}: {count} samples ({count / len(combined_features) * 100:.1f}%)"
             )
 
         # Step 7: Prepare training datasets (including symbol indices)

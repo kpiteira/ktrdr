@@ -255,7 +255,7 @@ class MemoryManager:
         ):
             logger.warning(
                 f"Process memory usage high: {snapshot.process_memory_mb:.1f}MB "
-                f"({snapshot.process_memory_mb/self.budget.max_process_memory_mb*100:.1f}% of budget)"
+                f"({snapshot.process_memory_mb / self.budget.max_process_memory_mb * 100:.1f}% of budget)"
             )
 
         # System memory warning

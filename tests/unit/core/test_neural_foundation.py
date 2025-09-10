@@ -188,14 +188,18 @@ class TestDecisionEngine:
 
         # Test confidence threshold
         filtered = engine._apply_position_logic(
-            Signal.BUY, confidence=0.5, timestamp=pd.Timestamp.now()  # Below threshold
+            Signal.BUY,
+            confidence=0.5,
+            timestamp=pd.Timestamp.now(),  # Below threshold
         )
         assert filtered == Signal.HOLD
 
         # Test position awareness
         engine.current_position = Position.LONG
         filtered = engine._apply_position_logic(
-            Signal.BUY, confidence=0.8, timestamp=pd.Timestamp.now()  # Already long
+            Signal.BUY,
+            confidence=0.8,
+            timestamp=pd.Timestamp.now(),  # Already long
         )
         assert filtered == Signal.HOLD
 

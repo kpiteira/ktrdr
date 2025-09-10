@@ -343,7 +343,7 @@ class ResearchDatabaseService:
 
         query = f"""
         UPDATE research.experiments
-        SET {', '.join(set_clauses)}
+        SET {", ".join(set_clauses)}
         WHERE id = $1
         """
 

@@ -188,7 +188,7 @@ class PositionManager:
                 )
             if total_value > self.initial_capital * 100:  # 10000% gain
                 logger.warning(
-                    f"SUSPICIOUS: Portfolio value ${total_value:,.2f} is {(total_value/self.initial_capital)*100:.0f}% of initial capital"
+                    f"SUSPICIOUS: Portfolio value ${total_value:,.2f} is {(total_value / self.initial_capital) * 100:.0f}% of initial capital"
                 )
 
             return total_value

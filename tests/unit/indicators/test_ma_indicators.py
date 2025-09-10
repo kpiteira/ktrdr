@@ -165,9 +165,9 @@ class TestSimpleMovingAverage:
         for idx, expected in SMA_5_REF_VALUES.items():
             actual = result.iloc[idx]
             # Assert that values are close (within tolerance)
-            assert (
-                abs(actual - expected) < TOLERANCE
-            ), f"SMA at position {idx}: expected {expected}, got {actual}"
+            assert abs(actual - expected) < TOLERANCE, (
+                f"SMA at position {idx}: expected {expected}, got {actual}"
+            )
 
     def test_error_handling(self):
         """Test that appropriate errors are raised."""
@@ -265,9 +265,9 @@ class TestExponentialMovingAverage:
         for idx, expected in EMA_5_REF_VALUES.items():
             actual = result.iloc[idx]
             # Assert that values are relatively close (with higher tolerance)
-            assert (
-                abs(actual - expected) < EMA_TOLERANCE
-            ), f"EMA at position {idx}: expected {expected}, got {actual}"
+            assert abs(actual - expected) < EMA_TOLERANCE, (
+                f"EMA at position {idx}: expected {expected}, got {actual}"
+            )
 
     def test_error_handling(self):
         """Test that appropriate errors are raised."""

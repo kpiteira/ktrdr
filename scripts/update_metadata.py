@@ -5,6 +5,7 @@ Synchronization script to update version and metadata across project files.
 This script ensures that derived configuration files are in sync with
 the central metadata file.
 """
+
 import argparse
 import json
 import sys

@@ -177,7 +177,9 @@ async def get_historical_data(request: HistoricalDataRequest):
 
         if data.empty:
             return HistoricalDataResponse(
-                success=True, data="{}", rows=0  # Empty DataFrame as JSON
+                success=True,
+                data="{}",
+                rows=0,  # Empty DataFrame as JSON
             )
 
         # Convert DataFrame to JSON for HTTP transport
@@ -200,7 +202,7 @@ async def validate_symbol(request: ValidationRequest):
     """
     try:
         logger.info(
-            f"Validating symbol: {request.symbol} " f"timeframes: {request.timeframes}"
+            f"Validating symbol: {request.symbol} timeframes: {request.timeframes}"
         )
 
         validator = await get_symbol_validator()
@@ -257,7 +259,8 @@ async def get_symbol_info(symbol: str):
         # Get full symbol validation with metadata (same as backend used to do)
         # Include a default timeframe to trigger head timestamp fetching
         validation_result = await validator.validate_symbol_with_metadata(
-            symbol=symbol, timeframes=["1h"]  # Default timeframe to get head timestamp
+            symbol=symbol,
+            timeframes=["1h"],  # Default timeframe to get head timestamp
         )
 
         # Convert head timestamps to ISO format strings

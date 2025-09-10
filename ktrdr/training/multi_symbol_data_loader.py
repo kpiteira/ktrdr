@@ -25,9 +25,9 @@ class MultiSymbolDataset(Dataset):
         self.symbol_indices = symbol_indices
 
         # Validate tensor shapes
-        assert (
-            len(features) == len(labels) == len(symbol_indices)
-        ), f"Tensor length mismatch: features={len(features)}, labels={len(labels)}, symbol_indices={len(symbol_indices)}"
+        assert len(features) == len(labels) == len(symbol_indices), (
+            f"Tensor length mismatch: features={len(features)}, labels={len(labels)}, symbol_indices={len(symbol_indices)}"
+        )
 
     def __len__(self) -> int:
         """Return dataset size."""

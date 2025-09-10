@@ -488,14 +488,34 @@ class ServiceOrchestrator(ABC, Generic[T]):
     def get_current_cancellation_token(self) -> Optional[UnifiedCancellationToken]:
         """
         Get the current operation's cancellation token.
-        
+
         This method can be called from within operations running under
         execute_with_cancellation to get access to the cancellation token.
-        
+
         Returns:
             Current unified cancellation token if available, None otherwise
         """
         return self._current_cancellation_token
+
+    def _is_token_cancelled(self, token: Any) -> bool:
+        """
+        Check if a cancellation token is cancelled, handling different token types.
+
+        Args:
+            token: Cancellation token of any type
+
+        Returns:
+            True if token indicates cancellation, False otherwise
+        """
+        if hasattr(token, "is_cancelled_requested"):
+            return token.is_cancelled_requested
+        elif hasattr(token, "is_set"):
+            return token.is_set()
+        elif hasattr(token, "is_cancelled"):
+            return token.is_cancelled()
+        elif hasattr(token, "cancelled"):
+            return token.cancelled()
+        return False
 
     async def execute_with_cancellation(
         self,
@@ -526,7 +546,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
         logger.debug(f"Starting {operation_name} with unified cancellation support")
 
         # Check if token is already cancelled before starting
-        if cancellation_token and cancellation_token.is_cancelled_requested:
+        if cancellation_token and self._is_token_cancelled(cancellation_token):
             logger.info(f"Operation {operation_name} cancelled before start")
             raise asyncio.CancelledError(f"Operation {operation_name} was cancelled")
 
@@ -536,15 +556,13 @@ class ServiceOrchestrator(ABC, Generic[T]):
 
         try:
             # If a modern cancellation token is provided, use it directly
-            if cancellation_token and hasattr(cancellation_token, 'operation_id'):
+            if cancellation_token and hasattr(cancellation_token, "operation_id"):
                 # This is already our unified cancellation token
                 async def wrapped_operation(token):
                     return await operation
 
                 return await coordinator.execute_with_cancellation(
-                    operation_id,
-                    wrapped_operation,
-                    operation_name
+                    operation_id, wrapped_operation, operation_name
                 )
 
             # For backward compatibility with old-style tokens or no token
@@ -555,10 +573,11 @@ class ServiceOrchestrator(ABC, Generic[T]):
 
             # If legacy token provided, create a bridge
             if cancellation_token:
+
                 async def legacy_bridge_check():
                     """Bridge legacy cancellation tokens to unified system."""
                     while not unified_token.is_cancelled():
-                        if cancellation_token.is_cancelled_requested:
+                        if self._is_token_cancelled(cancellation_token):
                             unified_token.cancel("Legacy token cancellation")
                             break
                         await asyncio.sleep(check_interval)
@@ -582,9 +601,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
                             pass
 
             result = await coordinator.execute_with_cancellation(
-                operation_id,
-                bridged_operation,
-                operation_name
+                operation_id, bridged_operation, operation_name
             )
 
             logger.debug(f"Completed {operation_name}")
@@ -593,7 +610,9 @@ class ServiceOrchestrator(ABC, Generic[T]):
         except CancellationError as e:
             # Convert unified CancellationError to asyncio.CancelledError for backward compatibility
             logger.info(f"Operation {operation_name} was cancelled: {e.reason}")
-            raise asyncio.CancelledError(f"Operation {operation_name} was cancelled: {e.reason}")
+            raise asyncio.CancelledError(
+                f"Operation {operation_name} was cancelled: {e.reason}"
+            )
         except asyncio.CancelledError:
             logger.info(f"Operation {operation_name} was cancelled")
             raise

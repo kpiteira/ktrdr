@@ -159,7 +159,9 @@ class TestAutomatedIndicatorValidation:
                             ):
                                 assert abs(result.iloc[idx] - expected) <= case.get(
                                     "tolerance", 0.01
-                                ), f"Expected {expected} at position {idx}, got {result.iloc[idx]}"
+                                ), (
+                                    f"Expected {expected} at position {idx}, got {result.iloc[idx]}"
+                                )
                 except Exception as e:
                     pytest.fail(
                         f"{indicator_name} should not raise error for {case['name']}: {e}"
@@ -210,12 +212,12 @@ class TestAutomatedIndicatorValidation:
         result = indicator.compute(data)
 
         # Check basic properties - support both Series and DataFrame (multi-output indicators)
-        assert isinstance(
-            result, (pd.Series, pd.DataFrame)
-        ), f"{indicator_name} should return a pd.Series or pd.DataFrame"
-        assert len(result) == len(
-            data
-        ), f"{indicator_name} output should have same length as input"
+        assert isinstance(result, (pd.Series, pd.DataFrame)), (
+            f"{indicator_name} should return a pd.Series or pd.DataFrame"
+        )
+        assert len(result) == len(data), (
+            f"{indicator_name} output should have same length as input"
+        )
 
         # For DataFrame results (multi-output indicators), check each column
         if isinstance(result, pd.DataFrame):
@@ -226,9 +228,9 @@ class TestAutomatedIndicatorValidation:
                     # Get the position of this index
                     pos = data.index.get_loc(first_valid_idx)
                     # Check that all values after this position are non-NaN
-                    assert not pd.isna(
-                        result[col].iloc[pos:]
-                    ).any(), f"{indicator_name} column {col} has NaN values after warmup period"
+                    assert not pd.isna(result[col].iloc[pos:]).any(), (
+                        f"{indicator_name} column {col} has NaN values after warmup period"
+                    )
         else:
             # For Series results (single-output indicators)
             # Check that NaN values only appear at the beginning (warmup period)
@@ -237,9 +239,7 @@ class TestAutomatedIndicatorValidation:
                 # Get the position of this index
                 pos = data.index.get_loc(first_valid_idx)
                 # Check that all values after this position are non-NaN
-                assert not pd.isna(
-                    result.iloc[pos:]
-                ).any(), (
+                assert not pd.isna(result.iloc[pos:]).any(), (
                     f"{indicator_name} should not have NaN values after warmup period"
                 )
 

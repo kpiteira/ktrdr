@@ -5,6 +5,7 @@ KTRDR API Models Example.
 This script demonstrates how to use the KTRDR API models for creating
 and validating data structures for API requests and responses.
 """
+
 import sys
 from datetime import datetime, timedelta
 from pprint import pprint

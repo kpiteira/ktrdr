@@ -189,9 +189,9 @@ class TestContainerCLIResilience:
         assert len(result.stdout) > 0 or len(result.stderr) > 0
 
         # Should not crash or hang
-        assert (
-            result.elapsed_time < 30.0
-        ), f"IB cleanup too slow: {result.elapsed_time:.2f}s"
+        assert result.elapsed_time < 30.0, (
+            f"IB cleanup too slow: {result.elapsed_time:.2f}s"
+        )
 
         if result.success:
             # Success output should mention cleanup activities
@@ -213,9 +213,9 @@ class TestContainerCLIResilience:
         ], f"Unexpected return code: {result.returncode}"
 
         # Should complete within reasonable time
-        assert (
-            result.elapsed_time < 45.0
-        ), f"IB test too slow: {result.elapsed_time:.2f}s"
+        assert result.elapsed_time < 45.0, (
+            f"IB test too slow: {result.elapsed_time:.2f}s"
+        )
 
         # Output should be meaningful
         output = result.stdout + result.stderr
@@ -236,9 +236,9 @@ class TestContainerCLIResilience:
             found_indicators = [
                 ind for ind in resilience_indicators if ind in output_lower
             ]
-            assert (
-                len(found_indicators) > 0
-            ), f"Expected resilience indicators in output. Found: {found_indicators}"
+            assert len(found_indicators) > 0, (
+                f"Expected resilience indicators in output. Found: {found_indicators}"
+            )
 
 
 @pytest.mark.container_cli
@@ -261,9 +261,9 @@ class TestContainerCLIBasics:
 
         # May succeed or fail depending on implementation
         if result.success:
-            assert re.search(
-                r"\d+\.\d+\.\d+", result.stdout
-            ), "Version should contain version number"
+            assert re.search(r"\d+\.\d+\.\d+", result.stdout), (
+                "Version should contain version number"
+            )
 
     def test_cli_commands_list(self, cli_runner):
         """Test listing available CLI commands."""
@@ -273,9 +273,9 @@ class TestContainerCLIBasics:
         expected_command_groups = ["data", "ib", "strategies", "indicators"]
 
         for cmd_group in expected_command_groups:
-            assert (
-                cmd_group in result.stdout
-            ), f"Command group '{cmd_group}' not found in help output"
+            assert cmd_group in result.stdout, (
+                f"Command group '{cmd_group}' not found in help output"
+            )
 
 
 @pytest.mark.container_cli
@@ -328,9 +328,9 @@ class TestContainerIBCLICommands:
 
         # Verbose mode should produce more output
         if result.success:
-            assert (
-                len(result.stdout) > 50
-            ), "Verbose mode should produce substantial output"
+            assert len(result.stdout) > 50, (
+                "Verbose mode should produce substantial output"
+            )
 
 
 @pytest.mark.container_cli
@@ -446,9 +446,9 @@ class TestContainerCLIPerformance:
             result = cli_runner.run_command(cmd_args)
 
             # Should respond quickly
-            assert (
-                result.elapsed_time < 10.0
-            ), f"Command {cmd_args} too slow: {result.elapsed_time:.2f}s"
+            assert result.elapsed_time < 10.0, (
+                f"Command {cmd_args} too slow: {result.elapsed_time:.2f}s"
+            )
 
     def test_cli_memory_usage(self, cli_runner):
         """Test CLI commands don't consume excessive memory."""
@@ -477,9 +477,9 @@ class TestContainerCLIIntegration:
 
         # Should not fail due to config issues
         if not result.success:
-            assert (
-                "config" not in result.stderr.lower()
-            ), "CLI should not have config access issues"
+            assert "config" not in result.stderr.lower(), (
+                "CLI should not have config access issues"
+            )
 
     def test_cli_data_directory_access(self, cli_runner):
         """Test that CLI can access data directory."""
@@ -493,12 +493,12 @@ class TestContainerCLIIntegration:
         # Should not fail due to data directory access issues
         if not result.success:
             error_text = result.stderr.lower()
-            assert (
-                "permission" not in error_text
-            ), "CLI should have data directory access"
-            assert (
-                "not found" in error_text or "no data" in result.stdout.lower()
-            ), "Expected data not found error"
+            assert "permission" not in error_text, (
+                "CLI should have data directory access"
+            )
+            assert "not found" in error_text or "no data" in result.stdout.lower(), (
+                "Expected data not found error"
+            )
 
     def test_cli_ib_integration(self, cli_runner):
         """Test CLI integration with IB components."""

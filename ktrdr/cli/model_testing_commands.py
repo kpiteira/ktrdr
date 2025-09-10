@@ -158,13 +158,13 @@ def test_model_signals(
             console.print("\n📊 Summary Statistics:")
             console.print(f"   Total decisions: {len(valid_decisions)}")
             console.print(
-                f"   HOLD signals: {hold_count} ({hold_count/len(valid_decisions)*100:.1f}%)"
+                f"   HOLD signals: {hold_count} ({hold_count / len(valid_decisions) * 100:.1f}%)"
             )
             console.print(
-                f"   BUY signals: {buy_count} ({buy_count/len(valid_decisions)*100:.1f}%)"
+                f"   BUY signals: {buy_count} ({buy_count / len(valid_decisions) * 100:.1f}%)"
             )
             console.print(
-                f"   SELL signals: {sell_count} ({sell_count/len(valid_decisions)*100:.1f}%)"
+                f"   SELL signals: {sell_count} ({sell_count / len(valid_decisions) * 100:.1f}%)"
             )
             console.print(f"   Average confidence: {avg_confidence:.3f}")
 

@@ -156,7 +156,7 @@ class PerformanceTracker:
             # CRITICAL DEBUG: Check for impossible drawdown values
             if self.current_drawdown > 1.0:
                 logger.error(
-                    f"🚨 IMPOSSIBLE DRAWDOWN: {self.current_drawdown:.4f} ({self.current_drawdown*100:.1f}%)"
+                    f"🚨 IMPOSSIBLE DRAWDOWN: {self.current_drawdown:.4f} ({self.current_drawdown * 100:.1f}%)"
                 )
                 logger.error(f"   Peak equity: ${self.peak_equity:,.2f}")
                 logger.error(f"   Current portfolio: ${portfolio_value:,.2f}")
@@ -172,7 +172,7 @@ class PerformanceTracker:
                 and self.current_drawdown > 0.1
             ):
                 logger.warning(
-                    f"📉 New max drawdown: {self.max_drawdown:.4f} ({self.max_drawdown*100:.1f}%) at portfolio ${portfolio_value:,.2f}"
+                    f"📉 New max drawdown: {self.max_drawdown:.4f} ({self.max_drawdown * 100:.1f}%) at portfolio ${portfolio_value:,.2f}"
                 )
 
         self.last_equity = portfolio_value
@@ -305,7 +305,7 @@ class PerformanceTracker:
         logger.info(f"   self.peak_equity: ${self.peak_equity:,.2f}")
         logger.info(f"   max_drawdown_abs: ${max_drawdown_abs:,.2f}")
         logger.info(
-            f"   max_drawdown_pct: {max_drawdown_pct:.6f} ({max_drawdown_pct*100:.2f}%)"
+            f"   max_drawdown_pct: {max_drawdown_pct:.6f} ({max_drawdown_pct * 100:.2f}%)"
         )
 
         if max_drawdown_pct > 1.0:

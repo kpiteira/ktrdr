@@ -184,6 +184,8 @@ class TestIndicatorCalculateRequest:
         """Test that empty indicators list raises validation error."""
         with pytest.raises(ValidationError) as exc_info:
             IndicatorCalculateRequest(
-                symbol="AAPL", timeframe="1d", indicators=[]  # Empty list
+                symbol="AAPL",
+                timeframe="1d",
+                indicators=[],  # Empty list
             )
         assert "indicators" in str(exc_info.value)

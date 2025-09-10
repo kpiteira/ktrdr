@@ -100,7 +100,9 @@ class EnhancedCLIProgressDisplay:
 
         # Add the main task
         self.current_task = self.progress.add_task(
-            description=title, total=100, details=""  # We'll work with percentages
+            description=title,
+            total=100,
+            details="",  # We'll work with percentages
         )
 
     def update_progress(self, progress_state: ProgressState) -> None:

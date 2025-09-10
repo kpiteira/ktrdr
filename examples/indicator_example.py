@@ -114,26 +114,26 @@ def main():
             ax1.plot(
                 df.index,
                 df[sma_short.get_column_name()],
-                label=f'SMA({sma_short.params["period"]})',
+                label=f"SMA({sma_short.params['period']})",
                 color="blue",
             )
             ax1.plot(
                 df.index,
                 df[sma_long.get_column_name()],
-                label=f'SMA({sma_long.params["period"]})',
+                label=f"SMA({sma_long.params['period']})",
                 color="green",
             )
             ax1.plot(
                 df.index,
                 df[ema_short.get_column_name()],
-                label=f'EMA({ema_short.params["period"]})',
+                label=f"EMA({ema_short.params['period']})",
                 color="red",
                 linestyle="--",
             )
             ax1.plot(
                 df.index,
                 df[ema_long.get_column_name()],
-                label=f'EMA({ema_long.params["period"]})',
+                label=f"EMA({ema_long.params['period']})",
                 color="purple",
                 linestyle="--",
             )
@@ -146,7 +146,7 @@ def main():
             ax2.plot(
                 df.index,
                 df[rsi.get_column_name()],
-                label=f'RSI({rsi.params["period"]})',
+                label=f"RSI({rsi.params['period']})",
                 color="orange",
             )
             ax2.axhline(y=70, color="r", linestyle="--", alpha=0.3)

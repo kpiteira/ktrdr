@@ -455,7 +455,9 @@ class ADXIndicator(BaseIndicator):
                 "volatility": (
                     "High"
                     if adx_max - adx_min > 30
-                    else "Medium" if adx_max - adx_min > 15 else "Low"
+                    else "Medium"
+                    if adx_max - adx_min > 15
+                    else "Low"
                 ),
             },
             "directional_analysis": {
@@ -466,7 +468,9 @@ class ADXIndicator(BaseIndicator):
                 "directional_strength": (
                     "Strong"
                     if abs(current_spread) > 10
-                    else "Moderate" if abs(current_spread) > 5 else "Weak"
+                    else "Moderate"
+                    if abs(current_spread) > 5
+                    else "Weak"
                 ),
             },
             "signals": signals_active,

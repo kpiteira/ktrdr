@@ -316,13 +316,13 @@ class AsyncDataLoader:
                 # Check for cancellation
                 if job.is_cancelled_requested:
                     logger.info(
-                        f"🛑 Job {job.job_id} cancelled at segment {i+1}/{job.progress.total_segments}"
+                        f"🛑 Job {job.job_id} cancelled at segment {i + 1}/{job.progress.total_segments}"
                     )
                     raise asyncio.CancelledError()
 
                 # Update current segment
                 job.progress.current_segment = (
-                    f"Segment {i+1}/{job.progress.total_segments}"
+                    f"Segment {i + 1}/{job.progress.total_segments}"
                 )
 
                 # Simulate segment loading delay

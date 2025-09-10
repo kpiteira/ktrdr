@@ -71,7 +71,7 @@ class ProgressInfo:
 class DataLoadingJob:
     """
     Data loading job with unified cancellation support.
-    
+
     Renamed from DataJob, enhanced with ServiceOrchestrator integration.
     Implements CancellationToken protocol for unified cancellation patterns.
     """
@@ -140,7 +140,7 @@ class DataLoadingJob:
 class DataJobManager:
     """
     Data job manager with ServiceOrchestrator integration.
-    
+
     Renamed from AsyncDataLoader, enhanced with:
     - Unified cancellation system integration
     - ServiceOrchestrator patterns
@@ -194,7 +194,9 @@ class DataJobManager:
         )
 
         self.jobs[job_id] = job
-        logger.info(f"🆕 Created data loading job {job_id}: {symbol} {timeframe} ({mode})")
+        logger.info(
+            f"🆕 Created data loading job {job_id}: {symbol} {timeframe} ({mode})"
+        )
         return job_id
 
     async def start_job(
@@ -227,7 +229,7 @@ class DataJobManager:
         # Create and start the async task with unified cancellation
         task = asyncio.create_task(
             self._execute_job_with_cancellation(job, progress_callback),
-            name=f"data_load_{job_id}"
+            name=f"data_load_{job_id}",
         )
         job._task = task
         self.active_jobs[job_id] = task
@@ -242,7 +244,7 @@ class DataJobManager:
     ):
         """
         Execute a data loading job with unified cancellation patterns.
-        
+
         This method integrates with ServiceOrchestrator cancellation while
         maintaining all the job management functionality.
 
@@ -254,7 +256,9 @@ class DataJobManager:
         job.started_at = TimestampManager.now_utc()
 
         try:
-            logger.info(f"📊 Executing data loading job {job.job_id}: {job.symbol} {job.timeframe}")
+            logger.info(
+                f"📊 Executing data loading job {job.job_id}: {job.symbol} {job.timeframe}"
+            )
 
             # Check for cancellation before starting
             job.check_cancellation("job start")
@@ -282,7 +286,9 @@ class DataJobManager:
             else:
                 job.error_message = "No data returned"
                 job.status = JobStatus.FAILED
-                logger.warning(f"❌ Data loading job {job.job_id} failed: No data returned")
+                logger.warning(
+                    f"❌ Data loading job {job.job_id} failed: No data returned"
+                )
 
         except asyncio.CancelledError:
             job.status = JobStatus.CANCELLED
@@ -347,11 +353,11 @@ class DataJobManager:
 
             for i in range(job.progress.total_segments):
                 # Check for cancellation using unified system
-                job.check_cancellation(f"segment {i+1}/{job.progress.total_segments}")
+                job.check_cancellation(f"segment {i + 1}/{job.progress.total_segments}")
 
                 # Update current segment
                 job.progress.current_segment = (
-                    f"Segment {i+1}/{job.progress.total_segments}"
+                    f"Segment {i + 1}/{job.progress.total_segments}"
                 )
 
                 # Simulate segment loading delay
@@ -367,9 +373,7 @@ class DataJobManager:
             # Actually load the data with unified cancellation token
             loop = asyncio.get_event_loop()
             result_df = await loop.run_in_executor(
-                None,
-                self._sync_load_data_with_cancellation,
-                job
+                None, self._sync_load_data_with_cancellation, job
             )
 
             return result_df
@@ -378,7 +382,9 @@ class DataJobManager:
             job.progress.errors.append(str(e))
             raise
 
-    def _sync_load_data_with_cancellation(self, job: DataLoadingJob) -> Optional[pd.DataFrame]:
+    def _sync_load_data_with_cancellation(
+        self, job: DataLoadingJob
+    ) -> Optional[pd.DataFrame]:
         """
         Synchronous data loading with unified cancellation support.
 
@@ -485,10 +491,10 @@ class DataJobManager:
     def cancel_all_jobs(self, reason: str = "All jobs cancelled") -> int:
         """
         Cancel all active jobs using unified cancellation.
-        
+
         Args:
             reason: Cancellation reason
-            
+
         Returns:
             Number of jobs cancelled
         """
@@ -538,4 +544,3 @@ def get_data_job_manager() -> DataJobManager:
     if _data_job_manager is None:
         _data_job_manager = DataJobManager()
     return _data_job_manager
-

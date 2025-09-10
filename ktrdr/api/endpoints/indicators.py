@@ -242,9 +242,11 @@ async def calculate_indicators(
     """
     try:
         # Call the service to calculate indicators
-        dates, indicator_values, metadata = (
-            await indicator_service.calculate_indicators(request)
-        )
+        (
+            dates,
+            indicator_values,
+            metadata,
+        ) = await indicator_service.calculate_indicators(request)
 
         # Apply pagination
         total_items = len(dates)

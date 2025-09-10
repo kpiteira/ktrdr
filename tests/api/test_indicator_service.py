@@ -74,9 +74,11 @@ async def test_calculate_indicators_with_valid_request(
         )
 
         # Calculate indicators
-        dates, indicator_values, metadata = (
-            await indicator_service.calculate_indicators(request)
-        )
+        (
+            dates,
+            indicator_values,
+            metadata,
+        ) = await indicator_service.calculate_indicators(request)
 
         # Verify results
         assert dates is not None
@@ -163,7 +165,6 @@ async def test_health_check_healthy(indicator_service):
             "MACDIndicator": MagicMock(),
         },
     ):
-
         result = await indicator_service.health_check()
 
         # Verify result structure
@@ -185,7 +186,6 @@ async def test_health_check_error(indicator_service):
         new_callable=PropertyMock,
         side_effect=Exception("Test error"),
     ):
-
         result = await indicator_service.health_check()
 
         # Verify result structure

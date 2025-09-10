@@ -285,9 +285,9 @@ class ExhaustiveTestRunner:
 
 ## Test Results Summary
 
-**Overall Result:** {'✅ PASSED' if test_results['success'] else '❌ FAILED'}
-**Execution Time:** {test_results['elapsed']:.2f} seconds
-**Return Code:** {test_results['returncode']}
+**Overall Result:** {"✅ PASSED" if test_results["success"] else "❌ FAILED"}
+**Execution Time:** {test_results["elapsed"]:.2f} seconds
+**Return Code:** {test_results["returncode"]}
 
 ### Test Statistics
 """
@@ -298,15 +298,15 @@ class ExhaustiveTestRunner:
             stats = test_results["test_results"]
 
             report += f"""
-- **Total Tests:** {stats.get('total_tests', 0)}
-- **Passed:** {stats.get('passed', 0)} ✅
-- **Failed:** {stats.get('failed', 0)} {'❌' if stats.get('failed', 0) > 0 else '✅'}
-- **Skipped:** {stats.get('skipped', 0)}
-- **Errors:** {stats.get('errors', 0)} {'❌' if stats.get('errors', 0) > 0 else '✅'}
-- **Warnings:** {stats.get('warnings', 0)}
+- **Total Tests:** {stats.get("total_tests", 0)}
+- **Passed:** {stats.get("passed", 0)} ✅
+- **Failed:** {stats.get("failed", 0)} {"❌" if stats.get("failed", 0) > 0 else "✅"}
+- **Skipped:** {stats.get("skipped", 0)}
+- **Errors:** {stats.get("errors", 0)} {"❌" if stats.get("errors", 0) > 0 else "✅"}
+- **Warnings:** {stats.get("warnings", 0)}
 
 ### Critical Checks
-- **Async/Coroutine Errors:** {'❌ DETECTED' if stats.get('async_errors_detected') else '✅ NONE DETECTED'}
+- **Async/Coroutine Errors:** {"❌ DETECTED" if stats.get("async_errors_detected") else "✅ NONE DETECTED"}
 """
 
             if stats.get("failed_tests"):
@@ -320,7 +320,7 @@ class ExhaustiveTestRunner:
             report += f"""
 ### Error Details
 ```
-{test_results['error']}
+{test_results["error"]}
 ```
 """
 

@@ -233,7 +233,7 @@ class IbLimitsRegistry:
         range_list = cls.CLIENT_ID_RANGES[purpose]
         if index >= len(range_list):
             raise ValueError(
-                f"Index {index} out of range for {purpose} (max: {len(range_list)-1})"
+                f"Index {index} out of range for {purpose} (max: {len(range_list) - 1})"
             )
 
         return range_list[index]

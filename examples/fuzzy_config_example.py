@@ -3,7 +3,6 @@
 Example script demonstrating how to load and validate fuzzy set configurations.
 """
 
-
 import yaml
 
 from ktrdr.errors import ConfigurationError

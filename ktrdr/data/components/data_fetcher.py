@@ -183,7 +183,7 @@ class DataFetcher:
         for i, segment in enumerate(segments):
             # Check for cancellation before processing each segment using extracted method
             self._check_cancellation(
-                cancellation_token, f"segment {i+1}/{len(segments)} processing"
+                cancellation_token, f"segment {i + 1}/{len(segments)} processing"
             )
 
             # Update progress within the current step (step 6: 10% to 96%)
@@ -203,7 +203,7 @@ class DataFetcher:
                 successful_results.append(result)
                 if progress_manager:
                     logger.info(
-                        f"✅ Segment {i+1}/{len(segments)}: Successfully fetched {len(result)} bars"
+                        f"✅ Segment {i + 1}/{len(segments)}: Successfully fetched {len(result)} bars"
                     )
 
         # Final progress update within step

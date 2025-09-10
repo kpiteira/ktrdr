@@ -96,9 +96,7 @@ class DataLoadingOrchestrator:
                     # Use DataManager's async method runner (handles AsyncHostService context properly)
                     async def validate_async():
                         # Pass cancellation_token to the host service context
-                        self.data_manager.external_provider._current_cancellation_token = (
-                            cancellation_token
-                        )
+                        self.data_manager.external_provider._current_cancellation_token = cancellation_token
                         return await self.data_manager.external_provider.validate_and_get_metadata(
                             symbol, [timeframe]
                         )
@@ -463,10 +461,10 @@ class DataLoadingOrchestrator:
         for i, df in enumerate(all_data_frames):
             if not df.empty:
                 logger.debug(
-                    f"📊 Data source {i+1}: {len(df)} bars from {df.index.min()} to {df.index.max()}"
+                    f"📊 Data source {i + 1}: {len(df)} bars from {df.index.min()} to {df.index.max()}"
                 )
             else:
-                logger.debug(f"📊 Data source {i+1}: EMPTY DataFrame")
+                logger.debug(f"📊 Data source {i + 1}: EMPTY DataFrame")
 
         combined_data = pd.concat(all_data_frames, ignore_index=False)
         logger.info(f"🔗 After concat: {len(combined_data)} total bars")

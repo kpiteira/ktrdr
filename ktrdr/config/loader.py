@@ -47,7 +47,9 @@ class ConfigLoader:
     @ErrorHandler.with_error_handling(logger=logger)
     @log_entry_exit(logger=logger)
     def load(
-        self, config_path: Union[str, Path], model_type: type[T] = KtrdrConfig  # type: ignore
+        self,
+        config_path: Union[str, Path],
+        model_type: type[T] = KtrdrConfig,  # type: ignore
     ) -> T:
         """
         Load a YAML configuration file and validate it against a Pydantic model.
@@ -351,12 +353,12 @@ class ConfigLoader:
                 indicator_counts[tf_config.timeframe] = count
                 total_indicators += count
 
-            validation_results["timeframe_summary"][
-                "indicator_counts"
-            ] = indicator_counts
-            validation_results["timeframe_summary"][
-                "total_indicators"
-            ] = total_indicators
+            validation_results["timeframe_summary"]["indicator_counts"] = (
+                indicator_counts
+            )
+            validation_results["timeframe_summary"]["total_indicators"] = (
+                total_indicators
+            )
 
             # Performance warnings
             if total_indicators > 50:

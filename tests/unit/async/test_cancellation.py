@@ -3,7 +3,7 @@ Tests for KTRDR unified cancellation system.
 
 This test suite validates:
 - CancellationToken protocol implementation
-- Thread-safe cancellation state management  
+- Thread-safe cancellation state management
 - Integration with ServiceOrchestrator patterns
 - Compatibility with existing AsyncDataLoader patterns
 """
@@ -32,9 +32,9 @@ class TestCancellationToken:
         token = AsyncCancellationToken("test-op")
 
         # Verify protocol methods exist
-        assert hasattr(token, 'is_cancelled')
-        assert hasattr(token, 'cancel')
-        assert hasattr(token, 'wait_for_cancellation')
+        assert hasattr(token, "is_cancelled")
+        assert hasattr(token, "cancel")
+        assert hasattr(token, "wait_for_cancellation")
         assert callable(token.is_cancelled)
         assert callable(token.cancel)
         assert callable(token.wait_for_cancellation)
@@ -223,7 +223,9 @@ class TestCancellationCoordinator:
         assert token1.is_cancelled()
         assert token2.is_cancelled()
         assert token3.is_cancelled()
-        assert all(token.reason == "Global shutdown" for token in [token1, token2, token3])
+        assert all(
+            token.reason == "Global shutdown" for token in [token1, token2, token3]
+        )
 
     def test_cleanup_after_operation(self):
         """Test that tokens are cleaned up after operations complete."""
@@ -239,6 +241,7 @@ class TestCancellationCoordinator:
     @pytest.mark.asyncio
     async def test_execute_with_cancellation_success(self):
         """Test successful execution with cancellation support."""
+
         async def test_operation(token: CancellationToken):
             # Simulate some work with cancellation checks
             for i in range(5):
@@ -247,9 +250,7 @@ class TestCancellationCoordinator:
             return "success"
 
         result = await self.coordinator.execute_with_cancellation(
-            "test-op",
-            test_operation,
-            "test operation"
+            "test-op", test_operation, "test operation"
         )
 
         assert result == "success"
@@ -257,6 +258,7 @@ class TestCancellationCoordinator:
     @pytest.mark.asyncio
     async def test_execute_with_cancellation_cancelled(self):
         """Test execution that gets cancelled."""
+
         async def test_operation(token: CancellationToken):
             # Simulate work that gets cancelled partway through
             for i in range(10):
@@ -268,14 +270,13 @@ class TestCancellationCoordinator:
 
         with pytest.raises(CancellationError):
             await self.coordinator.execute_with_cancellation(
-                "test-op",
-                test_operation,
-                "test operation"
+                "test-op", test_operation, "test operation"
             )
 
     @pytest.mark.asyncio
     async def test_execute_with_global_cancellation(self):
         """Test execution with global cancellation."""
+
         async def test_operation(token: CancellationToken):
             for i in range(10):
                 token.check_cancellation(f"step {i}")
@@ -291,9 +292,7 @@ class TestCancellationCoordinator:
 
         with pytest.raises(CancellationError):
             await self.coordinator.execute_with_cancellation(
-                "test-op",
-                test_operation,
-                "test operation"
+                "test-op", test_operation, "test operation"
             )
 
         await cancel_task
@@ -309,7 +308,7 @@ class TestServiceOrchestratorIntegration:
         token = AsyncCancellationToken("test-op")
 
         # Check that our token has the required protocol method
-        assert hasattr(token, 'is_cancelled_requested')
+        assert hasattr(token, "is_cancelled_requested")
 
         # Test the compatibility
         assert not token.is_cancelled_requested
@@ -320,9 +319,12 @@ class TestServiceOrchestratorIntegration:
     @pytest.mark.asyncio
     async def test_service_orchestrator_execute_with_cancellation_integration(self):
         """Test integration with ServiceOrchestrator.execute_with_cancellation."""
+
         # Create a mock ServiceOrchestrator
         class MockServiceOrchestrator:
-            async def execute_with_cancellation(self, operation, cancellation_token=None, **kwargs):
+            async def execute_with_cancellation(
+                self, operation, cancellation_token=None, **kwargs
+            ):
                 # This mimics ServiceOrchestrator behavior
                 if cancellation_token and cancellation_token.is_cancelled_requested:
                     raise asyncio.CancelledError("Operation was cancelled")
@@ -338,8 +340,7 @@ class TestServiceOrchestratorIntegration:
 
         # Should work when not cancelled
         result = await orchestrator.execute_with_cancellation(
-            test_operation(),
-            cancellation_token=token
+            test_operation(), cancellation_token=token
         )
         assert result == "success"
 
@@ -347,8 +348,7 @@ class TestServiceOrchestratorIntegration:
         token.cancel()
         with pytest.raises(asyncio.CancelledError):
             await orchestrator.execute_with_cancellation(
-                test_operation(),
-                cancellation_token=token
+                test_operation(), cancellation_token=token
             )
 
 
@@ -360,7 +360,7 @@ class TestAsyncDataLoaderCompatibility:
         token = AsyncCancellationToken("test-job")
 
         # Should support the same interface as DataLoadingJob
-        assert hasattr(token, 'is_cancelled_requested')
+        assert hasattr(token, "is_cancelled_requested")
         assert not token.is_cancelled_requested
 
         token.cancel("Job cancelled")
@@ -372,6 +372,7 @@ class TestAsyncDataLoaderCompatibility:
 
         # Mock progress callback like in AsyncDataLoader
         progress_calls = []
+
         def progress_callback(progress_info):
             progress_calls.append(progress_info)
 
@@ -387,9 +388,7 @@ class TestAsyncDataLoaderCompatibility:
         # This pattern should work (mimicking AsyncDataLoader usage)
         async def run_test():
             return await coordinator.execute_with_cancellation(
-                "test-op",
-                test_operation_with_progress,
-                "test operation with progress"
+                "test-op", test_operation_with_progress, "test operation with progress"
             )
 
         # Run the test

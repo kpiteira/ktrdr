@@ -305,7 +305,9 @@ class CMFIndicator(BaseIndicator):
             trend_direction = (
                 "Improving"
                 if recent_trend > 0
-                else "Deteriorating" if recent_trend < 0 else "Stable"
+                else "Deteriorating"
+                if recent_trend < 0
+                else "Stable"
             )
         else:
             recent_trend = 0
@@ -368,7 +370,9 @@ class CMFIndicator(BaseIndicator):
         volatility_state = (
             "High"
             if cmf_volatility > 0.15
-            else "Medium" if cmf_volatility > 0.05 else "Low"
+            else "Medium"
+            if cmf_volatility > 0.05
+            else "Low"
         )
 
         # Time since extremes
@@ -398,7 +402,9 @@ class CMFIndicator(BaseIndicator):
                 "intensity": (
                     "Extreme"
                     if abs(current_cmf) > 0.25
-                    else "Strong" if abs(current_cmf) > 0.1 else "Moderate"
+                    else "Strong"
+                    if abs(current_cmf) > 0.1
+                    else "Moderate"
                 ),
             },
             "trend_analysis": {

@@ -85,7 +85,6 @@ class TestRequestLoggingMiddleware:
             patch("ktrdr.api.middleware.logger.error") as mock_logger_error,
             pytest.raises(ValueError),
         ):
-
             await self.middleware.dispatch(self.request, error_call_next)
 
             # Verify error_call_next was called with the request

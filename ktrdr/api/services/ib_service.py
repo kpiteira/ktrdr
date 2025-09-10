@@ -95,7 +95,6 @@ class IbService:
 
         # Load host service configuration to determine connection method
         try:
-
             # Load host service configuration
             try:
                 config_loader = ConfigLoader()
