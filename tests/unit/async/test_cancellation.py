@@ -422,6 +422,314 @@ class TestFactoryFunctions:
         assert token.is_cancelled()
 
 
+class TestCLIIntegration:
+    """Test CLI KeyboardInterrupt integration (Task 2.3 requirements)."""
+
+    def test_setup_cli_cancellation_handler_imports(self):
+        """Test that CLI cancellation handler can be imported and setup."""
+        from ktrdr.async_infrastructure.cancellation import (
+            setup_cli_cancellation_handler,
+        )
+
+        # Should not raise on import/call
+        # We can't test signal handling in unit tests, but we can test it doesn't crash
+        setup_cli_cancellation_handler()
+
+    @pytest.mark.asyncio
+    async def test_global_cancellation_affects_new_operations(self):
+        """Test that global cancellation prevents new operations from starting."""
+        from ktrdr.async_infrastructure.cancellation import (
+            cancel_all_operations,
+            get_global_coordinator,
+        )
+
+        # Cancel all operations globally
+        cancel_all_operations("Test global cancellation")
+
+        coordinator = get_global_coordinator()
+
+        # New operations should be cancelled before they start
+        with pytest.raises(CancellationError):
+            await coordinator.execute_with_cancellation(
+                "test-op", lambda token: asyncio.sleep(0.1), "test operation"
+            )
+
+    @pytest.mark.asyncio
+    async def test_coordinator_bridges_service_orchestrator_patterns(self):
+        """Test integration with ServiceOrchestrator execute_with_cancellation patterns."""
+        coordinator = CancellationCoordinator()
+
+        # Should work with async operations that take cancellation tokens
+        async def mock_service_operation(cancellation_token):
+            # Simulate ServiceOrchestrator-style cancellation checking
+            if (
+                hasattr(cancellation_token, "is_cancelled")
+                and cancellation_token.is_cancelled()
+            ):
+                raise asyncio.CancelledError("Operation was cancelled")
+            return "success"
+
+        result = await coordinator.execute_with_cancellation(
+            "service-op-1", mock_service_operation, "Mock service operation"
+        )
+
+        assert result == "success"
+
+    @pytest.mark.asyncio
+    async def test_cli_cancellation_cancels_data_operations(self):
+        """Test that CLI cancellation properly cancels data operations."""
+        from ktrdr.async_infrastructure.cancellation import (
+            cancel_all_operations,
+            get_global_coordinator,
+        )
+
+        # Use the global coordinator to ensure cancel_all_operations affects the same instance
+        coordinator = get_global_coordinator()
+
+        # Reset global state for clean test
+        from ktrdr.async_infrastructure.cancellation import CancellationState
+
+        coordinator._global_state = CancellationState()
+
+        # Start a mock data operation
+        operation_cancelled = False
+
+        async def mock_data_operation(cancellation_token):
+            nonlocal operation_cancelled
+            try:
+                # Simulate data loading with cancellation checking
+                for i in range(100):
+                    if cancellation_token.is_cancelled():
+                        operation_cancelled = True
+                        raise CancellationError(f"Data operation cancelled at step {i}")
+                    await asyncio.sleep(0.01)  # Simulate work
+                return "data_loaded"
+            except CancellationError:
+                operation_cancelled = True
+                raise
+
+        # Start operation and cancel after a short time
+        async def cancel_after_delay():
+            await asyncio.sleep(0.05)
+            cancel_all_operations("CLI KeyboardInterrupt simulation")
+
+        # Run both concurrently
+        cancel_task = asyncio.create_task(cancel_after_delay())
+
+        with pytest.raises(CancellationError):
+            await coordinator.execute_with_cancellation(
+                "data-op-1", mock_data_operation, "Mock data operation"
+            )
+
+        await cancel_task
+        assert operation_cancelled, "Data operation should have been cancelled"
+
+
+class TestServiceOrchestratorBridge:
+    """Test bridging with ServiceOrchestrator patterns (Task 2.3 requirements)."""
+
+    @pytest.mark.asyncio
+    async def test_unified_cancellation_with_service_orchestrator(self):
+        """Test unified cancellation working with ServiceOrchestrator-style operations."""
+        coordinator = CancellationCoordinator()
+
+        # Mock ServiceOrchestrator-style operation that checks cancellation
+        async def service_style_operation(cancellation_token):
+            # ServiceOrchestrator pattern: check is_cancelled_requested property
+            for _i in range(10):
+                if hasattr(cancellation_token, "is_cancelled_requested"):
+                    if cancellation_token.is_cancelled_requested:
+                        raise asyncio.CancelledError(
+                            "ServiceOrchestrator style cancellation"
+                        )
+                elif hasattr(cancellation_token, "is_cancelled"):
+                    if cancellation_token.is_cancelled():
+                        raise asyncio.CancelledError("Unified style cancellation")
+                await asyncio.sleep(0.01)
+            return "operation_complete"
+
+        # Test normal completion
+        result = await coordinator.execute_with_cancellation(
+            "service-op", service_style_operation, "Service operation"
+        )
+        assert result == "operation_complete"
+
+        # Test cancellation by cancelling during execution
+        async def cancel_during_execution():
+            await asyncio.sleep(0.02)  # Let operation start
+            coordinator.cancel_operation("service-op-cancelled", "Test cancellation")
+
+        cancel_task = asyncio.create_task(cancel_during_execution())
+
+        with pytest.raises((CancellationError, asyncio.CancelledError)):
+            await coordinator.execute_with_cancellation(
+                "service-op-cancelled", service_style_operation, "Service operation"
+            )
+
+        await cancel_task
+
+    @pytest.mark.asyncio
+    async def test_async_data_loader_pattern_compatibility(self):
+        """Test compatibility with AsyncDataLoader job cancellation patterns."""
+        coordinator = CancellationCoordinator()
+
+        # Mock AsyncDataLoader-style job execution
+        async def data_job_operation(cancellation_token):
+            # AsyncDataLoader pattern: periodic cancellation checking during segments
+            segments = 5
+            for segment in range(segments):
+                # Check cancellation at segment boundaries (coarse-grained)
+                if cancellation_token.is_cancelled():
+                    raise CancellationError(f"Data job cancelled at segment {segment}")
+
+                # Simulate segment processing with fine-grained checks
+                for i in range(100):
+                    if i % 20 == 0:  # Check every 20 iterations (fine-grained)
+                        if cancellation_token.is_cancelled():
+                            raise CancellationError(
+                                f"Data job cancelled at segment {segment}, item {i}"
+                            )
+                    await asyncio.sleep(0.001)  # Simulate processing
+
+            return f"processed_{segments}_segments"
+
+        # Test successful completion
+        result = await coordinator.execute_with_cancellation(
+            "data-job-1", data_job_operation, "Data loading job"
+        )
+        assert result == "processed_5_segments"
+
+        # Test cancellation during processing
+        async def cancel_during_processing():
+            await asyncio.sleep(0.02)  # Cancel partway through
+            coordinator.cancel_operation("data-job-2", "Test cancellation")
+
+        cancel_task = asyncio.create_task(cancel_during_processing())
+
+        with pytest.raises(CancellationError) as exc_info:
+            await coordinator.execute_with_cancellation(
+                "data-job-2", data_job_operation, "Data loading job"
+            )
+
+        await cancel_task
+        assert "cancelled at segment" in str(exc_info.value)
+
+
+class TestUnifiedCancellationInterface:
+    """Test the unified cancellation interface (Task 2.3 requirements)."""
+
+    def test_cancellation_token_protocol_consistency(self):
+        """Test CancellationToken protocol works across all domains."""
+        # Reset global state to ensure clean test
+        from ktrdr.async_infrastructure.cancellation import _global_coordinator, CancellationState
+        if _global_coordinator is not None:
+            _global_coordinator._global_state = CancellationState()
+        
+        # Create tokens from different sources with unique operation IDs
+        coordinator = (
+            CancellationCoordinator()
+        )  # Use local coordinator to avoid global state
+        token1 = AsyncCancellationToken("protocol-test-domain1-op-unique")
+        token2 = coordinator.create_token("protocol-test-domain2-op-unique")
+        token3 = create_cancellation_token("protocol-test-domain3-op-unique")
+
+        # All should implement the same interface
+        for i, token in enumerate([token1, token2, token3], 1):
+            assert hasattr(token, "is_cancelled")
+            assert hasattr(token, "cancel")
+            assert hasattr(token, "wait_for_cancellation")
+            assert hasattr(
+                token, "is_cancelled_requested"
+            )  # ServiceOrchestrator compatibility
+
+            # Initial state should be consistent
+            assert (
+                not token.is_cancelled()
+            ), f"Token {i} should not be cancelled initially"
+            assert (
+                not token.is_cancelled_requested
+            ), f"Token {i} should not be cancelled_requested initially"
+
+            # Cancellation should work consistently
+            token.cancel(f"Test cancellation {i}")
+            assert token.is_cancelled(), f"Token {i} should be cancelled after cancel()"
+            assert (
+                token.is_cancelled_requested
+            ), f"Token {i} should be cancelled_requested after cancel()"
+
+    @pytest.mark.asyncio
+    async def test_thread_safe_cancellation_management(self):
+        """Test cancellation state management is thread-safe."""
+        coordinator = CancellationCoordinator()
+        token = coordinator.create_token("thread-test-op")
+
+        cancellation_results = []
+
+        def cancel_from_thread(thread_id):
+            try:
+                token.cancel(f"Cancelled from thread {thread_id}")
+                cancellation_results.append(f"thread-{thread_id}-success")
+            except Exception as e:
+                cancellation_results.append(f"thread-{thread_id}-error-{e}")
+
+        # Start multiple threads trying to cancel
+        threads = []
+        for i in range(5):
+            thread = threading.Thread(target=cancel_from_thread, args=(i,))
+            threads.append(thread)
+            thread.start()
+
+        # Wait for all threads
+        for thread in threads:
+            thread.join()
+
+        # Token should be cancelled
+        assert token.is_cancelled()
+
+        # All threads should have completed successfully (no race conditions)
+        assert len(cancellation_results) == 5
+        assert all("success" in result for result in cancellation_results)
+
+    @pytest.mark.asyncio
+    async def test_cancellation_context_preservation(self):
+        """Test cancellation context and reasons are preserved."""
+        coordinator = CancellationCoordinator()
+
+        detailed_reason = (
+            "User requested cancellation via CLI (Ctrl+C) during data loading"
+        )
+
+        async def operation_with_context(cancellation_token):
+            # Operation that checks for cancellation during execution
+            for _i in range(20):  # Give time for cancellation to happen
+                if cancellation_token.is_cancelled():
+                    raise CancellationError(
+                        "Operation cancelled with detailed context",
+                        operation_id="contextual-op",
+                        reason=cancellation_token.reason,
+                    )
+                await asyncio.sleep(0.01)
+            return "completed"
+
+        # Cancel with detailed context during execution
+        async def cancel_with_context():
+            await asyncio.sleep(0.02)  # Let operation start
+            coordinator.cancel_operation("contextual-op", detailed_reason)
+
+        cancel_task = asyncio.create_task(cancel_with_context())
+
+        with pytest.raises(CancellationError) as exc_info:
+            await coordinator.execute_with_cancellation(
+                "contextual-op", operation_with_context, "Operation with context"
+            )
+
+        await cancel_task
+        assert (
+            detailed_reason in str(exc_info.value)
+            or exc_info.value.reason == detailed_reason
+        )
+
+
 class TestErrorHandling:
     """Test error handling and edge cases."""
 
