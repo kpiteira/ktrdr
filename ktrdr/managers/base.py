@@ -21,16 +21,18 @@ from typing import (
     TypeVar,
 )
 
+from ktrdr.async_infrastructure.cancellation import (
+    CancellationError,
+    create_cancellation_token,
+    get_global_coordinator,
+)
+from ktrdr.async_infrastructure.cancellation import (
+    CancellationToken as UnifiedCancellationToken,
+)
 from ktrdr.async_infrastructure.progress import (
     GenericProgressManager,
     GenericProgressState,
     ProgressRenderer,
-)
-from ktrdr.async_infrastructure.cancellation import (
-    get_global_coordinator,
-    create_cancellation_token,
-    CancellationError,
-    CancellationToken as UnifiedCancellationToken,
 )
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
@@ -161,7 +163,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
             renderer=self._progress_renderer
         )
         self._current_operation_progress: Optional[GenericProgressManager] = None
-        
+
         # Initialize unified cancellation infrastructure
         self._current_cancellation_token: Optional[UnifiedCancellationToken] = None
 
@@ -538,19 +540,19 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 # This is already our unified cancellation token
                 async def wrapped_operation(token):
                     return await operation
-                    
+
                 return await coordinator.execute_with_cancellation(
                     operation_id,
                     wrapped_operation,
                     operation_name
                 )
-            
+
             # For backward compatibility with old-style tokens or no token
             unified_token = create_cancellation_token(operation_id, coordinator)
-            
+
             # Store current token for access by operations
             self._current_cancellation_token = unified_token
-            
+
             # If legacy token provided, create a bridge
             if cancellation_token:
                 async def legacy_bridge_check():
@@ -560,7 +562,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
                             unified_token.cancel("Legacy token cancellation")
                             break
                         await asyncio.sleep(check_interval)
-                
+
                 # Start the bridge task
                 bridge_task = asyncio.create_task(legacy_bridge_check())
             else:
@@ -578,16 +580,16 @@ class ServiceOrchestrator(ABC, Generic[T]):
                             await bridge_task
                         except asyncio.CancelledError:
                             pass
-            
+
             result = await coordinator.execute_with_cancellation(
                 operation_id,
                 bridged_operation,
                 operation_name
             )
-            
+
             logger.debug(f"Completed {operation_name}")
             return result
-            
+
         except CancellationError as e:
             # Convert unified CancellationError to asyncio.CancelledError for backward compatibility
             logger.info(f"Operation {operation_name} was cancelled: {e.reason}")
