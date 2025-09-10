@@ -58,7 +58,7 @@ class DataFetcher:
 
         # Use unified cancellation protocol only - no legacy patterns
         try:
-            return cancellation_token.is_cancelled()
+            is_cancelled = cancellation_token.is_cancelled()
         except Exception as e:
             logger.warning(f"Error checking cancellation token: {e}")
             return False
