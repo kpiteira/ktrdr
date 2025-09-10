@@ -473,7 +473,7 @@ async def _load_data_async(
                 # Create enhanced progress display
                 from datetime import datetime
 
-                from ktrdr.data.components.progress_manager import ProgressState
+                from ktrdr.async_infrastructure.progress import GenericProgressState
 
                 enhanced_callback, display = create_enhanced_progress_callback(
                     console=console, show_details=True
@@ -530,18 +530,16 @@ async def _load_data_async(
                             for error in errors[-2:]:  # Show last 2 errors
                                 console.print(f"[red]❌ {error}[/red]")
 
-                        # Create ProgressState for enhanced display
-                        progress_state = ProgressState(
+                        # Create GenericProgressState for enhanced display
+                        progress_state = GenericProgressState(
                             operation_id=operation_id,
                             current_step=progress_info.get("steps_completed", 0),
                             total_steps=progress_info.get("steps_total", 10),
                             message=current_step,
                             percentage=progress_percentage,
                             start_time=datetime.now(),  # Approximate - could be improved
-                            steps_completed=progress_info.get("steps_completed", 0),
-                            steps_total=progress_info.get("steps_total", 10),
                             items_processed=progress_info.get("items_processed", 0),
-                            expected_items=progress_info.get("items_total", None),
+                            total_items=progress_info.get("items_total", None),
                         )
 
                         # Start operation on first callback

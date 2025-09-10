@@ -24,7 +24,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from ktrdr.data.components.progress_manager import ProgressState
+from ktrdr.async_infrastructure.progress import GenericProgressState
 
 logger = logging.getLogger(__name__)
 
@@ -105,12 +105,12 @@ class EnhancedCLIProgressDisplay:
             details="",  # We'll work with percentages
         )
 
-    def update_progress(self, progress_state: ProgressState) -> None:
+    def update_progress(self, progress_state: GenericProgressState) -> None:
         """
         Update progress display with enhanced state information.
 
         Args:
-            progress_state: Current progress state from ProgressManager
+            progress_state: Current progress state from GenericProgressManager
         """
         if not self.progress or self.current_task is None:
             return
@@ -221,32 +221,32 @@ class EnhancedCLIProgressDisplay:
 
         return " ".join(title_parts)
 
-    def _create_step_description(self, progress_state: ProgressState) -> str:
+    def _create_step_description(self, progress_state: GenericProgressState) -> str:
         """Create enhanced step description with context."""
         base_description = progress_state.message
 
         # Add current step information if available
-        if progress_state.current_step_name:
-            step_info = f"[{progress_state.current_step}/{progress_state.total_steps}] {progress_state.current_step_name}"
-            if progress_state.step_detail:
-                step_info += f": {progress_state.step_detail}"
+        if progress_state.context.get("current_step_name"):
+            step_info = f"[{progress_state.current_step}/{progress_state.total_steps}] {progress_state.context['current_step_name']}"
+            if progress_state.context.get("step_detail"):
+                step_info += f": {progress_state.context['step_detail']}"
             return step_info
 
         return base_description
 
-    def _create_details_text(self, progress_state: ProgressState) -> str:
+    def _create_details_text(self, progress_state: GenericProgressState) -> str:
         """Create details text with additional information."""
         details_parts = []
 
         # Add current item detail if available
-        if progress_state.current_item_detail:
-            details_parts.append(progress_state.current_item_detail)
+        if progress_state.context.get("current_item_detail"):
+            details_parts.append(progress_state.context["current_item_detail"])
 
         # Add items processed information
         if progress_state.items_processed > 0:
-            if progress_state.expected_items:
+            if progress_state.total_items:
                 details_parts.append(
-                    f"{progress_state.items_processed}/{progress_state.expected_items} items"
+                    f"{progress_state.items_processed}/{progress_state.total_items} items"
                 )
             else:
                 details_parts.append(f"{progress_state.items_processed} items")
@@ -304,7 +304,7 @@ def create_enhanced_progress_callback(
     display = EnhancedCLIProgressDisplay(console, show_details)
     operation_started = False
 
-    def enhanced_progress_callback(progress_state: ProgressState) -> None:
+    def enhanced_progress_callback(progress_state: GenericProgressState) -> None:
         nonlocal operation_started
 
         # Start operation on first callback
@@ -312,7 +312,7 @@ def create_enhanced_progress_callback(
             display.start_operation(
                 progress_state.operation_id,
                 progress_state.total_steps,
-                progress_state.operation_context,
+                progress_state.context.get("operation_context", progress_state.context),
             )
             operation_started = True
 
@@ -328,7 +328,7 @@ def create_enhanced_progress_callback(
     return enhanced_progress_callback, display
 
 
-def simple_enhanced_progress_callback(progress_state: ProgressState) -> None:
+def simple_enhanced_progress_callback(progress_state: GenericProgressState) -> None:
     """
     Simple enhanced progress callback that can be used directly.
 
