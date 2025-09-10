@@ -27,12 +27,12 @@ class TestRealCLICommands:
         )
 
         # Verify no runtime warnings (the bug we just fixed)
-        assert (
-            "RuntimeWarning" not in result.stderr
-        ), f"Runtime warning detected: {result.stderr}"
-        assert (
-            "coroutine" not in result.stderr
-        ), f"Coroutine error detected: {result.stderr}"
+        assert "RuntimeWarning" not in result.stderr, (
+            f"Runtime warning detected: {result.stderr}"
+        )
+        assert "coroutine" not in result.stderr, (
+            f"Coroutine error detected: {result.stderr}"
+        )
 
         # Verify successful execution
         assert result.returncode == 0, f"Command failed: {result.stderr}"
@@ -69,9 +69,9 @@ class TestRealCLICommands:
         )
 
         # Verify no runtime warnings (the exact bug we fixed)
-        assert (
-            "RuntimeWarning" not in result.stderr
-        ), f"Runtime warning detected: {result.stderr}"
+        assert "RuntimeWarning" not in result.stderr, (
+            f"Runtime warning detected: {result.stderr}"
+        )
         assert (
             "coroutine 'acquire_ib_connection' was never awaited" not in result.stderr
         )
@@ -82,9 +82,9 @@ class TestRealCLICommands:
         # Should have either loaded data or provided informative message
         stdout_lower = result.stdout.lower()
         success_indicators = ["successfully loaded", "bars", "completed", "duration:"]
-        assert any(
-            indicator in stdout_lower for indicator in success_indicators
-        ), f"No success indicators found in output: {result.stdout}"
+        assert any(indicator in stdout_lower for indicator in success_indicators), (
+            f"No success indicators found in output: {result.stdout}"
+        )
 
     def test_real_data_load_command_full_mode(
         self, clean_test_symbols, test_date_ranges

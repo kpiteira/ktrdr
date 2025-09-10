@@ -510,8 +510,24 @@ class ServiceOrchestrator(ABC, Generic[T]):
         """
         if token is None:
             return False
-        # Use only the unified CancellationToken protocol interface
-        return token.is_cancelled()
+
+        # Try unified CancellationToken protocol first (preferred)
+        try:
+            # This will work for AsyncCancellationToken and other protocol implementations
+            result = token.is_cancelled()
+            # Ensure we got a boolean, not a mock or other object
+            if isinstance(result, bool):
+                return result
+        except (AttributeError, TypeError):
+            pass
+
+        # Backward compatibility: try legacy property interface using try/except
+        try:
+            return token.is_cancelled_requested
+        except AttributeError:
+            pass
+
+        return False
 
     async def execute_with_cancellation(
         self,

@@ -50,9 +50,7 @@ class TestDataManagerAsyncBoundaries:
         # Act & Assert - Test that we can call the sync method without nested event loop issues
         # After refactor, this uses the proper _run_async_method utility
         with patch.object(data_manager, "_ensure_data_fetcher") as mock_fetcher:
-            mock_fetcher.return_value.__aenter__.return_value.fetch_bulk_data_async.return_value = (
-                mock_fetch_async()
-            )
+            mock_fetcher.return_value.__aenter__.return_value.fetch_bulk_data_async.return_value = mock_fetch_async()
 
             # This call should work properly with the new sync wrapper utility
             result = data_manager._fetch_segments_with_component("AAPL", "1h", segments)
@@ -146,13 +144,13 @@ class TestDataManagerAsyncBoundaries:
 
         for method_name in expected_async_methods:
             # This will currently fail because these async methods don't exist
-            assert hasattr(
-                data_manager, method_name
-            ), f"Missing async method: {method_name}"
+            assert hasattr(data_manager, method_name), (
+                f"Missing async method: {method_name}"
+            )
             method = getattr(data_manager, method_name)
-            assert asyncio.iscoroutinefunction(
-                method
-            ), f"Method {method_name} should be async"
+            assert asyncio.iscoroutinefunction(method), (
+                f"Method {method_name} should be async"
+            )
 
     @pytest.mark.asyncio
     async def test_async_internal_method_chains(self, data_manager):
@@ -225,14 +223,14 @@ class TestDataManagerAsyncBoundaries:
         expected_calls = 1  # Only in _run_async_method
 
         # Verify proper architecture: minimal, centralized asyncio.run() usage
-        assert (
-            actual_calls == expected_calls
-        ), f"Found {actual_calls} actual asyncio.run() calls in DataManager - expected {expected_calls} (centralized in _run_async_method)"
+        assert actual_calls == expected_calls, (
+            f"Found {actual_calls} actual asyncio.run() calls in DataManager - expected {expected_calls} (centralized in _run_async_method)"
+        )
 
         # Verify the utility method exists
-        assert hasattr(
-            data_manager, "_run_async_method"
-        ), "Missing _run_async_method utility"
+        assert hasattr(data_manager, "_run_async_method"), (
+            "Missing _run_async_method utility"
+        )
 
     def test_performance_improvement_potential(self, data_manager):
         """

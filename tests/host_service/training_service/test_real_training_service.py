@@ -94,9 +94,9 @@ class TestRealTrainingService:
 
                 # Should have some kind of job identifier or status
                 expected_fields = ["job_id", "task_id", "status", "message"]
-                assert any(
-                    field in result_data for field in expected_fields
-                ), f"Response missing expected fields: {result_data}"
+                assert any(field in result_data for field in expected_fields), (
+                    f"Response missing expected fields: {result_data}"
+                )
 
             except httpx.RequestError as e:
                 pytest.skip(f"Training service train endpoint not accessible: {e}")
@@ -168,9 +168,9 @@ class TestRealTrainingService:
 
                 # Should have prediction results
                 expected_fields = ["prediction", "predictions", "result", "output"]
-                assert any(
-                    field in result_data for field in expected_fields
-                ), f"Response missing prediction fields: {result_data}"
+                assert any(field in result_data for field in expected_fields), (
+                    f"Response missing prediction fields: {result_data}"
+                )
 
             except httpx.RequestError as e:
                 pytest.skip(f"Training service inference endpoint not accessible: {e}")
@@ -199,9 +199,9 @@ class TestTrainingServicePerformance:
                 response_time = time.time() - start_time
 
                 # Health check should respond within 2 seconds
-                assert (
-                    response_time < 2.0
-                ), f"Health check too slow: {response_time:.2f}s"
+                assert response_time < 2.0, (
+                    f"Health check too slow: {response_time:.2f}s"
+                )
                 assert response.status_code == 200
 
             except httpx.RequestError as e:

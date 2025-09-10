@@ -260,9 +260,9 @@ class TestAroonIndicator:
             recent_down = valid_down.iloc[-3:]
 
             # Aroon Down should be high (new lows recently)
-            assert (
-                recent_down > 70
-            ).any(), "Aroon Down should be high during downtrend"
+            assert (recent_down > 70).any(), (
+                "Aroon Down should be high during downtrend"
+            )
             # Aroon Up should be relatively low (no recent highs)
             assert (recent_up < 30).any(), "Aroon Up should be low during downtrend"
 
@@ -290,12 +290,12 @@ class TestAroonIndicator:
             avg_down = valid_down.mean()
 
             # During consolidation, neither should dominate consistently
-            assert (
-                20 <= avg_up <= 80
-            ), "Aroon Up should be moderate during consolidation"
-            assert (
-                20 <= avg_down <= 80
-            ), "Aroon Down should be moderate during consolidation"
+            assert 20 <= avg_up <= 80, (
+                "Aroon Up should be moderate during consolidation"
+            )
+            assert 20 <= avg_down <= 80, (
+                "Aroon Down should be moderate during consolidation"
+            )
 
     def test_aroon_oscillator_calculation(self):
         """Test Aroon Oscillator calculation (Up - Down)."""

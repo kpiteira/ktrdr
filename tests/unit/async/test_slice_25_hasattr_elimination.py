@@ -17,7 +17,7 @@ from ktrdr.async_infrastructure.cancellation import (
     CancellationToken,
     create_cancellation_token,
 )
-from ktrdr.managers.async_host_service import AsyncHostService
+from ktrdr.managers.async_host_service import AsyncHostService, HostServiceConfig
 from ktrdr.managers.base import ServiceOrchestrator
 
 
@@ -115,9 +115,9 @@ class TestServiceOrchestratorCancellationProtocol:
         )
 
         # Verify it uses the protocol interface
-        assert (
-            "is_cancelled" in source
-        ), "ServiceOrchestrator._is_token_cancelled must use CancellationToken.is_cancelled"
+        assert "is_cancelled" in source, (
+            "ServiceOrchestrator._is_token_cancelled must use CancellationToken.is_cancelled"
+        )
 
     def test_cancellation_token_type_annotation_enforced(self):
         """Test that methods properly type-annotate CancellationToken parameters."""
@@ -156,7 +156,7 @@ class TestAsyncHostServiceCancellationProtocol:
             def get_service_name(self):
                 return "test"
 
-        service = MockAsyncHostService()
+        service = MockAsyncHostService(config=HostServiceConfig(base_url="http://test"))
 
         # Create a mock CancellationToken that implements the protocol
         mock_token = Mock(spec=CancellationToken)
@@ -192,7 +192,7 @@ class TestAsyncHostServiceCancellationProtocol:
             def get_service_name(self):
                 return "test"
 
-        service = MockAsyncHostService()
+        service = MockAsyncHostService(config=HostServiceConfig(base_url="http://test"))
 
         # Create cancelled token
         token = create_cancellation_token("test-op")
@@ -216,7 +216,7 @@ class TestAsyncHostServiceCancellationProtocol:
             def get_service_name(self):
                 return "test"
 
-        service = MockAsyncHostService()
+        service = MockAsyncHostService(config=HostServiceConfig(base_url="http://test"))
 
         # None token should return False (no cancellation)
         result = service._check_cancellation(None, "test operation")
@@ -241,9 +241,9 @@ class TestAsyncHostServiceCancellationProtocol:
         )
 
         # Verify it uses the protocol interface
-        assert (
-            "is_cancelled" in source
-        ), "AsyncHostService._check_cancellation must use CancellationToken.is_cancelled"
+        assert "is_cancelled" in source, (
+            "AsyncHostService._check_cancellation must use CancellationToken.is_cancelled"
+        )
 
 
 class TestCancellationProtocolCompliance:
@@ -290,7 +290,7 @@ class TestCancellationProtocolCompliance:
 
         # Both services should handle the same token type
         orchestrator = MockServiceOrchestrator()
-        MockAsyncHostService()
+        MockAsyncHostService(config=HostServiceConfig(base_url="http://test"))
 
         # Test uncancelled state
         assert orchestrator._is_token_cancelled(token) is False
@@ -326,12 +326,12 @@ class TestCancellationProtocolCompliance:
         ]
 
         for pattern in legacy_patterns:
-            assert (
-                pattern not in base_source
-            ), f"ServiceOrchestrator still contains legacy pattern: {pattern}"
-            assert (
-                pattern not in host_source
-            ), f"AsyncHostService still contains legacy pattern: {pattern}"
+            assert pattern not in base_source, (
+                f"ServiceOrchestrator still contains legacy pattern: {pattern}"
+            )
+            assert pattern not in host_source, (
+                f"AsyncHostService still contains legacy pattern: {pattern}"
+            )
 
 
 class TestCancellationProtocolBackwardCompatibility:
@@ -367,6 +367,6 @@ class TestCancellationProtocolBackwardCompatibility:
         ]
 
         for method in required_methods:
-            assert (
-                method in protocol_methods
-            ), f"CancellationToken protocol missing required method: {method}"
+            assert method in protocol_methods, (
+                f"CancellationToken protocol missing required method: {method}"
+            )

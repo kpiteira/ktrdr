@@ -244,8 +244,10 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
                 )
             else:
                 # Use direct IB connection (existing behavior)
-                validation_result = await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
-                    symbol, timeframes
+                validation_result = (
+                    await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
+                        symbol, timeframes
+                    )
                 )
 
             self._update_stats()
@@ -449,8 +451,10 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
                 )
             else:
                 # Use direct IB connection (existing behavior)
-                validation_result = await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
-                    symbol, []
+                validation_result = (
+                    await self.symbol_validator.validate_symbol_with_metadata(  # type: ignore[union-attr]
+                        symbol, []
+                    )
                 )
 
             self._update_stats()
@@ -502,8 +506,10 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
                 return None
             else:
                 # Use direct IB connection (existing behavior)
-                head_timestamp_iso = await self.symbol_validator.fetch_head_timestamp_async(  # type: ignore[union-attr]
-                    symbol, timeframe
+                head_timestamp_iso = (
+                    await self.symbol_validator.fetch_head_timestamp_async(  # type: ignore[union-attr]
+                        symbol, timeframe
+                    )
                 )
 
                 if head_timestamp_iso:

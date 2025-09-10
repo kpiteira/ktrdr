@@ -647,19 +647,19 @@ class TestUnifiedCancellationInterface:
             )  # ServiceOrchestrator compatibility
 
             # Initial state should be consistent
-            assert (
-                not token.is_cancelled()
-            ), f"Token {i} should not be cancelled initially"
-            assert (
-                not token.is_cancelled_requested
-            ), f"Token {i} should not be cancelled_requested initially"
+            assert not token.is_cancelled(), (
+                f"Token {i} should not be cancelled initially"
+            )
+            assert not token.is_cancelled_requested, (
+                f"Token {i} should not be cancelled_requested initially"
+            )
 
             # Cancellation should work consistently
             token.cancel(f"Test cancellation {i}")
             assert token.is_cancelled(), f"Token {i} should be cancelled after cancel()"
-            assert (
-                token.is_cancelled_requested
-            ), f"Token {i} should be cancelled_requested after cancel()"
+            assert token.is_cancelled_requested, (
+                f"Token {i} should be cancelled_requested after cancel()"
+            )
 
     @pytest.mark.asyncio
     async def test_thread_safe_cancellation_management(self):

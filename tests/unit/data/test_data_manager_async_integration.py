@@ -394,9 +394,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
                     expected_context = context
                     break
 
-            assert (
-                found_expected_context
-            ), f"Expected context not found in calls: {mock_instance.start_operation.call_args_list}"
+            assert found_expected_context, (
+                f"Expected context not found in calls: {mock_instance.start_operation.call_args_list}"
+            )
             # Check operation_type if it exists in the context
             if expected_context and "operation_type" in expected_context:
                 assert expected_context.get("operation_type") == "data_load"

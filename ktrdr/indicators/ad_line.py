@@ -310,7 +310,9 @@ class ADLineIndicator(BaseIndicator):
             trend_direction = (
                 "Accumulation"
                 if recent_slope > 0
-                else "Distribution" if recent_slope < 0 else "Neutral"
+                else "Distribution"
+                if recent_slope < 0
+                else "Neutral"
             )
         else:
             recent_slope = 0

@@ -89,20 +89,20 @@ class TestProgressManagerStepProgression:
         # Verify smooth progression (no big jumps except for completion)
         for i in range(1, len(percentages) - 1):  # Skip the final 100% jump
             jump = percentages[i] - percentages[i - 1]
-            assert (
-                jump >= 0
-            ), f"Progress should not go backwards: {percentages[i - 1]}% -> {percentages[i]}%"
-            assert (
-                jump <= 40
-            ), f"Progress jump too large: {percentages[i - 1]}% -> {percentages[i]}% (jump: {jump}%)"
+            assert jump >= 0, (
+                f"Progress should not go backwards: {percentages[i - 1]}% -> {percentages[i]}%"
+            )
+            assert jump <= 40, (
+                f"Progress jump too large: {percentages[i - 1]}% -> {percentages[i]}% (jump: {jump}%)"
+            )
 
         # Verify steps_total is consistent
         steps_totals = [
             call["steps_total"] for call in progress_calls if call["steps_total"] > 0
         ]
-        assert all(
-            total == 10 for total in steps_totals
-        ), "steps_total should always be 10"
+        assert all(total == 10 for total in steps_totals), (
+            "steps_total should always be 10"
+        )
 
         print(f"✅ Received {len(progress_calls)} progress updates")
         print(f"✅ Step range: {min(step_numbers)} to {max(step_numbers)}")
@@ -147,9 +147,9 @@ class TestProgressManagerStepProgression:
             assert len(step_calls) > 0, f"Should have progress call for step {step_num}"
 
             actual_pct = step_calls[0]["percentage"]
-            assert (
-                abs(actual_pct - expected_pct) < 1.0
-            ), f"Step {step_num}: expected ~{expected_pct}%, got {actual_pct}%"
+            assert abs(actual_pct - expected_pct) < 1.0, (
+                f"Step {step_num}: expected ~{expected_pct}%, got {actual_pct}%"
+            )
 
     def test_segment_sub_progress(self):
         """Test that segment fetching shows detailed sub-progress."""
@@ -203,6 +203,6 @@ class TestProgressManagerStepProgression:
             call["percentage"] for call in progress_calls if call["detail"]
         ]
         for pct in step6_percentages:
-            assert (
-                50.0 <= pct <= 60.0
-            ), f"Step 6 sub-progress should be 50-60%, got {pct}%"
+            assert 50.0 <= pct <= 60.0, (
+                f"Step 6 sub-progress should be 50-60%, got {pct}%"
+            )
