@@ -22,6 +22,7 @@ from typing import (
 )
 
 from ktrdr.async_infrastructure.cancellation import (
+    AsyncCancellationToken,
     CancellationError,
     create_cancellation_token,
     get_global_coordinator,
@@ -497,25 +498,20 @@ class ServiceOrchestrator(ABC, Generic[T]):
         """
         return self._current_cancellation_token
 
-    def _is_token_cancelled(self, token: Any) -> bool:
+    def _is_token_cancelled(self, token: Optional[Any]) -> bool:
         """
-        Check if a cancellation token is cancelled, handling different token types.
+        Check if a cancellation token is cancelled using unified cancellation protocol.
 
         Args:
-            token: Cancellation token of any type
+            token: Unified cancellation token implementing CancellationToken protocol
 
         Returns:
             True if token indicates cancellation, False otherwise
         """
-        if hasattr(token, "is_cancelled_requested"):
-            return token.is_cancelled_requested
-        elif hasattr(token, "is_set"):
-            return token.is_set()
-        elif hasattr(token, "is_cancelled"):
-            return token.is_cancelled()
-        elif hasattr(token, "cancelled"):
-            return token.cancelled()
-        return False
+        if token is None:
+            return False
+        # Use only the unified CancellationToken protocol interface
+        return token.is_cancelled()
 
     async def execute_with_cancellation(
         self,
@@ -555,8 +551,10 @@ class ServiceOrchestrator(ABC, Generic[T]):
         operation_id = f"{self._get_service_name()}-{operation_name}-{id(operation)}"
 
         try:
-            # If a modern cancellation token is provided, use it directly
-            if cancellation_token and hasattr(cancellation_token, "operation_id"):
+            # If a unified cancellation token is provided, use it directly
+            if cancellation_token and isinstance(
+                cancellation_token, AsyncCancellationToken
+            ):
                 # This is already our unified cancellation token
                 async def wrapped_operation(token):
                     return await operation

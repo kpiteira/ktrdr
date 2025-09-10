@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
 
-from ktrdr.managers.base import CancellationToken
+from ktrdr.async_infrastructure.cancellation import CancellationToken
 
 if TYPE_CHECKING:
     pass
@@ -182,10 +182,10 @@ class AsyncHostService(ABC):
         operation_description: str = "operation",
     ) -> bool:
         """
-        Check if cancellation has been requested.
+        Check if cancellation has been requested using unified cancellation protocol.
 
         Args:
-            cancellation_token: Token to check for cancellation
+            cancellation_token: Unified cancellation token implementing CancellationToken protocol
             operation_description: Description of current operation for logging
 
         Returns:
@@ -197,14 +197,8 @@ class AsyncHostService(ABC):
         if cancellation_token is None:
             return False
 
-        # Check if token has cancellation method
-        is_cancelled = False
-        if hasattr(cancellation_token, "is_cancelled_requested"):
-            is_cancelled = cancellation_token.is_cancelled_requested
-        elif hasattr(cancellation_token, "is_set"):
-            is_cancelled = cancellation_token.is_set()
-        elif hasattr(cancellation_token, "cancelled"):
-            is_cancelled = cancellation_token.cancelled()
+        # Use only the unified CancellationToken protocol interface
+        is_cancelled = cancellation_token.is_cancelled()
 
         if is_cancelled:
             logger.info(f"🛑 Cancellation requested during {operation_description}")
