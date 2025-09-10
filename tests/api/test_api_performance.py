@@ -214,17 +214,17 @@ def test_data_load_endpoint_performance(client, mock_data_service):
 
     # Generate and validate performance report
     report = metrics.report(threshold_ms=100)
-    assert report["passed"], (
-        f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
-    )
+    assert report[
+        "passed"
+    ], f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
 
     # Additional assertions to ensure consistent response quality
-    assert all(status == 200 for status in report["status_codes"]), (
-        "Not all requests were successful"
-    )
-    assert report["response_time"]["stdev_ms"] < 50, (
-        "Response time variation is too high"
-    )
+    assert all(
+        status == 200 for status in report["status_codes"]
+    ), "Not all requests were successful"
+    assert (
+        report["response_time"]["stdev_ms"] < 50
+    ), "Response time variation is too high"
 
 
 @pytest.mark.performance
@@ -266,15 +266,15 @@ def test_indicator_calculate_endpoint_performance(client, mock_indicator_service
 
     # Generate and validate performance report
     report = metrics.report(threshold_ms=150)
-    assert report["passed"], (
-        f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
-    )
+    assert report[
+        "passed"
+    ], f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
 
     # Skip HTTP status code validation for performance tests
     # assert all(status == 200 for status in report["status_codes"]), "Not all requests were successful"
-    assert report["response_time"]["stdev_ms"] < 50, (
-        "Response time variation is too high"
-    )
+    assert (
+        report["response_time"]["stdev_ms"] < 50
+    ), "Response time variation is too high"
 
 
 @pytest.mark.performance
@@ -322,17 +322,17 @@ def test_fuzzy_data_endpoint_performance(client, mock_fuzzy_service):
 
     # Generate and validate performance report
     report = metrics.report(threshold_ms=200)
-    assert report["passed"], (
-        f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
-    )
+    assert report[
+        "passed"
+    ], f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
 
     # Additional assertions to ensure consistent response quality
-    assert all(status == 200 for status in report["status_codes"]), (
-        "Not all requests were successful"
-    )
-    assert report["response_time"]["stdev_ms"] < 70, (
-        "Response time variation is too high"
-    )
+    assert all(
+        status == 200 for status in report["status_codes"]
+    ), "Not all requests were successful"
+    assert (
+        report["response_time"]["stdev_ms"] < 70
+    ), "Response time variation is too high"
 
 
 @pytest.mark.performance
@@ -376,17 +376,17 @@ def test_large_data_load_performance(client, mock_data_service):
 
     # Generate and validate performance report
     report = metrics.report(threshold_ms=250)  # Higher threshold for large data
-    assert report["passed"], (
-        f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
-    )
+    assert report[
+        "passed"
+    ], f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
 
     # Additional assertions to ensure consistent response quality
-    assert all(status == 200 for status in report["status_codes"]), (
-        "Not all requests were successful"
-    )
-    assert report["response_time"]["stdev_ms"] < 100, (
-        "Response time variation is too high"
-    )
+    assert all(
+        status == 200 for status in report["status_codes"]
+    ), "Not all requests were successful"
+    assert (
+        report["response_time"]["stdev_ms"] < 100
+    ), "Response time variation is too high"
 
 
 @pytest.mark.performance
@@ -446,15 +446,15 @@ def test_complex_multi_indicator_performance(client, mock_indicator_service):
     report = metrics.report(
         threshold_ms=300
     )  # Higher threshold for complex calculation
-    assert report["passed"], (
-        f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
-    )
+    assert report[
+        "passed"
+    ], f"Performance test failed: {report['response_time']['avg_ms']} ms > {report['threshold_ms']} ms"
 
     # Skip HTTP status code validation for performance tests
     # assert all(status == 200 for status in report["status_codes"]), "Not all requests were successful"
-    assert report["resource_usage"]["avg_memory_change_mb"] < 50, (
-        "Memory usage is too high"
-    )
+    assert (
+        report["resource_usage"]["avg_memory_change_mb"] < 50
+    ), "Memory usage is too high"
 
 
 @pytest.mark.performance
@@ -522,12 +522,12 @@ def test_concurrent_request_handling(client, mock_data_service):
 
     # Assertions
     assert len(results) == len(symbols), "Not all concurrent requests completed"
-    assert all(status == 200 for status in status_codes), (
-        "Not all concurrent requests were successful"
-    )
-    assert statistics.mean(response_times) < 500, (
-        "Average concurrent response time is too high"
-    )
+    assert all(
+        status == 200 for status in status_codes
+    ), "Not all concurrent requests were successful"
+    assert (
+        statistics.mean(response_times) < 500
+    ), "Average concurrent response time is too high"
 
 
 # Add this test to identify memory leaks over repeated requests
@@ -599,6 +599,6 @@ def test_memory_usage_stability(client, mock_fuzzy_service):
     # Check if memory usage is stable (allowing for small variations)
     # We consider it stable if the memory growth is less than 10% of initial or 10MB (whichever is greater)
     max_allowed_growth = max(10, initial_memory * 0.1)
-    assert final_memory - initial_memory < max_allowed_growth, (
-        f"Memory usage grew by {final_memory - initial_memory:.2f} MB, which exceeds the threshold of {max_allowed_growth:.2f} MB"
-    )
+    assert (
+        final_memory - initial_memory < max_allowed_growth
+    ), f"Memory usage grew by {final_memory - initial_memory:.2f} MB, which exceeds the threshold of {max_allowed_growth:.2f} MB"

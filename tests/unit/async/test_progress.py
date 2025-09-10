@@ -446,7 +446,7 @@ class TestGenericProgressManagerIntegration:
     def test_time_estimation_engine_integration(self):
         """Test integration with TimeEstimationEngine from existing ProgressManager."""
         # Import existing TimeEstimationEngine
-        from ktrdr.data.components.progress_manager import TimeEstimationEngine
+        from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 
         callback = Mock()
 

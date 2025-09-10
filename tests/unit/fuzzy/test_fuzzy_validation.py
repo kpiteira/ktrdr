@@ -331,9 +331,9 @@ class TestFuzzyNumericalValidation:
             print(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"RSI low membership validation failed: {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"RSI low membership validation failed: {result.failed_points} points"
 
     def test_rsi_medium_membership(self, standard_fuzzy_engine):
         """Test that RSI medium membership values match expected results."""
@@ -350,9 +350,9 @@ class TestFuzzyNumericalValidation:
         if not result.passed:
             print(result.get_failure_details())
 
-        assert result.passed, (
-            f"RSI medium membership validation failed: {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"RSI medium membership validation failed: {result.failed_points} points"
 
     def test_rsi_high_membership(self, standard_fuzzy_engine):
         """Test that RSI high membership values match expected results."""
@@ -369,9 +369,9 @@ class TestFuzzyNumericalValidation:
         if not result.passed:
             print(result.get_failure_details())
 
-        assert result.passed, (
-            f"RSI high membership validation failed: {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"RSI high membership validation failed: {result.failed_points} points"
 
     def test_macd_negative_membership(self, standard_fuzzy_engine):
         """Test that MACD negative membership values match expected results."""
@@ -388,9 +388,9 @@ class TestFuzzyNumericalValidation:
         if not result.passed:
             print(result.get_failure_details())
 
-        assert result.passed, (
-            f"MACD negative membership validation failed: {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"MACD negative membership validation failed: {result.failed_points} points"
 
     def test_macd_neutral_membership(self, standard_fuzzy_engine):
         """Test that MACD neutral membership values match expected results."""
@@ -407,9 +407,9 @@ class TestFuzzyNumericalValidation:
         if not result.passed:
             print(result.get_failure_details())
 
-        assert result.passed, (
-            f"MACD neutral membership validation failed: {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"MACD neutral membership validation failed: {result.failed_points} points"
 
     def test_macd_positive_membership(self, standard_fuzzy_engine):
         """Test that MACD positive membership values match expected results."""
@@ -426,6 +426,6 @@ class TestFuzzyNumericalValidation:
         if not result.passed:
             print(result.get_failure_details())
 
-        assert result.passed, (
-            f"MACD positive membership validation failed: {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"MACD positive membership validation failed: {result.failed_points} points"

@@ -53,9 +53,9 @@ class TestSMAValidation:
             logger.warning(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"SMA(5) failed validation with {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"SMA(5) failed validation with {result.failed_points} points"
 
     def test_sma10_against_reference(self):
         """Test SMA(10) against reference values."""
@@ -78,9 +78,9 @@ class TestSMAValidation:
             logger.warning(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"SMA(10) failed validation with {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"SMA(10) failed validation with {result.failed_points} points"
 
     def test_sma20_against_reference(self):
         """Test SMA(20) against reference values."""
@@ -103,9 +103,9 @@ class TestSMAValidation:
             logger.warning(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"SMA(20) failed validation with {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"SMA(20) failed validation with {result.failed_points} points"
 
     def test_sma_various_parameters(self):
         """Test SMA with various parameters to ensure consistent behavior."""
@@ -128,9 +128,9 @@ class TestSMAValidation:
                 # Volatility (standard deviation) should be lower than the original data
                 original_std = data["close"].std()
                 result_std = result.dropna().std()
-                assert result_std <= original_std * 1.05, (
-                    f"SMA({period}) should reduce volatility"
-                )
+                assert (
+                    result_std <= original_std * 1.05
+                ), f"SMA({period}) should reduce volatility"
 
             # Log report
             report = generate_indicator_report(
@@ -163,9 +163,9 @@ class TestEMAValidation:
             logger.warning(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"EMA(5) failed validation with {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"EMA(5) failed validation with {result.failed_points} points"
 
     def test_ema10_against_reference(self):
         """Test EMA(10) against reference values."""
@@ -188,9 +188,9 @@ class TestEMAValidation:
             logger.warning(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"EMA(10) failed validation with {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"EMA(10) failed validation with {result.failed_points} points"
 
     def test_ema_react_faster_than_sma(self):
         """Test that EMA reacts faster to price changes than SMA."""
@@ -211,14 +211,14 @@ class TestEMAValidation:
 
             # If there's a price drop, EMA should be lower than SMA
             if data["close"].iloc[idx] < data["close"].iloc[idx - 5]:
-                assert ema_result.iloc[idx] < sma_result.iloc[idx], (
-                    f"EMA({period}) should react faster to price drops than SMA({period})"
-                )
+                assert (
+                    ema_result.iloc[idx] < sma_result.iloc[idx]
+                ), f"EMA({period}) should react faster to price drops than SMA({period})"
             # If there's a price rise, EMA should be higher than SMA
             elif data["close"].iloc[idx] > data["close"].iloc[idx - 5]:
-                assert ema_result.iloc[idx] > sma_result.iloc[idx], (
-                    f"EMA({period}) should react faster to price increases than SMA({period})"
-                )
+                assert (
+                    ema_result.iloc[idx] > sma_result.iloc[idx]
+                ), f"EMA({period}) should react faster to price increases than SMA({period})"
 
     def test_ema_adjusted_vs_non_adjusted(self):
         """Test differences between adjusted and non-adjusted EMA."""
@@ -237,9 +237,9 @@ class TestEMAValidation:
         # The difference should decrease over time
         first_diff = abs(result_adj.iloc[10] - result_non_adj.iloc[10])
         last_diff = abs(result_adj.iloc[-1] - result_non_adj.iloc[-1])
-        assert last_diff < first_diff, (
-            "Adjusted and non-adjusted EMA should converge over time"
-        )
+        assert (
+            last_diff < first_diff
+        ), "Adjusted and non-adjusted EMA should converge over time"
 
 
 class TestRSIValidation:
@@ -266,9 +266,9 @@ class TestRSIValidation:
             logger.warning(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"RSI(14) failed validation with {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"RSI(14) failed validation with {result.failed_points} points"
 
     def test_rsi7_against_reference(self):
         """Test RSI(7) against reference values."""
@@ -291,9 +291,9 @@ class TestRSIValidation:
             logger.warning(result.get_failure_details())
 
         # Assert all points pass validation
-        assert result.passed, (
-            f"RSI(7) failed validation with {result.failed_points} points"
-        )
+        assert (
+            result.passed
+        ), f"RSI(7) failed validation with {result.failed_points} points"
 
     def test_rsi_bounded_values(self):
         """Test that RSI values are always bounded between 0 and 100."""
@@ -341,21 +341,21 @@ class TestAllIndicatorsValidation:
 
             # Basic requirements:
             # 1. Return type is pd.Series
-            assert isinstance(result, pd.Series), (
-                f"{indicator.name} should return a pd.Series"
-            )
+            assert isinstance(
+                result, pd.Series
+            ), f"{indicator.name} should return a pd.Series"
 
             # 2. Output has same length as input
-            assert len(result) == len(data), (
-                f"{indicator.name} output should have same length as input"
-            )
+            assert len(result) == len(
+                data
+            ), f"{indicator.name} output should have same length as input"
 
             # 3. No spurious NaN values after warmup period
             warmup = indicator.params.get("period", 0) + 2  # add buffer
             if warmup < len(data):
-                assert not pd.isna(result.iloc[warmup:]).any(), (
-                    f"{indicator.name} should not have NaN values after warmup"
-                )
+                assert not pd.isna(
+                    result.iloc[warmup:]
+                ).any(), f"{indicator.name} should not have NaN values after warmup"
 
     def test_all_indicators_on_edge_cases(self):
         """Test all indicators on edge case data."""

@@ -12,7 +12,8 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from ktrdr.async_infrastructure.progress import GenericProgressState, ProgressRenderer
-from ktrdr.data.components.progress_manager import ProgressState, TimeEstimationEngine
+from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
+from ktrdr.data.components.progress_manager import ProgressState
 
 
 class TestDataProgressRenderer:
@@ -478,9 +479,9 @@ class TestDataProgressRenderer:
         for test_case in test_cases:
             message = renderer.render_message(test_case["state"])
             for pattern in test_case["expected_patterns"]:
-                assert pattern in message, (
-                    f"Pattern '{pattern}' not found in message: {message}"
-                )
+                assert (
+                    pattern in message
+                ), f"Pattern '{pattern}' not found in message: {message}"
 
     def test_format_time_remaining_edge_cases(self):
         """Test time remaining formatting for various durations."""

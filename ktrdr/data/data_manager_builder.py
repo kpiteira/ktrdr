@@ -19,6 +19,7 @@ from ktrdr import get_logger
 
 # NEW: Async infrastructure imports
 from ktrdr.async_infrastructure.progress import GenericProgressManager
+from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 from ktrdr.config.loader import ConfigLoader
 from ktrdr.config.models import IbHostServiceConfig, KtrdrConfig
 from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
@@ -27,7 +28,6 @@ from ktrdr.data.components.data_processor import DataProcessor
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.gap_classifier import GapClassifier
-from ktrdr.data.components.progress_manager import TimeEstimationEngine
 from ktrdr.data.components.segment_manager import SegmentManager
 from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
 from ktrdr.data.ib_data_adapter import IbDataAdapter

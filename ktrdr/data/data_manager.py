@@ -13,10 +13,10 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
+    from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
     from ktrdr.data.async_infrastructure.data_progress_renderer import (
         DataProgressRenderer,
     )
-    from ktrdr.data.components.progress_manager import TimeEstimationEngine
     from ktrdr.data.data_manager_builder import DataManagerConfiguration
 
 import pandas as pd
@@ -124,9 +124,9 @@ class DataManager(ServiceOrchestrator):
         # Initialize all components from the built configuration
         # Assert components are non-None after builder.build_configuration()
         assert config.data_loader is not None, "Builder must create data_loader"
-        assert config.external_provider is not None, (
-            "Builder must create external_provider"
-        )
+        assert (
+            config.external_provider is not None
+        ), "Builder must create external_provider"
         assert config.data_validator is not None, "Builder must create data_validator"
         assert config.gap_classifier is not None, "Builder must create gap_classifier"
         assert config.gap_analyzer is not None, "Builder must create gap_analyzer"
@@ -171,9 +171,9 @@ class DataManager(ServiceOrchestrator):
         if builder is not None:
             config = builder.finalize_configuration(self)
 
-        assert config.data_loading_orchestrator is not None, (
-            "Builder must create data_loading_orchestrator"
-        )
+        assert (
+            config.data_loading_orchestrator is not None
+        ), "Builder must create data_loading_orchestrator"
         assert config.health_checker is not None, "Builder must create health_checker"
 
         self.data_loading_orchestrator = config.data_loading_orchestrator
@@ -454,16 +454,12 @@ class DataManager(ServiceOrchestrator):
             "start_date": (
                 start_date.isoformat()
                 if start_date and hasattr(start_date, "isoformat")
-                else str(start_date)
-                if start_date
-                else None
+                else str(start_date) if start_date else None
             ),
             "end_date": (
                 end_date.isoformat()
                 if end_date and hasattr(end_date, "isoformat")
-                else str(end_date)
-                if end_date
-                else None
+                else str(end_date) if end_date else None
             ),
         }
 
@@ -688,16 +684,12 @@ class DataManager(ServiceOrchestrator):
             "start_date": (
                 start_date.isoformat()
                 if start_date and hasattr(start_date, "isoformat")
-                else str(start_date)
-                if start_date
-                else None
+                else str(start_date) if start_date else None
             ),
             "end_date": (
                 end_date.isoformat()
                 if end_date and hasattr(end_date, "isoformat")
-                else str(end_date)
-                if end_date
-                else None
+                else str(end_date) if end_date else None
             ),
         }
 

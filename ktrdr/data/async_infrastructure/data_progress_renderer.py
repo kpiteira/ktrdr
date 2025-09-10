@@ -15,7 +15,8 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from ktrdr.async_infrastructure.progress import GenericProgressState, ProgressRenderer
-from ktrdr.data.components.progress_manager import ProgressState, TimeEstimationEngine
+from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
+from ktrdr.data.components.progress_manager import ProgressState
 
 logger = logging.getLogger(__name__)
 

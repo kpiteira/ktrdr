@@ -102,17 +102,17 @@ class TestRealDataPipeline:
             assert status_response.status_code == 200
 
             status_data = status_response.json()
-            assert status_data["success"], (
-                f"Failed to get operation status: {status_data}"
-            )
+            assert status_data[
+                "success"
+            ], f"Failed to get operation status: {status_data}"
 
             operation = status_data["data"]
             status = operation["status"]
 
             if status in ["completed", "failed", "cancelled"]:
-                assert status == "completed", (
-                    f"Operation should complete successfully, got: {status}"
-                )
+                assert (
+                    status == "completed"
+                ), f"Operation should complete successfully, got: {status}"
 
                 # Verify we got some data
                 result_summary = operation.get("result_summary", {})

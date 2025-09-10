@@ -222,9 +222,9 @@ class TestConnectionResilienceE2E:
 
             if working_phases == 3:
                 # All phases working should give high score (65+ points minimum)
-                assert score >= 65, (
-                    f"Expected high score for all working phases, got {score}"
-                )
+                assert (
+                    score >= 65
+                ), f"Expected high score for all working phases, got {score}"
 
     def test_timestamp_consistency(self, api_client):
         """Test that resilience status includes consistent timestamps."""
@@ -275,15 +275,15 @@ class TestConnectionResilienceE2E:
         response_time = end_time - start_time
 
         # Should respond within 10 seconds (even without IB)
-        assert response_time < 10.0, (
-            f"Resilience endpoint too slow: {response_time:.2f}s"
-        )
+        assert (
+            response_time < 10.0
+        ), f"Resilience endpoint too slow: {response_time:.2f}s"
 
         # Should be reasonably fast for status check
         if response.status_code == 200:
-            assert response_time < 5.0, (
-                f"Expected faster response: {response_time:.2f}s"
-            )
+            assert (
+                response_time < 5.0
+            ), f"Expected faster response: {response_time:.2f}s"
 
 
 @pytest.mark.container_e2e

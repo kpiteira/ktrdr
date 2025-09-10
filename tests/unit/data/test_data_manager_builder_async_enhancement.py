@@ -17,8 +17,8 @@ from ktrdr.async_infrastructure.progress import (
     GenericProgressManager,
     GenericProgressState,
 )
+from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
-from ktrdr.data.components.progress_manager import TimeEstimationEngine
 from ktrdr.data.data_manager_builder import DataManagerBuilder, DataManagerConfiguration
 from ktrdr.errors import DataError
 

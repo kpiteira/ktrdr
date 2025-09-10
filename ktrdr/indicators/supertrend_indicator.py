@@ -442,9 +442,7 @@ class SuperTrendIndicator(BaseIndicator):
             slope_direction = (
                 "Rising"
                 if recent_slope > 0.2
-                else "Falling"
-                if recent_slope < -0.2
-                else "Stable"
+                else "Falling" if recent_slope < -0.2 else "Stable"
             )
         else:
             recent_slope = 0
@@ -467,17 +465,13 @@ class SuperTrendIndicator(BaseIndicator):
             risk_level = (
                 "Low"
                 if current_distance > 2
-                else "Medium"
-                if current_distance > -1
-                else "High"
+                else "Medium" if current_distance > -1 else "High"
             )
         else:
             risk_level = (
                 "Low"
                 if current_distance < -2
-                else "Medium"
-                if current_distance < 1
-                else "High"
+                else "Medium" if current_distance < 1 else "High"
             )
 
         return {
@@ -516,9 +510,7 @@ class SuperTrendIndicator(BaseIndicator):
                 "trend_reversal_risk": (
                     "High"
                     if current_strength < 3
-                    else "Medium"
-                    if current_strength < 7
-                    else "Low"
+                    else "Medium" if current_strength < 7 else "Low"
                 ),
             },
             "signals": signals_active,

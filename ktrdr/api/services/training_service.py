@@ -565,9 +565,9 @@ class TrainingService(BaseService):
                 strategy_config["model"]["training"]["analytics"]["enabled"] = True
                 strategy_config["model"]["training"]["analytics"]["export_csv"] = True
                 strategy_config["model"]["training"]["analytics"]["export_json"] = True
-                strategy_config["model"]["training"]["analytics"]["export_alerts"] = (
-                    True
-                )
+                strategy_config["model"]["training"]["analytics"][
+                    "export_alerts"
+                ] = True
 
                 logger.info(f"Analytics enabled for training operation {operation_id}")
 
@@ -1003,9 +1003,9 @@ class TrainingService(BaseService):
                 strategy_config["model"]["training"]["analytics"]["enabled"] = True
                 strategy_config["model"]["training"]["analytics"]["export_csv"] = True
                 strategy_config["model"]["training"]["analytics"]["export_json"] = True
-                strategy_config["model"]["training"]["analytics"]["export_alerts"] = (
-                    True
-                )
+                strategy_config["model"]["training"]["analytics"][
+                    "export_alerts"
+                ] = True
 
                 logger.info(
                     f"Analytics enabled for multi-symbol training operation {operation_id}"

@@ -95,17 +95,17 @@ class TestDataJobManagerUnifiedCancellation:
         legacy_pattern_removed = not hasattr(job, "_cancel_event")
 
         # After migration: this should pass
-        assert legacy_pattern_removed, (
-            "DataLoadingJob still uses legacy asyncio.Event pattern"
-        )
+        assert (
+            legacy_pattern_removed
+        ), "DataLoadingJob still uses legacy asyncio.Event pattern"
 
         # Should have unified cancellation token instead
-        assert hasattr(job, "_cancellation_token"), (
-            "Should have unified cancellation token"
-        )
-        assert hasattr(job, "cancellation_token"), (
-            "Should have cancellation_token property"
-        )
+        assert hasattr(
+            job, "_cancellation_token"
+        ), "Should have unified cancellation token"
+        assert hasattr(
+            job, "cancellation_token"
+        ), "Should have cancellation_token property"
 
     def test_data_job_manager_should_use_unified_cancellation_token(
         self, data_job_manager

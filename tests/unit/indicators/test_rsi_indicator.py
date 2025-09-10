@@ -166,26 +166,26 @@ class TestRSIIndicator:
 
         # Check that RSI continues to increase with strong uptrends
         # Position 20-24 is a continued uptrend, RSI should be higher than before
-        assert result.iloc[24] > result.iloc[19], (
-            "RSI should increase with continued uptrends"
-        )
+        assert (
+            result.iloc[24] > result.iloc[19]
+        ), "RSI should increase with continued uptrends"
 
         # Check that RSI decreases during downtrends
         # Position 25-29 is a downtrend, RSI should decrease
-        assert result.iloc[29] < result.iloc[24], (
-            "RSI should decrease during downtrends"
-        )
+        assert (
+            result.iloc[29] < result.iloc[24]
+        ), "RSI should decrease during downtrends"
 
         # Check that RSI values are in expected ranges
         # After strong uptrend, RSI should be overbought (>70)
-        assert result.iloc[24] > 70, (
-            "RSI should be overbought (>70) after strong uptrend"
-        )
+        assert (
+            result.iloc[24] > 70
+        ), "RSI should be overbought (>70) after strong uptrend"
 
         # After downtrend, RSI should be lower than peak value
-        assert result.iloc[29] < result.iloc[24] * 0.9, (
-            "RSI should decrease significantly after downtrend"
-        )
+        assert (
+            result.iloc[29] < result.iloc[24] * 0.9
+        ), "RSI should decrease significantly after downtrend"
 
     def test_error_handling(self):
         """Test that appropriate errors are raised."""

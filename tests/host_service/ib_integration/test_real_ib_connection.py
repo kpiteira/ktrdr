@@ -46,9 +46,9 @@ class TestRealIbConnection:
         # Should have common account values
         summary_tags = {item.tag for item in account_summary}
         expected_tags = {"NetLiquidation", "TotalCashValue", "BuyingPower"}
-        assert expected_tags.issubset(summary_tags), (
-            f"Missing tags: {expected_tags - summary_tags}"
-        )
+        assert expected_tags.issubset(
+            summary_tags
+        ), f"Missing tags: {expected_tags - summary_tags}"
 
     @pytest.mark.asyncio
     async def test_market_data_request(self, real_ib_connection):

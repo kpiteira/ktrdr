@@ -15,8 +15,9 @@ from ktrdr.async_infrastructure.progress import (
     GenericProgressManager,
     GenericProgressState,
 )
+from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
-from ktrdr.data.components.progress_manager import ProgressState, TimeEstimationEngine
+from ktrdr.data.components.progress_manager import ProgressState
 from ktrdr.data.data_manager import DataManager
 from ktrdr.data.data_manager_builder import DataManagerBuilder, DataManagerConfiguration
 
@@ -394,9 +395,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
                     expected_context = context
                     break
 
-            assert found_expected_context, (
-                f"Expected context not found in calls: {mock_instance.start_operation.call_args_list}"
-            )
+            assert (
+                found_expected_context
+            ), f"Expected context not found in calls: {mock_instance.start_operation.call_args_list}"
             # Check operation_type if it exists in the context
             if expected_context and "operation_type" in expected_context:
                 assert expected_context.get("operation_type") == "data_load"

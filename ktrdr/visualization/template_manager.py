@@ -640,9 +640,7 @@ class TemplateManager:
             else (
                 "histogram"
                 if chart_type == "histogram"
-                else "area"
-                if chart_type == "range"
-                else "line"
+                else "area" if chart_type == "range" else "line"
             )
         )
 

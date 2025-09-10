@@ -116,9 +116,9 @@ class TestParabolicSARIndicator:
         # In uptrend, SAR should be below prices
         for i in range(2, len(data)):
             if not pd.isna(result.iloc[i]):
-                assert result.iloc[i] < data["low"].iloc[i], (
-                    f"SAR should be below low at position {i}"
-                )
+                assert (
+                    result.iloc[i] < data["low"].iloc[i]
+                ), f"SAR should be below low at position {i}"
 
     def test_downtrend_behavior(self):
         """Test Parabolic SAR behavior in strong downtrend."""
@@ -138,9 +138,9 @@ class TestParabolicSARIndicator:
         # Note: First few periods might still be establishing trend direction
         for i in range(4, len(data)):
             if not pd.isna(result.iloc[i]):
-                assert result.iloc[i] > data["high"].iloc[i], (
-                    f"SAR should be above high at position {i}"
-                )
+                assert (
+                    result.iloc[i] > data["high"].iloc[i]
+                ), f"SAR should be above high at position {i}"
 
     def test_trend_reversal(self):
         """Test Parabolic SAR behavior during trend reversal."""

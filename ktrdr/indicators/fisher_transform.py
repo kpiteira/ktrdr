@@ -421,9 +421,7 @@ class FisherTransformIndicator(BaseIndicator):
         signal_strength = (
             "Strong"
             if abs(current_momentum) > 0.3
-            else "Moderate"
-            if abs(current_momentum) > 0.1
-            else "Weak"
+            else "Moderate" if abs(current_momentum) > 0.1 else "Weak"
         )
 
         # Divergence analysis (if price data available)
