@@ -411,18 +411,29 @@ class DataService(BaseService):
         # Start periodic progress updates
         progress_task = asyncio.create_task(update_progress_periodically())
 
-        # Create a cancellation event that can be triggered externally
-        cancellation_event = asyncio.Event()
-
-        # Store the cancellation event so the operations service can signal it
-        self.operations_service._cancellation_events[operation_id] = cancellation_event
+        # Get unified cancellation token from operations service
+        cancellation_token = self.operations_service.get_cancellation_token(
+            operation_id
+        )
 
         async def check_cancellation():
-            """Wait for external cancellation signal via event."""
+            """Check for cancellation via unified cancellation token."""
             try:
-                await cancellation_event.wait()  # Block until signaled
-                logger.info(f"Cancelling data loading operation: {operation_id}")
-                cancel_event.set()  # Signal the worker thread to stop
+                if cancellation_token is None:
+                    logger.warning(
+                        f"No cancellation token available for operation: {operation_id}"
+                    )
+                    return
+
+                # Poll for cancellation using unified protocol
+                while not cancel_event.is_set():
+                    if cancellation_token.is_cancelled():
+                        logger.info(
+                            f"Cancelling data loading operation: {operation_id}"
+                        )
+                        cancel_event.set()  # Signal the worker thread to stop
+                        break
+                    await asyncio.sleep(0.1)  # Poll every 100ms
             except Exception as e:
                 logger.warning(f"Error in cancellation checker: {e}")
 
@@ -448,9 +459,8 @@ class DataService(BaseService):
                     except asyncio.CancelledError:
                         pass
         finally:
-            # Clean up cancellation event
-            if hasattr(self.operations_service, "_cancellation_events"):
-                self.operations_service._cancellation_events.pop(operation_id, None)
+            # Cleanup is handled by the unified cancellation coordinator
+            # No manual cleanup needed for cancellation tokens
 
             # Stop progress updates
             cancel_event.set()
@@ -477,8 +487,8 @@ class DataService(BaseService):
 
         # Process the result after cleanup
         try:
-            # Check if cancellation was completed
-            if cancellation_event.is_set():
+            # Check if cancellation was completed via unified token
+            if cancellation_token and cancellation_token.is_cancelled():
                 logger.info(f"Data loading operation was cancelled: {operation_id}")
                 raise asyncio.CancelledError("Operation was cancelled")
 

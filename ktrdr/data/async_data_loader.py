@@ -18,14 +18,14 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
+from ktrdr.async_infrastructure.cancellation import (
+    AsyncCancellationToken,
+    create_cancellation_token,
+)
 from ktrdr.data.data_manager import DataManager
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
 from ktrdr.utils.timezone_utils import TimestampManager
-from ktrdr.async_infrastructure.cancellation import (
-    AsyncCancellationToken, 
-    create_cancellation_token
-)
 
 logger = get_logger(__name__)
 
@@ -81,13 +81,17 @@ class DataLoadingJob:
     completed_at: Optional[datetime] = None
     result_path: Optional[str] = None
     error_message: Optional[str] = None
-    _cancellation_token: Optional[AsyncCancellationToken] = field(default=None, init=False)
+    _cancellation_token: Optional[AsyncCancellationToken] = field(
+        default=None, init=False
+    )
     _task: Optional[asyncio.Task] = field(default=None, init=False)
-    
+
     def __post_init__(self):
         """Initialize cancellation token after dataclass creation."""
         if self._cancellation_token is None:
-            self._cancellation_token = create_cancellation_token(f"data-job-{self.job_id}")
+            self._cancellation_token = create_cancellation_token(
+                f"data-job-{self.job_id}"
+            )
 
     @property
     def duration_seconds(self) -> Optional[float]:
@@ -108,8 +112,12 @@ class DataLoadingJob:
     @property
     def is_cancelled_requested(self) -> bool:
         """Check if cancellation has been requested using unified protocol."""
-        return self._cancellation_token.is_cancelled() if self._cancellation_token else False
-    
+        return (
+            self._cancellation_token.is_cancelled()
+            if self._cancellation_token
+            else False
+        )
+
     @property
     def cancellation_token(self) -> Optional[AsyncCancellationToken]:
         """Get the job's cancellation token for unified protocol usage."""

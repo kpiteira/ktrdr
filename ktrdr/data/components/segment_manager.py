@@ -38,14 +38,16 @@ class SegmentManager:
     def __init__(self):
         """Initialize the SegmentManager."""
         self.current_mode: Optional[DataLoadingMode] = None
-    
+
     def _is_cancelled(self, cancellation_token: Any) -> bool:
         """Check if cancellation token is cancelled using unified protocol."""
         if cancellation_token is None:
             return False
-        
+
         try:
-            if hasattr(cancellation_token, 'is_cancelled') and callable(cancellation_token.is_cancelled):
+            if hasattr(cancellation_token, "is_cancelled") and callable(
+                cancellation_token.is_cancelled
+            ):
                 return cancellation_token.is_cancelled()
             else:
                 logger.warning(

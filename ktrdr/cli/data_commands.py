@@ -18,6 +18,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
 from ktrdr.cli.api_client import check_api_connection, get_api_client
 from ktrdr.cli.async_cli_client import AsyncCLIClient, AsyncCLIClientError
 from ktrdr.cli.error_handler import (
@@ -28,7 +29,6 @@ from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callbac
 from ktrdr.config.validation import InputValidator
 from ktrdr.errors import DataError, ValidationError
 from ktrdr.logging import get_logger
-from ktrdr.async_infrastructure.cancellation import setup_cli_cancellation_handler
 
 # Setup logging and console
 logger = get_logger(__name__)
@@ -313,7 +313,7 @@ def load_data(
     """
     # Setup unified CLI cancellation handler
     setup_cli_cancellation_handler()
-    
+
     try:
         # Input validation
         symbol = InputValidator.validate_string(

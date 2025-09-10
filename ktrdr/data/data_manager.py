@@ -235,7 +235,9 @@ class DataManager(ServiceOrchestrator):
         is_cancelled = False
         try:
             # All tokens should implement is_cancelled() method
-            if hasattr(cancellation_token, 'is_cancelled') and callable(cancellation_token.is_cancelled):
+            if hasattr(cancellation_token, "is_cancelled") and callable(
+                cancellation_token.is_cancelled
+            ):
                 is_cancelled = cancellation_token.is_cancelled()
             else:
                 logger.warning(

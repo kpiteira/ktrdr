@@ -19,7 +19,7 @@ from ktrdr.api.models.operations import (
 )
 from ktrdr.async_infrastructure.cancellation import (
     AsyncCancellationToken,
-    get_global_coordinator
+    get_global_coordinator,
 )
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
@@ -280,7 +280,7 @@ class OperationsService:
 
             # Use unified cancellation coordinator
             cancellation_reason = reason or f"Operation {operation_id} cancelled"
-            cancelled_via_coordinator = self._cancellation_coordinator.cancel_operation(
+            self._cancellation_coordinator.cancel_operation(
                 operation_id, cancellation_reason
             )
 
@@ -714,24 +714,28 @@ class OperationsService:
             )
             return None
 
-    def get_cancellation_token(self, operation_id: str) -> Optional[AsyncCancellationToken]:
+    def get_cancellation_token(
+        self, operation_id: str
+    ) -> Optional[AsyncCancellationToken]:
         """
         Get unified cancellation token for an operation.
-        
+
         This method integrates with the global cancellation coordinator to provide
         cancellation tokens that work with the unified protocol.
-        
+
         Args:
             operation_id: Operation identifier
-            
+
         Returns:
             AsyncCancellationToken for the operation, or None if operation doesn't exist
         """
         # Check if operation exists
         if operation_id not in self._operations:
-            logger.warning(f"Cannot get cancellation token - operation not found: {operation_id}")
+            logger.warning(
+                f"Cannot get cancellation token - operation not found: {operation_id}"
+            )
             return None
-            
+
         # Create or get existing token from coordinator
         return self._cancellation_coordinator.create_token(operation_id)
 
