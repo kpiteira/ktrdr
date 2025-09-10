@@ -1,9 +1,8 @@
 """
-Test AsyncDataLoader migration to unified CancellationToken protocol.
+Test DataJobManager unified CancellationToken protocol.
 
-This test suite verifies that AsyncDataLoader can be successfully migrated
-from using asyncio.Event to using the unified CancellationToken protocol,
-eliminating legacy cancellation patterns.
+This test suite verifies that DataJobManager uses the unified CancellationToken protocol
+and works with ServiceOrchestrator integration, completing the migration from AsyncDataLoader.
 """
 
 import asyncio
@@ -16,11 +15,15 @@ from ktrdr.async_infrastructure.cancellation import (
     CancellationCoordinator,
     create_cancellation_token,
 )
-from ktrdr.data.async_data_loader import AsyncDataLoader, DataLoadingJob, JobStatus
+from ktrdr.data.components.data_job_manager import (
+    DataJobManager,
+    DataLoadingJob,
+    JobStatus,
+)
 
 
-class TestAsyncDataLoaderUnifiedCancellation:
-    """Test AsyncDataLoader unified cancellation migration."""
+class TestDataJobManagerUnifiedCancellation:
+    """Test DataJobManager unified cancellation integration."""
 
     @pytest.fixture
     def mock_data_manager(self):
@@ -40,9 +43,9 @@ class TestAsyncDataLoaderUnifiedCancellation:
         return manager
 
     @pytest.fixture
-    def async_data_loader(self, mock_data_manager):
-        """Create AsyncDataLoader with mocked DataManager."""
-        return AsyncDataLoader(data_manager=mock_data_manager)
+    def data_job_manager(self, mock_data_manager):
+        """Create DataJobManager with mocked DataManager."""
+        return DataJobManager(data_manager=mock_data_manager)
 
     @pytest.fixture
     def coordinator(self):
@@ -104,20 +107,20 @@ class TestAsyncDataLoaderUnifiedCancellation:
             job, "cancellation_token"
         ), "Should have cancellation_token property"
 
-    def test_async_data_loader_should_use_unified_cancellation_token(
-        self, async_data_loader
+    def test_data_job_manager_should_use_unified_cancellation_token(
+        self, data_job_manager
     ):
-        """Test that AsyncDataLoader uses unified CancellationToken protocol."""
+        """Test that DataJobManager uses unified CancellationToken protocol."""
         # Create job
-        job_id = async_data_loader.create_job("AAPL", "1h", mode="tail")
+        job_id = data_job_manager.create_job("AAPL", "1h", mode="tail")
 
-        # After migration, AsyncDataLoader should create jobs that work with CancellationToken
-        async_data_loader.jobs[job_id]
+        # After migration, DataJobManager should create jobs that work with CancellationToken
+        data_job_manager.jobs[job_id]
 
         # Test that we can provide a unified cancellation token
         token = create_cancellation_token(f"data-load-{job_id}")
 
-        # The async data loader should be able to work with this token
+        # The data job manager should be able to work with this token
         assert not token.is_cancelled()
 
         # Test cancellation
@@ -127,11 +130,11 @@ class TestAsyncDataLoaderUnifiedCancellation:
 
     @pytest.mark.asyncio
     async def test_job_execution_with_unified_cancellation_token(
-        self, async_data_loader, mock_data_manager
+        self, data_job_manager, mock_data_manager
     ):
         """Test that job execution works with unified CancellationToken."""
         # Create job
-        job_id = async_data_loader.create_job("AAPL", "1h", mode="tail")
+        job_id = data_job_manager.create_job("AAPL", "1h", mode="tail")
 
         # Create unified cancellation token
         create_cancellation_token(f"data-load-{job_id}")
@@ -148,13 +151,13 @@ class TestAsyncDataLoaderUnifiedCancellation:
         )
 
         # Start job (this should work with unified token after migration)
-        task = asyncio.create_task(async_data_loader.start_job(job_id))
+        task = asyncio.create_task(data_job_manager.start_job(job_id))
 
         # Let it run briefly
         await asyncio.sleep(0.1)
 
         # Job should be running
-        job = async_data_loader.jobs[job_id]
+        job = data_job_manager.jobs[job_id]
         assert job.status in [JobStatus.RUNNING, JobStatus.COMPLETED]
 
         # Clean up
@@ -167,11 +170,11 @@ class TestAsyncDataLoaderUnifiedCancellation:
 
     @pytest.mark.asyncio
     async def test_job_cancellation_through_unified_token(
-        self, async_data_loader, mock_data_manager
+        self, data_job_manager, mock_data_manager
     ):
         """Test that job cancellation works through unified CancellationToken."""
         # Create job
-        job_id = async_data_loader.create_job("AAPL", "1h", mode="tail")
+        job_id = data_job_manager.create_job("AAPL", "1h", mode="tail")
 
         # Create unified cancellation token
         token = create_cancellation_token(f"data-load-{job_id}")
@@ -192,7 +195,7 @@ class TestAsyncDataLoaderUnifiedCancellation:
         mock_data_manager.load_data = slow_load_data
 
         # Start job
-        task = asyncio.create_task(async_data_loader.start_job(job_id))
+        task = asyncio.create_task(data_job_manager.start_job(job_id))
 
         # Wait briefly then cancel through token
         await asyncio.sleep(0.1)
@@ -209,15 +212,15 @@ class TestAsyncDataLoaderUnifiedCancellation:
         except asyncio.CancelledError:
             pass
 
-    def test_no_legacy_hasattr_cancellation_checking(self, async_data_loader):
-        """Test that AsyncDataLoader no longer uses hasattr() for cancellation checking."""
-        # After migration, AsyncDataLoader should not contain hasattr() checking
+    def test_no_legacy_hasattr_cancellation_checking(self, data_job_manager):
+        """Test that DataJobManager no longer uses hasattr() for cancellation checking."""
+        # After migration, DataJobManager should not contain hasattr() checking
         # for multiple cancellation patterns
 
         # Read the source code to verify no hasattr() patterns remain
         import inspect
 
-        source = inspect.getsource(type(async_data_loader))
+        source = inspect.getsource(type(data_job_manager))
 
         # After migration, these legacy patterns should be removed
         legacy_patterns = [
@@ -265,7 +268,7 @@ class TestAsyncDataLoaderUnifiedCancellation:
 
     @pytest.mark.asyncio
     async def test_coordinator_integration(self, coordinator):
-        """Test that AsyncDataLoader integrates with CancellationCoordinator."""
+        """Test that DataJobManager integrates with CancellationCoordinator."""
         # Create token through coordinator
         token = coordinator.create_token("data-load-integration-test")
 
@@ -281,24 +284,24 @@ class TestAsyncDataLoaderUnifiedCancellation:
         assert status["global_cancelled"]
         assert token.is_cancelled()
 
-    def test_migration_preserves_existing_job_interface(self, async_data_loader):
-        """Test that migration preserves existing AsyncDataLoader job interface."""
+    def test_migration_preserves_existing_job_interface(self, data_job_manager):
+        """Test that migration preserves existing DataJobManager job interface."""
         # Existing interface should still work after migration
-        job_id = async_data_loader.create_job("AAPL", "1h", mode="tail")
+        job_id = data_job_manager.create_job("AAPL", "1h", mode="tail")
 
         # These methods should still exist
-        assert hasattr(async_data_loader, "create_job")
-        assert hasattr(async_data_loader, "get_job_status")
-        assert hasattr(async_data_loader, "list_jobs")
-        assert hasattr(async_data_loader, "cancel_job")
+        assert hasattr(data_job_manager, "create_job")
+        assert hasattr(data_job_manager, "get_job_status")
+        assert hasattr(data_job_manager, "list_jobs")
+        assert hasattr(data_job_manager, "cancel_job")
 
         # Job status should work
-        status = async_data_loader.get_job_status(job_id)
+        status = data_job_manager.get_job_status(job_id)
         assert status is not None
         assert status["job_id"] == job_id
         assert status["status"] == "pending"
 
         # List jobs should work
-        jobs = async_data_loader.list_jobs()
+        jobs = data_job_manager.list_jobs()
         assert len(jobs) == 1
         assert jobs[0]["job_id"] == job_id
