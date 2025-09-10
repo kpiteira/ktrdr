@@ -55,7 +55,7 @@ This final slice completes the unified async architecture by creating shared inf
 - **Generic Design**: No domain-specific knowledge, can serve any host service type
 
 **Key Changes**:
-- Move from `ktrdr/managers/` to `ktrdr/async/` to reflect its role as generic infrastructure
+- Move from `ktrdr/managers/` to `ktrdr/async_infrastructure/` to reflect its role as generic infrastructure
 - Remove any domain-specific logic (IB-specific or training-specific code)
 - Add abstract methods that subclasses implement for their specific needs
 - Integrate with the unified cancellation system instead of managing tokens internally
@@ -90,7 +90,7 @@ class AsyncServiceAdapter(ABC):
 
 **Acceptance Criteria**:
 
-- [ ] **File Structure**: AsyncServiceAdapter moved to `ktrdr/async/service_adapter.py` (generic location)
+- [ ] **File Structure**: AsyncServiceAdapter moved to `ktrdr/async_infrastructure/service_adapter.py` (generic location)
 - [ ] **Generic Design**: Zero domain-specific knowledge (no IB or training logic in base class)
 - [ ] **Abstract Interface**: Subclasses must implement `get_service_name()` and `get_service_type()`
 - [ ] **Connection Pooling**: HTTP client reused across requests with configurable connection limits

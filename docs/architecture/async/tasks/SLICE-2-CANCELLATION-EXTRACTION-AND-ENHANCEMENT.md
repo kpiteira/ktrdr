@@ -77,7 +77,7 @@ This slice focuses on **consolidating 90% of cancellation logic in ServiceOrches
 
 **Implementation Details**:
 ```python
-# File: ktrdr/async/operations.py (extracted from AsyncDataLoader patterns)
+# File: ktrdr/async_infrastructure/operations.py (extracted from AsyncDataLoader patterns)
 from abc import ABC, abstractmethod
 from typing import Protocol, Optional, Any
 import asyncio
@@ -200,7 +200,7 @@ class OperationCancelledException(Exception):
 - [ ] Quality checks: `make quality` must pass
 
 **Deliverables**:
-- [ ] `ktrdr/async/operations.py` with extracted operation patterns
+- [ ] `ktrdr/async_infrastructure/operations.py` with extracted operation patterns
 - [ ] `tests/unit/async/test_operations.py` comprehensive test suite
 - [ ] CancellationToken protocol based on AsyncDataLoader success
 - [ ] Generic operation management based on proven AsyncDataLoader patterns
@@ -312,12 +312,12 @@ class DataManager(ServiceOrchestrator):
 
 **Implementation Details**:
 ```python
-# File: ktrdr/async/cancellation.py (unified interface)
+# File: ktrdr/async_infrastructure/cancellation.py (unified interface)
 
 import signal
 import asyncio
 from typing import Optional, Callable, Any
-from ktrdr.async.operations import CancellationToken, OperationCancelledException
+from ktrdr.async_infrastructure.operations import CancellationToken, OperationCancelledException
 
 class CancellationCoordinator:
     """Unified cancellation coordinator for all operation types."""
@@ -411,7 +411,7 @@ class AsyncCancellationToken:
 - [ ] Quality checks: `make quality` must pass
 
 **Deliverables**:
-- [ ] `ktrdr/async/cancellation.py` with unified interface
+- [ ] `ktrdr/async_infrastructure/cancellation.py` with unified interface
 - [ ] `tests/unit/async/test_cancellation.py` comprehensive test suite
 - [ ] CLI cancellation integration for all operation types
 - [ ] ServiceOrchestrator bridge implementation
@@ -438,7 +438,7 @@ class AsyncCancellationToken:
 
 **Implementation Details**:
 ```python
-# File: ktrdr/async/cancellation_bridge.py
+# File: ktrdr/async_infrastructure/cancellation_bridge.py
 
 class CancellationBridge:
     """Bridge different cancellation patterns into unified interface."""
@@ -502,7 +502,7 @@ class UnifiedCancellationToken:
 - [ ] Quality checks: `make quality` must pass
 
 **Deliverables**:
-- [ ] `ktrdr/async/cancellation_bridge.py` with bridge implementations
+- [ ] `ktrdr/async_infrastructure/cancellation_bridge.py` with bridge implementations
 - [ ] `tests/unit/async/test_cancellation_bridge.py` compatibility test suite
 - [ ] Performance benchmark validation
 - [ ] Backward compatibility verification
@@ -530,7 +530,7 @@ class UnifiedCancellationToken:
 ```python
 # File: ktrdr/data/components/data_job_manager.py (renamed from async_data_loader.py)
 
-from ktrdr.async.cancellation import CancellationToken, AsyncCancellationToken
+from ktrdr.async_infrastructure.cancellation import CancellationToken, AsyncCancellationToken
 from ktrdr.managers import ServiceOrchestrator
 
 class DataJobManager:

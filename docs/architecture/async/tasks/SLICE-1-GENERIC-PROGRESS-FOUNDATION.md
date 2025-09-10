@@ -70,7 +70,7 @@ This slice enhances the existing **ServiceOrchestrator.execute_with_progress()**
 **Implementation Details**:
 
 ```python
-# File: ktrdr/async/progress.py
+# File: ktrdr/async_infrastructure/progress.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -200,7 +200,7 @@ class GenericProgressManager:
 
 **Deliverables**:
 
-- [ ] `ktrdr/async/progress.py` with generic infrastructure
+- [ ] `ktrdr/async_infrastructure/progress.py` with generic infrastructure
 - [ ] `tests/unit/async/test_progress.py` comprehensive test suite
 - [ ] Thread safety validation tests
 - [ ] Documentation for ProgressRenderer integration pattern
