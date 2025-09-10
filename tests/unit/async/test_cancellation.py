@@ -229,7 +229,7 @@ class TestCancellationCoordinator:
 
     def test_cleanup_after_operation(self):
         """Test that tokens are cleaned up after operations complete."""
-        token = self.coordinator.create_token("test-op-1")
+        self.coordinator.create_token("test-op-1")
 
         # Simulate operation completion
         self.coordinator._cleanup_token("test-op-1")
@@ -432,7 +432,7 @@ class TestErrorHandling:
 
         try:
             token.check_cancellation("important context")
-            assert False, "Should have raised CancellationError"
+            raise AssertionError("Should have raised CancellationError")
         except CancellationError as e:
             error_str = str(e)
             assert "important context" in error_str

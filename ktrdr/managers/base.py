@@ -612,7 +612,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
             logger.info(f"Operation {operation_name} was cancelled: {e.reason}")
             raise asyncio.CancelledError(
                 f"Operation {operation_name} was cancelled: {e.reason}"
-            )
+            ) from e
         except asyncio.CancelledError:
             logger.info(f"Operation {operation_name} was cancelled")
             raise

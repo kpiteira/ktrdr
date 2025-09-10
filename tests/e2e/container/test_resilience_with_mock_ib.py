@@ -170,9 +170,9 @@ class TestResilienceWithMockIB:
             # Should detect unhealthy connection (any unhealthy error is acceptable)
             data.get("error", {})
             health_data = data.get("data", {})
-            assert not health_data.get("healthy", True), (
-                "Should detect unhealthy connection"
-            )
+            assert not health_data.get(
+                "healthy", True
+            ), "Should detect unhealthy connection"
 
     def test_client_id_preference_with_conflicts(
         self, mock_ib_client_conflicts, api_client

@@ -414,9 +414,9 @@ class TestEnd2EndFuzzyIntegration:
                             k for k in rsi_fuzzy_keys if "oversold" in k or "low" in k
                         ]
                         if low_keys:
-                            assert max(fuzzy_values[k] for k in low_keys) > 0.1, (
-                                f"Low RSI ({rsi_value}) should have higher oversold membership"
-                            )
+                            assert (
+                                max(fuzzy_values[k] for k in low_keys) > 0.1
+                            ), f"Low RSI ({rsi_value}) should have higher oversold membership"
 
                     elif rsi_value > 70:
                         # Should have higher membership in overbought/high
@@ -426,9 +426,9 @@ class TestEnd2EndFuzzyIntegration:
                             if "overbought" in k or "high" in k
                         ]
                         if high_keys:
-                            assert max(fuzzy_values[k] for k in high_keys) > 0.1, (
-                                f"High RSI ({rsi_value}) should have higher overbought membership"
-                            )
+                            assert (
+                                max(fuzzy_values[k] for k in high_keys) > 0.1
+                            ), f"High RSI ({rsi_value}) should have higher overbought membership"
 
     def test_end_to_end_error_recovery(
         self, reference_indicator_config, reference_fuzzy_config
@@ -688,9 +688,9 @@ class TestFuzzyValueValidation:
         if oversold_keys:
             oversold_value = max(fuzzy_values[k] for k in oversold_keys)
             # Value should be between 0 and 1 (valid membership)
-            assert 0.0 <= oversold_value <= 1.0, (
-                f"Invalid membership value: {oversold_value}"
-            )
+            assert (
+                0.0 <= oversold_value <= 1.0
+            ), f"Invalid membership value: {oversold_value}"
 
     def test_membership_function_types_integration(self):
         """Test integration of different membership function types."""
@@ -771,9 +771,9 @@ class TestFuzzyValueValidation:
 
         # Check that we have either RSI or MACD fuzzy values (or both)
         total_indicator_values = len(rsi_keys) + len(macd_keys)
-        assert total_indicator_values > 0, (
-            "Should have fuzzy values from at least one indicator"
-        )
+        assert (
+            total_indicator_values > 0
+        ), "Should have fuzzy values from at least one indicator"
 
         # All values should be valid
         for _key, value in fuzzy_values.items():

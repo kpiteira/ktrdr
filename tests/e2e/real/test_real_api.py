@@ -401,9 +401,9 @@ class TestRealAPIErrorScenarios:
             operation_type = result[0]
             status_code = result[2] if operation_type == "discover" else result[1]
 
-            assert status_code == 200, (
-                f"Operation {operation_type} failed with status {status_code}"
-            )
+            assert (
+                status_code == 200
+            ), f"Operation {operation_type} failed with status {status_code}"
 
 
 @pytest.mark.real_ib

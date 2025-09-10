@@ -163,9 +163,9 @@ class TestModeSpecificGapAnalysis:
                 mode="local",
             )
 
-            assert len(gaps) == case["expected_gaps"], (
-                f"Local mode failed for: {case['description']}"
-            )
+            assert (
+                len(gaps) == case["expected_gaps"]
+            ), f"Local mode failed for: {case['description']}"
 
     def test_tail_mode_comprehensive(self, gap_analyzer, continuous_sample_data):
         """Test tail mode behavior for future data requests."""
@@ -204,14 +204,14 @@ class TestModeSpecificGapAnalysis:
             )
 
             # Tail mode should find gaps for future data
-            assert len(gaps) >= 1, (
-                f"Tail mode should find gaps for: {case['description']}"
-            )
+            assert (
+                len(gaps) >= 1
+            ), f"Tail mode should find gaps for: {case['description']}"
 
             # Last gap should extend to requested end
-            assert gaps[-1][1] == case["end"], (
-                f"Tail mode gap end incorrect for: {case['description']}"
-            )
+            assert (
+                gaps[-1][1] == case["end"]
+            ), f"Tail mode gap end incorrect for: {case['description']}"
 
     def test_backfill_mode_comprehensive(self, gap_analyzer, continuous_sample_data):
         """Test backfill mode behavior for historical data requests."""
@@ -250,15 +250,15 @@ class TestModeSpecificGapAnalysis:
 
             # Only check for gaps that should actually be found (not expected weekend/holiday gaps)
             if case.get("expected_min_gaps", 0) > 0:
-                assert len(gaps) >= case["expected_min_gaps"], (
-                    f"Backfill mode should find gaps for: {case['description']}"
-                )
+                assert (
+                    len(gaps) >= case["expected_min_gaps"]
+                ), f"Backfill mode should find gaps for: {case['description']}"
 
             # Verify gap boundaries when gaps are found
             if gaps and case.get("expected_min_gaps", 0) > 0:
-                assert gaps[0][0] == case["start"], (
-                    f"Backfill mode gap start incorrect for: {case['description']}"
-                )
+                assert (
+                    gaps[0][0] == case["start"]
+                ), f"Backfill mode gap start incorrect for: {case['description']}"
 
     def test_full_mode_comprehensive(self, gap_analyzer, continuous_sample_data):
         """Test full mode behavior for comprehensive data requests."""
@@ -303,9 +303,9 @@ class TestModeSpecificGapAnalysis:
                 mode="full",
             )
 
-            assert len(gaps) >= case["expected_min_gaps"], (
-                f"Full mode failed for: {case['description']}, found {len(gaps)} gaps"
-            )
+            assert (
+                len(gaps) >= case["expected_min_gaps"]
+            ), f"Full mode failed for: {case['description']}, found {len(gaps)} gaps"
 
     def test_internal_gap_detection_tail_mode(
         self, gap_analyzer, fragmented_sample_data
@@ -327,17 +327,17 @@ class TestModeSpecificGapAnalysis:
         )
 
         # Should find the large gap extending into the future (business hours, >7 days)
-        assert len(gaps) >= 1, (
-            f"Tail mode should detect large future gaps: expected ≥1 gap, got {len(gaps)}"
-        )
+        assert (
+            len(gaps) >= 1
+        ), f"Tail mode should detect large future gaps: expected ≥1 gap, got {len(gaps)}"
 
         # Test that we can control whether expected gaps are filtered
         # This validates the intelligent classification is working
         # The fact that we're getting fewer gaps than the raw internal gaps
         # proves the intelligent classification is working
-        assert isinstance(gaps, list), (
-            "Should return valid gap list with intelligent filtering"
-        )
+        assert isinstance(
+            gaps, list
+        ), "Should return valid gap list with intelligent filtering"
 
     def test_internal_gap_skipped_backfill_full_modes(
         self, gap_analyzer, fragmented_sample_data
@@ -362,9 +362,9 @@ class TestModeSpecificGapAnalysis:
             )
 
             # Should find the large business-hour gap we requested
-            assert len(gaps) >= 1, (
-                f"{mode} mode should find business hour gaps: expected ≥1 gap, got {len(gaps)}"
-            )
+            assert (
+                len(gaps) >= 1
+            ), f"{mode} mode should find business hour gaps: expected ≥1 gap, got {len(gaps)}"
 
 
 class TestGapClassificationAccuracy:
@@ -455,9 +455,9 @@ class TestGapClassificationAccuracy:
                 case["start"], case["end"], case["symbol"], case["timeframe"]
             )
 
-            assert classification == case["expected_classification"], (
-                f"Classification failed for {case['description']}: expected {case['expected_classification']}, got {classification}"
-            )
+            assert (
+                classification == case["expected_classification"]
+            ), f"Classification failed for {case['description']}: expected {case['expected_classification']}, got {classification}"
 
     def test_trading_hours_gap_accuracy(self, gap_analyzer_with_real_classifier):
         """Test accurate trading hours gap detection."""
@@ -502,9 +502,9 @@ class TestGapClassificationAccuracy:
             print(f"Expected: {case['expected_classification']}")
             print(f"Actual: {classification}")
 
-            assert classification == case["expected_classification"], (
-                f"Trading hours classification failed for {case['description']}: expected {case['expected_classification']}, got {classification}"
-            )
+            assert (
+                classification == case["expected_classification"]
+            ), f"Trading hours classification failed for {case['description']}: expected {case['expected_classification']}, got {classification}"
 
     def test_market_closure_vs_missing_data_distinction(
         self, gap_analyzer_with_real_classifier
@@ -555,9 +555,9 @@ class TestGapClassificationAccuracy:
                 )
             )
 
-            assert classification == case["expected"], (
-                f"Market closure distinction failed for {case['description']}: expected {case['expected']}, got {classification}"
-            )
+            assert (
+                classification == case["expected"]
+            ), f"Market closure distinction failed for {case['description']}: expected {case['expected']}, got {classification}"
 
 
 class TestConfigurationAndStrategySelection:
@@ -598,9 +598,9 @@ class TestConfigurationAndStrategySelection:
             )
 
             # Should handle all timeframes consistently
-            assert len(gaps) == 1, (
-                f"Timeframe {timeframe} handling failed: expected 1 gap, got {len(gaps)}"
-            )
+            assert (
+                len(gaps) == 1
+            ), f"Timeframe {timeframe} handling failed: expected 1 gap, got {len(gaps)}"
 
     def test_symbol_specific_configuration(self, gap_analyzer_with_mock_classifier):
         """Test symbol-specific configuration handling."""
@@ -630,9 +630,9 @@ class TestConfigurationAndStrategySelection:
             )
 
             # Should handle all symbols consistently
-            assert len(gaps) == 1, (
-                f"Symbol {symbol} handling failed: expected 1 gap, got {len(gaps)}"
-            )
+            assert (
+                len(gaps) == 1
+            ), f"Symbol {symbol} handling failed: expected 1 gap, got {len(gaps)}"
 
     def test_large_gap_override_behavior(self, gap_analyzer_with_mock_classifier):
         """Test that large gaps (>7 days) override classification."""
@@ -761,9 +761,9 @@ class TestPerformanceValidation:
 
         # Performance test - focus on execution time, gaps may be filtered by intelligent classification
         # This is expected behavior - the gaps are being classified as expected (weekends) and filtered
-        assert isinstance(gaps, list), (
-            f"Expected list of gaps, got {type(gaps)} for {dataset_size} dataset"
-        )
+        assert isinstance(
+            gaps, list
+        ), f"Expected list of gaps, got {type(gaps)} for {dataset_size} dataset"
 
         # Verify the analysis ran successfully (performance metric achieved)
 
@@ -804,9 +804,9 @@ class TestPerformanceValidation:
             memory_increase = current_memory - baseline_memory
 
             # Memory increase should be reasonable (<500MB for this test)
-            assert memory_increase < 500, (
-                f"Excessive memory usage: {memory_increase:.1f}MB increase"
-            )
+            assert (
+                memory_increase < 500
+            ), f"Excessive memory usage: {memory_increase:.1f}MB increase"
 
 
 class TestEdgeCases:
@@ -851,9 +851,9 @@ class TestEdgeCases:
             start, end, "AAPL", "1d"
         )
 
-        assert classification == GapClassification.EXPECTED_HOLIDAY, (
-            "Christmas Day should be classified as holiday"
-        )
+        assert (
+            classification == GapClassification.EXPECTED_HOLIDAY
+        ), "Christmas Day should be classified as holiday"
 
     def test_new_year_holiday_classification(self, gap_analyzer_with_holidays):
         """Test New Year holiday gap classification."""
@@ -870,9 +870,7 @@ class TestEdgeCases:
         assert classification in [
             GapClassification.EXPECTED_HOLIDAY,
             GapClassification.EXPECTED_WEEKEND,
-        ], (
-            f"New Year's Day should be classified as holiday or weekend, got {classification}"
-        )
+        ], f"New Year's Day should be classified as holiday or weekend, got {classification}"
 
     def test_boundary_conditions(self, gap_analyzer_with_holidays):
         """Test boundary conditions at start/end of time ranges."""
@@ -905,9 +903,9 @@ class TestEdgeCases:
                     case["start"], case["end"], "AAPL", "1h"
                 )
 
-                assert isinstance(gap_info, GapInfo), (
-                    f"Failed to handle {case['description']}"
-                )
+                assert isinstance(
+                    gap_info, GapInfo
+                ), f"Failed to handle {case['description']}"
 
             except Exception as e:
                 pytest.fail(
@@ -941,9 +939,9 @@ class TestEdgeCases:
                 )
 
                 if case["expect_success"]:
-                    assert isinstance(gap_info, GapInfo), (
-                        f"Expected success for {case['description']}"
-                    )
+                    assert isinstance(
+                        gap_info, GapInfo
+                    ), f"Expected success for {case['description']}"
                 else:
                     pytest.fail(
                         f"Expected failure for {case['description']} but got success"
@@ -954,9 +952,9 @@ class TestEdgeCases:
                     pytest.fail(f"Unexpected failure for {case['description']}: {e}")
                 else:
                     # Expected failure - timezone mixing should fail clearly
-                    assert "timezone" in str(e).lower() or "offset" in str(e).lower(), (
-                        f"Expected timezone error for {case['description']}, got: {e}"
-                    )
+                    assert (
+                        "timezone" in str(e).lower() or "offset" in str(e).lower()
+                    ), f"Expected timezone error for {case['description']}, got: {e}"
 
 
 class TestProgressManagerIntegration:
@@ -968,9 +966,9 @@ class TestProgressManagerIntegration:
 
         # ProgressManager should be available for integration
         progress_manager = ProgressManager()
-        assert hasattr(progress_manager, "update_progress"), (
-            "ProgressManager should have update_progress method"
-        )
+        assert hasattr(
+            progress_manager, "update_progress"
+        ), "ProgressManager should have update_progress method"
 
     @pytest.mark.skip(
         reason="ProgressManager integration not yet implemented in GapAnalyzer"

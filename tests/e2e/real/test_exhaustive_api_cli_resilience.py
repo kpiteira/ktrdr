@@ -382,9 +382,9 @@ class TestCLIResilienceUnderRealLoad:
                 print(f"✅ '{result['command']}': {status} in {result['elapsed']:.2f}s")
 
         # CRITICAL: No commands should have async errors
-        assert len(commands_with_async_errors) == 0, (
-            f"Commands with async errors: {commands_with_async_errors}"
-        )
+        assert (
+            len(commands_with_async_errors) == 0
+        ), f"Commands with async errors: {commands_with_async_errors}"
 
         print(
             f"✅ CLI resilience: {len(all_cli_results)} commands completed without async errors"
@@ -467,9 +467,9 @@ class TestCLIResilienceUnderRealLoad:
         print(f"  Async errors: {async_error_count}/4")
 
         # CRITICAL: No async errors allowed
-        assert async_error_count == 0, (
-            "Async errors detected in concurrent CLI operations"
-        )
+        assert (
+            async_error_count == 0
+        ), "Async errors detected in concurrent CLI operations"
 
     def test_cli_memory_stability_over_time(self, clean_test_symbols):
         """Test CLI command memory stability over extended operation."""
@@ -550,9 +550,9 @@ class TestCLIResilienceUnderRealLoad:
         times = [r["elapsed"] for r in results if "timeout" not in r]
         if len(times) > 1:
             time_variance = max(times) - min(times)
-            assert time_variance < 10.0, (
-                f"High time variance suggests memory issues: {time_variance:.2f}s"
-            )
+            assert (
+                time_variance < 10.0
+            ), f"High time variance suggests memory issues: {time_variance:.2f}s"
 
 
 @pytest.mark.real_ib
@@ -705,9 +705,9 @@ class TestFullSystemIntegrationResilience:
 
         # Score should recover (not degrade significantly)
         score_degradation = immediate_score - final_score
-        assert score_degradation <= 10, (
-            f"Resilience score degraded too much: {score_degradation}"
-        )
+        assert (
+            score_degradation <= 10
+        ), f"Resilience score degraded too much: {score_degradation}"
 
         print("✅ System recovery validated")
 

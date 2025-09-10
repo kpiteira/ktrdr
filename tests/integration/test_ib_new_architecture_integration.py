@@ -89,9 +89,9 @@ class TestIbNewArchitectureIntegration:
                 await asyncio.sleep(0.1)
 
         # Should reuse connections (not create 5 different ones)
-        assert len(connection_ids) <= 2, (
-            f"Too many connections created: {connection_ids}"
-        )
+        assert (
+            len(connection_ids) <= 2
+        ), f"Too many connections created: {connection_ids}"
 
     async def test_no_handler_closed_errors(self, connection_pool):
         """Test that we don't get 'handler is closed' errors with new architecture."""
@@ -116,9 +116,9 @@ class TestIbNewArchitectureIntegration:
                     # Other errors are OK (permission errors, etc.)
                     pass
 
-        assert len(errors_caught) == 0, (
-            f"Handler closed errors detected: {errors_caught}"
-        )
+        assert (
+            len(errors_caught) == 0
+        ), f"Handler closed errors detected: {errors_caught}"
 
     async def test_data_manager_uses_new_adapter(self):
         """Test that DataManager uses the new ExternalDataProvider interface."""
@@ -203,9 +203,9 @@ class TestIbNewArchitectureIntegration:
         error_type, wait_time = IbErrorClassifier.classify(
             162, "Historical Market Data Service error message"
         )
-        assert error_type.value == "data_unavail", (
-            "162 should be data unavailable, not pacing"
-        )
+        assert (
+            error_type.value == "data_unavail"
+        ), "162 should be data unavailable, not pacing"
 
     async def test_connection_health_monitoring(self, connection_pool):
         """Test connection health monitoring functionality."""

@@ -92,9 +92,9 @@ class TestMigrationPerformanceValidation:
         print(f"Performance improvement: {improvement_ratio:.1%}")
 
         # Validate significant performance improvement
-        assert improvement_ratio > 0.3, (
-            f"Expected >30% improvement, got {improvement_ratio:.1%}"
-        )
+        assert (
+            improvement_ratio > 0.3
+        ), f"Expected >30% improvement, got {improvement_ratio:.1%}"
 
     def test_models_train_performance_improvement_validation(self, tmp_path):
         """Validate that models train command shows performance improvement."""
