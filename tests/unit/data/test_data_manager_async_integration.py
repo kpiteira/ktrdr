@@ -13,11 +13,9 @@ import pandas as pd
 
 from ktrdr.async_infrastructure.progress import (
     GenericProgressManager,
-    GenericProgressState,
 )
 from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
-from ktrdr.data.components.progress_manager import ProgressState
 from ktrdr.data.data_manager import DataManager
 from ktrdr.data.data_manager_builder import DataManagerBuilder, DataManagerConfiguration
 
@@ -149,58 +147,6 @@ class TestDataManagerAsyncInfrastructureIntegration:
 
         # Assert: complete_operation was called
         mock_progress_instance.complete_operation.assert_called_once()
-
-    def test_legacy_callback_wrapper_conversion(self):
-        """Test that legacy callback wrapper converts GenericProgressState to ProgressState."""
-        # Arrange: Create DataManager with async infrastructure
-        config = DataManagerConfiguration()
-        config.generic_progress_manager = Mock(spec=GenericProgressManager)
-
-        # Create mock data progress renderer with legacy conversion method
-        mock_renderer = Mock(spec=DataProgressRenderer)
-        mock_legacy_state = Mock(spec=ProgressState)
-        mock_renderer.create_legacy_compatible_state.return_value = mock_legacy_state
-        config.data_progress_renderer = mock_renderer
-
-        # Mock other required components
-        config.data_loader = Mock()
-        config.external_provider = Mock()
-        config.data_validator = Mock()
-        config.gap_classifier = Mock()
-        config.gap_analyzer = Mock()
-        config.segment_manager = Mock()
-        config.data_processor = Mock()
-        config.data_loading_orchestrator = Mock()
-        config.health_checker = Mock()
-
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
-            data_manager = DataManager(builder_config=config)
-
-        # Create a mock legacy callback
-        legacy_callback = Mock()
-
-        # Act: Create legacy callback wrapper
-        wrapper = data_manager._create_legacy_callback_wrapper(legacy_callback)
-
-        # Create a GenericProgressState to test the wrapper
-        generic_state = GenericProgressState(
-            operation_id="test_operation",
-            current_step=1,
-            total_steps=5,
-            percentage=20.0,
-            message="Test message",
-        )
-
-        # Call the wrapper
-        wrapper(generic_state)
-
-        # Assert: Renderer conversion method was called
-        mock_renderer.create_legacy_compatible_state.assert_called_once_with(
-            generic_state
-        )
-
-        # Assert: Legacy callback was called with converted state
-        legacy_callback.assert_called_once_with(mock_legacy_state)
 
     @patch(
         "ktrdr.data.async_infrastructure.data_progress_renderer.DataProgressRenderer"

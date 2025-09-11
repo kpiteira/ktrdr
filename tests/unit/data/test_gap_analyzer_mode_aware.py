@@ -6,7 +6,7 @@ Tests the new mode-aware capabilities including:
 - classify_gap_type method with market calendar integration
 - prioritize_gaps_by_mode method
 - analyze_gaps_by_mode method with mode-specific strategies
-- ProgressManager integration for analysis progress reporting
+- GenericProgressManager integration for analysis progress reporting
 
 These tests follow TDD methodology - they define the expected behavior
 and should initially FAIL until the implementation is complete.
@@ -18,13 +18,13 @@ from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
 
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.data.components.gap_analyzer import GapAnalyzer
 from ktrdr.data.components.gap_classifier import (
     GapClassification,
     GapClassifier,
     GapInfo,
 )
-from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.loading_modes import DataLoadingMode
 
 
@@ -60,8 +60,8 @@ class TestModeAwareGapAnalysis:
 
     @pytest.fixture
     def progress_manager(self):
-        """Mock ProgressManager for testing."""
-        return Mock(spec=ProgressManager)
+        """Mock GenericProgressManager for testing."""
+        return Mock(spec=GenericProgressManager)
 
     @pytest.fixture
     def gap_analyzer(self, gap_classifier, progress_manager):
@@ -377,7 +377,7 @@ class TestModeAwareGapAnalysis:
     def test_progress_manager_integration(
         self, gap_analyzer, progress_manager, sample_data
     ):
-        """Test: ProgressManager integration reports analysis progress."""
+        """Test: GenericProgressManager integration reports analysis progress."""
         # Should fail initially - integration doesn't exist yet
 
         start = datetime(2022, 12, 20, tzinfo=timezone.utc)
@@ -398,7 +398,7 @@ class TestModeAwareGapAnalysis:
 
         # Verify progress manager was used
         progress_manager.start_operation.assert_called_once_with(
-            1, "Analyzing complete range"
+            operation_id="Analyzing complete range", total_steps=1
         )
         progress_manager.complete_operation.assert_called_once()
 

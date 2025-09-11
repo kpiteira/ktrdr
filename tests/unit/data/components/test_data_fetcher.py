@@ -12,8 +12,8 @@ import aiohttp
 import pandas as pd
 import pytest
 
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.data.components.data_fetcher import DataFetcher
-from ktrdr.data.components.progress_manager import ProgressManager
 
 
 class TestDataFetcher:
@@ -22,7 +22,7 @@ class TestDataFetcher:
     @pytest.fixture
     def progress_manager(self):
         """Create mock progress manager for testing."""
-        return Mock(spec=ProgressManager)
+        return Mock(spec=GenericProgressManager)
 
     @pytest.fixture
     def data_fetcher(self):

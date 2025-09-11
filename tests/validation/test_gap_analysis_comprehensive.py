@@ -958,24 +958,24 @@ class TestEdgeCases:
 
 
 class TestProgressManagerIntegration:
-    """Test ProgressManager integration for analysis progress tracking."""
+    """Test GenericProgressManager integration for analysis progress tracking."""
 
     def test_progress_manager_availability(self):
-        """Test that ProgressManager can be integrated with gap analysis."""
-        from ktrdr.data.components.progress_manager import ProgressManager
+        """Test that GenericProgressManager can be integrated with gap analysis."""
+        from ktrdr.async_infrastructure.progress import GenericProgressManager
 
-        # ProgressManager should be available for integration
-        progress_manager = ProgressManager()
+        # GenericProgressManager should be available for integration
+        progress_manager = GenericProgressManager()
         assert hasattr(
             progress_manager, "update_progress"
-        ), "ProgressManager should have update_progress method"
+        ), "GenericProgressManager should have update_progress method"
 
     @pytest.mark.skip(
-        reason="ProgressManager integration not yet implemented in GapAnalyzer"
+        reason="GenericProgressManager integration not yet implemented in GapAnalyzer"
     )
     def test_progress_tracking_during_analysis(self):
         """Test progress tracking during gap analysis operations."""
-        # This test will be implemented when ProgressManager integration is added
+        # This test will be implemented when GenericProgressManager integration is added
         pass
 
 
