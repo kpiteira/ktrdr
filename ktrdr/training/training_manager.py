@@ -11,16 +11,17 @@ The manager handles:
 """
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 from ktrdr.logging import get_logger
+from ktrdr.managers.base import ServiceOrchestrator
 
 from .training_adapter import TrainingAdapter
 
 logger = get_logger(__name__)
 
 
-class TrainingManager:
+class TrainingManager(ServiceOrchestrator[TrainingAdapter]):
     """
     Manager for training operations with automatic host service routing.
 
@@ -31,11 +32,14 @@ class TrainingManager:
 
     def __init__(self):
         """Initialize training manager with environment-based configuration."""
+        # Initialize ServiceOrchestrator base class
+        super().__init__()
 
-        # Simple environment variable handling (mirror IB pattern exactly)
-        self.training_adapter = self._initialize_training_adapter()
+        # training_adapter is now available through self.adapter (from ServiceOrchestrator)
+        # Keep old attribute name for backward compatibility
+        self.training_adapter = self.adapter
 
-    def _initialize_training_adapter(self) -> TrainingAdapter:
+    def _initialize_adapter(self) -> TrainingAdapter:
         """Initialize training adapter based on environment variables."""
         try:
             # Environment variable override for enabled flag (quick toggle)
@@ -77,6 +81,18 @@ class TrainingManager:
             # Fallback to local training
             return TrainingAdapter(use_host_service=False)
 
+    def _get_service_name(self) -> str:
+        """Get the service name for logging and configuration."""
+        return "Training"
+
+    def _get_default_host_url(self) -> str:
+        """Get the default host service URL."""
+        return "http://localhost:5002"
+
+    def _get_env_var_prefix(self) -> str:
+        """Get environment variable prefix."""
+        return "TRAINING"
+
     async def train_multi_symbol_strategy(
         self,
         strategy_config_path: str,
@@ -104,6 +120,9 @@ class TrainingManager:
         Returns:
             Dictionary with training results
         """
+        # Get current cancellation token from ServiceOrchestrator
+        cancellation_token = self.get_current_cancellation_token()
+
         return await self.training_adapter.train_multi_symbol_strategy(
             strategy_config_path=strategy_config_path,
             symbols=symbols,
@@ -113,6 +132,7 @@ class TrainingManager:
             validation_split=validation_split,
             data_mode=data_mode,
             progress_callback=progress_callback,
+            cancellation_token=cancellation_token,
         )
 
     async def get_training_status(self, session_id: str) -> dict[str, Any]:
@@ -143,24 +163,8 @@ class TrainingManager:
         """Get training adapter usage statistics."""
         return self.training_adapter.get_statistics()
 
-    def is_using_host_service(self) -> bool:
-        """Check if training manager is configured to use host service."""
-        return self.training_adapter.use_host_service
+    # Note: is_using_host_service and get_host_service_url are inherited from ServiceOrchestrator
+    # The ServiceOrchestrator base class provides these methods using self.adapter
 
-    def get_host_service_url(self) -> Optional[str]:
-        """Get host service URL if using host service."""
-        if self.training_adapter.use_host_service:
-            return self.training_adapter.host_service_url
-        return None
-
-    def get_configuration_info(self) -> dict[str, Any]:
-        """Get current configuration information."""
-        return {
-            "mode": "host_service" if self.is_using_host_service() else "local",
-            "host_service_url": self.get_host_service_url(),
-            "environment_variables": {
-                "USE_TRAINING_HOST_SERVICE": os.getenv("USE_TRAINING_HOST_SERVICE"),
-                "TRAINING_HOST_SERVICE_URL": os.getenv("TRAINING_HOST_SERVICE_URL"),
-            },
-            "statistics": self.get_adapter_statistics(),
-        }
+    # Note: get_configuration_info is inherited from ServiceOrchestrator
+    # The ServiceOrchestrator base class provides this method with training-specific details
