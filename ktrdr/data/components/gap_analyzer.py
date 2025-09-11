@@ -18,8 +18,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.data.components.gap_classifier import GapClassification, GapClassifier
-from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.logging import get_logger
@@ -47,7 +47,7 @@ class GapAnalyzer:
 
         # Mode-aware analysis state
         self.current_mode: Optional[DataLoadingMode] = None
-        self.progress_manager: Optional[ProgressManager] = None
+        self.progress_manager: Optional[GenericProgressManager] = None
 
         # Configuration options for analysis strategies and performance
         self.config: dict[str, Any] = {
@@ -426,12 +426,12 @@ class GapAnalyzer:
         self.current_mode = mode
         logger.debug(f"Set analysis mode to {mode.value}")
 
-    def set_progress_manager(self, progress_manager: ProgressManager) -> None:
+    def set_progress_manager(self, progress_manager: GenericProgressManager) -> None:
         """
-        Set the ProgressManager for analysis progress reporting.
+        Set the GenericProgressManager for analysis progress reporting.
 
         Args:
-            progress_manager: ProgressManager instance
+            progress_manager: GenericProgressManager instance
         """
         self.progress_manager = progress_manager
         logger.debug("Set ProgressManager for gap analysis progress reporting")
@@ -645,7 +645,9 @@ class GapAnalyzer:
             List of recent gaps to fill
         """
         if self.progress_manager:
-            self.progress_manager.start_operation(1, "Analyzing recent gaps")
+            self.progress_manager.start_operation(
+                operation_id="Analyzing recent gaps", total_steps=1
+            )
 
         try:
             gaps_to_fill = []
@@ -701,7 +703,9 @@ class GapAnalyzer:
             List of historical gaps to fill
         """
         if self.progress_manager:
-            self.progress_manager.start_operation(1, "Analyzing historical gaps")
+            self.progress_manager.start_operation(
+                operation_id="Analyzing historical gaps", total_steps=1
+            )
 
         try:
             gaps_to_fill = []
@@ -769,7 +773,9 @@ class GapAnalyzer:
             List of all gaps to fill, ordered for optimal fetching
         """
         if self.progress_manager:
-            self.progress_manager.start_operation(1, "Analyzing complete range")
+            self.progress_manager.start_operation(
+                operation_id="Analyzing complete range", total_steps=1
+            )
 
         try:
             gaps_to_fill = []

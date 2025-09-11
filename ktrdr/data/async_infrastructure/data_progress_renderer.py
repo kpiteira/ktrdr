@@ -7,7 +7,7 @@ features from the existing ProgressManager including:
 - Hierarchical progress display
 - Rich context messaging with symbol/timeframe/mode
 - Thread-safe message rendering
-- Legacy ProgressState compatibility
+- GenericProgressState rendering
 """
 
 import logging
@@ -16,7 +16,6 @@ from typing import Any, Optional
 
 from ktrdr.async_infrastructure.progress import GenericProgressState, ProgressRenderer
 from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
-from ktrdr.data.components.progress_manager import ProgressState
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class DataProgressRenderer(ProgressRenderer):
     - Hierarchical progress display (Operation → Steps → Sub-steps → Items)
     - Rich context messaging with symbol, timeframe, mode information
     - Thread-safe context enhancement and message rendering
-    - Legacy ProgressState conversion for backward compatibility
+    - GenericProgressState enhancement with data-specific context
     - Learning-based time estimation with persistent cache
     """
 
@@ -351,57 +350,6 @@ class DataProgressRenderer(ProgressRenderer):
                     state.step_total = step_total
 
         return state
-
-    def create_legacy_compatible_state(
-        self, generic_state: GenericProgressState
-    ) -> ProgressState:
-        """
-        Convert generic state back to rich ProgressState for backward compatibility.
-
-        This method ensures 100% backward compatibility with existing code that
-        expects ProgressState objects, preserving all existing fields and functionality.
-
-        Args:
-            generic_state: GenericProgressState to convert
-
-        Returns:
-            ProgressState with all existing fields populated
-        """
-        # Create full ProgressState with ALL existing fields (preserve exact compatibility)
-        # This ensures 100% backward compatibility with existing code expecting ProgressState
-        return ProgressState(
-            # Core progress fields
-            operation_id=generic_state.operation_id,
-            current_step=generic_state.current_step,
-            total_steps=generic_state.total_steps,
-            message=generic_state.message,
-            percentage=generic_state.percentage,
-            estimated_remaining=generic_state.estimated_remaining,
-            start_time=generic_state.start_time,
-            # Backward compatibility fields
-            steps_completed=generic_state.current_step,
-            steps_total=generic_state.total_steps,
-            expected_items=generic_state.total_items,
-            items_processed=generic_state.items_processed,
-            operation_context=generic_state.context,
-            # Extract hierarchical fields from generic state (CRITICAL for existing functionality)
-            current_step_name=generic_state.context.get("current_step_name"),
-            # Handle both context-based (old way) and field-based (new way) step progress
-            step_current=generic_state.step_current
-            or generic_state.context.get("step_current", 0),
-            step_total=generic_state.step_total
-            or generic_state.context.get("step_total", 0),
-            step_detail=generic_state.context.get(
-                "step_detail", ""
-            ),  # CRITICAL for ✅ and 💾 messages
-            current_item_detail=generic_state.context.get("current_item_detail"),
-            # Use hierarchical progress fields from GenericProgressState
-            step_start_percentage=generic_state.step_start_percentage,
-            step_end_percentage=generic_state.step_end_percentage,
-            step_items_processed=generic_state.items_processed,
-            estimated_completion=generic_state.context.get("estimated_completion"),
-            overall_percentage=generic_state.percentage,
-        )
 
     def _extract_base_message(self, message: str) -> str:
         """

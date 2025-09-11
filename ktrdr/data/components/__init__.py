@@ -4,7 +4,10 @@ from .data_health_checker import DataHealthChecker
 from .data_quality_validator import DataQualityValidator
 from .gap_analyzer import GapAnalyzer
 from .gap_classifier import GapClassifier
-from .progress_manager import ProgressManager, ProgressState
+
+# ProgressManager and ProgressState have been migrated to:
+# - ktrdr.async_infrastructure.progress.GenericProgressManager
+# - ktrdr.async_infrastructure.progress.GenericProgressState
 from .segment_manager import SegmentManager
 from .timeframe_synchronizer import TimeframeSynchronizer
 
@@ -13,8 +16,8 @@ __all__ = [
     "DataQualityValidator",
     "GapAnalyzer",
     "GapClassifier",
-    "ProgressManager",
-    "ProgressState",
+    # "ProgressManager",  # MIGRATED to GenericProgressManager
+    # "ProgressState",    # MIGRATED to GenericProgressState
     "SegmentManager",
     "TimeframeSynchronizer",
 ]
