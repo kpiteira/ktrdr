@@ -327,12 +327,12 @@ class DataService(BaseService):
                 operation_progress = OperationProgress(
                     percentage=progress_state.percentage,
                     current_step=progress_state.message,
-                    steps_completed=progress_state.steps_completed,
-                    steps_total=progress_state.steps_total,
+                    steps_completed=progress_state.step_current,
+                    steps_total=progress_state.step_total,
                     items_processed=progress_state.items_processed,
-                    items_total=progress_state.expected_items,
-                    current_item=progress_state.step_detail
-                    or progress_state.current_step_name,
+                    items_total=progress_state.total_items,
+                    current_item=progress_state.context.get("step_detail")
+                    or progress_state.context.get("current_step_name"),
                 )
 
                 # Store for async update (no warnings/errors from ProgressManager)

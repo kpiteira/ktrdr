@@ -540,6 +540,9 @@ async def _load_data_async(
                             start_time=datetime.now(),  # Approximate - could be improved
                             items_processed=progress_info.get("items_processed", 0),
                             total_items=progress_info.get("items_total", None),
+                            # Add the missing step fields for progress tracking
+                            step_current=progress_info.get("steps_completed", 0),
+                            step_total=progress_info.get("steps_total", 10),
                         )
 
                         # Start operation on first callback
