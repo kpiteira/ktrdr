@@ -12,7 +12,7 @@ from typing import Any, Optional
 import aiohttp
 import pandas as pd
 
-from ktrdr.data.components.progress_manager import ProgressManager
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.data.external_data_interface import ExternalDataProvider
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ class DataFetcher:
         symbol: str,
         timeframe: str,
         external_provider: ExternalDataProvider,
-        progress_manager: Optional[ProgressManager] = None,
+        progress_manager: Optional[GenericProgressManager] = None,
         cancellation_token: Optional[Any] = None,
     ) -> list[pd.DataFrame]:
         """

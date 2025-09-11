@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from ktrdr.async_infrastructure.progress import GenericProgressState, ProgressRenderer
-from ktrdr.data.components.progress_manager import ProgressState, TimeEstimationEngine
+from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 
 
 class TestDataProgressRenderer:
@@ -262,58 +262,6 @@ class TestDataProgressRenderer:
         assert enhanced_state.context["enhanced_step_name"] == "Data Validation"
         assert enhanced_state.context["step_progress"] == "15/50"
 
-    def test_create_legacy_compatible_state(self):
-        """Test conversion from GenericProgressState to legacy ProgressState."""
-        renderer = self.DataProgressRenderer()
-
-        generic_state = GenericProgressState(
-            operation_id="legacy_test",
-            current_step=2,
-            total_steps=5,
-            percentage=40.0,
-            message="Testing legacy compatibility",
-            start_time=datetime.now(),
-            context={
-                "symbol": "AAPL",
-                "timeframe": "1h",
-                "mode": "backfill",
-                "current_step_name": "Validation",
-                "step_current": 10,
-                "step_total": 25,
-                "step_detail": "Checking data quality",
-            },
-            items_processed=1000,
-            total_items=2500,
-            estimated_remaining=timedelta(seconds=60),
-        )
-
-        legacy_state = renderer.create_legacy_compatible_state(generic_state)
-
-        # Should be a ProgressState instance
-        assert isinstance(legacy_state, ProgressState)
-
-        # Should preserve core fields
-        assert legacy_state.operation_id == "legacy_test"
-        assert legacy_state.current_step == 2
-        assert legacy_state.total_steps == 5
-        assert legacy_state.percentage == 40.0
-        assert legacy_state.message == "Testing legacy compatibility"
-        assert legacy_state.estimated_remaining == timedelta(seconds=60)
-        assert legacy_state.start_time == generic_state.start_time
-
-        # Should preserve backward compatibility fields
-        assert legacy_state.steps_completed == 2
-        assert legacy_state.steps_total == 5
-        assert legacy_state.expected_items == 2500
-        assert legacy_state.items_processed == 1000
-        assert legacy_state.operation_context == generic_state.context
-
-        # Should preserve hierarchical fields
-        assert legacy_state.current_step_name == "Validation"
-        assert legacy_state.step_current == 10
-        assert legacy_state.step_total == 25
-        assert legacy_state.step_detail == "Checking data quality"
-
     def test_thread_safety_message_rendering(self):
         """Test thread safety of message rendering operations."""
         renderer = self.DataProgressRenderer()
@@ -525,11 +473,14 @@ class TestDataProgressRenderer:
         # Test all public methods
         assert callable(renderer.render_message)
         assert callable(renderer.enhance_state)
-        assert callable(renderer.create_legacy_compatible_state)
 
         # Test private methods exist
         assert callable(renderer._extract_base_message)
         assert callable(renderer._format_timedelta)
+        assert callable(renderer._build_data_context_string)
+        assert callable(renderer._create_enhanced_message)
+        assert callable(renderer._build_step_detail_message)
+        assert callable(renderer._add_data_context)
 
         # Test all attributes are accessible
         assert hasattr(renderer, "time_estimator")

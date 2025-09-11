@@ -446,7 +446,7 @@ class TestGenericProgressManagerIntegration:
     def test_time_estimation_engine_integration(self):
         """Test integration with TimeEstimationEngine from existing ProgressManager."""
         # Import existing TimeEstimationEngine
-        from ktrdr.data.components.progress_manager import TimeEstimationEngine
+        from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
 
         callback = Mock()
 
@@ -488,11 +488,11 @@ class TestGenericProgressManagerIntegration:
         # Verify callback was called appropriately
         assert callback.call_count >= 11  # start + 10 updates + complete
 
-    def test_backwards_compatibility_with_progress_state(self):
-        """Test backwards compatibility with existing ProgressState patterns."""
-        from ktrdr.data.components.progress_manager import ProgressState
+    def test_generic_progress_state_comprehensive_functionality(self):
+        """Test comprehensive GenericProgressState functionality."""
+        from ktrdr.async_infrastructure.progress import GenericProgressState
 
-        # Test that we can convert between GenericProgressState and ProgressState
+        # Test that GenericProgressState supports all needed fields
         generic_state = GenericProgressState(
             operation_id="test_op",
             current_step=3,
@@ -504,45 +504,35 @@ class TestGenericProgressManagerIntegration:
             context={"symbol": "AAPL", "timeframe": "1h"},
         )
 
-        # A renderer should be able to create legacy ProgressState for backward compatibility
-        class BackwardCompatibleRenderer(ProgressRenderer):
+        # Test renderer can work with GenericProgressState directly
+        class TestRenderer(ProgressRenderer):
             def render_message(self, state: GenericProgressState) -> str:
-                return state.message
+                context_str = ""
+                if "symbol" in state.context and "timeframe" in state.context:
+                    context_str = (
+                        f" ({state.context['symbol']} {state.context['timeframe']})"
+                    )
+                return f"{state.message}{context_str} [{state.current_step}/{state.total_steps}]"
 
             def enhance_state(
                 self, state: GenericProgressState
             ) -> GenericProgressState:
+                # Add enhanced fields
+                state.context["enhanced"] = True
                 return state
 
-            def create_legacy_compatible_state(
-                self, generic_state: GenericProgressState
-            ) -> ProgressState:
-                """Convert generic state to legacy ProgressState."""
-                return ProgressState(
-                    operation_id=generic_state.operation_id,
-                    current_step=generic_state.current_step,
-                    total_steps=generic_state.total_steps,
-                    message=generic_state.message,
-                    percentage=generic_state.percentage,
-                    estimated_remaining=generic_state.estimated_remaining,
-                    start_time=generic_state.start_time,
-                    steps_completed=generic_state.current_step,
-                    steps_total=generic_state.total_steps,
-                    expected_items=generic_state.total_items,
-                    items_processed=generic_state.items_processed,
-                    operation_context=generic_state.context,
-                )
+        renderer = TestRenderer()
+        enhanced_state = renderer.enhance_state(generic_state)
+        message = renderer.render_message(enhanced_state)
 
-        renderer = BackwardCompatibleRenderer()
-        legacy_state = renderer.create_legacy_compatible_state(generic_state)
-
-        # Verify legacy state has expected fields
-        assert isinstance(legacy_state, ProgressState)
-        assert legacy_state.operation_id == "test_op"
-        assert legacy_state.current_step == 3
-        assert legacy_state.percentage == 30.0
-        assert legacy_state.items_processed == 150
-        assert legacy_state.operation_context["symbol"] == "AAPL"
+        # Verify all fields are accessible and working
+        assert enhanced_state.operation_id == "test_op"
+        assert enhanced_state.current_step == 3
+        assert enhanced_state.percentage == 30.0
+        assert enhanced_state.items_processed == 150
+        assert enhanced_state.context["symbol"] == "AAPL"
+        assert enhanced_state.context["enhanced"]
+        assert message == "Processing data (AAPL 1h) [3/10]"
 
 
 if __name__ == "__main__":

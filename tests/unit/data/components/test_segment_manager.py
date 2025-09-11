@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pandas as pd
 import pytest
 
-from ktrdr.data.components.progress_manager import ProgressManager
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.data.components.segment_manager import SegmentManager
 from ktrdr.data.loading_modes import DataLoadingMode
 
@@ -68,7 +68,7 @@ class TestSegmentManager:
     @pytest.fixture
     def mock_progress_manager(self):
         """Mock progress manager."""
-        return Mock(spec=ProgressManager)
+        return Mock(spec=GenericProgressManager)
 
     def test_create_segments_from_small_gaps(self, segment_manager, sample_gaps):
         """Test creating segments from gaps that don't need splitting."""

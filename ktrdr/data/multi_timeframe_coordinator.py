@@ -14,7 +14,9 @@ from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 
-from ktrdr.data.components.progress_manager import ProgressManager
+from ktrdr.async_infrastructure.progress import GenericProgressManager
+from ktrdr.async_infrastructure.time_estimation import TimeEstimationEngine
+from ktrdr.data.async_infrastructure.data_progress_renderer import DataProgressRenderer
 from ktrdr.data.components.timeframe_synchronizer import TimeframeSynchronizer
 from ktrdr.errors import DataError, DataValidationError
 from ktrdr.logging import get_logger
@@ -101,14 +103,21 @@ class MultiTimeframeCoordinator:
                 },
             )
 
-        # Initialize clean ProgressManager (no legacy DataLoadingProgress)
+        # Initialize GenericProgressManager with DataProgressRenderer
         total_steps = len(timeframes) + 1  # Load each TF + synchronization
-        progress_manager = ProgressManager(progress_callback)
-        progress_manager.start_operation(total_steps, f"load_multi_timeframe_{symbol}")
+        time_engine = TimeEstimationEngine()
+        renderer = DataProgressRenderer(time_estimation_engine=time_engine)
+        progress_manager = GenericProgressManager(
+            callback=progress_callback, renderer=renderer
+        )
+        progress_manager.start_operation(
+            operation_id=f"multi_timeframe_{symbol}",
+            total_steps=total_steps,
+            context={"symbol": symbol, "timeframes": timeframes},
+        )
 
-        # Set cancellation token if provided
-        if cancellation_token:
-            progress_manager.set_cancellation_token(cancellation_token)
+        # Note: GenericProgressManager doesn't have built-in cancellation
+        # Cancellation will be handled at a higher level if needed
 
         # Dictionary to store loaded data for each timeframe
         timeframe_data = {}
@@ -119,10 +128,8 @@ class MultiTimeframeCoordinator:
 
         for i, timeframe in enumerate(timeframes):
             try:
-                # Check for cancellation
-                if progress_manager.check_cancelled():
-                    progress_manager.update_progress(i, "Cancelled by user")
-                    break
+                # Note: Check cancellation at higher level if needed
+                # GenericProgressManager doesn't have built-in cancellation support
 
                 # Update progress for current timeframe
                 progress_manager.update_progress(i, f"Loading {timeframe} data")

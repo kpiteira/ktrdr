@@ -19,8 +19,8 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.config.ib_limits import IbLimitsRegistry
-from ktrdr.data.components.progress_manager import ProgressManager
 from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.logging import get_logger
 
@@ -265,7 +265,7 @@ class SegmentManager:
         segments: list[tuple[datetime, datetime]],
         external_provider: Any,
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[ProgressManager] = None,
+        progress_manager: Optional[GenericProgressManager] = None,
         periodic_save_callback: Optional[Callable[[list[pd.DataFrame]], int]] = None,
         periodic_save_minutes: float = 0.5,
     ) -> tuple[list[pd.DataFrame], int, int]:
