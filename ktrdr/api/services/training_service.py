@@ -205,8 +205,37 @@ class TrainingService(BaseService):
     ):
         """Run training via TrainingManager with progress updates."""
         try:
-            # Create progress callback
-            async def progress_callback(progress: dict[str, Any]):
+            # Create progress callback - handle both old (3-arg) and new (dict) signatures
+            async def progress_callback(*args, **kwargs):
+                # Handle old signature: progress_callback(epoch, epochs, metrics)
+                if len(args) == 3:
+                    epoch, epochs, metrics = args
+                    progress = {
+                        "current_step": f"Epoch {epoch}/{epochs}",
+                        "progress_percentage": (
+                            (epoch / epochs) * 100.0 if epochs > 0 else 0.0
+                        ),
+                        "steps_completed": epoch,
+                        "steps_total": epochs,
+                        "items_processed": metrics.get("total_bars_processed", 0),
+                        "items_total": metrics.get("total_bars_all_epochs", None),
+                        "current_item": f"Processing epoch {epoch}",
+                    }
+                # Handle new signature: progress_callback(progress_dict)
+                elif len(args) == 1 and isinstance(args[0], dict):
+                    progress = args[0]
+                else:
+                    # Fallback for unknown signature
+                    progress = {
+                        "current_step": "Training in progress",
+                        "progress_percentage": 0.0,
+                        "steps_completed": 0,
+                        "steps_total": 100,
+                        "items_processed": 0,
+                        "items_total": None,
+                        "current_item": None,
+                    }
+
                 await self.operations_service.update_progress(
                     operation_id,
                     OperationProgress(
