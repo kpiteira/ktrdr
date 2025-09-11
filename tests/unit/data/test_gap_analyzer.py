@@ -373,6 +373,5 @@ class TestGapAnalyzerIntegration:
         assert hasattr(dm.gap_analyzer, "analyze_gaps")
 
 
-
 if __name__ == "__main__":
     pytest.main([__file__])
