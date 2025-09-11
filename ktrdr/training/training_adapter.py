@@ -96,6 +96,47 @@ class TrainingAdapter:
         self.errors_encountered = 0
         self.last_request_time: Optional[datetime] = None
 
+    def _check_cancellation(
+        self,
+        cancellation_token: Optional[Any],
+        operation_description: str = "operation",
+    ) -> bool:
+        """
+        Check if cancellation has been requested using unified protocol.
+
+        This follows the same pattern as DataManager._check_cancellation for consistency.
+
+        Args:
+            cancellation_token: Token to check for cancellation (must implement CancellationToken protocol)
+            operation_description: Description of current operation for logging
+
+        Returns:
+            True if cancellation was requested, False otherwise
+
+        Raises:
+            asyncio.CancelledError: If cancellation was requested
+        """
+        if cancellation_token is None:
+            return False
+
+        # Use unified cancellation protocol
+        try:
+            is_cancelled = cancellation_token.is_cancelled()
+        except Exception as e:
+            logger.warning(f"Error checking cancellation token: {e}")
+            return False
+
+        if is_cancelled:
+            logger.info(f"🛑 Cancellation requested during {operation_description}")
+            # Import here to avoid circular imports
+            import asyncio
+
+            raise asyncio.CancelledError(
+                f"Operation cancelled during {operation_description}"
+            )
+
+        return False
+
     async def _call_host_service_post(
         self, endpoint: str, data: dict[str, Any]
     ) -> dict[str, Any]:
@@ -208,6 +249,11 @@ class TrainingAdapter:
                             "memory_fraction": 0.8,
                             "mixed_precision": True,
                         },
+                        "cancellation_context": {
+                            "cancellation_token_id": (
+                                id(cancellation_token) if cancellation_token else None
+                            )
+                        },
                     },
                 )
 
@@ -238,8 +284,7 @@ class TrainingAdapter:
                         "Local trainer not initialized", provider="Training"
                     )
 
-                # TODO: Update local trainer to accept cancellation_token in future
-                # For now, call without cancellation_token to maintain compatibility
+                # Pass cancellation_token to local trainer for deep cancellation flow
                 return self.local_trainer.train_multi_symbol_strategy(
                     strategy_config_path=strategy_config_path,
                     symbols=symbols,
@@ -249,6 +294,7 @@ class TrainingAdapter:
                     validation_split=validation_split,
                     data_mode=data_mode,
                     progress_callback=progress_callback,
+                    cancellation_token=cancellation_token,
                 )
 
         except TrainingProviderError:

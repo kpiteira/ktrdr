@@ -53,6 +53,7 @@ class StrategyTrainer:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train a neuro-fuzzy strategy on multiple symbols simultaneously.
 
@@ -191,7 +192,14 @@ class StrategyTrainer:
         # Step 9: Train model
         print("\n9. Training multi-symbol neural network...")
         training_results = self._train_model(
-            model, train_data, val_data, config, symbols, timeframes, progress_callback
+            model,
+            train_data,
+            val_data,
+            config,
+            symbols,
+            timeframes,
+            progress_callback,
+            cancellation_token,
         )
 
         # Step 10: Evaluate model
@@ -291,6 +299,7 @@ class StrategyTrainer:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train a complete neuro-fuzzy strategy with multi-timeframe support.
 
@@ -440,7 +449,14 @@ class StrategyTrainer:
 
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
-            model, train_data, val_data, config, symbol, timeframes, progress_callback
+            model,
+            train_data,
+            val_data,
+            config,
+            symbol,
+            timeframes,
+            progress_callback,
+            cancellation_token,
         )
 
         # Step 8: Evaluate model
@@ -1040,6 +1056,7 @@ class StrategyTrainer:
         symbol_or_symbols,  # Can be str (single) or List[str] (multi-symbol)
         timeframes: list[str],
         progress_callback=None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train the neural network model (supports both single and multi-symbol).
 
@@ -1086,6 +1103,9 @@ class StrategyTrainer:
         training_config["full_config"] = config_with_metadata
 
         trainer = ModelTrainer(training_config, progress_callback=progress_callback)
+        # Set cancellation token for deep cancellation flow
+        if cancellation_token is not None:
+            trainer.cancellation_token = cancellation_token
 
         if is_multi_symbol:
             # Multi-symbol training with symbol indices

@@ -125,6 +125,9 @@ class ModelTrainer:
         if self.analytics_enabled:
             self._setup_analytics(full_config)
 
+        # Cancellation support for deep cancellation flow
+        self.cancellation_token = None
+
     def _setup_analytics(self, full_config):
         """Setup analytics system for detailed training monitoring."""
         try:
@@ -145,6 +148,47 @@ class ModelTrainer:
             print(f"⚠️ Failed to setup analytics: {e}")
             self.analytics_enabled = False
             self.analyzer = None
+
+    def _check_cancellation(
+        self,
+        cancellation_token: Optional[Any],
+        operation_description: str = "training",
+    ) -> bool:
+        """
+        Check if cancellation has been requested using unified protocol.
+
+        This follows the same pattern as DataManager._check_cancellation for consistency.
+
+        Args:
+            cancellation_token: Token to check for cancellation (must implement CancellationToken protocol)
+            operation_description: Description of current operation for logging
+
+        Returns:
+            True if cancellation was requested, False otherwise
+
+        Raises:
+            asyncio.CancelledError: If cancellation was requested
+        """
+        if cancellation_token is None:
+            return False
+
+        # Use unified cancellation protocol
+        try:
+            is_cancelled = cancellation_token.is_cancelled()
+        except Exception as e:
+            print(f"Warning: Error checking cancellation token: {e}")
+            return False
+
+        if is_cancelled:
+            print(f"🛑 Cancellation requested during {operation_description}")
+            # Import here to avoid circular imports
+            import asyncio
+
+            raise asyncio.CancelledError(
+                f"Training cancelled during {operation_description}"
+            )
+
+        return False
 
     def train(
         self,
@@ -215,6 +259,9 @@ class ModelTrainer:
 
         # Training loop
         for epoch in range(epochs):
+            # Check cancellation at epoch boundaries (minimal overhead)
+            self._check_cancellation(self.cancellation_token, f"epoch {epoch}")
+
             start_time = time.time()
 
             # Training phase
@@ -224,6 +271,12 @@ class ModelTrainer:
             train_total = 0
 
             for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
+                # Check cancellation every 50 batches (balanced performance/responsiveness)
+                if batch_idx % 50 == 0:
+                    self._check_cancellation(
+                        self.cancellation_token, f"epoch {epoch}, batch {batch_idx}"
+                    )
+
                 # DEBUG: Check for NaN in first batch of first epoch
                 if epoch == 0 and batch_idx == 0:
                     print(

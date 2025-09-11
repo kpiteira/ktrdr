@@ -232,28 +232,89 @@ class IbDataAdapter(AsyncServiceAdapter):
 
 ### Task 4.4: Enhance Host Services with Unified Async Infrastructure
 
-**Description**: Update the actual host services (IB host service and Training host service) to use unified async patterns, not just the client adapters. This ensures consistency across the entire system.
+**Description**: Update the actual host services (IB host service and Training host service) to use unified async patterns, including the specific training loop cancellation implementation established in SLICE-3.
 
-**Why this is critical**: Currently we're only addressing client-side adapters. The host services themselves should also use consistent async patterns, structured progress reporting, and cancellation handling.
+**Why this is critical**: SLICE-3 established client-side training cancellation flow but noted a host service limitation. This task completes the end-to-end training cancellation by implementing server-side training loop cancellation following the patterns validated in SLICE-3.
+
+**⭐ CRITICAL: RESOLVING SLICE-3 LIMITATION**:
+
+**SLICE-3 Status**: ✅ 7/8 acceptance criteria met  
+**Limitation**: Host service training cannot be cancelled (continues until completion)  
+**SLICE-4 Resolution**: Complete the final acceptance criterion for full end-to-end training cancellation
 
 **What this addresses**:
 - **IB Host Service**: The service that receives IB data requests and interfaces with Interactive Brokers
 - **Training Host Service**: The service that receives training requests and manages training operations  
+- **⭐ CRITICAL**: Complete training loop cancellation implementation following SLICE-3 patterns
 - **Progress Integration**: Both services should provide structured progress that integrates with ServiceOrchestrator
-- **Cancellation Support**: Both services should respect cancellation requests from client operations
+- **Complete Cancellation Support**: End-to-end cancellation from client through host services
 
 **Host Service Enhancements**:
 
 1. **Structured Progress Reporting**: Host services report progress in structured format (not strings)
-2. **Cancellation Handling**: Host services check for cancellation and stop operations appropriately
-3. **Unified Error Patterns**: Consistent error responses across both host services
-4. **Health Check Endpoints**: Standard health check implementations
-5. **Logging and Monitoring**: Consistent logging patterns across both services
+2. **⭐ CRITICAL: Training Loop Cancellation**: Host service implements SLICE-3 cancellation patterns in training loops
+3. **Cancellation API Endpoints**: Host service provides cancellation control endpoints  
+4. **Unified Error Patterns**: Consistent error responses across both host services
+5. **Health Check Endpoints**: Standard health check implementations
+6. **Logging and Monitoring**: Consistent logging patterns across both services
 
-**Technical Approach**:
-- Create shared host service base classes for common functionality
+**Training Host Service Direct Enhancement Requirements**:
+
+Following SLICE-3 ModelTrainer patterns, **enhance existing TrainingService class** (NO new classes):
+
+```python
+# Enhanced existing TrainingService class with SLICE-3 patterns:
+class TrainingService:  # EXISTING class - just add methods
+    def _check_cancellation(self, session: TrainingSession, operation="training"):
+        """Check cancellation following SLICE-3 patterns in existing host service."""
+        if session.stop_requested:
+            logger.info(f"🛑 Host service training cancelled during {operation}")
+            session.status = "cancelled"
+            raise asyncio.CancelledError(f"Host service training cancelled during {operation}")
+    
+    async def _run_real_training(self, session: TrainingSession):
+        """ENHANCED existing training loop with SLICE-3 cancellation patterns."""
+        # ... keep all existing setup code unchanged ...
+        
+        for epoch in range(epochs):
+            # SLICE-3 pattern: Check at epoch boundaries (minimal overhead)
+            self._check_cancellation(session, f"epoch {epoch}")
+            
+            # ... existing symbol/timeframe iteration (keep unchanged) ...
+            
+            for batch_idx in range(total_batches):
+                # SLICE-3 pattern: Check every 50 batches (balanced performance/responsiveness)
+                if batch_idx % 50 == 0:
+                    self._check_cancellation(session, f"epoch {epoch}, batch {batch_idx}")
+                
+                # Keep all existing PyTorch training step unchanged
+                optimizer.zero_grad()
+                outputs = model(features_tensor)
+                loss = criterion(outputs, labels_tensor)
+                loss.backward()
+                optimizer.step()
+```
+
+**Required Host Service API Endpoints**:
+```python
+POST /training/cancel/{session_id}     # Cancel specific training session
+GET /training/status/{session_id}      # Check if training is cancelled  
+PUT /training/sessions/{session_id}/cancellation  # Update cancellation state
+```
+
+**Performance Requirements** (from SLICE-3 validation):
+- **Cancellation check performance**: <0.01s per check (validated in SLICE-3)
+- **Training performance impact**: <5% degradation from cancellation checking  
+- **Cancellation responsiveness**: Stop within 1 epoch or 50 batches maximum
+- **Memory usage**: Stable with cancellation state tracking
+
+**Technical Approach - Direct Enhancement**:
+- **Enhance existing TrainingService class** (NO new classes)
+- **⭐ CRITICAL**: Add SLICE-3 training loop cancellation checking to existing `_run_real_training()` method
+- **Add cancellation control API endpoints** to existing router for session management
+- **Enhance existing TrainingSession class** with cancellation context support
 - Implement structured progress reporting from host services to client adapters
-- Add cancellation check mechanisms within host service operations
+- Add cancellation check mechanisms within existing host service operations
 - Standardize error response formats across both services
 
 **Acceptance Criteria**:
@@ -262,6 +323,10 @@ class IbDataAdapter(AsyncServiceAdapter):
 - [ ] **Training Host Service**: Uses unified async patterns for training operations  
 - [ ] **Structured Progress**: Both services provide structured progress (not raw strings)
 - [ ] **Cancellation Support**: Both services check and respond to cancellation requests
+- [ ] **⭐ Enhanced Training Loop**: Existing `_run_real_training()` method enhanced with SLICE-3 cancellation patterns (NO new classes)
+- [ ] **⭐ Cancellation API Endpoints**: Host service provides `/training/cancel/{session_id}` and related endpoints
+- [ ] **⭐ Performance Validation**: Cancellation checks <0.01s, <5% training impact  
+- [ ] **⭐ End-to-End Testing**: Client → host service → training loops cancellation flow validated
 - [ ] **Error Consistency**: Unified error response formats across both services
 - [ ] **Health Checks**: Standard health check endpoints for both services
 - [ ] **Documentation**: Clear API documentation for both enhanced services
