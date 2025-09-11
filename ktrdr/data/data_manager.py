@@ -27,10 +27,7 @@ from ktrdr import (
     log_entry_exit,
     log_performance,
 )
-from ktrdr.async_infrastructure.progress import (
-    GenericProgressManager,
-    GenericProgressState,
-)
+from ktrdr.async_infrastructure.progress import GenericProgressManager
 from ktrdr.data.components.data_fetcher import DataFetcher
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 
@@ -53,8 +50,7 @@ logger = get_logger(__name__)
 
 
 @dataclass
-# Legacy DataLoadingProgress and ProgressCallback classes removed
-# Now using ProgressManager with ProgressState for clean progress tracking
+# Using GenericProgressManager and GenericProgressState for progress tracking
 
 
 class DataManager(ServiceOrchestrator):
@@ -144,7 +140,7 @@ class DataManager(ServiceOrchestrator):
         self.data_processor = config.data_processor
 
         # Initialize operational components (will be configured per operation)
-        # Old progress manager no longer used - replaced with GenericProgressManager
+        # Progress manager placeholder
         self._progress_manager = None
         self._data_fetcher: Optional[DataFetcher] = None
 
@@ -231,7 +227,7 @@ class DataManager(ServiceOrchestrator):
         if cancellation_token is None:
             return False
 
-        # Use unified cancellation protocol only - no legacy patterns
+        # Use unified cancellation protocol
         try:
             is_cancelled = cancellation_token.is_cancelled()
         except Exception as e:
@@ -249,39 +245,22 @@ class DataManager(ServiceOrchestrator):
 
         return False
 
-    # Legacy _create_progress_wrapper method removed
-    # Now using ProgressManager directly with ProgressState callbacks
+    # Progress callback management
 
-    def _create_legacy_callback_wrapper(self, legacy_callback: Callable) -> Callable:
+    def _create_progress_callback_wrapper(
+        self, progress_callback: Callable
+    ) -> Callable:
         """
-        Wrap legacy progress callback to work with GenericProgressState.
-
-        This method provides 100% backward compatibility by converting GenericProgressState
-        instances to the legacy ProgressState format that existing callbacks expect.
+        Create a progress callback wrapper for GenericProgressState.
 
         Args:
-            legacy_callback: Callback function expecting ProgressState instances
+            progress_callback: Callback function expecting GenericProgressState instances
 
         Returns:
-            Wrapper function that converts GenericProgressState to ProgressState
+            Direct callback function
         """
-
-        def wrapper(generic_state: GenericProgressState) -> None:
-            # Convert to legacy ProgressState using the DataProgressRenderer
-            if self._data_progress_renderer is not None:
-                legacy_state = (
-                    self._data_progress_renderer.create_legacy_compatible_state(
-                        generic_state
-                    )
-                )
-                legacy_callback(legacy_state)
-            else:
-                # Fallback if no renderer available - should not happen in normal operation
-                logger.warning(
-                    "Legacy callback wrapper called without data progress renderer"
-                )
-
-        return wrapper
+        # No wrapper needed - callback receives GenericProgressState directly
+        return progress_callback
 
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
@@ -422,10 +401,12 @@ class DataManager(ServiceOrchestrator):
         This method contains the original load_data logic but can now be executed
         within ServiceOrchestrator cancellation patterns.
         """
-        # Create legacy-compatible progress callback wrapper
+        # Create progress callback wrapper
         enhanced_callback = None
         if progress_callback:
-            enhanced_callback = self._create_legacy_callback_wrapper(progress_callback)
+            enhanced_callback = self._create_progress_callback_wrapper(
+                progress_callback
+            )
 
         # Initialize progress manager - use GenericProgressManager if available
         total_steps = 5 if mode == "local" else 10  # More steps for IB-enabled modes
@@ -615,7 +596,7 @@ class DataManager(ServiceOrchestrator):
         repair: bool = False,
     ) -> pd.DataFrame:
         """
-        Load data with simpler parameter naming for backward compatibility.
+        Load data with simpler parameter naming.
 
         This is a wrapper around load_data with parameter names aligned with the UI expectations.
 
@@ -655,165 +636,6 @@ class DataManager(ServiceOrchestrator):
 
     # Gap analysis methods have been extracted to GapAnalyzer component
     # See: ktrdr.data.components.gap_analyzer.GapAnalyzer
-
-    def _load_with_fallback_legacy(
-        self,
-        symbol: str,
-        timeframe: str,
-        mode: str,
-        start_date,
-        end_date,
-        validate: bool,
-        repair: bool,
-        repair_outliers: bool,
-        strict: bool,
-        cancellation_token,
-        progress_manager: Any,  # Legacy method - to be removed
-    ) -> pd.DataFrame:
-        """
-        Fallback to existing ProgressManager logic when async infrastructure is unavailable.
-
-        This method preserves the original load_data behavior for backward compatibility
-        when GenericProgressManager is not available.
-        """
-        # Create enhanced context for better progress descriptions
-        operation_context = {
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "mode": mode,
-            "start_date": (
-                start_date.isoformat()
-                if start_date and hasattr(start_date, "isoformat")
-                else str(start_date) if start_date else None
-            ),
-            "end_date": (
-                end_date.isoformat()
-                if end_date and hasattr(end_date, "isoformat")
-                else str(end_date) if end_date else None
-            ),
-        }
-
-        progress_manager.start_operation(
-            5 if mode == "local" else 10,  # total_steps
-            f"load_data_{symbol}_{timeframe}",
-            operation_context=operation_context,
-        )
-
-        # Set cancellation token if provided
-        if cancellation_token:
-            progress_manager.set_cancellation_token(cancellation_token)
-
-        try:
-            # Load data based on mode
-            logger.info(
-                f"Loading data for {symbol} ({timeframe}) - mode: {mode} (legacy)"
-            )
-
-            if mode == "local":
-                # Local-only mode: use basic loader without IB integration
-                progress_manager.update_progress_with_context(
-                    1,
-                    "Loading local data from cache",
-                    current_item_detail=f"Reading {symbol} {timeframe} from local storage",
-                )
-                df = self.data_loader.load(symbol, timeframe, start_date, end_date)
-            else:
-                # Enhanced modes: use intelligent gap analysis with IB integration
-                df = self.data_loading_orchestrator.load_with_fallback(
-                    symbol,
-                    timeframe,
-                    start_date,
-                    end_date,
-                    mode,
-                    cancellation_token,
-                    progress_manager,
-                )
-
-            # Check if df is None (happens when fallback returns None)
-            if df is None:
-                raise DataNotFoundError(
-                    message=f"Data not found for {symbol} ({timeframe})",
-                    error_code="DATA-FileNotFound",
-                    details={"symbol": symbol, "timeframe": timeframe},
-                )
-
-            if validate:
-                # Update progress for validation step with context
-                progress_manager.update_progress_with_context(
-                    5 if mode == "local" else 10,  # total_steps
-                    "Validating data quality",
-                    current_item_detail=f"Checking {len(df)} data points for completeness and accuracy",
-                )
-
-                # Use the unified data quality validator with same logic as enhanced version
-                validation_type = "local"
-
-                if not repair:
-                    validator = DataQualityValidator(
-                        auto_correct=False, max_gap_percentage=self.max_gap_percentage
-                    )
-                else:
-                    validator = self.data_validator
-
-                df_validated, quality_report = validator.validate_data(
-                    df, symbol, timeframe, validation_type
-                )
-
-                # Handle validation results (same logic as enhanced version)
-                if repair and not repair_outliers:
-                    logger.info(
-                        "Outlier repair was skipped as requested (repair_outliers=False)"
-                    )
-
-                is_healthy = quality_report.is_healthy(
-                    max_critical=0, max_high=0 if strict else 5
-                )
-
-                if not is_healthy:
-                    issues_summary = quality_report.get_summary()
-                    issues_str = f"{issues_summary['total_issues']} issues found"
-
-                    if strict:
-                        logger.error(
-                            f"Data quality issues found and strict mode enabled: {issues_str}"
-                        )
-                        raise DataCorruptionError(
-                            message=f"Data quality issues found: {issues_str}",
-                            error_code="DATA-IntegrityIssue",
-                            details={
-                                "issues": issues_summary,
-                                "symbol": symbol,
-                                "timeframe": timeframe,
-                                "quality_report": quality_report.get_summary(),
-                            },
-                        )
-                    else:
-                        logger.warning(f"Data quality issues found: {issues_str}")
-                        if repair:
-                            df = df_validated
-                            logger.info(
-                                f"Data automatically repaired by validator: {quality_report.corrections_made} corrections made"
-                            )
-                        else:
-                            for issue in quality_report.issues:
-                                logger.warning(
-                                    f"  - {issue.issue_type}: {issue.description}"
-                                )
-                else:
-                    if repair:
-                        df = df_validated
-                        if quality_report.corrections_made > 0:
-                            logger.info(
-                                f"Minor data corrections applied: {quality_report.corrections_made} corrections made"
-                            )
-
-            # Complete operation
-            progress_manager.complete_operation()
-            return df
-
-        except Exception as e:
-            logger.error(f"Legacy data load failed: {e}")
-            raise
 
     def _load_with_enhanced_orchestrator(
         self,
@@ -894,9 +716,7 @@ class DataManager(ServiceOrchestrator):
         timeframe: str,
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[
-            Any
-        ] = None,  # Legacy parameter - will be updated to GenericProgressManager
+        progress_manager: Optional[GenericProgressManager] = None,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Enhanced async fetching using DataFetcher component.
@@ -984,7 +804,7 @@ class DataManager(ServiceOrchestrator):
         """
         Reusable utility to execute async methods from sync context.
 
-        Provides a single asyncio.run() entry point for backward compatibility
+        Provides a single asyncio.run() entry point
         while maintaining proper async/sync boundary separation.
         Handles AsyncHostService context management automatically.
 
@@ -1042,14 +862,12 @@ class DataManager(ServiceOrchestrator):
         timeframe: str,
         segments: list[tuple[datetime, datetime]],
         cancellation_token: Optional[Any] = None,
-        progress_manager: Optional[
-            Any
-        ] = None,  # Legacy parameter - will be updated to GenericProgressManager
+        progress_manager: Optional[GenericProgressManager] = None,
     ) -> tuple[list[pd.DataFrame], int, int]:
         """
         Sync wrapper for enhanced async fetching using DataFetcher component.
 
-        This method maintains backward compatibility by providing a sync interface
+        This method provides a sync interface
         to the async implementation, with a single asyncio.run() at the entry point.
 
         Args:
@@ -1172,7 +990,7 @@ class DataManager(ServiceOrchestrator):
         """
         Sync wrapper for async head timestamp fetching.
 
-        Maintains backward compatibility with a single asyncio.run() call.
+        Uses a single asyncio.run() call.
 
         Args:
             symbol: Trading symbol
@@ -1258,7 +1076,7 @@ class DataManager(ServiceOrchestrator):
         """
         Sync wrapper for async head timestamp validation.
 
-        Maintains backward compatibility with a single asyncio.run() call.
+        Uses a single asyncio.run() call.
 
         Args:
             symbol: Trading symbol
@@ -1324,7 +1142,7 @@ class DataManager(ServiceOrchestrator):
         Args:
             df: DataFrame containing OHLCV data
             timeframe: The timeframe of the data (e.g., '1h', '1d')
-            method: Repair method (legacy parameter, now uses unified validator)
+            method: Repair method (now uses unified validator)
             repair_outliers: Whether to repair detected outliers (default: True)
             context_window: Optional window size for contextual outlier detection
             std_threshold: Number of standard deviations to consider as outlier
@@ -1334,14 +1152,14 @@ class DataManager(ServiceOrchestrator):
 
         Note:
             This method now delegates to the unified DataQualityValidator for
-            all repair operations. The 'method' parameter is maintained for
-            backward compatibility but the validator uses its own repair logic.
+            all repair operations. The 'method' parameter is maintained but
+            the validator uses its own repair logic.
         """
         if df.empty:
             logger.warning("Cannot repair empty DataFrame")
             return df
 
-        # Validate method parameter for backward compatibility
+        # Validate method parameter
         if method not in [
             "auto",
             "ffill",
