@@ -372,13 +372,6 @@ class TestGapAnalyzerIntegration:
         assert dm.gap_analyzer is not None
         assert hasattr(dm.gap_analyzer, "analyze_gaps")
 
-    def test_backward_compatibility(self):
-        """Test that new implementation produces identical results to original."""
-        # This test compares gap analysis results between original DataManager
-        # and the new GapAnalyzer component
-
-        # Will be implemented after the component is created
-        pytest.skip("Requires both original and new implementations")
 
 
 if __name__ == "__main__":
