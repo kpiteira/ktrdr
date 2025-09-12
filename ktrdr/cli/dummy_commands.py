@@ -17,7 +17,7 @@ from ktrdr.cli.error_handler import (
     display_ib_connection_required_message,
     handle_cli_error,
 )
-from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callback
+from ktrdr.cli.progress_display_enhanced import EnhancedCLIProgressDisplay
 from ktrdr.errors import DataError
 from ktrdr.logging import get_logger
 
@@ -119,8 +119,7 @@ async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
             # Get operation ID from response (same pattern as data loading)
             if response.get("success") and response.get("data", {}).get("operation_id"):
                 operation_id = response["data"]["operation_id"]
-                if not quiet:
-                    console.print(f"⚡ Started operation: {operation_id}")
+                # Note: Don't print operation_id during progress display to avoid conflicts
             else:
                 # Handle sync fallback if needed
                 if not quiet:
@@ -134,9 +133,7 @@ async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
                 from ktrdr.async_infrastructure.progress import GenericProgressState
 
                 # Use the REAL enhanced progress display system
-                enhanced_callback, display = create_enhanced_progress_callback(
-                    console=console, show_details=True
-                )
+                display = EnhancedCLIProgressDisplay(console=console, show_details=True)
 
                 operation_started = False
 
