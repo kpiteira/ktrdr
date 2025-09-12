@@ -79,7 +79,7 @@ class TestAsyncExecutionPatterns:
         """Test execute_with_cancellation with successful execution."""
         # Mock cancellation token
         cancellation_token = MagicMock()
-        cancellation_token.is_cancelled_requested = False
+        cancellation_token.is_cancelled.return_value = False
 
         async def mock_operation():
             await asyncio.sleep(0.01)
@@ -97,7 +97,7 @@ class TestAsyncExecutionPatterns:
         """Test execute_with_cancellation when operation is cancelled."""
         # Mock cancellation token that is already cancelled
         cancellation_token = MagicMock()
-        cancellation_token.is_cancelled_requested = True
+        cancellation_token.is_cancelled.return_value = True
 
         async def mock_operation():
             await asyncio.sleep(0.1)  # This should be cancelled
