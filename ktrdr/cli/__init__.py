@@ -7,6 +7,7 @@ including commands for data inspection, indicator calculation, and visualization
 
 from ktrdr.cli.commands import cli_app
 from ktrdr.cli.data_commands import data_app
+from ktrdr.cli.dummy_commands import dummy_app
 from ktrdr.cli.fuzzy_commands import fuzzy_app
 from ktrdr.cli.ib_commands import ib_app
 from ktrdr.cli.indicator_commands import indicators_app
@@ -19,6 +20,9 @@ from ktrdr.cli.strategy_commands import strategies_app
 
 # Register command subgroups following industry best practices
 cli_app.add_typer(data_app, name="data", help="Data management commands")
+cli_app.add_typer(
+    dummy_app, name="dummy", help="Dummy service commands with beautiful UX"
+)
 cli_app.add_typer(
     operations_app, name="operations", help="Operations management commands"
 )
