@@ -30,6 +30,7 @@ class OperationType(str, Enum):
     BACKTESTING = "backtesting"
     INDICATOR_COMPUTE = "indicator_compute"
     FUZZY_ANALYSIS = "fuzzy_analysis"
+    DUMMY = "dummy"
 
 
 class OperationProgress(BaseModel):
