@@ -145,26 +145,35 @@ async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
                     try:
                         # Check for cancellation and send cancel request immediately
                         if cancelled:
-                            console.print(
-                                "[yellow]🛑 Sending cancellation to server...[/yellow]"
+                            # Complete the progress display before showing messages
+                            display.complete_operation(
+                                success=False, summary="Cancelled by user"
                             )
+
+                            if not quiet:
+                                console.print(
+                                    "[yellow]🛑 Sending cancellation to server...[/yellow]"
+                                )
                             try:
                                 cancel_response = await api_client.cancel_operation(
                                     operation_id=operation_id,
                                     reason="User requested cancellation via CLI",
                                 )
                                 if cancel_response.get("success"):
-                                    console.print(
-                                        "✅ [yellow]Cancellation sent successfully[/yellow]"
-                                    )
+                                    if not quiet:
+                                        console.print(
+                                            "✅ [yellow]Cancellation sent successfully[/yellow]"
+                                        )
                                 else:
-                                    console.print(
-                                        f"[red]Cancel failed: {cancel_response}[/red]"
-                                    )
+                                    if not quiet:
+                                        console.print(
+                                            f"[red]Cancel failed: {cancel_response}[/red]"
+                                        )
                             except Exception as e:
-                                console.print(
-                                    f"[red]Cancel request failed: {str(e)}[/red]"
-                                )
+                                if not quiet:
+                                    console.print(
+                                        f"[red]Cancel request failed: {str(e)}[/red]"
+                                    )
                             break  # Exit the polling loop
 
                         status_response = await api_client.get_operation_status(
