@@ -166,9 +166,13 @@ class GenericProgressManager:
                 context=context or {},
             )
 
-            self._finalize_state_update(
-                f"Started operation '{operation_id}' with {total_steps} steps and context: {context}"
+            logger.debug(
+                "Started operation '%s' with %d steps and context: %s",
+                operation_id,
+                total_steps,
+                context,
             )
+            self._trigger_callback()
 
     def start_step(
         self,
@@ -245,9 +249,14 @@ class GenericProgressManager:
             if not self.renderer:
                 self._state.message = f"Starting {step_name}"
 
-            self._finalize_state_update(
-                f"Started step {step_number} ({step_name}): {self._state.step_start_percentage:.1f}% → {self._state.step_end_percentage:.1f}%"
+            logger.debug(
+                "Started step %d (%s): %.1f%% → %.1f%%",
+                step_number,
+                step_name,
+                self._state.step_start_percentage,
+                self._state.step_end_percentage,
             )
+            self._trigger_callback()
 
     def update_step_progress(
         self, current: int, total: int, items_processed: int = 0, detail: str = ""
@@ -297,7 +306,7 @@ class GenericProgressManager:
                 }
             )
 
-            self._finalize_state_update()
+            self._trigger_callback()
 
     def update_progress(
         self,
@@ -323,7 +332,7 @@ class GenericProgressManager:
             # Update core fields
             self._state.current_step = step
             self._state.items_processed = items_processed
-            
+
             # Calculate simple step-based percentage
             self._state.percentage = (
                 min(100.0, (step / self._state.total_steps) * 100.0)
@@ -339,7 +348,7 @@ class GenericProgressManager:
             if context:
                 self._state.context.update(context)
 
-            self._finalize_state_update()
+            self._trigger_callback()
 
     def complete_operation(self) -> None:
         """Mark operation complete."""
@@ -354,9 +363,10 @@ class GenericProgressManager:
             # Set completion message
             self._state.message = f"Operation {self._state.operation_id} completed"
 
-            self._finalize_state_update(
-                f"Operation '{self._state.operation_id}' completed successfully"
+            logger.info(
+                "Operation '%s' completed successfully", self._state.operation_id
             )
+            self._trigger_callback()
 
     def _trigger_callback(self) -> None:
         """
@@ -386,38 +396,15 @@ class GenericProgressManager:
                 step_current=self._state.step_current,
                 step_total=self._state.step_total,
             )
-            
+
             # Apply renderer for display purposes (but don't modify the original state)
             if self.renderer:
                 # Enhance the copy for the callback
                 state_copy = self.renderer.enhance_state(state_copy)
                 # Render the message for display
                 state_copy.message = self.renderer.render_message(state_copy)
-            
+
             self.callback(state_copy)
         except Exception as e:
             # Same error handling as existing ProgressManager
             logger.warning(f"Progress callback failed: {e}")
-
-    def _finalize_state_update(self, log_message: Optional[str] = None) -> None:
-        """
-        Finalize state update with rendering, optional logging, and callback triggering.
-
-        This method centralizes the common pattern used by all progress update methods:
-        1. Enhance state via renderer (if available)
-        2. Log the operation (if message provided)
-        3. Trigger callback with rendered state
-
-        Args:
-            log_message: Optional message to log at debug level
-        """
-        # Use renderer for state enhancement (but not message modification)
-        if self.renderer and self._state:
-            self._state = self.renderer.enhance_state(self._state)
-
-        # Log if message provided
-        if log_message:
-            logger.debug(log_message)
-
-        # Trigger callback
-        self._trigger_callback()
