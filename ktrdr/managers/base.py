@@ -99,19 +99,8 @@ class DefaultServiceProgressRenderer(ProgressRenderer):
         if state.percentage > 0:
             parts.append(f"({state.percentage:.1f}%)")
 
-        # Add time estimation if available
-        if state.estimated_remaining:
-            remaining_seconds = int(state.estimated_remaining.total_seconds())
-            if remaining_seconds > 0:
-                if remaining_seconds < 60:
-                    eta_str = f"{remaining_seconds}s"
-                elif remaining_seconds < 3600:
-                    eta_str = f"{remaining_seconds // 60}m {remaining_seconds % 60}s"
-                else:
-                    hours = remaining_seconds // 3600
-                    minutes = (remaining_seconds % 3600) // 60
-                    eta_str = f"{hours}h {minutes}m"
-                parts.append(f"ETA: {eta_str}")
+        # Note: ETA formatting is handled by the client (CLI) to avoid conflicts
+        # The estimated_remaining data is still available in the state for clients to use
 
         return " ".join(parts)
 
