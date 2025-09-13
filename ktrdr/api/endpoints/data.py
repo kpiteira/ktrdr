@@ -340,13 +340,12 @@ async def get_cached_data(
                     details={"end_date": end_date},
                 ) from err
 
-        # Load data using DataManager with local mode only
-        df = data_service.data_manager.load_data(
+        # Load cached data using consistent DataService delegation
+        df = data_service.load_cached_data(
             symbol=clean_symbol,
             timeframe=timeframe,
             start_date=start_dt,
             end_date=end_dt,
-            mode="local",  # Force local only - no external operations
             validate=True,
             repair=False,
         )
@@ -569,8 +568,8 @@ async def load_data(
             }
 
         if async_mode:
-            # Async mode - start operation and return operation ID
-            operation_result = await data_service.start_data_loading_operation(
+            # Async mode - use consistent delegation for async operation tracking
+            operation_result = await data_service.load_data_async(
                 symbol=clean_symbol,
                 timeframe=request.timeframe,
                 start_date=request.start_date,
@@ -579,13 +578,14 @@ async def load_data(
                 filters=filters_dict,
             )
 
-            # Extract operation ID from result (or generate one if not available)
+            # Extract operation ID from ServiceOrchestrator result
             operation_id = operation_result.get("operation_id") or str(uuid.uuid4())
+            status = operation_result.get("status", "started")
 
             # Return operation ID for tracking
             response_data = DataLoadOperationResponse(
                 operation_id=operation_id,
-                status="started",
+                status=status,
                 fetched_bars=0,
                 cached_before=False,
                 merged_file="",
@@ -600,7 +600,7 @@ async def load_data(
             return DataLoadApiResponse(success=True, data=response_data, error=None)
 
         else:
-            # Sync mode - execute immediately and return results
+            # Sync mode - use consistent delegation for immediate results
             result = await data_service.load_data(
                 symbol=clean_symbol,
                 timeframe=request.timeframe,

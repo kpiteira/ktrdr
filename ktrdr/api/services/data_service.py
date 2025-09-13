@@ -83,6 +83,96 @@ class DataService(BaseService):
         )
         return result  # Already API-formatted by DataManager
 
+    @log_entry_exit(logger=logger, log_args=True)
+    @log_performance(threshold_ms=200, logger=logger)
+    def load_cached_data(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[Union[str, datetime]] = None,
+        end_date: Optional[Union[str, datetime]] = None,
+        validate: bool = True,
+        repair: bool = False,
+    ) -> Optional[pd.DataFrame]:
+        """
+        Load cached data from local storage for frontend visualization.
+
+        This method provides consistent delegation to DataManager while returning
+        a DataFrame for API endpoints that need to apply additional processing
+        like trading hours filtering and format conversion.
+
+        Args:
+            symbol: Trading symbol (e.g., 'AAPL', 'MSFT')
+            timeframe: Data timeframe (e.g., '1d', '1h')
+            start_date: Optional start date for filtering
+            end_date: Optional end date for filtering
+            validate: Whether to validate the data
+            repair: Whether to repair the data
+
+        Returns:
+            DataFrame with OHLCV data or None if no data found
+
+        Raises:
+            DataError: For data-related errors
+        """
+        # Delegate to DataManager's sync load_data method
+        # This maintains consistent delegation pattern while returning DataFrame
+        return self.data_manager.load_data(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
+            mode="local",  # Force local only - no external operations
+            validate=validate,
+            repair=repair,
+        )
+
+    @log_entry_exit(logger=logger, log_args=True)
+    @log_performance(threshold_ms=500, logger=logger)
+    async def load_data_async(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[Union[str, datetime]] = None,
+        end_date: Optional[Union[str, datetime]] = None,
+        mode: str = "local",
+        filters: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """
+        Load data asynchronously with ServiceOrchestrator operation tracking.
+
+        This method provides consistent delegation to DataManager's ServiceOrchestrator
+        for async operation tracking, returning operation metadata instead of data results.
+
+        Args:
+            symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
+            timeframe: Data timeframe (e.g., '1d', '1h')
+            start_date: Optional start date for filtering
+            end_date: Optional end date for filtering
+            mode: Loading mode (local, tail, backfill, full)
+            filters: Optional filters for data processing
+
+        Returns:
+            Dictionary with operation tracking info:
+            {
+                "operation_id": "op_xxx",
+                "status": "started",
+                "message": "Started data_load operation"
+            }
+
+        Raises:
+            DataError: For data-related errors
+        """
+        # Delegate to DataManager's ServiceOrchestrator for async operation tracking
+        return await self.data_manager.load_data_async(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
+            mode=mode,
+            filters=filters,
+        )
+
     async def start_data_loading_operation(
         self,
         symbol: str,
