@@ -4,6 +4,7 @@ Data endpoints for the KTRDR API.
 This module implements the API endpoints for accessing market data, symbols, and timeframes.
 """
 
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -569,7 +570,7 @@ async def load_data(
 
         if async_mode:
             # Async mode - start operation and return operation ID
-            operation_id = await data_service.start_data_loading_operation(
+            operation_result = await data_service.start_data_loading_operation(
                 symbol=clean_symbol,
                 timeframe=request.timeframe,
                 start_date=request.start_date,
@@ -577,6 +578,9 @@ async def load_data(
                 mode=request.mode,
                 filters=filters_dict,
             )
+
+            # Extract operation ID from result (or generate one if not available)
+            operation_id = operation_result.get("operation_id") or str(uuid.uuid4())
 
             # Return operation ID for tracking
             response_data = DataLoadOperationResponse(

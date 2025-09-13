@@ -5,7 +5,6 @@ This module provides services for accessing OHLCV data and related functionality
 bridging the API endpoints with the core KTRDR data modules.
 """
 
-import asyncio
 import time
 from datetime import datetime
 from typing import Any, Optional, Union
@@ -13,14 +12,9 @@ from typing import Any, Optional, Union
 import pandas as pd
 
 from ktrdr import get_logger, log_entry_exit, log_performance
-from ktrdr.api.models.operations import (
-    OperationMetadata,
-    OperationType,
-)
 from ktrdr.api.services.base import BaseService
-from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.data import DataManager
-from ktrdr.errors import DataError, DataNotFoundError, RetryConfig, retry_with_backoff
+from ktrdr.errors import DataError, DataNotFoundError
 
 # Setup module-level logger
 logger = get_logger(__name__)
@@ -43,18 +37,10 @@ class DataService(BaseService):
         """
         super().__init__()  # Initialize BaseService
         self.data_manager = DataManager(data_dir=data_dir)
-        self.operations_service = get_operations_service()
         self.logger.info("DataService initialized")
 
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=500, logger=logger)
-    @retry_with_backoff(
-        retryable_exceptions=[DataError],
-        config=RetryConfig(max_retries=3, base_delay=1.0, backoff_factor=2.0),
-        logger=logger,
-        is_retryable=lambda e: isinstance(e, DataError)
-        and not isinstance(e, DataNotFoundError),
-    )
     async def load_data(
         self,
         symbol: str,
@@ -68,12 +54,16 @@ class DataService(BaseService):
         """
         Load OHLCV data for a symbol and timeframe.
 
+        Delegates to DataManager's ServiceOrchestrator for all complex orchestration.
+
         Args:
             symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
             timeframe: Data timeframe (e.g., '1d', '1h')
             start_date: Optional start date for filtering
             end_date: Optional end date for filtering
-            include_metadata: Whether to include metadata in the response
+            mode: Loading mode (local, tail, backfill, full)
+            include_metadata: Whether to include metadata in the response (legacy parameter)
+            filters: Optional filters for data processing
 
         Returns:
             Dictionary with loaded data in API format
@@ -82,76 +72,16 @@ class DataService(BaseService):
             DataNotFoundError: If data is not found
             DataError: For other data-related errors
         """
-        import time
-
-        start_time = time.time()
-        logger.info(f"Loading data for {symbol} ({timeframe}) - mode: {mode}")
-
-        try:
-            # Load data using the DataManager with mode support
-            df = self.data_manager.load_data(
-                symbol=symbol,
-                timeframe=timeframe,
-                start_date=start_date,
-                end_date=end_date,
-                mode=mode,  # Pass through the mode - DataManager decides whether to use IB
-                validate=True,
-                repair=False,
-                # Note: No progress callback for sync operations
-            )
-
-            # Apply trading hours filtering if requested
-            if (
-                filters
-                and filters.get("trading_hours_only")
-                and df is not None
-                and not df.empty
-            ):
-                df = self._filter_trading_hours(
-                    df, symbol, filters.get("include_extended", False)
-                )
-
-            execution_time = time.time() - start_time
-
-            # Return enhanced format with metrics
-            result = {
-                "status": "success",
-                "fetched_bars": len(df) if df is not None and not df.empty else 0,
-                "cached_before": True,  # Will be enhanced when DataManager provides this info
-                "merged_file": f"data/{symbol}_{timeframe}.csv",
-                "gaps_analyzed": 0,  # Using intelligent gap classification - only unexpected gaps are reported
-                "segments_fetched": 0,  # Will be enhanced when DataManager provides this info
-                "ib_requests_made": (
-                    0 if mode == "local" else 0
-                ),  # Will be enhanced when DataManager provides this info
-                "execution_time_seconds": execution_time,
-                "error_message": None,
-            }
-
-            logger.info(
-                f"Successfully loaded {result['fetched_bars']} bars for {symbol}"
-            )
-            return result
-
-        except DataNotFoundError as e:
-            logger.error(f"Data not found for {symbol} ({timeframe}): {str(e)}")
-            raise
-        except Exception as e:
-            execution_time = time.time() - start_time
-            logger.error(f"Error loading data for {symbol} ({timeframe}): {str(e)}")
-
-            # Return failed status in enhanced format
-            return {
-                "status": "failed",
-                "fetched_bars": 0,
-                "cached_before": False,
-                "merged_file": f"data/{symbol}_{timeframe}.csv",
-                "gaps_analyzed": 0,
-                "segments_fetched": 0,
-                "ib_requests_made": 0,
-                "execution_time_seconds": execution_time,
-                "error_message": str(e),
-            }
+        # Simple delegation to DataManager's ServiceOrchestrator
+        result = await self.data_manager.load_data_async(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
+            mode=mode,
+            filters=filters,
+        )
+        return result  # Already API-formatted by DataManager
 
     async def start_data_loading_operation(
         self,
@@ -161,12 +91,9 @@ class DataService(BaseService):
         end_date: Optional[Union[str, datetime]] = None,
         mode: str = "tail",
         filters: Optional[dict[str, Any]] = None,
-    ) -> str:
+    ) -> dict[str, Any]:
         """
-        Start a data loading operation that can be tracked and cancelled.
-
-        This method creates an operation, registers it with the operations service,
-        and starts the data loading process in the background.
+        Start a data loading operation using simplified delegation to DataManager.
 
         Args:
             symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
@@ -177,299 +104,17 @@ class DataService(BaseService):
             filters: Optional filters (trading_hours_only, include_extended)
 
         Returns:
-            Operation ID for tracking the operation
+            API response dict with operation_id for async tracking
         """
-        # Create operation metadata
-        metadata = OperationMetadata(
+        # Delegate to DataManager's ServiceOrchestrator (same as load_data but async tracked)
+        return await self.data_manager.load_data_async(
             symbol=symbol,
             timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
             mode=mode,
-            start_date=start_date if isinstance(start_date, datetime) else None,
-            end_date=end_date if isinstance(end_date, datetime) else None,
-            parameters=filters or {},
+            filters=filters,
         )
-
-        # Create operation
-        operation = await self.operations_service.create_operation(
-            operation_type=OperationType.DATA_LOAD,
-            metadata=metadata,
-        )
-
-        operation_id = operation.operation_id
-        logger.info(f"Created data loading operation: {operation_id}")
-
-        # Start the data loading task
-        task = asyncio.create_task(
-            self._run_data_loading_operation(
-                operation_id,
-                symbol,
-                timeframe,
-                start_date,
-                end_date,
-                mode,
-                filters,
-            )
-        )
-
-        # Register task with operations service
-        await self.operations_service.start_operation(operation_id, task)
-
-        return operation_id
-
-    async def _run_data_loading_operation(
-        self,
-        operation_id: str,
-        symbol: str,
-        timeframe: str,
-        start_date: Optional[Union[str, datetime]],
-        end_date: Optional[Union[str, datetime]],
-        mode: str,
-        filters: Optional[dict[str, Any]],
-    ) -> None:
-        """
-        Run the actual data loading operation with progress tracking.
-
-        This method performs the data loading while updating operation progress
-        and handling cancellation requests.
-        """
-        try:
-            logger.info(f"Starting data loading operation: {operation_id}")
-            start_time = time.time()
-
-            # Call the actual data loading method with real progress tracking
-            try:
-                result = await self._cancellable_data_load(
-                    operation_id=operation_id,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    start_date=start_date,
-                    end_date=end_date,
-                    mode=mode,
-                    filters=filters,
-                )
-
-                # Complete the operation with real results
-                execution_time = time.time() - start_time
-                result_summary = {
-                    "status": result.get("status", "success"),
-                    "fetched_bars": result.get("fetched_bars", 0),
-                    "execution_time_seconds": execution_time,
-                    "mode": mode,
-                    "symbol": symbol,
-                    "timeframe": timeframe,
-                    "cached_before": result.get("cached_before", False),
-                    "merged_file": result.get("merged_file", ""),
-                    "gaps_analyzed": result.get("gaps_analyzed", 0),
-                    "segments_fetched": result.get("segments_fetched", 0),
-                    "ib_requests_made": result.get("ib_requests_made", 0),
-                }
-
-                await self.operations_service.complete_operation(
-                    operation_id, result_summary
-                )
-
-                logger.info(f"Completed data loading operation: {operation_id}")
-
-            except Exception as e:
-                # Handle operation failure
-                await self.operations_service.fail_operation(
-                    operation_id, f"Data loading failed: {str(e)}"
-                )
-                logger.error(
-                    f"Data loading operation failed: {operation_id} - {str(e)}"
-                )
-
-        except asyncio.CancelledError:
-            # Handle task cancellation
-            logger.info(f"Data loading operation cancelled: {operation_id}")
-            # The operations service will have already marked it as cancelled
-            raise
-        except Exception as e:
-            # Handle unexpected errors
-            await self.operations_service.fail_operation(
-                operation_id, f"Unexpected error: {str(e)}"
-            )
-            logger.error(
-                f"Unexpected error in data loading operation: {operation_id} - {str(e)}"
-            )
-
-    async def _cancellable_data_load(
-        self,
-        operation_id: str,
-        symbol: str,
-        timeframe: str,
-        start_date: Optional[Union[str, datetime]],
-        end_date: Optional[Union[str, datetime]],
-        mode: str,
-        filters: Optional[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """
-        Run data loading with cancellation support and real progress updates.
-
-        This method creates a progress callback that updates the operations service
-        with real progress from the DataManager and runs the data loading in an executor.
-        """
-        import concurrent.futures
-
-        # Get unified cancellation token from operations service
-        cancellation_token = self.operations_service.get_cancellation_token(
-            operation_id
-        )
-
-        last_progress = [None]  # Mutable container for thread communication
-
-        def progress_callback_fn(progress_state):
-            """Callback function to update operation progress in real-time from ProgressManager."""
-            try:
-                # Convert ProgressState to OperationProgress
-                from ktrdr.api.models.operations import OperationProgress
-
-                operation_progress = OperationProgress(
-                    percentage=progress_state.percentage,
-                    current_step=progress_state.message,
-                    steps_completed=progress_state.step_current,
-                    steps_total=progress_state.step_total,
-                    items_processed=progress_state.items_processed,
-                    items_total=progress_state.total_items,
-                    current_item=progress_state.context.get("step_detail")
-                    or progress_state.context.get("current_step_name"),
-                )
-
-                # Store for async update (no warnings/errors from ProgressManager)
-                last_progress[0] = (
-                    operation_progress,
-                    [],  # No warnings from ProgressManager
-                    [],  # No errors from ProgressManager
-                )
-
-            except Exception as e:
-                logger.warning(f"Progress callback error: {e}")
-
-        async def update_progress_periodically():
-            """Periodically update the operations service with the latest progress."""
-            while not (cancellation_token and cancellation_token.is_cancelled()):
-                if last_progress[0] is not None:
-                    try:
-                        progress_data, warnings, errors = last_progress[0]
-                        await self.operations_service.update_progress(
-                            operation_id, progress_data, warnings, errors
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to update progress: {e}")
-                await asyncio.sleep(0.5)  # Update every 500ms for responsive UI
-
-        def run_data_load():
-            """Run the actual data loading with real progress tracking."""
-            try:
-                # Check cancellation before starting using unified token
-                if cancellation_token and cancellation_token.is_cancelled():
-                    return {"status": "cancelled", "error": "Operation was cancelled"}
-
-                result = self.data_manager.load_data(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    start_date=start_date,
-                    end_date=end_date,
-                    mode=mode,
-                    validate=True,
-                    repair=False,
-                    cancellation_token=cancellation_token,  # Pass unified cancellation token
-                    progress_callback=progress_callback_fn,  # Real progress updates
-                )
-
-                # Convert result to API format
-                if result is None or result.empty:
-                    return {
-                        "status": "success",
-                        "fetched_bars": 0,
-                        "cached_before": False,
-                        "merged_file": "",
-                        "gaps_analyzed": 0,
-                        "segments_fetched": 0,
-                        "ib_requests_made": 0,
-                        "execution_time_seconds": 0.0,
-                    }
-
-                return {
-                    "status": "success",
-                    "fetched_bars": len(result),
-                    "cached_before": True,  # TODO: DataManager should provide this info
-                    "merged_file": f"{symbol}_{timeframe}.csv",
-                    "gaps_analyzed": 1,  # TODO: DataManager should provide this info
-                    "segments_fetched": 1,  # TODO: DataManager should provide this info
-                    "ib_requests_made": (
-                        1 if mode != "local" else 0
-                    ),  # TODO: DataManager should provide this info
-                    "execution_time_seconds": 0.0,  # Will be calculated by caller
-                }
-
-            except Exception as e:
-                logger.error(f"Data loading failed: {e}")
-                return {
-                    "error": str(e),
-                    "status": "failed",
-                }
-
-        # Start periodic progress updates
-        progress_task = asyncio.create_task(update_progress_periodically())
-
-        try:
-            # Run data loading in executor with unified cancellation
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_data_load)
-
-                # Wait for completion - cancellation is handled within the data loading operation
-                result = await asyncio.wrap_future(future)
-
-        finally:
-            # Stop progress updates by cancelling the unified token (signals the progress task to stop)
-            if cancellation_token:
-                cancellation_token.cancel("Operation completed or cancelled")
-
-            try:
-                await asyncio.wait_for(progress_task, timeout=1.0)
-            except asyncio.TimeoutError:
-                progress_task.cancel()
-
-            # Ensure ThreadPoolExecutor future result is retrieved to prevent logging warnings
-            # This prevents "Future exception was never retrieved" messages in logs
-            if "future" in locals():
-                try:
-                    if not future.done():
-                        future.cancel()
-                    # Retrieve result/exception to satisfy asyncio warning prevention
-                    future.result()
-                except (
-                    concurrent.futures.CancelledError,
-                    asyncio.CancelledError,
-                    Exception,
-                ):
-                    # Expected for cancellation - ignore silently
-                    pass
-
-        # Process the result after cleanup
-        try:
-            # Check if cancellation was completed via unified token
-            if cancellation_token and cancellation_token.is_cancelled():
-                logger.info(f"Data loading operation was cancelled: {operation_id}")
-                raise asyncio.CancelledError("Operation was cancelled")
-
-            # Check both error key and failed status
-            if "error" in result or result.get("status") == "failed":
-                error_msg = result.get("error", "Unknown error")
-                raise DataError(
-                    message=f"Data loading failed: {error_msg}",
-                    error_code="DATA-LoadError",
-                    details={
-                        "operation_id": operation_id,
-                        "symbol": symbol,
-                    },
-                )
-            return result
-
-        except concurrent.futures.CancelledError:
-            logger.info(f"Data loading future was cancelled: {operation_id}")
-            raise asyncio.CancelledError("Operation was cancelled") from None
 
     def _convert_df_to_api_format(
         self,
@@ -478,18 +123,7 @@ class DataService(BaseService):
         timeframe: str,
         include_metadata: bool = True,
     ) -> dict[str, Any]:
-        """
-        Convert pandas DataFrame to API response format.
-
-        Args:
-            df: DataFrame with OHLCV data
-            symbol: Trading symbol
-            timeframe: Data timeframe
-            include_metadata: Whether to include metadata
-
-        Returns:
-            Dictionary with data in API format
-        """
+        """Convert pandas DataFrame to API response format."""
         if df.empty:
             return {
                 "dates": [],
@@ -602,12 +236,7 @@ class DataService(BaseService):
         return result
 
     def _get_symbols_metadata(self) -> dict[str, dict[str, Any]]:
-        """
-        Get symbol metadata from the symbol validation cache.
-
-        Returns:
-            Dictionary mapping symbol to metadata
-        """
+        """Get symbol metadata from cache."""
         try:
             import json
             from pathlib import Path
@@ -638,15 +267,7 @@ class DataService(BaseService):
         return {}
 
     def _map_asset_type(self, ib_asset_type: str) -> str:
-        """
-        Map IB asset types to user-friendly types.
-
-        Args:
-            ib_asset_type: IB asset type (STK, CASH, FUT, etc.)
-
-        Returns:
-            User-friendly asset type
-        """
+        """Map IB asset types to user-friendly types."""
         mapping = {
             "STK": "stock",
             "CASH": "forex",
@@ -660,17 +281,7 @@ class DataService(BaseService):
     def _filter_trading_hours(
         self, df: pd.DataFrame, symbol: str, include_extended: bool = False
     ) -> pd.DataFrame:
-        """
-        Filter dataframe to only include trading hours.
-
-        Args:
-            df: DataFrame with datetime index
-            symbol: Symbol to get trading hours for
-            include_extended: Whether to include extended hours
-
-        Returns:
-            Filtered DataFrame
-        """
+        """Filter dataframe to trading hours."""
         try:
             from ktrdr.data.trading_hours import TradingHoursManager
 
@@ -845,134 +456,6 @@ class DataService(BaseService):
                 error_code="DATA-RangeError",
                 details={"symbol": symbol, "timeframe": timeframe},
             ) from e
-
-    def _filter_trading_hours_advanced(
-        self,
-        df: pd.DataFrame,
-        trading_hours: dict[str, Any],
-        include_extended: bool = False,
-    ) -> pd.DataFrame:
-        """
-        Filter DataFrame to trading hours only.
-
-        Args:
-            df: DataFrame with datetime index
-            trading_hours: Trading hours configuration
-            include_extended: Whether to include extended trading hours
-
-        Returns:
-            Filtered DataFrame
-        """
-        try:
-            if df is None or df.empty:
-                return df
-
-            # Ensure we have a datetime index
-            if not isinstance(df.index, pd.DatetimeIndex):
-                logger.warning(
-                    "DataFrame doesn't have datetime index, cannot filter trading hours"
-                )
-                return df
-
-            # Get timezone and trading hours info
-            timezone = trading_hours.get("timezone", "UTC")
-            regular_hours = trading_hours.get("regular_hours", {})
-            extended_hours = trading_hours.get("extended_hours", [])
-            trading_days = trading_hours.get(
-                "trading_days", [0, 1, 2, 3, 4]
-            )  # Default to weekdays
-
-            # Convert index to the exchange timezone
-            df_tz = df.copy()
-            if (
-                hasattr(df_tz.index, "tz")
-                and df_tz.index.tz is None
-                and hasattr(df_tz.index, "tz_localize")
-            ):
-                df_tz.index = df_tz.index.tz_localize("UTC")
-            if hasattr(df_tz.index, "tz_convert"):
-                df_tz.index = df_tz.index.tz_convert(timezone)
-
-            # Create boolean mask for filtering
-            mask = pd.Series(False, index=df_tz.index)
-
-            # Filter by trading days
-            if hasattr(df_tz.index, "dayofweek"):
-                day_mask = df_tz.index.dayofweek.isin(trading_days)
-            else:
-                day_mask = pd.Series(True, index=df_tz.index)
-
-            # Add regular hours
-            if regular_hours:
-                start_time = regular_hours.get("start", "09:30")
-                end_time = regular_hours.get("end", "16:00")
-
-                # Parse time strings
-                start_hour, start_min = map(int, start_time.split(":"))
-                end_hour, end_min = map(int, end_time.split(":"))
-
-                # Create time-based mask
-                if hasattr(df_tz.index, "hour") and hasattr(df_tz.index, "minute"):
-                    time_mask = (
-                        (df_tz.index.hour > start_hour)
-                        | (
-                            (df_tz.index.hour == start_hour)
-                            & (df_tz.index.minute >= start_min)
-                        )
-                    ) & (
-                        (df_tz.index.hour < end_hour)
-                        | (
-                            (df_tz.index.hour == end_hour)
-                            & (df_tz.index.minute <= end_min)
-                        )
-                    )
-                else:
-                    time_mask = pd.Series(True, index=df_tz.index)
-
-                mask |= day_mask & time_mask
-
-            # Add extended hours if requested
-            if include_extended and extended_hours:
-                for session in extended_hours:
-                    start_time = session.get("start", "04:00")
-                    end_time = session.get("end", "20:00")
-
-                    # Parse time strings
-                    start_hour, start_min = map(int, start_time.split(":"))
-                    end_hour, end_min = map(int, end_time.split(":"))
-
-                    # Create time-based mask for extended session
-                    if hasattr(df_tz.index, "hour") and hasattr(df_tz.index, "minute"):
-                        extended_mask = (
-                            (df_tz.index.hour > start_hour)
-                            | (
-                                (df_tz.index.hour == start_hour)
-                                & (df_tz.index.minute >= start_min)
-                            )
-                        ) & (
-                            (df_tz.index.hour < end_hour)
-                            | (
-                                (df_tz.index.hour == end_hour)
-                                & (df_tz.index.minute <= end_min)
-                            )
-                        )
-                    else:
-                        extended_mask = pd.Series(True, index=df_tz.index)
-
-                    mask |= day_mask & extended_mask
-
-            # Apply the filter
-            filtered_df = df[mask]
-
-            logger.debug(
-                f"Trading hours filter: {len(df)} -> {len(filtered_df)} data points"
-            )
-            return filtered_df
-
-        except Exception as e:
-            logger.error(f"Error filtering trading hours: {str(e)}")
-            # Return original data on error
-            return df
 
     async def health_check(self) -> dict[str, Any]:
         """
