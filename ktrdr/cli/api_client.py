@@ -758,6 +758,26 @@ class KtrdrApiClient:
         return response
 
     # =============================================================================
+    # Dummy Service Endpoints
+    # =============================================================================
+
+    async def start_dummy_task(self) -> dict[str, Any]:
+        """Start the awesome dummy task via API."""
+        response = await self._make_request(
+            "POST",
+            "/dummy/start",
+            timeout=10.0,  # Quick timeout for starting async operation
+        )
+
+        if not response.get("success"):
+            raise DataError(
+                message="Failed to start dummy task",
+                error_code="API-StartDummyTaskError",
+                details={"response": response},
+            )
+        return response
+
+    # =============================================================================
     # Helper Methods
     # =============================================================================
 

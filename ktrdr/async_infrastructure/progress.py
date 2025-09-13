@@ -166,18 +166,12 @@ class GenericProgressManager:
                 context=context or {},
             )
 
-            # Use renderer if available to enhance state and message
-            if self.renderer:
-                self._state = self.renderer.enhance_state(self._state)
-                self._state.message = self.renderer.render_message(self._state)
-
             logger.debug(
                 "Started operation '%s' with %d steps and context: %s",
                 operation_id,
                 total_steps,
                 context,
             )
-
             self._trigger_callback()
 
     def start_step(
@@ -251,11 +245,8 @@ class GenericProgressManager:
                 }
             )
 
-            # Use renderer for enhanced message
-            if self.renderer:
-                self._state = self.renderer.enhance_state(self._state)
-                self._state.message = self.renderer.render_message(self._state)
-            else:
+            # Set default message if no renderer
+            if not self.renderer:
                 self._state.message = f"Starting {step_name}"
 
             logger.debug(
@@ -265,7 +256,6 @@ class GenericProgressManager:
                 self._state.step_start_percentage,
                 self._state.step_end_percentage,
             )
-
             self._trigger_callback()
 
     def update_step_progress(
@@ -316,11 +306,6 @@ class GenericProgressManager:
                 }
             )
 
-            # Use renderer for enhanced message
-            if self.renderer:
-                self._state = self.renderer.enhance_state(self._state)
-                self._state.message = self.renderer.render_message(self._state)
-
             self._trigger_callback()
 
     def update_progress(
@@ -331,11 +316,11 @@ class GenericProgressManager:
         context: Optional[dict[str, Any]] = None,
     ) -> None:
         """
-        Update progress - generic interface (now preserves step ranges).
+        Update progress - simplified interface for basic step progress.
 
         Args:
             step: Current step number
-            message: Optional progress message (overridden by renderer if present)
+            message: Optional progress message
             items_processed: Number of items processed (bars, files, etc.)
             context: Optional additional context for this update
         """
@@ -344,33 +329,24 @@ class GenericProgressManager:
                 logger.warning("update_progress called without active operation")
                 return
 
-            # Update core progress fields
+            # Update core fields
             self._state.current_step = step
-
-            # Only update percentage if no step ranges are defined
-            # (preserve hierarchical progress when step ranges are active)
-            if (
-                self._state.step_start_percentage == 0.0
-                and self._state.step_end_percentage == 0.0
-            ):
-                self._state.percentage = (
-                    min(100.0, (step / self._state.total_steps) * 100.0)
-                    if self._state.total_steps > 0
-                    else 100.0
-                )
-
             self._state.items_processed = items_processed
 
-            # Update context
+            # Calculate simple step-based percentage
+            self._state.percentage = (
+                min(100.0, (step / self._state.total_steps) * 100.0)
+                if self._state.total_steps > 0
+                else 100.0
+            )
+
+            # Update message if provided
+            if message:
+                self._state.message = message
+
+            # Update context if provided
             if context:
                 self._state.context.update(context)
-
-            # Use renderer for message if available, otherwise use provided message
-            if self.renderer:
-                self._state = self.renderer.enhance_state(self._state)
-                self._state.message = self.renderer.render_message(self._state)
-            elif message:
-                self._state.message = message
 
             self._trigger_callback()
 
@@ -384,12 +360,8 @@ class GenericProgressManager:
             self._state.current_step = self._state.total_steps
             self._state.percentage = 100.0
 
-            if self.renderer:
-                # Let renderer create completion message
-                self._state = self.renderer.enhance_state(self._state)
-                self._state.message = self.renderer.render_message(self._state)
-            else:
-                self._state.message = f"Operation {self._state.operation_id} completed"
+            # Set completion message
+            self._state.message = f"Operation {self._state.operation_id} completed"
 
             logger.info(
                 "Operation '%s' completed successfully", self._state.operation_id
@@ -424,6 +396,14 @@ class GenericProgressManager:
                 step_current=self._state.step_current,
                 step_total=self._state.step_total,
             )
+
+            # Apply renderer for display purposes (but don't modify the original state)
+            if self.renderer:
+                # Enhance the copy for the callback
+                state_copy = self.renderer.enhance_state(state_copy)
+                # Render the message for display
+                state_copy.message = self.renderer.render_message(state_copy)
+
             self.callback(state_copy)
         except Exception as e:
             # Same error handling as existing ProgressManager
