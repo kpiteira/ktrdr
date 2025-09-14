@@ -1450,8 +1450,10 @@ class DataManager(ServiceOrchestrator):
         # ServiceOrchestrator provides cancellation - just get it!
         cancellation_token = self.get_current_cancellation_token()
 
-        # ServiceOrchestrator provides progress callbacks - create one!
-        progress_callback = None  # We'll pass None and let core logic handle it
+        # ServiceOrchestrator provides progress callbacks - get the current progress manager!
+        # The progress manager has a callback that does cross-thread communication
+        progress_manager = getattr(self, "_current_operation_progress", None)
+        progress_callback = progress_manager.callback if progress_manager else None
 
         try:
             # Use existing DataManager core logic with ServiceOrchestrator integration

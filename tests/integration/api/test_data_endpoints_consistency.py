@@ -66,33 +66,40 @@ class TestAPIEndpointConsistency:
         import pandas as pd
 
         # Set up mock data to return from proper delegation
-        sample_df = pd.DataFrame({
-            'datetime': ['2023-01-01 09:30:00', '2023-01-01 10:30:00'],
-            'open': [100.0, 101.0],
-            'high': [102.0, 103.0],
-            'low': [99.0, 100.5],
-            'close': [101.0, 102.5],
-            'volume': [1000, 1500]
-        })
+        sample_df = pd.DataFrame(
+            {
+                "datetime": ["2023-01-01 09:30:00", "2023-01-01 10:30:00"],
+                "open": [100.0, 101.0],
+                "high": [102.0, 103.0],
+                "low": [99.0, 100.5],
+                "close": [101.0, 102.5],
+                "volume": [1000, 1500],
+            }
+        )
 
         # Configure DataService delegation method to return DataFrame
         mock_data_service.load_cached_data.return_value = sample_df
 
         # Configure API formatting helper
         mock_data_service._convert_df_to_api_format.return_value = {
-            'dates': ['2023-01-01T09:30:00', '2023-01-01T10:30:00'],
-            'ohlcv': [[100.0, 102.0, 99.0, 101.0, 1000], [101.0, 103.0, 100.5, 102.5, 1500]],
-            'metadata': {
-                'symbol': 'AAPL',
-                'timeframe': '1h',
-                'start': '2023-01-01T09:30:00',
-                'end': '2023-01-01T10:30:00',
-                'points': 2
-            }
+            "dates": ["2023-01-01T09:30:00", "2023-01-01T10:30:00"],
+            "ohlcv": [
+                [100.0, 102.0, 99.0, 101.0, 1000],
+                [101.0, 103.0, 100.5, 102.5, 1500],
+            ],
+            "metadata": {
+                "symbol": "AAPL",
+                "timeframe": "1h",
+                "start": "2023-01-01T09:30:00",
+                "end": "2023-01-01T10:30:00",
+                "points": 2,
+            },
         }
 
         # Make the request
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             response = client.get("/api/v1/data/AAPL/1h")
 
         # Verify response success
@@ -106,15 +113,17 @@ class TestAPIEndpointConsistency:
 
         # Get the call arguments to verify the consistent delegation pattern
         call_kwargs = mock_data_service.load_cached_data.call_args[1]
-        assert call_kwargs['symbol'] == 'AAPL'
-        assert call_kwargs['timeframe'] == '1h'
+        assert call_kwargs["symbol"] == "AAPL"
+        assert call_kwargs["timeframe"] == "1h"
         # Should not have 'mode' since load_cached_data forces local internally
 
         # Verify API formatting was called
         mock_data_service._convert_df_to_api_format.assert_called_once()
 
     @pytest.mark.api
-    def test_load_data_endpoint_consistent_delegation_sync(self, client, mock_data_service):
+    def test_load_data_endpoint_consistent_delegation_sync(
+        self, client, mock_data_service
+    ):
         """Test load_data endpoint uses consistent DataService delegation in sync mode."""
         # Set up mock to return operation response
         mock_data_service.load_data.return_value = {
@@ -130,14 +139,12 @@ class TestAPIEndpointConsistency:
         }
 
         # Make the request in sync mode (async_mode=false)
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             response = client.post(
                 "/api/v1/data/load?async_mode=false",
-                json={
-                    "symbol": "AAPL",
-                    "timeframe": "1h",
-                    "mode": "tail"
-                }
+                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
             )
 
         # Verify response success
@@ -150,29 +157,29 @@ class TestAPIEndpointConsistency:
         # CRITICAL: Verify consistent delegation pattern
         mock_data_service.load_data.assert_called_once()
         call_kwargs = mock_data_service.load_data.call_args[1]
-        assert call_kwargs['symbol'] == 'AAPL'
-        assert call_kwargs['timeframe'] == '1h'
-        assert call_kwargs['mode'] == 'tail'
-        assert call_kwargs['include_metadata'] is True
+        assert call_kwargs["symbol"] == "AAPL"
+        assert call_kwargs["timeframe"] == "1h"
+        assert call_kwargs["mode"] == "tail"
+        assert call_kwargs["include_metadata"] is True
 
     @pytest.mark.api
-    def test_load_data_endpoint_consistent_delegation_async(self, client, mock_data_service):
+    def test_load_data_endpoint_consistent_delegation_async(
+        self, client, mock_data_service
+    ):
         """Test load_data endpoint uses consistent patterns in async mode."""
         # Set up mock to return async operation response
         mock_data_service.load_data_async.return_value = {
             "operation_id": "op_test_123",
-            "status": "started"
+            "status": "started",
         }
 
         # Make the request in async mode (async_mode=true)
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             response = client.post(
                 "/api/v1/data/load?async_mode=true",
-                json={
-                    "symbol": "MSFT",
-                    "timeframe": "1d",
-                    "mode": "full"
-                }
+                json={"symbol": "MSFT", "timeframe": "1d", "mode": "full"},
             )
 
         # Verify response success
@@ -186,9 +193,9 @@ class TestAPIEndpointConsistency:
         # Now uses load_data_async for consistency
         mock_data_service.load_data_async.assert_called_once()
         call_kwargs = mock_data_service.load_data_async.call_args[1]
-        assert call_kwargs['symbol'] == 'MSFT'
-        assert call_kwargs['timeframe'] == '1d'
-        assert call_kwargs['mode'] == 'full'
+        assert call_kwargs["symbol"] == "MSFT"
+        assert call_kwargs["timeframe"] == "1d"
+        assert call_kwargs["mode"] == "full"
 
     @pytest.mark.api
     def test_no_direct_bypass_patterns_remain(self, client, mock_data_service):
@@ -196,25 +203,29 @@ class TestAPIEndpointConsistency:
         import pandas as pd
 
         # Set up mock data
-        sample_df = pd.DataFrame({
-            'datetime': ['2023-01-01'],
-            'open': [100.0],
-            'high': [101.0],
-            'low': [99.0],
-            'close': [100.5],
-            'volume': [1000]
-        })
+        sample_df = pd.DataFrame(
+            {
+                "datetime": ["2023-01-01"],
+                "open": [100.0],
+                "high": [101.0],
+                "low": [99.0],
+                "close": [100.5],
+                "volume": [1000],
+            }
+        )
 
         # Configure mocks
         mock_data_service.load_cached_data.return_value = sample_df
         mock_data_service._convert_df_to_api_format.return_value = {
-            'dates': ['2023-01-01T00:00:00'],
-            'ohlcv': [[100.0, 101.0, 99.0, 100.5, 1000]],
-            'metadata': {'symbol': 'TEST', 'timeframe': '1d', 'points': 1}
+            "dates": ["2023-01-01T00:00:00"],
+            "ohlcv": [[100.0, 101.0, 99.0, 100.5, 1000]],
+            "metadata": {"symbol": "TEST", "timeframe": "1d", "points": 1},
         }
         mock_data_service.get_available_symbols.return_value = []
 
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             # Test cached data endpoint
             response = client.get("/api/v1/data/TEST/1d")
             assert response.status_code == 200
@@ -231,19 +242,23 @@ class TestAPIEndpointConsistency:
             # 3. ServiceOrchestrator delegation is used consistently ✅
 
     @pytest.mark.api
-    def test_error_handling_consistency_through_delegation(self, client, mock_data_service):
+    def test_error_handling_consistency_through_delegation(
+        self, client, mock_data_service
+    ):
         """Test that error handling works consistently through delegation."""
         # Set up mock to raise DataError through delegation
         mock_data_service.load_data.side_effect = DataError(
             message="Test error through delegation",
             error_code="DATA-TestError",
-            details={"test": "error"}
+            details={"test": "error"},
         )
 
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             response = client.post(
                 "/api/v1/data/load",
-                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"}
+                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"},
             )
 
         # Verify error handling works through delegation
@@ -272,10 +287,12 @@ class TestAPIEndpointConsistency:
             "error_message": None,
         }
 
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             response = client.post(
                 "/api/v1/data/load",
-                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"}
+                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
             )
 
         # Verify exact backward compatibility
@@ -289,9 +306,15 @@ class TestAPIEndpointConsistency:
 
         # Verify all expected fields are present with correct types
         expected_fields = [
-            "status", "fetched_bars", "cached_before", "merged_file",
-            "gaps_analyzed", "segments_fetched", "ib_requests_made",
-            "execution_time_seconds", "error_message"
+            "status",
+            "fetched_bars",
+            "cached_before",
+            "merged_file",
+            "gaps_analyzed",
+            "segments_fetched",
+            "ib_requests_made",
+            "execution_time_seconds",
+            "error_message",
         ]
 
         for field in expected_fields:
@@ -319,20 +342,22 @@ class TestAPIEndpointConsistency:
         }
         mock_data_service.load_data_async.return_value = {
             "operation_id": "op_123",
-            "status": "started"
+            "status": "started",
         }
 
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             # Test sync mode
             sync_response = client.post(
                 "/api/v1/data/load?async_mode=false",
-                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"}
+                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"},
             )
 
             # Test async mode
             async_response = client.post(
                 "/api/v1/data/load?async_mode=true",
-                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"}
+                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"},
             )
 
         # Both should succeed
@@ -364,14 +389,18 @@ class TestAPIEndpointTransformationRequirements:
         # This test documents the current pattern that needs to be eliminated
         import pandas as pd
 
-        sample_df = pd.DataFrame({'datetime': ['2023-01-01'], 'close': [100.0]})
+        sample_df = pd.DataFrame({"datetime": ["2023-01-01"], "close": [100.0]})
         mock_data_service.load_cached_data.return_value = sample_df
         mock_data_service._convert_df_to_api_format.return_value = {
-            'dates': [], 'ohlcv': [], 'metadata': {}
+            "dates": [],
+            "ohlcv": [],
+            "metadata": {},
         }
         mock_data_service.get_available_symbols.return_value = []
 
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             client.get("/api/v1/data/AAPL/1d")
 
         # PHASE 3 COMPLETE: Consistent delegation pattern achieved
@@ -395,10 +424,12 @@ class TestAPIEndpointTransformationRequirements:
             "error_message": None,
         }
 
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             response = client.post(
                 "/api/v1/data/load",
-                json={"symbol": "AAPL", "timeframe": "1d", "mode": "local"}
+                json={"symbol": "AAPL", "timeframe": "1d", "mode": "local"},
             )
 
         assert response.status_code == 200
@@ -408,7 +439,7 @@ class TestAPIEndpointTransformationRequirements:
         call_kwargs = mock_data_service.load_data.call_args[1]
 
         # Verify delegation includes all required parameters
-        required_params = ['symbol', 'timeframe', 'mode', 'include_metadata']
+        required_params = ["symbol", "timeframe", "mode", "include_metadata"]
         for param in required_params:
             assert param in call_kwargs
 
@@ -430,12 +461,14 @@ class TestAPIEndpointTransformationRequirements:
             "error_message": None,
         }
 
-        with patch("ktrdr.api.dependencies.get_data_service", return_value=mock_data_service):
+        with patch(
+            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
+        ):
             start_time = time.time()
 
             response = client.post(
                 "/api/v1/data/load",
-                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"}
+                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
             )
 
             end_time = time.time()

@@ -8,6 +8,7 @@ patterns across all service managers (Data, Training, Backtesting, etc.).
 
 import asyncio
 import os
+import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable
@@ -971,7 +972,24 @@ class ServiceOrchestrator(ABC, Generic[T]):
         operation_id = operation_info.operation_id
         logger.info(f"Created managed operation: {operation_id} ({operation_name})")
 
-        # Create background task for operation execution
+        # Start the background operation in a separate thread to prevent blocking FastAPI
+        # This ensures HTTP responses return immediately with operation_id while
+        # sync operations (like IB HTTP calls) run in parallel without blocking the event loop
+
+        # Get reference to main event loop for progress callbacks
+        main_loop = asyncio.get_event_loop()
+
+        def run_wrapper_in_thread():
+            """Run the async wrapper in a new event loop in a separate thread."""
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(_managed_operation_wrapper())
+            finally:
+                loop.close()
+
+        # Modify the progress callback to communicate back to main loop
         async def _managed_operation_wrapper():
             """Wrapper that handles progress, cancellation, and completion."""
             try:
@@ -982,19 +1000,28 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 if cancellation_token:
                     self._current_cancellation_token = cancellation_token
 
-                # Set up progress tracking for this operation
+                # Set up progress tracking for this operation with cross-thread communication
                 def progress_callback(state):
-                    """Async-safe progress callback."""
+                    """Thread-safe progress callback that communicates back to main loop."""
                     if state:
-                        # Schedule the progress update without awaiting
-                        asyncio.create_task(
-                            operations_service.update_progress(
-                                operation_id,
-                                self._convert_progress_state_to_operation_progress(
-                                    state
-                                ),
-                            )
-                        )
+                        # Use call_soon_threadsafe to schedule progress update in main loop
+                        def update_progress_in_main_loop():
+                            try:
+                                asyncio.create_task(
+                                    operations_service.update_progress(
+                                        operation_id,
+                                        self._convert_progress_state_to_operation_progress(
+                                            state
+                                        ),
+                                    )
+                                )
+                            except Exception:
+                                pass
+
+                        try:
+                            main_loop.call_soon_threadsafe(update_progress_in_main_loop)
+                        except Exception:
+                            pass
 
                 operation_progress = GenericProgressManager(
                     callback=progress_callback, renderer=self._progress_renderer
@@ -1012,29 +1039,47 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 )
 
                 # Execute the operation function
-                logger.debug(f"Starting execution of {operation_name}")
+                logger.info(
+                    f"🚀 STARTING OPERATION EXECUTION: Thread {threading.current_thread().ident}, Operation {operation_id}"
+                )
                 result = await operation_func(
                     *args, **{k: v for k, v in kwargs.items() if k != "metadata"}
+                )
+                logger.info(
+                    f"✅ OPERATION EXECUTION COMPLETED: Thread {threading.current_thread().ident}, Operation {operation_id}"
                 )
 
                 # Complete the operation
                 operation_progress.complete_operation()
-                await operations_service.complete_operation(
-                    operation_id, result_summary=result
-                )
+
+                def complete_in_main_loop():
+                    asyncio.create_task(
+                        operations_service.complete_operation(
+                            operation_id, result_summary=result
+                        )
+                    )
+
+                main_loop.call_soon_threadsafe(complete_in_main_loop)
 
                 logger.info(f"Completed managed operation: {operation_id}")
 
-            except Exception as e:
-                logger.error(f"Managed operation {operation_id} failed: {e}")
-                await operations_service.fail_operation(operation_id, str(e))
+            except Exception as exc:
+                logger.error(f"Managed operation {operation_id} failed: {exc}")
+                error_msg = str(exc)
+
+                def fail_in_main_loop():
+                    asyncio.create_task(
+                        operations_service.fail_operation(operation_id, error_msg)
+                    )
+
+                main_loop.call_soon_threadsafe(fail_in_main_loop)
             finally:
                 # Clean up current operation references
                 self._current_operation_progress = None
                 self._current_cancellation_token = None
 
-        # Start the background task
-        background_task = asyncio.create_task(_managed_operation_wrapper())
+        # Run the wrapper in a separate thread instead of same event loop
+        background_task = asyncio.create_task(asyncio.to_thread(run_wrapper_in_thread))
         await operations_service.start_operation(operation_id, background_task)
 
         # Return API response format for CLI compatibility
