@@ -141,7 +141,9 @@ class TrainingManager(ServiceOrchestrator[TrainingAdapter]):
                 "message": "Started train_multi_symbol_strategy operation"
             }
         """
-        logger.info(f"Starting train_multi_symbol_strategy for {symbols} on {timeframes} via ServiceOrchestrator")
+        logger.info(
+            f"Starting train_multi_symbol_strategy for {symbols} on {timeframes} via ServiceOrchestrator"
+        )
 
         # ServiceOrchestrator handles EVERYTHING - one method call like DummyService!
         return await self.start_managed_operation(
@@ -255,7 +257,9 @@ class TrainingManager(ServiceOrchestrator[TrainingAdapter]):
                 logger.error(f"Training failed: {e}")
                 raise
 
-    def _format_training_api_response(self, adapter_result: dict[str, Any]) -> dict[str, Any]:
+    def _format_training_api_response(
+        self, adapter_result: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Format adapter response for API compatibility.
 

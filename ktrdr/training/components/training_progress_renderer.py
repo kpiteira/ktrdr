@@ -132,14 +132,18 @@ class TrainingProgressRenderer(ProgressRenderer):
 
         # Progress context
         progress_info = ""
-        if state.total and state.total > 0:
-            progress_info = f" [{state.current}/{state.total}]"
+        if state.total_steps and state.total_steps > 0:
+            progress_info = f" [{state.current_step}/{state.total_steps}]"
         elif state.percentage is not None:
             progress_info = f" ({state.percentage:.1f}%)"
 
         # Time estimation
         eta_str = ""
-        if self.time_estimator and state.percentage is not None and state.percentage > 0:
+        if (
+            self.time_estimator
+            and state.percentage is not None
+            and state.percentage > 0
+        ):
             eta = self._estimate_remaining_time(state)
             if eta:
                 eta_str = f" ETA: {self._format_duration(eta)}"
@@ -196,13 +200,17 @@ class TrainingProgressRenderer(ProgressRenderer):
         # Progress information
         progress_parts = []
 
-        if state.total and state.total > 0:
-            progress_parts.append(f"{state.current}/{state.total}")
+        if state.total_steps and state.total_steps > 0:
+            progress_parts.append(f"{state.current_step}/{state.total_steps}")
         elif state.percentage is not None:
             progress_parts.append(f"{state.percentage:.1f}%")
 
         # Time estimation
-        if self.time_estimator and state.percentage is not None and state.percentage > 0:
+        if (
+            self.time_estimator
+            and state.percentage is not None
+            and state.percentage > 0
+        ):
             eta = self._estimate_remaining_time(state)
             if eta:
                 progress_parts.append(f"ETA: {self._format_duration(eta)}")
@@ -218,7 +226,9 @@ class TrainingProgressRenderer(ProgressRenderer):
 
         return " ".join(message_parts)
 
-    def _estimate_remaining_time(self, state: GenericProgressState) -> Optional[timedelta]:
+    def _estimate_remaining_time(
+        self, state: GenericProgressState
+    ) -> Optional[timedelta]:
         """
         Estimate remaining time using TimeEstimationEngine.
 
@@ -236,14 +246,18 @@ class TrainingProgressRenderer(ProgressRenderer):
             operation_key = self._get_operation_key(state)
 
             # Get time estimate
-            estimated_total = self.time_estimator.estimate_total_time(
-                operation_key, state.percentage / 100.0
+            estimated_total = self.time_estimator.estimate_duration(
+                operation_key, {"percentage": state.percentage / 100.0}
             )
 
             if estimated_total:
-                elapsed = datetime.now() - (self._operation_start_time or datetime.now())
-                remaining = estimated_total - elapsed
-                return remaining if remaining.total_seconds() > 0 else None
+                elapsed = datetime.now() - (
+                    self._operation_start_time or datetime.now()
+                )
+                remaining_seconds = estimated_total - elapsed.total_seconds()
+                if remaining_seconds > 0:
+                    return timedelta(seconds=remaining_seconds)
+                return None
 
         except Exception as e:
             logger.debug("Time estimation failed: %s", e)
@@ -303,7 +317,9 @@ class TrainingProgressRenderer(ProgressRenderer):
             minutes = (total_seconds % 3600) // 60
             return f"{hours}h {minutes}m"
 
-    def notify_operation_start(self, operation_type: str, context: dict[str, Any]) -> None:
+    def notify_operation_start(
+        self, operation_type: str, context: dict[str, Any]
+    ) -> None:
         """
         Notify renderer of operation start for time estimation.
 
@@ -316,12 +332,12 @@ class TrainingProgressRenderer(ProgressRenderer):
         self._current_context.update(context)
 
         logger.debug(
-            "Training operation started: %s with context: %s",
-            operation_type,
-            context
+            "Training operation started: %s with context: %s", operation_type, context
         )
 
-    def notify_operation_complete(self, operation_type: str, result: dict[str, Any]) -> None:
+    def notify_operation_complete(
+        self, operation_type: str, result: dict[str, Any]
+    ) -> None:
         """
         Notify renderer of operation completion for time tracking.
 
@@ -335,12 +351,12 @@ class TrainingProgressRenderer(ProgressRenderer):
                 operation_key = f"training_{operation_type}"
                 duration = datetime.now() - self._operation_start_time
 
-                self.time_estimator.record_completion(operation_key, duration)
+                self.time_estimator.record_operation_completion(
+                    operation_key, {}, duration.total_seconds()
+                )
 
                 logger.debug(
-                    "Training operation completed: %s in %s",
-                    operation_type,
-                    duration
+                    "Training operation completed: %s in %s", operation_type, duration
                 )
 
             except Exception as e:

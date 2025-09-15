@@ -223,7 +223,7 @@ class TrainingService(BaseService):
                 )
 
             # Use TrainingManager to run training (automatically routes to host service or local)
-            result = await self.training_manager.train_multi_symbol_strategy(
+            result = await self.training_manager.train_multi_symbol_strategy_async(
                 strategy_config_path=str(strategy_path),
                 symbols=symbols,
                 timeframes=timeframes,
@@ -1196,15 +1196,18 @@ class TrainingService(BaseService):
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     # Submit multi-symbol training task
                     training_future = executor.submit(
-                        trainer.train_multi_symbol_strategy,
-                        actual_strategy_path,
-                        symbols,
-                        timeframes,
-                        start_date or "",
-                        end_date or "",
-                        training_config.get("validation_split", 0.2),
-                        "local",
-                        sync_progress_callback,
+                        lambda: asyncio.run(
+                            trainer.train_multi_symbol_strategy(
+                                actual_strategy_path,
+                                symbols,
+                                timeframes,
+                                start_date or "",
+                                end_date or "",
+                                training_config.get("validation_split", 0.2),
+                                "local",
+                                sync_progress_callback,
+                            )
+                        )
                     )
 
                     # Monitor progress and update operations service (same logic as single-symbol)
