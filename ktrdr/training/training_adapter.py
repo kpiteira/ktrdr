@@ -152,6 +152,7 @@ class TrainingAdapter:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """
         Train a multi-symbol strategy using local trainer or host service.
@@ -165,6 +166,7 @@ class TrainingAdapter:
             validation_split: Validation split ratio
             data_mode: Data loading mode
             progress_callback: Optional progress callback function
+            cancellation_token: Optional cancellation token from ServiceOrchestrator
 
         Returns:
             Dictionary with training results
@@ -236,7 +238,7 @@ class TrainingAdapter:
                         "Local trainer not initialized", provider="Training"
                     )
 
-                return self.local_trainer.train_multi_symbol_strategy(
+                return await self.local_trainer.train_multi_symbol_strategy(
                     strategy_config_path=strategy_config_path,
                     symbols=symbols,
                     timeframes=timeframes,
@@ -245,6 +247,7 @@ class TrainingAdapter:
                     validation_split=validation_split,
                     data_mode=data_mode,
                     progress_callback=progress_callback,
+                    cancellation_token=cancellation_token,
                 )
 
         except TrainingProviderError:

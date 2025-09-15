@@ -43,7 +43,7 @@ class StrategyTrainer:
             None  # Will be initialized with strategy config
         )
 
-    def train_multi_symbol_strategy(
+    async def train_multi_symbol_strategy(
         self,
         strategy_config_path: str,
         symbols: list[str],
@@ -53,6 +53,7 @@ class StrategyTrainer:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train a neuro-fuzzy strategy on multiple symbols simultaneously.
 
@@ -65,6 +66,7 @@ class StrategyTrainer:
             validation_split: Fraction of data to use for validation
             data_mode: Data loading mode ('local', 'tail', 'backfill', 'full')
             progress_callback: Optional callback for progress updates
+            cancellation_token: Optional cancellation token from ServiceOrchestrator
 
         Returns:
             Dictionary with training results and per-symbol metrics
