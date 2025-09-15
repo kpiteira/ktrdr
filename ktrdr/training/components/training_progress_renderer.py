@@ -186,12 +186,30 @@ class TrainingProgressRenderer(ProgressRenderer):
         if timeframes:
             if len(timeframes) == 1:
                 context_parts.append(f"Timeframe: {timeframes[0]}")
-            else:
+            elif len(timeframes) <= 3:
                 context_parts.append(f"Timeframes: {', '.join(timeframes)}")
+            else:
+                # Smart truncation for many timeframes: show first 2 and indicate more
+                displayed_tfs = ", ".join(timeframes[:2])
+                context_parts.append(
+                    f"Timeframes: {displayed_tfs} (+{len(timeframes)-2} more)"
+                )
 
         model_type = state.context.get("model_type")
         if model_type:
             context_parts.append(f"Model: {model_type}")
+
+        # Add epoch progress information (training-specific)
+        current_epoch = state.context.get("current_epoch", 0)
+        total_epochs = state.context.get("total_epochs", 0)
+        if current_epoch > 0 and total_epochs > 0:
+            context_parts.append(f"Epoch: {current_epoch}/{total_epochs}")
+
+        # Add batch progress information (fine-grained training progress)
+        current_batch = state.context.get("current_batch", 0)
+        total_batches = state.context.get("total_batches", 0)
+        if current_batch > 0 and total_batches > 0:
+            context_parts.append(f"Batch: {current_batch}/{total_batches}")
 
         # Add current item detail if available
         if current_item_detail:
@@ -366,6 +384,130 @@ class TrainingProgressRenderer(ProgressRenderer):
         self._operation_start_time = None
         self._operation_type = None
         self._current_context.clear()
+
+    def enhance_state(self, state: GenericProgressState) -> GenericProgressState:
+        """
+        Enhance generic state with training-specific features.
+
+        This method preserves and enhances all the sophisticated state management
+        from the DataProgressRenderer pattern including:
+        - Learning-based time estimation using TimeEstimationEngine
+        - Hierarchical progress context tracking
+        - Operation tracking for time estimation accuracy
+        - Current context management for training operations
+
+        Args:
+            state: Generic progress state to enhance
+
+        Returns:
+            Enhanced state with training-specific capabilities
+        """
+        # Enhanced time estimation using hierarchical progress
+        if self.time_estimator:
+            # Track operation start for time estimation
+            if not self._operation_start_time and state.current_step == 0:
+                self._operation_start_time = state.start_time
+                self._operation_type = state.operation_id
+
+            # Better time estimation using actual progress data
+            if self._operation_start_time and state.percentage > 0:
+                elapsed = (datetime.now() - self._operation_start_time).total_seconds()
+
+                # Skip estimation if too early (need at least 2 seconds for meaningful estimate)
+                if elapsed >= 2.0:
+                    # Use progress percentage for time estimation
+                    progress_fraction = state.percentage / 100.0
+                    if progress_fraction >= 1.0:
+                        state.estimated_remaining = timedelta(0)
+                    else:
+                        # Estimate based on current rate of progress
+                        estimated_total_time = elapsed / progress_fraction
+                        remaining_time = estimated_total_time - elapsed
+
+                        # Cap estimates at reasonable values (avoid showing hours for short operations)
+                        if remaining_time > 3600:  # More than 1 hour
+                            remaining_time = 3600  # Cap at 1 hour
+                        elif remaining_time < 0:
+                            remaining_time = 0
+
+                        state.estimated_remaining = timedelta(seconds=remaining_time)
+
+                        # For training operations, enhance with epoch-based estimation
+                        current_epoch = state.context.get("current_epoch", 0)
+                        total_epochs = state.context.get("total_epochs", 0)
+                        if current_epoch > 0 and total_epochs > 0:
+                            # Calculate time per epoch and use for more accurate estimation
+                            epochs_completed = current_epoch
+                            epochs_remaining = total_epochs - epochs_completed
+
+                            if (
+                                epochs_completed >= 2
+                            ):  # Need at least 2 epochs for estimation
+                                time_per_epoch = elapsed / epochs_completed
+                                epoch_based_estimate = epochs_remaining * time_per_epoch
+
+                                # Use the more conservative of the two estimates
+                                if epoch_based_estimate < remaining_time:
+                                    state.estimated_remaining = timedelta(
+                                        seconds=epoch_based_estimate
+                                    )
+
+        # Hierarchical progress context enhancement (preserve existing functionality)
+        if self.enable_hierarchical:
+            # Preserve current context like _current_context in DataProgressRenderer
+            if not hasattr(self, "_current_context"):
+                self._current_context = {}
+
+            # Update current context with state context
+            if state.context:
+                self._current_context.update(state.context)
+
+            # Extract training-specific step details
+            current_epoch = state.context.get("current_epoch", 0)
+            total_epochs = state.context.get("total_epochs", 0)
+            if current_epoch > 0 and total_epochs > 0:
+                state.context["training_epoch_progress"] = (
+                    f"{current_epoch}/{total_epochs}"
+                )
+                state.context["training_epoch_percentage"] = (
+                    (current_epoch / total_epochs * 100) if total_epochs > 0 else 0
+                )
+
+            # Add batch progress tracking for fine-grained progress
+            current_batch = state.context.get("current_batch", 0)
+            total_batches = state.context.get("total_batches", 0)
+            if current_batch > 0 and total_batches > 0:
+                state.context["training_batch_progress"] = (
+                    f"{current_batch}/{total_batches}"
+                )
+                state.context["training_batch_percentage"] = (
+                    (current_batch / total_batches * 100) if total_batches > 0 else 0
+                )
+
+            # Handle both context-based (old way) and field-based (new way) step progress
+            step_current = state.step_current or state.context.get("step_current", 0)
+            step_total = state.step_total or state.context.get("step_total", 0)
+
+            if step_total > 0:
+                state.context["step_progress"] = f"{step_current}/{step_total}"
+                # Add detailed progress context for better message rendering
+                state.context["step_progress_detail"] = {
+                    "current": step_current,
+                    "total": step_total,
+                    "percentage": (
+                        (step_current / step_total * 100) if step_total > 0 else 0
+                    ),
+                    "range_start": state.step_start_percentage,
+                    "range_end": state.step_end_percentage,
+                }
+
+                # Update the GenericProgressState fields if they were set via context
+                if state.step_current == 0 and step_current > 0:
+                    state.step_current = step_current
+                if state.step_total == 0 and step_total > 0:
+                    state.step_total = step_total
+
+        return state
 
     def get_context(self) -> dict[str, Any]:
         """
