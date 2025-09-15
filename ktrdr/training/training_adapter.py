@@ -182,33 +182,42 @@ class TrainingAdapter:
                     f"Starting training via host service for {symbols} on {timeframes}"
                 )
 
-                response = await self._call_host_service_post(
-                    "/training/start",
-                    {
-                        "model_configuration": {
-                            "strategy_config": strategy_config_path,
-                            "symbols": symbols,
-                            "timeframes": timeframes,
-                            "model_type": "mlp",
-                            "multi_symbol": len(symbols) > 1,
-                        },
-                        "training_configuration": {
-                            "validation_split": validation_split,
-                            "start_date": start_date,
-                            "end_date": end_date,
-                            "data_mode": data_mode,
-                        },
-                        "data_configuration": {
-                            "symbols": symbols,
-                            "timeframes": timeframes,
-                            "data_source": data_mode,
-                        },
-                        "gpu_configuration": {
-                            "enable_gpu": True,
-                            "memory_fraction": 0.8,
-                            "mixed_precision": True,
-                        },
+                # Prepare host service request (future enhancement: include cancellation context)
+                request_data = {
+                    "model_configuration": {
+                        "strategy_config": strategy_config_path,
+                        "symbols": symbols,
+                        "timeframes": timeframes,
+                        "model_type": "mlp",
+                        "multi_symbol": len(symbols) > 1,
                     },
+                    "training_configuration": {
+                        "validation_split": validation_split,
+                        "start_date": start_date,
+                        "end_date": end_date,
+                        "data_mode": data_mode,
+                    },
+                    "data_configuration": {
+                        "symbols": symbols,
+                        "timeframes": timeframes,
+                        "data_source": data_mode,
+                    },
+                    "gpu_configuration": {
+                        "enable_gpu": True,
+                        "memory_fraction": 0.8,
+                        "mixed_precision": True,
+                    },
+                }
+
+                # Future enhancement: Add cancellation context for host service
+                # if cancellation_token:
+                #     request_data["cancellation_configuration"] = {
+                #         "operation_id": getattr(cancellation_token, 'operation_id', None),
+                #         "supports_cancellation": True
+                #     }
+
+                response = await self._call_host_service_post(
+                    "/training/start", request_data
                 )
 
                 if not response.get("session_id"):

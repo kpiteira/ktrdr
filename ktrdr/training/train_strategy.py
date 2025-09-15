@@ -193,7 +193,14 @@ class StrategyTrainer:
         # Step 9: Train model
         print("\n9. Training multi-symbol neural network...")
         training_results = self._train_model(
-            model, train_data, val_data, config, symbols, timeframes, progress_callback
+            model,
+            train_data,
+            val_data,
+            config,
+            symbols,
+            timeframes,
+            progress_callback,
+            cancellation_token,
         )
 
         # Step 10: Evaluate model
@@ -293,6 +300,7 @@ class StrategyTrainer:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train a complete neuro-fuzzy strategy with multi-timeframe support.
 
@@ -305,6 +313,7 @@ class StrategyTrainer:
             validation_split: Fraction of data to use for validation
             data_mode: Data loading mode ('local', 'tail', 'backfill', 'full')
             progress_callback: Optional callback for progress updates
+            cancellation_token: Optional cancellation token from ServiceOrchestrator
 
         Returns:
             Dictionary with training results and model information
@@ -442,7 +451,14 @@ class StrategyTrainer:
 
         model = self._create_model(config["model"], features.shape[1])
         training_results = self._train_model(
-            model, train_data, val_data, config, symbol, timeframes, progress_callback
+            model,
+            train_data,
+            val_data,
+            config,
+            symbol,
+            timeframes,
+            progress_callback,
+            cancellation_token,
         )
 
         # Step 8: Evaluate model
@@ -1042,6 +1058,7 @@ class StrategyTrainer:
         symbol_or_symbols,  # Can be str (single) or List[str] (multi-symbol)
         timeframes: list[str],
         progress_callback=None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train the neural network model (supports both single and multi-symbol).
 
@@ -1053,6 +1070,7 @@ class StrategyTrainer:
             symbol_or_symbols: Single symbol string or list of symbols for multi-symbol training
             timeframes: List of timeframes
             progress_callback: Optional callback for progress updates
+            cancellation_token: Optional cancellation token from ServiceOrchestrator
 
         Returns:
             Training results
@@ -1100,11 +1118,17 @@ class StrategyTrainer:
                 X_val=val_data[0],
                 y_val=val_data[1],
                 symbol_indices_val=val_data[2],
+                cancellation_token=cancellation_token,
             )
         else:
             # Single symbol training (standard case)
             return trainer.train(
-                model, train_data[0], train_data[1], val_data[0], val_data[1]
+                model,
+                train_data[0],
+                train_data[1],
+                val_data[0],
+                val_data[1],
+                cancellation_token=cancellation_token,
             )
 
     def _evaluate_model(

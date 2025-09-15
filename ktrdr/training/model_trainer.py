@@ -153,6 +153,7 @@ class ModelTrainer:
         y_train: torch.Tensor,
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train the neural network model.
 
@@ -162,6 +163,7 @@ class ModelTrainer:
             y_train: Training labels
             X_val: Optional validation features
             y_val: Optional validation labels
+            cancellation_token: Optional cancellation token from ServiceOrchestrator
 
         Returns:
             Training history and metrics
@@ -216,6 +218,15 @@ class ModelTrainer:
         # Training loop
         for epoch in range(epochs):
             start_time = time.time()
+
+            # Check cancellation at epoch boundaries (minimal overhead)
+            if cancellation_token and cancellation_token.is_cancelled():
+                print(f"Training cancelled at epoch {epoch}")
+                return {
+                    "status": "cancelled",
+                    "epochs_completed": epoch,
+                    "message": f"Training cancelled at epoch {epoch}",
+                }
 
             # Training phase
             model.train()
@@ -287,6 +298,20 @@ class ModelTrainer:
                     )
 
                 optimizer.step()
+
+                # Check cancellation every 50 batches (performance balance)
+                if (
+                    cancellation_token
+                    and batch_idx % 50 == 0
+                    and cancellation_token.is_cancelled()
+                ):
+                    print(f"Training cancelled at epoch {epoch}, batch {batch_idx}")
+                    return {
+                        "status": "cancelled",
+                        "epochs_completed": epoch,
+                        "batches_completed": batch_idx,
+                        "message": f"Training cancelled at epoch {epoch}, batch {batch_idx}",
+                    }
 
                 # Track metrics
                 train_loss += loss.item() * batch_X.size(0)
@@ -528,6 +553,7 @@ class ModelTrainer:
         X_val: Optional[torch.Tensor] = None,
         y_val: Optional[torch.Tensor] = None,
         symbol_indices_val: Optional[torch.Tensor] = None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
         """Train the multi-symbol neural network model with balanced sampling.
 
@@ -540,6 +566,7 @@ class ModelTrainer:
             X_val: Optional validation features
             y_val: Optional validation labels
             symbol_indices_val: Optional symbol indices for validation data
+            cancellation_token: Optional cancellation token from ServiceOrchestrator
 
         Returns:
             Training history and metrics
@@ -604,6 +631,15 @@ class ModelTrainer:
         for epoch in range(epochs):
             start_time = time.time()
 
+            # Check cancellation at epoch boundaries (minimal overhead)
+            if cancellation_token and cancellation_token.is_cancelled():
+                print(f"Multi-symbol training cancelled at epoch {epoch}")
+                return {
+                    "status": "cancelled",
+                    "epochs_completed": epoch,
+                    "message": f"Multi-symbol training cancelled at epoch {epoch}",
+                }
+
             # Training phase
             model.train()
             train_loss = 0.0
@@ -663,6 +699,22 @@ class ModelTrainer:
                     )
 
                 optimizer.step()
+
+                # Check cancellation every 50 batches (performance balance)
+                if (
+                    cancellation_token
+                    and batch_idx % 50 == 0
+                    and cancellation_token.is_cancelled()
+                ):
+                    print(
+                        f"Multi-symbol training cancelled at epoch {epoch}, batch {batch_idx}"
+                    )
+                    return {
+                        "status": "cancelled",
+                        "epochs_completed": epoch,
+                        "batches_completed": batch_idx,
+                        "message": f"Multi-symbol training cancelled at epoch {epoch}, batch {batch_idx}",
+                    }
 
                 # Track metrics
                 train_loss += loss.item() * batch_X.size(0)
