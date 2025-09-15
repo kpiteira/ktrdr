@@ -22,12 +22,8 @@ def mock_data_manager():
         mock_instance = MagicMock()
         mock.return_value = mock_instance
 
-        # Disable retry mechanism completely for tests
-        with patch(
-            "ktrdr.api.services.data_service.retry_with_backoff",
-            lambda *args, **kwargs: lambda func: func,
-        ):
-            yield mock_instance
+        # Tests now use simplified DataService (no retry decorators)
+        yield mock_instance
 
 
 @pytest.mark.api
@@ -42,20 +38,34 @@ def test_init_with_defaults():
 @pytest.mark.asyncio
 async def test_load_data_success(mock_data_manager):
     """Test successful data loading with metadata."""
-    # Create sample DataFrame for DataManager to return
-    df = pd.DataFrame(
-        {
-            "open": [100.0, 101.0, 102.0],
-            "high": [105.0, 106.0, 107.0],
-            "low": [95.0, 96.0, 97.0],
-            "close": [102.0, 103.0, 104.0],
-            "volume": [1000, 1100, 1200],
-        },
-        index=pd.date_range(start="2023-01-01", periods=3, freq="D"),
-    )
+    # Sample DataFrame format (not used since we're testing delegation to load_data_async)
+    # df = pd.DataFrame(
+    #     {
+    #         "open": [100.0, 101.0, 102.0],
+    #         "high": [105.0, 106.0, 107.0],
+    #         "low": [95.0, 96.0, 97.0],
+    #         "close": [102.0, 103.0, 104.0],
+    #         "volume": [1000, 1100, 1200],
+    #     },
+    #     index=pd.date_range(start="2023-01-01", periods=3, freq="D"),
+    # )
 
-    # Set up mock to return DataFrame (DataService will convert to operation result)
-    mock_data_manager.load_data.return_value = df
+    # Set up mock to return API result (DataService now delegates to load_data_async)
+    from unittest.mock import AsyncMock
+
+    mock_data_manager.load_data_async = AsyncMock(
+        return_value={
+            "status": "success",
+            "fetched_bars": 3,
+            "cached_before": True,
+            "merged_file": "AAPL_1d.csv",
+            "gaps_analyzed": 0,
+            "segments_fetched": 1,
+            "ib_requests_made": 0,
+            "execution_time_seconds": 0.1,
+            "error_message": None,
+        }
+    )
 
     # Create service and call method
     service = DataService()
