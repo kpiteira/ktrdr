@@ -16,11 +16,14 @@ from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 
+from ktrdr.async_infrastructure.async_host_service import (
+    AsyncHostService,
+    HostServiceConfig,
+)
 from ktrdr.data.external_data_interface import (
     DataProviderConnectionError,
 )
 from ktrdr.data.ib_data_adapter import IbDataAdapter
-from ktrdr.managers.async_host_service import AsyncHostService, HostServiceConfig
 
 
 class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
@@ -237,7 +240,7 @@ class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
                     AsyncHostService, "_call_host_service_post", new=AsyncMock()
                 ) as mock_post:
                     # Connection errors should still map to DataProviderConnectionError
-                    from ktrdr.managers.async_host_service import (
+                    from ktrdr.async_infrastructure.async_host_service import (
                         HostServiceConnectionError,
                     )
 
@@ -249,7 +252,7 @@ class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
                         await adapter.validate_and_get_metadata("AAPL", ["1h"])
 
                     # Timeout errors should still map to appropriate errors
-                    from ktrdr.managers.async_host_service import (
+                    from ktrdr.async_infrastructure.async_host_service import (
                         HostServiceTimeoutError,
                     )
 

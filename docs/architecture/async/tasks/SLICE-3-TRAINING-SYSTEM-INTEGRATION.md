@@ -1,584 +1,860 @@
-# SLICE 3: TRAINING SERVICE DUMMY PATTERN INTEGRATION
+# SLICE 3: TRAINING SERVICE DUMMY PATTERN INTEGRATION - CLEAN RESTART SPECIFICATION
 
-**Branch**: `slice-3-training-dummy-pattern-integration`
-**Goal**: Transform TrainingManager to follow DummyService pattern exactly, eliminating ALL async complexity like DataManager did
+**Branch**: `slice-3-training-dummy-pattern-integration-v2`
+**Goal**: Transform TrainingManager to follow DummyService pattern exactly from clean state with proper dual-implementation support and end-to-end testability
 **Priority**: High
 **Depends on**: Slice 1 and 2 completion
+**Approach**: Clean restart (Option 1) - reset to pre-ServiceOrchestrator state and build correctly
 
-## 🎯 **DUMMY SERVICE PATTERN ADOPTION**
+## 🎯 **STARTING STATE ANALYSIS**
 
-**CRITICAL**: This slice **MUST** follow the DummyService pattern exactly as demonstrated in `ktrdr/api/services/dummy_service.py` and successfully applied to DataManager.
+### **Current State (After Branch Reset)**
+- TrainingManager: Plain class, no ServiceOrchestrator inheritance
+- TrainingService: Has its own operations management system
+- CLI: Manual progress parsing and state reconstruction
+- No ServiceOrchestrator integration anywhere in training system
 
-**Key Requirements**:
-- TrainingManager inherits ServiceOrchestrator[TrainingAdapter] exactly like DataManager
-- ServiceOrchestrator handles ALL async complexity (zero boilerplate in TrainingManager)
-- Training methods become single `start_managed_operation()` calls like DummyService
-- Perfect UX with smooth progress and instant cancellation through ServiceOrchestrator
-- Clean domain logic with ServiceOrchestrator's unified cancellation system
-- Training operations provide structured progress (eliminate 50+ lines of CLI string parsing)
+### **Target Architecture (DummyService Pattern)**
 
-**Integration Points**:
-- TrainingManager → ServiceOrchestrator (inherits ALL capabilities)
-- Training methods → `start_managed_operation()` calls (like DummyService.start_dummy_task())
-- Domain logic → `_run_training_async()` methods (like DummyService._run_dummy_task_async())
-- ServiceOrchestrator → Handles operations, progress, cancellation automatically
-- CLI → Gets structured progress data (no more string parsing)
-
-## Overview
-
-This slice transforms TrainingManager to follow the exact DummyService pattern that has been successfully applied to DataManager. This eliminates ALL async complexity from TrainingManager and provides the same perfect UX as DummyService.
-
-**KEY INSIGHT**: DummyService shows the "most awesome yet simple" async service pattern. TrainingManager should be just as simple - ServiceOrchestrator handles everything, TrainingManager just calls `start_managed_operation()`.
-
-**Current Problem**: TrainingManager lacks ServiceOrchestrator inheritance, so:
-- No structured progress → CLI needs 50+ lines of brittle string parsing
-- No unified cancellation → Training continues after cancellation requests
-- Manual async management → Complex, error-prone code
-- Inconsistent with DataManager → Different patterns across the codebase
-
-**SOLUTION**: Make TrainingManager inherit ServiceOrchestrator[TrainingAdapter] and follow DummyService pattern exactly:
-- ServiceOrchestrator handles ALL complexity automatically
-- Training methods become simple `start_managed_operation()` calls
-- Domain logic in clean `_run_*_async()` methods with cancellation support
-- Perfect UX with zero effort, just like DummyService
-
-## Success Criteria
-
-- [ ] TrainingManager inherits ServiceOrchestrator[TrainingAdapter] exactly like DataManager
-- [ ] TrainingManager methods become single `start_managed_operation()` calls like DummyService
-- [ ] Training domain logic in clean `_run_*_async()` methods with ServiceOrchestrator cancellation
-- [ ] TrainingProgressRenderer provides training-specific structured progress context
-- [ ] Training CLI gets structured progress data (eliminate 50+ lines of string parsing)
-- [ ] Training operations have perfect UX - smooth progress and instant cancellation
-- [ ] ALL existing training functionality preserved with zero boilerplate
-- [ ] **CRITICAL**: ServiceOrchestrator handles ALL async complexity automatically
-- [ ] **CRITICAL**: Training follows exact same pattern as DummyService (consistency)
-
-## Current Architecture Issue
-
-**DummyService (perfect reference)**:
-- Inherits ServiceOrchestrator[None] → ALL complexity handled automatically
-- Methods are single `start_managed_operation()` calls → zero boilerplate
-- Domain logic in `_run_dummy_task_async()` → clean, focused implementation
-- Perfect UX with instant cancellation and smooth progress → effortless
-
-**DataManager (successfully refactored)**:
-- Inherits ServiceOrchestrator[IbDataAdapter] → follows DummyService pattern
-- Has `load_data_async()` method → single `start_managed_operation()` call
-- Domain logic in `_run_data_load_async()` → clean implementation like DummyService
-- CLI gets structured progress via ServiceOrchestrator → no string parsing
-
-**TrainingManager (needs transformation)**:
-- Plain class (no ServiceOrchestrator) → manual async management
-- Direct TrainingAdapter calls → no operations tracking or structured progress
-- CLI gets unstructured strings → 50+ lines of brittle parsing logic
-- No unified cancellation → training continues after cancellation requests
-
-## Tasks
-
-### Task 3.1: Transform TrainingManager to Follow DummyService Pattern Exactly
-
-**Description**: Transform TrainingManager to inherit ServiceOrchestrator[TrainingAdapter] and implement the exact DummyService pattern, eliminating ALL async complexity.
-
-**Why this is needed**: TrainingManager currently lacks ServiceOrchestrator inheritance, causing:
-- Manual async management (complex, error-prone)
-- No structured progress (CLI needs 50+ lines of string parsing)
-- No unified cancellation (training continues after cancellation)
-- Inconsistent with DataManager and DummyService patterns
-
-**DummyService Pattern to Follow**:
-```python
-# DummyService shows the perfect pattern:
-class DummyService(ServiceOrchestrator[None]):
-    async def start_dummy_task(self) -> dict[str, Any]:
-        # ServiceOrchestrator handles EVERYTHING - one method call!
-        return await self.start_managed_operation(
-            operation_name="dummy_task",
-            operation_type="DUMMY",
-            operation_func=self._run_dummy_task_async,
-        )
-
-    async def _run_dummy_task_async(self) -> dict[str, Any]:
-        # Clean domain logic with ServiceOrchestrator cancellation
-        cancellation_token = self.get_current_cancellation_token()
-        # ... domain logic with cancellation support
+```text
+CLI → API → TrainingService → TrainingManager (ServiceOrchestrator) → TrainingAdapter → {Local|Host} Training
+                                      ↓
+                              ServiceOrchestrator handles ALL:
+                              - Operation tracking
+                              - Progress reporting via TrainingProgressRenderer
+                              - Cancellation coordination
+                              - API response formatting
 ```
 
-**TrainingManager Transformation**:
+### **Dual Implementation Requirements**
+- **Local Training**: CPU-based training in Docker backend with ServiceOrchestrator integration
+- **Host Training**: GPU-based training via external service with ServiceOrchestrator integration
+- **Both paths**: Must support cancellation tokens and progress callbacks from ServiceOrchestrator
+- **Same UX**: Identical progress reporting and cancellation behavior regardless of implementation
+
+## 📋 **TASK BREAKDOWN FOR PROGRESSIVE IMPLEMENTATION**
+
+### **Task 3.1: Transform TrainingManager to Inherit ServiceOrchestrator**
+**End-to-End Testable**: ✅ Training still works, now uses ServiceOrchestrator pattern
+
+#### **Files to Modify**
+- `ktrdr/training/training_manager.py`
+- `ktrdr/training/components/training_progress_renderer.py` (create)
+
+#### **Specific Changes Required**
+
+**MODIFY TrainingManager Class Declaration:**
+
 ```python
-# BEFORE: Plain class with manual async management
+# BEFORE: Plain class
 class TrainingManager:
     def __init__(self):
         self.training_adapter = self._initialize_training_adapter()
 
-    async def train_multi_symbol_strategy(self, ...):
-        # Direct adapter call - no operations tracking, no cancellation
-        return await self.training_adapter.train_multi_symbol_strategy(...)
+# AFTER: ServiceOrchestrator inheritance (like DummyService)
+from ktrdr.managers.base import ServiceOrchestrator
+from .components.training_progress_renderer import TrainingProgressRenderer
 
-# AFTER: ServiceOrchestrator inheritance following DummyService pattern
 class TrainingManager(ServiceOrchestrator[TrainingAdapter]):
-    def _initialize_adapter(self) -> TrainingAdapter:
-        # Same initialization logic, moved to ServiceOrchestrator pattern
-        return TrainingAdapter(...)
+    def __init__(self) -> None:
+        # Initialize ServiceOrchestrator first
+        super().__init__()
 
-    async def train_multi_symbol_strategy_async(self, ...) -> dict[str, Any]:
-        # ServiceOrchestrator handles EVERYTHING - one method call like DummyService!
-        return await self.start_managed_operation(
-            operation_name="train_multi_symbol_strategy",
-            operation_type="TRAINING",
-            operation_func=self._run_training_async,
-            # Pass parameters to domain logic
-            strategy_config_path=strategy_config_path,
-            symbols=symbols,
-            timeframes=timeframes,
-            # ... other parameters
-        )
+        # Override with TrainingProgressRenderer for structured progress
+        self._training_progress_renderer = TrainingProgressRenderer()
+        if self._training_progress_renderer is not None:
+            self._progress_renderer = self._training_progress_renderer
 
-    async def _run_training_async(self, ...) -> dict[str, Any]:
-        # Clean domain logic like DummyService._run_dummy_task_async()
-        cancellation_token = self.get_current_cancellation_token()
-
-        # Use existing TrainingAdapter with ServiceOrchestrator cancellation
-        result = await self.training_adapter.train_multi_symbol_strategy(
-            ...,
-            cancellation_token=cancellation_token,
-            progress_callback=self.update_operation_progress,
-        )
-
-        # Format API response like DataManager does
-        return self._format_training_api_response(result)
+            # Recreate progress manager with training-specific renderer
+            from ktrdr.async_infrastructure.progress import GenericProgressManager
+            self._generic_progress_manager = GenericProgressManager(
+                renderer=self._progress_renderer
+            )
 ```
 
-**What ServiceOrchestrator Provides Automatically**:
-- Operation creation & tracking via operations service
-- Progress reporting integration with TrainingProgressRenderer
-- Unified cancellation support coordination
-- API response formatting for CLI compatibility
-- Background task execution management
-- Environment variable configuration support
+**IMPLEMENT Required ServiceOrchestrator Methods:**
 
-**Acceptance Criteria**:
-- [ ] TrainingManager inherits ServiceOrchestrator[TrainingAdapter] exactly like DataManager
-- [ ] Training methods become single `start_managed_operation()` calls like DummyService
-- [ ] Domain logic in clean `_run_*_async()` methods with ServiceOrchestrator cancellation
-- [ ] Environment configuration maintained (USE_TRAINING_HOST_SERVICE) via ServiceOrchestrator
-- [ ] ALL existing functionality preserved with zero boilerplate
-- [ ] ServiceOrchestrator handles ALL async complexity automatically
-- [ ] **CRITICAL**: Perfect UX with smooth progress and instant cancellation like DummyService
-
----
-
-### Task 3.2: Create TrainingProgressRenderer Following DataProgressRenderer Pattern
-
-**Description**: Create TrainingProgressRenderer following the exact same pattern as DataProgressRenderer to provide structured progress context for training operations via ServiceOrchestrator.
-
-**Why this is needed**: ServiceOrchestrator needs a training-specific progress renderer to provide structured progress context, eliminating the 50+ lines of CLI string parsing. This renderer integrates with ServiceOrchestrator's progress system automatically.
-
-**Key Insight**: Just like DataProgressRenderer provides structured context for data operations, TrainingProgressRenderer will provide structured context for training operations. ServiceOrchestrator calls the renderer automatically - no manual integration needed.
-
-**Progress Format Examples**:
-- Single symbol: "Training MLP model on AAPL [1H] [epoch 15/50] (batch 342/500)"
-- Multi-symbol: "Training MLP model on AAPL, MSFT (+2 more) [1H, 4H] [epoch 15/50]"
-- Different models: "Training CNN model on TSLA [5m] [epoch 8/20] (batch 156/800)"
-
-**ServiceOrchestrator Integration**:
 ```python
-# ServiceOrchestrator automatically calls renderer with context updates
-class TrainingProgressRenderer(ProgressRenderer):
-    def render_progress_message(self, context: dict) -> str:
-        # Extract training-specific context
-        model_type = context.get('model_type', 'Model')
-        symbols = context.get('symbols', [])
-        timeframes = context.get('timeframes', [])
-        current_epoch = context.get('current_epoch', 0)
-        total_epochs = context.get('total_epochs', 0)
+def _initialize_adapter(self) -> TrainingAdapter:
+    """Initialize training adapter based on environment variables."""
+    # Move existing adapter initialization logic here
+    return TrainingAdapter(...)
 
-        # Format like: "Training MLP model on AAPL [1H] [epoch 15/50]"
-        return self._format_training_context(model_type, symbols, timeframes, current_epoch, total_epochs)
+def _get_service_name(self) -> str:
+    return "Training"
 
-# TrainingManager domain logic updates context
-async def _run_training_async(self, ...) -> dict[str, Any]:
-    # ServiceOrchestrator provides progress updates automatically
-    self.update_operation_progress(
-        step=current_step,
-        message=f"Training epoch {current_epoch}",
-        context={
-            'model_type': 'mlp',
-            'symbols': symbols,
-            'timeframes': timeframes,
-            'current_epoch': current_epoch,
-            'total_epochs': total_epochs,
-            'current_batch': current_batch,
-            'total_batches': total_batches,
-        }
+def _get_default_host_url(self) -> str:
+    return "http://localhost:5002"
+
+def _get_env_var_prefix(self) -> str:
+    return "TRAINING"
+```
+
+**TRANSFORM Training Methods to ServiceOrchestrator Pattern:**
+
+```python
+# BEFORE: Direct adapter calls
+async def train_multi_symbol_strategy(self, ...):
+    return await self.training_adapter.train_multi_symbol_strategy(...)
+
+# AFTER: ServiceOrchestrator pattern (like DummyService)
+async def train_multi_symbol_strategy_async(self, ...) -> dict[str, Any]:
+    """ServiceOrchestrator handles ALL complexity automatically."""
+    return await self.start_managed_operation(
+        operation_name="train_multi_symbol_strategy",
+        operation_type="TRAINING",
+        operation_func=self._run_training_async,
+        # Pass parameters to domain logic
+        strategy_config_path=strategy_config_path,
+        symbols=symbols,
+        timeframes=timeframes,
+        start_date=start_date,
+        end_date=end_date,
+        validation_split=validation_split,
+        data_mode=data_mode,
     )
-```
 
-**Context Structure**:
-- Model type (MLP, CNN, LSTM, etc.) - extracted from strategy config
-- Symbols being trained (with smart truncation for multi-symbol readability)
-- Timeframes (with smart truncation for multi-timeframe readability)
-- Epoch progress (coarse-grained) - current/total epochs
-- Batch progress (fine-grained) - current/total batches within epoch
-- Step progress from ServiceOrchestrator - overall operation progress
-
-**Integration with ServiceOrchestrator**:
-- TrainingManager passes TrainingProgressRenderer to ServiceOrchestrator constructor
-- ServiceOrchestrator calls renderer automatically during progress updates
-- CLI gets structured progress data from operations API (no string parsing)
-- Same pattern as DataProgressRenderer for consistency
-
-**Acceptance Criteria**:
-- [ ] TrainingProgressRenderer extends ProgressRenderer interface like DataProgressRenderer
-- [ ] Integrates with ServiceOrchestrator progress system automatically
-- [ ] Renders training context clearly and consistently for CLI display
-- [ ] Handles multi-symbol/timeframe scenarios with smart truncation
-- [ ] Provides both coarse (epoch) and fine (batch) progress information
-- [ ] Context includes model type, symbols, timeframes, epochs, batches
-- [ ] **CRITICAL**: Follows exact same pattern as DataProgressRenderer (consistency)
-
----
-
-### Task 3.3: Leverage ServiceOrchestrator's Automatic Cancellation for Training
-
-**Description**: Configure TrainingAdapter and training components to use ServiceOrchestrator's automatic cancellation system, following the DummyService pattern for effortless cancellation support.
-
-**Key Insight**: ServiceOrchestrator provides automatic cancellation support just like DummyService demonstrates. TrainingAdapter and training components just need to check `self.get_current_cancellation_token()` periodically - no manual cancellation infrastructure needed.
-
-**DummyService Cancellation Pattern**:
-```python
-# DummyService shows perfect cancellation pattern:
-async def _run_dummy_task_async(self) -> dict[str, Any]:
-    for i in range(iterations):
-        # ServiceOrchestrator provides cancellation - just check it!
-        cancellation_token = self.get_current_cancellation_token()
-        if cancellation_token and cancellation_token.is_cancelled():
-            return {"status": "cancelled", "iterations_completed": i}
-
-        # Do work and report progress
-        await asyncio.sleep(2)
-        self.update_operation_progress(step=i + 1, message=f"Working on iteration {i+1}")
-```
-
-**Why ServiceOrchestrator Cancellation is Better**:
-- Automatic token management (no manual token passing)
-- Unified cancellation protocol across all services
-- Instant cancellation response through operations API
-- Cross-thread communication built-in
-- Perfect UX like DummyService demonstrates
-
-**Training Implementation Strategy**:
-
-**1. TrainingManager Domain Logic with ServiceOrchestrator Cancellation**:
-```python
-# TrainingManager._run_training_async() uses ServiceOrchestrator cancellation
-async def _run_training_async(self, ...) -> dict[str, Any]:
-    # Get cancellation token from ServiceOrchestrator (automatic!)
+async def _run_training_async(self, **kwargs) -> dict[str, Any]:
+    """Clean domain logic with ServiceOrchestrator integration."""
+    # Get cancellation token from ServiceOrchestrator
     cancellation_token = self.get_current_cancellation_token()
 
-    # Pass token to TrainingAdapter
-    result = await self.training_adapter.train_multi_symbol_strategy(
-        ...,
+    # Use adapter with ServiceOrchestrator callbacks
+    result = await self.adapter.train_multi_symbol_strategy(
+        **kwargs,
         cancellation_token=cancellation_token,
-        progress_callback=self.update_operation_progress
+        progress_callback=self.update_operation_progress,
     )
 
-    # ServiceOrchestrator handles cancellation gracefully in background
     return self._format_training_api_response(result)
 ```
 
-**2. TrainingAdapter Updates for ServiceOrchestrator Cancellation**:
+**CREATE TrainingProgressRenderer:**
+
 ```python
-# TrainingAdapter accepts cancellation_token from ServiceOrchestrator
-async def train_multi_symbol_strategy(self, ..., cancellation_token=None, progress_callback=None):
+# ktrdr/training/components/training_progress_renderer.py
+from ktrdr.async_infrastructure.progress import ProgressRenderer, GenericProgressState
+
+class TrainingProgressRenderer(ProgressRenderer):
+    def render_message(self, state: GenericProgressState) -> str:
+        """Render training-specific progress messages."""
+        context = state.context or {}
+
+        # Extract training context
+        symbols = context.get('symbols', [])
+        model_type = context.get('model_type', 'Model')
+        current_epoch = context.get('current_epoch', 0)
+        total_epochs = context.get('total_epochs', 0)
+
+        # Format like: "Training MLP model on AAPL [epoch 5/50]"
+        symbol_str = symbols[0] if symbols else "unknown"
+        if len(symbols) > 1:
+            symbol_str = f"{symbols[0]}+{len(symbols)-1} others"
+
+        epoch_str = ""
+        if total_epochs > 0:
+            epoch_str = f" [epoch {current_epoch}/{total_epochs}]"
+
+        return f"Training {model_type} model on {symbol_str}{epoch_str}"
+```
+
+#### **Integration Points**
+- **ServiceOrchestrator inheritance**: Provides automatic operations, progress, cancellation
+- **TrainingProgressRenderer**: Provides training-specific structured progress messages
+- **Method transformation**: Training methods become `start_managed_operation()` calls
+- **Domain logic separation**: Clean `_run_training_async()` with ServiceOrchestrator integration
+
+#### **End-to-End Test Validation**
+
+```bash
+# Test that training still starts and completes with ServiceOrchestrator
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02
+
+# Verify ServiceOrchestrator operations API shows the training
+curl localhost:8000/operations  # Should show training operation managed by ServiceOrchestrator
+```
+
+---
+
+### **Task 3.2: Integrate TrainingAdapter with ServiceOrchestrator Callbacks**
+**End-to-End Testable**: ✅ Training reports structured progress and supports cancellation
+
+#### **Files to Modify**
+- `ktrdr/training/training_adapter.py`
+
+#### **Specific Changes Required**
+
+**MODIFY TrainingAdapter Methods to Accept ServiceOrchestrator Integration:**
+
+```python
+async def train_multi_symbol_strategy(
+    self,
+    strategy_config_path: str,
+    symbols: list[str],
+    timeframes: list[str],
+    start_date: str,
+    end_date: str,
+    validation_split: float = 0.2,
+    data_mode: str = "local",
+    progress_callback=None,        # NEW: ServiceOrchestrator progress callback
+    cancellation_token=None,       # NEW: ServiceOrchestrator cancellation token
+) -> dict[str, Any]:
+    """Training adapter with ServiceOrchestrator integration support."""
     if self.use_host_service:
-        # Host service integration (future enhancement)
-        return await self._call_host_service_training(..., cancellation_token=cancellation_token)
+        return await self._call_host_service_training(
+            strategy_config_path=strategy_config_path,
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date,
+            end_date=end_date,
+            validation_split=validation_split,
+            data_mode=data_mode,
+            progress_callback=progress_callback,
+            cancellation_token=cancellation_token
+        )
     else:
-        # Local training with ServiceOrchestrator cancellation
-        return await self.local_trainer.train_multi_symbol_strategy(
-            ...,
-            cancellation_token=cancellation_token,
-            progress_callback=progress_callback
+        # Forward to local training with ServiceOrchestrator integration
+        return await self._call_local_training(
+            strategy_config_path=strategy_config_path,
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date,
+            end_date=end_date,
+            validation_split=validation_split,
+            data_mode=data_mode,
+            progress_callback=progress_callback,
+            cancellation_token=cancellation_token
         )
 ```
 
-**3. Local Training Cancellation Integration**:
+#### **Integration Points**
+- **Callback forwarding**: TrainingAdapter forwards ServiceOrchestrator callbacks to implementations
+- **Dual path support**: Both local and host service paths accept integration parameters
+- **Backward compatibility**: Existing calls work, new parameters are optional
+
+#### **End-to-End Test Validation**
+
+```bash
+# Test that TrainingAdapter forwards callbacks properly
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02
+
+# Should show structured progress from ServiceOrchestrator integration
+curl localhost:8000/operations/{operation_id}
+```
+
+---
+
+### **Task 3.3: Integrate Local Training with ServiceOrchestrator**
+**End-to-End Testable**: ✅ Local training supports ServiceOrchestrator cancellation and progress
+
+#### **Files to Modify**
+- `ktrdr/training/training_adapter.py` (`_call_local_training` method)
+- Local training implementation files
+
+#### **Specific Changes Required**
+
+**IMPLEMENT Local Training ServiceOrchestrator Integration:**
+
 ```python
-# model_trainer.py - Check ServiceOrchestrator cancellation periodically
-async def train_multi_symbol_strategy(self, ..., cancellation_token=None, progress_callback=None):
-    for epoch in range(total_epochs):
-        # Check cancellation at epoch boundaries (minimal overhead)
+async def _call_local_training(
+    self,
+    strategy_config_path: str,
+    symbols: list[str],
+    timeframes: list[str],
+    start_date: str,
+    end_date: str,
+    validation_split: float = 0.2,
+    data_mode: str = "local",
+    progress_callback=None,
+    cancellation_token=None,
+) -> dict[str, Any]:
+    """Local training with ServiceOrchestrator integration."""
+
+    # Load strategy and setup training
+    trainer = StrategyTrainer(models_dir="models")
+
+    # Run training with ServiceOrchestrator callbacks
+    def training_progress_callback(epoch: int, total_epochs: int, metrics: dict):
+        """Convert local training progress to ServiceOrchestrator format."""
+        if progress_callback:
+            progress_callback(
+                step=epoch,
+                message=f"Training epoch {epoch+1}",
+                context={
+                    'model_type': metrics.get('model_type', 'mlp'),
+                    'symbols': symbols,
+                    'timeframes': timeframes,
+                    'current_epoch': epoch + 1,
+                    'total_epochs': total_epochs,
+                    'current_batch': metrics.get('batch', 0),
+                    'total_batches': metrics.get('total_batches', 0),
+                    'strategy': Path(strategy_config_path).stem,
+                }
+            )
+
+    # Check cancellation during training setup
+    if cancellation_token and cancellation_token.is_cancelled():
+        return {"status": "cancelled", "message": "Training cancelled before start"}
+
+    # Run training with cancellation and progress integration
+    result = await self._run_local_training_with_cancellation(
+        trainer=trainer,
+        strategy_config_path=strategy_config_path,
+        symbols=symbols,
+        timeframes=timeframes,
+        start_date=start_date,
+        end_date=end_date,
+        validation_split=validation_split,
+        data_mode=data_mode,
+        progress_callback=training_progress_callback,
+        cancellation_token=cancellation_token,
+    )
+
+    return result
+
+async def _run_local_training_with_cancellation(
+    self,
+    trainer,
+    strategy_config_path: str,
+    symbols: list[str],
+    timeframes: list[str],
+    start_date: str,
+    end_date: str,
+    validation_split: float,
+    data_mode: str,
+    progress_callback,
+    cancellation_token,
+) -> dict[str, Any]:
+    """Run local training with periodic cancellation checks."""
+
+    # Run training in executor to allow cancellation checks
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Submit training task
+        training_future = executor.submit(
+            trainer.train_multi_symbol_strategy,
+            strategy_config_path,
+            symbols,
+            timeframes,
+            start_date,
+            end_date,
+            validation_split,
+            data_mode,
+            progress_callback,
+        )
+
+        # Monitor for cancellation while training runs
+        while not training_future.done():
+            if cancellation_token and cancellation_token.is_cancelled():
+                # Cancel training (implementation depends on trainer capabilities)
+                training_future.cancel()
+                return {
+                    "status": "cancelled",
+                    "message": "Training cancelled by user",
+                    "symbols": symbols,
+                }
+
+            await asyncio.sleep(1)  # Check every second
+
+        # Get training results
+        return training_future.result()
+```
+
+#### **Integration Points**
+- **Cancellation checks**: Local training checks ServiceOrchestrator cancellation token periodically
+- **Progress forwarding**: Local training progress → ServiceOrchestrator progress callback
+- **Context structure**: Local training provides structured context for TrainingProgressRenderer
+- **Async execution**: Local training runs in executor to allow cancellation monitoring
+
+#### **End-to-End Test Validation**
+
+```bash
+# Test local training cancellation
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02 &
+# Press Ctrl+C within 5 seconds - should cancel gracefully
+
+# Test progress shows local training context
+curl localhost:8000/operations/{operation_id}  # Should show epoch/batch progress
+```
+
+---
+
+### **Task 3.4: Integrate Host Service Training with ServiceOrchestrator**
+**End-to-End Testable**: ✅ Host service training supports ServiceOrchestrator integration
+
+#### **Files to Modify**
+- `ktrdr/training/training_adapter.py` (`_call_host_service_training` method)
+
+#### **Specific Changes Required**
+
+**IMPLEMENT Host Service ServiceOrchestrator Integration:**
+
+```python
+async def _call_host_service_training(
+    self,
+    strategy_config_path: str,
+    symbols: list[str],
+    timeframes: list[str],
+    start_date: str,
+    end_date: str,
+    validation_split: float = 0.2,
+    data_mode: str = "local",
+    progress_callback=None,
+    cancellation_token=None,
+) -> dict[str, Any]:
+    """Host service training with ServiceOrchestrator integration."""
+
+    # Check cancellation before starting
+    if cancellation_token and cancellation_token.is_cancelled():
+        return {"status": "cancelled", "message": "Training cancelled before start"}
+
+    # Start host service training session
+    training_config = {
+        "strategy_config_path": strategy_config_path,
+        "symbols": symbols,
+        "timeframes": timeframes,
+        "start_date": start_date,
+        "end_date": end_date,
+        "validation_split": validation_split,
+        "data_mode": data_mode,
+        # Enable ServiceOrchestrator integration features
+        "enable_cancellation": cancellation_token is not None,
+        "enable_progress_reporting": progress_callback is not None,
+    }
+
+    session_id = await self.host_client.start_training_session(training_config)
+
+    # Monitor host service training and forward to ServiceOrchestrator
+    while True:
+        # Check ServiceOrchestrator cancellation first
         if cancellation_token and cancellation_token.is_cancelled():
-            logger.info(f"Training cancelled at epoch {epoch}")
-            return {"status": "cancelled", "epochs_completed": epoch}
+            try:
+                await self.host_client.cancel_training_session(session_id)
+            except Exception as e:
+                logger.warning(f"Failed to cancel host training session: {e}")
+            return {"status": "cancelled", "message": "Training cancelled by user"}
 
-        # Training epoch logic
-        for batch_idx, batch in enumerate(train_loader):
-            # Check cancellation every 50 batches (balanced performance)
-            if batch_idx % 50 == 0 and cancellation_token and cancellation_token.is_cancelled():
-                logger.info(f"Training cancelled at epoch {epoch}, batch {batch_idx}")
-                return {"status": "cancelled", "epochs_completed": epoch, "batches_completed": batch_idx}
+        # Get progress from host service
+        try:
+            host_progress = await self.host_client.get_training_status(session_id)
+        except Exception as e:
+            logger.error(f"Failed to get host training status: {e}")
+            await asyncio.sleep(2)
+            continue
 
-            # Update progress via ServiceOrchestrator callback
-            if progress_callback:
-                progress_callback(
-                    step=current_step,
-                    message=f"Training epoch {epoch+1}",
-                    context={
-                        'current_epoch': epoch + 1,
-                        'total_epochs': total_epochs,
-                        'current_batch': batch_idx + 1,
-                        'total_batches': len(train_loader)
-                    }
-                )
+        # Forward host service progress to ServiceOrchestrator
+        if progress_callback and host_progress:
+            progress_callback(
+                step=host_progress.get("current_step", 0),
+                message=host_progress.get("message", "Host training"),
+                context={
+                    'model_type': host_progress.get("model_type", "mlp"),
+                    'symbols': symbols,
+                    'timeframes': timeframes,
+                    'current_epoch': host_progress.get("current_epoch", 0),
+                    'total_epochs': host_progress.get("total_epochs", 0),
+                    'current_batch': host_progress.get("current_batch", 0),
+                    'total_batches': host_progress.get("total_batches", 0),
+                    'strategy': Path(strategy_config_path).stem,
+                    'host_service': True,
+                }
+            )
 
-    return {"status": "success", "epochs_completed": total_epochs}
+        # Check if host training completed
+        status = host_progress.get("status")
+        if status in ["completed", "failed", "cancelled"]:
+            return host_progress
+
+        await asyncio.sleep(1)  # Poll interval
 ```
 
-**Why This Approach is Better**:
-- ServiceOrchestrator provides cancellation token automatically
-- No manual token passing through complex call chains
-- Cancellation checks use simple `.is_cancelled()` method
-- Performance optimized (epoch boundaries + every 50 batches)
-- Progress updates and cancellation checks combined for efficiency
-- Same pattern as DummyService and DataManager
+#### **Integration Points**
+- **Cancellation forwarding**: ServiceOrchestrator cancellation → host service cancellation
+- **Progress forwarding**: Host service progress → ServiceOrchestrator progress callback
+- **Context mapping**: Host service format → TrainingProgressRenderer context
+- **Error handling**: Host service errors handled gracefully
 
-**Acceptance Criteria**:
-- [ ] TrainingManager gets cancellation token from ServiceOrchestrator automatically
-- [ ] TrainingAdapter accepts cancellation_token parameter from ServiceOrchestrator
-- [ ] Local training checks cancellation at epoch boundaries (minimal overhead)
-- [ ] Local training checks cancellation every 50 batches (performance balance)
-- [ ] Training returns appropriate status on cancellation ("cancelled", progress info)
-- [ ] Host service training accepts cancellation context (future enhancement)
-- [ ] **CRITICAL**: Cancellation checks don't impact training performance significantly
-- [ ] **CRITICAL**: Training stops within reasonable time (epoch boundary or 50 batches)
+#### **End-to-End Test Validation**
+
+```bash
+# Test with host service enabled (requires host service running)
+USE_TRAINING_HOST_SERVICE=true ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02
+
+# Verify host service progress forwarding
+curl localhost:8000/operations/{operation_id}  # Should show host service context
+```
 
 ---
 
-### Task 3.4: Leverage ServiceOrchestrator's Automatic Structured Progress for CLI
+### **Task 3.5: Simplify TrainingService to Pure API Adapter**
+**End-to-End Testable**: ✅ TrainingService delegates to ServiceOrchestrator, no competing systems
 
-**Description**: Remove the 50+ lines of brittle string parsing from CLI training commands by leveraging ServiceOrchestrator's automatic structured progress data, just like DataManager and DummyService provide.
+#### **Files to Modify**
+- `ktrdr/api/services/training_service.py`
 
-**Key Insight**: Once TrainingManager inherits ServiceOrchestrator, the CLI automatically gets structured progress data through the operations API. No manual CLI changes needed - ServiceOrchestrator provides this automatically.
+#### **Specific Changes Required**
 
-**Current Problem**: CLI training commands contain 50+ lines of brittle string parsing because TrainingManager doesn't use ServiceOrchestrator:
+**REMOVE All Competing Operations Infrastructure:**
+
 ```python
-# async_model_commands.py:424-512 - BRITTLE STRING PARSING
-if current_step and "Epoch:" in current_step and "Bars:" in current_step:
-    try:
-        epoch_part = current_step.split("Epoch:")[1].split(",")[0].strip()
-        current_epoch = int(epoch_part)
-        bars_part = current_step.split("Bars:")[1].strip()
-        if bars_part and "(" in bars_part:
-            bars_part = bars_part.split("(")[0].strip()
-        # ... 40+ more lines of fragile parsing logic
-    except (IndexError, ValueError, ZeroDivisionError):
-        current_epoch = 0  # Parsing failed
+# REMOVE these methods entirely:
+# - _run_training_async() (if exists)
+# - _run_multi_symbol_training_async() (if exists)
+# - Any direct operations_service.update_progress() calls
+# - Any manual operations management
 ```
 
-**ServiceOrchestrator Solution**: Once TrainingManager uses ServiceOrchestrator, CLI gets structured data automatically:
+**SIMPLIFY TrainingService to Pure API Adapter:**
+
 ```python
-# AFTER: ServiceOrchestrator provides structured context automatically
-def display_training_progress(progress_info):
-    # Get structured context from ServiceOrchestrator operations API
-    context = progress_info.get("context", {})
+class TrainingService(BaseService):
+    def __init__(self, operations_service: Optional[OperationsService] = None):
+        super().__init__()
+        self.model_storage = ModelStorage()
+        self.model_loader = ModelLoader()
+        # Keep operations_service for other methods, but don't use for training
+        self.operations_service = operations_service
+        # TrainingManager handles its own operations via ServiceOrchestrator
+        self.training_manager = TrainingManager()
 
-    # Clean, reliable data access (no parsing!)
-    current_epoch = context.get('current_epoch', 0)
-    total_epochs = context.get('total_epochs', 0)
-    current_batch = context.get('current_batch', 0)
-    total_batches = context.get('total_batches', 0)
-    model_type = context.get('model_type', 'Model')
-    symbols = context.get('symbols', [])
+    async def start_training(
+        self,
+        symbols: list[str],
+        timeframes: list[str],
+        strategy_name: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        task_id: Optional[str] = None,
+        detailed_analytics: bool = False,
+    ) -> dict[str, Any]:
+        """Pure delegation to TrainingManager ServiceOrchestrator."""
 
-    # Display formatted progress (no parsing errors possible)
-    epoch_progress = f"[epoch {current_epoch}/{total_epochs}]" if total_epochs > 0 else ""
-    batch_progress = f"(batch {current_batch}/{total_batches})" if total_batches > 0 else ""
+        # Strategy validation (keep existing logic)
+        strategy_paths = [
+            Path(f"/app/strategies/{strategy_name}.yaml"),
+            Path(f"strategies/{strategy_name}.yaml"),
+        ]
 
-    return f"Training {model_type} model {epoch_progress} {batch_progress}"
+        strategy_path = None
+        for path in strategy_paths:
+            if path.exists():
+                strategy_path = path
+                break
+
+        if not strategy_path:
+            raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
+
+        # Apply analytics if requested (keep existing logic)
+        if detailed_analytics:
+            # Modify strategy config for analytics
+            pass
+
+        # SIMPLE DELEGATION to ServiceOrchestrator (no competing operations!)
+        return await self.training_manager.train_multi_symbol_strategy_async(
+            strategy_config_path=str(strategy_path),
+            symbols=symbols,
+            timeframes=timeframes,
+            start_date=start_date or "2020-01-01",
+            end_date=end_date or datetime.utcnow().strftime("%Y-%m-%d"),
+            validation_split=0.2,
+            data_mode="local",
+        )
 ```
 
-**How ServiceOrchestrator Makes This Automatic**:
-1. TrainingManager inherits ServiceOrchestrator → automatic operations API integration
-2. Training domain logic calls `self.update_operation_progress()` → structured context
-3. TrainingProgressRenderer formats context → clean display messages
-4. CLI polls operations API → gets structured progress data automatically
-5. CLI displays progress → no string parsing needed, just structured data access
+#### **Integration Points**
+- **Pure API adapter**: TrainingService only validates inputs and delegates
+- **No competing operations**: ServiceOrchestrator handles all operation management
+- **Strategy validation preserved**: Keep existing validation and analytics logic
+- **Simple delegation**: Direct call to TrainingManager ServiceOrchestrator method
 
-**Benefits of ServiceOrchestrator Approach**:
-- **Automatic**: No manual CLI modifications needed
-- **Reliable**: No parsing errors or edge case failures
-- **Consistent**: Same pattern as data loading CLI (DummyService proves this works)
-- **Maintainable**: Easy to extend context without breaking CLI
-- **Performance**: No complex regex operations or string manipulation
+#### **End-to-End Test Validation**
 
-**Implementation Approach**:
-1. TrainingManager inherits ServiceOrchestrator → automatic structured progress
-2. Remove string parsing logic from CLI training commands
-3. Access structured context from operations API (like data commands do)
-4. Format progress using clean structured data (no parsing failures)
+```bash
+# Test that API still works but uses ServiceOrchestrator
+curl -X POST localhost:8000/trainings/start -d '{"symbols":["AAPL"],"timeframes":["1h"],"strategy_name":"test"}'
 
-**Acceptance Criteria**:
-- [ ] TrainingManager provides structured progress via ServiceOrchestrator operations API
-- [ ] Remove 50+ lines of string parsing from CLI training commands (async_model_commands.py:424-512)
-- [ ] CLI accesses structured context from operations API (like data loading commands)
-- [ ] Training progress display more reliable and consistent than string parsing
-- [ ] CLI training progress quality matches data loading CLI exactly
-- [ ] **CRITICAL**: No parsing errors or edge case failures (impossible with structured data)
-- [ ] **CRITICAL**: Same automatic pattern as DummyService and DataManager (consistency)
+# Verify single operations system
+curl localhost:8000/operations  # Should show only ServiceOrchestrator-managed operations
+```
 
 ---
 
-### Task 3.5: Validate DummyService Pattern Implementation in Training
+### **Task 3.6: Fix CLI to Use ServiceOrchestrator's Structured Data**
+**End-to-End Testable**: ✅ CLI shows structured progress without manual parsing
 
-**Description**: Comprehensive validation that TrainingManager now follows the exact DummyService pattern, providing the same perfect UX as DummyService and DataManager.
+#### **Files to Modify**
+- `ktrdr/cli/async_model_commands.py`
 
-**Why this validation is critical**: This slice transforms TrainingManager to follow the proven DummyService pattern. We need to validate that:
-1. TrainingManager works exactly like DummyService (pattern consistency)
-2. Training operations are as simple as DummyService operations (zero boilerplate)
-3. Perfect UX achieved - smooth progress and instant cancellation (like DummyService)
-4. CLI gets automatic structured progress (no manual integration needed)
-5. All existing functionality preserved with ServiceOrchestrator benefits
+#### **Specific Changes Required**
 
-**DummyService Pattern Validation**:
-- **Pattern consistency**: TrainingManager follows DummyService structure exactly
-- **Method simplicity**: Training methods are single `start_managed_operation()` calls
-- **Domain logic**: Clean `_run_*_async()` methods like `DummyService._run_dummy_task_async()`
-- **ServiceOrchestrator benefits**: Automatic operations, progress, cancellation
-- **UX quality**: Perfect progress and cancellation like DummyService demonstrates
+**REMOVE Manual Progress State Construction:**
 
-**Validation Focus Areas**:
-
-1. **Pattern Validation**: TrainingManager structure matches DummyService exactly
-2. **UX Validation**: Training operations have perfect UX like DummyService
-3. **CLI Validation**: Automatic structured progress (no string parsing)
-4. **Regression Validation**: All existing training functionality preserved
-5. **Performance Validation**: ServiceOrchestrator doesn't impact training performance
-6. **Cancellation Validation**: Instant cancellation like DummyService
-
-**Testing Strategy**:
 ```python
-# Validate DummyService pattern compliance
+# DELETE manual GenericProgressState construction:
+# This assumes we know the start_time and other details, but ServiceOrchestrator manages these
+progress_state = GenericProgressState(
+    operation_id=operation_id,
+    current_step=progress_info.get("steps_completed", 0),
+    total_steps=progress_info.get("steps_total", 100),
+    message=current_step,
+    percentage=progress_percentage,
+    start_time=datetime.now(),  # WRONG! ServiceOrchestrator knows the real start time
+    items_processed=progress_info.get("items_processed", 0),
+    total_items=progress_info.get("items_total", None),
+    step_current=progress_info.get("steps_completed", 0),
+    step_total=progress_info.get("steps_total", 100),
+)
+```
+
+**USE ServiceOrchestrator's Structured Data:**
+
+```python
+# ServiceOrchestrator provides structured context automatically
+context = progress_info.get("context", {})
+
+# Access training-specific structured data (no parsing needed!)
+current_epoch = context.get('current_epoch', 0)
+total_epochs = context.get('total_epochs', 0)
+model_type = context.get('model_type', 'Model')
+symbols = context.get('symbols', [])
+strategy = context.get('strategy', 'Unknown')
+
+# Let ServiceOrchestrator manage the GenericProgressState properly
+progress_state = GenericProgressState(
+    operation_id=operation_id,
+    current_step=progress_info.get("steps_completed", 0),
+    total_steps=progress_info.get("steps_total", 100),
+    message=progress_info.get("current_step", "Training..."),
+    percentage=progress_info.get("percentage", 0),
+    start_time=None,  # Let ServiceOrchestrator manage timing
+    context=context,  # Use ServiceOrchestrator's structured context
+    items_processed=progress_info.get("items_processed", 0),
+    total_items=progress_info.get("items_total", None),
+)
+```
+
+#### **Integration Points**
+- **Remove manual construction**: Let ServiceOrchestrator provide proper state
+- **Use structured context**: Access training data from ServiceOrchestrator context
+- **TrainingProgressRenderer integration**: Structured context enables proper formatting
+- **Timing handled by ServiceOrchestrator**: No more incorrect start_time approximations
+
+#### **End-to-End Test Validation**
+
+```bash
+# Test CLI shows structured training progress
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02 --verbose
+
+# Should show: "Training MLP model on AAPL [epoch 5/50]"
+# Instead of: "Working..." or manual parsing errors
+```
+
+---
+
+### **Task 3.7: End-to-End Testing and DummyService Pattern Validation**
+**End-to-End Testable**: ✅ Training system works exactly like DummyService
+
+#### **Files to Create**
+- `tests/integration/test_training_serviceorchestrator_pattern.py`
+
+#### **Comprehensive Pattern Compliance Tests**
+
+```python
 def test_training_manager_follows_dummy_service_pattern():
-    # 1. TrainingManager inherits ServiceOrchestrator[TrainingAdapter]
+    """Validate TrainingManager follows exact DummyService pattern."""
+    # 1. Inheritance compliance
     assert issubclass(TrainingManager, ServiceOrchestrator)
 
-    # 2. Training methods are simple start_managed_operation() calls
-    # (check method structure, not implementation details)
-
-    # 3. Domain logic in clean _run_*_async() methods
-    assert hasattr(TrainingManager, '_run_training_async')
-
-    # 4. ServiceOrchestrator provides automatic capabilities
+    # 2. Method structure compliance
     training_manager = TrainingManager()
+
+    # ServiceOrchestrator capabilities (like DummyService)
     assert hasattr(training_manager, 'start_managed_operation')
     assert hasattr(training_manager, 'get_current_cancellation_token')
     assert hasattr(training_manager, 'update_operation_progress')
 
-def test_training_ux_matches_dummy_service():
-    # Perfect UX: smooth progress and instant cancellation
-    # (Integration test with operations API)
-    pass
+    # Training-specific methods
+    assert hasattr(training_manager, 'train_multi_symbol_strategy_async')
+    assert hasattr(training_manager, '_run_training_async')
 
-def test_cli_gets_structured_progress_automatically():
-    # CLI gets structured data from operations API
-    # No string parsing needed (like data loading CLI)
-    pass
+def test_training_service_is_pure_api_adapter():
+    """Validate TrainingService has no competing operations systems."""
+    training_service = TrainingService()
+
+    # Should NOT have competing async infrastructure
+    assert not hasattr(training_service, '_run_training_async')
+    assert not hasattr(training_service, '_run_multi_symbol_training_async')
+
+    # Should be simple delegation
+    assert hasattr(training_service, 'start_training')
+    assert hasattr(training_service, 'training_manager')
+
+async def test_training_matches_dummy_service_behavior():
+    """Test training operations behave identically to dummy operations."""
+    # Start training operation
+    training_response = await api_client.start_training(...)
+    training_op_id = training_response["operation_id"]
+
+    # Compare with dummy operation
+    dummy_response = await api_client.start_dummy_task()
+    dummy_op_id = dummy_response["operation_id"]
+
+    # Both should use same operations API structure
+    training_status = await api_client.get_operation_status(training_op_id)
+    dummy_status = await api_client.get_operation_status(dummy_op_id)
+
+    # Same operation structure
+    assert set(training_status.keys()) == set(dummy_status.keys())
+    assert training_status["data"]["progress"].keys() == dummy_status["data"]["progress"].keys()
+
+async def test_dual_implementation_serviceorchestrator_integration():
+    """Test both local and host service integrate with ServiceOrchestrator."""
+    # Test local training
+    local_result = await training_adapter.train_multi_symbol_strategy(
+        ...,
+        progress_callback=mock_progress_callback,
+        cancellation_token=mock_cancellation_token
+    )
+
+    # Test host service training
+    with mock.patch.object(training_adapter, 'use_host_service', True):
+        host_result = await training_adapter.train_multi_symbol_strategy(
+            ...,
+            progress_callback=mock_progress_callback,
+            cancellation_token=mock_cancellation_token
+        )
+
+    # Both should support ServiceOrchestrator integration
+    assert mock_progress_callback.called
+    assert mock_cancellation_token.checked
 ```
 
-**Success Criteria (DummyService Pattern Compliance)**:
-- [ ] TrainingManager inherits ServiceOrchestrator[TrainingAdapter] like DummyService pattern
-- [ ] Training methods are single `start_managed_operation()` calls (zero boilerplate)
-- [ ] Domain logic in clean `_run_*_async()` methods like DummyService
+#### **End-to-End Test Validation**
+
+```bash
+# Complete system validation
+make test-integration  # Should include ServiceOrchestrator compliance tests
+
+# Manual validation - should work exactly like dummy service
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02
+ktrdr dummy start
+
+# Both commands should have:
+# - Same progress display quality
+# - Same cancellation behavior
+# - Same operations API structure
+# - Same overall UX
+```
+
+## 🎯 **SUCCESS CRITERIA**
+
+### **DummyService Pattern Compliance**
+
+- [ ] TrainingManager inherits ServiceOrchestrator[TrainingAdapter] (like DummyService)
+- [ ] Training methods are single `start_managed_operation()` calls (like DummyService)
+- [ ] Domain logic in clean `_run_training_async()` methods (like DummyService)
 - [ ] ServiceOrchestrator handles ALL async complexity automatically
-- [ ] Perfect UX achieved - smooth progress and instant cancellation
-- [ ] CLI gets structured progress automatically (no manual integration)
-- [ ] ALL existing training functionality preserved with ServiceOrchestrator benefits
-- [ ] **CRITICAL**: Training operations as simple as DummyService operations
-- [ ] **CRITICAL**: Same perfect UX quality as DummyService demonstrates
-- [ ] **CRITICAL**: Pattern consistency across DummyService, DataManager, and TrainingManager
+- [ ] TrainingProgressRenderer provides training-specific structured progress
 
-## Architecture Consistency Analysis
+### **Dual Implementation Support**
 
-**Perfect Pattern Reference - DummyService:**
-```
-DummyService (ServiceOrchestrator[None])
-    ↓ (start_dummy_task() -> start_managed_operation())
-    ↓ (_run_dummy_task_async() -> clean domain logic)
-ServiceOrchestrator (handles ALL complexity automatically)
-    ↓ (operations, progress, cancellation, API formatting)
-[Perfect UX: smooth progress, instant cancellation, zero boilerplate]
-```
+- [ ] Local training integrates with ServiceOrchestrator (cancellation + progress)
+- [ ] Host service training integrates with ServiceOrchestrator (cancellation + progress)
+- [ ] Both paths provide identical UX and structured progress
+- [ ] Environment variable switching works seamlessly between implementations
 
-**Successfully Applied - DataManager:**
-```
-DataManager (ServiceOrchestrator[IbDataAdapter])
-    ↓ (load_data_async() -> start_managed_operation() like DummyService)
-    ↓ (_run_data_load_async() -> clean domain logic like DummyService)
-IbDataAdapter (routes: local IB vs host service)
-    ↓ (complex data operations with ServiceOrchestrator benefits)
-ServiceOrchestrator (handles ALL async complexity automatically)
-```
+### **System Integration**
 
-**Target for Slice 3 - TrainingManager:**
-```
-TrainingManager (ServiceOrchestrator[TrainingAdapter]) <- ADD THIS
-    ↓ (train_multi_symbol_strategy_async() -> start_managed_operation() like DummyService)
-    ↓ (_run_training_async() -> clean domain logic like DummyService)
-TrainingAdapter (routes: local training vs host service)
-    ↓ (training operations with ServiceOrchestrator benefits)
-ServiceOrchestrator (handles ALL async complexity automatically)
+- [ ] TrainingService is pure API adapter (no competing operations systems)
+- [ ] CLI gets structured data from ServiceOrchestrator automatically
+- [ ] Progress quality matches DummyService exactly
+- [ ] Cancellation works end-to-end through entire system
+
+### **End-to-End Testing**
+
+- [ ] Each task is independently testable and functional
+- [ ] Integration tests validate exact DummyService pattern compliance
+- [ ] Manual testing shows identical UX to DummyService
+- [ ] Both local and host training paths fully validated
+
+## 📋 **CRITICAL SUCCESS CHECKPOINTS**
+
+### **After Task 3.1 (ServiceOrchestrator Inheritance)**
+
+```bash
+# Training should still work, now with ServiceOrchestrator
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02
+
+# Operations API should show ServiceOrchestrator-managed operation
+curl localhost:8000/operations
 ```
 
-**Key Insight**: DummyService proves ServiceOrchestrator can make ANY service perfect with zero boilerplate:
-- **DummyService**: 200-second dummy operation → perfect UX with 50 lines of code
-- **DataManager**: Complex data loading → perfect UX following DummyService pattern
-- **TrainingManager**: Training operations → should have perfect UX like DummyService
+### **After Task 3.3 (Local Training Integration)**
 
-**Why DummyService Pattern Works for Training**:
-- **Simple delegation**: TrainingManager methods become single `start_managed_operation()` calls
-- **Clean domain logic**: Training logic in `_run_training_async()` like `_run_dummy_task_async()`
-- **ServiceOrchestrator benefits**: Automatic operations, progress, cancellation, API formatting
-- **Perfect UX**: Smooth progress and instant cancellation like DummyService demonstrates
-- **Zero boilerplate**: ServiceOrchestrator handles ALL complexity automatically
+```bash
+# Cancellation should work
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02 &
+# Ctrl+C should cancel gracefully
 
-**Slice 3 Transformation**: Make TrainingManager follow DummyService pattern exactly, achieving the same perfect UX with minimal code.
+# Progress should show structured training context
+curl localhost:8000/operations/{operation_id}  # Should show epoch/batch info
+```
 
-## Expected Outcome
+### **After Task 3.6 (CLI Integration)**
 
-**Before Slice 3**:
+```bash
+# CLI should show formatted training progress
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02 --verbose
 
-- TrainingManager: Plain class with manual async management
-- Training operations: Direct adapter calls, no operations tracking
-- Training CLI: 50+ lines of brittle string parsing, fragile progress display
-- UX: Complex, error-prone, inconsistent with DataManager
+# Should display: "Training MLP model on AAPL [epoch 5/50]"
+# Not: generic progress or parsing errors
+```
 
-**After Slice 3**:
+### **After Task 3.7 (Complete Integration)**
 
-- TrainingManager: Inherits ServiceOrchestrator[TrainingAdapter] like DummyService
-- Training operations: Single `start_managed_operation()` calls, automatic operations tracking
-- Training CLI: Structured data access, reliable progress display (no parsing)
-- UX: Perfect like DummyService - smooth progress, instant cancellation, zero boilerplate
+```bash
+# Training should behave exactly like dummy service
+ktrdr models train strategies/test_strategy.yaml --start-date 2024-01-01 --end-date 2024-01-02
+ktrdr dummy start
 
-**User Benefit**: Training commands work exactly like DummyService and data commands:
+# Both should have identical:
+# - Progress display patterns
+# - Cancellation behavior
+# - Operations API responses
+# - Overall user experience
+```
 
-- **Perfect UX**: Smooth progress and instant cancellation like DummyService demonstrates
-- **Reliable CLI**: No more string parsing errors or edge case failures
-- **Consistent patterns**: Same ServiceOrchestrator pattern across all services
-- **Zero boilerplate**: ServiceOrchestrator handles ALL complexity automatically
+## 🔍 **CONTEXT STRUCTURE FOR SERVICEORCHESTRATOR INTEGRATION**
 
-**Developer Benefit**: TrainingManager becomes as simple as DummyService:
+All progress callbacks must provide this structured context:
 
-- **Minimal code**: Methods are single `start_managed_operation()` calls
-- **Clean domain logic**: Training logic in simple `_run_*_async()` methods
-- **Automatic benefits**: Operations, progress, cancellation, API formatting
-- **Easy maintenance**: Follow proven DummyService pattern for all future services
+```python
+{
+    'model_type': str,              # 'mlp', 'cnn', etc.
+    'symbols': list[str],           # ['AAPL', 'MSFT']
+    'timeframes': list[str],        # ['1h', '4h']
+    'current_epoch': int,           # 5
+    'total_epochs': int,            # 50
+    'current_batch': int,           # 123
+    'total_batches': int,           # 500
+    'strategy': str,                # Strategy name
+    'host_service': bool,           # True if using host service
+}
+```
 
-## Integration Points
+This enables TrainingProgressRenderer to format messages like:
+- "Training MLP model on AAPL [epoch 5/50] (batch 123/500)"
+- "Training CNN model on AAPL+2 others [epoch 8/20] (host service)"
 
-**Slice 4 Integration Readiness**:
+## 📈 **PROGRESSIVE IMPLEMENTATION BENEFITS**
 
-- TrainingManager follows exact DummyService pattern for AsyncServiceAdapter integration
-- ServiceOrchestrator patterns proven across DummyService, DataManager, and TrainingManager
-- Unified async infrastructure foundation complete with perfect UX demonstrated
+1. **Task 3.1**: Basic ServiceOrchestrator pattern established, training still works
+2. **Task 3.2**: Adapter ready for integration, maintains backward compatibility
+3. **Task 3.3**: Local training gains cancellation and structured progress
+4. **Task 3.4**: Host service gains ServiceOrchestrator integration
+5. **Task 3.5**: API layer simplified, no competing systems
+6. **Task 3.6**: CLI gains structured progress without manual parsing
+7. **Task 3.7**: Full system behaves exactly like DummyService
+
+Each task builds on the previous while maintaining end-to-end functionality, preventing the "all-or-nothing" implementation issues of the previous attempt.

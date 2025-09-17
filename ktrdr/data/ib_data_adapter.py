@@ -17,10 +17,14 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from ktrdr.async_infrastructure.async_host_service import (
+    AsyncHostService,
+    HostServiceConfig,
+)
+
 # Import IB module components
 from ktrdr.ib import IbDataFetcher, IbErrorClassifier, IbErrorType
 from ktrdr.logging import get_logger
-from ktrdr.managers.async_host_service import AsyncHostService, HostServiceConfig
 
 from .external_data_interface import (
     DataProviderConnectionError,
@@ -155,7 +159,7 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
 
     def _translate_host_service_error(self, error: Exception) -> None:
         """Translate AsyncHostService errors to DataProvider errors for compatibility."""
-        from ktrdr.managers.async_host_service import (
+        from ktrdr.async_infrastructure.async_host_service import (
             HostServiceConnectionError,
             HostServiceError,
             HostServiceTimeoutError,

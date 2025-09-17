@@ -45,7 +45,7 @@ class TestDummyService:
     def test_dummy_service_extends_service_orchestrator(self):
         """Test that DummyService properly extends ServiceOrchestrator."""
         from ktrdr.api.services.dummy_service import DummyService
-        from ktrdr.managers.base import ServiceOrchestrator
+        from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
         # Should be subclass of ServiceOrchestrator
         assert issubclass(DummyService, ServiceOrchestrator)
