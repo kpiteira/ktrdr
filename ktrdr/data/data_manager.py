@@ -28,6 +28,7 @@ from ktrdr import (
     log_performance,
 )
 from ktrdr.async_infrastructure.progress import GenericProgressManager
+from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.data.components.data_fetcher import DataFetcher
 from ktrdr.data.components.data_quality_validator import DataQualityValidator
 
@@ -42,7 +43,6 @@ from ktrdr.errors import (
     DataError,
     DataNotFoundError,
 )
-from ktrdr.managers import ServiceOrchestrator
 from ktrdr.utils.timezone_utils import TimestampManager
 
 # Get module logger

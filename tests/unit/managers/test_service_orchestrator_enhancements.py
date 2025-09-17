@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ktrdr.managers.base import ServiceOrchestrator
+from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
 
 class MockServiceOrchestrator(ServiceOrchestrator):
@@ -28,7 +28,9 @@ class MockServiceOrchestrator(ServiceOrchestrator):
 
         # Initialize progress infrastructure that new ServiceOrchestrator expects
         from ktrdr.async_infrastructure.progress import GenericProgressManager
-        from ktrdr.managers.base import DefaultServiceProgressRenderer
+        from ktrdr.async_infrastructure.service_orchestrator import (
+            DefaultServiceProgressRenderer,
+        )
 
         self._progress_renderer = DefaultServiceProgressRenderer(self._service_name)
         self._generic_progress_manager = GenericProgressManager()

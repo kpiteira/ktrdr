@@ -24,7 +24,9 @@ class TestServiceProgressRenderer:
     def test_service_progress_renderer_creation_succeeds(self):
         """Test that DefaultServiceProgressRenderer class can be imported and created."""
         # This test now passes because we implemented DefaultServiceProgressRenderer
-        from ktrdr.managers.base import DefaultServiceProgressRenderer
+        from ktrdr.async_infrastructure.service_orchestrator import (
+            DefaultServiceProgressRenderer,
+        )
 
         renderer = DefaultServiceProgressRenderer("TestService")
         assert renderer is not None
@@ -35,7 +37,9 @@ class TestServiceProgressRenderer:
         """Test basic message rendering - will fail until implementation."""
         # This test will fail until we implement the renderer
         try:
-            from ktrdr.managers.base import DefaultServiceProgressRenderer
+            from ktrdr.async_infrastructure.service_orchestrator import (
+                DefaultServiceProgressRenderer,
+            )
 
             renderer = DefaultServiceProgressRenderer("TestService")
             state = GenericProgressState(
@@ -57,7 +61,9 @@ class TestServiceProgressRenderer:
     def test_service_progress_renderer_context_enhancement_fails(self):
         """Test context enhancement - will fail until implementation."""
         try:
-            from ktrdr.managers.base import DefaultServiceProgressRenderer
+            from ktrdr.async_infrastructure.service_orchestrator import (
+                DefaultServiceProgressRenderer,
+            )
 
             renderer = DefaultServiceProgressRenderer("TestService")
             state = GenericProgressState(
@@ -80,7 +86,9 @@ class TestServiceProgressRenderer:
     def test_service_progress_renderer_time_estimation_fails(self):
         """Test time estimation enhancement - will fail until implementation."""
         try:
-            from ktrdr.managers.base import DefaultServiceProgressRenderer
+            from ktrdr.async_infrastructure.service_orchestrator import (
+                DefaultServiceProgressRenderer,
+            )
 
             renderer = DefaultServiceProgressRenderer("TestService")
             past_time = datetime.now() - timedelta(seconds=30)
@@ -107,7 +115,7 @@ class TestServiceOrchestratorProgressEnhancement:
     def test_service_orchestrator_has_enhanced_progress_manager_fails(self):
         """Test ServiceOrchestrator has GenericProgressManager - will fail initially."""
         # Create a test ServiceOrchestrator subclass
-        from ktrdr.managers.base import ServiceOrchestrator
+        from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
         class TestOrchestrator(ServiceOrchestrator):
             def _initialize_adapter(self):
@@ -132,7 +140,7 @@ class TestServiceOrchestratorProgressEnhancement:
 
     def test_enhanced_execute_with_progress_uses_generic_manager_fails(self):
         """Test enhanced execute_with_progress uses GenericProgressManager - will fail initially."""
-        from ktrdr.managers.base import ServiceOrchestrator
+        from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
         class TestOrchestrator(ServiceOrchestrator):
             def _initialize_adapter(self):
@@ -178,7 +186,7 @@ class TestServiceOrchestratorProgressEnhancement:
 
     def test_hierarchical_progress_tracking_fails(self):
         """Test hierarchical progress tracking in enhanced execute_with_progress - will fail initially."""
-        from ktrdr.managers.base import ServiceOrchestrator
+        from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
         class TestOrchestrator(ServiceOrchestrator):
             def _initialize_adapter(self):
@@ -240,7 +248,7 @@ class TestServiceOrchestratorProgressEnhancement:
 
     def test_time_estimation_engine_integration_fails(self):
         """Test TimeEstimationEngine integration - will fail initially."""
-        from ktrdr.managers.base import ServiceOrchestrator
+        from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
         class TestOrchestrator(ServiceOrchestrator):
             def _initialize_adapter(self):
@@ -296,7 +304,7 @@ class TestServiceOrchestratorProgressEnhancement:
 
     def test_backward_compatibility_with_existing_progress_callback_fails(self):
         """Test backward compatibility with existing ProgressCallback protocol - will fail initially."""
-        from ktrdr.managers.base import ServiceOrchestrator
+        from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
         class TestOrchestrator(ServiceOrchestrator):
             def _initialize_adapter(self):
@@ -347,7 +355,7 @@ class TestServiceOrchestratorProgressEnhancement:
 
     def test_thread_safety_of_enhanced_progress_fails(self):
         """Test thread safety of enhanced progress tracking - will fail initially."""
-        from ktrdr.managers.base import ServiceOrchestrator
+        from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
         class TestOrchestrator(ServiceOrchestrator):
             def _initialize_adapter(self):

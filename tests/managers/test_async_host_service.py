@@ -11,7 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from ktrdr.managers.async_host_service import (
+from ktrdr.async_infrastructure.async_host_service import (
     AsyncHostService,
     HostServiceConfig,
     HostServiceConnectionError,
@@ -325,7 +325,9 @@ class TestAsyncHostServiceHealthCheck:
     async def test_health_check_cache_expiration(self, mock_host_service):
         """Test health check cache expiration."""
         with patch.object(mock_host_service, "_call_host_service_get") as mock_get:
-            with patch("ktrdr.managers.async_host_service.time.time") as mock_time:
+            with patch(
+                "ktrdr.async_infrastructure.async_host_service.time.time"
+            ) as mock_time:
                 mock_get.return_value = {"status": "healthy"}
                 # Set time sequence: [cache_time, age_check, new_cache_time]
                 mock_time.side_effect = [1000, 1040, 1040]  # Cache expires after 30s

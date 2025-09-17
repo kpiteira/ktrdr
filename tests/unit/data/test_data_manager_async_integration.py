@@ -43,7 +43,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
         config.health_checker = Mock()
 
         # Act: Create DataManager with enhanced configuration
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
+        with patch(
+            "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__"
+        ):
             data_manager = DataManager(builder_config=config)
 
         # Assert: DataManager stores async infrastructure components
@@ -69,7 +71,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
         config.health_checker = Mock()
 
         # Act: Create DataManager without async infrastructure
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
+        with patch(
+            "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__"
+        ):
             with patch("ktrdr.data.data_manager.logger"):
                 data_manager = DataManager(builder_config=config)
                 # Manually set the attributes that would normally be set by ServiceOrchestrator.__init__
@@ -105,7 +109,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
         config.data_loading_orchestrator = Mock()
         config.health_checker = Mock()
 
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
+        with patch(
+            "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__"
+        ):
             data_manager = DataManager(builder_config=config)
 
         # Mock data loader to return empty dataframe
@@ -173,7 +179,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
         mock_renderer_instance = Mock(spec=DataProgressRenderer)
         mock_data_progress_renderer.return_value = mock_renderer_instance
 
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
+        with patch(
+            "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__"
+        ):
             with patch("ktrdr.data.data_manager.logger"):
                 data_manager = DataManager(builder_config=config)
                 # Manually set the attributes that would normally be set by ServiceOrchestrator.__init__
@@ -217,7 +225,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
         config.data_loading_orchestrator = Mock()
         config.health_checker = Mock()
 
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
+        with patch(
+            "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__"
+        ):
             data_manager = DataManager(builder_config=config)
 
         # Mock data loader
@@ -267,7 +277,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
         config.data_loading_orchestrator = Mock()
         config.health_checker = Mock()
 
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
+        with patch(
+            "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__"
+        ):
             data_manager = DataManager(builder_config=config)
 
         # Assert: All existing public methods are still available
@@ -302,7 +314,9 @@ class TestDataManagerAsyncInfrastructureIntegration:
         config.data_loading_orchestrator = Mock()
         config.health_checker = Mock()
 
-        with patch("ktrdr.managers.ServiceOrchestrator.__init__"):
+        with patch(
+            "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__"
+        ):
             data_manager = DataManager(builder_config=config)
 
         # Mock data loader and orchestrator

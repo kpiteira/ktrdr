@@ -13,12 +13,15 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from ktrdr.async_infrastructure.async_host_service import (
+    AsyncHostService,
+    HostServiceConfig,
+)
 from ktrdr.async_infrastructure.cancellation import (
     CancellationToken,
     create_cancellation_token,
 )
-from ktrdr.managers.async_host_service import AsyncHostService, HostServiceConfig
-from ktrdr.managers.base import ServiceOrchestrator
+from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 
 
 class TestServiceOrchestratorCancellationProtocol:
@@ -251,8 +254,12 @@ class TestCancellationProtocolCompliance:
 
     def test_cancellation_token_protocol_is_imported(self):
         """Test that CancellationToken protocol is properly imported."""
-        from ktrdr.managers.async_host_service import CancellationToken as HostProtocol
-        from ktrdr.managers.base import CancellationToken as BaseProtocol
+        from ktrdr.async_infrastructure.async_host_service import (
+            CancellationToken as HostProtocol,
+        )
+        from ktrdr.async_infrastructure.service_orchestrator import (
+            CancellationToken as BaseProtocol,
+        )
 
         # Both should import the same protocol
         assert BaseProtocol is not None
@@ -310,7 +317,8 @@ class TestCancellationProtocolCompliance:
         """
         import inspect
 
-        from ktrdr.managers import async_host_service, base
+        from ktrdr.async_infrastructure import async_host_service
+        from ktrdr.async_infrastructure import service_orchestrator as base
 
         # Get source code of both modules
         base_source = inspect.getsource(base)

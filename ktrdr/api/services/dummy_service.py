@@ -18,8 +18,8 @@ This is THE reference implementation for the ServiceOrchestrator pattern.
 import asyncio
 from typing import Any
 
+from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.logging import get_logger
-from ktrdr.managers.base import ServiceOrchestrator
 
 logger = get_logger(__name__)
 

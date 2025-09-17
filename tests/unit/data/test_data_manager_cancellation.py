@@ -23,7 +23,10 @@ class TestDataManagerServiceOrchestratorIntegration:
         """Create a DataManager with mocked dependencies for testing."""
         with (
             patch("ktrdr.data.data_manager.create_default_datamanager_builder"),
-            patch("ktrdr.managers.ServiceOrchestrator.__init__", return_value=None),
+            patch(
+                "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__",
+                return_value=None,
+            ),
         ):
             dm = DataManager()
 
@@ -194,7 +197,10 @@ class TestBackwardCompatibility:
 
         with (
             patch("ktrdr.data.data_manager.create_default_datamanager_builder"),
-            patch("ktrdr.managers.ServiceOrchestrator.__init__", return_value=None),
+            patch(
+                "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__",
+                return_value=None,
+            ),
         ):
             dm = DataManager()
 
@@ -256,7 +262,10 @@ class TestBackwardCompatibility:
 
         with (
             patch("ktrdr.data.data_manager.create_default_datamanager_builder"),
-            patch("ktrdr.managers.ServiceOrchestrator.__init__", return_value=None),
+            patch(
+                "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__",
+                return_value=None,
+            ),
         ):
             dm = DataManager()
 
@@ -273,7 +282,10 @@ class TestBackwardCompatibility:
 
         with (
             patch("ktrdr.data.data_manager.create_default_datamanager_builder"),
-            patch("ktrdr.managers.ServiceOrchestrator.__init__", return_value=None),
+            patch(
+                "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__",
+                return_value=None,
+            ),
         ):
             dm = DataManager()
 
@@ -301,7 +313,10 @@ class TestServiceOrchestratorIntegrationCore:
 
         with (
             patch("ktrdr.data.data_manager.create_default_datamanager_builder"),
-            patch("ktrdr.managers.ServiceOrchestrator.__init__", return_value=None),
+            patch(
+                "ktrdr.async_infrastructure.service_orchestrator.ServiceOrchestrator.__init__",
+                return_value=None,
+            ),
         ):
             dm = DataManager()
 
