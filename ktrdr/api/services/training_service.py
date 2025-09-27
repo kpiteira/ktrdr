@@ -13,18 +13,15 @@ from typing import Any, Optional
 import yaml
 
 from ktrdr import get_logger
-from ktrdr.api.endpoints.strategies import _validate_strategy_config
-from ktrdr.api.models.operations import (
-    OperationMetadata,
-    OperationProgress,
-    OperationType,
-)
-from ktrdr.api.services.base import BaseService
-from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.models.operations import OperationProgress, OperationType
+from ktrdr.api.services.operations_service import get_operations_service
+from ktrdr.api.services.training import TrainingOperationContext, build_training_context
+from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError
 from ktrdr.training.model_storage import ModelStorage
 from ktrdr.training.train_strategy import StrategyTrainer
+from ktrdr.training.training_adapter import TrainingAdapter
 from ktrdr.training.training_manager import TrainingManager
 
 logger = get_logger(__name__)
@@ -33,19 +30,29 @@ logger = get_logger(__name__)
 _loaded_models: dict[str, Any] = {}
 
 
-class TrainingService(BaseService):
+class TrainingService(ServiceOrchestrator[TrainingAdapter]):
     """Service for neural network training operations."""
 
-    def __init__(self, operations_service: Optional[OperationsService] = None):
-        """Initialize the training service."""
+    def __init__(self) -> None:
         super().__init__()
         self.model_storage = ModelStorage()
         self.model_loader = ModelLoader()
-        if operations_service is None:
-            raise ValueError("OperationsService must be provided to TrainingService")
-        self.operations_service = operations_service
-        self.training_manager = TrainingManager()
+        self.operations_service = get_operations_service()
         logger.info("Training service initialized")
+
+    def _initialize_adapter(self) -> TrainingAdapter:
+        """Initialize training adapter via the legacy training manager."""
+        self.training_manager = TrainingManager()
+        return self.training_manager.training_adapter
+
+    def _get_service_name(self) -> str:
+        return "TrainingService"
+
+    def _get_default_host_url(self) -> str:
+        return "http://localhost:5002"
+
+    def _get_env_var_prefix(self) -> str:
+        return "TRAINING"
 
     async def health_check(self) -> dict[str, Any]:
         """
@@ -76,123 +83,66 @@ class TrainingService(BaseService):
         detailed_analytics: bool = False,
     ) -> dict[str, Any]:
         """Start neural network training task."""
-        # Simple delegation to training manager (no complex fallback logic)
-        return await self._start_training_via_manager(
+        context = build_training_context(
+            operation_id=task_id,
+            strategy_name=strategy_name,
             symbols=symbols,
             timeframes=timeframes,
-            strategy_name=strategy_name,
             start_date=start_date,
             end_date=end_date,
-            task_id=task_id,
             detailed_analytics=detailed_analytics,
+            use_host_service=self.is_using_host_service(),
         )
 
-    async def _start_training_via_manager(
-        self,
-        symbols: list[str],
-        timeframes: list[str],
-        strategy_name: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        task_id: Optional[str] = None,
-        detailed_analytics: bool = False,
-    ) -> dict[str, Any]:
-        """Start neural network training task using TrainingManager (host service or local)."""
-        # Validate strategy file exists - check both Docker and local paths
-        strategy_paths = [
-            Path(f"/app/strategies/{strategy_name}.yaml"),  # Docker path
-            Path(f"strategies/{strategy_name}.yaml"),  # Local path
-        ]
-
-        strategy_path = None
-        for path in strategy_paths:
-            if path.exists():
-                strategy_path = path
-                break
-
-        if not strategy_path:
-            raise ValidationError(f"Strategy file not found: {strategy_name}.yaml")
-
-        # Load and validate strategy config
-        with open(strategy_path) as f:
-            strategy_config = yaml.safe_load(f)
-
-        validation_issues = _validate_strategy_config(strategy_config, strategy_name)
-        error_issues = [
-            issue for issue in validation_issues if issue.severity == "error"
-        ]
-
-        if error_issues:
-            error_messages = [
-                f"{issue.category}: {issue.message}" for issue in error_issues
-            ]
-            raise ValidationError(
-                "Strategy validation failed:\n" + "\n".join(error_messages)
-            )
-
-        # Apply analytics settings if requested
-        if detailed_analytics:
-            strategy_config = self._apply_analytics_settings(strategy_config)
-
-        training_config = strategy_config.get("model", {}).get("training", {})
-
-        # Create operation metadata - use first symbol for compatibility, store all symbols in parameters
-        metadata = OperationMetadata(
-            symbol=symbols[0] if symbols else "MULTI",
-            timeframe=timeframes[0] if timeframes else "1h",
-            mode="training",
-            start_date=datetime.fromisoformat(start_date) if start_date else None,
-            end_date=datetime.fromisoformat(end_date) if end_date else None,
-            parameters={
-                "strategy_name": strategy_name,
-                "strategy_path": str(strategy_path),
-                "training_type": strategy_config.get("model", {}).get("type", "mlp"),
-                "symbols": symbols,
-                "timeframes": timeframes,
-                "epochs": training_config.get("epochs", 100),
-                "use_host_service": self.training_manager.is_using_host_service(),
-            },
+        operation_result = await self.start_managed_operation(
+            operation_name="training",
+            operation_type=OperationType.TRAINING.value,
+            operation_func=self._legacy_operation_entrypoint,
+            context=context,
+            metadata=context.metadata,
+            total_steps=context.total_steps,
         )
 
-        # Create operation
-        operation = await self.operations_service.create_operation(
-            operation_type=OperationType.TRAINING, metadata=metadata
-        )
-        operation_id = operation.operation_id
+        operation_id = operation_result["operation_id"]
+        context.operation_id = operation_id
 
-        # Start training using TrainingManager
-        task = asyncio.create_task(
-            self._run_training_via_manager_async(
-                operation_id, strategy_path, symbols, timeframes, start_date, end_date
-            )
+        estimated_duration = context.training_config.get(
+            "estimated_duration_minutes", 30
         )
-
-        await self.operations_service.start_operation(operation_id, task)
+        message = (
+            f"Neural network training started for {', '.join(context.symbols)} "
+            f"using {strategy_name} strategy"
+        )
 
         return {
             "success": True,
             "task_id": operation_id,
             "status": "training_started",
-            "message": f"Neural network training started for {', '.join(symbols)} using {strategy_name} strategy",
-            "symbols": symbols,
-            "timeframes": timeframes,
+            "message": message,
+            "symbols": context.symbols,
+            "timeframes": context.timeframes,
             "strategy_name": strategy_name,
-            "estimated_duration_minutes": training_config.get(
-                "estimated_duration_minutes", 30
-            ),
-            "use_host_service": self.training_manager.is_using_host_service(),
+            "estimated_duration_minutes": estimated_duration,
+            "use_host_service": context.use_host_service,
         }
 
-    def _apply_analytics_settings(self, strategy_config: dict) -> dict:
-        """Apply detailed analytics settings to strategy configuration."""
-        if "training" not in strategy_config:
-            strategy_config["training"] = {}
-
-        strategy_config["training"]["detailed_analytics"] = True
-        strategy_config["training"]["save_intermediate_models"] = True
-        strategy_config["training"]["track_gradients"] = True
-
-        return strategy_config
+    async def _legacy_operation_entrypoint(
+        self,
+        *,
+        operation_id: str,
+        context: TrainingOperationContext,
+    ) -> Optional[dict[str, Any]]:
+        """Temporary adapter that reuses legacy training manager wiring."""
+        context.operation_id = operation_id
+        await self._run_training_via_manager_async(
+            operation_id=operation_id,
+            strategy_path=context.strategy_path,
+            symbols=context.symbols,
+            timeframes=context.timeframes,
+            start_date=context.start_date,
+            end_date=context.end_date,
+        )
+        return None
 
     async def _run_training_via_manager_async(
         self,
@@ -1401,15 +1351,12 @@ class TrainingService(BaseService):
 
 
 # Global training service instance
-_training_service: Optional[TrainingService] = None
+_training_service: TrainingService | None = None
 
 
 def get_training_service() -> TrainingService:
     """Get the global training service instance."""
     global _training_service
     if _training_service is None:
-        from ktrdr.api.services.operations_service import get_operations_service
-
-        operations_service = get_operations_service()
-        _training_service = TrainingService(operations_service=operations_service)
+        _training_service = TrainingService()
     return _training_service
