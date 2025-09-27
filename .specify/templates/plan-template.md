@@ -47,7 +47,12 @@
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+**Root Cause Analysis**: [ ] Problem clearly defined at root level, not symptoms
+**TDD Compliance**: [ ] Test-first approach planned for all functionality
+**Architectural Purity**: [ ] Single responsibility per module, unidirectional dependencies
+**Performance Standards**: [ ] Test timing requirements planned (<2s unit, <30s integration, <5min E2E)
+**Archon-First**: [ ] Task management via Archon MCP server established
+**Quality Gates**: [ ] Pre-commit, pre-merge, and release gates identified
 
 ## Project Structure
 
@@ -208,4 +213,4 @@ ios/ or android/
 - [ ] Complexity deviations documented
 
 ---
-*Based on Constitution v2.1.1 - See `/memory/constitution.md`*
+*Based on Constitution v1.0.0 - See `.specify/memory/constitution.md`*
