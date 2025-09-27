@@ -130,17 +130,22 @@ def _resolve_strategy_path(
     strategy_filename = f"{strategy_name}.yaml"
 
     for root in search_roots:
-        path = Path(root)
-        if path.is_dir():
-            candidate = (path / strategy_filename).resolve(strict=False)
-            try:
-                candidate.relative_to(path.resolve())
-            except ValueError as exc:
-                raise ValidationError(
-                    "Strategy name resolves outside the allowed strategy directory"
-                ) from exc
-        else:
-            candidate = Path(root).resolve(strict=False)
+        root_path = Path(root)
+        root_resolved = root_path.resolve(strict=False)
+
+        if not root_resolved.is_dir():
+            candidate_paths.append(root_resolved)
+            continue
+
+        candidate = (root_resolved / strategy_filename).resolve(strict=False)
+
+        try:
+            candidate.relative_to(root_resolved)
+        except ValueError as exc:
+            raise ValidationError(
+                "Strategy name resolves outside the allowed strategy directory"
+            ) from exc
+
         candidate_paths.append(candidate)
         if candidate.exists():
             return candidate
