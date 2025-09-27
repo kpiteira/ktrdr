@@ -114,6 +114,11 @@ def _resolve_strategy_path(
 ) -> Path:
     """Locate the strategy YAML file, checking docker + host paths."""
 
+    if Path(strategy_name).is_absolute() or Path(strategy_name).name != strategy_name:
+        raise ValidationError(
+            "Strategy name must be a file name without directory components"
+        )
+
     candidate_paths: list[Path] = []
 
     search_roots = (
@@ -122,12 +127,20 @@ def _resolve_strategy_path(
         else list(DEFAULT_STRATEGY_PATHS)
     )
 
+    strategy_filename = f"{strategy_name}.yaml"
+
     for root in search_roots:
         path = Path(root)
         if path.is_dir():
-            candidate = path / f"{strategy_name}.yaml"
+            candidate = (path / strategy_filename).resolve(strict=False)
+            try:
+                candidate.relative_to(path.resolve())
+            except ValueError as exc:
+                raise ValidationError(
+                    "Strategy name resolves outside the allowed strategy directory"
+                ) from exc
         else:
-            candidate = path
+            candidate = Path(root).resolve(strict=False)
         candidate_paths.append(candidate)
         if candidate.exists():
             return candidate
