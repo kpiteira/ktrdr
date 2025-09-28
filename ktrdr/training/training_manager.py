@@ -13,6 +13,7 @@ The manager handles:
 import os
 from typing import Any, Optional
 
+from ktrdr.async_infrastructure.cancellation import CancellationToken
 from ktrdr.logging import get_logger
 
 from .training_adapter import TrainingAdapter
@@ -87,6 +88,7 @@ class TrainingManager:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
         """
         Train a multi-symbol strategy using the configured adapter.
@@ -113,6 +115,7 @@ class TrainingManager:
             validation_split=validation_split,
             data_mode=data_mode,
             progress_callback=progress_callback,
+            cancellation_token=cancellation_token,
         )
 
     async def get_training_status(self, session_id: str) -> dict[str, Any]:

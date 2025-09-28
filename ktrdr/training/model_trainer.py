@@ -12,6 +12,11 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
+from ktrdr.async_infrastructure.cancellation import (
+    CancellationError,
+    CancellationToken,
+)
+
 from .analytics import TrainingAnalyzer
 from .multi_symbol_data_loader import MultiSymbolDataLoader
 
@@ -90,7 +95,12 @@ class EarlyStopping:
 class ModelTrainer:
     """Handle PyTorch training loop with advanced features."""
 
-    def __init__(self, config: dict[str, Any], progress_callback=None):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        progress_callback=None,
+        cancellation_token: CancellationToken | None = None,
+    ):
         """Initialize trainer.
 
         Args:
@@ -98,6 +108,7 @@ class ModelTrainer:
             progress_callback: Optional callback for progress updates
         """
         self.config = config
+        self.cancellation_token = cancellation_token
         # GPU device selection with Apple Silicon support
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -124,6 +135,10 @@ class ModelTrainer:
         self.analyzer: Optional[TrainingAnalyzer] = None
         if self.analytics_enabled:
             self._setup_analytics(full_config)
+
+    def _check_cancelled(self) -> None:
+        if self.cancellation_token and self.cancellation_token.is_cancelled():
+            raise CancellationError("Training cancelled by user request")
 
     def _setup_analytics(self, full_config):
         """Setup analytics system for detailed training monitoring."""
@@ -215,6 +230,7 @@ class ModelTrainer:
 
         # Training loop
         for epoch in range(epochs):
+            self._check_cancelled()
             start_time = time.time()
 
             # Training phase
@@ -224,6 +240,7 @@ class ModelTrainer:
             train_total = 0
 
             for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
+                self._check_cancelled()
                 # DEBUG: Check for NaN in first batch of first epoch
                 if epoch == 0 and batch_idx == 0:
                     print(
@@ -297,6 +314,7 @@ class ModelTrainer:
                 # Batch-level progress callback (every 10 batches to avoid spam)
                 if self.progress_callback and batch_idx % 10 == 0:
                     try:
+                        self._check_cancelled()
                         completed_batches = epoch * total_batches_per_epoch + batch_idx
                         current_train_loss = train_loss / max(train_total, 1)
                         current_train_acc = train_correct / max(train_total, 1)
@@ -458,6 +476,7 @@ class ModelTrainer:
             # Progress callback for external monitoring (e.g., API progress updates)
             if self.progress_callback:
                 try:
+                    self._check_cancelled()
                     # Epoch-level metrics (complete epoch with validation)
                     epoch_metrics = {
                         "epoch": epoch,
@@ -602,6 +621,7 @@ class ModelTrainer:
 
         # Training loop
         for epoch in range(epochs):
+            self._check_cancelled()
             start_time = time.time()
 
             # Training phase
@@ -613,6 +633,7 @@ class ModelTrainer:
             for batch_idx, (batch_X, batch_y, batch_symbol_indices) in enumerate(
                 train_loader
             ):
+                self._check_cancelled()
                 # Move batch to device (should already be there, but just in case)
                 batch_X = batch_X.to(self.device)
                 batch_y = batch_y.to(self.device)
@@ -673,6 +694,7 @@ class ModelTrainer:
                 # Batch-level progress callback
                 if self.progress_callback and batch_idx % 10 == 0:
                     try:
+                        self._check_cancelled()
                         completed_batches = epoch * total_batches_per_epoch + batch_idx
                         current_train_loss = train_loss / max(train_total, 1)
                         current_train_acc = train_correct / max(train_total, 1)
@@ -760,6 +782,7 @@ class ModelTrainer:
             # Progress callback for external monitoring
             if self.progress_callback:
                 try:
+                    self._check_cancelled()
                     epoch_metrics = {
                         "epoch": epoch,
                         "total_epochs": epochs,

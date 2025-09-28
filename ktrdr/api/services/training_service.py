@@ -11,7 +11,12 @@ from typing import Any, Optional
 from ktrdr import get_logger
 from ktrdr.api.models.operations import OperationProgress, OperationType
 from ktrdr.api.services.operations_service import get_operations_service
-from ktrdr.api.services.training import TrainingOperationContext, build_training_context
+from ktrdr.api.services.training import (
+    TrainingOperationContext,
+    TrainingProgressBridge,
+    build_training_context,
+)
+from ktrdr.api.services.training.local_runner import LocalTrainingRunner
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError
@@ -129,15 +134,40 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
     ) -> Optional[dict[str, Any]]:
         """Temporary adapter that reuses legacy training manager wiring."""
         context.operation_id = operation_id
-        await self._run_training_via_manager_async(
-            operation_id=operation_id,
-            strategy_path=context.strategy_path,
-            symbols=context.symbols,
-            timeframes=context.timeframes,
-            start_date=context.start_date,
-            end_date=context.end_date,
+        if context.use_host_service:
+            await self._run_training_via_manager_async(
+                operation_id=operation_id,
+                strategy_path=context.strategy_path,
+                symbols=context.symbols,
+                timeframes=context.timeframes,
+                start_date=context.start_date,
+                end_date=context.end_date,
+            )
+            return None
+
+        return await self._run_local_training(context=context)
+
+    async def _run_local_training(
+        self, *, context: TrainingOperationContext
+    ) -> dict[str, Any]:
+        """Run local training via the orchestrator-native components."""
+        progress_manager = self._current_operation_progress
+        if progress_manager is None:
+            raise RuntimeError("Progress manager not available for training operation")
+
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=progress_manager,
+            cancellation_token=self._current_cancellation_token,
         )
-        return None
+
+        runner = LocalTrainingRunner(
+            context=context,
+            progress_bridge=bridge,
+            cancellation_token=self._current_cancellation_token,
+        )
+
+        return await runner.run()
 
     async def _run_training_via_manager_async(
         self,

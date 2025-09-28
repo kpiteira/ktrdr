@@ -12,6 +12,11 @@ from sklearn.metrics import (
     recall_score,
 )
 
+from ktrdr.async_infrastructure.cancellation import (
+    CancellationError,
+    CancellationToken,
+)
+
 from ..data.data_manager import DataManager
 from ..data.multi_timeframe_coordinator import MultiTimeframeCoordinator
 from ..fuzzy.engine import FuzzyEngine
@@ -53,6 +58,7 @@ class StrategyTrainer:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
         """Train a neuro-fuzzy strategy on multiple symbols simultaneously.
 
@@ -73,6 +79,12 @@ class StrategyTrainer:
         print(f"Timeframes: {timeframes}")
         print(f"Data range: {start_date} to {end_date}")
 
+        def _ensure_not_cancelled() -> None:
+            if cancellation_token and cancellation_token.is_cancelled():
+                raise CancellationError("Training cancelled before execution")
+
+        _ensure_not_cancelled()
+
         # Load strategy configuration
         config = self._load_strategy_config(strategy_config_path)
         strategy_name = config["name"]
@@ -82,6 +94,7 @@ class StrategyTrainer:
         print("\n1. Loading market data for all symbols...")
         all_symbols_data = {}
         for symbol in symbols:
+            _ensure_not_cancelled()
             print(f"  Loading data for {symbol}...")
             symbol_data = self._load_price_data(
                 symbol, timeframes, start_date, end_date, data_mode
@@ -102,6 +115,7 @@ class StrategyTrainer:
         print("\n2. Calculating technical indicators for all symbols...")
         all_symbols_indicators = {}
         for symbol in symbols:
+            _ensure_not_cancelled()
             print(f"  Calculating indicators for {symbol}...")
             symbol_indicators = self._calculate_indicators(
                 all_symbols_data[symbol], config["indicators"]
@@ -112,6 +126,7 @@ class StrategyTrainer:
         print("\n3. Generating fuzzy memberships for all symbols...")
         all_symbols_fuzzy = {}
         for symbol in symbols:
+            _ensure_not_cancelled()
             print(f"  Generating fuzzy memberships for {symbol}...")
             symbol_fuzzy = self._generate_fuzzy_memberships(
                 all_symbols_indicators[symbol], config["fuzzy_sets"]
@@ -123,6 +138,7 @@ class StrategyTrainer:
         all_symbols_features = {}
         all_symbols_feature_names = {}
         for symbol in symbols:
+            _ensure_not_cancelled()
             print(f"  Engineering features for {symbol}...")
             symbol_features, symbol_feature_names, _ = self._engineer_features(
                 all_symbols_fuzzy[symbol],
@@ -146,6 +162,7 @@ class StrategyTrainer:
         print("\n5. Generating training labels for all symbols...")
         all_symbols_labels = {}
         for symbol in symbols:
+            _ensure_not_cancelled()
             print(f"  Generating labels for {symbol}...")
             symbol_labels = self._generate_labels(
                 all_symbols_data[symbol], config["training"]["labels"]
@@ -191,7 +208,14 @@ class StrategyTrainer:
         # Step 9: Train model
         print("\n9. Training multi-symbol neural network...")
         training_results = self._train_model(
-            model, train_data, val_data, config, symbols, timeframes, progress_callback
+            model,
+            train_data,
+            val_data,
+            config,
+            symbols,
+            timeframes,
+            progress_callback,
+            cancellation_token=cancellation_token,
         )
 
         # Step 10: Evaluate model
@@ -1040,6 +1064,7 @@ class StrategyTrainer:
         symbol_or_symbols,  # Can be str (single) or List[str] (multi-symbol)
         timeframes: list[str],
         progress_callback=None,
+        cancellation_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
         """Train the neural network model (supports both single and multi-symbol).
 
@@ -1085,7 +1110,11 @@ class StrategyTrainer:
         config_with_metadata["timeframes"] = timeframes
         training_config["full_config"] = config_with_metadata
 
-        trainer = ModelTrainer(training_config, progress_callback=progress_callback)
+        trainer = ModelTrainer(
+            training_config,
+            progress_callback=progress_callback,
+            cancellation_token=cancellation_token,
+        )
 
         if is_multi_symbol:
             # Multi-symbol training with symbol indices

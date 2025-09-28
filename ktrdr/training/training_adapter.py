@@ -14,6 +14,7 @@ The adapter handles:
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from ktrdr.async_infrastructure.cancellation import CancellationToken
 from ktrdr.logging import get_logger
 
 # HTTP client for host service communication
@@ -152,6 +153,7 @@ class TrainingAdapter:
         validation_split: float = 0.2,
         data_mode: str = "local",
         progress_callback=None,
+        cancellation_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
         """
         Train a multi-symbol strategy using local trainer or host service.
@@ -245,6 +247,7 @@ class TrainingAdapter:
                     validation_split=validation_split,
                     data_mode=data_mode,
                     progress_callback=progress_callback,
+                    cancellation_token=cancellation_token,
                 )
 
         except TrainingProviderError:
