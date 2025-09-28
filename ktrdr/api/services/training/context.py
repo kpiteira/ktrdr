@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -139,24 +140,30 @@ def _resolve_strategy_path(
 
     for root in search_roots:
         root_path = Path(root)
-        root_resolved = root_path.resolve(strict=False)
+        try:
+            root_resolved = root_path.resolve(strict=True)
+        except FileNotFoundError:
+            continue
 
         if not root_resolved.is_dir():
             candidate_paths.append(root_resolved)
             continue
 
-        candidate = (root_resolved / strategy_filename).resolve(strict=False)
+        candidate = root_resolved / strategy_filename
+        candidate_resolved = candidate.resolve(strict=False)
+        if candidate_resolved.is_dir():
+            continue
 
         try:
-            candidate.relative_to(root_resolved)
+            candidate_resolved.relative_to(root_resolved)
         except ValueError as exc:
             raise ValidationError(
                 "Strategy name resolves outside the allowed strategy directory"
             ) from exc
 
-        candidate_paths.append(candidate)
-        if candidate.exists():
-            return candidate
+        candidate_paths.append(candidate_resolved)
+        if candidate_resolved.exists():
+            return candidate_resolved
 
     searched = ", ".join(str(p) for p in candidate_paths)
     raise ValidationError(
