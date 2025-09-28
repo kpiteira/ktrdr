@@ -113,12 +113,26 @@ class TestBuildTrainingContext:
     def test_rejects_strategy_name_with_directory_components(self, strategy_yaml: Path):
         from ktrdr.api.services.training.context import build_training_context
 
-        with pytest.raises(
-            ValidationError, match="file name without directory components"
-        ):
+        with pytest.raises(ValidationError, match="only contain alphanumerics"):
             build_training_context(
                 operation_id="op-invalid",
                 strategy_name="../secret",
+                symbols=["AAPL"],
+                timeframes=["1h"],
+                start_date=None,
+                end_date=None,
+                detailed_analytics=False,
+                use_host_service=False,
+                strategy_search_paths=[strategy_yaml.parent],
+            )
+
+    def test_rejects_strategy_name_with_invalid_chars(self, strategy_yaml: Path):
+        from ktrdr.api.services.training.context import build_training_context
+
+        with pytest.raises(ValidationError, match="only contain alphanumerics"):
+            build_training_context(
+                operation_id="op-invalid",
+                strategy_name="strategy.name",
                 symbols=["AAPL"],
                 timeframes=["1h"],
                 start_date=None,

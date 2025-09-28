@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,6 +20,8 @@ DEFAULT_STRATEGY_PATHS: tuple[Path, ...] = (
     Path("/app/strategies"),
     Path("strategies"),
 )
+
+_SAFE_STRATEGY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
 @dataclass(slots=True)
@@ -61,6 +64,11 @@ def build_training_context(
     strategy_search_paths: Iterable[Path] | None = None,
 ) -> TrainingOperationContext:
     """Construct a ``TrainingOperationContext`` from user input and config files."""
+
+    if not _SAFE_STRATEGY_NAME.fullmatch(strategy_name):
+        raise ValidationError(
+            "Strategy name may only contain alphanumerics, dashes, or underscores"
+        )
 
     strategy_path = _resolve_strategy_path(strategy_name, strategy_search_paths)
     strategy_config = _load_strategy_config(strategy_path)
