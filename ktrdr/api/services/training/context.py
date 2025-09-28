@@ -149,21 +149,28 @@ def _resolve_strategy_path(
             candidate_paths.append(root_resolved)
             continue
 
-        candidate = root_resolved / strategy_filename
-        candidate_resolved = candidate.resolve(strict=False)
-        if candidate_resolved.is_dir():
+        available_files: dict[str, Path] = {}
+        for file_path in root_resolved.glob("*.yaml"):
+            if not file_path.is_file():
+                continue
+
+            try:
+                file_path.resolve(strict=True).relative_to(root_resolved)
+            except ValueError:
+                # Skip files that do not reside within the allowed directory
+                continue
+
+            available_files[file_path.stem] = file_path
+
+        candidate_path = available_files.get(strategy_name)
+        candidate_paths.extend(available_files.values())
+
+        if candidate_path is None:
             continue
 
-        try:
-            candidate_resolved.relative_to(root_resolved)
-        except ValueError as exc:
-            raise ValidationError(
-                "Strategy name resolves outside the allowed strategy directory"
-            ) from exc
-
+        candidate_resolved = candidate_path.resolve(strict=True)
         candidate_paths.append(candidate_resolved)
-        if candidate_resolved.exists():
-            return candidate_resolved
+        return candidate_resolved
 
     searched = ", ".join(str(p) for p in candidate_paths)
     raise ValidationError(

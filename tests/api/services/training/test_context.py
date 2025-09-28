@@ -141,3 +141,19 @@ class TestBuildTrainingContext:
                 use_host_service=False,
                 strategy_search_paths=[strategy_yaml.parent],
             )
+
+    def test_rejects_non_ascii_strategy_name(self, strategy_yaml: Path):
+        from ktrdr.api.services.training.context import build_training_context
+
+        with pytest.raises(ValidationError, match="only contain alphanumerics"):
+            build_training_context(
+                operation_id="op-invalid",
+                strategy_name="stratégie",
+                symbols=["AAPL"],
+                timeframes=["1h"],
+                start_date=None,
+                end_date=None,
+                detailed_analytics=False,
+                use_host_service=False,
+                strategy_search_paths=[strategy_yaml.parent],
+            )
