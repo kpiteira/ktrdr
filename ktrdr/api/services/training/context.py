@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -135,8 +134,6 @@ def _resolve_strategy_path(
         if strategy_search_paths is not None
         else list(DEFAULT_STRATEGY_PATHS)
     )
-
-    strategy_filename = f"{strategy_name}.yaml"
 
     for root in search_roots:
         root_path = Path(root)
