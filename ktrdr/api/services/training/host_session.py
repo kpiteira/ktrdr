@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from ktrdr import get_logger
@@ -57,7 +57,7 @@ class HostSessionManager:
         self._ensure_not_cancelled()
 
         start_date = self._context.start_date or "2020-01-01"
-        end_date = self._context.end_date or datetime.utcnow().strftime("%Y-%m-%d")
+        end_date = self._context.end_date or datetime.now(UTC).strftime("%Y-%m-%d")
 
         logger.info(
             "Starting host training for strategy=%s symbols=%s timeframes=%s",
