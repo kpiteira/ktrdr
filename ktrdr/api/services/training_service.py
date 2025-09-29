@@ -12,6 +12,7 @@ from ktrdr import get_logger
 from ktrdr.api.models.operations import OperationProgress, OperationType
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training import (
+    HostSessionManager,
     TrainingOperationContext,
     TrainingProgressBridge,
     build_training_context,
@@ -135,15 +136,7 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
         """Temporary adapter that reuses legacy training manager wiring."""
         context.operation_id = operation_id
         if context.use_host_service:
-            await self._run_training_via_manager_async(
-                operation_id=operation_id,
-                strategy_path=context.strategy_path,
-                symbols=context.symbols,
-                timeframes=context.timeframes,
-                start_date=context.start_date,
-                end_date=context.end_date,
-            )
-            return None
+            return await self._run_host_training(context=context)
 
         return await self._run_local_training(context=context)
 
@@ -168,6 +161,39 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
         )
 
         return await runner.run()
+
+    async def _run_host_training(
+        self, *, context: TrainingOperationContext
+    ) -> dict[str, Any]:
+        """Run host-service backed training with orchestrator components."""
+        progress_manager = self._current_operation_progress
+        if progress_manager is None:
+            raise RuntimeError("Progress manager not available for training operation")
+
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=progress_manager,
+            cancellation_token=self._current_cancellation_token,
+        )
+
+        manager = HostSessionManager(
+            adapter=self.adapter,
+            context=context,
+            progress_bridge=bridge,
+            cancellation_token=self._current_cancellation_token,
+        )
+
+        final_snapshot = await manager.run()
+
+        return {
+            "session_id": context.session_id,
+            "host_status": (
+                final_snapshot.get("status")
+                if isinstance(final_snapshot, dict)
+                else None
+            ),
+            "host_snapshot": final_snapshot,
+        }
 
     async def _run_training_via_manager_async(
         self,
@@ -273,9 +299,12 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
         self, session_id: str, reason: Optional[str] = None
     ) -> dict[str, Any]:
         """Cancel a training session via TrainingManager."""
+        if not self.is_using_host_service():
+            raise ValidationError("Host training service is not enabled")
+
         try:
             logger.info(f"Cancelling training session {session_id} (reason: {reason})")
-            result = await self.training_manager.stop_training(session_id)
+            result = await self.adapter.stop_training(session_id)
             logger.info(f"Training session {session_id} cancelled successfully")
             return result
         except Exception as e:

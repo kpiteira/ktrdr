@@ -59,16 +59,18 @@ def test_training_session_progress():
     metrics = {"loss": 0.5, "accuracy": 0.8}
     session.update_progress(5, 50, metrics)
 
-    assert session.current_epoch == 5
+    assert session.current_epoch == 6
     assert session.current_batch == 50
     assert session.metrics["loss"] == [0.5]
     assert session.metrics["accuracy"] == [0.8]
 
     # Test progress dict
     progress = session.get_progress_dict()
-    assert progress["epoch"] == 5
+    assert progress["epoch"] == 6
     assert progress["total_epochs"] == 10
-    assert progress["progress_percent"] == 50.0
+    assert progress["progress_percent"] == 100.0
+    assert progress["items_processed"] == 50
+    assert progress["items_total"] == 50
 
 
 def test_service_basic_operations():

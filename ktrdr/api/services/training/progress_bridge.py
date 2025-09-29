@@ -60,13 +60,39 @@ class TrainingProgressBridge:
         self._check_cancelled()
         phase_message = message or phase_name.replace("_", " ").title()
         logger.debug("[TrainingProgressBridge] phase=%s", phase_name)
+        context = {"phase_name": phase_name}
+        if self._context.session_id:
+            context["host_session_id"] = self._context.session_id
         self._emit(
             current_step=self._last_epoch_step,
             percentage=self._last_percentage,
             message=phase_message,
             items_processed=self._last_items_processed,
             phase="phase",
-            context={"phase_name": phase_name},
+            context=context,
+        )
+
+    def on_cancellation(
+        self,
+        *,
+        message: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """Emit a cancellation update even when the token is cancelled."""
+        logger.debug("[TrainingProgressBridge] cancellation message=%s", message)
+        payload_context = {"phase_name": "cancelled"}
+        if context:
+            payload_context.update(context)
+        if self._context.session_id:
+            payload_context.setdefault("host_session_id", self._context.session_id)
+
+        self._emit(
+            current_step=self._last_epoch_step,
+            percentage=self._last_percentage,
+            message=message or "Training cancelled",
+            items_processed=self._last_items_processed,
+            phase="phase",
+            context=payload_context,
         )
 
     def on_epoch(
@@ -153,10 +179,17 @@ class TrainingProgressBridge:
         percentage = self._derive_percentage(items_processed, epoch_index)
         total_display = batches_per_epoch or "?"
         message = f"Epoch {epoch_index}/{self._total_epochs} · Batch {batch_number}/{total_display}"
+        display_batch_index = batch
+        if (
+            batches_per_epoch
+            and batches_per_epoch > 1
+            and batch_number == batches_per_epoch - 1
+        ):
+            display_batch_index = batch_number
         context = {
             "epoch_index": epoch_index,
             "total_epochs": self._total_epochs,
-            "batch_index": batch,
+            "batch_index": display_batch_index,
             "batch_number": batch_number,
             "batch_total_per_epoch": batches_per_epoch,
             "current_item": f"Epoch {epoch_index} · Batch {batch_number}/{total_display}",
@@ -173,16 +206,96 @@ class TrainingProgressBridge:
         )
 
     def on_remote_snapshot(self, snapshot: dict[str, Any]) -> None:
-        """Handle remote host-service snapshots by forwarding context."""
+        """Translate remote host-service snapshots into orchestrator progress."""
         self._check_cancelled()
-        logger.debug("[TrainingProgressBridge] remote snapshot=%s", snapshot)
+
+        if not isinstance(snapshot, dict):  # pragma: no cover - defensive guard
+            logger.debug(
+                "[TrainingProgressBridge] Ignoring non-dict remote snapshot: %s",
+                snapshot,
+            )
+            return
+
+        progress_info = snapshot.get("progress") or {}
+        if not isinstance(progress_info, dict):
+            progress_info = {}
+
+        session_id = snapshot.get("session_id") or self._context.session_id
+        status = str(snapshot.get("status") or "").lower() or None
+
+        epoch_index = self._safe_int(progress_info.get("epoch"))
+        if epoch_index is None or epoch_index < 0:
+            epoch_index = self._last_epoch_step
+
+        total_epochs = self._safe_int(progress_info.get("total_epochs"))
+        if total_epochs and total_epochs > 0:
+            self._total_epochs = max(self._total_epochs, total_epochs)
+
+        items_total = self._safe_int(
+            progress_info.get("items_total") or progress_info.get("total_batches")
+        )
+        if items_total and items_total > 0:
+            self._total_batches = items_total
+
+        raw_items_processed = progress_info.get("items_processed")
+        if raw_items_processed is None:
+            raw_items_processed = progress_info.get("batch")
+        items_processed = self._safe_int(raw_items_processed)
+        clamped_items_processed = self._clamp_items_processed(items_processed)
+
+        percentage = progress_info.get("progress_percent")
+        if percentage is None:
+            if items_processed is not None and self._total_batches:
+                percentage = items_processed / max(1, self._total_batches) * 100.0
+            elif epoch_index and self._total_epochs:
+                percentage = epoch_index / max(1, self._total_epochs) * 100.0
+            else:
+                percentage = self._last_percentage
+
+        try:
+            percentage_float = float(percentage)
+        except (TypeError, ValueError):  # pragma: no cover - defensive guard
+            percentage_float = self._last_percentage
+
+        message = progress_info.get("message")
+        if not message:
+            if (
+                epoch_index
+                and self._total_epochs
+                and clamped_items_processed
+                and self._total_batches
+            ):
+                message = (
+                    f"Epoch {epoch_index}/{self._total_epochs} · Batch "
+                    f"{clamped_items_processed}/{self._total_batches}"
+                )
+            elif epoch_index and self._total_epochs:
+                message = f"Epoch {epoch_index}/{self._total_epochs}"
+            else:
+                message = "Polling host session"
+
+        context_payload: dict[str, Any] = {
+            "host_status": status or snapshot.get("status"),
+            "host_session_id": session_id,
+            "remote_progress": dict(progress_info),
+            "metrics": (snapshot.get("metrics") or {}).get("current", {}),
+            "best_metrics": (snapshot.get("metrics") or {}).get("best", {}),
+            "gpu_usage": snapshot.get("gpu_usage"),
+            "resource_usage": snapshot.get("resource_usage"),
+            "timestamp": snapshot.get("timestamp"),
+        }
+
+        current_item = progress_info.get("current_item")
+        if current_item:
+            context_payload["current_item"] = current_item
+
         self._emit(
-            current_step=self._last_epoch_step,
-            percentage=self._last_percentage,
-            message="Remote progress update",
-            items_processed=self._last_items_processed,
+            current_step=max(0, min(epoch_index, self._total_epochs)),
+            percentage=percentage_float,
+            message=message,
+            items_processed=clamped_items_processed,
             phase="remote_snapshot",
-            context={"snapshot": snapshot},
+            context=context_payload,
         )
 
     def on_complete(self, message: str = "Training complete") -> None:
@@ -216,6 +329,12 @@ class TrainingProgressBridge:
             return batches_per_epoch * self._total_epochs
         return None
 
+    def _safe_int(self, value: Any) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):  # pragma: no cover - defensive guard
+            return None
+
     def _clamp_items_processed(self, value: int | None) -> int:
         if value is None:
             return self._last_items_processed
@@ -248,6 +367,14 @@ class TrainingProgressBridge:
             return True
 
         if batch_number == 1:
+            self._last_emitted_global_batch = items_processed
+            return True
+
+        if (
+            batches_per_epoch
+            and batches_per_epoch > 1
+            and batch_number == batches_per_epoch - 1
+        ):
             self._last_emitted_global_batch = items_processed
             return True
 

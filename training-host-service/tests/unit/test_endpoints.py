@@ -71,7 +71,7 @@ class TestTrainingEndpoints:
         }
 
         with patch(
-            "services.training_service.get_training_service",
+            "endpoints.training.get_service",
             return_value=mock_training_service,
         ):
             response = client.post("/training/start", json=training_config)
@@ -92,7 +92,7 @@ class TestTrainingEndpoints:
         }
 
         with patch(
-            "services.training_service.get_training_service",
+            "endpoints.training.get_service",
             return_value=mock_training_service,
         ):
             response = client.post("/training/start", json=request_data)
@@ -109,9 +109,7 @@ class TestTrainingEndpoints:
             "data_configuration": {"symbols": ["TEST"]},
         }
 
-        with patch(
-            "services.training_service.get_training_service"
-        ) as mock_get_service:
+        with patch("endpoints.training.get_service") as mock_get_service:
             mock_service = Mock()
             mock_service.create_session.side_effect = Exception("GPU allocation failed")
             mock_get_service.return_value = mock_service
@@ -126,7 +124,7 @@ class TestTrainingEndpoints:
         request_data = {"session_id": "test-session-123", "save_checkpoint": True}
 
         with patch(
-            "services.training_service.get_training_service",
+            "endpoints.training.get_service",
             return_value=mock_training_service,
         ):
             response = client.post("/training/stop", json=request_data)
@@ -139,9 +137,7 @@ class TestTrainingEndpoints:
 
     def test_stop_training_service_error(self, client):
         """Test training stop with service error."""
-        with patch(
-            "services.training_service.get_training_service"
-        ) as mock_get_service:
+        with patch("endpoints.training.get_service") as mock_get_service:
             mock_service = Mock()
             mock_service.stop_session.side_effect = Exception("Session not found")
             mock_get_service.return_value = mock_service
@@ -158,7 +154,7 @@ class TestTrainingEndpoints:
     def test_get_training_status_success(self, client, mock_training_service):
         """Test successful training status retrieval."""
         with patch(
-            "services.training_service.get_training_service",
+            "endpoints.training.get_service",
             return_value=mock_training_service,
         ):
             response = client.get("/training/status/test-session-123")
@@ -167,7 +163,8 @@ class TestTrainingEndpoints:
             data = response.json()
             assert data["session_id"] == "test-session-123"
             assert data["status"] == "running"
-            assert "progress" in data
+            assert data["progress"]["items_processed"] == 50
+            assert data["progress"]["items_total"] == 100
             assert "metrics" in data
             assert "gpu_usage" in data
 
@@ -187,7 +184,7 @@ class TestTrainingEndpoints:
     def test_list_training_sessions(self, client, mock_training_service):
         """Test listing training sessions."""
         with patch(
-            "services.training_service.get_training_service",
+            "endpoints.training.get_service",
             return_value=mock_training_service,
         ):
             response = client.get("/training/sessions")
@@ -218,7 +215,7 @@ class TestTrainingEndpoints:
     def test_cleanup_session_success(self, client, mock_training_service):
         """Test successful session cleanup."""
         with patch(
-            "services.training_service.get_training_service",
+            "endpoints.training.get_service",
             return_value=mock_training_service,
         ):
             response = client.delete("/training/sessions/test-session-123")
@@ -230,9 +227,7 @@ class TestTrainingEndpoints:
 
     def test_cleanup_session_service_error(self, client):
         """Test session cleanup with service error."""
-        with patch(
-            "services.training_service.get_training_service"
-        ) as mock_get_service:
+        with patch("endpoints.training.get_service") as mock_get_service:
             mock_service = Mock()
             mock_service.cleanup_session.side_effect = Exception(
                 "Cannot cleanup running session"

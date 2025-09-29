@@ -151,3 +151,69 @@ class TestTrainingProgressBridge:
                 total_batches=10,
                 metrics={"progress_type": "batch", "batch": 0, "total_batches": 20},
             )
+
+    def test_remote_snapshot_updates_progress_state(self):
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        context.session_id = "sess-999"
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        snapshot = {
+            "session_id": "sess-999",
+            "status": "running",
+            "progress": {
+                "epoch": 3,
+                "total_epochs": 5,
+                "batch": 120,
+                "total_batches": 250,
+                "progress_percent": 60.0,
+            },
+            "metrics": {
+                "current": {"loss": 0.34},
+                "best": {"loss": 0.30},
+            },
+            "gpu_usage": {
+                "gpu_memory": {"allocated_mb": 4096, "total_mb": 12288},
+            },
+            "resource_usage": {
+                "system_memory": {"process_mb": 2048},
+            },
+            "timestamp": "2024-01-01T12:00:00Z",
+        }
+
+        bridge.on_remote_snapshot(snapshot)
+
+        last_state = states[-1]
+        assert last_state.percentage == pytest.approx(60.0)
+        assert last_state.current_step == 3
+        assert last_state.context.get("host_status") == "running"
+        assert last_state.context.get("host_session_id") == "sess-999"
+        assert last_state.context.get("gpu_usage") == snapshot["gpu_usage"]
+
+    def test_on_cancellation_emits_even_when_token_cancelled(self):
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=2)
+
+        context = _make_context(total_epochs=2, total_batches=20)
+        context.session_id = "sess-555"
+        token = _DummyToken(cancelled=True)
+
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+            cancellation_token=token,
+        )
+
+        bridge.on_cancellation(message="Cancelled by user")
+
+        last_state = states[-1]
+        assert last_state.context.get("phase_name") == "cancelled"
+        assert last_state.context.get("host_session_id") == "sess-555"
+        assert last_state.message == "Cancelled by user"

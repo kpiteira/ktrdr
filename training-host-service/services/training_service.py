@@ -47,6 +47,9 @@ class TrainingSession:
         self.current_batch = 0
         self.total_epochs = config.get("training_config", {}).get("epochs", 100)
         self.total_batches = 0
+        self.items_processed = 0
+        self.message = "Initializing"
+        self.current_item = ""
 
         # Metrics tracking
         self.metrics = {}
@@ -73,17 +76,77 @@ class TrainingSession:
 
     def update_progress(self, epoch: int, batch: int, metrics: dict[str, float]):
         """Update training progress and metrics."""
-        self.current_epoch = epoch
-        self.current_batch = batch
+        try:
+            epoch_index = int(epoch)
+        except (TypeError, ValueError):
+            epoch_index = self.current_epoch or 0
+
+        is_epoch_summary = any(str(key).startswith("epoch_") for key in metrics)
+        if not is_epoch_summary:
+            epoch_index += 1
+
+        epoch_index = max(epoch_index, 1)
+        self.current_epoch = max(self.current_epoch, epoch_index)
+
+        try:
+            batch_index = int(batch)
+        except (TypeError, ValueError):
+            batch_index = self.current_batch
+        self.current_batch = max(self.current_batch, batch_index)
         self.last_updated = datetime.utcnow()
 
-        # Update metrics
+        total_batches_candidate = metrics.get("total_batches") or metrics.get(
+            "total_batches_per_epoch"
+        )
+        if total_batches_candidate is not None:
+            try:
+                total_batches_int = int(total_batches_candidate)
+                if total_batches_int > 0:
+                    self.total_batches = max(self.total_batches, total_batches_int)
+            except (TypeError, ValueError):
+                pass
+
+        if self.current_batch and self.current_batch > self.total_batches:
+            self.total_batches = self.current_batch
+
+        completed_batches = metrics.get("completed_batches")
+        if completed_batches is None:
+            completed_batches = self.current_batch
+        try:
+            completed_batches_int = int(completed_batches)
+        except (TypeError, ValueError):
+            completed_batches_int = self.current_batch
+
+        self.items_processed = max(self.items_processed, completed_batches_int)
+        if self.total_batches and self.items_processed > self.total_batches:
+            self.total_batches = self.items_processed
+
+        message_parts = []
+        if self.total_epochs:
+            message_parts.append(
+                f"Epoch {min(self.current_epoch, self.total_epochs)}/{self.total_epochs}"
+            )
+        else:
+            message_parts.append(f"Epoch {self.current_epoch}")
+
+        if self.total_batches:
+            message_parts.append(
+                f"Batch {min(self.items_processed, self.total_batches)}/{self.total_batches}"
+            )
+
+        if message_parts:
+            self.message = " · ".join(message_parts)
+            self.current_item = message_parts[-1]
+        else:  # pragma: no cover - fallback
+            self.message = "Training in progress"
+            self.current_item = self.message
+
+        # Update metrics tracking
         for key, value in metrics.items():
             if key not in self.metrics:
                 self.metrics[key] = []
             self.metrics[key].append(value)
 
-            # Track best metrics
             if "loss" in key.lower():
                 if key not in self.best_metrics or value < self.best_metrics[key]:
                     self.best_metrics[key] = value
@@ -93,16 +156,33 @@ class TrainingSession:
 
     def get_progress_dict(self) -> dict[str, Any]:
         """Get progress information as dictionary."""
+        items_total = self.total_batches or None
+
+        if items_total:
+            progress_percent = (
+                (self.items_processed / items_total) * 100.0
+                if items_total > 0
+                else 0.0
+            )
+        else:
+            progress_percent = (
+                (self.current_epoch / self.total_epochs) * 100.0
+                if self.total_epochs > 0
+                else 0.0
+            )
+
+        progress_percent = max(0.0, min(progress_percent, 100.0))
+
         return {
             "epoch": self.current_epoch,
             "total_epochs": self.total_epochs,
             "batch": self.current_batch,
             "total_batches": self.total_batches,
-            "progress_percent": (
-                (self.current_epoch / self.total_epochs) * 100
-                if self.total_epochs > 0
-                else 0
-            ),
+            "progress_percent": progress_percent,
+            "items_processed": self.items_processed,
+            "items_total": items_total,
+            "message": self.message,
+            "current_item": self.current_item or self.message,
         }
 
     def get_resource_usage(self) -> dict[str, Any]:
@@ -623,17 +703,28 @@ class TrainingService:
                                         "loss": loss.item(),
                                         "accuracy": accuracy,
                                         "device": device_type,
+                                        "completed_batches": batches_processed,
+                                        "total_batches": session.total_batches,
                                     },
                                 )
 
                                 # Small delay to prevent overwhelming
                                 await asyncio.sleep(0.1)
 
+                                if session.stop_requested:
+                                    break
+
                             except Exception as e:
                                 logger.error(
                                     f"Error processing batch for {symbol} {timeframe}: {str(e)}"
                                 )
                                 continue
+
+                        if session.stop_requested:
+                            break
+
+                if session.stop_requested:
+                    break
 
                 # Log epoch results
                 if batches_processed > 0:
@@ -653,6 +744,7 @@ class TrainingService:
                             "epoch_accuracy": avg_accuracy,
                             "device": device_type,
                             "total_batches": batches_processed,
+                            "completed_batches": batches_processed,
                         },
                     )
 
@@ -664,6 +756,14 @@ class TrainingService:
 
                 # Allow other tasks to run
                 await asyncio.sleep(0.5)
+
+                if session.stop_requested:
+                    logger.info(
+                        "Stop requested after epoch %s for session %s",
+                        epoch,
+                        session.session_id,
+                    )
+                    break
 
             # Log completion status based on whether it was cancelled or completed normally
             if session.stop_requested:
@@ -806,6 +906,11 @@ class TrainingService:
                     f"Training task for session {session_id} did not stop gracefully"
                 )
                 session.training_task.cancel()
+                session.status = "stopped"
+            except asyncio.CancelledError:
+                logger.info(
+                    "Training task for session %s was already cancelled", session_id
+                )
                 session.status = "stopped"
 
         return True
