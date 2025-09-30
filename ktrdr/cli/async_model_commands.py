@@ -330,7 +330,6 @@ async def _train_model_async_impl(
 
                 task_id = result["task_id"]
                 console.print(f"✅ Training started with ID: [bold]{task_id}[/bold]")
-                console.print("[dim]🔧 About to start polling setup...[/dim]")
 
             except AsyncCLIClientError as e:
                 console.print(f"❌ [red]Failed to start training: {str(e)}[/red]")
