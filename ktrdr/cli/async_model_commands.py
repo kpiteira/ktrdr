@@ -618,6 +618,14 @@ async def _train_model_async_impl(
                     performance_result = await cli._make_request(
                         "GET", f"/trainings/{task_id}/performance"
                     )
+
+                    # Handle None or malformed response
+                    if not performance_result:
+                        console.print(
+                            "⚠️  [yellow]Training completed, but unable to fetch detailed results[/yellow]"
+                        )
+                        return
+
                     training_metrics = performance_result.get("training_metrics", {})
                     test_metrics = performance_result.get("test_metrics", {})
                     model_info = performance_result.get("model_info", {})
