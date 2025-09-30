@@ -314,11 +314,10 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
                 f"Training task {task_id} is not completed (status: {operation.status.value})"
             )
 
-        # Extract metrics from training results
+        # Extract metrics from aggregated results
         results = operation.result_summary or {}
-        config = operation.metadata.parameters.get("config", {})
 
-        # Get training metrics from results
+        # Results are now in standardized aggregated format
         training_metrics = results.get("training_metrics", {})
         test_metrics = results.get("test_metrics", {})
         model_info = results.get("model_info", {})
@@ -327,35 +326,9 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
             "success": True,
             "task_id": task_id,
             "status": operation.status.value,
-            "training_metrics": {
-                "final_train_loss": training_metrics.get("final_train_loss", 0.0),
-                "final_val_loss": training_metrics.get("final_val_loss", 0.0),
-                "final_train_accuracy": training_metrics.get(
-                    "final_train_accuracy", 0.0
-                ),
-                "final_val_accuracy": training_metrics.get("final_val_accuracy", 0.0),
-                "epochs_completed": operation.progress.items_processed
-                or config.get("epochs", 100),
-                "early_stopped": training_metrics.get("early_stopped", False),
-                "training_time_minutes": training_metrics.get(
-                    "training_time_minutes", 0.0
-                ),
-            },
-            "test_metrics": {
-                "test_loss": test_metrics.get("test_loss", 0.0),
-                "test_accuracy": test_metrics.get("test_accuracy", 0.0),
-                "precision": test_metrics.get("precision", 0.0),
-                "recall": test_metrics.get("recall", 0.0),
-                "f1_score": test_metrics.get("f1_score", 0.0),
-            },
-            "model_info": {
-                "model_size_bytes": model_info.get("model_size_bytes", 0),
-                "parameters_count": model_info.get("parameters_count", 0),
-                "architecture": model_info.get(
-                    "architecture",
-                    f"mlp_{'_'.join(map(str, config.get('hidden_layers', [64, 32, 16])))}",
-                ),
-            },
+            "training_metrics": training_metrics,
+            "test_metrics": test_metrics,
+            "model_info": model_info,
         }
 
     async def save_trained_model(
@@ -370,9 +343,10 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
         if operation.status.value != "completed":
             raise ValidationError(f"Training task {task_id} is not completed")
 
-        # Get model path from training results
+        # Get model path from aggregated artifacts
         results = operation.result_summary or {}
-        model_path = results.get("model_path")
+        artifacts = results.get("artifacts", {})
+        model_path = artifacts.get("model_path")
         if not model_path or not Path(model_path).exists():
             raise ValidationError("Trained model file not found")
 
