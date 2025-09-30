@@ -68,9 +68,12 @@ def test_training_session_progress():
     progress = session.get_progress_dict()
     assert progress["epoch"] == 6
     assert progress["total_epochs"] == 10
-    assert progress["progress_percent"] == 100.0
-    assert progress["items_processed"] == 50
-    assert progress["items_total"] == 50
+    # At epoch 6, batch 50: items_processed = (6-1)*50 + 50 = 250 + 50 = 300
+    # items_total = 50 * 10 = 500
+    # progress = 300/500 * 100 = 60%
+    assert progress["progress_percent"] == 60.0
+    assert progress["items_processed"] == 300  # (5 complete epochs * 50) + 50
+    assert progress["items_total"] == 500  # 50 batches * 10 epochs
 
 
 def test_service_basic_operations():

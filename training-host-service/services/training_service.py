@@ -117,9 +117,20 @@ class TrainingSession:
         except (TypeError, ValueError):
             completed_batches_int = self.current_batch
 
-        self.items_processed = max(self.items_processed, completed_batches_int)
-        if self.total_batches and self.items_processed > self.total_batches:
-            self.total_batches = self.items_processed
+        # Calculate cumulative items processed across all epochs
+        # items_processed = (completed_epochs * batches_per_epoch) + current_batch
+        if self.total_batches and self.current_epoch > 0:
+            # Epochs are 1-indexed, so completed epochs = current_epoch - 1
+            cumulative_items = (
+                (self.current_epoch - 1) * self.total_batches
+            ) + completed_batches_int
+            self.items_processed = max(self.items_processed, cumulative_items)
+        else:
+            # Fallback to batch-only if we don't have epoch info
+            self.items_processed = max(self.items_processed, completed_batches_int)
+
+        # Don't artificially increase total_batches - it's batches PER EPOCH
+        # The total across all epochs is calculated in get_progress_dict()
 
         message_parts = []
         if self.total_epochs:
@@ -156,15 +167,22 @@ class TrainingSession:
 
     def get_progress_dict(self) -> dict[str, Any]:
         """Get progress information as dictionary."""
-        items_total = self.total_batches or None
+        # Calculate total items across ALL epochs, not just one epoch
+        items_total = (
+            self.total_batches * self.total_epochs
+            if self.total_batches and self.total_epochs
+            else None
+        )
 
         if items_total:
+            # Progress based on total batches across all epochs
             progress_percent = (
                 (self.items_processed / items_total) * 100.0
                 if items_total > 0
                 else 0.0
             )
         else:
+            # Fallback to epoch-based progress if batch info unavailable
             progress_percent = (
                 (self.current_epoch / self.total_epochs) * 100.0
                 if self.total_epochs > 0

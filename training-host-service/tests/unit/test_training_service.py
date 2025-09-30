@@ -319,7 +319,8 @@ class TestTrainingSession:
         session.total_epochs = 10
         session.current_batch = 50
         session.total_batches = 100
-        session.items_processed = 50
+        # items_processed should be cumulative: (4 complete epochs * 100) + 50 = 450
+        session.items_processed = 450
         session.message = "Epoch 5/10 · Batch 50/100"
         session.current_item = "Batch 50/100"
 
@@ -329,9 +330,12 @@ class TestTrainingSession:
         assert progress["total_epochs"] == 10
         assert progress["batch"] == 50
         assert progress["total_batches"] == 100
-        assert progress["progress_percent"] == 50.0
-        assert progress["items_processed"] == 50
-        assert progress["items_total"] == 100
+        # items_total = 100 * 10 = 1000
+        # items_processed = 450
+        # progress = 450/1000 * 100 = 45%
+        assert progress["progress_percent"] == 45.0
+        assert progress["items_processed"] == 450
+        assert progress["items_total"] == 1000
         assert progress["message"] == "Epoch 5/10 · Batch 50/100"
 
     @pytest.mark.asyncio
