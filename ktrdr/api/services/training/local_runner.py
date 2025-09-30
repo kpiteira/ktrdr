@@ -9,6 +9,7 @@ from typing import Any, Callable
 from ktrdr import get_logger
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
+from ktrdr.api.services.training.result_aggregator import from_local_run
 from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
 from ktrdr.training.train_strategy import StrategyTrainer
 
@@ -37,14 +38,17 @@ class LocalTrainingRunner:
         self._raise_if_cancelled()
 
         try:
-            result = await asyncio.to_thread(self._execute_training)
+            raw_result = await asyncio.to_thread(self._execute_training)
         except CancellationError:
             logger.info("Local training cancelled for %s", self._context.strategy_name)
             self._bridge.on_phase("cancelled", message="Training cancelled")
             raise
 
+        # Aggregate result into standardized format
+        aggregated_result = from_local_run(self._context, raw_result or {})
+
         self._bridge.on_complete()
-        return result or {}
+        return aggregated_result
 
     # ------------------------------------------------------------------
     # Internal helpers

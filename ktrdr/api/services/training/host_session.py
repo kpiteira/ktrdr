@@ -9,6 +9,7 @@ from typing import Any
 from ktrdr import get_logger
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
+from ktrdr.api.services.training.result_aggregator import from_host_run
 from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
 from ktrdr.training.training_adapter import TrainingAdapter
 
@@ -50,7 +51,10 @@ class HostSessionManager:
     async def run(self) -> dict[str, Any]:
         """Start the host session and poll until completion."""
         await self.start_session()
-        return await self.poll_session()
+        host_snapshot = await self.poll_session()
+
+        # Aggregate result into standardized format
+        return from_host_run(self._context, host_snapshot)
 
     async def start_session(self) -> str:
         """Start a remote training session through the adapter."""

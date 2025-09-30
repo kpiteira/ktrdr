@@ -183,17 +183,8 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
             cancellation_token=self._current_cancellation_token,
         )
 
-        final_snapshot = await manager.run()
-
-        return {
-            "session_id": context.session_id,
-            "host_status": (
-                final_snapshot.get("status")
-                if isinstance(final_snapshot, dict)
-                else None
-            ),
-            "host_snapshot": final_snapshot,
-        }
+        # Returns aggregated result from from_host_run
+        return await manager.run()
 
     async def _run_training_via_manager_async(
         self,
