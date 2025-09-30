@@ -613,71 +613,67 @@ async def _train_model_async_impl(
                     pass
                 httpx_logger.setLevel(original_level)
 
-                # Get real results from API using outer cli client
-                try:
-                    performance_result = await cli._make_request(
-                        "GET", f"/trainings/{task_id}/performance"
+            # Get real results from API using outer cli client (after finally block)
+            try:
+                performance_result = await cli._make_request(
+                    "GET", f"/trainings/{task_id}/performance"
+                )
+
+                # Handle None or malformed response
+                if not performance_result:
+                    console.print(
+                        "⚠️  [yellow]Training completed, but unable to fetch detailed results[/yellow]"
+                    )
+                    return
+
+                training_metrics = performance_result.get("training_metrics", {})
+                test_metrics = performance_result.get("test_metrics", {})
+                model_info = performance_result.get("model_info", {})
+
+                # Display real results
+                console.print("📊 [bold green]Training Results:[/bold green]")
+                console.print(
+                    f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0) * 100:.1f}%"
+                )
+                console.print(
+                    f"📊 Precision: {test_metrics.get('precision', 0) * 100:.1f}%"
+                )
+                console.print(f"📊 Recall: {test_metrics.get('recall', 0) * 100:.1f}%")
+                console.print(
+                    f"📊 F1 Score: {test_metrics.get('f1_score', 0) * 100:.1f}%"
+                )
+                console.print(
+                    f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0) * 100:.1f}%"
+                )
+                console.print(
+                    f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}"
+                )
+                console.print(
+                    f"⏱️  Training time: {training_metrics.get('training_time_minutes', 0):.1f} minutes"
+                )
+
+                # Format model size from bytes
+                model_size_bytes = model_info.get("model_size_bytes", 0)
+                if model_size_bytes == 0:
+                    console.print("💾 Model size: 0 bytes")
+                elif model_size_bytes < 1024:
+                    console.print(f"💾 Model size: {model_size_bytes} bytes")
+                elif model_size_bytes < 1024 * 1024:
+                    console.print(f"💾 Model size: {model_size_bytes / 1024:.1f} KB")
+                else:
+                    console.print(
+                        f"💾 Model size: {model_size_bytes / (1024 * 1024):.1f} MB"
                     )
 
-                    # Handle None or malformed response
-                    if not performance_result:
-                        console.print(
-                            "⚠️  [yellow]Training completed, but unable to fetch detailed results[/yellow]"
-                        )
-                        return
+            except Exception as e:
+                console.print(
+                    f"❌ [red]Error retrieving training results: {str(e)}[/red]"
+                )
+                console.print(
+                    "✅ [green]Training completed, but unable to fetch detailed results[/green]"
+                )
 
-                    training_metrics = performance_result.get("training_metrics", {})
-                    test_metrics = performance_result.get("test_metrics", {})
-                    model_info = performance_result.get("model_info", {})
-
-                    # Display real results
-                    console.print("📊 [bold green]Training Results:[/bold green]")
-                    console.print(
-                        f"🎯 Test accuracy: {test_metrics.get('test_accuracy', 0) * 100:.1f}%"
-                    )
-                    console.print(
-                        f"📊 Precision: {test_metrics.get('precision', 0) * 100:.1f}%"
-                    )
-                    console.print(
-                        f"📊 Recall: {test_metrics.get('recall', 0) * 100:.1f}%"
-                    )
-                    console.print(
-                        f"📊 F1 Score: {test_metrics.get('f1_score', 0) * 100:.1f}%"
-                    )
-                    console.print(
-                        f"📈 Validation accuracy: {training_metrics.get('final_val_accuracy', 0) * 100:.1f}%"
-                    )
-                    console.print(
-                        f"📉 Final loss: {training_metrics.get('final_train_loss', 0):.4f}"
-                    )
-                    console.print(
-                        f"⏱️  Training time: {training_metrics.get('training_time_minutes', 0):.1f} minutes"
-                    )
-
-                    # Format model size from bytes
-                    model_size_bytes = model_info.get("model_size_bytes", 0)
-                    if model_size_bytes == 0:
-                        console.print("💾 Model size: 0 bytes")
-                    elif model_size_bytes < 1024:
-                        console.print(f"💾 Model size: {model_size_bytes} bytes")
-                    elif model_size_bytes < 1024 * 1024:
-                        console.print(
-                            f"💾 Model size: {model_size_bytes / 1024:.1f} KB"
-                        )
-                    else:
-                        console.print(
-                            f"💾 Model size: {model_size_bytes / (1024 * 1024):.1f} MB"
-                        )
-
-                except Exception as e:
-                    console.print(
-                        f"❌ [red]Error retrieving training results: {str(e)}[/red]"
-                    )
-                    console.print(
-                        "✅ [green]Training completed, but unable to fetch detailed results[/green]"
-                    )
-
-                console.print("💾 Model training completed via AsyncCLIClient")
+            console.print("💾 Model training completed via AsyncCLIClient")
 
             # Debug: Check if we're still within the context
             if cli._http_client is not None and not cli._http_client.is_closed:

@@ -5,13 +5,13 @@ This module provides a CLI for interacting with the KTRDR application,
 including commands for data inspection, indicator calculation, and visualization.
 """
 
+from ktrdr.cli.async_model_commands import async_models_app as models_app
 from ktrdr.cli.commands import cli_app
 from ktrdr.cli.data_commands import data_app
 from ktrdr.cli.dummy_commands import dummy_app
 from ktrdr.cli.fuzzy_commands import fuzzy_app
 from ktrdr.cli.ib_commands import ib_app
 from ktrdr.cli.indicator_commands import indicators_app
-from ktrdr.cli.async_model_commands import async_models_app as models_app
 from ktrdr.cli.operations_commands import operations_app
 from ktrdr.cli.strategy_commands import strategies_app
 

@@ -79,6 +79,7 @@ class HostSessionManager:
             validation_split=self._context.training_config.get("validation_split", 0.2),
             data_mode=self._context.training_config.get("data_mode", "local"),
             cancellation_token=self._token,
+            training_config=self._context.training_config,
         )
 
         session_id = response.get("session_id") if isinstance(response, dict) else None
