@@ -1,7 +1,7 @@
 # Development Dockerfile for KTRDR
 # Optimized for quick rebuilds and live code changes
 
-FROM python:3.11-slim as dev
+FROM python:3.13-slim as dev
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

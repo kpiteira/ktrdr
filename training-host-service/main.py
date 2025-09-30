@@ -10,6 +10,7 @@ endpoints that the containerized backend can call.
 """
 
 import logging
+import logging.handlers
 import sys
 import warnings
 from datetime import datetime
@@ -38,7 +39,7 @@ try:
     from config import get_host_service_config
 
     # Import existing ktrdr modules
-    from ktrdr.logging import get_logger
+    from ktrdr.logging import configure_logging, get_logger
 except ImportError as e:
     print(f"Error importing modules: {e}")
     print("Make sure the parent directory contains ktrdr modules")
@@ -47,8 +48,37 @@ except ImportError as e:
 # Get configuration
 service_config = get_host_service_config()
 
-# Configure logging
-logging.basicConfig(level=getattr(logging, service_config.host_service.log_level))
+# Configure KTRDR logging with separate log file for host service
+log_dir = Path(__file__).parent / "logs"
+configure_logging(
+    log_dir=log_dir,
+    console_level=getattr(logging, service_config.host_service.log_level),
+    file_level=logging.DEBUG,
+    config={
+        "file_format": "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s.%(funcName)s:%(lineno)d | %(message)s",
+    }
+)
+
+# Override root handler to write to host-service-specific log file
+root_logger = logging.getLogger()
+for handler in root_logger.handlers[:]:
+    if isinstance(handler, logging.handlers.RotatingFileHandler):
+        # Change log file to ktrdr-host-service.log
+        root_logger.removeHandler(handler)
+        handler.close()
+
+        host_log_file = log_dir / "ktrdr-host-service.log"
+        new_handler = logging.handlers.RotatingFileHandler(
+            filename=host_log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+        )
+        new_handler.setLevel(logging.DEBUG)
+        new_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s.%(funcName)s:%(lineno)d | %(message)s"
+        ))
+        root_logger.addHandler(new_handler)
+
 logger = get_logger(__name__)
 
 # Create FastAPI app
