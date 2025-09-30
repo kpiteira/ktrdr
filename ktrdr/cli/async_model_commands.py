@@ -421,11 +421,10 @@ async def _train_model_async_impl(
                                 break
 
                             # Get status from operations framework via AsyncCLIClient
-                            # Use a fresh client for each status check to avoid lifecycle issues
-                            async with AsyncCLIClient() as status_cli:
-                                status_result = await status_cli._make_request(
-                                    "GET", f"/operations/{task_id}"
-                                )
+                            # Use the outer cli client to avoid nested context issues
+                            status_result = await cli._make_request(
+                                "GET", f"/operations/{task_id}"
+                            )
                             operation_data = status_result.get("data", {})
 
                             status = operation_data.get("status", "unknown")
@@ -615,12 +614,11 @@ async def _train_model_async_impl(
                     pass
                 httpx_logger.setLevel(original_level)
 
-                # Get real results from API via fresh AsyncCLIClient for resilience
+                # Get real results from API using outer cli client
                 try:
-                    async with AsyncCLIClient() as results_cli:
-                        performance_result = await results_cli._make_request(
-                            "GET", f"/trainings/{task_id}/performance"
-                        )
+                    performance_result = await cli._make_request(
+                        "GET", f"/trainings/{task_id}/performance"
+                    )
                     training_metrics = performance_result.get("training_metrics", {})
                     test_metrics = performance_result.get("test_metrics", {})
                     model_info = performance_result.get("model_info", {})
