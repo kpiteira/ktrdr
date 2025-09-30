@@ -431,6 +431,7 @@ async def _train_model_async_impl(
                             status = operation_data.get("status", "unknown")
                             progress_info = operation_data.get("progress", {})
                             progress_pct = progress_info.get("percentage", 0)
+                            progress_context = progress_info.get("context", {})
 
                             # Extract epoch info from metadata and results
                             metadata = operation_data.get("metadata", {})
@@ -448,74 +449,106 @@ async def _train_model_async_impl(
                                 current_epoch = training_metrics.get(
                                     "epochs_trained", 0
                                 )
-                            else:
-                                # For running operations, parse epoch and bars from current_step
-                                current_step = (
-                                    progress_info.get("current_step", "")
-                                    if progress_info
-                                    else ""
-                                )
-                                current_epoch = 0
                                 bars_info = ""
-
-                                # Parse "Epoch: N, Bars: X/Y" format
-                                if (
-                                    current_step
-                                    and "Epoch:" in current_step
-                                    and "Bars:" in current_step
-                                ):
-                                    try:
-                                        # Extract epoch number
-                                        epoch_part = (
-                                            current_step.split("Epoch:")[1]
-                                            .split(",")[0]
-                                            .strip()
-                                        )
-                                        current_epoch = int(epoch_part)
-
-                                        # Extract bars part "X/Y"
-                                        bars_part = current_step.split("Bars:")[
-                                            1
-                                        ].strip()
-                                        # Remove any trailing text like "(Val Acc: 0.123)"
-                                        if bars_part and "(" in bars_part:
-                                            bars_part = bars_part.split("(")[0].strip()
-
-                                        # Parse current bars and total bars for this epoch
-                                        if bars_part and "/" in bars_part:
-                                            current_bars_str, total_bars_str = (
-                                                bars_part.split("/")
-                                            )
-                                            current_bars = int(
-                                                current_bars_str.replace(",", "")
-                                            )
-                                            total_bars_all_epochs = int(
-                                                total_bars_str.replace(",", "")
-                                            )
-
-                                            # Calculate bars per epoch and current bars in this epoch
-                                            bars_per_epoch = (
-                                                total_bars_all_epochs // total_epochs
-                                                if total_epochs > 0
-                                                else 0
-                                            )
-                                            bars_this_epoch = (
-                                                current_bars % bars_per_epoch
-                                                if bars_per_epoch > 0
-                                                else 0
-                                            )
-
-                                            bars_info = f", Bars: {bars_this_epoch:,}/{bars_per_epoch:,}"
-
-                                    except (IndexError, ValueError, ZeroDivisionError):
-                                        current_epoch = 0
-                                        bars_info = ""
-
-                            # Update progress bar with epoch and bars info
-                            if current_epoch > 0:
-                                epoch_info = f" (Epoch: {current_epoch}/{total_epochs}{bars_info})"
+                                gpu_info = ""
                             else:
-                                epoch_info = ""
+                                # Prefer using new progress context fields (Task 5.4)
+                                current_epoch = progress_context.get("current_epoch", 0)
+                                current_batch = progress_context.get("current_batch", 0)
+                                total_batches = progress_context.get(
+                                    "total_batches_per_epoch", 0
+                                )
+
+                                # Build bars info from context
+                                bars_info = ""
+                                if current_batch > 0 and total_batches > 0:
+                                    bars_info = (
+                                        f", Batch: {current_batch}/{total_batches}"
+                                    )
+
+                                # Extract GPU/resource usage info (Task 5.4)
+                                gpu_info = ""
+                                resource_usage = progress_context.get(
+                                    "resource_usage", {}
+                                )
+                                gpu_used = resource_usage.get("gpu_used", False)
+                                if gpu_used:
+                                    gpu_name = resource_usage.get("gpu_name", "GPU")
+                                    gpu_util = resource_usage.get(
+                                        "gpu_utilization_percent"
+                                    )
+                                    if gpu_util is not None:
+                                        gpu_info = f" 🖥️ {gpu_name}: {gpu_util:.0f}%"
+                                    elif gpu_name:
+                                        gpu_info = f" 🖥️ {gpu_name}"
+
+                                # Fallback: parse from current_step string (backward compatibility)
+                                if current_epoch == 0:
+                                    current_step = progress_info.get("current_step", "")
+                                    if (
+                                        current_step
+                                        and "Epoch:" in current_step
+                                        and "Bars:" in current_step
+                                    ):
+                                        try:
+                                            # Extract epoch number
+                                            epoch_part = (
+                                                current_step.split("Epoch:")[1]
+                                                .split(",")[0]
+                                                .strip()
+                                            )
+                                            current_epoch = int(epoch_part)
+
+                                            # Extract bars part "X/Y"
+                                            bars_part = current_step.split("Bars:")[
+                                                1
+                                            ].strip()
+                                            # Remove any trailing text like "(Val Acc: 0.123)"
+                                            if bars_part and "(" in bars_part:
+                                                bars_part = bars_part.split("(")[
+                                                    0
+                                                ].strip()
+
+                                            # Parse current bars and total bars for this epoch
+                                            if bars_part and "/" in bars_part:
+                                                current_bars_str, total_bars_str = (
+                                                    bars_part.split("/")
+                                                )
+                                                current_bars = int(
+                                                    current_bars_str.replace(",", "")
+                                                )
+                                                total_bars_all_epochs = int(
+                                                    total_bars_str.replace(",", "")
+                                                )
+
+                                                # Calculate bars per epoch and current bars in this epoch
+                                                bars_per_epoch = (
+                                                    total_bars_all_epochs
+                                                    // total_epochs
+                                                    if total_epochs > 0
+                                                    else 0
+                                                )
+                                                bars_this_epoch = (
+                                                    current_bars % bars_per_epoch
+                                                    if bars_per_epoch > 0
+                                                    else 0
+                                                )
+
+                                                bars_info = f", Bars: {bars_this_epoch:,}/{bars_per_epoch:,}"
+
+                                        except (
+                                            IndexError,
+                                            ValueError,
+                                            ZeroDivisionError,
+                                        ):
+                                            current_epoch = 0
+                                            bars_info = ""
+
+                            # Update progress bar with epoch, bars, and GPU info
+                            if current_epoch > 0:
+                                epoch_info = f" (Epoch: {current_epoch}/{total_epochs}{bars_info}{gpu_info})"
+                            else:
+                                epoch_info = gpu_info if gpu_info else ""
                             progress.update(
                                 task,
                                 completed=progress_pct,
