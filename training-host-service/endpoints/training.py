@@ -109,6 +109,9 @@ async def start_training(request: TrainingStartRequest):
     try:
         service = get_service()
 
+        # Debug: Log what we receive
+        logger.info(f"Received training_configuration: {request.training_configuration}")
+
         # Prepare configuration for training service
         config = {
             "model_config": request.model_configuration,

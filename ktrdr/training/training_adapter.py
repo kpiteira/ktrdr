@@ -195,6 +195,9 @@ class TrainingAdapter:
                 if training_config:
                     training_configuration.update(training_config)
 
+                # Debug: Log what we're sending
+                logger.info(f"Sending training_configuration to host: {training_configuration}")
+
                 response = await self._call_host_service_post(
                     "/training/start",
                     {
