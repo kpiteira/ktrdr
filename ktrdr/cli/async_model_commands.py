@@ -260,8 +260,10 @@ async def _train_model_async_impl(
     def format_training_progress(operation_data: dict) -> str:
         """Format progress message with training-specific details."""
         status = operation_data.get("status", "unknown")
-        progress_info = operation_data.get("progress", {})
-        progress_context = progress_info.get("context", {})
+        progress_info = operation_data.get("progress") or {}
+        progress_context = (
+            progress_info.get("context") if progress_info else None
+        ) or {}
 
         # Extract epoch information
         metadata = operation_data.get("metadata", {})
