@@ -258,32 +258,54 @@ async def _train_model_async_impl(
 
     # Define training-specific progress message formatter
     def format_training_progress(operation_data: dict) -> str:
-        """Format progress message with training-specific details."""
+        """Format progress message with training-specific details.
+
+        The TrainingProgressRenderer on the backend already formats rich progress
+        messages and puts them in progress.current_step. We should use that first,
+        and only fall back to manual construction if it's not available.
+        """
         status = operation_data.get("status", "unknown")
         progress_info = operation_data.get("progress") or {}
+
+        # First, try to use the pre-formatted message from TrainingProgressRenderer
+        # This is in progress.current_step and should already contain epoch/batch/GPU info
+        rendered_message = progress_info.get("current_step")
+        if rendered_message and rendered_message != "Status: running":
+            # Use the backend-rendered message directly
+            return f"Status: {status} - {rendered_message}"
+
+        # Fallback: extract context and build message manually
         progress_context = (
             progress_info.get("context") if progress_info else None
         ) or {}
 
-        # Extract epoch information
-        metadata = operation_data.get("metadata", {})
-        total_epochs = metadata.get("parameters", {}).get("epochs", 100)
+        # Debug: log what we're receiving
+        if verbose:
+            logger.debug(
+                f"Progress info: current_step={rendered_message}, context={progress_context}"
+            )
 
-        # Get current epoch from progress context
-        current_epoch = progress_context.get("current_epoch", 0)
-        current_batch = progress_context.get("current_batch", 0)
-        total_batches = progress_context.get("total_batches_per_epoch", 0)
+        # Extract epoch information
+        metadata = operation_data.get("metadata") or {}
+        parameters = metadata.get("parameters") or {}
+        total_epochs = parameters.get("epochs", 100)
+
+        # Get current epoch from progress context (match TrainingProgressBridge field names)
+        current_epoch = progress_context.get("epoch_index", 0)
+        current_batch = progress_context.get("batch_number", 0)
+        total_batches = progress_context.get("batch_total_per_epoch", 0)
+        total_epochs_from_context = progress_context.get("total_epochs", total_epochs)
 
         # Build status message with epoch/batch info
         status_msg = f"Status: {status}"
         if current_epoch > 0:
-            status_msg += f" (Epoch: {current_epoch}/{total_epochs}"
+            status_msg += f" (Epoch: {current_epoch}/{total_epochs_from_context}"
             if current_batch > 0 and total_batches > 0:
                 status_msg += f", Batch: {current_batch}/{total_batches}"
             status_msg += ")"
 
         # Extract GPU info
-        resource_usage = progress_context.get("resource_usage", {})
+        resource_usage = progress_context.get("resource_usage") or {}
         if resource_usage.get("gpu_used"):
             gpu_name = resource_usage.get("gpu_name", "GPU")
             gpu_util = resource_usage.get("gpu_utilization_percent")
