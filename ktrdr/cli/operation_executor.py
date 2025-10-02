@@ -235,36 +235,83 @@ class AsyncOperationExecutor:
         self,
         operation_id: str,
         http_client: httpx.AsyncClient,
-    ) -> None:
+        console: Console,
+    ) -> dict[str, Any]:
         """
-        Send cancellation request to backend.
+        Send cancellation request to backend and wait for confirmation.
 
-        This is best-effort - we don't block on the cancel request
-        failing, as the user wants to exit regardless.
+        Sends DELETE request to cancel the operation, then polls for a short time
+        to get the final cancelled status and any results from the backend.
 
         Args:
             operation_id: Operation ID to cancel
             http_client: Async HTTP client
+            console: Rich console for status updates
+
+        Returns:
+            Final operation status after cancellation
         """
-        url = f"{self.base_url}/operations/{operation_id}"
+        cancel_url = f"{self.base_url}/operations/{operation_id}"
+        status_url = f"{self.base_url}/operations/{operation_id}"
+
         logger.debug(f"Sending cancellation request for operation {operation_id}")
 
+        # Send cancellation request
         try:
             response = await http_client.delete(
-                url,
+                cancel_url,
                 timeout=5.0,  # Short timeout for cancel
             )
 
             if response.status_code == 200:
                 logger.debug("Cancellation request sent successfully")
+                console.print(
+                    "[cyan]🔄 Waiting for backend to confirm cancellation...[/cyan]"
+                )
             elif response.status_code == 400:
                 # Operation may already be finished - that's okay
                 logger.debug("Operation already finished (cancel not needed)")
+                return {"status": "cancelled", "operation_id": operation_id}
             else:
                 logger.warning(f"Cancel request returned status {response.status_code}")
+                return {"status": "cancelled", "operation_id": operation_id}
 
         except httpx.HTTPError as e:
             logger.warning(f"Failed to send cancel request (continuing anyway): {e}")
+            return {"status": "cancelled", "operation_id": operation_id}
+
+        # Poll for cancellation confirmation (max 3 seconds)
+        max_polls = 10  # 10 * 0.3s = 3 seconds max
+        for i in range(max_polls):
+            try:
+                response = await http_client.get(status_url, timeout=2.0)
+                response.raise_for_status()
+                status_data = response.json()
+
+                if status_data.get("success"):
+                    operation_data = status_data.get("data", {})
+                    status = operation_data.get("status")
+
+                    if status == "cancelled":
+                        logger.debug(f"Cancellation confirmed after {i+1} polls")
+                        return operation_data
+                    elif status in ("completed", "failed"):
+                        # Operation finished before cancellation took effect
+                        logger.debug(
+                            f"Operation finished as {status} before cancellation"
+                        )
+                        return operation_data
+
+                await asyncio.sleep(0.3)
+
+            except httpx.HTTPError as e:
+                logger.debug(f"Error polling for cancellation status: {e}")
+                await asyncio.sleep(0.3)
+                continue
+
+        # Timeout waiting for confirmation - return what we know
+        logger.debug("Timeout waiting for cancellation confirmation")
+        return {"status": "cancelled", "operation_id": operation_id}
 
     async def execute_operation(
         self,
@@ -348,8 +395,25 @@ class AsyncOperationExecutor:
                     console.print(
                         "[yellow]⚠️  Operation cancelled by user[/yellow]", style="bold"
                     )
-                    # Send cancellation to backend
-                    await self._handle_cancellation(operation_id, http_client)
+                    # Send cancellation to backend and wait for confirmation
+                    final_status = await self._handle_cancellation(
+                        operation_id, http_client, console
+                    )
+
+                    # Display any cancellation results/metadata via adapter
+                    if hasattr(adapter, "display_cancellation_results"):
+                        await adapter.display_cancellation_results(
+                            final_status, console, http_client
+                        )
+                    else:
+                        # Default cancellation message
+                        iterations = final_status.get("metadata", {}).get(
+                            "iterations_completed", "some"
+                        )
+                        console.print(
+                            f"[yellow]✓ Cancellation confirmed. Completed {iterations} iterations.[/yellow]"
+                        )
+
                     return False
 
                 # Handle failure

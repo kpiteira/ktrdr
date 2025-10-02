@@ -332,3 +332,24 @@ class DummyOperationAdapter(OperationAdapter):
         console.print(
             f"Duration: {final_status.get('metadata', {}).get('duration', 'N/A')}s"
         )
+
+    async def display_cancellation_results(
+        self,
+        final_status: dict,
+        console: Console,
+        http_client: AsyncClient,
+    ) -> None:
+        """
+        Display cancellation results for dummy operation.
+
+        Optional method - if not implemented, executor shows generic cancellation message.
+        This demonstrates how to display domain-specific cancellation details.
+        """
+        metadata = final_status.get("metadata", {})
+        iterations_completed = metadata.get("iterations_completed", 0)
+        total_iterations = metadata.get("total_iterations", self.iterations)
+
+        console.print(
+            f"\n[yellow]✓ Cancellation confirmed - "
+            f"Completed {iterations_completed}/{total_iterations} iterations[/yellow]"
+        )
