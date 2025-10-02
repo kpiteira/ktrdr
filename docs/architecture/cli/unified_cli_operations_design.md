@@ -237,13 +237,15 @@ Each component has exactly one reason to change:
 
 **What It Knows**:
 - How to make HTTP requests with retries and error handling
-- The operations API contract: `/operations/{id}`, `/operations/{id}/cancel`
+- The operations API contract: `/operations/{id}` for polling, DELETE `/operations/{id}` for cancellation
 - How to poll for operation status at appropriate intervals
 - How to interpret operation status: running, completed, failed, cancelled
 - How to setup async signal handlers for graceful cancellation
 - **How to create and manage Rich Progress bar (INVARIANT)**
 - How to update progress display during polling
 - How to display percentage completion and elapsed time
+- **How to send cancellation requests and wait for backend confirmation (with timeout)**
+- **How to poll for cancellation confirmation and extract cancellation metadata**
 
 **What It Doesn't Know**:
 - Anything about training, data loading, or any specific operation type
@@ -263,7 +265,10 @@ Each component has exactly one reason to change:
 7. Extracts operation_id from response (via adapter)
 8. Enters polling loop until completion or cancellation
 9. **On each poll: fetches status, formats message (via callback), updates progress bar**
-10. On cancellation: sends cancel request, waits for acknowledgment
+10. On cancellation:
+    - Sends DELETE request to backend
+    - Polls for confirmation (max 3 seconds)
+    - Displays cancellation results (via adapter if available, or default message)
 11. On completion: asks adapter to display results
 12. Cleans up signal handler, progress bar, and HTTP client
 13. Returns success/failure to caller
@@ -319,7 +324,15 @@ Each component has exactly one reason to change:
    - Override when operation has special progress semantics
    - Example: Training might expose epoch/batch information
 
-**Design Note**: This is a minimal interface with just four required methods. Most adapters will be <100 lines of simple, declarative code.
+6. **display_cancellation_results(final_status: dict, console: Console, http_client: AsyncClient) → None** (optional)
+   - Called when operation is cancelled and backend confirms cancellation
+   - Receives the final operation status with cancellation metadata
+   - Has access to HTTP client for making additional requests if needed
+   - Formats and prints cancellation-specific results using Rich console
+   - If not implemented, executor shows default message: "✓ Cancellation confirmed. Completed {X} iterations."
+   - Example: Dummy adapter shows "Completed {X}/{Y} iterations"
+
+**Design Note**: This is a minimal interface with just four required methods (get_start_endpoint, get_start_payload, parse_start_response, display_results). Optional methods like adapt_progress and display_cancellation_results allow customization when needed. Most adapters will be <100 lines of simple, declarative code.
 
 #### Concrete Adapters
 
@@ -452,13 +465,18 @@ The executor integrates with `EnhancedCLIProgressDisplay` which already exists:
 **Cancellation Flow**:
 When cancellation is detected (Ctrl+C pressed):
 
-1. Immediately print: "🛑 Sending cancellation to server..."
-2. Send POST to `/operations/{operation_id}/cancel` with reason: "User cancelled"
-3. Wait for response with 5-second timeout
-4. If successful: print "✅ Cancellation sent successfully"
-5. If failed: print warning but don't block (best effort)
-6. Exit polling loop, return None (indicating cancellation)
-7. Executor returns False to command (operation did not complete)
+1. Immediately print: "⚠️  Operation cancelled by user"
+2. Call `_handle_cancellation()` to send DELETE request and wait for confirmation:
+   - Send DELETE to `/operations/{operation_id}`
+   - Print: "🔄 Waiting for backend to confirm cancellation..."
+   - Poll for confirmation (max 10 polls × 0.3s = 3 seconds)
+   - Check if status becomes "cancelled"
+   - Return final operation status with metadata
+3. Display cancellation results:
+   - Call adapter's optional `display_cancellation_results()` if implemented
+   - Otherwise show default message: "✓ Cancellation confirmed. Completed {X} iterations."
+4. Exit polling loop, cleanup resources
+5. Executor returns False to command (operation did not complete successfully)
 
 **Error Handling Hierarchy**:
 
