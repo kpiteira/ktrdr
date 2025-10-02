@@ -278,6 +278,11 @@ Each component has exactly one reason to change:
 - **VARIANT (Command/Adapter)**: Provides optional `progress_callback(operation_data: dict) -> str` to format domain-specific messages
 - **Default**: If no callback provided, shows generic "Status: {status} - {current_step}"
 - **Custom**: Callbacks can add domain details (e.g., "Epoch 5/10, Batch 120/500, GPU: 85%")
+- **Context Flow**: Rich progress metadata flows via `OperationProgress.context` field:
+  - Backend (TrainingProgressBridge) → emits context dict with domain-specific details
+  - Operations API → preserves context in OperationProgress model
+  - CLI (progress_callback) → extracts context to format rich display
+  - Example context: `{"current_epoch": 5, "total_epochs": 10, "current_batch": 120, "resource_usage": {"gpu_used": True, "gpu_utilization_percent": 85}}`
 
 **Error Handling Strategy**:
 - Connection errors: Retry with exponential backoff
@@ -861,6 +866,133 @@ Consider adding operation timing metrics, success/failure rate tracking, and pro
 ### Advanced Progress Display
 
 Future enhancements could include real-time logs, resource usage display, multi-step progress, and parallel operation tracking.
+
+---
+
+## Data Models
+
+### OperationProgress Model
+
+The `OperationProgress` model is the data structure that carries progress information from the backend through the operations API to the CLI. It includes both generic progress fields (used by all operations) and a flexible context field for domain-specific metadata.
+
+**Model Structure**:
+```python
+class OperationProgress(BaseModel):
+    # Generic progress fields (used by all operations)
+    percentage: float = Field(0.0, ge=0.0, le=100.0)
+    current_step: Optional[str] = None
+    steps_completed: int = Field(0, ge=0)
+    steps_total: int = Field(0, ge=0)
+    items_processed: int = Field(0, ge=0)
+    items_total: Optional[int] = None
+    current_item: Optional[str] = None
+
+    # Domain-specific progress metadata (flexible dict)
+    context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional progress context for domain-specific details"
+    )
+```
+
+**Context Field Purpose**:
+The `context` field enables rich progress display without coupling the generic operations API to specific domain knowledge. Different operations can include different context data:
+
+**Training Operation Context Example**:
+```python
+{
+    "current_epoch": 5,
+    "total_epochs": 10,
+    "current_batch": 120,
+    "total_batches_per_epoch": 500,
+    "batch_metrics": {
+        "loss": 0.234,
+        "accuracy": 0.876
+    },
+    "resource_usage": {
+        "gpu_used": True,
+        "gpu_name": "RTX 3090",
+        "gpu_utilization_percent": 85,
+        "memory_used_mb": 8192
+    }
+}
+```
+
+**Data Loading Operation Context Example**:
+```python
+{
+    "current_segment": 3,
+    "total_segments": 10,
+    "current_symbol": "AAPL",
+    "timeframe": "1h",
+    "bars_fetched": 12500,
+    "date_range": {
+        "start": "2024-01-01",
+        "end": "2024-03-01"
+    }
+}
+```
+
+**Context Flow Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Backend (TrainingProgressBridge)                       │
+│                                                          │
+│  def on_batch(epoch, batch, metrics):                   │
+│      context = {                                         │
+│          "current_epoch": epoch,                         │
+│          "current_batch": batch,                         │
+│          "resource_usage": gpu_info                      │
+│      }                                                   │
+│      emit_progress(percentage, message, context)        │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Operations Service (operations_service.py)             │
+│                                                          │
+│  async def update_progress(operation_id, progress):     │
+│      operation.progress = progress  # Preserves context │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Operations API (GET /operations/{id})                  │
+│                                                          │
+│  Returns OperationInfo with progress.context intact     │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  CLI Executor (operation_executor.py)                   │
+│                                                          │
+│  operation_data = poll_status(operation_id)             │
+│  if progress_callback:                                   │
+│      msg = progress_callback(operation_data)            │
+│  progress_bar.update(msg)                                │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Command Callback (async_model_commands.py)             │
+│                                                          │
+│  def format_training_progress(operation_data):          │
+│      context = operation_data["progress"]["context"]    │
+│      epoch = context.get("current_epoch")               │
+│      batch = context.get("current_batch")               │
+│      gpu = context.get("resource_usage", {})            │
+│      return f"Epoch {epoch}/10, Batch {batch}, GPU..."  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Benefits of Context Field**:
+1. **Flexibility**: Different operations can include different metadata
+2. **Extensibility**: New context fields can be added without API changes
+3. **Type Safety**: Context validated at the model level
+4. **Separation of Concerns**: Generic API doesn't need domain knowledge
+5. **Rich UX**: CLI can display detailed progress information
+
+**Migration Note**: The context field was added in Phase 4 (TASK-4.3) to address a regression where the unified operations pattern lost rich progress details that were previously displayed in the training command.
 
 ---
 

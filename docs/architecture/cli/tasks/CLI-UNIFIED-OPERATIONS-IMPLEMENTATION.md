@@ -454,6 +454,139 @@ git commit -m "test(cli): add integration tests for unified operations pattern"
 
 ---
 
+### TASK-4.3: Fix Rich Progress Context Regression
+
+**Objective**: Restore rich training progress details (epochs, batches, GPU info) in CLI display
+
+**Context**: The unified operations pattern successfully fixed cancellation, but introduced a regression where training progress now only shows basic percentage instead of detailed epoch/batch/GPU information that was previously available.
+
+**Root Cause**: The `OperationProgress` model doesn't have a `context` field to carry the rich metadata (epoch numbers, batch counts, GPU usage, etc.) that `TrainingProgressBridge` generates. The training command's `format_training_progress` callback expects `operation_data.get("progress", {}).get("context", {})` but this data is lost during the operations API flow.
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/api/models/operations.py` (MODIFY - add context field to OperationProgress)
+- `ktrdr/api/services/operations_service.py` (VERIFY - ensure context preserved)
+- `ktrdr/api/services/training/progress_bridge.py` (VERIFY - emits context correctly)
+- `tests/integration/cli/test_unified_operations.py` (ADD - test rich progress context)
+- `tests/integration/cli/test_epochs_configuration.py` (MODIFY - verify context flow)
+
+**Implementation Steps**:
+
+1. **Add context field to OperationProgress model**:
+   ```python
+   # ktrdr/api/models/operations.py
+   class OperationProgress(BaseModel):
+       # ... existing fields ...
+       context: dict[str, Any] = Field(
+           default_factory=dict,
+           description="Additional progress context (e.g., epochs, batches, GPU usage)"
+       )
+   ```
+
+2. **Verify TrainingProgressBridge emits context**:
+   - Check `on_epoch()`, `on_batch()`, `on_remote_snapshot()` methods
+   - Ensure `context` dict includes:
+     - `current_epoch`, `total_epochs`
+     - `current_batch`, `total_batches_per_epoch`
+     - `resource_usage` (GPU info)
+     - Any other training-specific metadata
+
+3. **Verify operations service preserves context**:
+   - Check `update_progress()` method
+   - Ensure context is not filtered out during progress updates
+   - Verify context flows through to GET `/operations/{id}` response
+
+4. **Test the full flow**:
+   - Training command → TrainingProgressBridge → Operations API → CLI display
+   - Verify `format_training_progress` callback receives context
+   - Verify CLI shows: "Status: running (Epoch: 5/10, Batch: 120/500) 🖥️ GPU: 85%"
+
+**Expected Progress Display**:
+
+Before (Current - Regression):
+```
+Training: 45% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 00:02:30
+```
+
+After (Fixed):
+```
+Training: 45% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 00:02:30
+Status: running (Epoch: 5/10, Batch: 120/500) 🖥️ RTX 3090: 85%
+```
+
+**Acceptance Criteria**:
+- [ ] `OperationProgress` has `context: dict[str, Any]` field
+- [ ] Training progress shows epoch numbers (e.g., "Epoch: 5/10")
+- [ ] Training progress shows batch numbers (e.g., "Batch: 120/500")
+- [ ] Training progress shows GPU info when available (e.g., "🖥️ RTX 3090: 85%")
+- [ ] Dummy operation still works (generic progress without context)
+- [ ] Integration test verifies context flows through correctly
+- [ ] No breaking changes to existing operations
+- [ ] All unit and integration tests pass
+- [ ] Quality checks pass
+
+**Testing Strategy**:
+
+1. **Unit Tests**:
+   - Test OperationProgress model with context field
+   - Test that context serializes/deserializes correctly
+
+2. **Integration Tests**:
+   - Add test to `test_unified_operations.py`:
+     ```python
+     def test_training_operation_rich_progress_context():
+         """Verify training progress includes rich context (epochs, batches, GPU)."""
+         # Mock training response with progress.context containing:
+         # - epoch_index, total_epochs
+         # - batch_number, batch_total_per_epoch
+         # - resource_usage with GPU info
+         # Verify format_training_progress callback receives this data
+     ```
+
+3. **Manual Testing**:
+   ```bash
+   # Start training and verify progress display shows:
+   ktrdr models train strategies/trend_momentum.yaml AAPL 1h \
+     --start-date 2024-01-01 --end-date 2024-03-01
+
+   # Expected output should include:
+   # Status: running (Epoch: 5/10, Batch: 120/500) 🖥️ GPU: 85%
+   ```
+
+**Rollback Plan**:
+If this introduces issues, the `context` field is optional (defaults to empty dict), so existing operations continue working. Simply revert the commit and investigate.
+
+**Documentation Updates**:
+- Update API models documentation to explain context field usage
+- Add example showing how adapters can use context for rich progress
+- Document best practices for progress context structure
+
+**Commit Message**:
+```
+fix(cli): restore rich training progress details (epochs/batches/GPU)
+
+Adds context field to OperationProgress model to preserve detailed training
+metadata (epoch numbers, batch counts, GPU usage) through the operations API.
+
+Before: Training progress showed only percentage
+After: Training progress shows "Epoch: 5/10, Batch: 120/500, GPU: 85%"
+
+Root Cause: Unified operations pattern lacked mechanism to carry rich progress
+metadata from TrainingProgressBridge through operations API to CLI display.
+
+Solution: Add optional context dict to OperationProgress for domain-specific
+progress details. Training progress bridge already emits this data; now it
+flows through to the CLI.
+
+Fixes: Progress context regression from unified operations migration
+Tests: Added integration tests for rich progress context flow
+```
+
+**Estimated Time**: 2-3 hours (implementation + testing)
+
+---
+
 ## Phase 5: Cleanup and Documentation
 
 ### TASK-5.1: Remove Debug Code
