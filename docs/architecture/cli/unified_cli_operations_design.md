@@ -241,28 +241,38 @@ Each component has exactly one reason to change:
 - How to poll for operation status at appropriate intervals
 - How to interpret operation status: running, completed, failed, cancelled
 - How to setup async signal handlers for graceful cancellation
-- How to integrate with Rich console for progress display
+- **How to create and manage Rich Progress bar (INVARIANT)**
+- How to update progress display during polling
+- How to display percentage completion and elapsed time
 
 **What It Doesn't Know**:
 - Anything about training, data loading, or any specific operation type
 - What parameters to send when starting operations
 - What endpoints to call (delegates to adapter)
 - How to interpret domain-specific results
+- **How to format domain-specific progress messages (VARIANT - delegates to callback)**
 - Business logic of any kind
 
 **Lifecycle**:
-1. Receives an adapter and display preferences
+1. Receives an adapter, console, optional progress formatter callback, and display preferences
 2. Creates and manages HTTP client (async context manager)
-3. Registers signal handler for Ctrl+C
-4. Asks adapter for start endpoint and payload
-5. Makes HTTP POST to start the operation
-6. Extracts operation_id from response (via adapter)
-7. Enters polling loop until completion or cancellation
-8. On each poll: fetches status, updates progress display
-9. On cancellation: sends cancel request, waits for acknowledgment
-10. On completion: asks adapter to display results
-11. Cleans up signal handler and HTTP client
-12. Returns success/failure to caller
+3. **Creates Rich Progress bar context (if show_progress=True)**
+4. Registers signal handler for Ctrl+C
+5. Asks adapter for start endpoint and payload
+6. Makes HTTP POST to start the operation
+7. Extracts operation_id from response (via adapter)
+8. Enters polling loop until completion or cancellation
+9. **On each poll: fetches status, formats message (via callback), updates progress bar**
+10. On cancellation: sends cancel request, waits for acknowledgment
+11. On completion: asks adapter to display results
+12. Cleans up signal handler, progress bar, and HTTP client
+13. Returns success/failure to caller
+
+**Progress Display Architecture (INVARIANT/VARIANT Separation)**:
+- **INVARIANT (Executor)**: Creates Rich Progress bar, manages lifecycle, updates percentage/elapsed time
+- **VARIANT (Command/Adapter)**: Provides optional `progress_callback(operation_data: dict) -> str` to format domain-specific messages
+- **Default**: If no callback provided, shows generic "Status: {status} - {current_step}"
+- **Custom**: Callbacks can add domain details (e.g., "Epoch 5/10, Batch 120/500, GPU: 85%")
 
 **Error Handling Strategy**:
 - Connection errors: Retry with exponential backoff

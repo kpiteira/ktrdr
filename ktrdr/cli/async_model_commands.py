@@ -11,13 +11,6 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
 from ktrdr.cli.operation_adapters import TrainingOperationAdapter
 from ktrdr.cli.operation_executor import AsyncOperationExecutor
@@ -256,17 +249,11 @@ async def _train_model_async_impl(
     # Create executor for unified async operation handling
     executor = AsyncOperationExecutor()
 
-    # Create progress callback for rich progress display
-    progress_instance = None
-    task_instance = None
-
-    def progress_callback(operation_data: dict) -> None:
-        """Update progress display with operation status."""
-        nonlocal progress_instance, task_instance
-
+    # Define training-specific progress message formatter
+    def format_training_progress(operation_data: dict) -> str:
+        """Format progress message with training-specific details."""
         status = operation_data.get("status", "unknown")
         progress_info = operation_data.get("progress", {})
-        progress_pct = progress_info.get("percentage", 0)
         progress_context = progress_info.get("context", {})
 
         # Extract epoch information
@@ -294,30 +281,15 @@ async def _train_model_async_impl(
             if gpu_util is not None:
                 status_msg += f" 🖥️ {gpu_name}: {gpu_util:.0f}%"
 
-        if task_instance is not None:
-            progress_instance.update(
-                task_instance, completed=progress_pct, description=status_msg
-            )
+        return status_msg
 
-    # Execute the operation with progress display
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
+    # Execute operation - executor handles progress bar
+    success = await executor.execute_operation(
+        adapter=adapter,
         console=console,
-    ) as progress:
-        progress_instance = progress
-        task_instance = progress.add_task("Training model...", total=100)
-
-        # Execute operation via unified executor
-        success = await executor.execute_operation(
-            adapter=adapter,
-            console=console,
-            progress_callback=progress_callback,
-            show_progress=True,
-        )
+        progress_callback=format_training_progress,
+        show_progress=True,
+    )
 
     # Exit with appropriate code
     sys.exit(0 if success else 1)

@@ -154,7 +154,7 @@ class AsyncOperationExecutor:
         operation_id: str,
         http_client: httpx.AsyncClient,
         progress: Optional[Progress] = None,
-        task_id: Optional[any] = None,
+        task_id: Optional[Any] = None,
         progress_callback: Optional[Callable[[dict[str, Any]], str]] = None,
     ) -> dict[str, Any]:
         """
@@ -208,7 +208,9 @@ class AsyncOperationExecutor:
                         progress_msg = f"Status: {status} - {current_step}"
 
                     # Update progress bar
-                    progress.update(task_id, completed=progress_pct, description=progress_msg)
+                    progress.update(
+                        task_id, completed=progress_pct, description=progress_msg
+                    )
 
                 # Check for terminal states
                 if status in ("completed", "failed", "cancelled"):
@@ -329,7 +331,11 @@ class AsyncOperationExecutor:
                     ) as progress:
                         task_id = progress.add_task("Starting operation...", total=100)
                         final_status = await self._poll_until_complete(
-                            operation_id, http_client, progress, task_id, progress_callback
+                            operation_id,
+                            http_client,
+                            progress,
+                            task_id,
+                            progress_callback,
                         )
                 else:
                     # Poll without progress display

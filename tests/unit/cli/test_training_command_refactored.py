@@ -247,8 +247,25 @@ epochs: 10
                 assert "progress_callback" in call_args[1]
                 assert "show_progress" in call_args[1]
 
-                # Progress callback should be callable
+                # Progress callback should be callable and return a string
                 assert callable(call_args[1]["progress_callback"])
+
+                # Test callback returns formatted string
+                test_operation_data = {
+                    "status": "running",
+                    "progress": {
+                        "percentage": 50,
+                        "context": {
+                            "current_epoch": 5,
+                            "current_batch": 100,
+                            "total_batches_per_epoch": 200,
+                        },
+                    },
+                    "metadata": {"parameters": {"epochs": 10}},
+                }
+                result = call_args[1]["progress_callback"](test_operation_data)
+                assert isinstance(result, str)
+                assert "Epoch: 5/10" in result
 
     @pytest.mark.asyncio
     async def test_training_command_validates_strategy_file_exists(

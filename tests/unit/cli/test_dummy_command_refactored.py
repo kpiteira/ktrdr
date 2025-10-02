@@ -110,8 +110,21 @@ class TestDummyCommandRefactored:
                 assert "progress_callback" in call_args[1]
                 assert "show_progress" in call_args[1]
 
-                # Progress callback should be callable when show_progress=True
+                # Progress callback should be callable and return a string
                 assert callable(call_args[1]["progress_callback"])
+
+                # Test callback returns formatted string
+                test_operation_data = {
+                    "status": "running",
+                    "progress": {
+                        "percentage": 30,
+                        "current_step": "Working hard on iteration 15!",
+                    },
+                }
+                result = call_args[1]["progress_callback"](test_operation_data)
+                assert isinstance(result, str)
+                assert "running" in result
+                assert "iteration 15" in result
 
     @pytest.mark.asyncio
     async def test_dummy_command_handles_api_connection_failure(self):

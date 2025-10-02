@@ -4,8 +4,9 @@ Unit tests for TrainingOperationAdapter.
 Tests the training-specific logic for the unified operations pattern.
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from rich.console import Console
 
 from ktrdr.cli.operation_adapters import TrainingOperationAdapter
@@ -55,7 +56,7 @@ class TestTrainingOperationAdapter:
             timeframes=["1h"],
         )
 
-        assert adapter.get_start_endpoint() == "/api/v1/trainings/start"
+        assert adapter.get_start_endpoint() == "/trainings/start"
 
     def test_get_start_payload_with_all_fields(self):
         """Test payload construction with all fields."""

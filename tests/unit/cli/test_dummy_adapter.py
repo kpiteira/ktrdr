@@ -5,8 +5,9 @@ Tests the dummy operation adapter - a simple reference implementation
 used for testing and as an example for developers.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from rich.console import Console
 
 from ktrdr.cli.operation_adapters import DummyOperationAdapter
@@ -30,10 +31,10 @@ class TestDummyOperationAdapter:
         assert adapter.iterations == 150
 
     def test_get_start_endpoint(self):
-        """Test that correct endpoint is returned."""
+        """Test that correct endpoint is returned (without /api/v1 prefix)."""
         adapter = DummyOperationAdapter()
 
-        assert adapter.get_start_endpoint() == "/api/v1/dummy/start"
+        assert adapter.get_start_endpoint() == "/dummy/start"
 
     def test_get_start_payload(self):
         """Test payload construction - should be empty for dummy."""
