@@ -210,7 +210,9 @@ class TrainingOperationAdapter(OperationAdapter):
         and displays them in a formatted table.
         """
         operation_id = final_status.get("operation_id")
-        console.print("\n✅ [green bold]Training completed successfully![/green bold]\n")
+        console.print(
+            "\n✅ [green bold]Training completed successfully![/green bold]\n"
+        )
 
         # Fetch detailed performance metrics
         try:
@@ -222,9 +224,7 @@ class TrainingOperationAdapter(OperationAdapter):
             perf_data = response.json()
 
             if not perf_data.get("success"):
-                console.print(
-                    "[yellow]⚠️  Could not fetch training metrics[/yellow]"
-                )
+                console.print("[yellow]⚠️  Could not fetch training metrics[/yellow]")
                 return
 
             # Display training metrics in a nice table
