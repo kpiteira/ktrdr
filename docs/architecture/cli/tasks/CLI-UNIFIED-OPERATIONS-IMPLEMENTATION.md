@@ -1,0 +1,755 @@
+# CLI Unified Operations Pattern - Implementation Plan
+
+**Parent Design**: [Unified CLI Operations Design](../unified_cli_operations_design.md)
+**Status**: Ready for Implementation
+**Version**: 2.0
+**Date**: 2025-09-30
+
+---
+
+## Overview
+
+This document breaks down the implementation of the unified CLI operations pattern into discrete, testable tasks following the adapter pattern approved in design document v2.0.
+
+**Key Architecture Components**:
+- `AsyncOperationExecutor`: Generic infrastructure (HTTP, polling, signals, progress)
+- `OperationAdapter`: Abstract interface defining the contract
+- Concrete adapters: Domain-specific knowledge for each operation type
+
+**Scope**: Training + Dummy commands (Data Loading deferred to future work)
+
+**Branching Strategy**:
+- **Feature Branch**: `feature/cli-unified-operations` (off `feature/training-service-orchestrator`)
+- **Merge Target**: `feature/training-service-orchestrator`
+- **After Merge**: Delete feature branch
+
+**Migration Philosophy**: Incremental, non-breaking changes with continuous testing
+
+---
+
+## Phase 1: Foundation (Additive Only)
+
+**Branch Setup**:
+```bash
+# Create feature branch off current branch
+git checkout -b feature/cli-unified-operations
+```
+
+### TASK-1.1: Create AsyncOperationExecutor
+
+**Objective**: Build the generic async operation executor with zero domain knowledge
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/operation_executor.py` (NEW)
+- `tests/unit/cli/test_operation_executor.py` (NEW)
+
+**What It Does**:
+- Manages HTTP client lifecycle (create, reuse, cleanup)
+- Sets up and tears down signal handlers for Ctrl+C
+- Polls operations API at `/api/v1/operations/{id}` until completion
+- Integrates with `EnhancedCLIProgressDisplay` for consistent progress bars
+- Handles cancellation via `/api/v1/operations/{id}/cancel`
+- Coordinates error handling and recovery
+- Delegates domain-specific decisions to adapter interface
+
+**What It Doesn't Know**:
+- Which endpoints to call to start operations (adapter provides)
+- What parameters to send (adapter provides)
+- How to interpret domain-specific results (adapter handles)
+- Any business logic about training, data loading, etc.
+
+**Key Methods**:
+```python
+class AsyncOperationExecutor:
+    async def execute_operation(
+        self,
+        adapter: OperationAdapter,
+        console: Console,
+        options: dict,
+    ) -> bool:
+        """Execute an async operation end-to-end."""
+
+    async def _poll_until_complete(
+        self,
+        operation_id: str,
+    ) -> dict | None:
+        """Poll operation status until terminal state."""
+
+    async def _handle_cancellation(
+        self,
+        operation_id: str,
+    ) -> None:
+        """Send cancellation request to backend."""
+```
+
+**Acceptance Criteria**:
+- [ ] Executor polls operations API at 300ms intervals
+- [ ] Signal handler registers/unregisters correctly for Ctrl+C
+- [ ] Cancellation detected and sent to backend within 300ms
+- [ ] Progress display integrates with `EnhancedCLIProgressDisplay`
+- [ ] HTTP errors handled with appropriate retry logic
+- [ ] Executor has zero domain-specific knowledge
+- [ ] All unit tests pass
+- [ ] Code coverage >80%
+
+**Testing Strategy**:
+- Mock adapter interface for unit tests
+- Mock HTTP client for network isolation
+- Test cancellation flow end-to-end
+- Test error recovery and retry logic
+- Test progress display integration
+
+---
+
+**Commit After**:
+```bash
+make test-unit  # Ensure all tests pass
+git add ktrdr/cli/operation_executor.py tests/unit/cli/test_operation_executor.py
+git commit -m "feat(cli): add AsyncOperationExecutor for unified async operations"
+```
+
+---
+
+### TASK-1.2: Create OperationAdapter Interface
+
+**Objective**: Define the contract between executor and domain logic
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/operation_adapters.py` (NEW - interface only)
+- `tests/unit/cli/test_operation_adapter_interface.py` (NEW)
+
+**Interface Definition**:
+```python
+from abc import ABC, abstractmethod
+from typing import Any
+from httpx import AsyncClient
+from rich.console import Console
+
+class OperationAdapter(ABC):
+    """
+    Abstract interface for operation-specific logic.
+
+    Separates generic async operation infrastructure from domain knowledge.
+    Adapters are lightweight translators (~50-100 lines each).
+    """
+
+    @abstractmethod
+    def get_start_endpoint(self) -> str:
+        """Return HTTP endpoint to start this operation."""
+
+    @abstractmethod
+    def get_start_payload(self) -> dict[str, Any]:
+        """Return JSON payload for start request."""
+
+    @abstractmethod
+    def parse_start_response(self, response: dict) -> str:
+        """Extract operation_id from start response."""
+
+    @abstractmethod
+    async def display_results(
+        self,
+        final_status: dict,
+        console: Console,
+        http_client: AsyncClient,
+    ) -> None:
+        """Display final results after operation completes."""
+```
+
+**Acceptance Criteria**:
+- [ ] Interface defined with 4 required methods
+- [ ] Clear docstrings explaining each method's purpose
+- [ ] Type hints for all parameters and returns
+- [ ] Example implementation in docstring
+- [ ] Unit tests verify interface contract
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/operation_adapters.py tests/unit/cli/test_operation_adapter_interface.py
+git commit -m "feat(cli): add OperationAdapter interface for domain-specific logic"
+```
+
+---
+
+## Phase 2: Create Concrete Adapters
+
+### TASK-2.1: TrainingOperationAdapter
+
+**Objective**: Implement adapter for training operations
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/operation_adapters.py` (MODIFY - add TrainingOperationAdapter)
+- `tests/unit/cli/test_training_adapter.py` (NEW)
+
+**What It Knows**:
+- Training API endpoint: `/api/v1/trainings/start`
+- Training request payload format (strategy_name, symbols, timeframes, etc.)
+- How to fetch detailed training metrics: `/api/v1/trainings/{id}/performance`
+- How to display training results (accuracy, precision, recall, F1, model size)
+
+**Constructor Parameters**:
+```python
+TrainingOperationAdapter(
+    strategy_name: str,
+    symbols: list[str],
+    timeframes: list[str],
+    start_date: str | None,
+    end_date: str | None,
+    validation_split: float,
+    detailed_analytics: bool,
+)
+```
+
+**Acceptance Criteria**:
+- [ ] Implements all 4 OperationAdapter methods
+- [ ] `get_start_endpoint()` returns correct training endpoint
+- [ ] `get_start_payload()` constructs valid training request
+- [ ] `parse_start_response()` extracts operation_id correctly
+- [ ] `display_results()` fetches and displays training metrics
+- [ ] Adapter is <100 lines of code
+- [ ] Unit tests cover all methods
+- [ ] Integration test verifies actual API contract
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/operation_adapters.py tests/unit/cli/test_training_adapter.py
+git commit -m "feat(cli): add TrainingOperationAdapter for training commands"
+```
+
+---
+
+### TASK-2.2: DummyOperationAdapter (Reference Implementation)
+
+**Objective**: Create simple reference adapter for testing and examples
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/operation_adapters.py` (MODIFY - add DummyOperationAdapter)
+- `tests/unit/cli/test_dummy_adapter.py` (NEW)
+
+**Purpose**:
+- Simplest possible adapter implementation
+- Reference for developers adding new operations
+- Used for testing executor without backend dependencies
+
+**Constructor Parameters**:
+```python
+DummyOperationAdapter(
+    duration: int,
+    iterations: int,
+)
+```
+
+**Acceptance Criteria**:
+- [ ] Implements all 4 OperationAdapter methods
+- [ ] <50 lines of code (simplest adapter)
+- [ ] Clear inline comments explaining each method
+- [ ] Unit tests pass
+- [ ] Can be used with executor for end-to-end testing
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/operation_adapters.py tests/unit/cli/test_dummy_adapter.py
+git commit -m "feat(cli): add DummyOperationAdapter for testing and reference"
+```
+
+---
+
+## Phase 3: Migrate Training Command
+
+### TASK-3.1: Refactor Training Command to Use Executor
+
+**Objective**: Rewrite `async_model_commands.py` to use new infrastructure
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/async_model_commands.py` (REWRITE)
+- `tests/integration/cli/test_training_command.py` (MODIFY)
+
+**Changes**:
+- Remove `AsyncCLIClient` usage
+- Remove custom signal handling code (~30 lines)
+- Remove custom polling loop code (~150 lines)
+- Remove custom progress display code (~50 lines)
+- Create `TrainingOperationAdapter` with parameters
+- Create `AsyncOperationExecutor`
+- Call `executor.execute_operation(adapter, console, options)`
+
+**Expected Code Reduction**:
+- Before: ~350 lines in training command
+- After: ~80 lines in training command
+- Reduction: ~77% less code
+
+**New Command Structure**:
+```python
+async def _train_model_async(
+    strategy_name: str,
+    symbols: list[str],
+    timeframes: list[str],
+    # ... other params
+):
+    # 1. Check API connection
+    # 2. Display operation header
+    # 3. Create adapter
+    adapter = TrainingOperationAdapter(
+        strategy_name=strategy_name,
+        symbols=symbols,
+        timeframes=timeframes,
+        # ...
+    )
+    # 4. Create executor
+    executor = AsyncOperationExecutor(base_url=API_URL)
+    # 5. Execute
+    success = await executor.execute_operation(adapter, console, options)
+    # 6. Exit with appropriate code
+    sys.exit(0 if success else 1)
+```
+
+**Acceptance Criteria**:
+- [ ] Training starts successfully
+- [ ] Progress displays correctly with smooth updates
+- [ ] **Cancellation works (Ctrl+C stops training)**
+- [ ] Final results display correctly
+- [ ] No regressions in functionality
+- [ ] Code reduced by >60%
+- [ ] All existing training tests pass
+- [ ] Integration tests verify end-to-end flow
+
+**Manual Testing**:
+```bash
+# Test training command
+ktrdr models train strategies/trend_momentum.yaml AAPL 1h \
+  --start-date 2024-01-01 --end-date 2024-03-01
+
+# Test cancellation
+# Start training, then press Ctrl+C after a few seconds
+# Verify: "Training cancellation sent successfully"
+# Verify: Backend training actually stops (check logs)
+```
+
+**Commit After**:
+```bash
+make test-unit
+make test-integration  # Verify training command
+git add ktrdr/cli/async_model_commands.py tests/
+git commit -m "refactor(cli): migrate training command to unified operations pattern
+
+Fixes training cancellation bug. Training command now uses AsyncOperationExecutor
+with TrainingOperationAdapter for consistent, maintainable async operation handling.
+
+Before: Custom polling/signal handling, broken cancellation
+After: Unified pattern, working cancellation, 60% less code"
+```
+
+---
+
+### TASK-3.2: Refactor Dummy Command to Use Executor
+
+**Objective**: Migrate dummy command to prove pattern works for multiple operations
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/dummy_commands.py` (REWRITE)
+- `tests/integration/cli/test_dummy_command.py` (MODIFY)
+
+**Changes**:
+- Replace custom polling/cancellation code
+- Use `AsyncOperationExecutor` with `DummyOperationAdapter`
+- Maintain identical user experience
+
+**Expected Code Reduction**:
+- Before: ~200 lines
+- After: ~50 lines
+- Reduction: ~75% less code
+
+**Acceptance Criteria**:
+- [ ] Dummy command works identically to before
+- [ ] Progress displays correctly
+- [ ] Cancellation works
+- [ ] All tests pass
+- [ ] Code reduced by >70%
+
+**Manual Testing**:
+```bash
+# Test dummy command
+ktrdr dummy start --duration 10 --iterations 100
+
+# Test cancellation
+# Start dummy, press Ctrl+C after a few iterations
+# Verify cancellation works
+```
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/dummy_commands.py tests/
+git commit -m "refactor(cli): migrate dummy command to unified operations pattern"
+```
+
+---
+
+## Phase 4: Verification and Testing
+
+### TASK-4.1: End-to-End Integration Tests
+
+**Objective**: Verify the complete flow works end-to-end
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `tests/integration/cli/test_unified_operations.py` (NEW)
+
+**Test Scenarios**:
+- [ ] Training command starts and completes successfully
+- [ ] Training command cancels correctly when Ctrl+C pressed
+- [ ] Training command handles backend failures gracefully
+- [ ] Progress updates are accurate and responsive (<500ms lag)
+- [ ] Final results display correctly with all metrics
+- [ ] Dummy command works end-to-end
+- [ ] Dummy command cancellation works
+
+**Commit After**:
+```bash
+make test-integration
+git add tests/integration/cli/test_unified_operations.py
+git commit -m "test(cli): add integration tests for unified operations pattern"
+```
+
+---
+
+### TASK-4.2: Verify Epochs Configuration (Separate Issue)
+
+**Objective**: Verify epochs from strategy YAML pass through correctly
+
+**Note**: This was already fixed in commit `34026e9` but needs verification
+
+**Files**:
+- `ktrdr/training/training_adapter.py` (VERIFY)
+- `ktrdr/api/services/training/host_session.py` (VERIFY)
+- `training-host-service/services/training_service.py` (VERIFY)
+
+**Verification Steps**:
+1. Start training with strategy containing `epochs: 10`
+2. Check main API logs for "Sending training_configuration to host"
+3. Verify `training_configuration` contains `"epochs": 10`
+4. Check host service logs for "Received training_configuration"
+5. Verify progress updates correctly (10% → 20% → ... → 100%)
+
+**Acceptance Criteria**:
+- [ ] Main API sends epochs in training_configuration
+- [ ] Host service receives and uses epochs value
+- [ ] Progress percentage matches actual training progress
+- [ ] No defaulting to 100 epochs when strategy has different value
+
+---
+
+## Phase 5: Cleanup and Documentation
+
+### TASK-5.1: Remove Debug Code
+
+**Objective**: Clean up debug logging added during investigation
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/training/training_adapter.py` (remove debug logs)
+- `training-host-service/services/training_service.py` (remove debug logs)
+- `training-host-service/endpoints/training.py` (remove debug logs)
+
+**Acceptance Criteria**:
+- [ ] All `logger.info("DEBUG: ...")` removed
+- [ ] No temporary/exploratory code in production files
+- [ ] Code quality checks pass
+
+**Commit After**:
+```bash
+make quality
+git add ktrdr/ training-host-service/
+git commit -m "chore(cli): remove debug logging from CLI refactoring investigation"
+```
+
+---
+
+### TASK-5.2: Update Documentation
+
+**Objective**: Document the new pattern for future developers
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `docs/cli/adding-new-operations.md` (NEW)
+- `docs/cli/README.md` (MODIFY)
+
+**Content**:
+- How to add a new async operation (step-by-step guide)
+- Adapter pattern explanation with examples
+- When to use executor vs. direct API calls
+- Testing strategy for new operations
+
+**Acceptance Criteria**:
+- [ ] Step-by-step guide for adding new operations
+- [ ] Example adapter with annotations
+- [ ] Clear explanation of executor responsibilities
+- [ ] Migration guide for existing commands (optional)
+
+**Commit After**:
+```bash
+git add docs/cli/
+git commit -m "docs(cli): add developer guide for unified operations pattern"
+```
+
+---
+
+### TASK-5.3: Create Pull Request
+
+**Objective**: Merge feature branch into parent branch
+
+**Branch**: `feature/cli-unified-operations` → `feature/training-service-orchestrator`
+
+**Pre-PR Checklist**:
+- [ ] All unit tests pass: `make test-unit`
+- [ ] All integration tests pass: `make test-integration`
+- [ ] Code quality checks pass: `make quality`
+- [ ] Manual testing completed for training and dummy commands
+- [ ] All commits have clear messages
+- [ ] No debug code or TODOs in production files
+
+**Create PR**:
+```bash
+gh pr create \
+  --base feature/training-service-orchestrator \
+  --head feature/cli-unified-operations \
+  --title "refactor(cli): implement unified async operations pattern with adapter architecture" \
+  --body "$(cat <<'EOF'
+## Summary
+Implements unified async operations pattern for CLI commands using adapter architecture.
+
+## Changes
+- Created `AsyncOperationExecutor` for generic async operation handling
+- Created `OperationAdapter` interface for domain-specific logic
+- Implemented `TrainingOperationAdapter` and `DummyOperationAdapter`
+- Migrated training command to use new pattern (fixes cancellation bug)
+- Migrated dummy command to use new pattern
+
+## Fixes
+- ✅ Training cancellation now works correctly (Ctrl+C)
+- ✅ Consistent progress display across operations
+- ✅ Reduced code duplication by >60%
+
+## Testing
+- [x] All unit tests pass
+- [x] All integration tests pass
+- [x] Manual testing: training start/complete/cancel
+- [x] Manual testing: dummy command
+- [x] Code quality checks pass
+
+## Migration Notes
+- Data loading command NOT migrated (deferred to future work)
+- Old `AsyncCLIClient` retained for compatibility
+- No breaking changes to user experience
+
+## Code Metrics
+- Training command: 350 → 80 lines (77% reduction)
+- Dummy command: 200 → 50 lines (75% reduction)
+- New infrastructure: 400 lines (executor + adapters + tests)
+- Net reduction: ~220 lines with better architecture
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+```
+
+**After Merge**:
+```bash
+# Switch back to parent branch
+git checkout feature/training-service-orchestrator
+
+# Pull merged changes
+git pull origin feature/training-service-orchestrator
+
+# Delete feature branch
+git branch -d feature/cli-unified-operations
+gh api repos/:owner/:repo/git/refs/heads/feature/cli-unified-operations -X DELETE
+```
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+**Coverage Target**: >80% for all new code
+
+**Key Test Files**:
+- `test_operation_executor.py`: Executor logic isolation
+- `test_operation_adapters.py`: Each adapter in isolation
+- `test_training_command.py`: Command integration
+
+**Mock Strategy**:
+- Mock HTTP client for network isolation
+- Mock adapter interface for executor tests
+- Mock operations API responses
+
+### Integration Tests
+
+**Test Files**:
+- `test_unified_operations.py`: Full workflow with real API
+
+**Scenarios**:
+- Successful completion flow
+- Cancellation flow
+- Error handling flow
+- Progress accuracy
+
+### Manual Testing Checklist
+
+**Before Committing**:
+- [ ] `ktrdr models train` starts and completes
+- [ ] Progress bar updates smoothly (< 500ms lag)
+- [ ] Ctrl+C cancels training immediately
+- [ ] Backend training actually stops (check logs)
+- [ ] Final results display all metrics correctly
+- [ ] Error messages are helpful and actionable
+- [ ] `--quiet` mode suppresses progress
+- [ ] `--verbose` mode shows detailed logs
+
+---
+
+## Success Metrics
+
+### Code Quality
+- **Code Reduction**: >60% reduction in command implementation
+- **Code Duplication**: <10% similarity between operations
+- **Test Coverage**: >80% for executor and adapters
+
+### Functionality
+- **Cancellation Success Rate**: 100% (main fix)
+- **Progress Accuracy**: Within ±2% of actual training progress
+- **Response Time**: Progress updates < 500ms lag
+
+### User Experience
+- **Consistent UX**: Same progress display across all operations
+- **Error Clarity**: Actionable error messages
+- **Responsiveness**: Immediate feedback on user actions
+
+---
+
+## Migration Timeline
+
+### Estimated Effort
+
+**Phase 1: Foundation** (4-5 hours)
+- TASK-1.1: AsyncOperationExecutor - 2-3 hours
+- TASK-1.2: OperationAdapter Interface - 1 hour
+- Testing - 1 hour
+
+**Phase 2: Adapters** (3-4 hours)
+- TASK-2.1: TrainingOperationAdapter - 2 hours
+- TASK-2.2: DummyOperationAdapter - 1 hour
+- Testing - 1 hour
+
+**Phase 3: Migration** (5-6 hours)
+- TASK-3.1: Refactor training command - 2-3 hours
+- TASK-3.2: Refactor dummy command - 1-2 hours
+- Testing - 2 hours
+
+**Phase 4: Verification** (2-3 hours)
+- TASK-4.1: Integration tests - 1-2 hours
+- TASK-4.2: Verify epochs config - 1 hour
+
+**Phase 5: Cleanup** (3 hours)
+- TASK-5.1: Remove debug code - 30 minutes
+- TASK-5.2: Documentation - 1.5 hours
+- TASK-5.3: Create PR and merge - 1 hour
+
+**Total**: ~17-21 hours for complete migration
+
+**Scope**: Training + Dummy commands (Data Loading deferred)
+
+---
+
+## Risk Mitigation
+
+### Risk: Breaking Existing Functionality
+
+**Mitigation**:
+- Incremental migration (one command at a time)
+- Comprehensive test coverage before migration
+- Keep backup of old implementation
+- Easy rollback plan
+- Gradual rollout
+
+### Risk: Adapter Interface Too Rigid
+
+**Mitigation**:
+- Keep interface minimal (4 methods)
+- Allow optional methods for customization
+- Design review before implementation
+- Test with multiple adapters before finalizing
+
+### Risk: Performance Degradation
+
+**Mitigation**:
+- Profile before and after migration
+- Use same HTTP client and polling intervals
+- Monitor progress update latency
+- Load testing with concurrent operations
+
+---
+
+## Rollback Plan
+
+If critical issues are discovered:
+
+1. **Immediate**: Revert to backed-up version
+2. **Investigation**: Identify root cause in isolated environment
+3. **Fix Forward**: Apply minimal patch to executor/adapter
+4. **Re-migrate**: Once fix is verified with tests
+
+**Backup Strategy**: Create `async_model_commands.py.backup` before modification
+
+---
+
+## Open Questions
+
+1. ✅ **Should we migrate data/dummy commands too?**
+   - **Decision**: Optional future work, not required for training fix
+
+2. ✅ **What to do with AsyncCLIClient?**
+   - **Decision**: Keep for now, add cancel_operation() method as safety net
+
+3. ✅ **Should progress adapter be mandatory or optional?**
+   - **Decision**: Optional with sensible default
+
+4. ⏳ **Should we deprecate old async patterns?**
+   - **Decision**: Pending - evaluate after migration complete
+
+---
+
+## Next Steps
+
+1. Review and approve this implementation plan
+2. Decide on approach:
+   - **Option A**: Full refactoring (14-18 hours)
+   - **Option B**: Minimal patch only (45 minutes)
+   - **Option C**: Minimal patch now + full refactoring later
+3. Begin implementation based on decision
+
+---
+
+**Document Version**: 2.0
+**Status**: Ready for Implementation
+**Changes from v1.0**: Aligned with approved design document v2.0 using adapter pattern instead of growing KtrdrApiClient
