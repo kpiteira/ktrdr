@@ -132,11 +132,12 @@ class TestDummyCommandRefactored:
         from ktrdr.cli.dummy_commands import _run_dummy_async
 
         with patch("ktrdr.cli.dummy_commands.check_api_connection", return_value=False):
-            with patch("ktrdr.cli.dummy_commands.sys.exit") as mock_exit:
+            # sys.exit should raise SystemExit to stop execution
+            with pytest.raises(SystemExit) as exc_info:
                 await _run_dummy_async(verbose=False, quiet=True, show_progress=False)
 
-                # Should exit with code 1
-                mock_exit.assert_called_once_with(1)
+            # Should exit with code 1
+            assert exc_info.value.code == 1
 
     @pytest.mark.asyncio
     async def test_dummy_command_quiet_mode_suppresses_output(self, mock_executor):
