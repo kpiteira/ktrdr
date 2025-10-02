@@ -203,6 +203,13 @@ async def _train_model_async_impl(
     detailed_analytics: bool,
 ) -> None:
     """Async implementation of train model command using unified executor pattern."""
+    # Reduce HTTP logging noise unless verbose mode
+    if not verbose:
+        import logging
+
+        httpx_logger = logging.getLogger("httpx")
+        httpx_logger.setLevel(logging.WARNING)
+
     if verbose:
         symbols_str = ", ".join(symbols)
         timeframes_str = ", ".join(timeframes)
