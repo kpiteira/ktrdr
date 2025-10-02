@@ -10,13 +10,6 @@ import sys
 
 import typer
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
 from ktrdr.cli.api_client import check_api_connection
 from ktrdr.cli.error_handler import (
@@ -101,57 +94,23 @@ async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
         # Create executor for unified async operation handling
         executor = AsyncOperationExecutor()
 
-        # Create progress callback for rich progress display
-        progress_instance = None
-        task_instance = None
-
-        def progress_callback(operation_data: dict) -> None:
-            """Update progress display with operation status."""
-            nonlocal progress_instance, task_instance
-
+        # Optional: Define custom progress message formatter
+        def format_progress(operation_data: dict) -> str:
+            """Format progress message for dummy operation."""
             status = operation_data.get("status", "unknown")
             progress_info = operation_data.get("progress", {})
-            progress_pct = progress_info.get("percentage", 0)
             current_step = progress_info.get("current_step", "Working...")
+            return f"Status: {status} - {current_step}"
 
-            # Build status message
-            status_msg = f"Status: {status} - {current_step}"
+        # Execute operation - executor handles progress bar
+        success = await executor.execute_operation(
+            adapter=adapter,
+            console=console,
+            progress_callback=format_progress if show_progress else None,
+            show_progress=show_progress and not quiet,
+        )
 
-            if task_instance is not None:
-                progress_instance.update(
-                    task_instance, completed=progress_pct, description=status_msg
-                )
-
-        # Execute the operation with progress display
-        if show_progress and not quiet:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-                console=console,
-            ) as progress:
-                progress_instance = progress
-                task_instance = progress.add_task("Running dummy task...", total=100)
-
-                # Execute operation via unified executor
-                success = await executor.execute_operation(
-                    adapter=adapter,
-                    console=console,
-                    progress_callback=progress_callback,
-                    show_progress=True,
-                )
-        else:
-            # Execute without progress display
-            success = await executor.execute_operation(
-                adapter=adapter,
-                console=console,
-                progress_callback=None,
-                show_progress=False,
-            )
-
-        # Executor handles exit codes, so we just return
+        # Handle unsuccessful completion
         if not success and not quiet:
             console.print(
                 "[yellow]⚠️  Dummy task did not complete successfully[/yellow]"

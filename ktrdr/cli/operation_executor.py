@@ -18,6 +18,13 @@ from typing import Any, Callable, Optional
 
 import httpx
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from ktrdr.cli.operation_adapters import OperationAdapter
 from ktrdr.config.host_services import get_api_base_url
@@ -75,7 +82,7 @@ class AsyncOperationExecutor:
         """
         if not self.cancelled:
             self.cancelled = True
-            logger.info("Cancellation requested by user (Ctrl+C)")
+            logger.debug("Cancellation requested by user (Ctrl+C)")
 
     def _setup_signal_handler(self) -> None:
         """
@@ -139,14 +146,16 @@ class AsyncOperationExecutor:
         response_data = response.json()
         operation_id = adapter.parse_start_response(response_data)
 
-        logger.info(f"Operation started: {operation_id}")
+        logger.debug(f"Operation started: {operation_id}")
         return operation_id
 
     async def _poll_until_complete(
         self,
         operation_id: str,
         http_client: httpx.AsyncClient,
-        progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
+        progress: Optional[Progress] = None,
+        task_id: Optional[any] = None,
+        progress_callback: Optional[Callable[[dict[str, Any]], str]] = None,
     ) -> dict[str, Any]:
         """
         Poll operation status until it reaches a terminal state.
@@ -154,7 +163,9 @@ class AsyncOperationExecutor:
         Args:
             operation_id: Operation ID to poll
             http_client: Async HTTP client
-            progress_callback: Optional callback for progress updates
+            progress: Optional Rich Progress instance for display
+            task_id: Optional task ID for updating progress
+            progress_callback: Optional callback to format progress messages
 
         Returns:
             Final operation status dictionary
@@ -182,13 +193,26 @@ class AsyncOperationExecutor:
 
                 logger.debug(f"Operation {operation_id} status: {status}")
 
-                # Call progress callback if provided
-                if progress_callback:
-                    progress_callback(operation_data)
+                # Update progress display if enabled
+                if progress and task_id is not None:
+                    # Get progress percentage
+                    progress_info = operation_data.get("progress", {})
+                    progress_pct = progress_info.get("percentage", 0)
+
+                    # Format progress message (use callback if provided)
+                    if progress_callback:
+                        progress_msg = progress_callback(operation_data)
+                    else:
+                        # Default format
+                        current_step = progress_info.get("current_step", "Working...")
+                        progress_msg = f"Status: {status} - {current_step}"
+
+                    # Update progress bar
+                    progress.update(task_id, completed=progress_pct, description=progress_msg)
 
                 # Check for terminal states
                 if status in ("completed", "failed", "cancelled"):
-                    logger.info(
+                    logger.debug(
                         f"Operation {operation_id} reached terminal state: {status}"
                     )
                     return operation_data
@@ -202,7 +226,7 @@ class AsyncOperationExecutor:
                 continue
 
         # If we get here, operation was cancelled
-        logger.info("Polling loop exited due to cancellation")
+        logger.debug("Polling loop exited due to cancellation")
         return {"status": "cancelled", "operation_id": operation_id}
 
     async def _handle_cancellation(
@@ -221,7 +245,7 @@ class AsyncOperationExecutor:
             http_client: Async HTTP client
         """
         url = f"{self.base_url}/operations/{operation_id}"
-        logger.info(f"Sending cancellation request for operation {operation_id}")
+        logger.debug(f"Sending cancellation request for operation {operation_id}")
 
         try:
             response = await http_client.delete(
@@ -230,10 +254,10 @@ class AsyncOperationExecutor:
             )
 
             if response.status_code == 200:
-                logger.info("Cancellation request sent successfully")
+                logger.debug("Cancellation request sent successfully")
             elif response.status_code == 400:
                 # Operation may already be finished - that's okay
-                logger.info("Operation already finished (cancel not needed)")
+                logger.debug("Operation already finished (cancel not needed)")
             else:
                 logger.warning(f"Cancel request returned status {response.status_code}")
 
@@ -244,7 +268,7 @@ class AsyncOperationExecutor:
         self,
         adapter: OperationAdapter,
         console: Console,
-        progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
+        progress_callback: Optional[Callable[[dict[str, Any]], str]] = None,
         show_progress: bool = True,
     ) -> bool:
         """
@@ -252,17 +276,18 @@ class AsyncOperationExecutor:
 
         This is the main entry point for executing operations. It:
         1. Sets up signal handlers for Ctrl+C
-        2. Creates HTTP client
+        2. Creates HTTP client and Rich progress bar (if show_progress=True)
         3. Starts the operation via adapter
-        4. Polls until completion or cancellation
+        4. Polls until completion or cancellation, updating progress
         5. Displays results via adapter
         6. Cleans up resources
 
         Args:
             adapter: Operation adapter providing domain-specific logic
             console: Rich console for output
-            progress_callback: Optional callback for progress updates
-            show_progress: Whether to show progress updates
+            progress_callback: Optional callback that formats progress messages.
+                             Takes operation_data dict, returns formatted string for display.
+            show_progress: Whether to show progress bar
 
         Returns:
             True if operation completed successfully, False otherwise
@@ -291,10 +316,26 @@ class AsyncOperationExecutor:
                     )
                     return False
 
-                # Poll until complete
-                final_status = await self._poll_until_complete(
-                    operation_id, http_client, progress_callback
-                )
+                # Poll until complete (with or without progress display)
+                if show_progress:
+                    # Create Rich progress bar and poll with updates
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                        TimeElapsedColumn(),
+                        console=console,
+                    ) as progress:
+                        task_id = progress.add_task("Starting operation...", total=100)
+                        final_status = await self._poll_until_complete(
+                            operation_id, http_client, progress, task_id, progress_callback
+                        )
+                else:
+                    # Poll without progress display
+                    final_status = await self._poll_until_complete(
+                        operation_id, http_client, None, None, None
+                    )
 
                 # Handle cancellation
                 if self.cancelled or final_status.get("status") == "cancelled":
