@@ -994,6 +994,62 @@ The `context` field enables rich progress display without coupling the generic o
 
 **Migration Note**: The context field was added in Phase 4 (TASK-4.3) to address a regression where the unified operations pattern lost rich progress details that were previously displayed in the training command.
 
+### TrainingProgressRenderer
+
+The system uses the `ProgressRenderer` pattern to format domain-specific progress messages. Training operations use `TrainingProgressRenderer`, which follows the same pattern as `DataProgressRenderer`.
+
+**Architecture**:
+
+```python
+# TrainingProgressBridge populates GenericProgressState.context
+state.context = {
+    "epoch_index": 5,
+    "total_epochs": 10,
+    "batch_number": 120,
+    "batch_total_per_epoch": 500,
+    "resource_usage": {
+        "gpu_used": True,
+        "gpu_name": "RTX 3090",
+        "gpu_utilization_percent": 85
+    }
+}
+
+# TrainingProgressRenderer formats the message
+class TrainingProgressRenderer(ProgressRenderer):
+    def render_message(self, state: GenericProgressState) -> str:
+        # Extract structured data from state.context
+        epoch = state.context.get("epoch_index", 0)
+        total_epochs = state.context.get("total_epochs", 0)
+        batch = state.context.get("batch_number", 0)
+
+        # Format rich message
+        msg = f"Epoch {epoch}/{total_epochs} · Batch {batch}/..."
+
+        # Add GPU info if available
+        if state.context.get("resource_usage", {}).get("gpu_used"):
+            gpu_util = state.context["resource_usage"]["gpu_utilization_percent"]
+            msg += f" 🖥️ GPU: {gpu_util:.0f}%"
+
+        return msg
+```
+
+**Flow**:
+
+1. `TrainingService` creates `GenericProgressManager` with `TrainingProgressRenderer`
+2. `TrainingProgressBridge._emit()` updates `state.context` with rich data
+3. `GenericProgressManager._trigger_callback()` calls `renderer.render_message(state)`
+4. Rendered message flows to `OperationProgress.current_step`
+5. Context dict flows to `OperationProgress.context`
+6. CLI receives both formatted message and structured context
+
+**Benefits**:
+
+- Follows proven `DataProgressRenderer` pattern
+- Separates formatting logic from bridge emission logic
+- Context remains structured for CLI to further customize display
+- Renderer can be tested independently
+- New training metrics can be added by updating renderer
+
 ---
 
 ## Appendix: File Organization

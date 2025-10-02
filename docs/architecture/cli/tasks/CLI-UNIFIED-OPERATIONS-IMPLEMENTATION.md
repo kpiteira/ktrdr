@@ -458,49 +458,83 @@ git commit -m "test(cli): add integration tests for unified operations pattern"
 
 **Objective**: Restore rich training progress details (epochs, batches, GPU info) in CLI display
 
-**Context**: The unified operations pattern successfully fixed cancellation, but introduced a regression where training progress now only shows basic percentage instead of detailed epoch/batch/GPU information that was previously available.
+**Context**: The unified operations pattern successfully fixed cancellation, but introduced a regression where training progress now only shows basic "Status: running" instead of detailed epoch/batch/GPU information that was previously available.
 
-**Root Cause**: The `OperationProgress` model doesn't have a `context` field to carry the rich metadata (epoch numbers, batch counts, GPU usage, etc.) that `TrainingProgressBridge` generates. The training command's `format_training_progress` callback expects `operation_data.get("progress", {}).get("context", {})` but this data is lost during the operations API flow.
+**Root Cause Analysis**:
+
+- `TrainingProgressBridge` already creates rich context data (epoch_index, batch_number, resource_usage)
+- `current_step` field contains formatted string: "Epoch 1/100 · Batch 1/45 [1/100] (0.0%)"
+- However, `GenericProgressState.context` is NOT being rendered into a structured format for the CLI
+- The system has `ProgressRenderer` infrastructure (see `DataProgressRenderer`) but training doesn't use it
+
+**Correct Solution**: Create `TrainingProgressRenderer` following the proven `ProgressRenderer` pattern
 
 **Branch**: `feature/cli-unified-operations`
 
 **Files**:
-- `ktrdr/api/models/operations.py` (MODIFY - add context field to OperationProgress)
-- `ktrdr/api/services/operations_service.py` (VERIFY - ensure context preserved)
-- `ktrdr/api/services/training/progress_bridge.py` (VERIFY - emits context correctly)
-- `tests/integration/cli/test_unified_operations.py` (ADD - test rich progress context)
-- `tests/integration/cli/test_epochs_configuration.py` (MODIFY - verify context flow)
+
+- `ktrdr/api/services/training/training_progress_renderer.py` (NEW)
+- `ktrdr/api/services/training_service.py` (MODIFY - inject renderer into GenericProgressManager)
+- `ktrdr/api/models/operations.py` (MODIFY - add context field to OperationProgress) ✅ DONE
+- `ktrdr/api/services/training_service.py` (MODIFY - ensure context passed to OperationProgress)
+- `ktrdr/cli/async_model_commands.py` (CLEANUP - remove debug code)
+- `tests/unit/api/services/training/test_training_progress_renderer.py` (NEW)
+- `tests/integration/cli/test_unified_operations.py` (MODIFY - test rich progress context)
 
 **Implementation Steps**:
 
-1. **Add context field to OperationProgress model**:
+1. **Create TrainingProgressRenderer** (follows DataProgressRenderer pattern):
+
    ```python
-   # ktrdr/api/models/operations.py
-   class OperationProgress(BaseModel):
-       # ... existing fields ...
-       context: dict[str, Any] = Field(
-           default_factory=dict,
-           description="Additional progress context (e.g., epochs, batches, GPU usage)"
-       )
+   # ktrdr/api/services/training/training_progress_renderer.py
+   class TrainingProgressRenderer(ProgressRenderer):
+       """Renders rich training progress messages from context data."""
+
+       def render_message(self, state: GenericProgressState) -> str:
+           """Format training-specific progress with epochs, batches, GPU."""
+           # Extract from state.context (populated by TrainingProgressBridge)
+           epoch_index = state.context.get("epoch_index", 0)
+           total_epochs = state.context.get("total_epochs", 0)
+           batch_number = state.context.get("batch_number", 0)
+           batch_total = state.context.get("batch_total_per_epoch", 0)
+
+           # Build rich message
+           msg = state.message  # Base message from bridge
+           if epoch_index > 0 and total_epochs > 0:
+               msg = f"Epoch {epoch_index}/{total_epochs}"
+               if batch_number > 0:
+                   msg += f" · Batch {batch_number}/{batch_total}"
+
+           # Add GPU info if available
+           resource_usage = state.context.get("resource_usage", {})
+           if resource_usage.get("gpu_used"):
+               gpu_name = resource_usage.get("gpu_name", "GPU")
+               gpu_util = resource_usage.get("gpu_utilization_percent")
+               if gpu_util:
+                   msg += f" 🖥️ {gpu_name}: {gpu_util:.0f}%"
+
+           return msg
    ```
 
-2. **Verify TrainingProgressBridge emits context**:
-   - Check `on_epoch()`, `on_batch()`, `on_remote_snapshot()` methods
-   - Ensure `context` dict includes:
-     - `current_epoch`, `total_epochs`
-     - `current_batch`, `total_batches_per_epoch`
-     - `resource_usage` (GPU info)
-     - Any other training-specific metadata
+2. **Inject renderer when creating GenericProgressManager**:
 
-3. **Verify operations service preserves context**:
-   - Check `update_progress()` method
-   - Ensure context is not filtered out during progress updates
-   - Verify context flows through to GET `/operations/{id}` response
+   ```python
+   # ktrdr/api/services/training_service.py
+   from .training.training_progress_renderer import TrainingProgressRenderer
 
-4. **Test the full flow**:
-   - Training command → TrainingProgressBridge → Operations API → CLI display
-   - Verify `format_training_progress` callback receives context
-   - Verify CLI shows: "Status: running (Epoch: 5/10, Batch: 120/500) 🖥️ GPU: 85%"
+   # In _run_local_via_orchestrator() and _run_host_via_orchestrator():
+   renderer = TrainingProgressRenderer()
+   # Pass to GenericProgressManager constructor
+   ```
+
+3. **Ensure ServiceOrchestrator passes context to OperationProgress**:
+   - Verify that when converting GenericProgressState → OperationProgress
+   - The `state.context` dict is included in `OperationProgress.context`
+   - This ensures CLI receives structured data, not just formatted strings
+
+4. **Update CLI callback to use context** (already exists in format_training_progress):
+   - Extract from `progress_info.get("context", {})`
+   - Build rich status message for progress bar description
 
 **Expected Progress Display**:
 
@@ -516,33 +550,36 @@ Status: running (Epoch: 5/10, Batch: 120/500) 🖥️ RTX 3090: 85%
 ```
 
 **Acceptance Criteria**:
-- [ ] `OperationProgress` has `context: dict[str, Any]` field
+
+- [ ] `TrainingProgressRenderer` class created following `DataProgressRenderer` pattern
+- [ ] Renderer extracts epoch_index, total_epochs, batch_number from state.context
+- [ ] Renderer extracts GPU info from state.context.resource_usage
+- [ ] Renderer injected into GenericProgressManager for training operations
+- [ ] `OperationProgress` has `context: dict[str, Any]` field ✅ DONE
+- [ ] ServiceOrchestrator passes `state.context` to `OperationProgress.context`
 - [ ] Training progress shows epoch numbers (e.g., "Epoch: 5/10")
 - [ ] Training progress shows batch numbers (e.g., "Batch: 120/500")
 - [ ] Training progress shows GPU info when available (e.g., "🖥️ RTX 3090: 85%")
-- [ ] Dummy operation still works (generic progress without context)
-- [ ] Integration test verifies context flows through correctly
+- [ ] Dummy operation still works (generic progress without renderer)
+- [ ] Unit tests for TrainingProgressRenderer pass
+- [ ] Integration test verifies rich progress context flows correctly
 - [ ] No breaking changes to existing operations
 - [ ] All unit and integration tests pass
 - [ ] Quality checks pass
 
 **Testing Strategy**:
 
-1. **Unit Tests**:
-   - Test OperationProgress model with context field
-   - Test that context serializes/deserializes correctly
+1. **Unit Tests** (`test_training_progress_renderer.py`):
+   - Test renderer with epoch-only context
+   - Test renderer with epoch + batch context
+   - Test renderer with epoch + batch + GPU context
+   - Test renderer with empty context (graceful fallback)
+   - Test renderer extracts correct values from state.context
 
-2. **Integration Tests**:
-   - Add test to `test_unified_operations.py`:
-     ```python
-     def test_training_operation_rich_progress_context():
-         """Verify training progress includes rich context (epochs, batches, GPU)."""
-         # Mock training response with progress.context containing:
-         # - epoch_index, total_epochs
-         # - batch_number, batch_total_per_epoch
-         # - resource_usage with GPU info
-         # Verify format_training_progress callback receives this data
-     ```
+2. **Integration Tests** (`test_unified_operations.py`):
+   - Test rich progress context flows from API to CLI
+   - Verify `format_training_progress` callback receives populated context
+   - Verify context contains: epoch_index, total_epochs, batch_number, resource_usage
 
 3. **Manual Testing**:
    ```bash
@@ -564,26 +601,30 @@ If this introduces issues, the `context` field is optional (defaults to empty di
 
 **Commit Message**:
 ```
-fix(cli): restore rich training progress details (epochs/batches/GPU)
+feat(training): implement TrainingProgressRenderer for rich progress display
 
-Adds context field to OperationProgress model to preserve detailed training
-metadata (epoch numbers, batch counts, GPU usage) through the operations API.
+Creates TrainingProgressRenderer following the ProgressRenderer pattern to
+restore rich training progress details (epochs, batches, GPU) in CLI.
 
-Before: Training progress showed only percentage
-After: Training progress shows "Epoch: 5/10, Batch: 120/500, GPU: 85%"
+Changes:
+- Add TrainingProgressRenderer to format training-specific progress messages
+- Inject renderer into GenericProgressManager for training operations
+- Ensure ServiceOrchestrator passes state.context to OperationProgress.context
+- Update CLI callback to extract from progress.context
 
-Root Cause: Unified operations pattern lacked mechanism to carry rich progress
-metadata from TrainingProgressBridge through operations API to CLI display.
+Before: "Status: running" (generic message)
+After: "Epoch: 5/10 · Batch: 120/500 🖥️ RTX 3090: 85%" (rich details)
 
-Solution: Add optional context dict to OperationProgress for domain-specific
-progress details. Training progress bridge already emits this data; now it
-flows through to the CLI.
+Architecture:
+- Follows proven DataProgressRenderer pattern
+- TrainingProgressBridge populates state.context → Renderer formats message
+- Context flows: Bridge → Manager → ServiceOrchestrator → OperationProgress → CLI
 
-Fixes: Progress context regression from unified operations migration
-Tests: Added integration tests for rich progress context flow
+Fixes: Rich progress context regression from unified operations migration
+Tests: Unit tests for renderer + integration tests for context flow
 ```
 
-**Estimated Time**: 2-3 hours (implementation + testing)
+**Estimated Time**: 3-4 hours (renderer + integration + testing)
 
 ---
 
