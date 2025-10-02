@@ -263,30 +263,30 @@ async def _train_model_async_impl(
         progress_info = operation_data.get("progress", {})
         progress_context = progress_info.get("context", {})
 
-        # Extract epoch information
-        metadata = operation_data.get("metadata", {})
-        total_epochs = metadata.get("parameters", {}).get("epochs", 100)
+        # Extract epoch information from context (TrainingProgressBridge uses epoch_index)
+        epoch_index = progress_context.get("epoch_index", 0)
+        total_epochs = progress_context.get("total_epochs", 0)
 
-        # Get current epoch from progress context
-        current_epoch = progress_context.get("current_epoch", 0)
-        current_batch = progress_context.get("current_batch", 0)
-        total_batches = progress_context.get("total_batches_per_epoch", 0)
+        # Extract batch information from context
+        batch_number = progress_context.get("batch_number", 0)
+        batch_total = progress_context.get("batch_total_per_epoch", 0)
 
         # Build status message with epoch/batch info
         status_msg = f"Status: {status}"
-        if current_epoch > 0:
-            status_msg += f" (Epoch: {current_epoch}/{total_epochs}"
-            if current_batch > 0 and total_batches > 0:
-                status_msg += f", Batch: {current_batch}/{total_batches}"
+        if epoch_index > 0 and total_epochs > 0:
+            status_msg += f" (Epoch: {epoch_index}/{total_epochs}"
+            if batch_number > 0 and batch_total > 0:
+                status_msg += f", Batch: {batch_number}/{batch_total}"
             status_msg += ")"
 
-        # Extract GPU info
+        # Extract GPU info from resource_usage context
         resource_usage = progress_context.get("resource_usage", {})
-        if resource_usage.get("gpu_used"):
-            gpu_name = resource_usage.get("gpu_name", "GPU")
-            gpu_util = resource_usage.get("gpu_utilization_percent")
-            if gpu_util is not None:
-                status_msg += f" 🖥️ {gpu_name}: {gpu_util:.0f}%"
+        if resource_usage:
+            if resource_usage.get("gpu_used"):
+                gpu_name = resource_usage.get("gpu_name", "GPU")
+                gpu_util = resource_usage.get("gpu_utilization_percent")
+                if gpu_util is not None:
+                    status_msg += f" 🖥️ {gpu_name}: {gpu_util:.0f}%"
 
         return status_msg
 

@@ -639,23 +639,23 @@ class TestRichProgressContext:
             # Store for verification
             progress_messages.append(progress_context)
 
-            # Extract rich context
-            current_epoch = progress_context.get("epoch_index", 0)
+            # Extract rich context (use same field names as TrainingProgressBridge)
+            epoch_index = progress_context.get("epoch_index", 0)
             total_epochs = progress_context.get("total_epochs", 0)
-            current_batch = progress_context.get("batch_number", 0)
-            total_batches = progress_context.get("batch_total_per_epoch", 0)
+            batch_number = progress_context.get("batch_number", 0)
+            batch_total = progress_context.get("batch_total_per_epoch", 0)
 
             # Build status message
             status_msg = f"Status: {operation_data.get('status', 'unknown')}"
-            if current_epoch > 0:
-                status_msg += f" (Epoch: {current_epoch}/{total_epochs}"
-                if current_batch > 0 and total_batches > 0:
-                    status_msg += f", Batch: {current_batch}/{total_batches}"
+            if epoch_index > 0 and total_epochs > 0:
+                status_msg += f" (Epoch: {epoch_index}/{total_epochs}"
+                if batch_number > 0 and batch_total > 0:
+                    status_msg += f", Batch: {batch_number}/{batch_total}"
                 status_msg += ")"
 
             # Extract GPU info
             resource_usage = progress_context.get("resource_usage", {})
-            if resource_usage.get("gpu_used"):
+            if resource_usage and resource_usage.get("gpu_used"):
                 gpu_name = resource_usage.get("gpu_name", "GPU")
                 gpu_util = resource_usage.get("gpu_utilization_percent")
                 if gpu_util is not None:
