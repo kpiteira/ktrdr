@@ -161,7 +161,7 @@ class AsyncOperationExecutor:
 
         Terminal states: completed, failed, cancelled
         """
-        url = f"{self.base_url}/api/v1/operations/{operation_id}"
+        url = f"{self.base_url}/operations/{operation_id}"
         logger.debug(f"Starting polling loop for operation {operation_id}")
 
         while not self.cancelled:
@@ -220,7 +220,7 @@ class AsyncOperationExecutor:
             operation_id: Operation ID to cancel
             http_client: Async HTTP client
         """
-        url = f"{self.base_url}/api/v1/operations/{operation_id}"
+        url = f"{self.base_url}/operations/{operation_id}"
         logger.info(f"Sending cancellation request for operation {operation_id}")
 
         try:
