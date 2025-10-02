@@ -18,6 +18,9 @@ from ktrdr.api.services.training import (
     build_training_context,
 )
 from ktrdr.api.services.training.local_runner import LocalTrainingRunner
+from ktrdr.api.services.training.training_progress_renderer import (
+    TrainingProgressRenderer,
+)
 from ktrdr.async_infrastructure.service_orchestrator import ServiceOrchestrator
 from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError
@@ -36,10 +39,12 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
 
     def __init__(self) -> None:
         super().__init__()
+        # Override progress renderer with training-specific renderer
+        self._progress_renderer = TrainingProgressRenderer()
         self.model_storage = ModelStorage()
         self.model_loader = ModelLoader()
         self.operations_service = get_operations_service()
-        logger.info("Training service initialized")
+        logger.info("Training service initialized with TrainingProgressRenderer")
 
     def _initialize_adapter(self) -> TrainingAdapter:
         """Initialize training adapter via the legacy training manager."""

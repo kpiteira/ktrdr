@@ -169,7 +169,8 @@ class ServiceOrchestrator(ABC, Generic[T]):
         self.adapter: T = self._initialize_adapter()
 
         # Initialize enhanced progress infrastructure
-        self._progress_renderer = DefaultServiceProgressRenderer(
+        # Type annotation allows subclasses to override with specialized renderers
+        self._progress_renderer: ProgressRenderer = DefaultServiceProgressRenderer(
             self._get_service_name()
         )
         self._generic_progress_manager = GenericProgressManager(
@@ -1274,6 +1275,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
             items_processed=state.items_processed or 0,
             items_total=state.total_items,
             current_item=state.context.get("current_item") if state.context else None,
+            context=state.context if state.context else {},
         )
 
     def __repr__(self) -> str:
