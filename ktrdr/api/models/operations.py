@@ -49,6 +49,10 @@ class OperationProgress(BaseModel):
     current_item: Optional[str] = Field(
         None, description="Current item being processed"
     )
+    context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional progress context for domain-specific details (e.g., epochs, batches, GPU usage)",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -60,6 +64,12 @@ class OperationProgress(BaseModel):
                 "items_processed": 250,
                 "items_total": 550,
                 "current_item": "AAPL_1d_2024-01-15",
+                "context": {
+                    "epoch_index": 3,
+                    "total_epochs": 10,
+                    "batch_number": 50,
+                    "resource_usage": {"gpu_used": True, "gpu_utilization_percent": 85},
+                },
             }
         }
     )
