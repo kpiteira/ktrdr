@@ -240,9 +240,14 @@ class TestAsyncOperationExecutorCancellation:
     """Test cancellation flow."""
 
     @pytest.mark.asyncio
-    async def test_cancel_operation_success(self, executor):
+    async def test_cancel_operation_success(self, executor, console):
         """Test successful operation cancellation."""
-        mock_response = {
+        cancel_response_data = {
+            "success": True,
+            "data": {"operation_id": "test-op", "status": "cancelled"},
+        }
+
+        status_response_data = {
             "success": True,
             "data": {"operation_id": "test-op", "status": "cancelled"},
         }
@@ -251,19 +256,27 @@ class TestAsyncOperationExecutorCancellation:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            mock_resp = AsyncMock()
-            mock_resp.json.return_value = mock_response
-            mock_resp.status_code = 200
-            mock_client.delete.return_value = mock_resp
+            # Mock DELETE response for cancellation request
+            mock_delete_resp = AsyncMock()
+            mock_delete_resp.json = Mock(return_value=cancel_response_data)
+            mock_delete_resp.status_code = 200
+            mock_client.delete.return_value = mock_delete_resp
 
-            await executor._handle_cancellation("test-op", mock_client)
+            # Mock GET response for status polling
+            mock_get_resp = AsyncMock()
+            mock_get_resp.json = Mock(return_value=status_response_data)
+            mock_get_resp.status_code = 200
+            mock_get_resp.raise_for_status = Mock()
+            mock_client.get.return_value = mock_get_resp
+
+            await executor._handle_cancellation("test-op", mock_client, console)
 
             mock_client.delete.assert_called_once()
             call_args = mock_client.delete.call_args
             assert "test-op" in call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_cancel_operation_already_finished(self, executor):
+    async def test_cancel_operation_already_finished(self, executor, console):
         """Test cancelling an already finished operation."""
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
@@ -272,13 +285,20 @@ class TestAsyncOperationExecutorCancellation:
             # Mock 400 error for already finished
             mock_resp = AsyncMock()
             mock_resp.status_code = 400
-            mock_resp.json.return_value = {
-                "detail": "Operation cannot be cancelled - already completed"
-            }
+            mock_resp.json = Mock(
+                return_value={
+                    "detail": "Operation cannot be cancelled - already completed"
+                }
+            )
             mock_client.delete.return_value = mock_resp
 
             # Should not raise - best effort cancellation
-            await executor._handle_cancellation("test-op", mock_client)
+            result = await executor._handle_cancellation(
+                "test-op", mock_client, console
+            )
+
+            # Should return cancelled status even if backend says 400
+            assert result["status"] == "cancelled"
 
 
 class TestAsyncOperationExecutorSignalHandling:
@@ -417,11 +437,13 @@ class TestAsyncOperationExecutorProgressCallback:
 
     @pytest.mark.asyncio
     async def test_progress_callback_called(self, executor):
-        """Test that progress callback is invoked during polling."""
-        callback_calls = []
+        """Test that progress callback is invoked during polling when progress display is enabled."""
+        callback_invocations = []
 
         def progress_callback(status_data):
-            callback_calls.append(status_data)
+            """Callback that returns formatted string and tracks invocations."""
+            callback_invocations.append(status_data)
+            return f"Progress: {status_data.get('progress', {}).get('percentage', 0)}%"
 
         responses = [
             {
@@ -456,10 +478,24 @@ class TestAsyncOperationExecutorProgressCallback:
 
             mock_client.get.side_effect = mock_responses
 
+            # Mock Progress and task_id to enable progress display
+            from rich.progress import Progress
+
+            mock_progress = Mock(spec=Progress)
+            mock_task_id = "task-123"
+
             await executor._poll_until_complete(
-                "test-op", mock_client, progress_callback=progress_callback
+                "test-op",
+                mock_client,
+                progress=mock_progress,
+                task_id=mock_task_id,
+                progress_callback=progress_callback,
             )
 
-            assert len(callback_calls) == 2
-            assert callback_calls[0]["progress"]["percentage"] == 50
-            assert callback_calls[1]["progress"]["percentage"] == 100
+            # Callback should be invoked twice (once per poll)
+            assert len(callback_invocations) == 2
+            assert callback_invocations[0]["progress"]["percentage"] == 50
+            assert callback_invocations[1]["progress"]["percentage"] == 100
+
+            # Progress bar should be updated with callback results
+            assert mock_progress.update.call_count == 2

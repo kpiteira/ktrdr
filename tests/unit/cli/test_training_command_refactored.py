@@ -251,14 +251,16 @@ epochs: 10
                 assert callable(call_args[1]["progress_callback"])
 
                 # Test callback returns formatted string
+                # Use field names that match TrainingProgressBridge implementation
                 test_operation_data = {
                     "status": "running",
                     "progress": {
                         "percentage": 50,
                         "context": {
-                            "current_epoch": 5,
-                            "current_batch": 100,
-                            "total_batches_per_epoch": 200,
+                            "epoch_index": 5,  # Actual field name from TrainingProgressBridge
+                            "batch_number": 100,  # Actual field name from TrainingProgressBridge
+                            "batch_total_per_epoch": 200,  # Actual field name
+                            "total_epochs": 10,  # Total epochs in context
                         },
                     },
                     "metadata": {"parameters": {"epochs": 10}},
