@@ -50,7 +50,8 @@ def mock_gpu_unavailable():
     """Mock torch.cuda.is_available to return False."""
     with patch("torch.cuda.is_available", return_value=False):
         with patch("torch.cuda.device_count", return_value=0):
-            yield
+            with patch("torch.backends.mps.is_available", return_value=False):
+                yield
 
 
 @pytest.fixture
@@ -115,6 +116,10 @@ def mock_training_session():
         "batch": 50,
         "total_batches": 100,
         "progress_percent": 50.0,
+        "items_processed": 50,
+        "items_total": 100,
+        "message": "Epoch 5/10",
+        "current_item": "Epoch 5 · Batch 50/100",
     }
 
     session_mock.get_resource_usage.return_value = {
@@ -164,9 +169,20 @@ async def mock_training_service():
         return_value={
             "session_id": "test-session-123",
             "status": "running",
-            "progress": {"epoch": 5, "total_epochs": 10, "progress_percent": 50.0},
+            "progress": {
+                "epoch": 5,
+                "total_epochs": 10,
+                "batch": 50,
+                "total_batches": 100,
+                "progress_percent": 50.0,
+                "items_processed": 50,
+                "items_total": 100,
+                "message": "Epoch 5/10",
+                "current_item": "Epoch 5 · Batch 50/100",
+            },
             "metrics": {"current": {}, "best": {}},
             "resource_usage": {"gpu_allocated": True},
+            "gpu_usage": {"gpu_allocated": True},
             "start_time": "2024-01-01T10:00:00",
             "last_updated": "2024-01-01T10:30:00",
             "error": None,

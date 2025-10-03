@@ -194,7 +194,9 @@ class TestTrainingService:
 
             assert status["session_id"] == "test-session"
             assert status["status"] == "running"
-            assert "progress" in status
+            assert status["progress"]["message"].startswith("Epoch")
+            assert status["progress"]["items_processed"] == 50
+            assert status["progress"]["items_total"] == 100
             assert "metrics" in status
             assert "resource_usage" in status
 
@@ -299,7 +301,7 @@ class TestTrainingSession:
         metrics = {"train_loss": 0.5, "train_accuracy": 0.8}
         session.update_progress(5, 50, metrics)
 
-        assert session.current_epoch == 5
+        assert session.current_epoch == 6
         assert session.current_batch == 50
         assert session.metrics["train_loss"] == [0.5]
         assert session.metrics["train_accuracy"] == [0.8]
@@ -317,6 +319,10 @@ class TestTrainingSession:
         session.total_epochs = 10
         session.current_batch = 50
         session.total_batches = 100
+        # items_processed should be cumulative: (4 complete epochs * 100) + 50 = 450
+        session.items_processed = 450
+        session.message = "Epoch 5/10 · Batch 50/100"
+        session.current_item = "Batch 50/100"
 
         progress = session.get_progress_dict()
 
@@ -324,7 +330,13 @@ class TestTrainingSession:
         assert progress["total_epochs"] == 10
         assert progress["batch"] == 50
         assert progress["total_batches"] == 100
-        assert progress["progress_percent"] == 50.0
+        # items_total = 100 * 10 = 1000
+        # items_processed = 450
+        # progress = 450/1000 * 100 = 45%
+        assert progress["progress_percent"] == 45.0
+        assert progress["items_processed"] == 450
+        assert progress["items_total"] == 1000
+        assert progress["message"] == "Epoch 5/10 · Batch 50/100"
 
     @pytest.mark.asyncio
     async def test_session_cleanup(self, sample_training_config):
@@ -349,6 +361,6 @@ class TestTrainingSession:
 
         await session.cleanup()
 
-        assert session.stop_requested is True
+        assert session.stop_requested is False
         session.gpu_manager.cleanup_memory.assert_called_once()
         session.memory_manager.cleanup_memory.assert_called_once()

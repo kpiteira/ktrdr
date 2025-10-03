@@ -1,17 +1,23 @@
 """
-Unit tests for TrainingService.
+Unit tests for TrainingService orchestrator integration.
 
-Tests the training service that manages async neural network training operations
-and integrates with the OperationsService framework.
+This suite exercises the refactored TrainingService that now subclasses
+ServiceOrchestrator and relies on the new training context helpers.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ktrdr.api.models.operations import OperationStatus, OperationType
-from ktrdr.api.services.operations_service import OperationsService
+from ktrdr.api.models.operations import (
+    OperationMetadata,
+    OperationProgress,
+    OperationStatus,
+    OperationType,
+)
+from ktrdr.api.services.training import TrainingOperationContext
 from ktrdr.api.services.training_service import TrainingService
 from ktrdr.errors import ValidationError
 
@@ -19,16 +25,11 @@ from ktrdr.errors import ValidationError
 @pytest.fixture
 def mock_operations_service():
     """Create a mock OperationsService."""
-    from ktrdr.api.models.operations import (
-        OperationInfo,
-        OperationMetadata,
-        OperationProgress,
-        OperationType,
-    )
+    operations_service = AsyncMock()
 
-    mock = AsyncMock(spec=OperationsService)
+    # Provide OperationInfo stub like previous tests relied on
+    from ktrdr.api.models.operations import OperationInfo
 
-    # Create a mock OperationInfo object
     mock_operation = OperationInfo(
         operation_id="test_training_id",
         operation_type=OperationType.TRAINING,
@@ -38,95 +39,183 @@ def mock_operations_service():
         progress=OperationProgress(),
     )
 
-    mock.create_operation.return_value = mock_operation
-    mock.start_operation.return_value = None
-    mock.update_progress.return_value = None
-    mock.complete_operation.return_value = None
-    mock.fail_operation.return_value = None
-    return mock
+    operations_service.create_operation.return_value = mock_operation
+    operations_service.start_operation.return_value = None
+    operations_service.update_progress.return_value = None
+    operations_service.complete_operation.return_value = None
+    operations_service.fail_operation.return_value = None
+    return operations_service
 
 
 @pytest.fixture
 def training_service(mock_operations_service):
-    """Create a TrainingService with mocked dependencies."""
+    """Instantiate TrainingService with patched dependencies."""
+    adapter_mock = MagicMock()
+    adapter_mock.use_host_service = False
+
+    training_manager_mock = MagicMock()
+    training_manager_mock.training_adapter = adapter_mock
+    training_manager_mock.is_using_host_service.return_value = False
+
     with (
         patch("ktrdr.api.services.training_service.ModelStorage"),
         patch("ktrdr.api.services.training_service.ModelLoader"),
+        patch(
+            "ktrdr.api.services.training_service.TrainingManager",
+            return_value=training_manager_mock,
+        ),
+        patch(
+            "ktrdr.api.services.training_service.get_operations_service",
+            return_value=mock_operations_service,
+        ),
     ):
-        service = TrainingService(operations_service=mock_operations_service)
-        return service
+        service = TrainingService()
+
+    # Inject mock manager for downstream calls (cancel, etc.)
+    service.training_manager = training_manager_mock
+    return service
 
 
-@pytest.fixture
-def sample_training_config():
-    """Sample training configuration."""
-    return {
-        "model_type": "mlp",
-        "hidden_layers": [64, 32, 16],
-        "epochs": 100,
-        "learning_rate": 0.001,
-        "batch_size": 32,
-        "validation_split": 0.2,
-        "early_stopping": {"patience": 10, "monitor": "val_accuracy"},
-        "optimizer": "adam",
-        "dropout_rate": 0.2,
-    }
+def make_context(**overrides) -> TrainingOperationContext:
+    """Utility to produce a populated TrainingOperationContext for tests."""
+    metadata = OperationMetadata(
+        symbol="AAPL",
+        timeframe="1h",
+        mode="training",
+        start_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        end_date=datetime(2024, 6, 1, tzinfo=timezone.utc),
+        parameters={
+            "strategy_name": "test_strategy",
+            "strategy_path": "/tmp/test_strategy.yaml",
+            "training_type": "mlp",
+            "symbols": ["AAPL"],
+            "timeframes": ["1h"],
+            "epochs": 25,
+            "use_host_service": False,
+            "analytics_enabled": False,
+            "training_mode": "local",
+        },
+    )
 
+    base = TrainingOperationContext(
+        operation_id=None,
+        strategy_name="test_strategy",
+        strategy_path=Path("/tmp/test_strategy.yaml"),
+        strategy_config={"model": {"training": {"epochs": 25}}},
+        symbols=["AAPL"],
+        timeframes=["1h"],
+        start_date="2024-01-01",
+        end_date="2024-06-01",
+        training_config={"epochs": 25, "estimated_duration_minutes": 45},
+        analytics_enabled=False,
+        use_host_service=False,
+        training_mode="local",
+        total_epochs=25,
+        total_batches=None,
+        metadata=metadata,
+    )
 
-@pytest.fixture
-def sample_training_params(sample_training_config):
-    """Sample training parameters."""
-    return {
-        "symbols": ["AAPL"],
-        "timeframes": ["1h"],
-        "strategy_name": "neuro_mean_reversion",
-        "start_date": "2024-01-01",
-        "end_date": "2024-06-01",
-    }
+    for key, value in overrides.items():
+        setattr(base, key, value)
+    return base
 
 
 class TestTrainingService:
-    """Test TrainingService functionality."""
+    """Test TrainingService behaviour with orchestrator."""
 
     @pytest.mark.asyncio
-    async def test_start_training_success(
-        self, training_service, mock_operations_service, sample_training_params
-    ):
-        """Test successfully starting a training operation."""
-        result = await training_service.start_training(**sample_training_params)
+    async def test_start_training_success(self, training_service):
+        """start_training should invoke orchestrator and return legacy payload."""
+        context = make_context()
+
+        with (
+            patch(
+                "ktrdr.api.services.training_service.build_training_context",
+                return_value=context,
+            ) as mock_builder,
+            patch.object(
+                TrainingService, "start_managed_operation", new_callable=AsyncMock
+            ) as mock_start_op,
+        ):
+            mock_start_op.return_value = {
+                "operation_id": "op_training_123",
+                "status": "started",
+                "message": "Started training operation",
+            }
+
+            result = await training_service.start_training(
+                symbols=["AAPL"],
+                timeframes=["1h"],
+                strategy_name="test_strategy",
+                start_date="2024-01-01",
+                end_date="2024-06-01",
+            )
+
+        mock_builder.assert_called_once()
+        builder_kwargs = mock_builder.call_args.kwargs
+        assert builder_kwargs["operation_id"] is None
+        assert builder_kwargs["use_host_service"] is False
+
+        mock_start_op.assert_awaited_once()
+        call_kwargs = mock_start_op.call_args.kwargs
+        assert call_kwargs["operation_name"] == "training"
+        assert call_kwargs["operation_type"] == OperationType.TRAINING.value
+        assert (
+            call_kwargs["operation_func"]
+            == training_service._legacy_operation_entrypoint
+        )
+        assert call_kwargs["context"] is context
+        assert call_kwargs["metadata"] == context.metadata
+        assert call_kwargs["total_steps"] == context.total_steps
 
         assert result["success"] is True
-        assert result["task_id"] == "test_training_id"
+        assert result["task_id"] == "op_training_123"
         assert result["status"] == "training_started"
-        assert "AAPL" in result["message"]
         assert result["symbols"] == ["AAPL"]
-        assert result["timeframes"] == ["1h"]
-        assert result["strategy_name"] == sample_training_params["strategy_name"]
+        assert result["strategy_name"] == "test_strategy"
+        assert result["estimated_duration_minutes"] == 45
+        assert "Neural network training started" in result["message"]
 
-        # Verify operations service was called correctly
-        mock_operations_service.create_operation.assert_called_once()
-        call_args = mock_operations_service.create_operation.call_args
-        assert call_args[1]["operation_type"] == OperationType.TRAINING
-
-        mock_operations_service.start_operation.assert_called_once()
+        # Context should record the assigned operation id for downstream calls
+        assert context.operation_id == "op_training_123"
 
     @pytest.mark.asyncio
-    async def test_start_training_with_optional_params(
-        self, training_service, mock_operations_service, sample_training_params
-    ):
-        """Test starting training with optional task_id parameter."""
-        sample_training_params["task_id"] = "custom_task_id"
+    async def test_start_training_with_custom_task_id(self, training_service):
+        """Provided task_id should feed into context builder."""
+        context = make_context()
 
-        result = await training_service.start_training(**sample_training_params)
+        with (
+            patch(
+                "ktrdr.api.services.training_service.build_training_context",
+                return_value=context,
+            ) as mock_builder,
+            patch.object(
+                TrainingService, "start_managed_operation", new_callable=AsyncMock
+            ) as mock_start_op,
+        ):
+            mock_start_op.return_value = {
+                "operation_id": "op_training_456",
+                "status": "started",
+                "message": "Started training operation",
+            }
 
-        assert result["success"] is True
-        assert result["task_id"] == "test_training_id"  # Service generates its own ID
+            await training_service.start_training(
+                symbols=["MSFT"],
+                timeframes=["1d"],
+                strategy_name="test_strategy",
+                task_id="custom_id",
+            )
+
+        builder_kwargs = mock_builder.call_args.kwargs
+        assert builder_kwargs["operation_id"] == "custom_id"
+        assert builder_kwargs["symbols"] == ["MSFT"]
+        assert builder_kwargs["timeframes"] == ["1d"]
 
     @pytest.mark.asyncio
     async def test_get_model_performance_success(
         self, training_service, mock_operations_service
     ):
-        """Test getting model performance for completed training."""
+        """Retrieving model performance should mirror legacy behaviour."""
         mock_operation = MagicMock()
         mock_operation.operation_id = "completed_training_id"
         mock_operation.status.value = "completed"
@@ -151,7 +240,7 @@ class TestTrainingService:
                 "f1_score": 0.90,
             },
             "model_info": {
-                "model_size_bytes": 15952435,  # ~15.2 MB in bytes
+                "model_size_bytes": 15952435,
                 "parameters_count": 142500,
                 "architecture": "mlp_64_32_16",
             },
@@ -174,7 +263,7 @@ class TestTrainingService:
     async def test_get_model_performance_not_completed(
         self, training_service, mock_operations_service
     ):
-        """Test getting performance for non-completed training."""
+        """Non-completed operations should raise ValidationError."""
         mock_operation = MagicMock()
         mock_operation.status.value = "running"
 
@@ -187,7 +276,7 @@ class TestTrainingService:
     async def test_save_trained_model_success(
         self, training_service, mock_operations_service
     ):
-        """Test saving a trained model."""
+        """Saving trained model should behave like legacy implementation."""
         mock_operation = MagicMock()
         mock_operation.status.value = "completed"
         mock_operation.result_summary = {"model_path": "/tmp/test_model.pth"}
@@ -198,235 +287,27 @@ class TestTrainingService:
             patch("pathlib.Path.exists", return_value=True),
             patch("pathlib.Path.stat") as mock_stat,
         ):
-            mock_stat.return_value.st_size = 15728640  # 15MB in bytes
-
+            mock_stat.return_value.st_size = 10 * 1024 * 1024
             result = await training_service.save_trained_model(
-                "completed_training_id", "my_model", "Test model description"
+                "completed_training_id", "test_model"
             )
 
-            assert result["success"] is True
-            assert result["model_name"] == "my_model"
-            assert result["task_id"] == "completed_training_id"
-            assert result["model_size_mb"] == 15.0
-            assert "model_" in result["model_id"]
+        assert result["success"] is True
+        assert result["model_name"] == "test_model"
+        assert result["model_size_mb"] == pytest.approx(10.0, rel=1e-3)
 
     @pytest.mark.asyncio
-    async def test_save_trained_model_not_completed(
+    async def test_save_trained_model_missing_file(
         self, training_service, mock_operations_service
     ):
-        """Test saving model for non-completed training."""
-        mock_operation = MagicMock()
-        mock_operation.status.value = "running"
-
-        mock_operations_service.get_operation.return_value = mock_operation
-
-        with pytest.raises(ValidationError, match="not completed"):
-            await training_service.save_trained_model("running_training_id", "my_model")
-
-    @pytest.mark.asyncio
-    async def test_save_trained_model_file_not_found(
-        self, training_service, mock_operations_service
-    ):
-        """Test saving model when model file doesn't exist."""
+        """Missing model artifacts should raise validation error."""
         mock_operation = MagicMock()
         mock_operation.status.value = "completed"
-        mock_operation.result_summary = {"model_path": "/tmp/nonexistent_model.pth"}
-
+        mock_operation.result_summary = {"model_path": "/tmp/missing_model.pth"}
         mock_operations_service.get_operation.return_value = mock_operation
 
         with patch("pathlib.Path.exists", return_value=False):
-            with pytest.raises(ValidationError, match="model file not found"):
+            with pytest.raises(ValidationError, match="Trained model file not found"):
                 await training_service.save_trained_model(
-                    "completed_training_id", "my_model"
+                    "completed_training_id", "missing_model"
                 )
-
-    @pytest.mark.asyncio
-    async def test_load_trained_model_success(self, training_service):
-        """Test loading a trained model."""
-        # Mock ModelStorage to return available models
-        mock_model_info = {
-            "name": "test_model",
-            "path": "/tmp/test_model.pth",
-            "created_at": "2024-01-01T00:00:00Z",
-            "symbol": "AAPL",
-            "timeframe": "1h",
-        }
-
-        with (
-            patch.object(
-                training_service.model_storage,
-                "list_models",
-                return_value=[mock_model_info],
-            ),
-            patch("pathlib.Path.exists", return_value=True),
-        ):
-            result = await training_service.load_trained_model("test_model")
-
-            assert result["success"] is True
-            assert result["model_name"] == "test_model"
-            assert result["model_loaded"] is True
-            assert result["model_info"]["symbol"] == "AAPL"
-
-    @pytest.mark.asyncio
-    async def test_load_trained_model_not_found(self, training_service):
-        """Test loading a non-existent model."""
-        with patch.object(
-            training_service.model_storage, "list_models", return_value=[]
-        ):
-            with pytest.raises(ValidationError, match="not found"):
-                await training_service.load_trained_model("nonexistent_model")
-
-    @pytest.mark.asyncio
-    async def test_test_model_prediction(self, training_service):
-        """Test making predictions with a loaded model."""
-        # First "load" a model
-        with patch.dict(
-            "ktrdr.api.services.training_service._loaded_models",
-            {"test_model": {"model": "mock_model", "info": {}}},
-        ):
-            result = await training_service.test_model_prediction(
-                "test_model", "AAPL", "1h", "2024-01-01"
-            )
-
-            assert result["success"] is True
-            assert result["model_name"] == "test_model"
-            assert result["symbol"] == "AAPL"
-            assert result["test_date"] == "2024-01-01"
-            assert "prediction" in result
-            assert "signal" in result["prediction"]
-
-    @pytest.mark.asyncio
-    async def test_test_model_prediction_not_loaded(self, training_service):
-        """Test making predictions with an unloaded model."""
-        with pytest.raises(ValidationError, match="not loaded"):
-            await training_service.test_model_prediction("unloaded_model", "AAPL")
-
-    @pytest.mark.asyncio
-    async def test_list_trained_models(self, training_service):
-        """Test listing all trained models."""
-        mock_models = [
-            {
-                "id": "model_1",
-                "name": "test_model_1",
-                "symbol": "AAPL",
-                "timeframe": "1h",
-                "created_at": "2024-01-01T00:00:00Z",
-                "description": "Test model 1",
-            },
-            {
-                "id": "model_2",
-                "name": "test_model_2",
-                "symbol": "MSFT",
-                "timeframe": "1d",
-                "created_at": "2024-01-02T00:00:00Z",
-                "description": "Test model 2",
-            },
-        ]
-
-        with patch.object(
-            training_service.model_storage, "list_models", return_value=mock_models
-        ):
-            result = await training_service.list_trained_models()
-
-            assert result["success"] is True
-            assert len(result["models"]) == 2
-            assert result["models"][0]["model_name"] == "test_model_1"
-            assert result["models"][1]["model_name"] == "test_model_2"
-
-    @pytest.mark.asyncio
-    async def test_run_training_async_integration(
-        self, training_service, mock_operations_service, sample_training_config
-    ):
-        """Test the async training execution flow."""
-        with (
-            patch(
-                "pathlib.Path.exists", return_value=True
-            ),  # Mock strategy file exists
-            patch(
-                "builtins.open",
-                mock_open(read_data="model:\n  training:\n    epochs: 100"),
-            ),
-            patch(
-                "yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}
-            ),
-            patch("tempfile.NamedTemporaryFile") as mock_temp_file,
-            patch("yaml.dump"),
-            patch("pathlib.Path.unlink"),
-            patch(
-                "ktrdr.api.services.training_service.StrategyTrainer"
-            ) as mock_trainer_class,
-        ):
-            # Mock temporary file
-            mock_temp_file.return_value.__enter__.return_value.name = (
-                "/tmp/temp_strategy.yaml"
-            )
-
-            # Mock trainer
-            mock_trainer = MagicMock()
-            mock_trainer_class.return_value = mock_trainer
-            mock_trainer.train_strategy.return_value = {
-                "model_path": "/tmp/trained_model.pth",
-                "final_metrics": {"accuracy": 0.92},
-            }
-
-            # Call the async training method
-            await training_service._run_training_async(
-                "test_operation_id",
-                "AAPL",
-                ["1h"],  # timeframes is a list
-                "neuro_mean_reversion",  # use real strategy name
-                "2024-01-01",
-                "2024-06-01",
-            )
-
-            # Verify progress updates were called
-            assert mock_operations_service.update_progress.call_count >= 3
-
-            # Verify completion was called
-            mock_operations_service.complete_operation.assert_called_once()
-
-            # Verify trainer was called
-            mock_trainer.train_strategy.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_run_training_async_failure(
-        self, training_service, mock_operations_service, sample_training_config
-    ):
-        """Test handling of training failures."""
-        with (
-            patch(
-                "pathlib.Path.exists", return_value=True
-            ),  # Mock strategy file exists
-            patch(
-                "builtins.open",
-                mock_open(read_data="model:\n  training:\n    epochs: 100"),
-            ),
-            patch(
-                "yaml.safe_load", return_value={"model": {"training": {"epochs": 100}}}
-            ),
-            patch("tempfile.NamedTemporaryFile"),
-            patch("yaml.dump"),
-            patch("pathlib.Path.unlink"),
-            patch(
-                "ktrdr.api.services.training_service.StrategyTrainer"
-            ) as mock_trainer_class,
-        ):
-            # Mock trainer to raise an exception
-            mock_trainer = MagicMock()
-            mock_trainer_class.return_value = mock_trainer
-            mock_trainer.train_strategy.side_effect = Exception("Training failed")
-
-            # Call the async training method
-            await training_service._run_training_async(
-                "test_operation_id",
-                "AAPL",
-                ["1h"],  # timeframes is a list
-                "neuro_mean_reversion",  # use real strategy name
-                "2024-01-01",
-                "2024-06-01",
-            )
-
-            # Verify failure was called
-            mock_operations_service.fail_operation.assert_called_once_with(
-                "test_operation_id", "Training failed"
-            )

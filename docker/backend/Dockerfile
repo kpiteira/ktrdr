@@ -4,7 +4,7 @@
 # --------------------------------------
 # STAGE 1: Builder stage
 # --------------------------------------
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -40,7 +40,7 @@ RUN uv pip install --system --no-cache-dir -e .
 # --------------------------------------
 # STAGE 2: Runtime stage
 # --------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.13-slim AS runtime
 
 # Set metadata labels following best practices
 LABEL org.opencontainers.image.title="KTRDR Backend"

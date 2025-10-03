@@ -7,6 +7,7 @@ patterns across all service managers (Data, Training, Backtesting, etc.).
 """
 
 import asyncio
+import inspect
 import os
 import threading
 import time
@@ -168,7 +169,8 @@ class ServiceOrchestrator(ABC, Generic[T]):
         self.adapter: T = self._initialize_adapter()
 
         # Initialize enhanced progress infrastructure
-        self._progress_renderer = DefaultServiceProgressRenderer(
+        # Type annotation allows subclasses to override with specialized renderers
+        self._progress_renderer: ProgressRenderer = DefaultServiceProgressRenderer(
             self._get_service_name()
         )
         self._generic_progress_manager = GenericProgressManager(
@@ -944,6 +946,10 @@ class ServiceOrchestrator(ABC, Generic[T]):
 
         operations_service = get_operations_service()
 
+        operation_kwargs = dict(kwargs)
+        metadata_input = operation_kwargs.pop("metadata", None)
+        total_steps = operation_kwargs.pop("total_steps", 100)
+
         # Convert string operation type to enum
         try:
             op_type = OperationType(operation_type.lower())
@@ -951,18 +957,40 @@ class ServiceOrchestrator(ABC, Generic[T]):
             op_type = OperationType.DATA_LOAD  # Default fallback
 
         # Create operation metadata with all required fields
-        metadata = OperationMetadata(
-            symbol="N/A",
-            timeframe="N/A",
-            mode="N/A",
-            start_date=None,
-            end_date=None,
-            parameters={
-                "operation_name": operation_name,
-                "service_name": self._get_service_name(),
-                **kwargs.get("metadata", {}),
-            },
-        )
+        metadata_base_params = {
+            "operation_name": operation_name,
+            "service_name": self._get_service_name(),
+        }
+
+        def _build_metadata_from_dict(data):
+            metadata_dict = {
+                "symbol": "N/A",
+                "timeframe": "N/A",
+                "mode": "N/A",
+                "start_date": None,
+                "end_date": None,
+                "parameters": dict(metadata_base_params),
+            }
+            if isinstance(data, dict):
+                extra = dict(data)
+                parameters_override = extra.pop("parameters", {})
+                metadata_dict["parameters"].update(parameters_override)
+                for field in ("symbol", "timeframe", "mode", "start_date", "end_date"):
+                    if field in extra:
+                        metadata_dict[field] = extra[field]
+            return OperationMetadata(**metadata_dict)
+
+        if isinstance(metadata_input, OperationMetadata):
+            metadata = metadata_input.model_copy(
+                update={
+                    "parameters": {
+                        **metadata_input.parameters,
+                        **metadata_base_params,
+                    }
+                }
+            )
+        else:
+            metadata = _build_metadata_from_dict(metadata_input)
 
         # Create operation via operations service
         operation_info = await operations_service.create_operation(
@@ -1031,7 +1059,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 # Start progress tracking
                 operation_progress.start_operation(
                     operation_id=operation_name,
-                    total_steps=kwargs.get("total_steps", 100),
+                    total_steps=total_steps,
                     context={
                         "operation": operation_name,
                         "service": self._get_service_name(),
@@ -1042,9 +1070,15 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 logger.info(
                     f"🚀 STARTING OPERATION EXECUTION: Thread {threading.current_thread().ident}, Operation {operation_id}"
                 )
-                result = await operation_func(
-                    *args, **{k: v for k, v in kwargs.items() if k != "metadata"}
+                operation_call_kwargs = dict(operation_kwargs)
+                signature = inspect.signature(operation_func)
+                accepts_operation_id = "operation_id" in signature.parameters or any(
+                    param.kind == inspect.Parameter.VAR_KEYWORD
+                    for param in signature.parameters.values()
                 )
+                if accepts_operation_id:
+                    operation_call_kwargs["operation_id"] = operation_id
+                result = await operation_func(*args, **operation_call_kwargs)
                 logger.info(
                     f"✅ OPERATION EXECUTION COMPLETED: Thread {threading.current_thread().ident}, Operation {operation_id}"
                 )
@@ -1113,6 +1147,9 @@ class ServiceOrchestrator(ABC, Generic[T]):
         """
         logger.debug(f"Starting sync operation: {operation_name}")
 
+        operation_kwargs = dict(kwargs)
+        total_steps = operation_kwargs.pop("total_steps", 100)
+
         # Create a temporary operation ID for progress/cancellation tracking
         temp_operation_id = f"sync_{operation_name}_{id(operation_func)}"
 
@@ -1140,7 +1177,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 # Start progress tracking
                 operation_progress.start_operation(
                     operation_id=operation_name,
-                    total_steps=kwargs.get("total_steps", 100),
+                    total_steps=total_steps,
                     context={
                         "operation": operation_name,
                         "service": self._get_service_name(),
@@ -1148,7 +1185,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
                 )
 
                 # Execute the operation function
-                result = await operation_func(*args, **kwargs)
+                result = await operation_func(*args, **operation_kwargs)
 
                 # Complete the operation
                 operation_progress.complete_operation()
@@ -1238,6 +1275,7 @@ class ServiceOrchestrator(ABC, Generic[T]):
             items_processed=state.items_processed or 0,
             items_total=state.total_items,
             current_item=state.context.get("current_item") if state.context else None,
+            context=state.context if state.context else {},
         )
 
     def __repr__(self) -> str:

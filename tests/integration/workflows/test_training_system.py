@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 import torch
 
+from ktrdr.async_infrastructure.cancellation import CancellationError
 from ktrdr.training import (
     ModelStorage,
     ModelTrainer,
@@ -96,6 +97,14 @@ class TestZigZagLabeler:
 class TestModelTrainer:
     """Test neural network training functionality."""
 
+    class _CancelAfterFirstBatchToken:
+        def __init__(self) -> None:
+            self._checks = 0
+
+        def is_cancelled(self) -> bool:
+            self._checks += 1
+            return self._checks > 1
+
     def test_trainer_initialization(self):
         """Test trainer initialization with config."""
         config = {
@@ -138,6 +147,39 @@ class TestModelTrainer:
         assert "train_loss" in results["history"]
         assert "train_accuracy" in results["history"]
         assert len(trainer.history) == 5  # 5 epochs
+
+    def test_progress_callback_invoked(self):
+        model = torch.nn.Sequential(
+            torch.nn.Linear(5, 6),
+            torch.nn.ReLU(),
+            torch.nn.Linear(6, 3),
+        )
+        X_train = torch.randn(20, 5)
+        y_train = torch.randint(0, 3, (20,))
+
+        captured = []
+
+        def progress_callback(epoch: int, epochs: int, metrics):
+            captured.append((metrics.get("progress_type"), epoch, epochs))
+
+        config = {"epochs": 2, "batch_size": 5, "learning_rate": 0.01}
+        trainer = ModelTrainer(config, progress_callback=progress_callback)
+        trainer.train(model, X_train, y_train)
+
+        assert any(kind == "batch" for kind, _, _ in captured)
+        assert any(kind == "epoch" for kind, _, _ in captured)
+
+    def test_training_honours_cancellation(self):
+        model = torch.nn.Sequential(torch.nn.Linear(4, 3))
+        X_train = torch.randn(10, 4)
+        y_train = torch.randint(0, 3, (10,))
+
+        config = {"epochs": 3, "batch_size": 2, "learning_rate": 0.01}
+        token = self._CancelAfterFirstBatchToken()
+        trainer = ModelTrainer(config, cancellation_token=token)
+
+        with pytest.raises(CancellationError):
+            trainer.train(model, X_train, y_train)
 
 
 class TestModelStorage:

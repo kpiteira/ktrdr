@@ -11,9 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
-from ktrdr.api.services.operations_service import (
-    get_operations_service,
-)
 from ktrdr.api.services.training_service import TrainingService
 from ktrdr.errors import DataError, ValidationError
 
@@ -169,9 +166,7 @@ async def get_training_service() -> TrainingService:
     """Get training service instance (singleton)."""
     global _training_service
     if _training_service is None:
-        # Pass the global OperationsService singleton to avoid creating separate instances
-        operations_service = get_operations_service()
-        _training_service = TrainingService(operations_service=operations_service)
+        _training_service = TrainingService()
     return _training_service
 
 
