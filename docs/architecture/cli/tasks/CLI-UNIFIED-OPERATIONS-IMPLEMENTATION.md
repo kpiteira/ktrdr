@@ -761,6 +761,486 @@ gh api repos/:owner/:repo/git/refs/heads/feature/cli-unified-operations -X DELET
 
 ---
 
+## Phase 6: Final CLI Unification and Cleanup
+
+**Objective**: Complete CLI unification by cleaning up remaining custom code in Training and migrating Data Loading command to unified pattern. Ensure all three async CLI commands (Dummy, Training, Data Loading) are as lean as possible.
+
+**Branch**: `feature/cli-unified-operations` (continue on same branch)
+
+### Analysis Summary
+
+**Current State Assessment**:
+
+1. **Dummy Command**: ✅ PERFECT (Gold Standard)
+   - 127 total lines, ~57 async implementation
+   - Fully migrated, minimal custom code
+   - Only appropriate domain-specific code
+   - **This is the target pattern for all commands**
+
+2. **Training Command**: ⚠️ NEEDS CLEANUP
+   - 327 total lines, ~135 async implementation
+   - Migrated but bloated with ~55 lines of extractable code
+   - Issues: Strategy loading (~34 lines), complex progress formatter (~56 lines), validation loops (~15 lines)
+   - **Target: Reduce to ~80 lines async implementation**
+
+3. **Data Loading Command**: ❌ NOT MIGRATED - CRITICAL
+   - 934 total lines, ~332 async implementation
+   - Uses OLD pattern: `KtrdrApiClient`, custom signal handlers, custom polling
+   - Major duplication: TWO polling loops (~157 lines), custom signal handler (~26 lines), duplicate cancellation (~50 lines)
+   - **Target: Migrate completely, reduce to ~80 lines async implementation**
+
+---
+
+### TASK-6.1: Create Strategy Loading Helper
+
+**Objective**: Extract strategy loading/validation logic from training command into reusable helper
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/helpers/strategy_helpers.py` (NEW)
+- `ktrdr/cli/helpers/__init__.py` (NEW)
+- `tests/unit/cli/helpers/test_strategy_helpers.py` (NEW)
+- `tests/unit/cli/helpers/__init__.py` (NEW)
+
+**What to Extract**:
+```python
+# From async_model_commands.py lines 89-158
+def load_and_validate_strategy(
+    strategy_file: str,
+    symbol_override: Optional[str] = None,
+    timeframe_override: Optional[str] = None,
+) -> tuple[list[str], list[str], dict]:
+    """
+    Load strategy config and extract/validate symbols and timeframes.
+
+    Returns:
+        (symbols, timeframes, config) tuple
+
+    Raises:
+        ValidationError: If validation fails
+        FileNotFoundError: If strategy file doesn't exist
+    """
+```
+
+**Benefits**:
+- Removes ~50 lines from training command
+- Reusable for future commands
+- Easier to test in isolation
+- Cleaner training command flow
+
+**Acceptance Criteria**:
+- [ ] Helper function created with clear interface
+- [ ] Handles strategy file validation
+- [ ] Extracts symbols/timeframes from config
+- [ ] Supports CLI overrides
+- [ ] Validates symbols and timeframes
+- [ ] Returns clean data structures
+- [ ] Unit tests with >90% coverage
+- [ ] Training command uses helper (verified working)
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/helpers/ tests/unit/cli/helpers/
+git commit -m "refactor(cli): extract strategy loading into reusable helper"
+```
+
+---
+
+### TASK-6.2: Simplify Training Progress Formatter
+
+**Objective**: Reduce 56-line progress formatter to ~15 lines by removing excessive fallback logic
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/async_model_commands.py` (MODIFY - lines 260-315)
+
+**Current Problem**:
+The formatter has two complete implementations:
+1. Try to use backend-rendered message
+2. Fall back to manual construction from context
+
+**Root Cause**:
+Backend `TrainingProgressRenderer` already formats rich messages. CLI shouldn't duplicate this logic.
+
+**Solution**:
+```python
+def format_training_progress(operation_data: dict) -> str:
+    """Format progress message - backend already does the heavy lifting."""
+    status = operation_data.get("status", "unknown")
+    progress_info = operation_data.get("progress") or {}
+
+    # Use backend-rendered message (TrainingProgressRenderer output)
+    rendered_message = progress_info.get("current_step", "")
+    if rendered_message:
+        return f"Status: {status} - {rendered_message}"
+
+    # Minimal fallback for missing data
+    return f"Status: {status}"
+```
+
+**Benefits**:
+- Reduces from 56 lines to ~10 lines
+- Eliminates duplicate rendering logic
+- Trusts backend to do formatting (Single Responsibility)
+- Easier to maintain
+
+**Acceptance Criteria**:
+- [ ] Formatter reduced to <15 lines
+- [ ] Uses backend-rendered message primarily
+- [ ] Minimal fallback (no complex reconstruction)
+- [ ] Still displays rich progress (epochs, batches, GPU)
+- [ ] Manual testing shows correct display
+- [ ] No regressions in progress quality
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/async_model_commands.py
+git commit -m "refactor(cli): simplify training progress formatter
+
+Reduce from 56 lines to 10 lines by trusting backend TrainingProgressRenderer
+to format messages. CLI should only display, not reconstruct."
+```
+
+---
+
+### TASK-6.3: Clean Up Training Command
+
+**Objective**: Apply helpers and simplifications to reduce training command to ~80 lines async implementation
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/async_model_commands.py` (MODIFY)
+
+**Changes**:
+1. Use `load_and_validate_strategy()` helper (TASK-6.1)
+2. Use simplified progress formatter (TASK-6.2)
+3. Consolidate parameter display into single print statement
+4. Remove redundant comments and whitespace
+
+**Expected Reduction**:
+- Before: ~135 lines async implementation
+- After: ~80 lines async implementation
+- Reduction: ~40% cleaner code
+
+**Acceptance Criteria**:
+- [ ] Uses strategy helper function
+- [ ] Uses simplified progress formatter
+- [ ] Async implementation ≤85 lines
+- [ ] All functionality preserved
+- [ ] Training starts, progresses, completes successfully
+- [ ] Cancellation works correctly
+- [ ] Progress display shows rich details
+- [ ] All tests pass
+- [ ] Manual testing successful
+
+**Commit After**:
+```bash
+make test-unit
+make test-integration
+git add ktrdr/cli/async_model_commands.py
+git commit -m "refactor(cli): clean up training command using helpers
+
+Reduces async implementation from 135 to 80 lines (40% reduction).
+Uses strategy loading helper and simplified progress formatter."
+```
+
+---
+
+### TASK-6.4: Create DataLoadOperationAdapter
+
+**Objective**: Create adapter for data loading operations following the proven pattern
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/operation_adapters.py` (MODIFY - add DataLoadOperationAdapter)
+- `tests/unit/cli/test_data_load_adapter.py` (NEW)
+
+**Adapter Design**:
+```python
+class DataLoadOperationAdapter(OperationAdapter):
+    """
+    Adapter for data loading operations.
+
+    Knows how to:
+    - Start data loading via /api/v1/data/load
+    - Parse data loading response to extract operation_id
+    - Display data loading results with summary
+    - Handle IB diagnosis messages
+    """
+
+    def __init__(
+        self,
+        symbol: str,
+        timeframe: str,
+        mode: str = "tail",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        trading_hours_only: bool = False,
+        include_extended: bool = False,
+    ):
+        # Store parameters
+
+    def get_start_endpoint(self) -> str:
+        return "/data/load"
+
+    def get_start_payload(self) -> dict[str, Any]:
+        # Construct payload from parameters
+
+    def parse_start_response(self, response: dict) -> str:
+        # Extract operation_id
+
+    async def display_results(
+        self,
+        final_status: dict,
+        console: Console,
+        http_client: AsyncClient,
+    ) -> None:
+        # Display bars loaded, date range, execution time
+        # Handle IB diagnosis if present
+        # Show summary table
+```
+
+**Key Features**:
+- Handles data loading specific parameters
+- Knows data loading API contract
+- Displays data summary (bars loaded, date range, etc.)
+- Handles IB diagnosis messages (partial loads, errors)
+- Clean, ~100 lines like TrainingOperationAdapter
+
+**Acceptance Criteria**:
+- [ ] Implements all 4 required OperationAdapter methods
+- [ ] Handles all data loading parameters correctly
+- [ ] Constructs proper API payload
+- [ ] Extracts operation_id correctly
+- [ ] Displays comprehensive results summary
+- [ ] Handles IB diagnosis messages
+- [ ] Shows bars loaded, date range, execution time
+- [ ] Adapter is <120 lines
+- [ ] Unit tests cover all methods
+- [ ] Mock tests verify API contract
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/operation_adapters.py tests/unit/cli/test_data_load_adapter.py
+git commit -m "feat(cli): add DataLoadOperationAdapter for data loading operations"
+```
+
+---
+
+### TASK-6.5: Migrate Data Loading Command
+
+**Objective**: Complete rewrite of data loading command using unified pattern
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/data_commands.py` (REWRITE `load_data` and `_load_data_async`)
+- `tests/integration/cli/test_data_commands.py` (MODIFY)
+
+**Current State**:
+- 332 lines of async implementation
+- Custom signal handling (~26 lines)
+- TWO polling loops (~157 lines combined)
+- Duplicate cancellation code (~50 lines)
+- Custom progress integration (~33 lines)
+
+**Target State**:
+~80 lines async implementation using `AsyncOperationExecutor` and `DataLoadOperationAdapter`
+
+**Code to DELETE**:
+- All custom signal handling (lines 410-435)
+- Both polling loops (lines 471-627)
+- All cancellation handling code (lines 484-509, 584-606)
+- Progress state creation (lines 534-546)
+- Enhanced display integration
+
+**Code to KEEP (move to adapter)**:
+- `_process_data_load_response` logic → move to adapter's `display_results()`
+- IB diagnosis handling → keep in adapter
+
+**Expected Reduction**:
+- Before: ~332 lines async implementation
+- After: ~80 lines async implementation
+- Reduction: ~76% cleaner code
+
+**Acceptance Criteria**:
+- [ ] Uses `AsyncOperationExecutor`
+- [ ] Uses `DataLoadOperationAdapter`
+- [ ] NO custom polling loops
+- [ ] NO custom signal handling
+- [ ] NO custom cancellation code
+- [ ] Async implementation ≤85 lines
+- [ ] Data loading works correctly (tail, backfill, full)
+- [ ] Progress displays correctly
+- [ ] Cancellation works (Ctrl+C)
+- [ ] IB diagnosis messages still shown
+- [ ] Results summary displayed correctly
+- [ ] All tests pass
+- [ ] Manual testing with real IB data successful
+
+**Testing Strategy**:
+1. **Unit tests**: Adapter methods in isolation
+2. **Integration tests**: Full command flow with mock API
+3. **Manual tests**:
+   ```bash
+   # Test basic load
+   ktrdr data load AAPL --timeframe 1h --mode tail
+
+   # Test with date range
+   ktrdr data load MSFT --start 2024-01-01 --end 2024-06-01
+
+   # Test cancellation (press Ctrl+C during load)
+   ktrdr data load TSLA --mode full
+
+   # Test with trading hours filter
+   ktrdr data load AAPL --trading-hours --include-extended
+   ```
+
+**Commit After**:
+```bash
+make test-unit
+make test-integration
+git add ktrdr/cli/data_commands.py tests/
+git commit -m "refactor(cli): migrate data loading to unified operations pattern
+
+Complete migration of data loading command to use AsyncOperationExecutor
+and DataLoadOperationAdapter. Removes 252 lines of custom code.
+
+Before: 332 lines with custom polling/signal handling
+After: 80 lines using unified pattern (76% reduction)
+
+- Removed custom signal handling
+- Removed duplicate polling loops
+- Removed custom cancellation code
+- Removed custom progress integration
+- All functionality preserved
+- IB diagnosis still works"
+```
+
+---
+
+### TASK-6.6: Final Verification and Documentation
+
+**Objective**: Ensure all three commands are lean, consistent, and well-documented
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/dummy_commands.py` (VERIFY)
+- `ktrdr/cli/async_model_commands.py` (VERIFY)
+- `ktrdr/cli/data_commands.py` (VERIFY)
+- `docs/cli/adding-new-operations.md` (UPDATE)
+- `docs/architecture/cli/tasks/CLI-UNIFIED-OPERATIONS-IMPLEMENTATION.md` (UPDATE)
+
+**Verification Checklist**:
+
+**Code Metrics**:
+- [ ] Dummy command: ≤60 lines async implementation
+- [ ] Training command: ≤85 lines async implementation
+- [ ] Data loading command: ≤85 lines async implementation
+- [ ] All use `AsyncOperationExecutor`
+- [ ] All use appropriate `OperationAdapter`
+- [ ] NO custom polling loops in any command
+- [ ] NO custom signal handling in any command
+- [ ] NO custom cancellation code in any command
+
+**Consistency Checks**:
+- [ ] All three commands have same structure
+- [ ] All three handle httpx logging suppression the same way
+- [ ] All three use progress callbacks similarly
+- [ ] All three have consistent error handling
+- [ ] All three have similar parameter display patterns
+
+**Functional Testing**:
+- [ ] Dummy command: start, progress, complete, cancel
+- [ ] Training command: start, progress, complete, cancel, metrics display
+- [ ] Data loading command: start, progress, complete, cancel, data summary
+
+**Quality Checks**:
+- [ ] All unit tests pass
+- [ ] All integration tests pass
+- [ ] Code quality checks pass (`make quality`)
+- [ ] No debug code remaining
+- [ ] No TODOs remaining
+
+**Documentation Updates**:
+- [ ] Update `adding-new-operations.md` with all three as examples
+- [ ] Document data loading adapter specifics
+- [ ] Update implementation plan with Phase 6 completion
+- [ ] Add "lessons learned" section
+
+**Final Comparison Table**:
+```
+Command         | Before | After | Reduction | Status
+----------------|--------|-------|-----------|--------
+Dummy           | 57     | 57    | 0%        | ✅ Already optimal
+Training        | 135    | 80    | 41%       | ✅ Cleaned up
+Data Loading    | 332    | 80    | 76%       | ✅ Fully migrated
+```
+
+**Commit After**:
+```bash
+git add docs/
+git commit -m "docs(cli): update documentation for Phase 6 completion
+
+Final verification of all three async CLI commands (dummy, training, data loading).
+All commands now use unified pattern with minimal custom code.
+
+Code Metrics:
+- Dummy: 57 lines (already optimal)
+- Training: 80 lines (41% reduction)
+- Data Loading: 80 lines (76% reduction)
+
+Total reduction: ~307 lines of duplicate infrastructure code eliminated."
+```
+
+---
+
+## Phase 6 Success Criteria
+
+### Code Quality Metrics:
+- All three commands use unified pattern
+- Total async implementation: ≤220 lines (avg ~73 lines per command)
+- Code duplication: <5% across all three commands
+- All custom infrastructure removed
+
+### Functional Metrics:
+- All operations start successfully
+- All operations show progress correctly
+- All operations handle cancellation correctly
+- All operations display results correctly
+- No regressions in any command
+
+### Architectural Metrics:
+- Single source of truth: `AsyncOperationExecutor`
+- Clear separation: infrastructure vs domain logic
+- Consistent pattern across all async operations
+- Easy to add new operations (<100 lines per adapter)
+
+---
+
+## Phase 6 Timeline
+
+**TASK-6.1: Strategy Helper** - 2 hours
+**TASK-6.2: Training Formatter** - 1 hour
+**TASK-6.3: Training Cleanup** - 1 hour
+**TASK-6.4: Data Adapter** - 3 hours
+**TASK-6.5: Data Migration** - 4 hours
+**TASK-6.6: Verification** - 2 hours
+
+**Total**: ~13 hours for complete Phase 6
+
+**Overall Project Total**: ~30-34 hours (Phases 1-6 combined)
+
+---
+
 ## Testing Strategy
 
 ### Unit Tests
