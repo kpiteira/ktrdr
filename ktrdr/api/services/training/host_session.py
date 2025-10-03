@@ -145,12 +145,6 @@ class HostSessionManager:
                 self._bridge.on_remote_snapshot(snapshot)
 
                 status = str(snapshot.get("status") or "").lower()
-                logger.info(
-                    "Host session %s status: %s, progress: %s",
-                    session_id,
-                    status,
-                    snapshot.get("progress", {}),
-                )
                 if status in _TERMINAL_SUCCESS:
                     self._bridge.on_complete(
                         f"Remote training session {session_id} completed"
