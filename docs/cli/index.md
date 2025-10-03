@@ -177,3 +177,9 @@ For detailed information about each command, see the specific command documentat
 - [Indicator Commands](indicator-commands.md)
 - [Visualization Commands](visualization-commands.md)
 - [Strategy Commands](strategy-commands.md)
+
+## Developer Documentation
+
+If you're extending the CLI with new async operations:
+
+- [Adding New Async Operations](adding-new-operations.md) - Guide for adding new async operations using the unified pattern
