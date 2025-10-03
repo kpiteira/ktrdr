@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ktrdr import get_logger
-from ktrdr.api.models.operations import OperationProgress, OperationType
+from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training import (
     HostSessionManager,
@@ -192,106 +192,6 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
 
         # Returns aggregated result from from_host_run
         return await manager.run()
-
-    async def _run_training_via_manager_async(
-        self,
-        operation_id: str,
-        strategy_path: Path,
-        symbols: list[str],
-        timeframes: list[str],
-        start_date: Optional[str],
-        end_date: Optional[str],
-    ):
-        """Run training via TrainingManager with progress updates."""
-        try:
-            # Create progress callback
-            async def progress_callback(progress: dict[str, Any]):
-                await self.operations_service.update_progress(
-                    operation_id,
-                    OperationProgress(
-                        percentage=progress.get("progress_percentage", 0.0),
-                        current_step=progress.get(
-                            "current_step", "Training in progress"
-                        ),
-                        steps_completed=progress.get("steps_completed", 0),
-                        steps_total=progress.get("steps_total", 100),
-                        items_processed=progress.get("items_processed", 0),
-                        items_total=progress.get("items_total", None),
-                        current_item=progress.get("current_item", None),
-                    ),
-                )
-
-            # Use TrainingManager to run training (automatically routes to host service or local)
-            result = await self.training_manager.train_multi_symbol_strategy(
-                strategy_config_path=str(strategy_path),
-                symbols=symbols,
-                timeframes=timeframes,
-                start_date=start_date or "2020-01-01",
-                end_date=end_date or datetime.utcnow().strftime("%Y-%m-%d"),
-                validation_split=0.2,
-                data_mode="local",
-                progress_callback=progress_callback,
-            )
-
-            # Check if this is host service mode (returns session_id) or local mode (completes training)
-            if result and result.get("session_id"):
-                # Host service mode - store session_id for status polling
-                session_id = result["session_id"]
-                logger.info(
-                    f"Training started on host service with session {session_id}"
-                )
-
-                # Store session_id in operation metadata for status polling
-                operation = await self.operations_service.get_operation(operation_id)
-                if operation and hasattr(operation.metadata, "parameters"):
-                    operation.metadata.parameters["session_id"] = session_id
-
-                # Update progress to indicate training started on host service
-                await self.operations_service.update_progress(
-                    operation_id,
-                    OperationProgress(
-                        percentage=15.0,
-                        current_step=f"Training started on host service (session: {session_id})",
-                        steps_completed=1,
-                        steps_total=10,
-                        items_processed=0,
-                        items_total=None,
-                        current_item=None,
-                    ),
-                )
-            else:
-                # Local mode - training completed
-                await self.operations_service.update_progress(
-                    operation_id,
-                    OperationProgress(
-                        percentage=100.0,
-                        current_step="Training completed successfully",
-                        steps_completed=10,
-                        steps_total=10,
-                        items_processed=100,
-                        items_total=100,
-                        current_item="Complete",
-                    ),
-                )
-                logger.info(
-                    f"Local training completed successfully for operation {operation_id}"
-                )
-
-        except Exception as e:
-            # Update with error
-            await self.operations_service.update_progress(
-                operation_id,
-                OperationProgress(
-                    percentage=0.0,
-                    current_step=f"Training failed: {str(e)}",
-                    steps_completed=0,
-                    steps_total=10,
-                    items_processed=0,
-                    items_total=None,
-                    current_item=None,
-                ),
-            )
-            logger.error(f"Training failed for operation {operation_id}: {str(e)}")
 
     async def cancel_training_session(
         self, session_id: str, reason: Optional[str] = None

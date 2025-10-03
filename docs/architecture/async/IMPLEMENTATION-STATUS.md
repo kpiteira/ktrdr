@@ -103,9 +103,9 @@
 - Reduced coupling between API and OperationsService
 - Unified result schema across local and host execution
 
-**Minor Cleanup Needed**:
-- ⚠️ Legacy code: `_run_training_via_manager_async()` method exists but unused (195 lines)
-- ⚠️ TrainingManager redundancy: Consider consolidation (TrainingService already inherits ServiceOrchestrator)
+**Cleanup Status**:
+- ✅ Legacy code removed: `_run_training_via_manager_async()` method deleted (99 lines)
+- ⚠️ TrainingManager redundancy: Minor - TrainingManager used only for adapter initialization (acceptable delegation pattern)
 
 ---
 
@@ -189,14 +189,14 @@ class TrainingAdapter(AsyncServiceAdapter):
 
 ## 🧹 Technical Debt
 
-### Code Cleanup (LOW PRIORITY)
+### Code Cleanup (COMPLETE)
 
 **TrainingService Legacy Code**:
-- Location: [ktrdr/api/services/training_service.py:196](/Users/karl/Documents/dev/ktrdr2/ktrdr/api/services/training_service.py#L196)
-- Issue: `_run_training_via_manager_async()` method (195 lines) appears unused
-- Impact: Confusing code paths, potential maintenance burden
-- Action: Verify method is truly unused, then remove
-- Status: ⚠️ Pending investigation
+- Location: [ktrdr/api/services/training_service.py](/Users/karl/Documents/dev/ktrdr2/ktrdr/api/services/training_service.py)
+- Issue: `_run_training_via_manager_async()` method (99 lines) was unused
+- Impact: Confusing code paths resolved
+- Action: Method deleted, unused imports cleaned up
+- Status: ✅ **COMPLETE**
 
 **TrainingManager Redundancy**:
 - Location: [ktrdr/training/training_manager.py](/Users/karl/Documents/dev/ktrdr2/ktrdr/training/training_manager.py)
@@ -290,8 +290,8 @@ class TrainingAdapter(AsyncServiceAdapter):
 **Priority**: Low
 **Ongoing Improvements**
 
-1. Remove legacy code (`_run_training_via_manager_async`)
-2. Evaluate TrainingManager consolidation opportunity
+1. ✅ ~~Remove legacy code~~ (Complete - deleted `_run_training_via_manager_async`)
+2. Evaluate TrainingManager consolidation opportunity (optional)
 3. Final architecture validation and optimization
 4. Performance tuning and monitoring
 
