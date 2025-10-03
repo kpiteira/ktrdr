@@ -274,6 +274,13 @@ class TrainingProgressBridge:
             else:
                 message = "Polling host session"
 
+        # Calculate batch number within current epoch for display
+        batch_number = None
+        batch_total_per_epoch = progress_info.get("total_batches")
+        if clamped_items_processed and batch_total_per_epoch:
+            # items_processed is global batch count, convert to batch within epoch
+            batch_number = ((clamped_items_processed - 1) % batch_total_per_epoch) + 1
+
         context_payload: dict[str, Any] = {
             "host_status": status or snapshot.get("status"),
             "host_session_id": session_id,
@@ -284,6 +291,14 @@ class TrainingProgressBridge:
             "resource_usage": snapshot.get("resource_usage"),
             "timestamp": snapshot.get("timestamp"),
         }
+
+        # Add epoch/batch info for renderer (like on_batch does)
+        if epoch_index:
+            context_payload["epoch_index"] = epoch_index
+            context_payload["total_epochs"] = self._total_epochs
+        if batch_number and batch_total_per_epoch:
+            context_payload["batch_number"] = batch_number
+            context_payload["batch_total_per_epoch"] = batch_total_per_epoch
 
         current_item = progress_info.get("current_item")
         if current_item:

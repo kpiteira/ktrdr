@@ -237,32 +237,52 @@ Each component has exactly one reason to change:
 
 **What It Knows**:
 - How to make HTTP requests with retries and error handling
-- The operations API contract: `/operations/{id}`, `/operations/{id}/cancel`
+- The operations API contract: `/operations/{id}` for polling, DELETE `/operations/{id}` for cancellation
 - How to poll for operation status at appropriate intervals
 - How to interpret operation status: running, completed, failed, cancelled
 - How to setup async signal handlers for graceful cancellation
-- How to integrate with Rich console for progress display
+- **How to create and manage Rich Progress bar (INVARIANT)**
+- How to update progress display during polling
+- How to display percentage completion and elapsed time
+- **How to send cancellation requests and wait for backend confirmation (with timeout)**
+- **How to poll for cancellation confirmation and extract cancellation metadata**
 
 **What It Doesn't Know**:
 - Anything about training, data loading, or any specific operation type
 - What parameters to send when starting operations
 - What endpoints to call (delegates to adapter)
 - How to interpret domain-specific results
+- **How to format domain-specific progress messages (VARIANT - delegates to callback)**
 - Business logic of any kind
 
 **Lifecycle**:
-1. Receives an adapter and display preferences
+1. Receives an adapter, console, optional progress formatter callback, and display preferences
 2. Creates and manages HTTP client (async context manager)
-3. Registers signal handler for Ctrl+C
-4. Asks adapter for start endpoint and payload
-5. Makes HTTP POST to start the operation
-6. Extracts operation_id from response (via adapter)
-7. Enters polling loop until completion or cancellation
-8. On each poll: fetches status, updates progress display
-9. On cancellation: sends cancel request, waits for acknowledgment
-10. On completion: asks adapter to display results
-11. Cleans up signal handler and HTTP client
-12. Returns success/failure to caller
+3. **Creates Rich Progress bar context (if show_progress=True)**
+4. Registers signal handler for Ctrl+C
+5. Asks adapter for start endpoint and payload
+6. Makes HTTP POST to start the operation
+7. Extracts operation_id from response (via adapter)
+8. Enters polling loop until completion or cancellation
+9. **On each poll: fetches status, formats message (via callback), updates progress bar**
+10. On cancellation:
+    - Sends DELETE request to backend
+    - Polls for confirmation (max 3 seconds)
+    - Displays cancellation results (via adapter if available, or default message)
+11. On completion: asks adapter to display results
+12. Cleans up signal handler, progress bar, and HTTP client
+13. Returns success/failure to caller
+
+**Progress Display Architecture (INVARIANT/VARIANT Separation)**:
+- **INVARIANT (Executor)**: Creates Rich Progress bar, manages lifecycle, updates percentage/elapsed time
+- **VARIANT (Command/Adapter)**: Provides optional `progress_callback(operation_data: dict) -> str` to format domain-specific messages
+- **Default**: If no callback provided, shows generic "Status: {status} - {current_step}"
+- **Custom**: Callbacks can add domain details (e.g., "Epoch 5/10, Batch 120/500, GPU: 85%")
+- **Context Flow**: Rich progress metadata flows via `OperationProgress.context` field:
+  - Backend (TrainingProgressBridge) → emits context dict with domain-specific details
+  - Operations API → preserves context in OperationProgress model
+  - CLI (progress_callback) → extracts context to format rich display
+  - Example context: `{"current_epoch": 5, "total_epochs": 10, "current_batch": 120, "resource_usage": {"gpu_used": True, "gpu_utilization_percent": 85}}`
 
 **Error Handling Strategy**:
 - Connection errors: Retry with exponential backoff
@@ -309,7 +329,15 @@ Each component has exactly one reason to change:
    - Override when operation has special progress semantics
    - Example: Training might expose epoch/batch information
 
-**Design Note**: This is a minimal interface with just four required methods. Most adapters will be <100 lines of simple, declarative code.
+6. **display_cancellation_results(final_status: dict, console: Console, http_client: AsyncClient) → None** (optional)
+   - Called when operation is cancelled and backend confirms cancellation
+   - Receives the final operation status with cancellation metadata
+   - Has access to HTTP client for making additional requests if needed
+   - Formats and prints cancellation-specific results using Rich console
+   - If not implemented, executor shows default message: "✓ Cancellation confirmed. Completed {X} iterations."
+   - Example: Dummy adapter shows "Completed {X}/{Y} iterations"
+
+**Design Note**: This is a minimal interface with just four required methods (get_start_endpoint, get_start_payload, parse_start_response, display_results). Optional methods like adapt_progress and display_cancellation_results allow customization when needed. Most adapters will be <100 lines of simple, declarative code.
 
 #### Concrete Adapters
 
@@ -442,13 +470,18 @@ The executor integrates with `EnhancedCLIProgressDisplay` which already exists:
 **Cancellation Flow**:
 When cancellation is detected (Ctrl+C pressed):
 
-1. Immediately print: "🛑 Sending cancellation to server..."
-2. Send POST to `/operations/{operation_id}/cancel` with reason: "User cancelled"
-3. Wait for response with 5-second timeout
-4. If successful: print "✅ Cancellation sent successfully"
-5. If failed: print warning but don't block (best effort)
-6. Exit polling loop, return None (indicating cancellation)
-7. Executor returns False to command (operation did not complete)
+1. Immediately print: "⚠️  Operation cancelled by user"
+2. Call `_handle_cancellation()` to send DELETE request and wait for confirmation:
+   - Send DELETE to `/operations/{operation_id}`
+   - Print: "🔄 Waiting for backend to confirm cancellation..."
+   - Poll for confirmation (max 10 polls × 0.3s = 3 seconds)
+   - Check if status becomes "cancelled"
+   - Return final operation status with metadata
+3. Display cancellation results:
+   - Call adapter's optional `display_cancellation_results()` if implemented
+   - Otherwise show default message: "✓ Cancellation confirmed. Completed {X} iterations."
+4. Exit polling loop, cleanup resources
+5. Executor returns False to command (operation did not complete successfully)
 
 **Error Handling Hierarchy**:
 
@@ -833,6 +866,189 @@ Consider adding operation timing metrics, success/failure rate tracking, and pro
 ### Advanced Progress Display
 
 Future enhancements could include real-time logs, resource usage display, multi-step progress, and parallel operation tracking.
+
+---
+
+## Data Models
+
+### OperationProgress Model
+
+The `OperationProgress` model is the data structure that carries progress information from the backend through the operations API to the CLI. It includes both generic progress fields (used by all operations) and a flexible context field for domain-specific metadata.
+
+**Model Structure**:
+```python
+class OperationProgress(BaseModel):
+    # Generic progress fields (used by all operations)
+    percentage: float = Field(0.0, ge=0.0, le=100.0)
+    current_step: Optional[str] = None
+    steps_completed: int = Field(0, ge=0)
+    steps_total: int = Field(0, ge=0)
+    items_processed: int = Field(0, ge=0)
+    items_total: Optional[int] = None
+    current_item: Optional[str] = None
+
+    # Domain-specific progress metadata (flexible dict)
+    context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional progress context for domain-specific details"
+    )
+```
+
+**Context Field Purpose**:
+The `context` field enables rich progress display without coupling the generic operations API to specific domain knowledge. Different operations can include different context data:
+
+**Training Operation Context Example**:
+```python
+{
+    "current_epoch": 5,
+    "total_epochs": 10,
+    "current_batch": 120,
+    "total_batches_per_epoch": 500,
+    "batch_metrics": {
+        "loss": 0.234,
+        "accuracy": 0.876
+    },
+    "resource_usage": {
+        "gpu_used": True,
+        "gpu_name": "RTX 3090",
+        "gpu_utilization_percent": 85,
+        "memory_used_mb": 8192
+    }
+}
+```
+
+**Data Loading Operation Context Example**:
+```python
+{
+    "current_segment": 3,
+    "total_segments": 10,
+    "current_symbol": "AAPL",
+    "timeframe": "1h",
+    "bars_fetched": 12500,
+    "date_range": {
+        "start": "2024-01-01",
+        "end": "2024-03-01"
+    }
+}
+```
+
+**Context Flow Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Backend (TrainingProgressBridge)                       │
+│                                                          │
+│  def on_batch(epoch, batch, metrics):                   │
+│      context = {                                         │
+│          "current_epoch": epoch,                         │
+│          "current_batch": batch,                         │
+│          "resource_usage": gpu_info                      │
+│      }                                                   │
+│      emit_progress(percentage, message, context)        │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Operations Service (operations_service.py)             │
+│                                                          │
+│  async def update_progress(operation_id, progress):     │
+│      operation.progress = progress  # Preserves context │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Operations API (GET /operations/{id})                  │
+│                                                          │
+│  Returns OperationInfo with progress.context intact     │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  CLI Executor (operation_executor.py)                   │
+│                                                          │
+│  operation_data = poll_status(operation_id)             │
+│  if progress_callback:                                   │
+│      msg = progress_callback(operation_data)            │
+│  progress_bar.update(msg)                                │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Command Callback (async_model_commands.py)             │
+│                                                          │
+│  def format_training_progress(operation_data):          │
+│      context = operation_data["progress"]["context"]    │
+│      epoch = context.get("current_epoch")               │
+│      batch = context.get("current_batch")               │
+│      gpu = context.get("resource_usage", {})            │
+│      return f"Epoch {epoch}/10, Batch {batch}, GPU..."  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Benefits of Context Field**:
+1. **Flexibility**: Different operations can include different metadata
+2. **Extensibility**: New context fields can be added without API changes
+3. **Type Safety**: Context validated at the model level
+4. **Separation of Concerns**: Generic API doesn't need domain knowledge
+5. **Rich UX**: CLI can display detailed progress information
+
+**Migration Note**: The context field was added in Phase 4 (TASK-4.3) to address a regression where the unified operations pattern lost rich progress details that were previously displayed in the training command.
+
+### TrainingProgressRenderer
+
+The system uses the `ProgressRenderer` pattern to format domain-specific progress messages. Training operations use `TrainingProgressRenderer`, which follows the same pattern as `DataProgressRenderer`.
+
+**Architecture**:
+
+```python
+# TrainingProgressBridge populates GenericProgressState.context
+state.context = {
+    "epoch_index": 5,
+    "total_epochs": 10,
+    "batch_number": 120,
+    "batch_total_per_epoch": 500,
+    "resource_usage": {
+        "gpu_used": True,
+        "gpu_name": "RTX 3090",
+        "gpu_utilization_percent": 85
+    }
+}
+
+# TrainingProgressRenderer formats the message
+class TrainingProgressRenderer(ProgressRenderer):
+    def render_message(self, state: GenericProgressState) -> str:
+        # Extract structured data from state.context
+        epoch = state.context.get("epoch_index", 0)
+        total_epochs = state.context.get("total_epochs", 0)
+        batch = state.context.get("batch_number", 0)
+
+        # Format rich message
+        msg = f"Epoch {epoch}/{total_epochs} · Batch {batch}/..."
+
+        # Add GPU info if available
+        if state.context.get("resource_usage", {}).get("gpu_used"):
+            gpu_util = state.context["resource_usage"]["gpu_utilization_percent"]
+            msg += f" 🖥️ GPU: {gpu_util:.0f}%"
+
+        return msg
+```
+
+**Flow**:
+
+1. `TrainingService` creates `GenericProgressManager` with `TrainingProgressRenderer`
+2. `TrainingProgressBridge._emit()` updates `state.context` with rich data
+3. `GenericProgressManager._trigger_callback()` calls `renderer.render_message(state)`
+4. Rendered message flows to `OperationProgress.current_step`
+5. Context dict flows to `OperationProgress.context`
+6. CLI receives both formatted message and structured context
+
+**Benefits**:
+
+- Follows proven `DataProgressRenderer` pattern
+- Separates formatting logic from bridge emission logic
+- Context remains structured for CLI to further customize display
+- Renderer can be tested independently
+- New training metrics can be added by updating renderer
 
 ---
 

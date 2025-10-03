@@ -454,6 +454,180 @@ git commit -m "test(cli): add integration tests for unified operations pattern"
 
 ---
 
+### TASK-4.3: Fix Rich Progress Context Regression
+
+**Objective**: Restore rich training progress details (epochs, batches, GPU info) in CLI display
+
+**Context**: The unified operations pattern successfully fixed cancellation, but introduced a regression where training progress now only shows basic "Status: running" instead of detailed epoch/batch/GPU information that was previously available.
+
+**Root Cause Analysis**:
+
+- `TrainingProgressBridge` already creates rich context data (epoch_index, batch_number, resource_usage)
+- `current_step` field contains formatted string: "Epoch 1/100 · Batch 1/45 [1/100] (0.0%)"
+- However, `GenericProgressState.context` is NOT being rendered into a structured format for the CLI
+- The system has `ProgressRenderer` infrastructure (see `DataProgressRenderer`) but training doesn't use it
+
+**Correct Solution**: Create `TrainingProgressRenderer` following the proven `ProgressRenderer` pattern
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+
+- `ktrdr/api/services/training/training_progress_renderer.py` (NEW)
+- `ktrdr/api/services/training_service.py` (MODIFY - inject renderer into GenericProgressManager)
+- `ktrdr/api/models/operations.py` (MODIFY - add context field to OperationProgress) ✅ DONE
+- `ktrdr/api/services/training_service.py` (MODIFY - ensure context passed to OperationProgress)
+- `ktrdr/cli/async_model_commands.py` (CLEANUP - remove debug code)
+- `tests/unit/api/services/training/test_training_progress_renderer.py` (NEW)
+- `tests/integration/cli/test_unified_operations.py` (MODIFY - test rich progress context)
+
+**Implementation Steps**:
+
+1. **Create TrainingProgressRenderer** (follows DataProgressRenderer pattern):
+
+   ```python
+   # ktrdr/api/services/training/training_progress_renderer.py
+   class TrainingProgressRenderer(ProgressRenderer):
+       """Renders rich training progress messages from context data."""
+
+       def render_message(self, state: GenericProgressState) -> str:
+           """Format training-specific progress with epochs, batches, GPU."""
+           # Extract from state.context (populated by TrainingProgressBridge)
+           epoch_index = state.context.get("epoch_index", 0)
+           total_epochs = state.context.get("total_epochs", 0)
+           batch_number = state.context.get("batch_number", 0)
+           batch_total = state.context.get("batch_total_per_epoch", 0)
+
+           # Build rich message
+           msg = state.message  # Base message from bridge
+           if epoch_index > 0 and total_epochs > 0:
+               msg = f"Epoch {epoch_index}/{total_epochs}"
+               if batch_number > 0:
+                   msg += f" · Batch {batch_number}/{batch_total}"
+
+           # Add GPU info if available
+           resource_usage = state.context.get("resource_usage", {})
+           if resource_usage.get("gpu_used"):
+               gpu_name = resource_usage.get("gpu_name", "GPU")
+               gpu_util = resource_usage.get("gpu_utilization_percent")
+               if gpu_util:
+                   msg += f" 🖥️ {gpu_name}: {gpu_util:.0f}%"
+
+           return msg
+   ```
+
+2. **Inject renderer when creating GenericProgressManager**:
+
+   ```python
+   # ktrdr/api/services/training_service.py
+   from .training.training_progress_renderer import TrainingProgressRenderer
+
+   # In _run_local_via_orchestrator() and _run_host_via_orchestrator():
+   renderer = TrainingProgressRenderer()
+   # Pass to GenericProgressManager constructor
+   ```
+
+3. **Ensure ServiceOrchestrator passes context to OperationProgress**:
+   - Verify that when converting GenericProgressState → OperationProgress
+   - The `state.context` dict is included in `OperationProgress.context`
+   - This ensures CLI receives structured data, not just formatted strings
+
+4. **Update CLI callback to use context** (already exists in format_training_progress):
+   - Extract from `progress_info.get("context", {})`
+   - Build rich status message for progress bar description
+
+**Expected Progress Display**:
+
+Before (Current - Regression):
+```
+Training: 45% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 00:02:30
+```
+
+After (Fixed):
+```
+Training: 45% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 00:02:30
+Status: running (Epoch: 5/10, Batch: 120/500) 🖥️ RTX 3090: 85%
+```
+
+**Acceptance Criteria**:
+
+- [ ] `TrainingProgressRenderer` class created following `DataProgressRenderer` pattern
+- [ ] Renderer extracts epoch_index, total_epochs, batch_number from state.context
+- [ ] Renderer extracts GPU info from state.context.resource_usage
+- [ ] Renderer injected into GenericProgressManager for training operations
+- [ ] `OperationProgress` has `context: dict[str, Any]` field ✅ DONE
+- [ ] ServiceOrchestrator passes `state.context` to `OperationProgress.context`
+- [ ] Training progress shows epoch numbers (e.g., "Epoch: 5/10")
+- [ ] Training progress shows batch numbers (e.g., "Batch: 120/500")
+- [ ] Training progress shows GPU info when available (e.g., "🖥️ RTX 3090: 85%")
+- [ ] Dummy operation still works (generic progress without renderer)
+- [ ] Unit tests for TrainingProgressRenderer pass
+- [ ] Integration test verifies rich progress context flows correctly
+- [ ] No breaking changes to existing operations
+- [ ] All unit and integration tests pass
+- [ ] Quality checks pass
+
+**Testing Strategy**:
+
+1. **Unit Tests** (`test_training_progress_renderer.py`):
+   - Test renderer with epoch-only context
+   - Test renderer with epoch + batch context
+   - Test renderer with epoch + batch + GPU context
+   - Test renderer with empty context (graceful fallback)
+   - Test renderer extracts correct values from state.context
+
+2. **Integration Tests** (`test_unified_operations.py`):
+   - Test rich progress context flows from API to CLI
+   - Verify `format_training_progress` callback receives populated context
+   - Verify context contains: epoch_index, total_epochs, batch_number, resource_usage
+
+3. **Manual Testing**:
+   ```bash
+   # Start training and verify progress display shows:
+   ktrdr models train strategies/trend_momentum.yaml AAPL 1h \
+     --start-date 2024-01-01 --end-date 2024-03-01
+
+   # Expected output should include:
+   # Status: running (Epoch: 5/10, Batch: 120/500) 🖥️ GPU: 85%
+   ```
+
+**Rollback Plan**:
+If this introduces issues, the `context` field is optional (defaults to empty dict), so existing operations continue working. Simply revert the commit and investigate.
+
+**Documentation Updates**:
+- Update API models documentation to explain context field usage
+- Add example showing how adapters can use context for rich progress
+- Document best practices for progress context structure
+
+**Commit Message**:
+```
+feat(training): implement TrainingProgressRenderer for rich progress display
+
+Creates TrainingProgressRenderer following the ProgressRenderer pattern to
+restore rich training progress details (epochs, batches, GPU) in CLI.
+
+Changes:
+- Add TrainingProgressRenderer to format training-specific progress messages
+- Inject renderer into GenericProgressManager for training operations
+- Ensure ServiceOrchestrator passes state.context to OperationProgress.context
+- Update CLI callback to extract from progress.context
+
+Before: "Status: running" (generic message)
+After: "Epoch: 5/10 · Batch: 120/500 🖥️ RTX 3090: 85%" (rich details)
+
+Architecture:
+- Follows proven DataProgressRenderer pattern
+- TrainingProgressBridge populates state.context → Renderer formats message
+- Context flows: Bridge → Manager → ServiceOrchestrator → OperationProgress → CLI
+
+Fixes: Rich progress context regression from unified operations migration
+Tests: Unit tests for renderer + integration tests for context flow
+```
+
+**Estimated Time**: 3-4 hours (renderer + integration + testing)
+
+---
+
 ## Phase 5: Cleanup and Documentation
 
 ### TASK-5.1: Remove Debug Code
@@ -584,6 +758,967 @@ git pull origin feature/training-service-orchestrator
 git branch -d feature/cli-unified-operations
 gh api repos/:owner/:repo/git/refs/heads/feature/cli-unified-operations -X DELETE
 ```
+
+---
+
+## Phase 6: Final CLI Unification and Cleanup
+
+**Objective**: Complete CLI unification by enhancing the unified pattern to support rich progress (like data loading), then migrating all commands. Preserve data loading's superior UX as the new standard.
+
+**Branch**: `feature/cli-unified-operations` (continue on same branch)
+
+### Analysis Summary
+
+**Current State Assessment**:
+
+1. **Dummy Command**: ⚠️ BASIC UX (Needs Enhancement)
+   - Migrated to unified pattern but simple progress display
+   - Shows basic spinner and generic message
+   - **Target: Upgrade to rich progress display**
+
+2. **Training Command**: ⚠️ NEEDS CLEANUP + UX ENHANCEMENT
+   - Migrated to unified pattern but has extractable code
+   - Issues: Strategy loading logic embedded, complex progress formatter with duplication
+   - Simple progress display (needs rich context)
+   - **Target: Extract helpers + upgrade to rich progress display**
+
+3. **Data Loading Command**: ✅ SUPERIOR UX (Gold Standard!)
+   - Uses OLD pattern BUT has EXCELLENT rich progress display:
+     - 🔄 Dynamic status with operation details ("Fetch 1059 segments from IB: Segment 77/1059...")
+     - 📊 Real-time item counts (104824 items)
+     - 📈 Percentage progress (16%)
+     - ⏱️ Time tracking (0:08:18 elapsed, 3:15:27 remaining)
+     - 📦 Current work description with date ranges
+   - Has significant code duplication (custom polling loops, signal handling, cancellation)
+   - **Target: Migrate to unified pattern WHILE PRESERVING rich progress UX**
+
+**CRITICAL INSIGHTS**:
+- Data loading has the BEST UX - enhance unified pattern to match it, NOT downgrade data loading
+- **Migration sequence matters**: Validate enhanced pattern with Dummy first, then Training, THEN Data Loading
+- **Goal is NOT line count reduction** - goal is eliminating duplication and enhancing UX
+
+---
+
+### TASK-6.0: Enhance AsyncOperationExecutor for Rich Progress Display
+
+**Objective**: Upgrade AsyncOperationExecutor to support rich progress display (like data loading) instead of basic progress bar
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/operation_executor.py` (MODIFY - add rich progress support)
+- `tests/unit/cli/test_operation_executor.py` (MODIFY - test rich progress)
+
+**Current Problem**:
+AsyncOperationExecutor uses a simple Rich `Progress` bar with basic text:
+```python
+# Current: Simple progress bar
+with Progress(...) as progress:
+    task = progress.add_task("Operation running...")
+    # Just updates percentage
+```
+
+Data loading uses `EnhancedCLIProgressDisplay` with:
+- Detailed current operation ("Fetch 1059 segments: Segment 77/1059")
+- Item counts (104824 items processed)
+- Time estimates (0:08:18 elapsed, 3:15:27 remaining)
+- Percentage progress with context
+
+**Solution**:
+Integrate `EnhancedCLIProgressDisplay` into `AsyncOperationExecutor` as an option:
+
+```python
+class AsyncOperationExecutor:
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        poll_interval: float = 0.3,
+        timeout: float = 30.0,
+        use_rich_progress: bool = True,  # NEW: Enable rich progress by default
+    ):
+        self.use_rich_progress = use_rich_progress
+
+    async def execute_operation(
+        self,
+        adapter: OperationAdapter,
+        console: Console,
+        progress_callback: Optional[Callable] = None,
+        show_progress: bool = True,
+    ) -> bool:
+        if show_progress and self.use_rich_progress:
+            # Use EnhancedCLIProgressDisplay
+            from ktrdr.cli.progress_display_enhanced import create_enhanced_progress_callback
+
+            enhanced_callback, display = create_enhanced_progress_callback(
+                console=console,
+                show_details=True
+            )
+
+            # Poll with enhanced display
+            # Convert operation_data from API to GenericProgressState
+            # Update enhanced display with rich context
+        else:
+            # Fall back to simple progress bar (current behavior)
+```
+
+**Key Changes**:
+
+1. **Add `use_rich_progress` parameter** (default True)
+2. **Integrate `EnhancedCLIProgressDisplay`** from existing code
+3. **Convert operations API data → GenericProgressState**:
+   ```python
+   def _create_progress_state(operation_data: dict) -> GenericProgressState:
+       progress = operation_data.get("progress", {})
+       return GenericProgressState(
+           operation_id=operation_data["operation_id"],
+           current_step=progress.get("steps_completed", 0),
+           total_steps=progress.get("steps_total", 100),
+           message=progress.get("current_step", "Processing..."),
+           percentage=progress.get("percentage", 0),
+           items_processed=progress.get("items_processed", 0),
+           total_items=progress.get("items_total"),
+           context=progress.get("context", {}),
+           # Enhanced display will calculate time estimates
+       )
+   ```
+
+4. **Keep backward compatibility**: Simple progress bar still available via `use_rich_progress=False`
+
+**Benefits**:
+- All three commands get rich progress display by default
+- Data loading UX becomes the standard
+- No breaking changes (simple mode still available)
+- Reuses existing, proven `EnhancedCLIProgressDisplay` code
+
+**Acceptance Criteria**:
+- [ ] `AsyncOperationExecutor` supports `use_rich_progress` parameter
+- [ ] When enabled, uses `EnhancedCLIProgressDisplay`
+- [ ] Converts operations API data to `GenericProgressState`
+- [ ] Shows detailed operation context (items processed, time estimates, etc.)
+- [ ] Backward compatible with simple progress bar mode
+- [ ] All existing tests pass
+- [ ] New tests verify rich progress integration
+- [ ] Manual testing shows data-loading-quality progress for all operations
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/operation_executor.py tests/unit/cli/test_operation_executor.py
+git commit -m "feat(cli): add rich progress display support to AsyncOperationExecutor
+
+Integrates EnhancedCLIProgressDisplay into unified executor to provide
+data-loading-quality UX for all async operations.
+
+Features:
+- Rich progress with item counts, time estimates, percentages
+- Detailed operation context display
+- Backward compatible (simple mode still available via use_rich_progress=False)
+- Reuses existing EnhancedCLIProgressDisplay code
+
+This makes data loading's superior UX the standard for all async CLI operations."
+```
+
+**Estimated Time**: 2-3 hours
+
+---
+
+### TASK-6.1: Create Strategy Loading Helper
+
+**Objective**: Extract strategy loading/validation logic from training command into reusable helper
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/helpers/strategy_helpers.py` (NEW)
+- `ktrdr/cli/helpers/__init__.py` (NEW)
+- `tests/unit/cli/helpers/test_strategy_helpers.py` (NEW)
+- `tests/unit/cli/helpers/__init__.py` (NEW)
+
+**What to Extract**:
+```python
+# From async_model_commands.py lines 89-158
+def load_and_validate_strategy(
+    strategy_file: str,
+    symbol_override: Optional[str] = None,
+    timeframe_override: Optional[str] = None,
+) -> tuple[list[str], list[str], dict]:
+    """
+    Load strategy config and extract/validate symbols and timeframes.
+
+    Returns:
+        (symbols, timeframes, config) tuple
+
+    Raises:
+        ValidationError: If validation fails
+        FileNotFoundError: If strategy file doesn't exist
+    """
+```
+
+**Benefits**:
+- Removes strategy loading logic from command (reusable helper)
+- Easier to test in isolation
+- Cleaner training command flow
+- Future commands can reuse this helper
+
+**Acceptance Criteria**:
+- [ ] Helper function created with clear interface
+- [ ] Handles strategy file validation
+- [ ] Extracts symbols/timeframes from config
+- [ ] Supports CLI overrides
+- [ ] Validates symbols and timeframes
+- [ ] Returns clean data structures
+- [ ] Unit tests with >90% coverage
+- [ ] Training command uses helper (verified working)
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/helpers/ tests/unit/cli/helpers/
+git commit -m "refactor(cli): extract strategy loading into reusable helper"
+```
+
+---
+
+### TASK-6.2: Simplify Training Progress Formatter
+
+**Objective**: Reduce 56-line progress formatter to ~15 lines by removing excessive fallback logic
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/async_model_commands.py` (MODIFY - lines 260-315)
+
+**Current Problem**:
+The formatter has two complete implementations:
+1. Try to use backend-rendered message
+2. Fall back to manual construction from context
+
+**Root Cause**:
+Backend `TrainingProgressRenderer` already formats rich messages. CLI shouldn't duplicate this logic.
+
+**Solution**:
+```python
+def format_training_progress(operation_data: dict) -> str:
+    """Format progress message - backend already does the heavy lifting."""
+    status = operation_data.get("status", "unknown")
+    progress_info = operation_data.get("progress") or {}
+
+    # Use backend-rendered message (TrainingProgressRenderer output)
+    rendered_message = progress_info.get("current_step", "")
+    if rendered_message:
+        return f"Status: {status} - {rendered_message}"
+
+    # Minimal fallback for missing data
+    return f"Status: {status}"
+```
+
+**Benefits**:
+- Eliminates duplicate rendering logic (backend already formats)
+- Trusts backend TrainingProgressRenderer (Single Responsibility)
+- Simpler and easier to maintain
+- Preparation for rich progress migration
+
+**Acceptance Criteria**:
+- [ ] Formatter reduced to <15 lines
+- [ ] Uses backend-rendered message primarily
+- [ ] Minimal fallback (no complex reconstruction)
+- [ ] Still displays rich progress (epochs, batches, GPU)
+- [ ] Manual testing shows correct display
+- [ ] No regressions in progress quality
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/async_model_commands.py
+git commit -m "refactor(cli): simplify training progress formatter
+
+Reduce from 56 lines to 10 lines by trusting backend TrainingProgressRenderer
+to format messages. CLI should only display, not reconstruct."
+```
+
+---
+
+### TASK-6.3: Clean Up Training Command
+
+**Objective**: Apply helpers and simplifications to reduce training command to ~80 lines async implementation
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/async_model_commands.py` (MODIFY)
+
+**Changes**:
+1. Use `load_and_validate_strategy()` helper (TASK-6.1)
+2. Use simplified progress formatter (TASK-6.2)
+3. Consolidate parameter display
+4. Remove redundant comments
+
+**Expected Improvements**:
+- Cleaner command structure
+- Better separation of concerns
+- Reusable strategy loading logic
+
+**Acceptance Criteria**:
+- [ ] Uses strategy helper function
+- [ ] Uses simplified progress formatter
+- [ ] Command structure is clean and maintainable
+- [ ] All functionality preserved
+- [ ] Training starts, progresses, completes successfully
+- [ ] Cancellation works correctly
+- [ ] Progress display shows rich details
+- [ ] All tests pass
+- [ ] Manual testing successful
+
+**Commit After**:
+```bash
+make test-unit
+make test-integration
+git add ktrdr/cli/async_model_commands.py
+git commit -m "refactor(cli): clean up training command using helpers
+
+Uses strategy loading helper and simplified progress formatter.
+Cleaner separation of concerns and better maintainability."
+```
+
+---
+
+### TASK-6.4: Migrate Dummy Command to Rich Progress
+
+**Objective**: Migrate dummy command to use enhanced AsyncOperationExecutor with rich progress display
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/dummy_commands.py` (MODIFY - use rich progress)
+- `tests/integration/cli/test_dummy_commands.py` (MODIFY)
+
+**Current State**:
+Dummy command uses basic progress display from AsyncOperationExecutor
+
+**Target State**:
+Use enhanced AsyncOperationExecutor with `use_rich_progress=True` (default)
+
+**Changes**:
+```python
+async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
+    # ... existing setup ...
+
+    # Create executor with rich progress (now default)
+    executor = AsyncOperationExecutor()  # use_rich_progress=True by default
+
+    # Execute - will automatically use EnhancedCLIProgressDisplay
+    success = await executor.execute_operation(
+        adapter=adapter,
+        console=console,
+        show_progress=show_progress and not quiet,
+    )
+```
+
+**What to Validate**:
+- Rich progress bar appears (with spinner, percentage, time)
+- Shows iteration counts if backend provides them
+- Time elapsed/remaining displayed
+- No regressions in functionality
+
+**Why Dummy First?**:
+- Simplest command - easiest to validate rich progress works
+- Minimal domain complexity - focuses on infrastructure
+- If something breaks, easier to debug
+- Proves enhanced pattern before touching more complex commands
+
+**Acceptance Criteria**:
+- [ ] Uses enhanced AsyncOperationExecutor (default rich progress)
+- [ ] Progress display shows rich context (items, time, percentage)
+- [ ] No custom progress formatting code needed
+- [ ] Cancellation still works correctly
+- [ ] All functionality preserved
+- [ ] All tests pass
+
+**MANDATORY MANUAL TESTING** (BEFORE COMMIT):
+
+**⚠️ DO NOT COMMIT until ALL manual tests pass and UX is validated!**
+
+Run these commands and verify UX quality:
+
+```bash
+# Test 1: Basic execution with progress
+ktrdr dummy
+
+# VERIFY:
+# - Rich progress bar appears (not just simple spinner)
+# - Shows percentage (e.g., "16%")
+# - Shows item counts (e.g., "25/100 items")
+# - Shows time elapsed (e.g., "0:00:05")
+# - Shows time remaining estimate (e.g., "0:00:15")
+# - Spinner animates smoothly
+# - Progress updates are responsive (<1s latency)
+
+# Test 2: Cancellation (press Ctrl+C after a few seconds)
+ktrdr dummy
+
+# VERIFY:
+# - Ctrl+C is caught gracefully
+# - Shows "Cancellation requested" message
+# - Operation stops cleanly
+# - No stack traces or errors
+# - Returns to shell prompt cleanly
+
+# Test 3: Completion
+ktrdr dummy
+
+# VERIFY:
+# - Progress reaches 100%
+# - Shows completion message
+# - Displays operation summary (iterations completed)
+# - Clean exit
+```
+
+**Screenshot/Recording**:
+- [ ] Take screenshot or recording of progress display
+- [ ] Compare to data loading progress quality
+- [ ] Verify it meets same UX standard
+
+**Only commit if**: Rich progress looks as good as data loading example!
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/dummy_commands.py tests/
+git commit -m "feat(cli): migrate dummy command to rich progress display
+
+Uses enhanced AsyncOperationExecutor with rich progress by default.
+Validates that enhanced pattern provides data-loading-quality UX
+for simple operations.
+
+Progress now shows:
+- Item counts and percentages
+- Time elapsed/remaining
+- Rich operation context
+- Professional spinner and progress bar"
+```
+
+**Estimated Time**: 1 hour
+
+---
+
+### TASK-6.5: Migrate Training Command to Rich Progress
+
+**Objective**: Migrate training command to use enhanced AsyncOperationExecutor with rich progress display
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/async_model_commands.py` (MODIFY - use rich progress)
+- `tests/integration/cli/test_training_commands.py` (MODIFY)
+
+**Current State**:
+Training command uses basic progress display with custom formatter
+
+**Target State**:
+Use enhanced AsyncOperationExecutor with rich progress, remove custom formatter
+
+**Changes**:
+```python
+async def _train_model_async_impl(...):
+    # ... existing setup ...
+
+    # Create executor with rich progress (default)
+    executor = AsyncOperationExecutor()
+
+    # NO custom progress formatter needed!
+    # Backend TrainingProgressRenderer already provides rich context
+    # EnhancedCLIProgressDisplay will show it automatically
+
+    success = await executor.execute_operation(
+        adapter=adapter,
+        console=console,
+        show_progress=True,  # Rich progress automatically shown
+    )
+```
+
+**What to Figure Out**:
+- Does backend TrainingProgressRenderer provide enough context for rich display?
+- Do we need to enhance backend progress data with:
+  - Current epoch/batch info in progress.context?
+  - GPU utilization in progress.context?
+  - Items processed counts?
+- Test and adjust backend if needed
+
+**Why Training Second?**:
+- More complex than dummy - validates rich progress with real domain data
+- Tests backend integration (TrainingProgressRenderer → rich display)
+- Identifies any missing context data before touching data loading
+- Proves pattern works for training-specific progress
+
+**Acceptance Criteria**:
+- [ ] Uses enhanced AsyncOperationExecutor (default rich progress)
+- [ ] Progress shows epoch/batch context (from backend)
+- [ ] GPU utilization displayed (if available from backend)
+- [ ] Time estimates shown
+- [ ] No custom progress formatter needed
+- [ ] All functionality preserved
+- [ ] All tests pass
+
+**MANDATORY MANUAL TESTING** (BEFORE COMMIT):
+
+**⚠️ DO NOT COMMIT until ALL manual tests pass and UX is validated!**
+
+Run these commands and verify training-specific rich progress:
+
+```bash
+# Test 1: Basic training execution
+ktrdr models train strategies/your_strategy.yaml --start-date 2024-01-01 --end-date 2024-06-01
+
+# VERIFY:
+# - Rich progress bar appears
+# - Shows current epoch (e.g., "Epoch: 5/100")
+# - Shows current batch (e.g., "Batch: 123/500")
+# - Shows GPU utilization if available (e.g., "🖥️ NVIDIA A100: 85%")
+# - Shows percentage progress
+# - Shows time elapsed and remaining
+# - Progress messages include training context
+# - Updates are responsive and informative
+
+# Test 2: Cancellation during training
+ktrdr models train strategies/your_strategy.yaml --start-date 2024-01-01 --end-date 2024-06-01
+# Press Ctrl+C after a few epochs
+
+# VERIFY:
+# - Ctrl+C is caught gracefully
+# - Shows which epoch was interrupted
+# - Training stops cleanly on backend
+# - No corruption or hanging processes
+# - Returns to shell cleanly
+
+# Test 3: Completion and results
+ktrdr models train strategies/your_strategy.yaml --start-date 2024-01-01 --end-date 2024-06-01
+
+# VERIFY:
+# - Progress reaches 100%
+# - Shows completion message
+# - Displays training metrics (accuracy, precision, recall, F1)
+# - Shows model info (parameters, size)
+# - All data is accurate
+```
+
+**Screenshot/Recording**:
+- [ ] Take screenshot showing epoch/batch progress
+- [ ] Compare to data loading progress quality
+- [ ] Verify training-specific context is clear and informative
+
+**Compare Progress Quality**:
+- [ ] Training progress ≥ data loading quality
+- [ ] Context is domain-appropriate (epochs vs segments)
+- [ ] Time estimates are accurate
+- [ ] UX feels professional and informative
+
+**Only commit if**: Training progress matches data loading UX quality!
+
+**Commit After**:
+```bash
+make test-unit
+make test-integration
+git add ktrdr/cli/async_model_commands.py tests/
+git commit -m "feat(cli): migrate training command to rich progress display
+
+Uses enhanced AsyncOperationExecutor with rich progress by default.
+Removes custom progress formatter - backend provides all context.
+
+Progress now shows:
+- Epoch and batch numbers
+- GPU utilization
+- Time estimates
+- Item counts
+- Professional rich display"
+```
+
+**Estimated Time**: 2 hours (includes testing/adjusting backend progress context)
+
+---
+
+### TASK-6.6: Create DataLoadOperationAdapter
+
+**Objective**: Create adapter for data loading operations (now that pattern is proven with Dummy and Training)
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/operation_adapters.py` (MODIFY - add DataLoadOperationAdapter)
+- `tests/unit/cli/test_data_load_adapter.py` (NEW)
+
+**Adapter Design**:
+```python
+class DataLoadOperationAdapter(OperationAdapter):
+    """
+    Adapter for data loading operations.
+
+    Knows how to:
+    - Start data loading via /api/v1/data/load
+    - Parse data loading response to extract operation_id
+    - Display data loading results with summary
+    - Handle IB diagnosis messages
+    """
+
+    def __init__(
+        self,
+        symbol: str,
+        timeframe: str,
+        mode: str = "tail",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        trading_hours_only: bool = False,
+        include_extended: bool = False,
+    ):
+        # Store parameters
+
+    def get_start_endpoint(self) -> str:
+        return "/data/load"
+
+    def get_start_payload(self) -> dict[str, Any]:
+        # Construct payload from parameters
+
+    def parse_start_response(self, response: dict) -> str:
+        # Extract operation_id
+
+    async def display_results(
+        self,
+        final_status: dict,
+        console: Console,
+        http_client: AsyncClient,
+    ) -> None:
+        # Display bars loaded, date range, execution time
+        # Handle IB diagnosis if present
+        # Show summary table
+```
+
+**Key Features**:
+- Handles data loading specific parameters
+- Knows data loading API contract
+- Displays data summary (bars loaded, date range, etc.)
+- Handles IB diagnosis messages (partial loads, errors)
+- Similar structure to TrainingOperationAdapter (proven pattern)
+
+**Acceptance Criteria**:
+- [ ] Implements all 4 required OperationAdapter methods
+- [ ] Handles all data loading parameters correctly
+- [ ] Constructs proper API payload
+- [ ] Extracts operation_id correctly
+- [ ] Displays comprehensive results summary
+- [ ] Handles IB diagnosis messages
+- [ ] Shows bars loaded, date range, execution time
+- [ ] Clean, maintainable code structure
+- [ ] Unit tests cover all methods
+- [ ] Mock tests verify API contract
+
+**Commit After**:
+```bash
+make test-unit
+git add ktrdr/cli/operation_adapters.py tests/unit/cli/test_data_load_adapter.py
+git commit -m "feat(cli): add DataLoadOperationAdapter for data loading operations"
+```
+
+---
+
+### TASK-6.7: Migrate Data Loading Command
+
+**Objective**: Complete rewrite of data loading command using unified pattern
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/data_commands.py` (REWRITE `load_data` and `_load_data_async`)
+- `tests/integration/cli/test_data_commands.py` (MODIFY)
+
+**Current State**:
+- Custom signal handling
+- TWO polling loops (with/without progress)
+- Duplicate cancellation code
+- Custom progress integration with EnhancedCLIProgressDisplay
+
+**Target State**:
+Use `AsyncOperationExecutor` (with rich progress) and `DataLoadOperationAdapter`
+
+**Code to DELETE** (duplicate infrastructure):
+- Custom signal handling
+- Both polling loops
+- Cancellation handling code
+- Manual progress state creation
+- Custom enhanced display integration
+
+**Code to PRESERVE** (move to adapter):
+- `_process_data_load_response` logic → adapter's `display_results()`
+- IB diagnosis handling → adapter's `display_results()`
+
+**Why Data Loading Last?**:
+- Most complex command - has the most to lose
+- Rich progress pattern already proven with Dummy and Training
+- Enhanced executor already validated
+- We know exactly what works before touching working code
+
+**Acceptance Criteria**:
+- [ ] Uses enhanced `AsyncOperationExecutor` (rich progress)
+- [ ] Uses `DataLoadOperationAdapter`
+- [ ] NO custom polling loops
+- [ ] NO custom signal handling
+- [ ] NO custom cancellation code
+- [ ] Clean, maintainable code structure
+- [ ] Data loading works correctly (tail, backfill, full)
+- [ ] **CRITICAL**: Rich progress display preserved (same quality as before)
+- [ ] Cancellation works (Ctrl+C)
+- [ ] IB diagnosis messages still shown
+- [ ] Results summary displayed correctly
+- [ ] All tests pass
+
+**MANDATORY MANUAL TESTING** (BEFORE COMMIT):
+
+**⚠️ CRITICAL: DO NOT COMMIT until you verify NO REGRESSION in UX quality!**
+
+**This is the most important validation - data loading already works perfectly!**
+
+Run these commands and compare UX to original (take screenshots of BOTH):
+
+```bash
+# Test 1: Basic tail load (compare to original screenshot)
+ktrdr data load AUDUSD --timeframe 5m --mode tail
+
+# VERIFY (must match original quality):
+# - Shows "Fetch X segments from IB: Segment Y/X"
+# - Shows date range being fetched
+# - Shows item count (e.g., "104824 items")
+# - Shows percentage (e.g., "16%")
+# - Shows time elapsed (e.g., "0:08:18")
+# - Shows time remaining (e.g., "3:15:27")
+# - Progress updates feel responsive
+# - NO REGRESSION in detail or clarity
+
+# Test 2: Full load with date range
+ktrdr data load AAPL --start 2020-01-01 --end 2025-09-30 --mode full
+
+# VERIFY:
+# - Rich progress throughout entire load
+# - Segment tracking is accurate
+# - Time estimates are reasonable
+# - No missing context information
+
+# Test 3: Cancellation (press Ctrl+C after ~10 seconds)
+ktrdr data load MSFT --timeframe 1h --mode backfill
+# Press Ctrl+C
+
+# VERIFY:
+# - Cancellation is clean
+# - Shows how many segments were completed
+# - No data corruption
+# - Returns cleanly
+
+# Test 4: Trading hours filter
+ktrdr data load TSLA --trading-hours --include-extended
+
+# VERIFY:
+# - Filtering works correctly
+# - Progress display unchanged
+# - Results show filtered data
+
+# Test 5: IB diagnosis messages (simulate IB error if possible)
+# VERIFY:
+# - Partial load shows IB diagnosis
+# - Error shows clear IB diagnosis message
+# - Recovery suggestions appear
+
+# Test 6: Completion and summary
+ktrdr data load AAPL --mode tail
+
+# VERIFY:
+# - Shows bars loaded count
+# - Shows date range
+# - Shows execution time
+# - All metrics accurate
+```
+
+**CRITICAL COMPARISON**:
+- [ ] Take screenshot of NEW data loading progress
+- [ ] Compare side-by-side with ORIGINAL screenshot (the one you showed me)
+- [ ] Verify EVERY detail matches:
+  - [ ] "Fetch X segments from IB: Segment Y/X" format
+  - [ ] Item counts displayed
+  - [ ] Percentage shown
+  - [ ] Time elapsed shown
+  - [ ] Time remaining shown
+  - [ ] Date ranges shown
+  - [ ] Progress feels equally responsive
+- [ ] NO detail lost in migration
+- [ ] Quality ≥ original (ideally equal)
+
+**IB Diagnosis Testing**:
+- [ ] Partial load shows diagnosis message
+- [ ] Error conditions show clear messages
+- [ ] Recovery suggestions appear
+- [ ] Warnings are visible
+
+**Only commit if**:
+1. UX matches original screenshot quality EXACTLY
+2. All functionality preserved
+3. IB diagnosis messages still work
+4. No regressions detected
+
+**If ANY regression found**: STOP, fix the issue, and re-test before committing!
+
+**Commit After**:
+```bash
+make test-unit
+make test-integration
+git add ktrdr/cli/data_commands.py tests/
+git commit -m "refactor(cli): migrate data loading to unified operations pattern
+
+Migrates data loading to use AsyncOperationExecutor and DataLoadOperationAdapter.
+Eliminates duplicate infrastructure code while preserving rich progress UX.
+
+Changes:
+- Uses enhanced AsyncOperationExecutor (rich progress by default)
+- Removed custom signal handling
+- Removed duplicate polling loops
+- Removed custom cancellation code
+- Removed manual progress integration
+
+Preserved:
+- Rich progress display (same quality as before)
+- IB diagnosis messages
+- All functionality
+- Superior UX"
+```
+
+---
+
+### TASK-6.8: Final Verification and Documentation
+
+**Objective**: Ensure all three commands are lean, consistent, and well-documented
+
+**Branch**: `feature/cli-unified-operations`
+
+**Files**:
+- `ktrdr/cli/dummy_commands.py` (VERIFY)
+- `ktrdr/cli/async_model_commands.py` (VERIFY)
+- `ktrdr/cli/data_commands.py` (VERIFY)
+- `docs/cli/adding-new-operations.md` (UPDATE)
+- `docs/architecture/cli/tasks/CLI-UNIFIED-OPERATIONS-IMPLEMENTATION.md` (UPDATE)
+
+**Verification Checklist**:
+
+**Code Quality**:
+- [ ] All three commands use enhanced `AsyncOperationExecutor`
+- [ ] All three use appropriate `OperationAdapter`
+- [ ] NO custom polling loops in any command
+- [ ] NO custom signal handling in any command
+- [ ] NO custom cancellation code in any command
+- [ ] All duplicate infrastructure eliminated
+- [ ] Code is clean and maintainable
+
+**Consistency Checks**:
+- [ ] All three commands have same structure
+- [ ] All three handle httpx logging suppression the same way
+- [ ] All three use progress callbacks similarly
+- [ ] All three have consistent error handling
+- [ ] All three have similar parameter display patterns
+
+**Functional Testing**:
+- [ ] Dummy command: start, progress, complete, cancel
+- [ ] Training command: start, progress, complete, cancel, metrics display
+- [ ] Data loading command: start, progress, complete, cancel, data summary
+
+**Quality Checks**:
+- [ ] All unit tests pass
+- [ ] All integration tests pass
+- [ ] Code quality checks pass (`make quality`)
+- [ ] No debug code remaining
+- [ ] No TODOs remaining
+
+**Documentation Updates**:
+- [ ] Update `adding-new-operations.md` with all three as examples
+- [ ] Document data loading adapter specifics
+- [ ] Update implementation plan with Phase 6 completion
+- [ ] Add "lessons learned" section
+
+**Final Status Table**:
+```
+Command         | Pattern Status        | Rich Progress | Duplication Eliminated
+----------------|----------------------|---------------|------------------------
+Dummy           | ✅ Unified + Rich     | ✅ Enabled    | Minimal (was already clean)
+Training        | ✅ Unified + Rich     | ✅ Enabled    | Strategy helper extracted
+Data Loading    | ✅ Unified + Rich     | ✅ Preserved  | All custom infrastructure
+```
+
+**Commit After**:
+```bash
+git add docs/
+git commit -m "docs(cli): update documentation for Phase 6 completion
+
+Final verification of all three async CLI commands (dummy, training, data loading).
+All commands now use unified pattern with rich progress display.
+
+Achievements:
+- All three commands use enhanced AsyncOperationExecutor
+- Rich progress display (data-loading quality) for all operations
+- Eliminated all duplicate infrastructure (polling, signals, cancellation)
+- Strategy loading helper for reusability
+- Clean, maintainable code structure
+
+No line count goals - focused on eliminating duplication and enhancing UX."
+```
+
+---
+
+## Phase 6 Success Criteria
+
+### UX Quality (Primary Goal):
+- All operations show rich progress display (data-loading quality)
+- Time estimates shown for all operations
+- Item counts and percentages displayed
+- Operation-specific context shown (epochs, segments, etc.)
+- No regression in data loading UX quality
+
+### Code Quality:
+- All duplicate infrastructure eliminated (polling, signals, cancellation)
+- All three commands use unified pattern consistently
+- Clear separation: infrastructure vs domain logic
+- Code is maintainable and easy to understand
+
+### Functional Requirements:
+- All operations start, run, complete successfully
+- Cancellation works correctly (Ctrl+C)
+- Results display correctly with domain-specific details
+- IB diagnosis messages preserved (data loading)
+- No regressions in any command
+
+### Architectural Goals:
+- Single source of truth: `AsyncOperationExecutor` with rich progress
+- Consistent pattern across all async operations
+- Easy to add new operations (~100 lines per adapter)
+- Reusable helpers (strategy loading)
+
+---
+
+## Phase 6 Timeline
+
+**TASK-6.0: Enhance Executor for Rich Progress** - 2-3 hours (Critical foundation!)
+**TASK-6.1: Strategy Helper** - 2 hours
+**TASK-6.2: Training Formatter Simplification** - 1 hour
+**TASK-6.3: Training Cleanup** - 1 hour
+**TASK-6.4: Migrate Dummy to Rich Progress** - 1 hour (Validate pattern with simplest case)
+**TASK-6.5: Migrate Training to Rich Progress** - 2 hours (Test with complex domain data)
+**TASK-6.6: Data Adapter** - 3 hours
+**TASK-6.7: Migrate Data Loading** - 4 hours (Final migration, preserve UX)
+**TASK-6.8: Verification & Documentation** - 2 hours
+
+**Total**: ~18-19 hours for complete Phase 6
+
+**Overall Project Total**: ~35-40 hours (Phases 1-6 combined)
+
+**Migration Sequence Rationale**:
+1. Enhance executor first (foundation)
+2. Validate with Dummy (simplest)
+3. Test with Training (complex domain data)
+4. Only then touch Data Loading (most complex, working perfectly)
+
+This de-risks the migration by validating the enhanced pattern before touching production-quality code!
 
 ---
 

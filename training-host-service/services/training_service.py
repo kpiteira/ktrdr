@@ -46,12 +46,6 @@ class TrainingSession:
         self.current_epoch = 0
         self.current_batch = 0
 
-        # Debug: Log what we receive in config
-        from ktrdr.logging import get_logger
-        logger = get_logger(__name__)
-        logger.info(f"TrainingSession init - config keys: {list(config.keys())}")
-        logger.info(f"TrainingSession init - training_config: {config.get('training_config', {})}")
-
         self.total_epochs = config.get("training_config", {}).get("epochs", 100)
         self.total_batches = 0
         self.items_processed = 0
