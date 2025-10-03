@@ -124,6 +124,10 @@ class ModelTrainer:
         self.best_val_accuracy = 0.0
         self.progress_callback = progress_callback
 
+        # Progress update frequency: update every N batches
+        # Default to 1 (every batch) for responsive UI, can be increased for performance
+        self.progress_update_frequency = config.get("progress_update_frequency", 1)
+
         # Analytics setup - check both direct config and full_config
         full_config = config.get("full_config", config)
         self.analytics_enabled = (
@@ -311,8 +315,11 @@ class ModelTrainer:
                 train_total += batch_y.size(0)
                 train_correct += (predicted == batch_y).sum().item()
 
-                # Batch-level progress callback (every 10 batches to avoid spam)
-                if self.progress_callback and batch_idx % 10 == 0:
+                # Batch-level progress callback (configurable frequency)
+                if (
+                    self.progress_callback
+                    and batch_idx % self.progress_update_frequency == 0
+                ):
                     try:
                         self._check_cancelled()
                         completed_batches = epoch * total_batches_per_epoch + batch_idx
@@ -691,8 +698,11 @@ class ModelTrainer:
                 train_total += batch_y.size(0)
                 train_correct += (predicted == batch_y).sum().item()
 
-                # Batch-level progress callback
-                if self.progress_callback and batch_idx % 10 == 0:
+                # Batch-level progress callback (configurable frequency)
+                if (
+                    self.progress_callback
+                    and batch_idx % self.progress_update_frequency == 0
+                ):
                     try:
                         self._check_cancelled()
                         completed_batches = epoch * total_batches_per_epoch + batch_idx

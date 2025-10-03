@@ -186,6 +186,8 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
             context=context,
             progress_bridge=bridge,
             cancellation_token=self._current_cancellation_token,
+            poll_interval=0.3,  # Poll every 300ms for responsive progress updates
+            backoff_factor=1.0,  # No backoff - keep constant polling frequency
         )
 
         # Returns aggregated result from from_host_run
