@@ -1133,7 +1133,52 @@ async def _run_dummy_async(verbose: bool, quiet: bool, show_progress: bool):
 - [ ] Cancellation still works correctly
 - [ ] All functionality preserved
 - [ ] All tests pass
-- [ ] Manual testing shows data-loading-quality progress
+
+**MANDATORY MANUAL TESTING** (BEFORE COMMIT):
+
+**⚠️ DO NOT COMMIT until ALL manual tests pass and UX is validated!**
+
+Run these commands and verify UX quality:
+
+```bash
+# Test 1: Basic execution with progress
+ktrdr dummy
+
+# VERIFY:
+# - Rich progress bar appears (not just simple spinner)
+# - Shows percentage (e.g., "16%")
+# - Shows item counts (e.g., "25/100 items")
+# - Shows time elapsed (e.g., "0:00:05")
+# - Shows time remaining estimate (e.g., "0:00:15")
+# - Spinner animates smoothly
+# - Progress updates are responsive (<1s latency)
+
+# Test 2: Cancellation (press Ctrl+C after a few seconds)
+ktrdr dummy
+
+# VERIFY:
+# - Ctrl+C is caught gracefully
+# - Shows "Cancellation requested" message
+# - Operation stops cleanly
+# - No stack traces or errors
+# - Returns to shell prompt cleanly
+
+# Test 3: Completion
+ktrdr dummy
+
+# VERIFY:
+# - Progress reaches 100%
+# - Shows completion message
+# - Displays operation summary (iterations completed)
+# - Clean exit
+```
+
+**Screenshot/Recording**:
+- [ ] Take screenshot or recording of progress display
+- [ ] Compare to data loading progress quality
+- [ ] Verify it meets same UX standard
+
+**Only commit if**: Rich progress looks as good as data loading example!
 
 **Commit After**:
 ```bash
@@ -1213,7 +1258,61 @@ async def _train_model_async_impl(...):
 - [ ] No custom progress formatter needed
 - [ ] All functionality preserved
 - [ ] All tests pass
-- [ ] Manual testing shows data-loading-quality progress with training context
+
+**MANDATORY MANUAL TESTING** (BEFORE COMMIT):
+
+**⚠️ DO NOT COMMIT until ALL manual tests pass and UX is validated!**
+
+Run these commands and verify training-specific rich progress:
+
+```bash
+# Test 1: Basic training execution
+ktrdr models train strategies/your_strategy.yaml --start-date 2024-01-01 --end-date 2024-06-01
+
+# VERIFY:
+# - Rich progress bar appears
+# - Shows current epoch (e.g., "Epoch: 5/100")
+# - Shows current batch (e.g., "Batch: 123/500")
+# - Shows GPU utilization if available (e.g., "🖥️ NVIDIA A100: 85%")
+# - Shows percentage progress
+# - Shows time elapsed and remaining
+# - Progress messages include training context
+# - Updates are responsive and informative
+
+# Test 2: Cancellation during training
+ktrdr models train strategies/your_strategy.yaml --start-date 2024-01-01 --end-date 2024-06-01
+# Press Ctrl+C after a few epochs
+
+# VERIFY:
+# - Ctrl+C is caught gracefully
+# - Shows which epoch was interrupted
+# - Training stops cleanly on backend
+# - No corruption or hanging processes
+# - Returns to shell cleanly
+
+# Test 3: Completion and results
+ktrdr models train strategies/your_strategy.yaml --start-date 2024-01-01 --end-date 2024-06-01
+
+# VERIFY:
+# - Progress reaches 100%
+# - Shows completion message
+# - Displays training metrics (accuracy, precision, recall, F1)
+# - Shows model info (parameters, size)
+# - All data is accurate
+```
+
+**Screenshot/Recording**:
+- [ ] Take screenshot showing epoch/batch progress
+- [ ] Compare to data loading progress quality
+- [ ] Verify training-specific context is clear and informative
+
+**Compare Progress Quality**:
+- [ ] Training progress ≥ data loading quality
+- [ ] Context is domain-appropriate (epochs vs segments)
+- [ ] Time estimates are accurate
+- [ ] UX feels professional and informative
+
+**Only commit if**: Training progress matches data loading UX quality!
 
 **Commit After**:
 ```bash
@@ -1369,26 +1468,99 @@ Use `AsyncOperationExecutor` (with rich progress) and `DataLoadOperationAdapter`
 - [ ] IB diagnosis messages still shown
 - [ ] Results summary displayed correctly
 - [ ] All tests pass
-- [ ] Manual testing with real IB data successful
-- [ ] No regression in UX quality
 
-**Testing Strategy**:
-1. **Unit tests**: Adapter methods in isolation
-2. **Integration tests**: Full command flow with mock API
-3. **Manual tests**:
-   ```bash
-   # Test basic load
-   ktrdr data load AAPL --timeframe 1h --mode tail
+**MANDATORY MANUAL TESTING** (BEFORE COMMIT):
 
-   # Test with date range
-   ktrdr data load MSFT --start 2024-01-01 --end 2024-06-01
+**⚠️ CRITICAL: DO NOT COMMIT until you verify NO REGRESSION in UX quality!**
 
-   # Test cancellation (press Ctrl+C during load)
-   ktrdr data load TSLA --mode full
+**This is the most important validation - data loading already works perfectly!**
 
-   # Test with trading hours filter
-   ktrdr data load AAPL --trading-hours --include-extended
-   ```
+Run these commands and compare UX to original (take screenshots of BOTH):
+
+```bash
+# Test 1: Basic tail load (compare to original screenshot)
+ktrdr data load AUDUSD --timeframe 5m --mode tail
+
+# VERIFY (must match original quality):
+# - Shows "Fetch X segments from IB: Segment Y/X"
+# - Shows date range being fetched
+# - Shows item count (e.g., "104824 items")
+# - Shows percentage (e.g., "16%")
+# - Shows time elapsed (e.g., "0:08:18")
+# - Shows time remaining (e.g., "3:15:27")
+# - Progress updates feel responsive
+# - NO REGRESSION in detail or clarity
+
+# Test 2: Full load with date range
+ktrdr data load AAPL --start 2020-01-01 --end 2025-09-30 --mode full
+
+# VERIFY:
+# - Rich progress throughout entire load
+# - Segment tracking is accurate
+# - Time estimates are reasonable
+# - No missing context information
+
+# Test 3: Cancellation (press Ctrl+C after ~10 seconds)
+ktrdr data load MSFT --timeframe 1h --mode backfill
+# Press Ctrl+C
+
+# VERIFY:
+# - Cancellation is clean
+# - Shows how many segments were completed
+# - No data corruption
+# - Returns cleanly
+
+# Test 4: Trading hours filter
+ktrdr data load TSLA --trading-hours --include-extended
+
+# VERIFY:
+# - Filtering works correctly
+# - Progress display unchanged
+# - Results show filtered data
+
+# Test 5: IB diagnosis messages (simulate IB error if possible)
+# VERIFY:
+# - Partial load shows IB diagnosis
+# - Error shows clear IB diagnosis message
+# - Recovery suggestions appear
+
+# Test 6: Completion and summary
+ktrdr data load AAPL --mode tail
+
+# VERIFY:
+# - Shows bars loaded count
+# - Shows date range
+# - Shows execution time
+# - All metrics accurate
+```
+
+**CRITICAL COMPARISON**:
+- [ ] Take screenshot of NEW data loading progress
+- [ ] Compare side-by-side with ORIGINAL screenshot (the one you showed me)
+- [ ] Verify EVERY detail matches:
+  - [ ] "Fetch X segments from IB: Segment Y/X" format
+  - [ ] Item counts displayed
+  - [ ] Percentage shown
+  - [ ] Time elapsed shown
+  - [ ] Time remaining shown
+  - [ ] Date ranges shown
+  - [ ] Progress feels equally responsive
+- [ ] NO detail lost in migration
+- [ ] Quality ≥ original (ideally equal)
+
+**IB Diagnosis Testing**:
+- [ ] Partial load shows diagnosis message
+- [ ] Error conditions show clear messages
+- [ ] Recovery suggestions appear
+- [ ] Warnings are visible
+
+**Only commit if**:
+1. UX matches original screenshot quality EXACTLY
+2. All functionality preserved
+3. IB diagnosis messages still work
+4. No regressions detected
+
+**If ANY regression found**: STOP, fix the issue, and re-test before committing!
 
 **Commit After**:
 ```bash
