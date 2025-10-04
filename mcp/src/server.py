@@ -1025,6 +1025,212 @@ async def get_backtest_performance_summary(
         raise
 
 
+# Phase 2: Async Operations Management Tools
+
+
+@mcp.tool()
+async def list_operations(
+    operation_type: Optional[str] = None,
+    status: Optional[str] = None,
+    active_only: bool = False,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """List all operations with optional filtering
+
+    Get a list of data loading, training, or other async operations.
+    Filter by status (running, completed, failed) or type (data_load, training).
+
+    Args:
+        operation_type: Filter by type (data_load, training, backtest)
+        status: Filter by status (running, completed, failed, cancelled, pending)
+        active_only: Show only active operations (running/pending)
+        limit: Maximum number of operations to return (default 10, max 100)
+
+    Returns:
+        dict with operation list and counts
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.list_operations(
+                operation_type=operation_type,
+                status=status,
+                active_only=active_only,
+                limit=min(limit, 100),
+                offset=0,
+            )
+            logger.info("Listed operations", count=len(result.get("data", [])))
+            return result
+    except Exception as e:
+        logger.error("Failed to list operations", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def get_operation_status(operation_id: str) -> dict[str, Any]:
+    """Get detailed status of a specific operation
+
+    Poll for progress updates on data loading, training, or other async operations.
+    Returns current status, progress percentage, ETA, and any errors.
+
+    Args:
+        operation_id: Unique operation identifier (e.g., "op_training_20241201_123456")
+
+    Returns:
+        dict with detailed operation status, progress, and metadata
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.get_operation_status(operation_id)
+            logger.info("Got operation status", operation_id=operation_id)
+            return result
+    except Exception as e:
+        logger.error("Failed to get operation status", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def cancel_operation(
+    operation_id: str, reason: Optional[str] = None
+) -> dict[str, Any]:
+    """Cancel a running async operation
+
+    Stop a long-running data load or training operation.
+    Only works for operations in 'running' or 'pending' status.
+
+    Args:
+        operation_id: Unique operation identifier to cancel
+        reason: Optional reason for cancellation (for audit trail)
+
+    Returns:
+        dict confirming cancellation
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.cancel_operation(operation_id, reason)
+            logger.info(
+                "Cancelled operation", operation_id=operation_id, reason=reason
+            )
+            return result
+    except Exception as e:
+        logger.error("Failed to cancel operation", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def get_operation_results(operation_id: str) -> dict[str, Any]:
+    """Get results from a completed operation
+
+    Retrieve summary metrics and artifact paths from finished operations.
+    Only works for operations in 'completed' or 'failed' status.
+
+    Args:
+        operation_id: Unique operation identifier
+
+    Returns:
+        dict with result summary, metrics, and paths to detailed data
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.get_operation_results(operation_id)
+            logger.info("Got operation results", operation_id=operation_id)
+            return result
+    except Exception as e:
+        logger.error("Failed to get operation results", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def trigger_data_loading(
+    symbol: str,
+    timeframe: str = "1h",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mode: str = "local",
+) -> dict[str, Any]:
+    """Start async data loading operation
+
+    Trigger a background data loading job. Returns immediately with operation_id
+    for tracking progress. Use get_operation_status() to monitor progress.
+
+    Args:
+        symbol: Trading symbol (e.g., "AAPL", "EURUSD")
+        timeframe: Data timeframe (1m, 5m, 15m, 30m, 1h, 4h, 1d)
+        start_date: Start date (YYYY-MM-DD, optional)
+        end_date: End date (YYYY-MM-DD, optional)
+        mode: Loading mode (local, ib, hybrid)
+
+    Returns:
+        dict with operation_id for tracking the async operation
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.data.load_data_operation(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                mode=mode,
+            )
+            logger.info(
+                "Data loading triggered",
+                symbol=symbol,
+                operation_id=result.get("operation_id"),
+            )
+            return result
+    except Exception as e:
+        logger.error("Failed to trigger data loading", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def start_training(
+    symbols: list[str],
+    timeframe: str = "1h",
+    config: Optional[dict[str, Any]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> dict[str, Any]:
+    """Start async neural network training operation
+
+    Trigger a background training job. Returns immediately with operation_id
+    for tracking progress. Use get_operation_status() to monitor training.
+
+    Args:
+        symbols: List of trading symbols to train on (e.g., ["AAPL", "MSFT"])
+        timeframe: Data timeframe (1h, 4h, 1d)
+        config: Optional training configuration dict
+        start_date: Training data start date (YYYY-MM-DD, optional)
+        end_date: Training data end date (YYYY-MM-DD, optional)
+
+    Returns:
+        dict with operation_id for tracking the async training operation
+    """
+    try:
+        async with get_api_client() as client:
+            training_config = config or {
+                "epochs": 100,
+                "batch_size": 32,
+                "learning_rate": 0.001,
+            }
+
+            result = await client.training.start_neural_training(
+                symbols=symbols,
+                timeframe=timeframe,
+                config=training_config,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            logger.info(
+                "Training started",
+                symbols=symbols,
+                operation_id=result.get("operation_id"),
+            )
+            return result
+    except Exception as e:
+        logger.error("Failed to start training", error=str(e))
+        raise
+
+
 class KTRDRMCPServer:
     """MCP Server for KTRDR trading strategy research"""
 

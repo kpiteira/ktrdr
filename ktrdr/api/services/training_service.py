@@ -122,7 +122,8 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
 
         return {
             "success": True,
-            "task_id": operation_id,
+            "operation_id": operation_id,  # Added for MCP compatibility
+            "task_id": operation_id,  # Keep for backward compatibility
             "status": "training_started",
             "message": message,
             "symbols": context.symbols,
