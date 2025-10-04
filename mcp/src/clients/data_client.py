@@ -62,10 +62,8 @@ class DataAPIClient(BaseAPIClient):
         if end_date:
             payload["end_date"] = end_date
 
-        # Add async_mode query parameter to get immediate response with operation_id
-        return await self._request(
-            "POST", "/data/load", json=payload, params={"async_mode": "true"}
-        )
+        # Data loading is always async - returns operation_id for tracking
+        return await self._request("POST", "/data/load", json=payload)
 
     async def get_data_info(self, symbol: str) -> dict[str, Any]:
         """Get data information for a symbol"""

@@ -473,11 +473,10 @@ async def get_cached_data(
 )
 async def load_data(
     request: DataLoadRequest,
-    async_mode: bool = Query(False, description="Use async operation tracking"),
     data_service: DataService = Depends(get_data_service),
 ) -> DataLoadApiResponse:
     """
-    Load data using enhanced DataManager with IB integration.
+    Load data asynchronously using enhanced DataManager with IB integration.
 
     This endpoint uses the enhanced DataManager which provides:
     - Intelligent gap analysis
@@ -486,18 +485,17 @@ async def load_data(
     - IB rate limit compliance
     - Partial failure resilience
 
-    **Modes:**
-    - Sync mode (async_mode=false): Returns results immediately (default)
-    - Async mode (async_mode=true): Returns operation ID for tracking
+    All operations are asynchronous and return an operation ID for tracking.
+    Use GET /operations/{operation_id} to poll for status.
+    Use GET /operations/{operation_id}/results to get final results.
 
     Args:
         request: Enhanced data loading request with mode support
-        async_mode: Use async operation tracking for cancellable operations
 
     Returns:
-        Detailed response with operation metrics/status or operation ID
+        Response with operation ID for tracking
 
-    Example request (sync):
+    Example request:
         ```json
         {
           "symbol": "AAPL",
@@ -506,29 +504,7 @@ async def load_data(
         }
         ```
 
-    Example request (async):
-        ```
-        POST /api/v1/data/load?async_mode=true
-        {
-          "symbol": "AAPL",
-          "timeframe": "1h",
-          "mode": "tail"
-        }
-        ```
-
-    Example response (sync):
-        ```json
-        {
-          "success": true,
-          "data": {
-            "status": "success",
-            "fetched_bars": 168,
-            "execution_time_seconds": 2.456
-          }
-        }
-        ```
-
-    Example response (async):
+    Example response:
         ```json
         {
           "success": true,
@@ -545,7 +521,7 @@ async def load_data(
             f"📥 USER OPERATION: Data loading initiated for {request.symbol} ({request.timeframe})"
         )
         logger.info(
-            f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}, async: {async_mode}"
+            f"Enhanced data loading for {request.symbol} ({request.timeframe}) - mode: {request.mode}"
         )
 
         # Validate request
@@ -567,89 +543,36 @@ async def load_data(
                 "include_extended": request.filters.include_extended,
             }
 
-        if async_mode:
-            # Async mode - use consistent delegation for async operation tracking
-            operation_result = await data_service.load_data_async(
-                symbol=clean_symbol,
-                timeframe=request.timeframe,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                mode=request.mode,
-                filters=filters_dict,
-            )
+        # Always use async mode - consistent delegation for async operation tracking
+        operation_result = await data_service.load_data_async(
+            symbol=clean_symbol,
+            timeframe=request.timeframe,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            mode=request.mode,
+            filters=filters_dict,
+        )
 
-            # Extract operation ID from ServiceOrchestrator result
-            operation_id = operation_result.get("operation_id") or str(uuid.uuid4())
-            status = operation_result.get("status", "started")
+        # Extract operation ID from ServiceOrchestrator result
+        operation_id = operation_result.get("operation_id") or str(uuid.uuid4())
+        status = operation_result.get("status", "started")
 
-            # Return operation ID for tracking
-            response_data = DataLoadOperationResponse(
-                operation_id=operation_id,
-                status=status,
-                fetched_bars=0,
-                cached_before=False,
-                merged_file="",
-                gaps_analyzed=0,
-                segments_fetched=0,
-                ib_requests_made=0,
-                execution_time_seconds=0.0,
-                error_message=None,
-            )
+        # Return operation ID for tracking
+        response_data = DataLoadOperationResponse(
+            operation_id=operation_id,
+            status=status,
+            fetched_bars=0,
+            cached_before=False,
+            merged_file="",
+            gaps_analyzed=0,
+            segments_fetched=0,
+            ib_requests_made=0,
+            execution_time_seconds=0.0,
+            error_message=None,
+        )
 
-            logger.info(f"Started async data loading operation: {operation_id}")
-            return DataLoadApiResponse(success=True, data=response_data, error=None)
-
-        else:
-            # Sync mode - use consistent delegation for immediate results
-            result = await data_service.load_data(
-                symbol=clean_symbol,
-                timeframe=request.timeframe,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                mode=request.mode,
-                include_metadata=True,
-                filters=filters_dict,
-            )
-
-        # Convert to response model
-        response_data = DataLoadOperationResponse(**result)
-
-        # Determine success based on status
-        if result["status"] == "success":
-            logger.info(
-                f"Successfully loaded {result['fetched_bars']} bars for {clean_symbol}"
-            )
-            return DataLoadApiResponse(success=True, data=response_data, error=None)
-        elif result["status"] == "partial":
-            logger.warning(
-                f"Partially loaded data for {clean_symbol}: {result.get('error_message', 'Unknown error')}"
-            )
-            return DataLoadApiResponse(
-                success=True,  # Still considered success for partial data
-                data=response_data,
-                error=ErrorResponse(
-                    code="DATA-PartialLoad",
-                    message="Data loading partially successful",
-                    details={"error_message": result.get("error_message")},
-                ),
-            )
-        else:
-            logger.error(
-                f"Failed to load data for {clean_symbol}: {result.get('error_message', 'Unknown error')}"
-            )
-            return DataLoadApiResponse(
-                success=False,
-                data=response_data,
-                error=ErrorResponse(
-                    code="DATA-LoadFailed",
-                    message=result.get("error_message", "Data loading failed"),
-                    details={
-                        "symbol": clean_symbol,
-                        "timeframe": request.timeframe,
-                        "mode": request.mode,
-                    },
-                ),
-            )
+        logger.info(f"Started async data loading operation: {operation_id}")
+        return DataLoadApiResponse(success=True, data=response_data, error=None)
 
     except DataError as e:
         logger.error(f"Data error loading {request.symbol}: {str(e)}")
