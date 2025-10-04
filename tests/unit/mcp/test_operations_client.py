@@ -107,8 +107,8 @@ class TestOperationsAPIClient:
 
             assert result["success"] is True
             client.client.request.assert_called_once_with(
-                "POST",
-                "/operations/op_123/cancel",
+                "DELETE",
+                "/operations/op_123",
                 json={"reason": "User requested"},
             )
 
@@ -129,7 +129,7 @@ class TestOperationsAPIClient:
 
             assert result["success"] is True
             client.client.request.assert_called_once_with(
-                "POST", "/operations/op_123/cancel", json={}
+                "DELETE", "/operations/op_123", json=None
             )
 
     @pytest.mark.asyncio

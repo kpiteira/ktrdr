@@ -35,9 +35,9 @@ class OperationsAPIClient(BaseAPIClient):
         self, operation_id: str, reason: Optional[str] = None
     ) -> dict[str, Any]:
         """Cancel a running operation"""
-        payload = {"reason": reason} if reason else {}
+        payload = {"reason": reason} if reason else None
         return await self._request(
-            "POST", f"/operations/{operation_id}/cancel", json=payload
+            "DELETE", f"/operations/{operation_id}", json=payload
         )
 
     async def get_operation_results(self, operation_id: str) -> dict[str, Any]:
