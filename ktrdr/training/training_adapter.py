@@ -114,12 +114,20 @@ class TrainingAdapter(AsyncServiceAdapter):
         """Return endpoint for health checking."""
         return "/health"
 
+    async def _ensure_client_initialized(self) -> None:
+        """Ensure HTTP client is initialized (for long-lived adapter pattern)."""
+        if self.use_host_service and self._http_client is None:
+            await self._setup_connection_pool()
+
     async def _call_host_service_post(
         self, endpoint: str, data: dict[str, Any], cancellation_token=None
     ) -> dict[str, Any]:
         """Make POST request to host service using AsyncServiceAdapter."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
+
+        # Ensure HTTP client is initialized
+        await self._ensure_client_initialized()
 
         try:
             return await AsyncServiceAdapter._call_host_service_post(
@@ -140,6 +148,9 @@ class TrainingAdapter(AsyncServiceAdapter):
         """Make GET request to host service using AsyncServiceAdapter."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
+
+        # Ensure HTTP client is initialized
+        await self._ensure_client_initialized()
 
         try:
             return await AsyncServiceAdapter._call_host_service_get(
