@@ -30,7 +30,7 @@ class DataAPIClient(BaseAPIClient):
             params["include_extended"] = include_extended
 
         response = await self._request(
-            "GET", f"/api/v1/data/{symbol}/{timeframe}", params=params
+            "GET", f"/data/{symbol}/{timeframe}", params=params
         )
 
         # Apply client-side limiting for response size
@@ -62,8 +62,8 @@ class DataAPIClient(BaseAPIClient):
         if end_date:
             payload["end_date"] = end_date
 
-        return await self._request("POST", "/api/v1/data/load", json=payload)
+        return await self._request("POST", "/data/load", json=payload)
 
     async def get_data_info(self, symbol: str) -> dict[str, Any]:
         """Get data information for a symbol"""
-        return await self._request("GET", f"/api/v1/data/info/{symbol}")
+        return await self._request("GET", f"/data/info/{symbol}")

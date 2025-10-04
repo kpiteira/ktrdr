@@ -26,19 +26,19 @@ class TrainingAPIClient(BaseAPIClient):
         if task_id:
             payload["task_id"] = task_id
 
-        return await self._request("POST", "/api/v1/trainings/start", json=payload)
+        return await self._request("POST", "/trainings/start", json=payload)
 
     async def get_training_status(self, task_id: str) -> dict[str, Any]:
         """Get neural network training status"""
-        return await self._request("GET", f"/api/v1/trainings/{task_id}")
+        return await self._request("GET", f"/trainings/{task_id}")
 
     async def get_model_performance(self, task_id: str) -> dict[str, Any]:
         """Get trained model performance metrics"""
         return await self._request(
-            "GET", f"/api/v1/trainings/{task_id}/performance"
+            "GET", f"/trainings/{task_id}/performance"
         )
 
     async def list_trained_models(self) -> list[dict[str, Any]]:
         """List all trained models"""
-        response = await self._request("GET", "/api/v1/models")
+        response = await self._request("GET", "/models")
         return response.get("models", [])

@@ -29,7 +29,7 @@ class TestOperationsAPIClient:
 
             assert result["success"] is True
             client.client.request.assert_called_once_with(
-                "GET", "/api/v1/operations", params={"limit": 10, "offset": 0}
+                "GET", "/operations", params={"limit": 10, "offset": 0}
             )
 
     @pytest.mark.asyncio
@@ -59,7 +59,7 @@ class TestOperationsAPIClient:
             assert len(result["data"]) == 1
             client.client.request.assert_called_once_with(
                 "GET",
-                "/api/v1/operations",
+                "/operations",
                 params={
                     "limit": 5,
                     "offset": 10,
@@ -87,7 +87,7 @@ class TestOperationsAPIClient:
             assert result["success"] is True
             assert result["data"]["status"] == "running"
             client.client.request.assert_called_once_with(
-                "GET", "/api/v1/operations/op_123"
+                "GET", "/operations/op_123"
             )
 
     @pytest.mark.asyncio
@@ -108,7 +108,7 @@ class TestOperationsAPIClient:
             assert result["success"] is True
             client.client.request.assert_called_once_with(
                 "POST",
-                "/api/v1/operations/op_123/cancel",
+                "/operations/op_123/cancel",
                 json={"reason": "User requested"},
             )
 
@@ -129,7 +129,7 @@ class TestOperationsAPIClient:
 
             assert result["success"] is True
             client.client.request.assert_called_once_with(
-                "POST", "/api/v1/operations/op_123/cancel", json={}
+                "POST", "/operations/op_123/cancel", json={}
             )
 
     @pytest.mark.asyncio
@@ -150,5 +150,5 @@ class TestOperationsAPIClient:
             assert result["success"] is True
             assert result["results"]["bars_loaded"] == 1000
             client.client.request.assert_called_once_with(
-                "GET", "/api/v1/operations/op_123/results"
+                "GET", "/operations/op_123/results"
             )

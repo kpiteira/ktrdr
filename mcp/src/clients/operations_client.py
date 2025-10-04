@@ -25,11 +25,11 @@ class OperationsAPIClient(BaseAPIClient):
         if active_only:
             params["active_only"] = active_only
 
-        return await self._request("GET", "/api/v1/operations", params=params)
+        return await self._request("GET", "/operations", params=params)
 
     async def get_operation_status(self, operation_id: str) -> dict[str, Any]:
         """Get detailed operation status"""
-        return await self._request("GET", f"/api/v1/operations/{operation_id}")
+        return await self._request("GET", f"/operations/{operation_id}")
 
     async def cancel_operation(
         self, operation_id: str, reason: Optional[str] = None
@@ -37,11 +37,11 @@ class OperationsAPIClient(BaseAPIClient):
         """Cancel a running operation"""
         payload = {"reason": reason} if reason else {}
         return await self._request(
-            "POST", f"/api/v1/operations/{operation_id}/cancel", json=payload
+            "POST", f"/operations/{operation_id}/cancel", json=payload
         )
 
     async def get_operation_results(self, operation_id: str) -> dict[str, Any]:
         """Get operation results (summary)"""
         return await self._request(
-            "GET", f"/api/v1/operations/{operation_id}/results"
+            "GET", f"/operations/{operation_id}/results"
         )
