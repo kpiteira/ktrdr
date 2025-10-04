@@ -17,8 +17,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from ktrdr.async_infrastructure.async_host_service import (
-    AsyncHostService,
+from ktrdr.async_infrastructure.service_adapter import (
+    AsyncServiceAdapter,
     HostServiceConfig,
 )
 
@@ -34,13 +34,13 @@ from .external_data_interface import (
     ExternalDataProvider,
 )
 
-# HTTP client for host service communication - Now handled by AsyncHostService
-HTTPX_AVAILABLE = True  # Assume available since AsyncHostService handles this
+# HTTP client for host service communication - Now handled by AsyncServiceAdapter
+HTTPX_AVAILABLE = True  # Assume available since AsyncServiceAdapter handles this
 
 logger = get_logger(__name__)
 
 
-class IbDataAdapter(ExternalDataProvider, AsyncHostService):
+class IbDataAdapter(ExternalDataProvider, AsyncServiceAdapter):
     """
     Adapter that implements ExternalDataProvider interface using the IB module.
 
@@ -72,10 +72,13 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
         self.use_host_service = use_host_service
         self.host_service_url = host_service_url or "http://localhost:5001"
 
-        # Initialize AsyncHostService for host service mode
+        # Initialize AsyncServiceAdapter for host service mode
         if use_host_service:
-            config = HostServiceConfig(base_url=self.host_service_url)
-            AsyncHostService.__init__(self, config)
+            config = HostServiceConfig(
+                base_url=self.host_service_url,
+                connection_pool_limit=10,  # IB-specific: 10 connections for data operations
+            )
+            AsyncServiceAdapter.__init__(self, config)
 
         # Declare Optional attributes with specific types
         self.symbol_validator: Optional[Any] = None  # IbSymbolValidator
@@ -114,10 +117,14 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
         self.errors_encountered = 0
         self.last_request_time: Optional[datetime] = None
 
-    # AsyncHostService abstract method implementations
+    # AsyncServiceAdapter abstract method implementations
     def get_service_name(self) -> str:
         """Return service identifier for logging and metrics."""
         return "IB Data Service"
+
+    def get_service_type(self) -> str:
+        """Return service type identifier for categorization."""
+        return "ib_data"
 
     def get_base_url(self) -> str:
         """Return service base URL from configuration."""
@@ -128,38 +135,45 @@ class IbDataAdapter(ExternalDataProvider, AsyncHostService):
         return "/health"
 
     async def _call_host_service_post(
-        self, endpoint: str, data: dict[str, Any]
+        self, endpoint: str, data: dict[str, Any], cancellation_token=None
     ) -> dict[str, Any]:
-        """Make POST request to host service using AsyncHostService."""
+        """Make POST request to host service using AsyncServiceAdapter."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
 
         try:
-            return await AsyncHostService._call_host_service_post(self, endpoint, data)
+            return await AsyncServiceAdapter._call_host_service_post(
+                self, endpoint, data, cancellation_token
+            )
         except Exception as e:
-            # Translate AsyncHostService errors to DataProvider errors for compatibility
+            # Translate AsyncServiceAdapter errors to DataProvider errors for compatibility
             self._translate_host_service_error(e)
             # This line should never be reached since _translate_host_service_error always raises
             raise  # pragma: no cover
 
     async def _call_host_service_get(
-        self, endpoint: str, params: Optional[dict[str, Any]] = None
+        self,
+        endpoint: str,
+        params: Optional[dict[str, Any]] = None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
-        """Make GET request to host service using AsyncHostService."""
+        """Make GET request to host service using AsyncServiceAdapter."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
 
         try:
-            return await AsyncHostService._call_host_service_get(self, endpoint, params)
+            return await AsyncServiceAdapter._call_host_service_get(
+                self, endpoint, params, cancellation_token
+            )
         except Exception as e:
-            # Translate AsyncHostService errors to DataProvider errors for compatibility
+            # Translate AsyncServiceAdapter errors to DataProvider errors for compatibility
             self._translate_host_service_error(e)
             # This line should never be reached since _translate_host_service_error always raises
             raise  # pragma: no cover
 
     def _translate_host_service_error(self, error: Exception) -> None:
-        """Translate AsyncHostService errors to DataProvider errors for compatibility."""
-        from ktrdr.async_infrastructure.async_host_service import (
+        """Translate AsyncServiceAdapter errors to DataProvider errors for compatibility."""
+        from ktrdr.async_infrastructure.service_adapter import (
             HostServiceConnectionError,
             HostServiceError,
             HostServiceTimeoutError,

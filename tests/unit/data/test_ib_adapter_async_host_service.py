@@ -1,7 +1,7 @@
 """
-Unit tests for IbDataAdapter AsyncHostService integration.
+Unit tests for IbDataAdapter AsyncServiceAdapter integration.
 
-Tests the refactored adapter that inherits from AsyncHostService to ensure:
+Tests the refactored adapter that inherits from AsyncServiceAdapter to ensure:
 1. All existing IB API calls work identically
 2. Same method signatures and return types
 3. Identical error handling and exceptions
@@ -16,8 +16,8 @@ from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 
-from ktrdr.async_infrastructure.async_host_service import (
-    AsyncHostService,
+from ktrdr.async_infrastructure.service_adapter import (
+    AsyncServiceAdapter,
     HostServiceConfig,
 )
 from ktrdr.data.external_data_interface import (
@@ -27,22 +27,22 @@ from ktrdr.data.ib_data_adapter import IbDataAdapter
 
 
 class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
-    """Test IB adapter AsyncHostService inheritance and integration."""
+    """Test IB adapter AsyncServiceAdapter inheritance and integration."""
 
     def setUp(self):
         """Set up test fixtures."""
         self.host_service_url = "http://localhost:5001"
 
     def test_adapter_inherits_from_async_host_service(self):
-        """Test that IbDataAdapter inherits from AsyncHostService."""
+        """Test that IbDataAdapter inherits from AsyncServiceAdapter."""
         adapter = IbDataAdapter(
             use_host_service=True, host_service_url=self.host_service_url
         )
 
-        # Should inherit from AsyncHostService
-        self.assertIsInstance(adapter, AsyncHostService)
+        # Should inherit from AsyncServiceAdapter
+        self.assertIsInstance(adapter, AsyncServiceAdapter)
 
-        # Should have AsyncHostService config
+        # Should have AsyncServiceAdapter config
         self.assertIsInstance(adapter.config, HostServiceConfig)
         self.assertEqual(adapter.config.base_url, self.host_service_url)
 
@@ -106,9 +106,9 @@ class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
         self.assertTrue(hasattr(adapter, "_call_host_service_post"))
         self.assertTrue(hasattr(adapter, "_call_host_service_get"))
 
-        # Should inherit AsyncHostService methods for the actual implementation
-        self.assertTrue(hasattr(AsyncHostService, "_call_host_service_post"))
-        self.assertTrue(hasattr(AsyncHostService, "_call_host_service_get"))
+        # Should inherit AsyncServiceAdapter methods for the actual implementation
+        self.assertTrue(hasattr(AsyncServiceAdapter, "_call_host_service_post"))
+        self.assertTrue(hasattr(AsyncServiceAdapter, "_call_host_service_get"))
 
     def test_connection_pooling_available(self):
         """Test that adapter can use connection pooling from AsyncHostService."""
@@ -229,7 +229,7 @@ class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
         asyncio.run(test_compatibility())
 
     def test_error_handling_preserved(self):
-        """Test that error handling works identically after AsyncHostService refactoring."""
+        """Test that error handling works identically after AsyncServiceAdapter refactoring."""
         adapter = IbDataAdapter(
             use_host_service=True, host_service_url=self.host_service_url
         )
@@ -237,10 +237,10 @@ class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
         async def test_error_handling():
             async with adapter:
                 with patch.object(
-                    AsyncHostService, "_call_host_service_post", new=AsyncMock()
+                    AsyncServiceAdapter, "_call_host_service_post", new=AsyncMock()
                 ) as mock_post:
                     # Connection errors should still map to DataProviderConnectionError
-                    from ktrdr.async_infrastructure.async_host_service import (
+                    from ktrdr.async_infrastructure.service_adapter import (
                         HostServiceConnectionError,
                     )
 
@@ -252,7 +252,7 @@ class TestIbAdapterAsyncHostServiceIntegration(unittest.TestCase):
                         await adapter.validate_and_get_metadata("AAPL", ["1h"])
 
                     # Timeout errors should still map to appropriate errors
-                    from ktrdr.async_infrastructure.async_host_service import (
+                    from ktrdr.async_infrastructure.service_adapter import (
                         HostServiceTimeoutError,
                     )
 
