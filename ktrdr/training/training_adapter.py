@@ -15,15 +15,14 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ktrdr.async_infrastructure.cancellation import CancellationToken
+from ktrdr.async_infrastructure.service_adapter import (
+    AsyncServiceAdapter,
+    HostServiceConfig,
+)
 from ktrdr.logging import get_logger
 
-# HTTP client for host service communication
-try:
-    import httpx
-
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
+# HTTP client for host service communication - Now handled by AsyncServiceAdapter
+HTTPX_AVAILABLE = True  # Assume available since AsyncServiceAdapter handles this
 
 logger = get_logger(__name__)
 
@@ -49,7 +48,7 @@ class TrainingProviderDataError(TrainingProviderError):
     pass
 
 
-class TrainingAdapter:
+class TrainingAdapter(AsyncServiceAdapter):
     """
     Adapter that provides clean interface for training operations using local or host service.
 
@@ -71,12 +70,13 @@ class TrainingAdapter:
         self.use_host_service = use_host_service
         self.host_service_url = host_service_url or "http://localhost:5002"
 
-        # Validate configuration
-        if use_host_service and not HTTPX_AVAILABLE:
-            raise TrainingProviderError(
-                "httpx library required for host service mode but not available",
-                provider="Training",
+        # Initialize AsyncServiceAdapter for host service mode
+        if use_host_service:
+            config = HostServiceConfig(
+                base_url=self.host_service_url,
+                connection_pool_limit=5,  # Training-specific: 5 connections for training operations
             )
+            AsyncServiceAdapter.__init__(self, config)
 
         # Initialize appropriate components based on mode
         if not use_host_service:
@@ -97,51 +97,95 @@ class TrainingAdapter:
         self.errors_encountered = 0
         self.last_request_time: Optional[datetime] = None
 
+    # AsyncServiceAdapter abstract method implementations
+    def get_service_name(self) -> str:
+        """Return service identifier for logging and metrics."""
+        return "Training Service"
+
+    def get_service_type(self) -> str:
+        """Return service type identifier for categorization."""
+        return "training"
+
+    def get_base_url(self) -> str:
+        """Return service base URL from configuration."""
+        return self.host_service_url
+
+    async def get_health_check_endpoint(self) -> str:
+        """Return endpoint for health checking."""
+        return "/health"
+
+    async def _ensure_client_initialized(self) -> None:
+        """Ensure HTTP client is initialized (for long-lived adapter pattern)."""
+        if self.use_host_service and self._http_client is None:
+            await self._setup_connection_pool()
+
     async def _call_host_service_post(
-        self, endpoint: str, data: dict[str, Any]
+        self, endpoint: str, data: dict[str, Any], cancellation_token=None
     ) -> dict[str, Any]:
-        """Make POST request to host service."""
+        """Make POST request to host service using AsyncServiceAdapter."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
 
-        url = f"{self.host_service_url}{endpoint}"
+        # Ensure HTTP client is initialized
+        await self._ensure_client_initialized()
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(url, json=data)
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPError as e:
-            raise TrainingProviderConnectionError(
-                f"Host service request failed: {str(e)}", provider="Training"
-            ) from e
+            return await AsyncServiceAdapter._call_host_service_post(
+                self, endpoint, data, cancellation_token
+            )
         except Exception as e:
-            raise TrainingProviderError(
-                f"Host service communication error: {str(e)}", provider="Training"
-            ) from e
+            # Translate AsyncServiceAdapter errors to TrainingProvider errors for compatibility
+            self._translate_host_service_error(e)
+            # This line should never be reached since _translate_host_service_error always raises
+            raise  # pragma: no cover
 
     async def _call_host_service_get(
-        self, endpoint: str, params: Optional[dict[str, Any]] = None
+        self,
+        endpoint: str,
+        params: Optional[dict[str, Any]] = None,
+        cancellation_token=None,
     ) -> dict[str, Any]:
-        """Make GET request to host service."""
+        """Make GET request to host service using AsyncServiceAdapter."""
         if not self.use_host_service:
             raise RuntimeError("Host service not enabled")
 
-        url = f"{self.host_service_url}{endpoint}"
+        # Ensure HTTP client is initialized
+        await self._ensure_client_initialized()
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(url, params=params or {})
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPError as e:
-            raise TrainingProviderConnectionError(
-                f"Host service request failed: {str(e)}", provider="Training"
-            ) from e
+            return await AsyncServiceAdapter._call_host_service_get(
+                self, endpoint, params, cancellation_token
+            )
         except Exception as e:
+            # Translate AsyncServiceAdapter errors to TrainingProvider errors for compatibility
+            self._translate_host_service_error(e)
+            # This line should never be reached since _translate_host_service_error always raises
+            raise  # pragma: no cover
+
+    def _translate_host_service_error(self, error: Exception) -> None:
+        """Translate AsyncServiceAdapter errors to TrainingProvider errors for compatibility."""
+        from ktrdr.async_infrastructure.service_adapter import (
+            HostServiceConnectionError,
+            HostServiceError,
+            HostServiceTimeoutError,
+        )
+
+        if isinstance(error, HostServiceConnectionError):
+            raise TrainingProviderConnectionError(
+                f"Host service connection failed: {error.message}", provider="Training"
+            ) from error
+        elif isinstance(error, HostServiceTimeoutError):
+            raise TrainingProviderConnectionError(
+                f"Host service timeout: {error.message}", provider="Training"
+            ) from error
+        elif isinstance(error, HostServiceError):
             raise TrainingProviderError(
-                f"Host service communication error: {str(e)}", provider="Training"
-            ) from e
+                f"Host service error: {error.message}", provider="Training"
+            ) from error
+        else:
+            raise TrainingProviderError(
+                f"Host service communication error: {str(error)}", provider="Training"
+            ) from error
 
     async def train_multi_symbol_strategy(
         self,
