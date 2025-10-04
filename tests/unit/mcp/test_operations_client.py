@@ -86,9 +86,7 @@ class TestOperationsAPIClient:
 
             assert result["success"] is True
             assert result["data"]["status"] == "running"
-            client.client.request.assert_called_once_with(
-                "GET", "/operations/op_123"
-            )
+            client.client.request.assert_called_once_with("GET", "/operations/op_123")
 
     @pytest.mark.asyncio
     async def test_cancel_operation_with_reason(self):
