@@ -59,7 +59,7 @@ async def list_operations(
         None, description="Filter by operation type"
     ),
     limit: int = Query(
-        100, ge=1, le=1000, description="Maximum number of operations to return"
+        10, ge=1, le=1000, description="Maximum number of operations to return"
     ),
     offset: int = Query(0, ge=0, description="Number of operations to skip"),
     active_only: bool = Query(
