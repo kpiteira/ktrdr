@@ -11,4 +11,4 @@ class IndicatorsAPIClient(BaseAPIClient):
     async def list_indicators(self) -> list[dict[str, Any]]:
         """List all available indicators"""
         response = await self._request("GET", "/indicators/")
-        return response.get("data", [])
+        return self._extract_list(response)  # Simple extraction

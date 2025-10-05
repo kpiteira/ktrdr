@@ -33,7 +33,10 @@ class TrainingAPIClient(BaseAPIClient):
         if detailed_analytics:
             payload["detailed_analytics"] = detailed_analytics
 
-        return await self._request("POST", "/trainings/start", json=payload)
+        response = await self._request("POST", "/trainings/start", json=payload)
+
+        # CRITICAL: Must succeed for training start
+        return self._extract_or_raise(response, operation="training start")
 
     async def get_training_status(self, task_id: str) -> dict[str, Any]:
         """Get neural network training status"""
@@ -46,4 +49,5 @@ class TrainingAPIClient(BaseAPIClient):
     async def list_trained_models(self) -> list[dict[str, Any]]:
         """List all trained models"""
         response = await self._request("GET", "/models")
-        return response.get("models", [])
+        # Backend returns {models: [...]} instead of {data: [...]}
+        return self._extract_list(response, field="models")
