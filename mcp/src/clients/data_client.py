@@ -64,8 +64,10 @@ class DataAPIClient(BaseAPIClient):
         if end_date:
             payload["end_date"] = end_date
 
-        # Data loading is always async - returns operation_id for tracking
-        return await self._request("POST", "/data/load", json=payload)
+        response = await self._request("POST", "/data/load", json=payload)
+
+        # CRITICAL: Must have operation_id for tracking
+        return self._extract_or_raise(response, operation="data loading")
 
     async def get_data_info(self, symbol: str) -> dict[str, Any]:
         """Get data information for a symbol"""
@@ -74,4 +76,4 @@ class DataAPIClient(BaseAPIClient):
     async def get_symbols(self) -> list[dict[str, Any]]:
         """Get available trading symbols"""
         response = await self._request("GET", "/symbols")
-        return response.get("data", [])
+        return self._extract_list(response)  # Simple extraction

@@ -127,3 +127,39 @@ class TestGetSymbols:
 
             # Should return empty list when data field missing
             assert result == []
+
+
+class TestLoadDataOperation:
+    """Tests for load_data_operation method"""
+
+    @pytest.mark.asyncio
+    async def test_load_data_operation_returns_operation_response(self, data_client):
+        """Test load_data_operation returns full response for critical operation"""
+        mock_response = {
+            "success": True,
+            "data": {
+                "operation_id": "op_data_123",
+                "symbol": "AAPL",
+                "timeframe": "1h",
+            },
+        }
+
+        with patch.object(
+            data_client, "_request", new_callable=AsyncMock
+        ) as mock_request:
+            mock_request.return_value = mock_response
+
+            result = await data_client.load_data_operation(
+                symbol="AAPL", timeframe="1h", mode="local"
+            )
+
+            # Verify request payload
+            mock_request.assert_called_once_with(
+                "POST",
+                "/data/load",
+                json={"symbol": "AAPL", "timeframe": "1h", "mode": "local"},
+            )
+
+            # Should return extracted data field (critical operation)
+            assert result == mock_response["data"]
+            assert result["operation_id"] == "op_data_123"

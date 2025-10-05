@@ -211,6 +211,124 @@ class TestBaseAPIClient:
             assert exc_info.value.status_code is None
 
 
+class TestExtractList:
+    """Test _extract_list() method"""
+
+    def test_extract_list_with_data_field(self):
+        """Should extract list from 'data' field"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "data": [{"id": 1}, {"id": 2}]}
+
+        result = client._extract_list(response)
+
+        assert result == [{"id": 1}, {"id": 2}]
+
+    def test_extract_list_missing_field_returns_empty(self):
+        """Should return empty list when field missing"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        result = client._extract_list(response)
+
+        assert result == []
+
+    def test_extract_list_custom_field(self):
+        """Should extract from custom field name"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "models": [{"name": "model1"}]}
+
+        result = client._extract_list(response, field="models")
+
+        assert result == [{"name": "model1"}]
+
+    def test_extract_list_custom_default(self):
+        """Should use custom default when provided"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        result = client._extract_list(response, default=[{"default": True}])
+
+        assert result == [{"default": True}]
+
+
+class TestExtractDict:
+    """Test _extract_dict() method"""
+
+    def test_extract_dict_with_data_field(self):
+        """Should extract dict from 'data' field"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "data": {"key": "value"}}
+
+        result = client._extract_dict(response)
+
+        assert result == {"key": "value"}
+
+    def test_extract_dict_missing_field_returns_empty(self):
+        """Should return empty dict when field missing"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        result = client._extract_dict(response)
+
+        assert result == {}
+
+    def test_extract_dict_custom_field(self):
+        """Should extract from custom field name"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "result": {"status": "ok"}}
+
+        result = client._extract_dict(response, field="result")
+
+        assert result == {"status": "ok"}
+
+
+class TestExtractOrRaise:
+    """Test _extract_or_raise() method"""
+
+    def test_extract_or_raise_success(self):
+        """Should extract field when present and success=True"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "data": {"operation_id": "op_123"}}
+
+        result = client._extract_or_raise(response, field="data")
+
+        assert result == {"operation_id": "op_123"}
+
+    def test_extract_or_raise_explicit_error_flag(self):
+        """Should raise when success=False"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": False, "error": "Not found"}
+
+        with pytest.raises(KTRDRAPIError) as exc_info:
+            client._extract_or_raise(response, operation="training start")
+
+        assert "Training start failed: Not found" in str(exc_info.value)
+
+    def test_extract_or_raise_missing_field(self):
+        """Should raise when field missing"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        with pytest.raises(KTRDRAPIError) as exc_info:
+            client._extract_or_raise(
+                response, field="operation_id", operation="data loading"
+            )
+
+        assert "Data loading response missing 'operation_id' field" in str(
+            exc_info.value
+        )
+
+    def test_extract_or_raise_custom_operation_name(self):
+        """Should use operation name in error messages"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": False, "error": "Timeout"}
+
+        with pytest.raises(KTRDRAPIError) as exc_info:
+            client._extract_or_raise(response, operation="model training")
+
+        assert "Model training failed: Timeout" in str(exc_info.value)
+
+
 class TestKTRDRAPIError:
     """Test KTRDRAPIError exception class"""
 

@@ -86,3 +86,100 @@ class BaseAPIClient:
         except httpx.RequestError as e:
             logger.error("Request error", error=str(e), url=url)
             raise KTRDRAPIError(f"Request failed: {str(e)}") from e
+
+    def _extract_list(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        default: Optional[list] = None
+    ) -> list[dict[str, Any]]:
+        """
+        Extract list from response envelope.
+
+        For non-critical operations where empty list is acceptable.
+
+        Args:
+            response: API response dict
+            field: Field name to extract (default "data")
+            default: Default value if field missing (default [])
+
+        Returns:
+            Extracted list or default
+
+        Example:
+            response = {"success": true, "data": [...]}
+            items = self._extract_list(response)
+        """
+        if default is None:
+            default = []
+        return response.get(field, default)
+
+    def _extract_dict(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        default: Optional[dict] = None
+    ) -> dict[str, Any]:
+        """
+        Extract dict from response envelope.
+
+        For non-critical operations where empty dict is acceptable.
+
+        Args:
+            response: API response dict
+            field: Field name to extract (default "data")
+            default: Default value if field missing (default {})
+
+        Returns:
+            Extracted dict or default
+
+        Example:
+            response = {"success": true, "data": {...}}
+            item = self._extract_dict(response)
+        """
+        if default is None:
+            default = {}
+        return response.get(field, default)
+
+    def _extract_or_raise(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        operation: str = "operation"
+    ) -> Any:
+        """
+        Extract field from response or raise detailed error.
+
+        For critical operations that MUST succeed (training start, data loading).
+
+        Args:
+            response: API response dict
+            field: Field name to extract
+            operation: Operation name for error message
+
+        Returns:
+            Extracted value
+
+        Raises:
+            KTRDRAPIError: If field missing or response indicates error
+
+        Example:
+            response = {"success": true, "data": {...}}
+            data = self._extract_or_raise(response, operation="training start")
+        """
+        # Check explicit error flag
+        if not response.get("success", True):
+            error_msg = response.get("error", "Unknown error")
+            raise KTRDRAPIError(
+                f"{operation.capitalize()} failed: {error_msg}",
+                details=response
+            )
+
+        # Extract field
+        if field not in response:
+            raise KTRDRAPIError(
+                f"{operation.capitalize()} response missing '{field}' field",
+                details=response
+            )
+
+        return response[field]

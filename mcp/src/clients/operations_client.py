@@ -29,6 +29,7 @@ class OperationsAPIClient(BaseAPIClient):
 
     async def get_operation_status(self, operation_id: str) -> dict[str, Any]:
         """Get detailed operation status"""
+        # Return full response (tests expect success + data fields)
         return await self._request("GET", f"/operations/{operation_id}")
 
     async def cancel_operation(
