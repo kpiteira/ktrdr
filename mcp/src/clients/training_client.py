@@ -35,8 +35,10 @@ class TrainingAPIClient(BaseAPIClient):
 
         response = await self._request("POST", "/trainings/start", json=payload)
 
-        # CRITICAL: Must succeed for training start
-        return self._extract_or_raise(response, operation="training start")
+        # Training endpoint returns flat structure: {success, task_id, status, ...}
+        # No nested 'data' field, so return full response
+        # The _request method already validates success and raises on error
+        return response
 
     async def get_training_status(self, task_id: str) -> dict[str, Any]:
         """Get neural network training status"""
