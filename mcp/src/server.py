@@ -96,11 +96,11 @@ async def get_market_data(
             # Apply client-side limiting (max 200 bars to prevent Claude overload)
             effective_limit = min(limit_bars, 200) if limit_bars else 50
             data = await client.get_cached_data(
-                symbol,
-                timeframe,
-                start_date,
-                end_date,
-                trading_hours_only,
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                trading_hours_only=trading_hours_only,
                 limit=effective_limit,
             )
             logger.info(
@@ -132,7 +132,9 @@ async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]
     try:
         async with get_api_client() as client:
             # Get a minimal data sample to extract metadata
-            data = await client.get_cached_data(symbol, timeframe, limit=1)
+            data = await client.get_cached_data(
+                symbol=symbol, timeframe=timeframe, limit=1
+            )
 
             # Extract useful summary info
             metadata = data.get("data", {}).get("metadata", {})
@@ -425,8 +427,8 @@ async def trigger_data_loading(
 @mcp.tool()
 async def start_training(
     symbols: list[str],
-    timeframe: str = "1h",
-    config: Optional[dict[str, Any]] = None,
+    timeframes: list[str],
+    strategy_name: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -438,32 +440,37 @@ async def start_training(
 
     Args:
         symbols: List of trading symbols to train on (e.g., ["AAPL", "MSFT"])
-        timeframe: Data timeframe (1h, 4h, 1d)
-        config: Optional training configuration dict (epochs, batch_size, learning_rate)
+        timeframes: List of data timeframes to use (e.g., ["1h", "4h", "1d"])
+        strategy_name: Name of the strategy configuration to use (e.g., "neuro_mean_reversion")
         start_date: Training data start date (YYYY-MM-DD, optional)
         end_date: Training data end date (YYYY-MM-DD, optional)
 
     Returns:
         dict with operation_id for tracking the training operation
+
+    Example:
+        result = await start_training(
+            symbols=["AAPL"],
+            timeframes=["1h"],
+            strategy_name="neuro_mean_reversion",
+            start_date="2024-01-01",
+            end_date="2024-03-01"
+        )
+        operation_id = result["operation_id"]
     """
     try:
         async with get_api_client() as client:
-            training_config = config or {
-                "epochs": 100,
-                "batch_size": 32,
-                "learning_rate": 0.001,
-            }
-
             result = await client.training.start_neural_training(
                 symbols=symbols,
-                timeframe=timeframe,
-                config=training_config,
+                timeframes=timeframes,
+                strategy_name=strategy_name,
                 start_date=start_date,
                 end_date=end_date,
             )
             logger.info(
                 "Training started",
                 symbols=symbols,
+                strategy_name=strategy_name,
                 operation_id=result.get("operation_id"),
             )
             return result

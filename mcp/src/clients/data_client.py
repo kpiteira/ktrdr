@@ -70,3 +70,8 @@ class DataAPIClient(BaseAPIClient):
     async def get_data_info(self, symbol: str) -> dict[str, Any]:
         """Get data information for a symbol"""
         return await self._request("GET", f"/data/info/{symbol}")
+
+    async def get_symbols(self) -> list[dict[str, Any]]:
+        """Get available trading symbols"""
+        response = await self._request("GET", "/symbols")
+        return response.get("data", [])

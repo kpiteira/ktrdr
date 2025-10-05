@@ -219,10 +219,10 @@ Start async neural network training operation.
 
 **Parameters:**
 - `symbols` (required): List of trading symbols (e.g., ["AAPL", "MSFT"])
-- `timeframe` (default: "1h"): Data timeframe
-- `config` (optional): Training configuration dict (epochs, batch_size, learning_rate, etc.)
-- `start_date` (optional): Training data start date
-- `end_date` (optional): Training data end date
+- `timeframes` (required): List of data timeframes (e.g., ["1h", "4h", "1d"])
+- `strategy_name` (required): Name of the strategy configuration to use (e.g., "neuro_mean_reversion")
+- `start_date` (optional): Training data start date (YYYY-MM-DD)
+- `end_date` (optional): Training data end date (YYYY-MM-DD)
 
 **Returns:** `operation_id` for tracking the async training
 
@@ -230,14 +230,18 @@ Start async neural network training operation.
 ```python
 result = await start_training(
     symbols=["AAPL"],
-    timeframe="1h",
-    config={"epochs": 100, "batch_size": 32}
+    timeframes=["1h"],
+    strategy_name="neuro_mean_reversion",
+    start_date="2024-01-01",
+    end_date="2024-03-01"
 )
 operation_id = result["operation_id"]
 
 # Monitor training progress
 status = await get_operation_status(operation_id)
 ```
+
+**Note:** `timeframes` is plural and expects a list. `strategy_name` must match an existing strategy configuration.
 
 ### `get_training_status`
 
@@ -307,8 +311,8 @@ await get_operation_status(data_result["data"]["operation_id"])
 # 2. Start training
 training_result = await start_training(
     symbols=["AAPL"],
-    timeframe="1h",
-    config={"epochs": 100}
+    timeframes=["1h"],
+    strategy_name="neuro_mean_reversion"
 )
 training_op_id = training_result["operation_id"]
 

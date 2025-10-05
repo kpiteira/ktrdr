@@ -11,20 +11,27 @@ class TrainingAPIClient(BaseAPIClient):
     async def start_neural_training(
         self,
         symbols: list[str],
-        timeframe: str,
-        config: dict[str, Any],
+        timeframes: list[str],
+        strategy_name: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         task_id: Optional[str] = None,
+        detailed_analytics: bool = False,
     ) -> dict[str, Any]:
         """Start neural network training (async, returns operation_id)"""
-        payload = {"symbols": symbols, "timeframe": timeframe, "config": config}
+        payload = {
+            "symbols": symbols,
+            "timeframes": timeframes,
+            "strategy_name": strategy_name,
+        }
         if start_date:
             payload["start_date"] = start_date
         if end_date:
             payload["end_date"] = end_date
         if task_id:
             payload["task_id"] = task_id
+        if detailed_analytics:
+            payload["detailed_analytics"] = detailed_analytics
 
         return await self._request("POST", "/trainings/start", json=payload)
 
