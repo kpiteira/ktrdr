@@ -82,3 +82,48 @@ class TestGetCachedData:
             assert len(result["data"]["dates"]) == 2
             assert result["data"]["metadata"]["points"] == 2
             assert result["data"]["metadata"]["limited_by_client"] is True
+
+
+class TestGetSymbols:
+    """Tests for get_symbols method"""
+
+    @pytest.mark.asyncio
+    async def test_get_symbols_returns_data_array(self, data_client):
+        """Test get_symbols extracts data from response"""
+        mock_response = {
+            "success": True,
+            "data": [
+                {"symbol": "AAPL", "instrument_type": "stock"},
+                {"symbol": "EURUSD", "instrument_type": "forex"},
+            ],
+        }
+
+        with patch.object(
+            data_client, "_request", new_callable=AsyncMock
+        ) as mock_request:
+            mock_request.return_value = mock_response
+
+            result = await data_client.get_symbols()
+
+            # Verify request
+            mock_request.assert_called_once_with("GET", "/symbols")
+
+            # Verify response extraction
+            assert isinstance(result, list)
+            assert len(result) == 2
+            assert result[0]["symbol"] == "AAPL"
+
+    @pytest.mark.asyncio
+    async def test_get_symbols_handles_empty_data(self, data_client):
+        """Test get_symbols handles missing data field gracefully"""
+        mock_response = {"success": True}
+
+        with patch.object(
+            data_client, "_request", new_callable=AsyncMock
+        ) as mock_request:
+            mock_request.return_value = mock_response
+
+            result = await data_client.get_symbols()
+
+            # Should return empty list when data field missing
+            assert result == []
