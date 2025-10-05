@@ -13,6 +13,7 @@ from .clients import (
     DataAPIClient,
     KTRDRAPIError,
     OperationsAPIClient,
+    SystemAPIClient,
     TrainingAPIClient,
 )
 from .config import API_TIMEOUT, KTRDR_API_URL
@@ -44,6 +45,7 @@ class KTRDRAPIClient:
         self.data = DataAPIClient(base_url, timeout)
         self.training = TrainingAPIClient(base_url, timeout)
         self.operations = OperationsAPIClient(base_url, timeout)
+        self.system = SystemAPIClient(base_url, timeout)
 
         logger.info("Unified API client initialized", base_url=self.base_url)
 
@@ -52,6 +54,7 @@ class KTRDRAPIClient:
         await self.data.__aenter__()
         await self.training.__aenter__()
         await self.operations.__aenter__()
+        await self.system.__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -59,6 +62,7 @@ class KTRDRAPIClient:
         await self.data.__aexit__(exc_type, exc_val, exc_tb)
         await self.training.__aexit__(exc_type, exc_val, exc_tb)
         await self.operations.__aexit__(exc_type, exc_val, exc_tb)
+        await self.system.__aexit__(exc_type, exc_val, exc_tb)
 
     # ====================
     # Operations Methods (backward compatibility)
@@ -119,12 +123,12 @@ class KTRDRAPIClient:
         return await self.training.list_trained_models()
 
     # ====================
-    # Health check (stays in facade)
+    # System Methods (backward compatibility)
     # ====================
 
     async def health_check(self) -> dict[str, Any]:
-        """Check backend health"""
-        return await self.operations._request("GET", "/health")
+        """Check backend API health status"""
+        return await self.system.health_check()
 
 
 # Singleton instance for easy access

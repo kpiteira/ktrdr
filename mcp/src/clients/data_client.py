@@ -33,7 +33,9 @@ class DataAPIClient(BaseAPIClient):
             "GET", f"/data/{symbol}/{timeframe}", params=params
         )
 
-        # Apply client-side limiting for response size
+        # TODO: Replace client-side limiting with proper backend pagination
+        # This is a temporary workaround - backend should handle pagination with limit/offset
+        # like operations_client.list_operations() does
         if limit and "data" in response and "dates" in response["data"]:
             data = response["data"]
             if len(data["dates"]) > limit:
