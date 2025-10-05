@@ -9,7 +9,9 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
+
+import httpx
 
 
 @dataclass
@@ -38,6 +40,110 @@ class ValidationConfig:
             raise ValueError("Config missing 'tools' section")
 
         return cls(tools=data["tools"])
+
+
+class OpenAPIFetcher:
+    """Fetch and parse OpenAPI specification from backend"""
+
+    def __init__(self, base_url: str):
+        self.base_url = base_url.rstrip("/")
+        self.spec: Optional[dict] = None
+
+    def fetch(self) -> dict[str, Any]:
+        """
+        Fetch OpenAPI spec from backend.
+
+        Returns:
+            OpenAPI specification dict
+
+        Raises:
+            ConnectionError: If backend not reachable
+        """
+        url = f"{self.base_url}/openapi.json"
+
+        try:
+            response = httpx.get(url, timeout=10.0)
+            response.raise_for_status()
+            self.spec = response.json()
+            return self.spec
+        except httpx.ConnectError as e:
+            raise ConnectionError(
+                f"Backend not reachable at {url}. Ensure backend is running."
+            ) from e
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(
+                f"Failed to fetch OpenAPI spec: HTTP {e.response.status_code}"
+            ) from e
+
+    def get_request_schema(
+        self, endpoint: str, method: str
+    ) -> Optional[dict[str, Any]]:
+        """
+        Get request schema for endpoint.
+
+        Resolves $ref references to actual schemas.
+
+        Args:
+            endpoint: API endpoint path
+            method: HTTP method (uppercase)
+
+        Returns:
+            Schema dict or None if not found
+        """
+        if not self.spec:
+            raise ValueError("Must call fetch() first")
+
+        # Get endpoint definition
+        path_item = self.spec.get("paths", {}).get(endpoint)
+        if not path_item:
+            return None
+
+        operation = path_item.get(method.lower())
+        if not operation:
+            return None
+
+        # Get request body schema
+        request_body = operation.get("requestBody")
+        if not request_body:
+            return None  # GET requests have no body
+
+        content = request_body.get("content", {})
+        json_content = content.get("application/json")
+        if not json_content:
+            return None
+
+        schema = json_content.get("schema")
+        if not schema:
+            return None
+
+        # Resolve $ref if present
+        if "$ref" in schema:
+            return self._resolve_ref(schema["$ref"])
+
+        return schema
+
+    def _resolve_ref(self, ref: str) -> dict[str, Any]:
+        """
+        Resolve $ref to actual schema.
+
+        Args:
+            ref: Reference string like "#/components/schemas/TrainingStartRequest"
+
+        Returns:
+            Resolved schema dict
+        """
+        if not ref.startswith("#/"):
+            raise ValueError(f"External refs not supported: {ref}")
+
+        # Parse ref path
+        parts = ref[2:].split("/")  # Remove "#/" prefix
+
+        # Navigate spec
+        current = self.spec
+        for part in parts:
+            current = current[part]
+
+        return current
 
 
 def main(argv: list[str] | None = None) -> int:

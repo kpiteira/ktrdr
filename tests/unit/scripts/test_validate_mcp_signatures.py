@@ -1,8 +1,11 @@
 """Tests for MCP signature validation script"""
 
+from unittest.mock import Mock, patch
+
+import httpx
 import pytest
 
-from scripts.validate_mcp_signatures import ValidationConfig, main
+from scripts.validate_mcp_signatures import OpenAPIFetcher, ValidationConfig, main
 
 
 class TestValidationConfig:
@@ -62,3 +65,98 @@ class TestCLI:
         """Should support --strict flag"""
         # Will be implemented when we have full validation logic
         pass
+
+
+class TestOpenAPIFetcher:
+    """Test OpenAPI spec fetching"""
+
+    @patch("httpx.get")
+    def test_fetch_spec_from_backend(self, mock_get):
+        """Should fetch OpenAPI spec from backend"""
+        mock_response = Mock()
+        mock_response.json.return_value = {"openapi": "3.1.0", "paths": {}}
+        mock_get.return_value = mock_response
+
+        fetcher = OpenAPIFetcher("http://localhost:8000")
+        spec = fetcher.fetch()
+
+        assert spec["openapi"] == "3.1.0"
+        assert "paths" in spec
+        mock_get.assert_called_once_with(
+            "http://localhost:8000/openapi.json", timeout=10.0
+        )
+
+    @patch("httpx.get")
+    def test_fetch_handles_connection_error(self, mock_get):
+        """Should raise clear error if backend not reachable"""
+        mock_get.side_effect = httpx.ConnectError("Connection refused")
+
+        fetcher = OpenAPIFetcher("http://localhost:9999")
+
+        with pytest.raises(ConnectionError, match="Backend not reachable"):
+            fetcher.fetch()
+
+    def test_get_request_schema(self):
+        """Should extract request schema for endpoint"""
+        spec = {
+            "paths": {
+                "/api/v1/trainings/start": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/TrainingStartRequest"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "TrainingStartRequest": {
+                        "type": "object",
+                        "properties": {
+                            "symbols": {"type": "array", "items": {"type": "string"}},
+                            "strategy_name": {"type": "string"},
+                        },
+                        "required": ["symbols", "strategy_name"],
+                    }
+                }
+            },
+        }
+
+        fetcher = OpenAPIFetcher("http://localhost:8000")
+        fetcher.spec = spec
+
+        schema = fetcher.get_request_schema("/api/v1/trainings/start", "POST")
+
+        assert schema["type"] == "object"
+        assert "symbols" in schema["properties"]
+        assert "strategy_name" in schema["required"]
+
+    def test_get_request_schema_no_body(self):
+        """Should return None for GET requests with no body"""
+        spec = {
+            "paths": {
+                "/api/v1/operations": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "operation_type",
+                                "in": "query",
+                                "schema": {"type": "string"},
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+
+        fetcher = OpenAPIFetcher("http://localhost:8000")
+        fetcher.spec = spec
+
+        schema = fetcher.get_request_schema("/api/v1/operations", "GET")
+        assert schema is None
