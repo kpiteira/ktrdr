@@ -2,33 +2,53 @@
 
 This document describes all available MCP tools exposed by the KTRDR MCP server for AI agent integration.
 
+**Architecture**: The MCP server is a **pure interface layer** that delegates all business logic and data management to the backend API. It does not maintain any local state or storage.
+
 ## Table of Contents
 
-1. [Async Operations Management](#async-operations-management)
-2. [Data Operations](#data-operations)
-3. [Training Operations](#training-operations)
+1. [System Health](#system-health)
+2. [Async Operations Management](#async-operations-management)
+3. [Data Operations](#data-operations)
 4. [Market Data & Research](#market-data--research)
-5. [Backtesting](#backtesting)
+5. [Training Operations](#training-operations)
+
+---
+
+## System Health
+
+### `check_backend_health`
+
+Check if the KTRDR backend API is accessible and healthy.
+
+**Parameters:** None
+
+**Returns:** Health status with service information
+
+**Example:**
+```python
+health = await check_backend_health()
+print(f"Backend status: {health['status']}")
+```
 
 ---
 
 ## Async Operations Management
 
-The KTRDR backend executes long-running operations (data loading, training, backtesting) asynchronously. These tools allow AI agents to manage and monitor these operations.
+The KTRDR backend executes long-running operations (data loading, training) asynchronously. These tools allow monitoring and control.
 
 ### `list_operations`
 
 List all async operations with optional filtering.
 
 **Parameters:**
-- `operation_type` (optional): Filter by type (`data_load`, `training`, `backtest`)
+- `operation_type` (optional): Filter by type (`data_load`, `training`)
 - `status` (optional): Filter by status (`running`, `completed`, `failed`, `cancelled`, `pending`)
-- `active_only` (bool, default: False): Show only active (running/pending) operations
-- `limit` (int, default: 10): Maximum operations to return (max 100)
+- `active_only` (bool, default: False): Show only active operations
+- `limit` (int, default: 10): Maximum operations to return
 
-**Returns:** List of operations with metadata (status, progress, created_at, etc.)
+**Returns:** List of operations with status, progress, timestamps
 
-**Example Usage:**
+**Example:**
 ```python
 # List all active operations
 operations = await list_operations(active_only=True)
@@ -39,21 +59,15 @@ training_ops = await list_operations(operation_type="training", limit=5)
 
 ### `get_operation_status`
 
-Get detailed status of a specific operation for progress monitoring.
+Get detailed status of a specific operation.
 
 **Parameters:**
 - `operation_id` (required): Unique operation identifier
 
-**Returns:** Detailed operation state including:
-- Current status (`running`, `completed`, etc.)
-- Progress percentage
-- ETA (estimated time to completion)
-- Result summary (if completed)
-- Error details (if failed)
+**Returns:** Status, progress percentage, ETA, results/errors
 
-**Example Usage:**
+**Example:**
 ```python
-# Poll for progress
 status = await get_operation_status("op_training_20241201_123456")
 print(f"Progress: {status['progress']}%")
 ```
@@ -64,35 +78,27 @@ Cancel a running async operation.
 
 **Parameters:**
 - `operation_id` (required): Operation to cancel
-- `reason` (optional): Cancellation reason for audit trail
+- `reason` (optional): Cancellation reason
 
 **Returns:** Cancellation confirmation
 
-**Example Usage:**
+**Example:**
 ```python
-# Cancel a long-running data load
-result = await cancel_operation(
-    "op_data_load_20241201_123456",
-    reason="User requested cancellation"
-)
+await cancel_operation("op_data_load_123", reason="User requested")
 ```
 
 ### `get_operation_results`
 
-Retrieve results from a completed or failed operation.
+Retrieve results from a completed operation.
 
 **Parameters:**
 - `operation_id` (required): Operation identifier
 
-**Returns:** Result summary with:
-- Metrics and statistics
-- Paths to detailed artifacts
-- Performance data
+**Returns:** Result summary with metrics, artifacts, performance data
 
-**Example Usage:**
+**Example:**
 ```python
-# Get training results
-results = await get_operation_results("op_training_20241201_123456")
+results = await get_operation_results("op_training_123")
 print(f"Model accuracy: {results['results']['accuracy']}")
 ```
 
@@ -100,50 +106,126 @@ print(f"Model accuracy: {results['results']['accuracy']}")
 
 ## Data Operations
 
-### `trigger_data_loading`
+### `get_available_symbols`
 
-Start an async data loading operation.
+Get list of available trading symbols from the backend.
 
-**Parameters:**
-- `symbol` (required): Trading symbol (e.g., "AAPL", "EURUSD")
-- `timeframe` (default: "1h"): Data timeframe (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`)
-- `start_date` (optional): Start date in YYYY-MM-DD format
-- `end_date` (optional): End date in YYYY-MM-DD format
-- `mode` (default: "local"): Loading mode (`local`, `ib`, `hybrid`)
+**Parameters:** None
 
-**Returns:** Operation ID for tracking
+**Returns:** List of supported symbols with metadata
 
-**Example Usage:**
+**Example:**
 ```python
-# Load AAPL data for last year
-result = await trigger_data_loading(
-    symbol="AAPL",
-    timeframe="1d",
-    start_date="2024-01-01",
-    end_date="2024-12-31",
-    mode="ib"
-)
-
-# Monitor progress
-operation_id = result["operation_id"]
-status = await get_operation_status(operation_id)
+symbols = await get_available_symbols()
 ```
 
 ### `get_market_data`
 
-Get cached market data for analysis (fast, synchronous, local only).
+Retrieve historical market data for a symbol.
+
+**Parameters:**
+- `symbol` (required): Trading symbol (e.g., "AAPL", "EURUSD")
+- `timeframe` (default: "1h"): Data timeframe (1m, 5m, 1h, 4h, 1d)
+- `start_date` (optional): Start date (YYYY-MM-DD)
+- `end_date` (optional): End date (YYYY-MM-DD)
+- `limit` (default: 100): Maximum bars to return
+
+**Returns:** OHLCV data with timestamps
+
+**Example:**
+```python
+data = await get_market_data("AAPL", timeframe="1d", limit=30)
+```
+
+### `trigger_data_loading`
+
+Trigger async data loading operation.
 
 **Parameters:**
 - `symbol` (required): Trading symbol
 - `timeframe` (default: "1h"): Data timeframe
-- `start_date` (optional): Start date filter
-- `end_date` (optional): End date filter
-- `trading_hours_only` (default: False): Filter to trading hours only
-- `limit_bars` (default: 50): Maximum bars to return
+- `mode` (default: "local"): Loading mode (local, tail, backfill, full)
+- `start_date` (optional): Start date for data range
+- `end_date` (optional): End date for data range
 
-**Returns:** OHLCV data with dates
+**Returns:** `operation_id` for tracking the async operation
 
-**Note:** This is a synchronous tool for quick data retrieval. For loading new data, use `trigger_data_loading`.
+**Example:**
+```python
+result = await trigger_data_loading(
+    symbol="AAPL",
+    timeframe="1h",
+    mode="tail"
+)
+operation_id = result["data"]["operation_id"]
+
+# Monitor progress
+status = await get_operation_status(operation_id)
+```
+
+### `load_data_from_source`
+
+Load data from a specific source (IB Gateway or local cache).
+
+**Parameters:**
+- `symbol` (required): Trading symbol
+- `timeframe` (default: "1h"): Data timeframe
+- `source` (default: "ib"): Data source ("ib" or "local")
+- `start_date` (optional): Start date
+- `end_date` (optional): End date
+
+**Returns:** Data loading results
+
+**Example:**
+```python
+data = await load_data_from_source("EURUSD", source="ib", timeframe="1h")
+```
+
+### `get_data_summary`
+
+Get summary statistics about available data for a symbol.
+
+**Parameters:**
+- `symbol` (required): Trading symbol
+- `timeframe` (default: "1h"): Data timeframe
+
+**Returns:** Data range, bar count, gaps, quality metrics
+
+**Example:**
+```python
+summary = await get_data_summary("AAPL", timeframe="1d")
+print(f"Total bars: {summary['bar_count']}")
+```
+
+---
+
+## Market Data & Research
+
+### `get_available_indicators`
+
+Get list of available technical indicators.
+
+**Parameters:** None
+
+**Returns:** List of indicators with parameters and descriptions
+
+**Example:**
+```python
+indicators = await get_available_indicators()
+```
+
+### `get_available_strategies`
+
+Get list of available trading strategies.
+
+**Parameters:** None
+
+**Returns:** List of strategy configurations
+
+**Example:**
+```python
+strategies = await get_available_strategies()
+```
 
 ---
 
@@ -151,69 +233,79 @@ Get cached market data for analysis (fast, synchronous, local only).
 
 ### `start_training`
 
-Start an async neural network training operation.
+Start async neural network training operation.
 
 **Parameters:**
-- `symbols` (required): List of symbols to train on (e.g., `["AAPL", "MSFT"]`)
+- `symbols` (required): List of trading symbols (e.g., ["AAPL", "MSFT"])
 - `timeframe` (default: "1h"): Data timeframe
-- `config` (optional): Training configuration dict with:
-  - `epochs` (default: 100)
-  - `batch_size` (default: 32)
-  - `learning_rate` (default: 0.001)
+- `config` (optional): Training configuration dict (epochs, batch_size, learning_rate, etc.)
 - `start_date` (optional): Training data start date
 - `end_date` (optional): Training data end date
 
-**Returns:** Operation ID for tracking
+**Returns:** `operation_id` for tracking the async training
 
-**Example Usage:**
+**Example:**
 ```python
-# Start multi-symbol training
 result = await start_training(
-    symbols=["AAPL", "MSFT", "GOOGL"],
+    symbols=["AAPL"],
     timeframe="1h",
-    config={
-        "epochs": 200,
-        "batch_size": 64,
-        "learning_rate": 0.0001
-    },
-    start_date="2023-01-01",
-    end_date="2024-12-31"
+    config={"epochs": 100, "batch_size": 32}
 )
+operation_id = result["operation_id"]
 
 # Monitor training progress
-operation_id = result["operation_id"]
-while True:
-    status = await get_operation_status(operation_id)
-    if status["status"] in ["completed", "failed"]:
-        break
-    print(f"Epoch {status['context']['epoch']}, Loss: {status['context']['loss']}")
-    await asyncio.sleep(5)
-
-# Get final results
-results = await get_operation_results(operation_id)
+status = await get_operation_status(operation_id)
 ```
 
----
+### `get_training_status`
 
-## Market Data & Research
+Get status of a training operation (alias for get_operation_status for training ops).
 
-### `check_backend_health`
+**Parameters:**
+- `task_id` (required): Training task/operation ID
 
-Check if KTRDR backend is healthy and accessible.
+**Returns:** Training status, progress, metrics
 
-**Returns:** Health status and backend info
+**Example:**
+```python
+status = await get_training_status("op_training_123")
+```
 
-### `get_available_symbols`
+### `get_model_performance`
 
-Get list of all available trading symbols with metadata.
+Get detailed performance metrics for a trained model.
 
-**Returns:** List of symbols with details
+**Parameters:**
+- `task_id` (required): Training task ID
 
----
+**Returns:** Training metrics, test metrics, model information
 
-## Backtesting
+**Example:**
+```python
+perf = await get_model_performance("op_training_123")
+print(f"Test accuracy: {perf['test_metrics']['accuracy']}")
+```
 
-(See existing tools in MCP server for backtesting functionality)
+### `test_model_prediction`
+
+Test a trained model with sample data.
+
+**Parameters:**
+- `model_name` (required): Name of the trained model
+- `symbol` (required): Trading symbol for test data
+- `timeframe` (default: "1h"): Data timeframe
+- `sample_size` (default: 100): Number of samples to test
+
+**Returns:** Prediction results and evaluation metrics
+
+**Example:**
+```python
+results = await test_model_prediction(
+    model_name="aapl_model_v1",
+    symbol="AAPL",
+    sample_size=50
+)
+```
 
 ---
 
@@ -222,126 +314,56 @@ Get list of all available trading symbols with metadata.
 ### Complete Training Workflow
 
 ```python
-# 1. Check backend health
-health = await check_backend_health()
-assert health["status"] == "healthy"
-
-# 2. Load data if needed
-data_op = await trigger_data_loading(
+# 1. Ensure data is loaded
+data_result = await trigger_data_loading(
     symbol="AAPL",
     timeframe="1h",
-    start_date="2023-01-01",
-    end_date="2024-12-31"
+    mode="tail"
 )
+await get_operation_status(data_result["data"]["operation_id"])
 
-# 3. Wait for data loading
-while True:
-    status = await get_operation_status(data_op["operation_id"])
-    if status["status"] == "completed":
-        break
-    await asyncio.sleep(2)
-
-# 4. Start training
-training_op = await start_training(
+# 2. Start training
+training_result = await start_training(
     symbols=["AAPL"],
     timeframe="1h",
     config={"epochs": 100}
 )
+training_op_id = training_result["operation_id"]
 
-# 5. Monitor training
+# 3. Monitor training
 while True:
-    status = await get_operation_status(training_op["operation_id"])
+    status = await get_operation_status(training_op_id)
     if status["status"] in ["completed", "failed"]:
         break
     print(f"Progress: {status['progress']}%")
-    await asyncio.sleep(10)
 
-# 6. Get results
+# 4. Get results
 if status["status"] == "completed":
-    results = await get_operation_results(training_op["operation_id"])
-    print(f"Model performance: {results['results']}")
-```
-
-### Monitoring Multiple Operations
-
-```python
-# Start multiple operations
-ops = []
-for symbol in ["AAPL", "MSFT", "GOOGL"]:
-    op = await trigger_data_loading(symbol=symbol, timeframe="1d")
-    ops.append(op["operation_id"])
-
-# Monitor all
-while ops:
-    for op_id in ops[:]:
-        status = await get_operation_status(op_id)
-        if status["status"] in ["completed", "failed"]:
-            print(f"{op_id}: {status['status']}")
-            ops.remove(op_id)
-    await asyncio.sleep(5)
+    results = await get_operation_results(training_op_id)
+    perf = await get_model_performance(training_op_id)
 ```
 
 ---
 
-## Architecture
+## Architecture Notes
 
-The MCP tools use a **domain-specific client architecture**:
+**Design Principle**: The MCP server is a stateless interface layer. All data, operations, and results are managed by the backend API.
 
-```
-MCP Tools
-   ↓
-KTRDRAPIClient (Unified Facade)
-   ├── operations: OperationsAPIClient
-   ├── data: DataAPIClient
-   └── training: TrainingAPIClient
-         ↓
-    BaseAPIClient (Shared HTTP)
-         ↓
-   KTRDR Backend API (FastAPI)
-```
+**Benefits**:
+- ✅ No local state management
+- ✅ CLI and MCP have identical capabilities
+- ✅ Single source of truth (backend)
+- ✅ Simplified MCP server maintenance
 
-**Benefits:**
-- Clean separation of concerns
-- Type-safe operations
-- Consistent error handling
-- Easy to extend with new domains
+**What MCP Does NOT Do**:
+- ❌ Store strategies, experiments, or knowledge locally
+- ❌ Maintain SQLite databases
+- ❌ Duplicate backend functionality
+- ❌ Keep operation results after backend restart
 
----
-
-## Error Handling
-
-All tools raise exceptions on errors. Common error patterns:
-
-```python
-try:
-    result = await start_training(symbols=["INVALID"])
-except Exception as e:
-    print(f"Training failed: {e}")
-    # Handle error appropriately
-```
-
-**Common Errors:**
-- **404**: Operation/resource not found
-- **400**: Invalid parameters or operation not in expected state
-- **500**: Backend error (check backend health)
-- **Connection Error**: Backend not accessible
-
----
-
-## Best Practices
-
-1. **Always check backend health** before starting operations
-2. **Use operation IDs** to track long-running tasks
-3. **Poll periodically** for status updates (every 5-10 seconds)
-4. **Handle failures gracefully** - check operation status before getting results
-5. **Cancel operations** if no longer needed to free resources
-6. **Use filters** in `list_operations` to reduce response size
-7. **Set reasonable limits** when fetching data to avoid timeouts
-
----
-
-## Version
-
-- **MCP Server Version**: 0.2.0
-- **API Version**: v1
-- **Last Updated**: 2024-12-01
+**What Backend Provides**:
+- ✅ All business logic
+- ✅ Data persistence
+- ✅ Operation tracking
+- ✅ Model storage
+- ✅ Strategy execution
