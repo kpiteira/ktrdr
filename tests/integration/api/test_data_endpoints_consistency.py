@@ -121,64 +121,22 @@ class TestAPIEndpointConsistency:
         mock_data_service._convert_df_to_api_format.assert_called_once()
 
     @pytest.mark.api
-    def test_load_data_endpoint_consistent_delegation_sync(
-        self, client, mock_data_service
-    ):
-        """Test load_data endpoint uses consistent DataService delegation in sync mode."""
-        # Set up mock to return operation response
-        mock_data_service.load_data.return_value = {
-            "status": "success",
-            "fetched_bars": 100,
-            "cached_before": False,
-            "merged_file": "AAPL_1h.csv",
-            "gaps_analyzed": 2,
-            "segments_fetched": 1,
-            "ib_requests_made": 5,
-            "execution_time_seconds": 1.5,
-            "error_message": None,
-        }
-
-        # Make the request in sync mode (async_mode=false)
-        with patch(
-            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-        ):
-            response = client.post(
-                "/api/v1/data/load?async_mode=false",
-                json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
-            )
-
-        # Verify response success
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        assert data["data"]["status"] == "success"
-        assert data["data"]["fetched_bars"] == 100
-
-        # CRITICAL: Verify consistent delegation pattern
-        mock_data_service.load_data.assert_called_once()
-        call_kwargs = mock_data_service.load_data.call_args[1]
-        assert call_kwargs["symbol"] == "AAPL"
-        assert call_kwargs["timeframe"] == "1h"
-        assert call_kwargs["mode"] == "tail"
-        assert call_kwargs["include_metadata"] is True
-
-    @pytest.mark.api
     def test_load_data_endpoint_consistent_delegation_async(
         self, client, mock_data_service
     ):
-        """Test load_data endpoint uses consistent patterns in async mode."""
+        """Test load_data endpoint uses consistent async delegation pattern."""
         # Set up mock to return async operation response
         mock_data_service.load_data_async.return_value = {
             "operation_id": "op_test_123",
             "status": "started",
         }
 
-        # Make the request in async mode (async_mode=true)
+        # Make the request (always async now)
         with patch(
             "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
         ):
             response = client.post(
-                "/api/v1/data/load?async_mode=true",
+                "/api/v1/data/load",
                 json={"symbol": "MSFT", "timeframe": "1d", "mode": "full"},
             )
 
@@ -247,7 +205,7 @@ class TestAPIEndpointConsistency:
     ):
         """Test that error handling works consistently through delegation."""
         # Set up mock to raise DataError through delegation
-        mock_data_service.load_data.side_effect = DataError(
+        mock_data_service.load_data_async.side_effect = DataError(
             message="Test error through delegation",
             error_code="DATA-TestError",
             details={"test": "error"},
@@ -269,22 +227,15 @@ class TestAPIEndpointConsistency:
         assert data["error"]["code"] == "DATA-TestError"
 
         # Verify delegation was called
-        mock_data_service.load_data.assert_called_once()
+        mock_data_service.load_data_async.assert_called_once()
 
     @pytest.mark.api
-    def test_backward_compatibility_maintained(self, client, mock_data_service):
-        """Test that API response formats are preserved exactly after transformation."""
-        # Set up mock to return expected format
-        mock_data_service.load_data.return_value = {
-            "status": "success",
-            "fetched_bars": 50,
-            "cached_before": True,
-            "merged_file": "AAPL_1h.csv",
-            "gaps_analyzed": 1,
-            "segments_fetched": 2,
-            "ib_requests_made": 0,
-            "execution_time_seconds": 0.8,
-            "error_message": None,
+    def test_async_response_format(self, client, mock_data_service):
+        """Test that async response format is correct."""
+        # Set up mock to return async operation response
+        mock_data_service.load_data_async.return_value = {
+            "operation_id": "op_test_123",
+            "status": "started",
         }
 
         with patch(
@@ -295,89 +246,20 @@ class TestAPIEndpointConsistency:
                 json={"symbol": "AAPL", "timeframe": "1h", "mode": "tail"},
             )
 
-        # Verify exact backward compatibility
+        # Verify response format
         assert response.status_code == 200
         data = response.json()
 
-        # Verify response structure matches expected format exactly
+        # Verify response structure
         assert data["success"] is True
         assert "data" in data
         response_data = data["data"]
 
-        # Verify all expected fields are present with correct types
-        expected_fields = [
-            "status",
-            "fetched_bars",
-            "cached_before",
-            "merged_file",
-            "gaps_analyzed",
-            "segments_fetched",
-            "ib_requests_made",
-            "execution_time_seconds",
-            "error_message",
-        ]
-
-        for field in expected_fields:
-            assert field in response_data, f"Missing field: {field}"
-
-        # Verify specific values match expected format
-        assert response_data["status"] == "success"
-        assert response_data["fetched_bars"] == 50
-        assert isinstance(response_data["execution_time_seconds"], (int, float))
-
-    @pytest.mark.api
-    def test_async_sync_mode_compatibility(self, client, mock_data_service):
-        """Test that both sync and async modes work with consistent patterns."""
-        # Set up mocks for both modes - include all required fields
-        mock_data_service.load_data.return_value = {
-            "status": "success",
-            "fetched_bars": 10,
-            "cached_before": False,
-            "merged_file": "TEST_1d.csv",
-            "gaps_analyzed": 0,
-            "segments_fetched": 1,
-            "ib_requests_made": 0,
-            "execution_time_seconds": 0.1,
-            "error_message": None,
-        }
-        mock_data_service.load_data_async.return_value = {
-            "operation_id": "op_123",
-            "status": "started",
-        }
-
-        with patch(
-            "ktrdr.api.dependencies.get_data_service", return_value=mock_data_service
-        ):
-            # Test sync mode
-            sync_response = client.post(
-                "/api/v1/data/load?async_mode=false",
-                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"},
-            )
-
-            # Test async mode
-            async_response = client.post(
-                "/api/v1/data/load?async_mode=true",
-                json={"symbol": "TEST", "timeframe": "1d", "mode": "local"},
-            )
-
-        # Both should succeed
-        assert sync_response.status_code == 200
-        assert async_response.status_code == 200
-
-        # Sync mode returns immediate results
-        sync_data = sync_response.json()
-        assert sync_data["success"] is True
-        assert sync_data["data"]["status"] == "success"
-
-        # Async mode returns operation ID
-        async_data = async_response.json()
-        assert async_data["success"] is True
-        assert async_data["data"]["operation_id"] == "op_123"
-        assert async_data["data"]["status"] == "started"
-
-        # Verify both delegation patterns were called
-        mock_data_service.load_data.assert_called_once()
-        mock_data_service.load_data_async.assert_called_once()
+        # Verify async operation fields are present
+        assert "operation_id" in response_data
+        assert "status" in response_data
+        assert response_data["operation_id"] == "op_test_123"
+        assert response_data["status"] == "started"
 
 
 class TestAPIEndpointTransformationRequirements:
@@ -412,16 +294,9 @@ class TestAPIEndpointTransformationRequirements:
     @pytest.mark.api
     def test_phase3_requirement_consistent_delegation(self, client, mock_data_service):
         """Test Phase 3 requirement: All endpoints use consistent DataService delegation."""
-        mock_data_service.load_data.return_value = {
-            "status": "success",
-            "fetched_bars": 0,
-            "cached_before": True,
-            "merged_file": "AAPL_1d.csv",
-            "gaps_analyzed": 0,
-            "segments_fetched": 1,
-            "ib_requests_made": 0,
-            "execution_time_seconds": 0.05,
-            "error_message": None,
+        mock_data_service.load_data_async.return_value = {
+            "operation_id": "op_test_456",
+            "status": "started",
         }
 
         with patch(
@@ -434,12 +309,12 @@ class TestAPIEndpointTransformationRequirements:
 
         assert response.status_code == 200
 
-        # Verify consistent delegation pattern
-        mock_data_service.load_data.assert_called_once()
-        call_kwargs = mock_data_service.load_data.call_args[1]
+        # Verify consistent delegation pattern - always async now
+        mock_data_service.load_data_async.assert_called_once()
+        call_kwargs = mock_data_service.load_data_async.call_args[1]
 
         # Verify delegation includes all required parameters
-        required_params = ["symbol", "timeframe", "mode", "include_metadata"]
+        required_params = ["symbol", "timeframe", "mode"]
         for param in required_params:
             assert param in call_kwargs
 
@@ -448,17 +323,10 @@ class TestAPIEndpointTransformationRequirements:
         """Test Phase 3 requirement: No performance degradation from endpoint changes."""
         import time
 
-        # Set up fast mock response with all required fields
-        mock_data_service.load_data.return_value = {
-            "status": "success",
-            "fetched_bars": 1000,
-            "cached_before": False,
-            "merged_file": "AAPL_1h.csv",
-            "gaps_analyzed": 5,
-            "segments_fetched": 3,
-            "ib_requests_made": 2,
-            "execution_time_seconds": 0.02,
-            "error_message": None,
+        # Set up fast mock response for async operation
+        mock_data_service.load_data_async.return_value = {
+            "operation_id": "op_perf_test",
+            "status": "started",
         }
 
         with patch(
@@ -481,4 +349,4 @@ class TestAPIEndpointTransformationRequirements:
         assert response_time < 1.0  # Should be sub-second with mocks
 
         # Verify delegation was efficient (single call)
-        assert mock_data_service.load_data.call_count == 1
+        assert mock_data_service.load_data_async.call_count == 1

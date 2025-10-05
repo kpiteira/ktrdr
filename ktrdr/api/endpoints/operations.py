@@ -59,7 +59,7 @@ async def list_operations(
         None, description="Filter by operation type"
     ),
     limit: int = Query(
-        100, ge=1, le=1000, description="Maximum number of operations to return"
+        10, ge=1, le=1000, description="Maximum number of operations to return"
     ),
     offset: int = Query(0, ge=0, description="Number of operations to skip"),
     active_only: bool = Query(
@@ -419,5 +419,82 @@ async def retry_operation(
         raise DataError(
             message=f"Failed to retry operation {operation_id}",
             error_code="OPERATIONS-RetryError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@router.get(
+    "/operations/{operation_id}/results",
+    tags=["Operations"],
+    summary="Get operation results",
+    description="""
+    Get operation results (summary metrics + analytics paths).
+
+    Returns lightweight summary metrics and paths/links to detailed data.
+    Works for any operation type (data loading, training, backtesting).
+
+    Only returns results for completed or failed operations.
+    For running operations, use GET /operations/{operation_id} for status.
+    """,
+)
+async def get_operation_results(
+    operation_id: str = Path(..., description="Unique operation identifier"),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> dict:
+    """
+    Get operation results from result_summary.
+
+    Args:
+        operation_id: Unique identifier for the operation
+
+    Returns:
+        dict: Operation results with summary metrics
+
+    Raises:
+        404: Operation not found
+        400: Operation not finished (status not completed or failed)
+
+    Example:
+        GET /api/v1/operations/op_training_20241201_123456/results
+    """
+    try:
+        logger.info(f"Getting results for operation: {operation_id}")
+
+        # Get operation from service
+        operation = await operations_service.get_operation(operation_id)
+
+        if not operation:
+            logger.warning(f"Operation not found: {operation_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Operation not found: {operation_id}",
+            )
+
+        # Check if operation is finished
+        if operation.status not in [OperationStatus.COMPLETED, OperationStatus.FAILED]:
+            logger.warning(
+                f"Operation not finished: {operation_id} (status: {operation.status})"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Operation not finished (status: {operation.status.value})",
+            )
+
+        logger.info(f"Returning results for operation: {operation_id}")
+        return {
+            "success": True,
+            "operation_id": operation_id,
+            "operation_type": operation.operation_type.value,
+            "status": operation.status.value,
+            "results": operation.result_summary or {},
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting operation results: {str(e)}")
+        raise DataError(
+            message=f"Failed to get results for operation {operation_id}",
+            error_code="OPERATIONS-ResultsError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e

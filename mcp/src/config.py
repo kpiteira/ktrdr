@@ -21,9 +21,6 @@ KTRDR_API_URL = os.getenv("KTRDR_API_URL", "http://backend:8000/api/v1")
 KTRDR_API_KEY = os.getenv("KTRDR_API_KEY", "")
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
 
-# Storage Configuration
-EXPERIMENT_DB_PATH = os.getenv("EXPERIMENT_DB_PATH", str(MCP_DIR / "experiments.db"))
-
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

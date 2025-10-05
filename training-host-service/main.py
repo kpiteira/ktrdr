@@ -56,7 +56,7 @@ configure_logging(
     file_level=logging.DEBUG,
     config={
         "file_format": "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s.%(funcName)s:%(lineno)d | %(message)s",
-    }
+    },
 )
 
 # Override root handler to write to host-service-specific log file
@@ -74,9 +74,11 @@ for handler in root_logger.handlers[:]:
             backupCount=5,
         )
         new_handler.setLevel(logging.DEBUG)
-        new_handler.setFormatter(logging.Formatter(
-            "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s.%(funcName)s:%(lineno)d | %(message)s"
-        ))
+        new_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s.%(funcName)s:%(lineno)d | %(message)s"
+            )
+        )
         root_logger.addHandler(new_handler)
 
 logger = get_logger(__name__)

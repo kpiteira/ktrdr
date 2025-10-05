@@ -117,14 +117,12 @@ services:
       # Write access to research areas
       - ../strategies:/app/strategies:rw
       - ../models:/app/models:rw
-      - mcp-experiments:/app/experiments:rw
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - PYTHONPATH=/app
       # API connection to backend via localhost (simple and reliable)
       - KTRDR_API_URL=http://localhost:8000/api/v1
-      - EXPERIMENT_DB_PATH=/app/experiments/experiments.db
     # Removed depends_on to make MCP rebuilding completely independent
     # MCP will connect to backend via localhost when it starts
     network_mode: host  # Use host network to access localhost directly
@@ -139,4 +137,3 @@ volumes:
   pip-cache:
   uv-cache:
   npm-cache:
-  mcp-experiments:

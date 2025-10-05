@@ -40,50 +40,6 @@ class DataService(BaseService):
         self.logger.info("DataService initialized")
 
     @log_entry_exit(logger=logger, log_args=True)
-    @log_performance(threshold_ms=500, logger=logger)
-    async def load_data(
-        self,
-        symbol: str,
-        timeframe: str,
-        start_date: Optional[Union[str, datetime]] = None,
-        end_date: Optional[Union[str, datetime]] = None,
-        mode: str = "local",
-        include_metadata: bool = True,
-        filters: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """
-        Load OHLCV data for a symbol and timeframe.
-
-        Delegates to DataManager's ServiceOrchestrator for all complex orchestration.
-
-        Args:
-            symbol: Trading symbol (e.g., 'AAPL', 'EURUSD')
-            timeframe: Data timeframe (e.g., '1d', '1h')
-            start_date: Optional start date for filtering
-            end_date: Optional end date for filtering
-            mode: Loading mode (local, tail, backfill, full)
-            include_metadata: Whether to include metadata in the response (legacy parameter)
-            filters: Optional filters for data processing
-
-        Returns:
-            Dictionary with loaded data in API format
-
-        Raises:
-            DataNotFoundError: If data is not found
-            DataError: For other data-related errors
-        """
-        # Simple delegation to DataManager's ServiceOrchestrator
-        result = await self.data_manager.load_data_async(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            mode=mode,
-            filters=filters,
-        )
-        return result  # Already API-formatted by DataManager
-
-    @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=200, logger=logger)
     def load_cached_data(
         self,

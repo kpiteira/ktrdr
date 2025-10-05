@@ -178,9 +178,7 @@ class TrainingSession:
         if items_total:
             # Progress based on total batches across all epochs
             progress_percent = (
-                (self.items_processed / items_total) * 100.0
-                if items_total > 0
-                else 0.0
+                (self.items_processed / items_total) * 100.0 if items_total > 0 else 0.0
             )
         else:
             # Fallback to epoch-based progress if batch info unavailable

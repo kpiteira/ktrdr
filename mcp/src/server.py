@@ -1,6 +1,5 @@
 """KTRDR MCP Server - Main entry point"""
 
-import json
 from typing import Any, Optional
 
 import structlog
@@ -8,7 +7,6 @@ import structlog
 from mcp.server.fastmcp import FastMCP
 
 from .api_client import get_api_client
-from .storage_manager import get_storage
 
 logger = structlog.get_logger()
 
@@ -118,41 +116,6 @@ async def get_market_data(
 
 
 @mcp.tool()
-async def load_data_from_source(
-    symbol: str,
-    timeframe: str = "1h",
-    mode: str = "tail",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-) -> dict[str, Any]:
-    """Instruct backend to load data from external sources (e.g., Interactive Brokers)
-
-    Args:
-        symbol: Trading symbol (e.g., 'AAPL', 'TSLA')
-        timeframe: Data timeframe ('1m', '5m', '1h', '1d')
-        mode: Loading mode ('local', 'tail', 'backfill', 'full')
-              - 'local': cached data only
-              - 'tail': recent data gaps
-              - 'backfill': historical data
-              - 'full': both historical and recent
-        start_date: Start date override (YYYY-MM-DD format, optional)
-        end_date: End date override (YYYY-MM-DD format, optional)
-
-    Returns operational metrics about what was loaded.
-    """
-    try:
-        async with get_api_client() as client:
-            result = await client.load_data_operation(
-                symbol, timeframe, mode, start_date, end_date
-            )
-            logger.info("Data loading operation completed", symbol=symbol, mode=mode)
-            return result
-    except Exception as e:
-        logger.error("Failed to load data from source", symbol=symbol, error=str(e))
-        raise
-
-
-@mcp.tool()
 async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]:
     """Get summary information about available data for a symbol
 
@@ -184,164 +147,6 @@ async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]
             return {"success": True, "data": summary, "error": None}
     except Exception as e:
         logger.error("Failed to get data summary", symbol=symbol, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def create_experiment(
-    name: str, description: str = "", config: Optional[dict] = None
-) -> dict[str, Any]:
-    """Create a new research experiment
-
-    Args:
-        name: Experiment name
-        description: Experiment description
-        config: Optional configuration dictionary
-    """
-    try:
-        storage = await get_storage()
-        experiment_id = await storage.create_experiment(name, description, config)
-
-        logger.info("Experiment created", id=experiment_id, name=name)
-        return {
-            "experiment_id": experiment_id,
-            "name": name,
-            "description": description,
-            "status": "created",
-            "message": f"Experiment '{name}' created with ID {experiment_id}",
-        }
-    except Exception as e:
-        logger.error("Failed to create experiment", name=name, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def list_experiments(status: Optional[str] = None, limit: int = 10) -> list[dict]:
-    """List research experiments
-
-    Args:
-        status: Filter by status ('running', 'completed', 'failed')
-        limit: Maximum number of experiments to return
-    """
-    try:
-        storage = await get_storage()
-        experiments = await storage.list_experiments(status, limit)
-
-        logger.info("Experiments listed", count=len(experiments), status=status)
-        return experiments
-    except Exception as e:
-        logger.error("Failed to list experiments", error=str(e))
-        raise
-
-
-@mcp.tool()
-async def save_strategy(
-    name: str, config: dict[str, Any], description: str = ""
-) -> dict[str, Any]:
-    """Save a trading strategy configuration
-
-    Args:
-        name: Strategy name
-        config: Strategy configuration dictionary
-        description: Strategy description
-    """
-    try:
-        storage = await get_storage()
-        strategy_id = await storage.save_strategy(name, config, description)
-
-        logger.info("Strategy saved", id=strategy_id, name=name)
-        return {
-            "strategy_id": strategy_id,
-            "name": name,
-            "description": description,
-            "message": f"Strategy '{name}' saved with ID {strategy_id}",
-        }
-    except Exception as e:
-        logger.error("Failed to save strategy", name=name, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def load_strategy(name: str) -> dict[str, Any]:
-    """Load a trading strategy configuration by name"""
-    try:
-        storage = await get_storage()
-        strategy = await storage.get_strategy(name)
-
-        if not strategy:
-            return {"error": f"Strategy '{name}' not found"}
-
-        logger.info("Strategy loaded", name=name)
-        return strategy
-    except Exception as e:
-        logger.error("Failed to load strategy", name=name, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def list_strategies() -> list[dict]:
-    """List all saved trading strategies"""
-    try:
-        storage = await get_storage()
-        strategies = await storage.list_strategies()
-
-        logger.info("Strategies listed", count=len(strategies))
-        return strategies
-    except Exception as e:
-        logger.error("Failed to list strategies", error=str(e))
-        raise
-
-
-@mcp.tool()
-async def add_knowledge(
-    topic: str,
-    content: str,
-    source_type: str = "manual",
-    tags: Optional[list[str]] = None,
-) -> dict[str, Any]:
-    """Add knowledge to the research knowledge base
-
-    Args:
-        topic: Knowledge topic/title
-        content: Knowledge content/description
-        source_type: Source type ('manual', 'experiment', 'backtest')
-        tags: Optional list of tags
-    """
-    try:
-        storage = await get_storage()
-        knowledge_id = await storage.add_knowledge(
-            topic, content, source_type, tags=tags
-        )
-
-        logger.info("Knowledge added", id=knowledge_id, topic=topic)
-        return {
-            "knowledge_id": knowledge_id,
-            "topic": topic,
-            "message": f"Knowledge '{topic}' added with ID {knowledge_id}",
-        }
-    except Exception as e:
-        logger.error("Failed to add knowledge", topic=topic, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def search_knowledge(
-    topic: Optional[str] = None, tags: Optional[list[str]] = None
-) -> list[dict]:
-    """Search the knowledge base
-
-    Args:
-        topic: Search for topic (partial match)
-        tags: Filter by tags
-    """
-    try:
-        storage = await get_storage()
-        knowledge = await storage.search_knowledge(topic, tags)
-
-        logger.info("Knowledge searched", count=len(knowledge), topic=topic)
-        return knowledge
-    except Exception as e:
-        logger.error("Failed to search knowledge", error=str(e))
         raise
 
 
@@ -384,156 +189,27 @@ async def get_available_strategies() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def start_model_training(
-    experiment_id: str,
-    symbol: str,
-    timeframe: str = "1h",
-    training_config: Optional[dict[str, Any]] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-) -> dict[str, Any]:
-    """Start neural network model training for a trading strategy
-
-    This is a CORE capability that enables autonomous strategy discovery through
-    machine learning. The training process creates neural networks that can
-    learn complex patterns in market data and generate trading signals.
-
-    Args:
-        experiment_id: ID of experiment to track this training
-        symbol: Trading symbol to train on (e.g., 'AAPL', 'TSLA')
-        timeframe: Data timeframe ('1m', '5m', '1h', '1d')
-        training_config: Training configuration (epochs, learning_rate, etc.)
-        start_date: Training data start date (YYYY-MM-DD)
-        end_date: Training data end date (YYYY-MM-DD)
-
-    Returns:
-        Training task status and progress information
-    """
-    try:
-        # Default training configuration
-        default_config = {
-            "model_type": "mlp",
-            "hidden_layers": [64, 32, 16],
-            "epochs": 100,
-            "learning_rate": 0.001,
-            "batch_size": 32,
-            "validation_split": 0.2,
-            "early_stopping": {"patience": 10, "monitor": "val_accuracy"},
-            "optimizer": "adam",
-            "dropout_rate": 0.2,
-        }
-
-        # Merge with user config
-        if training_config:
-            default_config.update(training_config)
-
-        # Store training task in experiment
-        storage = await get_storage()
-        task_id = await storage.create_training_task(
-            experiment_id=experiment_id,
-            symbol=symbol,
-            timeframe=timeframe,
-            config=default_config,
-            start_date=start_date,
-            end_date=end_date,
-        )
-
-        # Start training through backend API
-        async with get_api_client() as client:
-            training_result = await client.start_neural_training(
-                symbol=symbol,
-                timeframe=timeframe,
-                config=default_config,
-                start_date=start_date,
-                end_date=end_date,
-                task_id=task_id,
-            )
-
-        logger.info("Model training started", task_id=task_id, symbol=symbol)
-        return {
-            "task_id": task_id,
-            "experiment_id": experiment_id,
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "config": default_config,
-            "status": "training_started",
-            "backend_response": training_result,
-            "message": f"Neural network training started for {symbol} with task ID {task_id}",
-        }
-
-    except Exception as e:
-        logger.error("Failed to start model training", error=str(e))
-        raise
-
-
-@mcp.tool()
 async def get_training_status(task_id: str) -> dict[str, Any]:
     """Get the status and progress of a neural network training task
 
     Args:
-        task_id: Training task ID returned from start_model_training
+        task_id: Training task ID from backend operations
 
     Returns:
         Training status, progress, metrics, and current state
     """
     try:
-        storage = await get_storage()
-        task_info = await storage.get_training_task(task_id)
-
-        if not task_info:
-            return {"error": f"Training task {task_id} not found"}
-
-        # Get live status from backend
+        # Get status directly from backend
         async with get_api_client() as client:
-            backend_status = await client.get_training_status(task_id)
-
-        # Combine storage info with live backend status
-        result = {
-            "task_id": task_id,
-            "experiment_id": task_info.get("experiment_id"),
-            "symbol": task_info.get("symbol"),
-            "timeframe": task_info.get("timeframe"),
-            "config": task_info.get("config", {}),
-            "created_at": task_info.get("created_at"),
-            "backend_status": backend_status,
-            "status": backend_status.get("status", "unknown"),
-        }
+            status = await client.get_training_status(task_id)
 
         logger.info(
-            "Training status retrieved", task_id=task_id, status=result["status"]
+            "Training status retrieved", task_id=task_id, status=status.get("status")
         )
-        return result
+        return status
 
     except Exception as e:
         logger.error("Failed to get training status", task_id=task_id, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def list_training_tasks(
-    experiment_id: Optional[str] = None, status: Optional[str] = None, limit: int = 10
-) -> list[dict[str, Any]]:
-    """List neural network training tasks
-
-    Args:
-        experiment_id: Filter by experiment ID
-        status: Filter by status ('pending', 'training', 'completed', 'failed')
-        limit: Maximum number of tasks to return
-
-    Returns:
-        List of training tasks with their status and metrics
-    """
-    try:
-        storage = await get_storage()
-        tasks = await storage.list_training_tasks(experiment_id, status, limit)
-
-        logger.info(
-            "Training tasks listed", count=len(tasks), experiment_id=experiment_id
-        )
-        return tasks
-
-    except Exception as e:
-        logger.error("Failed to list training tasks", error=str(e))
         raise
 
 
@@ -556,92 +232,6 @@ async def get_model_performance(task_id: str) -> dict[str, Any]:
 
     except Exception as e:
         logger.error("Failed to get model performance", task_id=task_id, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def save_trained_model(
-    task_id: str, model_name: str, description: str = ""
-) -> dict[str, Any]:
-    """Save a trained neural network model for later use
-
-    Args:
-        task_id: Training task ID
-        model_name: Name to save the model under
-        description: Model description
-
-    Returns:
-        Model save confirmation and metadata
-    """
-    try:
-        storage = await get_storage()
-
-        # Get training task info
-        task_info = await storage.get_training_task(task_id)
-        if not task_info:
-            return {"error": f"Training task {task_id} not found"}
-
-        # Save model through backend
-        async with get_api_client() as client:
-            save_result = await client.save_trained_model(
-                task_id, model_name, description
-            )
-
-        # Record in storage
-        model_id = await storage.save_model_record(
-            name=model_name,
-            task_id=task_id,
-            description=description,
-            config=task_info.get("config", {}),
-            symbol=task_info.get("symbol"),
-            timeframe=task_info.get("timeframe"),
-        )
-
-        logger.info("Model saved", model_id=model_id, name=model_name)
-        return {
-            "model_id": model_id,
-            "model_name": model_name,
-            "task_id": task_id,
-            "backend_response": save_result,
-            "message": f"Model '{model_name}' saved successfully",
-        }
-
-    except Exception as e:
-        logger.error("Failed to save trained model", task_id=task_id, error=str(e))
-        raise
-
-
-@mcp.tool()
-async def load_trained_model(model_name: str) -> dict[str, Any]:
-    """Load a previously saved neural network model
-
-    Args:
-        model_name: Name of the model to load
-
-    Returns:
-        Model metadata and load confirmation
-    """
-    try:
-        storage = await get_storage()
-        model_info = await storage.get_model_record(model_name)
-
-        if not model_info:
-            return {"error": f"Model '{model_name}' not found"}
-
-        # Load model through backend
-        async with get_api_client() as client:
-            load_result = await client.load_trained_model(model_name)
-
-        logger.info("Model loaded", name=model_name)
-        return {
-            "model_name": model_name,
-            "model_info": model_info,
-            "backend_response": load_result,
-            "message": f"Model '{model_name}' loaded successfully",
-        }
-
-    except Exception as e:
-        logger.error("Failed to load trained model", name=model_name, error=str(e))
         raise
 
 
@@ -681,347 +271,204 @@ async def test_model_prediction(
 
 
 @mcp.tool()
-async def run_strategy_backtest(
-    experiment_id: str,
-    strategy_name: str,
-    symbol: str,
-    timeframe: str,
-    start_date: str,
-    end_date: str,
-    initial_capital: float = 10000.0,
-    backtest_name: Optional[str] = None,
+async def list_operations(
+    operation_type: Optional[str] = None,
+    status: Optional[str] = None,
+    active_only: bool = False,
+    limit: int = 10,
 ) -> dict[str, Any]:
-    """Run a comprehensive backtest for a trading strategy
+    """List all operations with optional filtering
 
-    This is a CORE capability that enables rigorous strategy evaluation through
-    historical market simulation. Backtesting validates strategy performance
-    across different market conditions and time periods.
+    Get a list of data loading, training, or other async operations.
+    Filter by status (running, completed, failed) or type (data_load, training).
 
     Args:
-        experiment_id: ID of experiment to track this backtest
-        strategy_name: Name of existing strategy to backtest
-        symbol: Trading symbol to backtest on (e.g., 'AAPL', 'TSLA')
-        timeframe: Data timeframe ('1m', '5m', '1h', '1d')
-        start_date: Backtest start date (YYYY-MM-DD)
-        end_date: Backtest end date (YYYY-MM-DD)
-        initial_capital: Starting capital for the backtest
-        backtest_name: Optional name for this backtest run
+        operation_type: Filter by type (data_load, training, backtest)
+        status: Filter by status (running, completed, failed, cancelled, pending)
+        active_only: Show only active operations (running/pending)
+        limit: Maximum number of operations to return (default 10, max 100)
 
     Returns:
-        Backtest task status and preliminary results
+        dict with operation list and counts
     """
     try:
-        # Generate backtest name if not provided
-        if not backtest_name:
-            backtest_name = f"{strategy_name}_{symbol}_{start_date}_{end_date}"
-
-        # Store backtest task in experiment
-        await get_storage()
-
-        # Start backtest through backend API (CORRECTED API CALL)
         async with get_api_client() as client:
-            backtest_result = await client.run_backtest(
-                strategy_name=strategy_name,
+            result = await client.operations.list_operations(
+                operation_type=operation_type,
+                status=status,
+                active_only=active_only,
+                limit=min(limit, 100),
+                offset=0,
+            )
+            logger.info("Listed operations", count=len(result.get("data", [])))
+            return result
+    except Exception as e:
+        logger.error("Failed to list operations", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def get_operation_status(operation_id: str) -> dict[str, Any]:
+    """Get detailed status of a specific operation
+
+    Poll for progress updates on data loading, training, or other async operations.
+    Returns current status, progress percentage, ETA, and any errors.
+
+    Args:
+        operation_id: Unique operation identifier (e.g., "op_training_20241201_123456")
+
+    Returns:
+        dict with detailed operation status, progress, and metadata
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.get_operation_status(operation_id)
+            logger.info("Got operation status", operation_id=operation_id)
+            return result
+    except Exception as e:
+        logger.error("Failed to get operation status", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def cancel_operation(
+    operation_id: str, reason: Optional[str] = None
+) -> dict[str, Any]:
+    """Cancel a running async operation
+
+    Stop a long-running data load or training operation.
+    Only works for operations in 'running' or 'pending' status.
+
+    Args:
+        operation_id: Unique operation identifier to cancel
+        reason: Optional reason for cancellation (for audit trail)
+
+    Returns:
+        dict confirming cancellation
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.cancel_operation(operation_id, reason)
+            logger.info("Cancelled operation", operation_id=operation_id, reason=reason)
+            return result
+    except Exception as e:
+        logger.error("Failed to cancel operation", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def get_operation_results(operation_id: str) -> dict[str, Any]:
+    """Get results from a completed operation
+
+    Retrieve summary metrics and artifact paths from finished operations.
+    Only works for operations in 'completed' or 'failed' status.
+
+    Args:
+        operation_id: Unique operation identifier
+
+    Returns:
+        dict with result summary, metrics, and paths to detailed data
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.get_operation_results(operation_id)
+            logger.info("Got operation results", operation_id=operation_id)
+            return result
+    except Exception as e:
+        logger.error("Failed to get operation results", error=str(e))
+        raise
+
+
+@mcp.tool()
+async def trigger_data_loading(
+    symbol: str,
+    timeframe: str = "1h",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mode: str = "local",
+) -> dict[str, Any]:
+    """Load market data from external sources (IB Gateway) or local cache
+
+    Triggers data loading in the background. Returns immediately with operation_id
+    for tracking progress. Use get_operation_status() to monitor the data load.
+
+    Args:
+        symbol: Trading symbol (e.g., "AAPL", "EURUSD")
+        timeframe: Data timeframe (1m, 5m, 15m, 30m, 1h, 4h, 1d)
+        start_date: Start date (YYYY-MM-DD, optional)
+        end_date: End date (YYYY-MM-DD, optional)
+        mode: Loading mode (local, ib, hybrid)
+
+    Returns:
+        dict with operation_id for tracking the data loading operation
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.data.load_data_operation(
                 symbol=symbol,
                 timeframe=timeframe,
                 start_date=start_date,
                 end_date=end_date,
-                initial_capital=initial_capital,
+                mode=mode,
             )
-
-        logger.info("Backtest started", strategy_name=strategy_name, symbol=symbol)
-        return {
-            "experiment_id": experiment_id,
-            "strategy_name": strategy_name,
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "start_date": start_date,
-            "end_date": end_date,
-            "initial_capital": initial_capital,
-            "backend_response": backtest_result,
-            "status": "started",
-            "message": f"Backtest started for {strategy_name} on {symbol} from {start_date} to {end_date}",
-        }
-
-    except Exception as e:
-        logger.error("Failed to run strategy backtest", error=str(e))
-        raise
-
-
-@mcp.tool()
-async def get_backtest_results(backtest_id: int) -> dict[str, Any]:
-    """Get detailed results from a completed backtest
-
-    Args:
-        backtest_id: Backtest ID returned from run_strategy_backtest
-
-    Returns:
-        Comprehensive backtest results including trades, metrics, and analysis
-    """
-    try:
-        storage = await get_storage()
-
-        # Get backtest from storage
-        backtests = await storage.get_backtest_history()
-        backtest = None
-        for bt in backtests:
-            if bt["id"] == backtest_id:
-                backtest = bt
-                break
-
-        if not backtest:
-            return {"error": f"Backtest {backtest_id} not found"}
-
-        # Parse stored results
-        results = json.loads(backtest["results"]) if backtest["results"] else {}
-        metrics = json.loads(backtest["metrics"]) if backtest["metrics"] else {}
-
-        logger.info("Backtest results retrieved", backtest_id=backtest_id)
-        return {
-            "backtest_id": backtest_id,
-            "symbol": backtest["symbol"],
-            "start_date": backtest["start_date"],
-            "end_date": backtest["end_date"],
-            "results": results,
-            "metrics": metrics,
-            "created_at": backtest["created_at"],
-        }
-
-    except Exception as e:
-        logger.error(
-            "Failed to get backtest results", backtest_id=backtest_id, error=str(e)
-        )
-        raise
-
-
-@mcp.tool()
-async def compare_backtests(
-    backtest_ids: list[int], metrics: Optional[list[str]] = None
-) -> dict[str, Any]:
-    """Compare performance metrics across multiple backtests
-
-    Args:
-        backtest_ids: List of backtest IDs to compare
-        metrics: Specific metrics to compare (e.g., ['total_return', 'sharpe_ratio'])
-
-    Returns:
-        Comparative analysis showing relative performance across backtests
-    """
-    try:
-        storage = await get_storage()
-
-        # Default metrics to compare
-        if not metrics:
-            metrics = [
-                "total_return",
-                "annualized_return",
-                "volatility",
-                "sharpe_ratio",
-                "max_drawdown",
-                "win_rate",
-                "profit_factor",
-            ]
-
-        # Get all backtests
-        all_backtests = await storage.get_backtest_history()
-        selected_backtests = []
-
-        for backtest_id in backtest_ids:
-            for bt in all_backtests:
-                if bt["id"] == backtest_id:
-                    # Parse metrics
-                    bt_metrics = json.loads(bt["metrics"]) if bt["metrics"] else {}
-                    selected_backtests.append(
-                        {
-                            "id": bt["id"],
-                            "symbol": bt["symbol"],
-                            "start_date": bt["start_date"],
-                            "end_date": bt["end_date"],
-                            "metrics": bt_metrics,
-                        }
-                    )
-                    break
-
-        if not selected_backtests:
-            return {"error": "No valid backtests found for comparison"}
-
-        # Build comparison table
-        comparison = {
-            "backtests": selected_backtests,
-            "metric_comparison": {},
-            "rankings": {},
-        }
-
-        # Compare each metric
-        for metric in metrics:
-            values = []
-            for bt in selected_backtests:
-                value = bt["metrics"].get(metric)
-                if value is not None:
-                    values.append({"backtest_id": bt["id"], "value": value})
-
-            if values:
-                # Sort by value (descending for most metrics)
-                reverse_sort = metric not in [
-                    "volatility",
-                    "max_drawdown",
-                ]  # Lower is better for these
-                values.sort(key=lambda x: x["value"], reverse=reverse_sort)
-
-                comparison["metric_comparison"][metric] = values
-                comparison["rankings"][metric] = [v["backtest_id"] for v in values]
-
-        logger.info("Backtest comparison completed", count=len(selected_backtests))
-        return comparison
-
-    except Exception as e:
-        logger.error("Failed to compare backtests", error=str(e))
-        raise
-
-
-@mcp.tool()
-async def run_walk_forward_analysis(
-    experiment_id: str,
-    strategy_config: dict[str, Any],
-    symbol: str,
-    start_date: str,
-    end_date: str,
-    train_period_months: int = 12,
-    test_period_months: int = 3,
-) -> dict[str, Any]:
-    """Run walk-forward analysis to test strategy robustness over time
-
-    Walk-forward analysis divides the data into multiple training and testing periods
-    to evaluate how well a strategy adapts to changing market conditions.
-
-    Args:
-        experiment_id: ID of experiment to track this analysis
-        strategy_config: Strategy configuration to test
-        symbol: Trading symbol to analyze
-        start_date: Analysis start date (YYYY-MM-DD)
-        end_date: Analysis end date (YYYY-MM-DD)
-        train_period_months: Months of data for training each iteration
-        test_period_months: Months of data for testing each iteration
-
-    Returns:
-        Walk-forward analysis results with performance across time periods
-    """
-    try:
-        # This would be implemented with multiple backtests across rolling windows
-        # For now, return a structured response indicating the capability
-
-        from datetime import datetime
-
-        import dateutil.relativedelta as rd
-
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-
-        # Calculate periods
-        periods = []
-        current_start = start_dt
-
-        while current_start < end_dt:
-            train_end = current_start + rd.relativedelta(months=train_period_months)
-            test_end = train_end + rd.relativedelta(months=test_period_months)
-
-            if test_end > end_dt:
-                test_end = end_dt
-
-            periods.append(
-                {
-                    "train_start": current_start.strftime("%Y-%m-%d"),
-                    "train_end": train_end.strftime("%Y-%m-%d"),
-                    "test_start": train_end.strftime("%Y-%m-%d"),
-                    "test_end": test_end.strftime("%Y-%m-%d"),
-                }
+            logger.info(
+                "Data loading triggered",
+                symbol=symbol,
+                operation_id=result.get("operation_id"),
             )
-
-            # Move to next period (overlap by moving only test_period forward)
-            current_start = train_end
-
-            if current_start >= end_dt:
-                break
-
-        logger.info(
-            "Walk-forward analysis planned", symbol=symbol, periods=len(periods)
-        )
-        return {
-            "experiment_id": experiment_id,
-            "symbol": symbol,
-            "strategy_config": strategy_config,
-            "periods_planned": len(periods),
-            "periods": periods,
-            "status": "analysis_framework_ready",
-            "message": f"Walk-forward analysis framework prepared with {len(periods)} periods",
-            "note": "Full implementation requires backend integration for iterative training/testing",
-        }
-
+            return result
     except Exception as e:
-        logger.error("Failed to run walk-forward analysis", error=str(e))
+        logger.error("Failed to trigger data loading", error=str(e))
         raise
 
 
 @mcp.tool()
-async def get_backtest_performance_summary(
-    symbol: Optional[str] = None, strategy_name: Optional[str] = None, limit: int = 10
+async def start_training(
+    symbols: list[str],
+    timeframe: str = "1h",
+    config: Optional[dict[str, Any]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Get a performance summary of recent backtests
+    """Train a neural network model on market data
+
+    Trains a neural network to predict trading signals using historical market data.
+    Training runs in the background. Returns immediately with operation_id for
+    tracking progress. Use get_operation_status() to monitor training progress.
 
     Args:
-        symbol: Filter by trading symbol
-        strategy_name: Filter by strategy name
-        limit: Maximum number of backtests to include
+        symbols: List of trading symbols to train on (e.g., ["AAPL", "MSFT"])
+        timeframe: Data timeframe (1h, 4h, 1d)
+        config: Optional training configuration dict (epochs, batch_size, learning_rate)
+        start_date: Training data start date (YYYY-MM-DD, optional)
+        end_date: Training data end date (YYYY-MM-DD, optional)
 
     Returns:
-        Summary of backtest performance with key metrics and insights
+        dict with operation_id for tracking the training operation
     """
     try:
-        storage = await get_storage()
-
-        # Get backtest history
-        backtests = await storage.get_backtest_history(symbol=symbol)
-
-        if limit:
-            backtests = backtests[:limit]
-
-        if not backtests:
-            return {"message": "No backtests found", "backtests": []}
-
-        # Calculate summary statistics
-        summary = {
-            "total_backtests": len(backtests),
-            "symbols_tested": list({bt["symbol"] for bt in backtests}),
-            "date_range": {
-                "earliest": min(bt["start_date"] for bt in backtests),
-                "latest": max(bt["end_date"] for bt in backtests),
-            },
-            "backtests": [],
-        }
-
-        # Process each backtest
-        for bt in backtests:
-            metrics = json.loads(bt["metrics"]) if bt["metrics"] else {}
-
-            backtest_summary = {
-                "id": bt["id"],
-                "symbol": bt["symbol"],
-                "period": f"{bt['start_date']} to {bt['end_date']}",
-                "key_metrics": {
-                    "total_return": metrics.get("total_return"),
-                    "sharpe_ratio": metrics.get("sharpe_ratio"),
-                    "max_drawdown": metrics.get("max_drawdown"),
-                    "win_rate": metrics.get("win_rate"),
-                },
-                "created_at": bt["created_at"],
+        async with get_api_client() as client:
+            training_config = config or {
+                "epochs": 100,
+                "batch_size": 32,
+                "learning_rate": 0.001,
             }
-            summary["backtests"].append(backtest_summary)
 
-        logger.info("Backtest performance summary generated", count=len(backtests))
-        return summary
-
+            result = await client.training.start_neural_training(
+                symbols=symbols,
+                timeframe=timeframe,
+                config=training_config,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            logger.info(
+                "Training started",
+                symbols=symbols,
+                operation_id=result.get("operation_id"),
+            )
+            return result
     except Exception as e:
-        logger.error("Failed to get backtest performance summary", error=str(e))
+        logger.error("Failed to start training", error=str(e))
         raise
 
 
