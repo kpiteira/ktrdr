@@ -88,7 +88,7 @@ class TestOpenAPIFetcher:
         assert spec["openapi"] == "3.1.0"
         assert "paths" in spec
         mock_get.assert_called_once_with(
-            "http://localhost:8000/openapi.json", timeout=10.0
+            "http://localhost:8000/api/v1/openapi.json", timeout=10.0
         )
 
     @patch("httpx.get")
