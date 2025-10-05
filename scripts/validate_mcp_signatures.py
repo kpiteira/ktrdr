@@ -6,9 +6,10 @@ Validates MCP tool signatures against backend OpenAPI specification.
 """
 
 import argparse
+import ast
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import httpx
@@ -144,6 +145,164 @@ class OpenAPIFetcher:
             current = current[part]
 
         return current
+
+
+@dataclass
+class ParameterInfo:
+    """Information about a function parameter"""
+
+    name: str
+    type: str  # Python type annotation as string
+    required: bool
+    default: Any = None
+
+
+@dataclass
+class ToolSignature:
+    """Signature of an MCP tool"""
+
+    name: str
+    parameters: dict[str, ParameterInfo] = field(default_factory=dict)
+    return_type: str = "None"
+    line_number: int = 0
+
+
+class MCPToolParser:
+    """Parse MCP tool signatures from server.py using AST"""
+
+    def parse_tools(self, server_file: str) -> dict[str, ToolSignature]:
+        """
+        Extract all @mcp.tool() decorated functions.
+
+        Args:
+            server_file: Path to MCP server file
+
+        Returns:
+            Dict mapping tool names to their signatures
+        """
+        with open(server_file) as f:
+            tree = ast.parse(f.read())
+
+        tools = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AsyncFunctionDef) or isinstance(
+                node, ast.FunctionDef
+            ):
+                # Check for @mcp.tool() decorator
+                if self._has_mcp_decorator(node):
+                    sig = self._extract_signature(node)
+                    tools[node.name] = sig
+
+        return tools
+
+    def _has_mcp_decorator(
+        self, func_node: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> bool:
+        """Check if function has @mcp.tool() decorator"""
+        for decorator in func_node.decorator_list:
+            # Handle @mcp.tool()
+            if isinstance(decorator, ast.Call):
+                if isinstance(decorator.func, ast.Attribute):
+                    if (
+                        isinstance(decorator.func.value, ast.Name)
+                        and decorator.func.value.id == "mcp"
+                        and decorator.func.attr == "tool"
+                    ):
+                        return True
+        return False
+
+    def _extract_signature(
+        self, func_node: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> ToolSignature:
+        """
+        Extract parameter names, types, and defaults.
+
+        Returns:
+            ToolSignature with parameters and metadata
+        """
+        params = {}
+
+        # Get defaults - they align from the right
+        num_args = len(func_node.args.args)
+        num_defaults = len(func_node.args.defaults)
+        defaults_offset = num_args - num_defaults
+
+        for i, arg in enumerate(func_node.args.args):
+            # Skip 'self' parameter
+            if arg.arg == "self":
+                continue
+
+            # Determine if parameter has a default
+            has_default = i >= defaults_offset
+            default_value = None
+            if has_default:
+                default_node = func_node.args.defaults[i - defaults_offset]
+                default_value = self._get_default_value(default_node)
+
+            param_info = ParameterInfo(
+                name=arg.arg,
+                type=self._get_type_annotation(arg.annotation),
+                required=not has_default,
+                default=default_value,
+            )
+            params[arg.arg] = param_info
+
+        return ToolSignature(
+            name=func_node.name,
+            parameters=params,
+            return_type=self._get_type_annotation(func_node.returns),
+            line_number=func_node.lineno,
+        )
+
+    def _get_type_annotation(self, annotation_node: Optional[ast.expr]) -> str:
+        """Extract type annotation as string"""
+        if annotation_node is None:
+            return "Any"
+
+        # Handle simple types: str, int, bool, etc.
+        if isinstance(annotation_node, ast.Name):
+            return annotation_node.id
+
+        # Handle list[T], dict[K, V], etc.
+        if isinstance(annotation_node, ast.Subscript):
+            if isinstance(annotation_node.value, ast.Name):
+                base_type = annotation_node.value.id
+                # Get the subscript type
+                if isinstance(annotation_node.slice, ast.Name):
+                    inner = annotation_node.slice.id
+                    return f"{base_type}[{inner}]"
+                elif isinstance(annotation_node.slice, ast.Tuple):
+                    # Handle dict[str, Any]
+                    inner_types = [
+                        self._get_type_annotation(elt)
+                        for elt in annotation_node.slice.elts
+                    ]
+                    return f"{base_type}[{', '.join(inner_types)}]"
+
+        # Handle Optional[T]
+        if isinstance(annotation_node, ast.Subscript):
+            if isinstance(annotation_node.value, ast.Name):
+                if annotation_node.value.id == "Optional":
+                    return self._get_type_annotation(annotation_node.slice)
+
+        # Fallback
+        return ast.unparse(annotation_node)
+
+    def _get_default_value(self, default_node: ast.expr) -> Any:
+        """Extract default value from AST node"""
+        if isinstance(default_node, ast.Constant):
+            return default_node.value
+        elif isinstance(default_node, ast.Name):
+            if default_node.id == "None":
+                return None
+            return default_node.id
+        elif isinstance(default_node, ast.List):
+            return []
+        elif isinstance(default_node, ast.Dict):
+            return {}
+        else:
+            # For complex defaults, return string representation
+            return ast.unparse(default_node)
 
 
 def main(argv: list[str] | None = None) -> int:

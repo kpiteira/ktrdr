@@ -5,7 +5,12 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
-from scripts.validate_mcp_signatures import OpenAPIFetcher, ValidationConfig, main
+from scripts.validate_mcp_signatures import (
+    MCPToolParser,
+    OpenAPIFetcher,
+    ValidationConfig,
+    main,
+)
 
 
 class TestValidationConfig:
@@ -160,3 +165,89 @@ class TestOpenAPIFetcher:
 
         schema = fetcher.get_request_schema("/api/v1/operations", "GET")
         assert schema is None
+
+
+class TestMCPToolParser:
+    """Test MCP tool signature parsing"""
+
+    def test_parse_tools_from_server(self):
+        """Should parse all @mcp.tool() decorated functions"""
+        parser = MCPToolParser()
+        tools = parser.parse_tools("mcp/src/server.py")
+
+        # Should find multiple tools
+        assert len(tools) > 0
+        assert "start_training" in tools
+        assert "check_backend_health" in tools
+
+    def test_parse_start_training_signature(self):
+        """Should correctly parse start_training tool signature"""
+        parser = MCPToolParser()
+        tools = parser.parse_tools("mcp/src/server.py")
+
+        start_training = tools["start_training"]
+
+        assert start_training.name == "start_training"
+        assert "symbols" in start_training.parameters
+        assert "timeframes" in start_training.parameters
+        assert "strategy_name" in start_training.parameters
+
+        # Check parameter types
+        assert start_training.parameters["symbols"].type == "list[str]"
+        assert start_training.parameters["timeframes"].type == "list[str]"
+        assert start_training.parameters["strategy_name"].type == "str"
+
+        # Check required vs optional
+        assert start_training.parameters["symbols"].required is True
+        assert start_training.parameters["start_date"].required is False
+
+        # Check defaults
+        assert start_training.parameters["start_date"].default is None
+
+    def test_parse_simple_tool_signature(self):
+        """Should parse simple tools with basic types"""
+        parser = MCPToolParser()
+        tools = parser.parse_tools("mcp/src/server.py")
+
+        # Check health check tool (no params)
+        health_check = tools["check_backend_health"]
+        assert health_check.name == "check_backend_health"
+        assert len(health_check.parameters) == 0  # async tools have no self
+
+    def test_ignore_non_tool_functions(self):
+        """Should only parse @mcp.tool() decorated functions"""
+        # Create a temporary test file
+        import tempfile
+
+        test_code = """
+from mcp.server.fastmcp import FastMCP
+mcp = FastMCP("test")
+
+@mcp.tool()
+def tool_function(x: int) -> int:
+    return x
+
+def regular_function(x: int) -> int:
+    return x
+
+@some_other_decorator()
+def other_decorated(x: int) -> int:
+    return x
+"""
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(test_code)
+            temp_path = f.name
+
+        try:
+            parser = MCPToolParser()
+            tools = parser.parse_tools(temp_path)
+
+            assert len(tools) == 1
+            assert "tool_function" in tools
+            assert "regular_function" not in tools
+            assert "other_decorated" not in tools
+        finally:
+            import os
+
+            os.unlink(temp_path)
