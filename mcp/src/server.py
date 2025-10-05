@@ -96,11 +96,11 @@ async def get_market_data(
             # Apply client-side limiting (max 200 bars to prevent Claude overload)
             effective_limit = min(limit_bars, 200) if limit_bars else 50
             data = await client.get_cached_data(
-                symbol,
-                timeframe,
-                start_date,
-                end_date,
-                trading_hours_only,
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                trading_hours_only=trading_hours_only,
                 limit=effective_limit,
             )
             logger.info(
@@ -132,7 +132,9 @@ async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]
     try:
         async with get_api_client() as client:
             # Get a minimal data sample to extract metadata
-            data = await client.get_cached_data(symbol, timeframe, limit=1)
+            data = await client.get_cached_data(
+                symbol=symbol, timeframe=timeframe, limit=1
+            )
 
             # Extract useful summary info
             metadata = data.get("data", {}).get("metadata", {})
