@@ -4,6 +4,11 @@ This document describes all available MCP tools exposed by the KTRDR MCP server 
 
 **Architecture**: The MCP server is a **pure interface layer** that delegates all business logic and data management to the backend API. It does not maintain any local state or storage.
 
+**Response Handling**: All MCP tools use a hybrid response pattern that balances safety and convenience:
+- **Critical operations** (training start, data loading): Use `_extract_or_raise()` to validate responses and provide clear error messages
+- **Simple operations** (listing data): Use `_extract_list()` / `_extract_dict()` with sensible defaults
+- **Complex operations** (status checks): Return full response structure for maximum information
+
 ## Table of Contents
 
 1. [System Health](#system-health)
@@ -353,3 +358,35 @@ if status["status"] == "completed":
 - ✅ Operation tracking
 - ✅ Model storage
 - ✅ Strategy execution
+
+---
+
+## Response Handling Architecture
+
+The MCP API clients use a **hybrid response extraction pattern** for optimal safety and convenience:
+
+### Extraction Methods
+
+**`_extract_or_raise(response, field="data", operation="operation")`**
+- Used for **critical operations** that must succeed (training start, data loading)
+- Validates `success` field and raises descriptive errors on failure
+- Ensures required fields are present
+- Example: `start_training()`, `trigger_data_loading()`
+
+**`_extract_list(response, field="data", default=[])`**
+- Used for **simple list retrieval** operations
+- Returns empty list if field missing (graceful degradation)
+- Example: `get_available_symbols()`, `list_trained_models()`
+
+**`_extract_dict(response, field="data", default={})`**
+- Used for **simple dict retrieval** operations
+- Returns empty dict if field missing (graceful degradation)
+- Example: `get_indicators()`, `get_strategies()`
+
+### Design Rationale
+
+1. **Critical operations** → `_extract_or_raise()`: Training and data loading failures must be detected immediately
+2. **Discovery operations** → `_extract_list/dict()`: Empty lists/dicts are valid for "no results found"
+3. **Status operations** → Full response: Keep all metadata for maximum information
+
+This pattern prevents silent failures while maintaining ergonomic APIs for common operations.

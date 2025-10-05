@@ -1,4 +1,51 @@
-# MCP Container Management
+# KTRDR MCP Server
+
+Model Context Protocol (MCP) server for KTRDR trading strategy research and development. Provides AI agents with structured access to market data, neural network training, and trading strategy operations.
+
+## 📚 Documentation
+
+- **[MCP_TOOLS.md](MCP_TOOLS.md)**: Complete tool reference with comprehensive docstrings, examples, and workflows
+- **Architecture**: Pure interface layer delegating to backend API (no local state)
+- **Response Pattern**: Hybrid extraction for safety + convenience
+
+## 🚀 Quick Start
+
+All MCP tools have comprehensive docstrings with:
+- Clear parameter descriptions and valid values
+- Complete return structure documentation
+- Working code examples
+- Related tools for discovery ("See Also")
+- Behavioral notes and best practices
+
+Example - Starting a training operation:
+```python
+# Start training (returns operation_id)
+result = await start_training(
+    symbols=["AAPL", "MSFT"],
+    timeframes=["1h", "4h"],
+    strategy_name="neuro_mean_reversion",
+    start_date="2024-01-01",
+    end_date="2024-03-01"
+)
+
+# Monitor progress
+status = await get_operation_status(result["data"]["operation_id"])
+print(f"Progress: {status['data']['progress_percentage']}%")
+```
+
+## 🏗️ Architecture
+
+### Response Handling Pattern
+
+The MCP clients use a **hybrid response extraction pattern**:
+
+1. **Critical operations** → `_extract_or_raise()`: Validates responses for operations that must succeed
+2. **Discovery operations** → `_extract_list/dict()`: Graceful defaults for browsing/listing
+3. **Status operations** → Full response: Maximum information for monitoring
+
+See [MCP_TOOLS.md](MCP_TOOLS.md#response-handling-architecture) for details.
+
+## 📦 Container Management
 
 This directory contains scripts for safely managing the MCP container without affecting the backend or frontend.
 
