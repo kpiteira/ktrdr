@@ -1,210 +1,486 @@
-# MCP Async Operations Integration - Implementation Plan
+# MCP Response Handling & Documentation - Implementation Plan
 
-**Parent Documents**:
-- [Requirements](./REQUIREMENTS.md)
-- [Architecture](./ARCHITECTURE.md)
+**Parent Document**: [Architecture](./ARCHITECTURE.md)
 
 **Status**: Ready for Implementation
 **Version**: 1.0
-**Date**: 2025-10-04
-**Phase**: 1 - MCP Integration Layer
+**Date**: 2025-10-05
+**Branch**: `feat/mcp-response-handling-and-docstrings`
 
 ---
 
 ## Overview
 
-This document breaks down the implementation of MCP async operations integration into discrete, testable tasks following the domain-specific client architecture.
-
-**Key Architecture Components**:
-- **Domain-Specific API Clients**: Separation of concerns by domain (Data, Training, Operations)
-- **Base HTTP Client**: Shared functionality for all domain clients
-- **MCP Tools**: Stateless pass-through layer exposing backend capabilities
-- **Backend Enhancements**: Minimal changes to support MCP integration
+This document breaks down the implementation of response handling standardization and docstring enhancements into discrete, testable tasks following strict TDD methodology.
 
 **Scope**:
-- ✅ 6 MCP tools (4 new + 2 updated)
-- ✅ Domain-specific API client refactor
-- ✅ 3 minor backend enhancements (~27 lines total)
+
+- ✅ 3 extraction helper methods in BaseAPIClient
+- ✅ 6 domain clients updated to use hybrid pattern
+- ✅ 12 MCP tool docstrings enhanced to full standard
+- ✅ Documentation updates
+
+**TDD Workflow** (Mandatory):
+
+```
+RED → GREEN → REFACTOR
+Write failing test → Make it pass → Clean up code
+```
+
+**Quality Gates** (Before EVERY commit):
+
+```bash
+make test-unit   # Must pass (<2s)
+make quality     # Must pass (lint + format + typecheck)
+```
 
 **Branching Strategy**:
-- **Feature Branch**: `feature/mcp-async-operations` (off `main`)
+
+- **Feature Branch**: `feat/mcp-response-handling-and-docstrings` (off `main`)
 - **Merge Target**: `main`
 - **After Merge**: Delete feature branch
 
-**Migration Philosophy**: Additive changes with backward compatibility, continuous testing
-
-**Testing Strategy**:
-- ✅ **Unit tests**: Fast (<1s), mocked dependencies, high coverage (>80%)
-- ✅ **Manual verification**: Backend endpoints, MCP tools in Claude Desktop
-- ❌ **Integration tests**: Skip (4min runtime, 10% failure rate - not worth the overhead)
-- ✅ **make quality**: Run before every commit (lint + format + typecheck)
-
 ---
 
-## Phase 1: API Client Refactor (Domain Separation)
+## Sprint 1: Response Handling + Docstrings
 
-**Goal**: Split monolithic `KTRDRAPIClient` into domain-specific clients for scalability
+### TASK-1: Add Extraction Methods to BaseAPIClient
 
-### TASK-1.1: Create Base API Client
-
-**Objective**: Extract shared HTTP logic into reusable base class
-
-**Branch**: `feature/mcp-async-operations`
+**Objective**: Add three helper methods for hybrid response extraction pattern
 
 **Files**:
-- `mcp/src/clients/base.py` (NEW)
-- `tests/unit/mcp/test_base_client.py` (NEW)
 
-**What It Does**:
-- Manages HTTP client lifecycle (async context manager)
-- Provides `_request()` method with error handling
-- Handles connection pooling and timeouts
-- Converts HTTP errors to `KTRDRAPIError`
+- `mcp/src/clients/base.py` (UPDATE)
+- `tests/unit/mcp/test_base_client.py` (UPDATE)
 
-**Implementation**:
+**TDD Workflow**:
+
+**RED Phase** - Write failing tests first:
+
 ```python
-"""Base HTTP client for KTRDR API communication"""
+# tests/unit/mcp/test_base_client.py
 
-from typing import Any, Optional
-import httpx
-import structlog
-
-logger = structlog.get_logger()
+import pytest
+from mcp.src.clients.base import BaseAPIClient, KTRDRAPIError
 
 
-class KTRDRAPIError(Exception):
-    """Custom exception for KTRDR API errors"""
-    def __init__(
-        self,
-        message: str,
-        status_code: Optional[int] = None,
-        details: Optional[dict] = None,
-    ):
-        self.message = message
-        self.status_code = status_code
-        self.details = details or {}
-        super().__init__(message)
+class TestExtractList:
+    """Test _extract_list() method"""
 
+    def test_extract_list_with_data_field(self):
+        """Should extract list from 'data' field"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "data": [{"id": 1}, {"id": 2}]}
+
+        result = client._extract_list(response)
+
+        assert result == [{"id": 1}, {"id": 2}]
+
+    def test_extract_list_missing_field_returns_empty(self):
+        """Should return empty list when field missing"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        result = client._extract_list(response)
+
+        assert result == []
+
+    def test_extract_list_custom_field(self):
+        """Should extract from custom field name"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "models": [{"name": "model1"}]}
+
+        result = client._extract_list(response, field="models")
+
+        assert result == [{"name": "model1"}]
+
+    def test_extract_list_custom_default(self):
+        """Should use custom default when provided"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        result = client._extract_list(response, default=[{"default": True}])
+
+        assert result == [{"default": True}]
+
+
+class TestExtractDict:
+    """Test _extract_dict() method"""
+
+    def test_extract_dict_with_data_field(self):
+        """Should extract dict from 'data' field"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "data": {"key": "value"}}
+
+        result = client._extract_dict(response)
+
+        assert result == {"key": "value"}
+
+    def test_extract_dict_missing_field_returns_empty(self):
+        """Should return empty dict when field missing"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        result = client._extract_dict(response)
+
+        assert result == {}
+
+    def test_extract_dict_custom_field(self):
+        """Should extract from custom field name"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "result": {"status": "ok"}}
+
+        result = client._extract_dict(response, field="result")
+
+        assert result == {"status": "ok"}
+
+
+class TestExtractOrRaise:
+    """Test _extract_or_raise() method"""
+
+    def test_extract_or_raise_success(self):
+        """Should extract field when present and success=True"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True, "data": {"operation_id": "op_123"}}
+
+        result = client._extract_or_raise(response, field="data")
+
+        assert result == {"operation_id": "op_123"}
+
+    def test_extract_or_raise_explicit_error_flag(self):
+        """Should raise when success=False"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": False, "error": "Not found"}
+
+        with pytest.raises(KTRDRAPIError) as exc_info:
+            client._extract_or_raise(response, operation="training start")
+
+        assert "Training start failed: Not found" in str(exc_info.value)
+
+    def test_extract_or_raise_missing_field(self):
+        """Should raise when field missing"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": True}
+
+        with pytest.raises(KTRDRAPIError) as exc_info:
+            client._extract_or_raise(response, field="operation_id", operation="data loading")
+
+        assert "Data loading response missing 'operation_id' field" in str(exc_info.value)
+
+    def test_extract_or_raise_custom_operation_name(self):
+        """Should use operation name in error messages"""
+        client = BaseAPIClient("http://localhost", 30.0)
+        response = {"success": False, "error": "Timeout"}
+
+        with pytest.raises(KTRDRAPIError) as exc_info:
+            client._extract_or_raise(response, operation="model training")
+
+        assert "Model training failed: Timeout" in str(exc_info.value)
+```
+
+Run tests (should FAIL):
+
+```bash
+uv run pytest tests/unit/mcp/test_base_client.py::TestExtractList -v
+uv run pytest tests/unit/mcp/test_base_client.py::TestExtractDict -v
+uv run pytest tests/unit/mcp/test_base_client.py::TestExtractOrRaise -v
+# Expected: All tests FAIL (methods don't exist yet)
+```
+
+**GREEN Phase** - Implement methods to pass tests:
+
+```python
+# mcp/src/clients/base.py
 
 class BaseAPIClient:
     """Shared HTTP client functionality for all domain clients"""
 
-    def __init__(self, base_url: str, timeout: float):
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-        self.client: Optional[httpx.AsyncClient] = None
-        logger.info("API client initialized", base_url=self.base_url)
+    # ... existing __init__, __aenter__, __aexit__, _request methods ...
 
-    async def __aenter__(self):
-        """Async context manager entry"""
-        self.client = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=self.timeout,
-            headers={"Content-Type": "application/json"},
-        )
-        return self
+    def _extract_list(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        default: Optional[list] = None
+    ) -> list[dict[str, Any]]:
+        """
+        Extract list from response envelope.
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
-        if self.client:
-            await self.client.aclose()
+        For non-critical operations where empty list is acceptable.
 
-    async def _request(
-        self, method: str, endpoint: str, **kwargs
+        Args:
+            response: API response dict
+            field: Field name to extract (default "data")
+            default: Default value if field missing (default [])
+
+        Returns:
+            Extracted list or default
+
+        Example:
+            response = {"success": true, "data": [...]}
+            items = self._extract_list(response)
+        """
+        if default is None:
+            default = []
+        return response.get(field, default)
+
+    def _extract_dict(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        default: Optional[dict] = None
     ) -> dict[str, Any]:
-        """Make HTTP request with error handling"""
-        if not self.client:
+        """
+        Extract dict from response envelope.
+
+        For non-critical operations where empty dict is acceptable.
+
+        Args:
+            response: API response dict
+            field: Field name to extract (default "data")
+            default: Default value if field missing (default {})
+
+        Returns:
+            Extracted dict or default
+
+        Example:
+            response = {"success": true, "data": {...}}
+            item = self._extract_dict(response)
+        """
+        if default is None:
+            default = {}
+        return response.get(field, default)
+
+    def _extract_or_raise(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        operation: str = "operation"
+    ) -> Any:
+        """
+        Extract field from response or raise detailed error.
+
+        For critical operations that MUST succeed (training start, data loading).
+
+        Args:
+            response: API response dict
+            field: Field name to extract
+            operation: Operation name for error message
+
+        Returns:
+            Extracted value
+
+        Raises:
+            KTRDRAPIError: If field missing or response indicates error
+
+        Example:
+            response = {"success": true, "data": {...}}
+            data = self._extract_or_raise(response, operation="training start")
+        """
+        # Check explicit error flag
+        if not response.get("success", True):
+            error_msg = response.get("error", "Unknown error")
             raise KTRDRAPIError(
-                "API client not initialized. Use async context manager."
+                f"{operation.capitalize()} failed: {error_msg}",
+                details=response
             )
 
-        url = f"{endpoint}" if endpoint.startswith("/") else f"/{endpoint}"
-
-        try:
-            logger.debug("API request", method=method, url=url)
-            response = await self.client.request(method, url, **kwargs)
-            response.raise_for_status()
-
-            data = response.json()
-            logger.debug(
-                "API response",
-                status=response.status_code,
-                data_keys=(
-                    list(data.keys())
-                    if isinstance(data, dict)
-                    else type(data).__name__
-                ),
-            )
-            return data
-
-        except httpx.HTTPStatusError as e:
-            logger.error("HTTP error", status=e.response.status_code, url=url)
-            try:
-                error_data = e.response.json()
-            except Exception:
-                error_data = {"detail": e.response.text}
-
+        # Extract field
+        if field not in response:
             raise KTRDRAPIError(
-                f"HTTP {e.response.status_code}: {error_data.get('detail', 'Unknown error')}",
-                status_code=e.response.status_code,
-                details=error_data,
-            ) from e
+                f"{operation.capitalize()} response missing '{field}' field",
+                details=response
+            )
 
-        except httpx.RequestError as e:
-            logger.error("Request error", error=str(e), url=url)
-            raise KTRDRAPIError(f"Request failed: {str(e)}") from e
+        return response[field]
 ```
 
-**Acceptance Criteria**:
-- [ ] Base client handles async context manager lifecycle
-- [ ] `_request()` method handles GET, POST with proper params/json
-- [ ] HTTP errors converted to `KTRDRAPIError` with status codes
-- [ ] Network errors handled gracefully
-- [ ] All unit tests pass
-- [ ] Code coverage >80%
+Run tests (should PASS):
 
-**Testing Strategy**:
-- Mock httpx.AsyncClient for unit tests
-- Test successful requests (GET, POST)
-- Test HTTP error scenarios (404, 500, etc.)
-- Test network errors (connection timeout, etc.)
-- Test context manager lifecycle
-
----
-
-**Commit After**:
 ```bash
-make test-unit  # Ensure all tests pass
-make quality    # Lint + format + typecheck
+make test-unit  # All tests must pass
+```
+
+**REFACTOR Phase** - Clean up if needed (likely none for this task)
+
+**Quality Gate**:
+
+```bash
+make test-unit   # Must pass
+make quality     # Must pass (lint + format + typecheck)
+```
+
+**Commit**:
+
+```bash
 git add mcp/src/clients/base.py tests/unit/mcp/test_base_client.py
-git commit -m "feat(mcp): add BaseAPIClient for domain-specific client refactor"
+git commit -m "feat(mcp): add hybrid response extraction methods to BaseAPIClient
+
+- Add _extract_list() for simple list extraction with defaults
+- Add _extract_dict() for simple dict extraction with defaults
+- Add _extract_or_raise() for critical operations requiring validation
+- Full test coverage for all extraction patterns"
 ```
 
 ---
 
-### TASK-1.2: Create Operations API Client
+### TASK-2: Update DataAPIClient with Hybrid Pattern
 
-**Objective**: Build operations-specific client for async operation management
-
-**Branch**: `feature/mcp-async-operations`
+**Objective**: Apply extraction methods to DataAPIClient
 
 **Files**:
-- `mcp/src/clients/operations_client.py` (NEW)
-- `tests/unit/mcp/test_operations_client.py` (NEW)
 
-**What It Does**:
-- List operations with filters
-- Get operation status
-- Cancel operations
-- Get operation results
+- `mcp/src/clients/data_client.py` (UPDATE)
+- `tests/unit/mcp/test_data_client.py` (UPDATE)
+
+**TDD Workflow**:
+
+**RED Phase** - Update existing tests or add new ones:
+
+```python
+# tests/unit/mcp/test_data_client.py
+
+async def test_get_symbols_uses_extract_list():
+    """Should use _extract_list for symbols response"""
+    # Mock _request to return response with data field
+    # Verify _extract_list called with correct parameters
+
+async def test_load_data_operation_uses_extract_or_raise():
+    """Should use _extract_or_raise for critical data loading"""
+    # Mock _request to return response
+    # Verify _extract_or_raise called for operation_id extraction
+```
+
+**GREEN Phase** - Update implementation:
+
+```python
+# mcp/src/clients/data_client.py
+
+class DataAPIClient(BaseAPIClient):
+    """API client for data operations"""
+
+    async def get_symbols(self) -> list[dict[str, Any]]:
+        """Get available trading symbols"""
+        response = await self._request("GET", "/api/v1/symbols")
+        return self._extract_list(response)  # Simple extraction
+
+    async def load_data_operation(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        mode: str = "local",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Trigger data loading operation (MUST return operation_id)"""
+        payload = {"symbol": symbol, "timeframe": timeframe, "mode": mode}
+        if start_date:
+            payload["start_date"] = start_date
+        if end_date:
+            payload["end_date"] = end_date
+
+        response = await self._request("POST", "/api/v1/data/load", json=payload)
+
+        # CRITICAL: Must have operation_id
+        return self._extract_or_raise(response, operation="data loading")
+```
+
+**Quality Gate & Commit**:
+
+```bash
+make test-unit
+make quality
+git add mcp/src/clients/data_client.py tests/unit/mcp/test_data_client.py
+git commit -m "refactor(mcp): apply hybrid response pattern to DataAPIClient
+
+- Use _extract_list() for get_symbols()
+- Use _extract_or_raise() for load_data_operation()
+- Maintain backward compatibility"
+```
+
+---
+
+### TASK-3: Update TrainingAPIClient with Hybrid Pattern
+
+**Objective**: Apply extraction methods to TrainingAPIClient
+
+**Files**:
+
+- `mcp/src/clients/training_client.py` (UPDATE)
+- `tests/unit/mcp/test_training_client.py` (UPDATE)
+
+**Implementation** (following same TDD pattern as TASK-2):
+
+```python
+# mcp/src/clients/training_client.py
+
+class TrainingAPIClient(BaseAPIClient):
+    """API client for training operations"""
+
+    async def list_trained_models(self) -> list[dict[str, Any]]:
+        """List all trained models"""
+        response = await self._request("GET", "/api/v1/models")
+        # Backend returns {models: [...]} instead of {data: [...]}
+        return self._extract_list(response, field="models")
+
+    async def start_neural_training(
+        self,
+        symbols: list[str],
+        timeframes: list[str],
+        strategy_name: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        task_id: Optional[str] = None,
+        detailed_analytics: bool = False,
+    ) -> dict[str, Any]:
+        """Start neural network training (MUST return operation_id)"""
+        payload = {
+            "symbols": symbols,
+            "timeframes": timeframes,
+            "strategy_name": strategy_name,
+            "detailed_analytics": detailed_analytics,
+        }
+        if start_date:
+            payload["start_date"] = start_date
+        if end_date:
+            payload["end_date"] = end_date
+        if task_id:
+            payload["task_id"] = task_id
+
+        response = await self._request("POST", "/api/v1/trainings/start", json=payload)
+
+        # CRITICAL: Must succeed
+        return self._extract_or_raise(response, operation="training start")
+```
+
+**Commit**:
+
+```bash
+make test-unit
+make quality
+git add mcp/src/clients/training_client.py tests/unit/mcp/test_training_client.py
+git commit -m "refactor(mcp): apply hybrid response pattern to TrainingAPIClient
+
+- Use _extract_list() for list_trained_models() with custom 'models' field
+- Use _extract_or_raise() for start_neural_training()
+- Maintain backward compatibility"
+```
+
+---
+
+### TASK-4: Update OperationsAPIClient with Hybrid Pattern
+
+**Objective**: Apply extraction methods to OperationsAPIClient
+
+**Files**:
+
+- `mcp/src/clients/operations_client.py` (UPDATE)
+- `tests/unit/mcp/test_operations_client.py` (UPDATE)
 
 **Implementation**:
+
 ```python
-"""Operations management API client"""
-
-from typing import Any, Optional
-from .base import BaseAPIClient
-
+# mcp/src/clients/operations_client.py
 
 class OperationsAPIClient(BaseAPIClient):
     """API client for operations management"""
@@ -226,1397 +502,389 @@ class OperationsAPIClient(BaseAPIClient):
         if active_only:
             params["active_only"] = active_only
 
+        # Return full response (includes data, total_count, active_count)
         return await self._request("GET", "/api/v1/operations", params=params)
 
     async def get_operation_status(self, operation_id: str) -> dict[str, Any]:
         """Get detailed operation status"""
-        return await self._request("GET", f"/api/v1/operations/{operation_id}")
-
-    async def cancel_operation(
-        self, operation_id: str, reason: Optional[str] = None
-    ) -> dict[str, Any]:
-        """Cancel a running operation"""
-        payload = {"reason": reason} if reason else {}
-        return await self._request(
-            "POST", f"/api/v1/operations/{operation_id}/cancel", json=payload
-        )
-
-    async def get_operation_results(
-        self, operation_id: str
-    ) -> dict[str, Any]:
-        """Get operation results (summary)"""
-        return await self._request(
-            "GET", f"/api/v1/operations/{operation_id}/results"
-        )
+        response = await self._request("GET", f"/api/v1/operations/{operation_id}")
+        return self._extract_dict(response)  # Simple extraction
 ```
 
-**Acceptance Criteria**:
-- [ ] All 4 methods implemented correctly
-- [ ] Parameters properly serialized (query params, JSON payload)
-- [ ] Returns parsed response dicts
-- [ ] Inherits error handling from BaseAPIClient
-- [ ] All unit tests pass
-- [ ] Code coverage >80%
+**Commit**:
 
-**Testing Strategy**:
-- Mock BaseAPIClient._request() for unit tests
-- Test each method with various parameter combinations
-- Test filter logic in list_operations
-- Test optional parameters handled correctly
-
----
-
-**Commit After**:
 ```bash
-make test-unit  # Ensure all tests pass
-make quality    # Lint + format + typecheck
+make test-unit
+make quality
 git add mcp/src/clients/operations_client.py tests/unit/mcp/test_operations_client.py
-git commit -m "feat(mcp): add OperationsAPIClient for operation management"
+git commit -m "refactor(mcp): apply hybrid response pattern to OperationsAPIClient
+
+- Keep full response for list_operations() (needs total_count, active_count)
+- Use _extract_dict() for get_operation_status()
+- Maintain backward compatibility"
 ```
 
 ---
 
-### TASK-1.3: Create Data API Client
+### TASK-5: Update IndicatorsAPIClient with Hybrid Pattern
 
-**Objective**: Extract data-specific methods from monolithic client
-
-**Branch**: `feature/mcp-async-operations`
+**Objective**: Apply extraction methods to IndicatorsAPIClient
 
 **Files**:
-- `mcp/src/clients/data_client.py` (NEW)
-- `tests/unit/mcp/test_data_client.py` (NEW)
 
-**What It Does**:
-- Get cached market data (synchronous)
-- Trigger data loading (async operation)
-- Get data info
+- `mcp/src/clients/indicators_client.py` (UPDATE)
+- `tests/unit/mcp/test_indicators_client.py` (UPDATE)
 
 **Implementation**:
+
 ```python
-"""Data API client"""
+# mcp/src/clients/indicators_client.py
 
-from typing import Any, Optional
-from .base import BaseAPIClient
+class IndicatorsAPIClient(BaseAPIClient):
+    """API client for indicators operations"""
 
-
-class DataAPIClient(BaseAPIClient):
-    """API client for data operations"""
-
-    async def get_cached_data(
-        self,
-        symbol: str,
-        timeframe: str = "1h",
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        trading_hours_only: bool = False,
-        include_extended: bool = False,
-        limit: Optional[int] = None,
-    ) -> dict[str, Any]:
-        """Get cached OHLCV data (synchronous, local only)"""
-        params = {}
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if trading_hours_only:
-            params["trading_hours_only"] = trading_hours_only
-        if include_extended:
-            params["include_extended"] = include_extended
-
-        response = await self._request(
-            "GET", f"/api/v1/data/{symbol}/{timeframe}", params=params
-        )
-
-        # Apply client-side limiting for response size
-        if limit and "data" in response and "dates" in response["data"]:
-            data = response["data"]
-            if len(data["dates"]) > limit:
-                data["dates"] = data["dates"][-limit:]
-                data["ohlcv"] = data["ohlcv"][-limit:] if data["ohlcv"] else []
-                if data.get("points"):
-                    data["points"] = data["points"][-limit:]
-                if "metadata" in data:
-                    data["metadata"]["points"] = len(data["dates"])
-                    data["metadata"]["limited_by_client"] = True
-
-        return response
-
-    async def load_data_operation(
-        self,
-        symbol: str,
-        timeframe: str = "1h",
-        mode: str = "local",
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Trigger data loading operation (async, returns operation_id)"""
-        payload = {"symbol": symbol, "timeframe": timeframe, "mode": mode}
-        if start_date:
-            payload["start_date"] = start_date
-        if end_date:
-            payload["end_date"] = end_date
-
-        return await self._request("POST", "/api/v1/data/load", json=payload)
-
-    async def get_data_info(self, symbol: str) -> dict[str, Any]:
-        """Get data information for a symbol"""
-        return await self._request("GET", f"/api/v1/data/info/{symbol}")
+    async def list_indicators(self) -> list[dict[str, Any]]:
+        """List all available indicators"""
+        response = await self._request("GET", "/api/v1/indicators/")
+        return self._extract_list(response)  # Simple extraction
 ```
 
-**Acceptance Criteria**:
-- [ ] get_cached_data() handles client-side limiting correctly
-- [ ] load_data_operation() returns operation_id
-- [ ] All methods properly serialize parameters
-- [ ] All unit tests pass
-- [ ] Code coverage >80%
+**Commit**:
 
-**Testing Strategy**:
-- Test get_cached_data with and without limit
-- Test load_data_operation with various modes
-- Test parameter serialization
-
----
-
-**Commit After**:
 ```bash
-make test-unit  # Ensure all tests pass
-make quality    # Lint + format + typecheck
-git add mcp/src/clients/data_client.py tests/unit/mcp/test_data_client.py
-git commit -m "feat(mcp): add DataAPIClient for data operations"
+make test-unit
+make quality
+git add mcp/src/clients/indicators_client.py tests/unit/mcp/test_indicators_client.py
+git commit -m "refactor(mcp): apply hybrid response pattern to IndicatorsAPIClient
+
+- Use _extract_list() for list_indicators()
+- Maintain backward compatibility"
 ```
 
 ---
 
-### TASK-1.4: Create Training API Client
+### TASK-6: Update StrategiesAPIClient with Hybrid Pattern
 
-**Objective**: Extract training-specific methods from monolithic client
-
-**Branch**: `feature/mcp-async-operations`
+**Objective**: Apply extraction methods to StrategiesAPIClient
 
 **Files**:
-- `mcp/src/clients/training_client.py` (NEW)
-- `tests/unit/mcp/test_training_client.py` (NEW)
 
-**What It Does**:
-- Start neural network training
-- Get training status
-- Get model performance
-- Manage trained models
+- `mcp/src/clients/strategies_client.py` (UPDATE)
+- `tests/unit/mcp/test_strategies_client.py` (UPDATE)
 
 **Implementation**:
+
 ```python
-"""Training API client"""
+# mcp/src/clients/strategies_client.py
 
-from typing import Any, Optional
-from .base import BaseAPIClient
+class StrategiesAPIClient(BaseAPIClient):
+    """API client for strategies operations"""
 
-
-class TrainingAPIClient(BaseAPIClient):
-    """API client for training operations"""
-
-    async def start_neural_training(
-        self,
-        symbols: list[str],
-        timeframe: str,
-        config: dict[str, Any],
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        task_id: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Start neural network training (async, returns operation_id)"""
-        payload = {"symbols": symbols, "timeframe": timeframe, "config": config}
-        if start_date:
-            payload["start_date"] = start_date
-        if end_date:
-            payload["end_date"] = end_date
-        if task_id:
-            payload["task_id"] = task_id
-
-        return await self._request("POST", "/api/v1/trainings/start", json=payload)
-
-    async def get_training_status(self, task_id: str) -> dict[str, Any]:
-        """Get neural network training status"""
-        return await self._request("GET", f"/api/v1/trainings/{task_id}")
-
-    async def get_model_performance(self, task_id: str) -> dict[str, Any]:
-        """Get trained model performance metrics"""
-        return await self._request(
-            "GET", f"/api/v1/trainings/{task_id}/performance"
-        )
-
-    async def list_trained_models(self) -> list[dict[str, Any]]:
-        """List all trained models"""
-        response = await self._request("GET", "/api/v1/models")
-        return response.get("models", [])
+    async def list_strategies(self) -> dict[str, Any]:
+        """List all available strategies"""
+        # Return full response (backend may include metadata)
+        return await self._request("GET", "/api/v1/strategies/")
 ```
 
-**Acceptance Criteria**:
-- [ ] start_neural_training() returns operation_id
-- [ ] All methods properly serialize complex payloads
-- [ ] List methods handle response unwrapping
-- [ ] All unit tests pass
-- [ ] Code coverage >80%
+**Commit**:
 
----
-
-**Commit After**:
 ```bash
-make test-unit  # Ensure all tests pass
-make quality    # Lint + format + typecheck
-git add mcp/src/clients/training_client.py tests/unit/mcp/test_training_client.py
-git commit -m "feat(mcp): add TrainingAPIClient for training operations"
+make test-unit
+make quality
+git add mcp/src/clients/strategies_client.py tests/unit/mcp/test_strategies_client.py
+git commit -m "refactor(mcp): apply hybrid response pattern to StrategiesAPIClient
+
+- Keep full response for list_strategies() (may include metadata)
+- Maintain backward compatibility"
 ```
 
 ---
 
-### TASK-1.5: Create Unified Facade Client
+### TASK-7: Enhance All MCP Tool Docstrings
 
-**Objective**: Provide backward-compatible facade combining all domain clients
-
-**Branch**: `feature/mcp-async-operations`
+**Objective**: Apply comprehensive docstring standard to all 12 MCP tools
 
 **Files**:
-- `mcp/src/clients/__init__.py` (NEW)
-- `mcp/src/api_client.py` (UPDATE - make facade)
-- `tests/unit/mcp/test_facade_client.py` (NEW)
 
-**What It Does**:
-- Combines all domain clients into single interface
-- Maintains backward compatibility with existing code
-- Provides both old monolithic access and new domain access
+- `mcp/src/server.py` (UPDATE - all tool docstrings)
 
-**Implementation**:
-```python
-# mcp/src/clients/__init__.py
-"""Domain-specific API clients"""
-
-from .base import BaseAPIClient, KTRDRAPIError
-from .data_client import DataAPIClient
-from .training_client import TrainingAPIClient
-from .operations_client import OperationsAPIClient
-
-__all__ = [
-    "BaseAPIClient",
-    "KTRDRAPIError",
-    "DataAPIClient",
-    "TrainingAPIClient",
-    "OperationsAPIClient",
-]
-```
+**Standard Template**:
 
 ```python
-# mcp/src/api_client.py (UPDATE)
-"""
-Unified API Client Facade
-
-Provides both domain-specific access (client.operations.list_operations())
-and backward-compatible monolithic access (client.list_operations())
-"""
-
-from typing import Any, Optional
-from .clients import (
-    DataAPIClient,
-    TrainingAPIClient,
-    OperationsAPIClient,
-    KTRDRAPIError,
-)
-from .config import API_TIMEOUT, KTRDR_API_URL
-
-import structlog
-
-logger = structlog.get_logger()
-
-
-class KTRDRAPIClient:
-    """
-    Unified facade combining domain-specific API clients.
-
-    Usage:
-        # New domain-specific access (recommended)
-        async with KTRDRAPIClient() as client:
-            result = await client.operations.list_operations(...)
-            data = await client.data.get_cached_data(...)
-            training = await client.training.start_neural_training(...)
-
-        # Old monolithic access (backward compatibility)
-        async with KTRDRAPIClient() as client:
-            result = await client.list_operations(...)  # Delegates to client.operations
-    """
-
-    def __init__(self, base_url: str = KTRDR_API_URL, timeout: float = API_TIMEOUT):
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-
-        # Domain-specific clients (new pattern)
-        self.data = DataAPIClient(base_url, timeout)
-        self.training = TrainingAPIClient(base_url, timeout)
-        self.operations = OperationsAPIClient(base_url, timeout)
-
-        logger.info("Unified API client initialized", base_url=self.base_url)
-
-    async def __aenter__(self):
-        """Enter async context - initialize all domain clients"""
-        await self.data.__aenter__()
-        await self.training.__aenter__()
-        await self.operations.__aenter__()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context - cleanup all domain clients"""
-        await self.data.__aexit__(exc_type, exc_val, exc_tb)
-        await self.training.__aexit__(exc_type, exc_val, exc_tb)
-        await self.operations.__aexit__(exc_type, exc_val, exc_tb)
-
-    # Backward compatibility - delegate to domain clients
-    async def list_operations(self, **kwargs) -> dict[str, Any]:
-        """Delegate to operations client (backward compat)"""
-        return await self.operations.list_operations(**kwargs)
-
-    async def get_operation_status(self, operation_id: str) -> dict[str, Any]:
-        """Delegate to operations client (backward compat)"""
-        return await self.operations.get_operation_status(operation_id)
-
-    async def cancel_operation(self, operation_id: str, reason: Optional[str] = None) -> dict[str, Any]:
-        """Delegate to operations client (backward compat)"""
-        return await self.operations.cancel_operation(operation_id, reason)
-
-    async def get_operation_results(self, operation_id: str) -> dict[str, Any]:
-        """Delegate to operations client (backward compat)"""
-        return await self.operations.get_operation_results(operation_id)
-
-    async def get_cached_data(self, **kwargs) -> dict[str, Any]:
-        """Delegate to data client (backward compat)"""
-        return await self.data.get_cached_data(**kwargs)
-
-    async def load_data_operation(self, **kwargs) -> dict[str, Any]:
-        """Delegate to data client (backward compat)"""
-        return await self.data.load_data_operation(**kwargs)
-
-    async def start_neural_training(self, **kwargs) -> dict[str, Any]:
-        """Delegate to training client (backward compat)"""
-        return await self.training.start_neural_training(**kwargs)
-
-    # Health check (can stay in facade)
-    async def health_check(self) -> dict[str, Any]:
-        """Check backend health"""
-        return await self.operations._request("GET", "/health")
-
-
-# Singleton instance for easy access
-_api_client: Optional[KTRDRAPIClient] = None
-
-
-def get_api_client() -> KTRDRAPIClient:
-    """Get singleton API client instance"""
-    global _api_client
-    if _api_client is None:
-        _api_client = KTRDRAPIClient()
-    return _api_client
-```
-
-**Acceptance Criteria**:
-- [ ] Facade provides both domain-specific and monolithic access
-- [ ] Backward compatibility maintained (existing code works)
-- [ ] All domain clients initialized in context manager
-- [ ] Delegation methods work correctly
-- [ ] All unit tests pass
-- [ ] Code coverage >80%
-
-**Testing Strategy**:
-- Test both access patterns work
-- Test context manager lifecycle
-- Test delegation to domain clients
-- Test backward compatibility with existing tools
-
----
-
-**Commit After**:
-```bash
-make test-unit  # Ensure all tests pass
-make quality    # Lint + format + typecheck
-git add mcp/src/clients/__init__.py mcp/src/api_client.py tests/unit/mcp/test_facade_client.py
-git commit -m "feat(mcp): add unified facade for domain-specific clients with backward compatibility"
-```
-
----
-
-## Phase 2: Backend Enhancements
-
-**Goal**: Minimal backend changes to support MCP integration
-
-### TASK-2.1: Add operation_id to Training Response
-
-**Objective**: Ensure training endpoint returns operation_id explicitly
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `ktrdr/api/services/training_service.py` (UPDATE - 1 line)
-
-**Current Code** ([training_service.py:123-133](../../ktrdr/api/services/training_service.py#L123-L133)):
-```python
-return {
-    "success": True,
-    "task_id": operation_id,
-    "status": "training_started",
-    "message": message,
-    "symbols": context.symbols,
-    "timeframes": context.timeframes,
-    "strategy_name": strategy_name,
-    "estimated_duration_minutes": estimated_duration,
-    "use_host_service": context.use_host_service,
-}
-```
-
-**Change**:
-```python
-return {
-    "success": True,
-    "operation_id": operation_id,  # ← ADD THIS LINE
-    "task_id": operation_id,  # Keep for backward compat
-    "status": "training_started",
-    "message": message,
-    "symbols": context.symbols,
-    "timeframes": context.timeframes,
-    "strategy_name": strategy_name,
-    "estimated_duration_minutes": estimated_duration,
-    "use_host_service": context.use_host_service,
-}
-```
-
-**Acceptance Criteria**:
-- [ ] Response includes `operation_id` field
-- [ ] `task_id` still present for backward compatibility
-- [ ] Both fields have same value
-- [ ] Existing tests still pass
-- [ ] Integration tests verify operation_id present
-
-**Testing**:
-```bash
-# Start backend
-./start_ktrdr.sh
-
-# Test endpoint
-curl -X POST http://localhost:8000/api/v1/trainings/start \
-  -H "Content-Type: application/json" \
-  -d '{"symbols": ["AAPL"], "timeframe": "1h", "strategy_name": "mlp_basic"}'
-
-# Verify response includes both operation_id and task_id
-```
-
----
-
-**Commit After**:
-```bash
-make test-unit  # Ensure all tests pass
-make quality    # Lint + format + typecheck
-git add ktrdr/api/services/training_service.py
-git commit -m "feat(api): add operation_id to training start response for MCP compatibility"
-```
-
----
-
-### TASK-2.2: Add Operations Results Endpoint
-
-**Objective**: Create new endpoint to get operation results summary
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `ktrdr/api/endpoints/operations.py` (UPDATE - ~20 lines)
-- `tests/integration/api/test_operations_results.py` (NEW)
-
-**Implementation**:
-```python
-# Add to ktrdr/api/endpoints/operations.py
-
-from fastapi import HTTPException, status
-from ktrdr.api.models.operations import OperationStatus
-
-@router.get("/operations/{operation_id}/results")
-async def get_operation_results(
-    operation_id: str,
-    operations_service: OperationsService = Depends(get_operations_service),
+@mcp.tool()
+async def tool_name(
+    param1: str,
+    param2: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    Get operation results (summary metrics + analytics paths).
+    [One-line summary of what tool does]
 
-    Only returns results for completed or failed operations.
-    For running operations, use GET /operations/{operation_id} for status.
-    """
-    operation = await operations_service.get_operation(operation_id)
-
-    if not operation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Operation not found: {operation_id}",
-        )
-
-    if operation.status not in [OperationStatus.COMPLETED, OperationStatus.FAILED]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Operation not finished (status: {operation.status.value})",
-        )
-
-    return {
-        "success": True,
-        "operation_id": operation_id,
-        "operation_type": operation.operation_type.value,
-        "status": operation.status.value,
-        "results": operation.result_summary or {},
-    }
-```
-
-**Acceptance Criteria**:
-- [ ] Endpoint returns 404 if operation not found
-- [ ] Endpoint returns 400 if operation not finished
-- [ ] Returns result_summary for completed operations
-- [ ] Returns result_summary for failed operations (error details)
-- [ ] Unit tests cover all scenarios
-- [ ] API docs updated (Swagger/ReDoc)
-
-**Testing Strategy**:
-- **Unit tests** with mocked OperationsService (fast, <1s)
-- Test error scenarios (not found, not complete, not failed/completed)
-- Test response format for completed and failed operations
-- **Manual verification** with running backend (curl/Swagger UI)
-- **Skip integration tests** (4min, 10% failure rate - not worth it for 20 lines)
-
-**Manual Testing**:
-```bash
-# Start backend
-./start_ktrdr.sh
-
-# Create an operation (e.g., trigger data loading)
-curl -X POST http://localhost:8000/api/v1/data/load \
-  -H "Content-Type: application/json" \
-  -d '{"symbol": "AAPL", "timeframe": "1h", "mode": "local"}'
-# Note the operation_id
-
-# Wait for completion, then test results endpoint
-curl http://localhost:8000/api/v1/operations/{operation_id}/results
-
-# Test error cases
-curl http://localhost:8000/api/v1/operations/invalid_id/results  # → 404
-curl http://localhost:8000/api/v1/operations/{running_op_id}/results  # → 400
-```
-
----
-
-**Commit After**:
-```bash
-make test-unit  # Fast unit tests only
-make quality    # Lint + format + typecheck
-git add ktrdr/api/endpoints/operations.py tests/unit/api/test_operations_results.py
-git commit -m "feat(api): add GET /operations/{id}/results endpoint for MCP integration"
-```
-
----
-
-### TASK-2.3: Update Operations List Default Limit
-
-**Objective**: Change default pagination limit from 100 to 10
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `ktrdr/api/endpoints/operations.py` (UPDATE - 1 line)
-
-**Current Code**:
-```python
-@router.get("/operations")
-async def list_operations(
-    operation_type: Optional[OperationType] = None,
-    status: Optional[OperationStatus] = None,
-    active_only: bool = False,
-    limit: int = Query(100, ge=1, le=100),  # ← Change default here
-    offset: int = Query(0, ge=0),
-    operations_service: OperationsService = Depends(get_operations_service)
-) -> OperationListResponse:
-```
-
-**Change**:
-```python
-@router.get("/operations")
-async def list_operations(
-    operation_type: Optional[OperationType] = None,
-    status: Optional[OperationStatus] = None,
-    active_only: bool = False,
-    limit: int = Query(10, ge=1, le=100),  # ← Changed from 100 to 10
-    offset: int = Query(0, ge=0),
-    operations_service: OperationsService = Depends(get_operations_service)
-) -> OperationListResponse:
-```
-
-**Acceptance Criteria**:
-- [ ] Default limit is 10 (not 100)
-- [ ] Can still request up to 100 with explicit parameter
-- [ ] Existing tests updated if they rely on default 100
-- [ ] API docs reflect new default
-
-**Testing**:
-```bash
-# Test default limit
-curl http://localhost:8000/api/v1/operations
-# Should return max 10 operations
-
-# Test explicit limit
-curl http://localhost:8000/api/v1/operations?limit=50
-# Should return max 50 operations
-```
-
----
-
-**Commit After**:
-```bash
-make test-unit  # Fast unit tests (update if any rely on default 100)
-make quality    # Lint + format + typecheck
-git add ktrdr/api/endpoints/operations.py
-git commit -m "feat(api): change default operations list limit to 10 for MCP efficiency"
-```
-
----
-
-## Phase 3: MCP Tools Implementation
-
-**Goal**: Implement 6 MCP tools using new domain-specific clients
-
-### TASK-3.1: Add list_operations Tool
-
-**Objective**: New MCP tool to list operations with filters
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `mcp/src/server.py` (UPDATE - add tool)
-- `mcp/src/tools/operations.py` (NEW - optional, for organization)
-
-**Implementation**:
-```python
-# Add to mcp/src/server.py (or create mcp/src/tools/operations.py)
-
-@mcp.tool()
-async def list_operations(
-    operation_type: Optional[str] = None,
-    status: Optional[str] = None,
-    active_only: bool = False,
-    limit: int = 10,
-    offset: int = 0,
-) -> dict[str, Any]:
-    """
-    List operations with optional filters.
-
-    Discover operations without prior knowledge. Filter by type, status,
-    or show only active operations.
+    [Extended description explaining behavior, context, and when to use]
 
     Args:
-        operation_type: Filter by type ("data_load", "training", "backtesting")
-        status: Filter by status ("pending", "running", "completed", "failed", "cancelled")
-        active_only: Only show pending + running operations
-        limit: Max operations to return (default 10)
-        offset: Number of operations to skip for pagination
+        param1: Description with valid values:
+            - "value1": What this means
+            - "value2": What this means
+            - Format examples if needed
+        param2: Optional parameter description
+            - Default behavior when None
 
     Returns:
-        Dict with:
-        - data: List of operation summaries
-        - total_count: Total matching operations
-        - active_count: Number of active operations
-        - returned_count: Number in this response
+        Dict with structure:
+        {
+            "success": bool,
+            "field1": str,
+            "field2": {
+                "nested": str,
+                "fields": int
+            },
+            "field3": Optional[str]  # Present when...
+        }
+
+    Raises:
+        KTRDRAPIError: When [specific error scenario]
+        KTRDRAPIError: When [another error scenario]
 
     Examples:
-        - list_operations(active_only=True) → All running operations
-        - list_operations(operation_type="training", status="running") → Active training
-        - list_operations(status="failed", limit=5) → Last 5 failed operations
+        # Basic usage
+        result = await tool_name("value1")
+        # Returns: {"success": True, "field1": "..."}
+
+        # Advanced usage
+        result = await tool_name("value2", param2="custom")
+        # Returns: {"success": True, "field1": "...", "field2": {...}}
+
+    See Also:
+        - related_tool1(): What it does and when to use
+        - related_tool2(): What it does and when to use
+
+    Notes:
+        - Important behavioral detail 1
+        - Important behavioral detail 2
+        - Performance considerations if relevant
     """
-    try:
-        async with get_api_client() as client:
-            result = await client.operations.list_operations(
-                operation_type=operation_type,
-                status=status,
-                active_only=active_only,
-                limit=limit,
-                offset=offset,
-            )
-            return result
-    except KTRDRAPIError as e:
-        logger.error(f"API error: {e.message}", error=str(e))
-        return {
-            "success": False,
-            "error": e.message,
-            "status_code": e.status_code,
-            "details": e.details,
-        }
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+    # Implementation...
 ```
 
-**Acceptance Criteria**:
-- [ ] Tool registered with MCP server
-- [ ] All parameters work correctly
-- [ ] Filters applied properly (type, status, active_only)
-- [ ] Pagination works (limit, offset)
-- [ ] Error handling for API failures
-- [ ] Tool works in Claude Desktop/CLI
+**Tools to Update** (2 commits for manageability):
 
-**Testing**:
+**Commit 1** - Core operation tools:
+
+- `list_operations()`
+- `get_operation_status()`
+- `cancel_operation()`
+- `get_operation_results()`
+- `trigger_data_loading()`
+- `start_training()`
+
+**Commit 2** - Data and configuration tools:
+
+- `get_market_data()`
+- `get_symbols()`
+- `get_indicators()`
+- `get_strategies()`
+- `list_trained_models()`
+- `health_check()`
+
+**TDD Note**: Docstring changes don't require new tests, but existing tests should still pass.
+
+**Quality Gate & Commits**:
+
 ```bash
-# Test with MCP inspector or Claude Desktop
-mcp dev mcp/src/server.py
-
-# Test filters
-list_operations(active_only=True)
-list_operations(operation_type="training", status="running")
-list_operations(limit=5)
-```
-
----
-
-**Commit After**:
-```bash
-make quality  # Lint + format + typecheck
+make test-unit  # Verify no regressions
+make quality
 git add mcp/src/server.py
-git commit -m "feat(mcp): add list_operations tool for operation discovery"
+git commit -m "docs(mcp): enhance docstrings for core operation tools
+
+Apply comprehensive docstring standard to:
+- list_operations
+- get_operation_status
+- cancel_operation
+- get_operation_results
+- trigger_data_loading
+- start_training
+
+Each docstring now includes:
+- Clear one-line summary
+- Extended description with context
+- Args with valid values and formats
+- Returns with complete structure
+- Raises with specific scenarios
+- Examples with working code
+- See Also with related tools
+- Notes with behavioral details"
+
+# Second commit
+make test-unit
+make quality
+git add mcp/src/server.py
+git commit -m "docs(mcp): enhance docstrings for data and configuration tools
+
+Apply comprehensive docstring standard to:
+- get_market_data
+- get_symbols
+- get_indicators
+- get_strategies
+- list_trained_models
+- health_check
+
+Completes full docstring standardization across all 12 MCP tools."
 ```
 
 ---
 
-### TASK-3.2: Add get_operation_status Tool
+### TASK-8: Update Documentation
 
-**Objective**: New MCP tool to get detailed operation status
-
-**Branch**: `feature/mcp-async-operations`
+**Objective**: Document response handling pattern and docstring standards
 
 **Files**:
-- `mcp/src/server.py` (UPDATE - add tool)
 
-**Implementation**:
-```python
-@mcp.tool()
-async def get_operation_status(operation_id: str) -> dict[str, Any]:
-    """
-    Get detailed operation status with progress and context.
+- `mcp/MCP_TOOLS.md` (UPDATE - add docstring standard section)
+- `mcp/README.md` (UPDATE - mention response handling)
 
-    Returns rich progress information including domain-specific context
-    (e.g., epochs/batches for training, segments for data loading).
+**Content**:
 
-    Args:
-        operation_id: Operation identifier (e.g., "op_training_20251004_143530_...")
+**MCP_TOOLS.md** additions:
 
-    Returns:
-        Dict with:
-        - operation_id, operation_type, status
-        - progress: percentage, current_step, context (domain-specific)
-        - metadata: operation parameters
-        - created_at, started_at, completed_at timestamps
-        - result_summary (if completed)
-        - error_message (if failed)
+```markdown
+## Docstring Standards
 
-    Examples:
-        get_operation_status("op_training_20251004_143530_b5c6d7e8")
-        → {"status": "running", "progress": {"percentage": 65.2, "current_step": "Epoch 32/50"}}
-    """
-    try:
-        async with get_api_client() as client:
-            result = await client.operations.get_operation_status(operation_id)
-            return result
-    except KTRDRAPIError as e:
-        logger.error(f"API error: {e.message}", error=str(e))
-        return {
-            "success": False,
-            "error": e.message,
-            "status_code": e.status_code,
-            "details": e.details,
-        }
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+All MCP tools follow a comprehensive docstring standard to ensure AI agents
+can understand and use them correctly.
+
+### Required Sections
+
+1. **One-line summary** - What the tool does
+2. **Extended description** - Context and behavior
+3. **Args** - Parameter formats with valid values
+4. **Returns** - Complete structure with field descriptions
+5. **Raises** - Error scenarios
+6. **Examples** - Working code showing common use cases
+7. **See Also** - Related tools for discovery
+8. **Notes** - Important behavioral details
+
+### Example
+
+[Include full example from architecture doc]
+
+## Response Handling Pattern
+
+API clients use a hybrid response handling pattern:
+
+- **Simple extractors** for common operations (_extract_list, _extract_dict)
+- **Strict validation** for critical operations (_extract_or_raise)
+- **Backward compatibility** maintained throughout
+
+See [Architecture](../docs/architecture/mcp/ARCHITECTURE.md) for details.
 ```
 
-**Acceptance Criteria**:
-- [ ] Tool returns detailed operation info
-- [ ] Progress context included (domain-specific)
-- [ ] Works for all operation types (data, training)
-- [ ] Error handling for not found
-- [ ] Tool works in Claude Desktop
+**Commit**:
 
----
-
-**Commit After**:
 ```bash
-make quality  # Lint + format + typecheck
-git add mcp/src/server.py
-git commit -m "feat(mcp): add get_operation_status tool for detailed progress"
+git add mcp/MCP_TOOLS.md mcp/README.md
+git commit -m "docs(mcp): document response handling pattern and docstring standards
+
+- Add comprehensive docstring standard with examples
+- Document hybrid response extraction pattern
+- Link to architecture documentation"
 ```
 
 ---
 
-### TASK-3.3: Add cancel_operation Tool
+## Final Checklist
 
-**Objective**: New MCP tool to cancel running operations
+Before creating PR:
 
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `mcp/src/server.py` (UPDATE - add tool)
-
-**Implementation**:
-```python
-@mcp.tool()
-async def cancel_operation(
-    operation_id: str, reason: Optional[str] = None
-) -> dict[str, Any]:
-    """
-    Cancel a running operation.
-
-    Cancellation propagates to backend → host services → processes.
-    Graceful shutdown with checkpoint save is already supported.
-
-    Args:
-        operation_id: Operation identifier to cancel
-        reason: Optional reason for cancellation
-
-    Returns:
-        Dict with:
-        - success: bool
-        - operation_id: str
-        - status: "cancelled"
-        - cancelled_at: timestamp
-        - cancellation_reason: str
-        - task_cancelled: bool (backend task)
-        - training_session_cancelled: bool (if training)
-
-    Examples:
-        cancel_operation("op_training_...", "User changed strategy")
-        → {"success": true, "status": "cancelled"}
-    """
-    try:
-        async with get_api_client() as client:
-            result = await client.operations.cancel_operation(operation_id, reason)
-            return result
-    except KTRDRAPIError as e:
-        logger.error(f"API error: {e.message}", error=str(e))
-        return {
-            "success": False,
-            "error": e.message,
-            "status_code": e.status_code,
-            "details": e.details,
-        }
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
-```
-
-**Acceptance Criteria**:
-- [ ] Tool cancels running operations
-- [ ] Cancellation propagates to host services
-- [ ] Optional reason parameter works
-- [ ] Error handling for already completed/cancelled
-- [ ] Tool works in Claude Desktop
+- [ ] All 8 tasks completed
+- [ ] All commits follow TDD workflow (RED-GREEN-REFACTOR)
+- [ ] All commits passed `make test-unit` and `make quality`
+- [ ] All 12 MCP tool docstrings enhanced
+- [ ] All 6 domain clients use hybrid pattern
+- [ ] Documentation updated
+- [ ] No breaking changes introduced
+- [ ] Backward compatibility verified
 
 ---
 
-**Commit After**:
+## Create Pull Request
+
 ```bash
-make quality  # Lint + format + typecheck
-git add mcp/src/server.py
-git commit -m "feat(mcp): add cancel_operation tool for operation cancellation"
-```
-
----
-
-### TASK-3.4: Add get_operation_results Tool
-
-**Objective**: New MCP tool to get operation results summary
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `mcp/src/server.py` (UPDATE - add tool)
-
-**Implementation**:
-```python
-@mcp.tool()
-async def get_operation_results(operation_id: str) -> dict[str, Any]:
-    """
-    Get operation results (summary metrics + analytics paths).
-
-    Returns lightweight summary metrics and paths to detailed data.
-    Works for any operation type (data loading, training, backtesting).
-
-    Args:
-        operation_id: Operation identifier
-
-    Returns:
-        Dict with:
-        - operation_id, operation_type, status
-        - results: summary metrics + artifact paths
-
-    Training results include:
-        - training_metrics: final losses, epochs completed
-        - validation_metrics: accuracy, precision
-        - artifacts: model_path, analytics_directory
-
-    Data loading results include:
-        - bars_loaded, date_range, gaps_filled
-        - data_source, storage_location
-
-    Examples:
-        get_operation_results("op_training_...")
-        → {"results": {"training_metrics": {...}, "artifacts": {...}}}
-    """
-    try:
-        async with get_api_client() as client:
-            result = await client.operations.get_operation_results(operation_id)
-            return result
-    except KTRDRAPIError as e:
-        logger.error(f"API error: {e.message}", error=str(e))
-        return {
-            "success": False,
-            "error": e.message,
-            "status_code": e.status_code,
-            "details": e.details,
-        }
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
-```
-
-**Acceptance Criteria**:
-- [ ] Tool returns results for completed operations
-- [ ] Error handling for not complete/not found
-- [ ] Works for different operation types
-- [ ] Result structure matches spec
-- [ ] Tool works in Claude Desktop
-
----
-
-**Commit After**:
-```bash
-make quality  # Lint + format + typecheck
-git add mcp/src/server.py
-git commit -m "feat(mcp): add get_operation_results tool for result retrieval"
-```
-
----
-
-### TASK-3.5: Update trigger_data_loading Tool
-
-**Objective**: Rename/update existing data loading tool to return operation_id
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `mcp/src/server.py` (UPDATE - rename load_data_from_source → trigger_data_loading)
-
-**Implementation**:
-```python
-@mcp.tool()
-async def trigger_data_loading(
-    symbol: str,
-    timeframe: str = "1h",
-    mode: str = "tail",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-) -> dict[str, Any]:
-    """
-    Trigger async data loading operation (returns operation_id for tracking).
-
-    This does NOT return market data - it initiates a background loading operation.
-    Use get_market_data() to retrieve the loaded data after operation completes.
-
-    Args:
-        symbol: Trading symbol (e.g., "AAPL", "EURUSD")
-        timeframe: Data timeframe ("1m", "5m", "15m", "1h", "1d")
-        mode: Loading mode ("local", "tail", "backfill", "full")
-        start_date: Start date (ISO format, e.g., "2024-01-01")
-        end_date: End date (ISO format)
-
-    Returns:
-        Dict with:
-        - success: bool
-        - operation_id: str (for tracking with get_operation_status)
-        - operation_type: "data_load"
-        - status: "started"
-        - message: Human-readable description
-
-    Examples:
-        trigger_data_loading("AAPL", "1h", "tail", "2024-01-01")
-        → {"operation_id": "op_data_load_...", "status": "started"}
-    """
-    try:
-        async with get_api_client() as client:
-            result = await client.data.load_data_operation(
-                symbol=symbol,
-                timeframe=timeframe,
-                mode=mode,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            return result
-    except KTRDRAPIError as e:
-        logger.error(f"API error: {e.message}", error=str(e))
-        return {
-            "success": False,
-            "error": e.message,
-            "status_code": e.status_code,
-            "details": e.details,
-        }
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
-```
-
-**Acceptance Criteria**:
-- [ ] Tool renamed from load_data_from_source
-- [ ] Returns operation_id for tracking
-- [ ] Clear docstring explains it doesn't return data
-- [ ] All parameters work correctly
-- [ ] Tool works in Claude Desktop
-
----
-
-**Commit After**:
-```bash
-make quality  # Lint + format + typecheck
-git add mcp/src/server.py
-git commit -m "feat(mcp): rename to trigger_data_loading and ensure returns operation_id"
-```
-
----
-
-### TASK-3.6: Update start_training Tool
-
-**Objective**: Update existing training tool to ensure returns operation_id
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `mcp/src/server.py` (UPDATE - ensure start_model_training → start_training, returns operation_id)
-
-**Implementation**:
-```python
-@mcp.tool()
-async def start_training(
-    strategy_config_path: str,
-    symbols: list[str],
-    timeframes: list[str] = ["1h"],
-    training_config: Optional[dict] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-) -> dict[str, Any]:
-    """
-    Start neural network training (returns operation_id for tracking).
-
-    Initiates async training operation. Use get_operation_status() to monitor
-    progress and get_operation_results() to retrieve final metrics.
-
-    Args:
-        strategy_config_path: Strategy name (e.g., "mlp_basic", "lstm_advanced")
-        symbols: List of trading symbols (e.g., ["AAPL", "MSFT"])
-        timeframes: List of timeframes (e.g., ["1h", "4h"])
-        training_config: Optional training parameters (epochs, learning_rate, etc.)
-        start_date: Training data start date (ISO format)
-        end_date: Training data end date (ISO format)
-
-    Returns:
-        Dict with:
-        - success: bool
-        - operation_id: str (for tracking with get_operation_status)
-        - task_id: str (same as operation_id, for backward compat)
-        - status: "training_started"
-        - message: Human-readable description
-        - estimated_duration_minutes: int
-
-    Examples:
-        start_training("mlp_basic", ["AAPL", "MSFT"], ["1h"])
-        → {"operation_id": "op_training_...", "status": "training_started"}
-    """
-    try:
-        async with get_api_client() as client:
-            # Backend expects single timeframe currently
-            result = await client.training.start_neural_training(
-                symbols=symbols,
-                timeframe=timeframes[0] if timeframes else "1h",
-                config=training_config or {},
-                start_date=start_date,
-                end_date=end_date,
-            )
-            return result
-    except KTRDRAPIError as e:
-        logger.error(f"API error: {e.message}", error=str(e))
-        return {
-            "success": False,
-            "error": e.message,
-            "status_code": e.status_code,
-            "details": e.details,
-        }
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
-```
-
-**Acceptance Criteria**:
-- [ ] Tool returns operation_id in response
-- [ ] Backend returns both operation_id and task_id
-- [ ] Clear docstring explains async pattern
-- [ ] All parameters work correctly
-- [ ] Tool works in Claude Desktop
-
----
-
-**Commit After**:
-```bash
-make quality  # Lint + format + typecheck
-git add mcp/src/server.py
-git commit -m "feat(mcp): update start_training to ensure returns operation_id"
-```
-
----
-
-## Phase 4: Integration Testing & Documentation
-
-### TASK-4.1: Manual End-to-End Verification
-
-**⚠️ MANUAL TASK - HUMAN ONLY ⚠️**
-
-**Objective**: Verify complete workflows with MCP tools via manual testing
-
-**Branch**: `feature/mcp-async-operations`
-
-**👤 WHO DOES THIS**: User (Karl) - NOT the coding agent
-**🤖 CODING AGENT**: Do NOT attempt to automate this task. Skip to TASK-4.2.
-
-**Why Manual Instead of Automated?**:
-- Integration tests: 4min runtime, 10% failure rate
-- Not worth the overhead for verification
-- Manual testing is faster and more reliable for this use case
-- Requires human interaction with Claude Desktop/MCP inspector
-
-**Manual Test Scenarios**:
-
-**1. Data Loading Workflow**:
-```bash
-# Start backend and MCP server
-./start_ktrdr.sh
-mcp dev mcp/src/server.py
-
-# Test in Claude Desktop or MCP inspector:
-1. trigger_data_loading("AAPL", "1h", "local")
-   → Verify returns operation_id
-2. list_operations(active_only=True)
-   → Verify shows the operation
-3. get_operation_status(operation_id)
-   → Verify shows progress
-4. get_operation_results(operation_id)
-   → Verify returns result_summary
-5. get_market_data("AAPL", "1h")
-   → Verify data is available
-```
-
-**2. Training Workflow**:
-```bash
-# In Claude Desktop/MCP inspector:
-1. start_training("mlp_basic", ["AAPL"], ["1h"])
-   → Verify returns operation_id
-2. get_operation_status(operation_id)
-   → Verify shows epoch/batch progress
-3. cancel_operation(operation_id, "Testing cancellation")
-   → Verify cancellation succeeds
-4. get_operation_status(operation_id)
-   → Verify status = "cancelled"
-```
-
-**3. Discovery Workflow**:
-```bash
-# Start multiple operations, then:
-1. list_operations(active_only=True)
-   → Verify shows only running ops
-2. list_operations(operation_type="training")
-   → Verify filters by type
-3. list_operations(status="completed", limit=5)
-   → Verify pagination works
-```
-
-**Acceptance Criteria**:
-- [ ] All 3 workflows verified manually
-- [ ] Tools work correctly in Claude Desktop
-- [ ] Progress updates visible
-- [ ] Cancellation propagates properly
-- [ ] Filters and pagination work
-
-**Documentation**:
-Create a manual test checklist in `mcp/TESTING.md` for future verification
-
----
-
-**Commit After**:
-```bash
-make quality  # Lint + format + typecheck
-git add mcp/TESTING.md  # If created
-git commit -m "docs(mcp): add manual testing checklist for async operations"
-```
-
----
-
-### TASK-4.2: Update MCP Server Documentation
-
-**Objective**: Document new tools and usage patterns
-
-**Branch**: `feature/mcp-async-operations`
-
-**Files**:
-- `mcp/README.md` (UPDATE)
-- `mcp/TOOLS.md` (NEW - detailed tool reference)
-
-**Documentation Sections**:
-1. **Overview** - Async operations pattern
-2. **Available Tools** - List with descriptions
-3. **Usage Examples** - Common workflows
-4. **Agent Patterns** - Fire-and-forget, discovery, monitoring
-
-**Acceptance Criteria**:
-- [ ] All 6 new/updated tools documented
-- [ ] Example workflows included
-- [ ] Agent usage patterns explained
-- [ ] Troubleshooting section added
-
----
-
-**Commit After**:
-```bash
-make quality  # Lint + format + typecheck (for any code examples in docs)
-git add mcp/README.md mcp/TOOLS.md
-git commit -m "docs(mcp): document async operations tools and usage patterns"
-```
-
----
-
-## Phase 5: Final Cleanup & Merge
-
-### TASK-5.1: Remove Old Monolithic Code (If Any)
-
-**Objective**: Clean up any obsolete code from refactor
-
-**Branch**: `feature/mcp-async-operations`
-
-**Review**:
-- Check if old `load_data_from_source` tool removed (replaced by `trigger_data_loading`)
-- Check if old `start_model_training` tool removed (replaced by `start_training`)
-- Verify no dead code in api_client.py
-
----
-
-**Commit After**:
-```bash
-make quality  # Lint + format + typecheck
-git add <files>
-git commit -m "refactor(mcp): remove obsolete tools after async operations migration"
-```
-
----
-
-### TASK-5.2: Final Testing & Quality Checks
-
-**Objective**: Comprehensive testing before merge
-
-**Branch**: `feature/mcp-async-operations`
-
-**Checklist**:
-- [ ] All unit tests pass: `make test-unit`
-- [ ] All integration tests pass: `make test-integration`
-- [ ] Code quality checks pass: `make quality`
-- [ ] Type checking passes: `make typecheck`
-- [ ] No lint errors: `make lint`
-- [ ] Test coverage >80% for new code
-
----
-
-### TASK-5.3: Merge to Main
-
-**Objective**: Integrate feature branch
-
-**Commands**:
-```bash
-# Ensure branch is up to date
+# Ensure branch up to date
 git checkout main
 git pull origin main
-git checkout feature/mcp-async-operations
+git checkout feat/mcp-response-handling-and-docstrings
 git rebase main
 
-# Final tests
+# Final quality checks
 make test-unit
-make test-integration
 make quality
 
-# Merge
-git checkout main
-git merge --no-ff feature/mcp-async-operations -m "feat(mcp): integrate async operations with domain-specific clients
+# Push and create PR
+git push origin feat/mcp-response-handling-and-docstrings
 
-BREAKING CHANGES: None (backward compatible)
+# Create PR with gh CLI
+gh pr create \
+  --title "feat(mcp): standardize response handling and enhance docstrings" \
+  --body "## Summary
 
-This PR implements:
-- Domain-specific API clients (Data, Training, Operations)
-- 4 new MCP tools (list, status, cancel, results)
-- 2 updated MCP tools (trigger_data_loading, start_training)
-- Backend enhancements (operation_id, results endpoint, pagination)
+This PR implements Option 4 (Hybrid) response handling pattern and massively
+improves MCP tool docstrings for better LLM interaction.
 
-All changes are additive and maintain backward compatibility.
+## Changes
 
-Closes #XXX"
+### Response Handling (Hybrid Pattern)
+- Added 3 extraction helpers to BaseAPIClient:
+  - \`_extract_list()\` - Simple list extraction with defaults
+  - \`_extract_dict()\` - Simple dict extraction with defaults
+  - \`_extract_or_raise()\` - Strict validation for critical operations
+- Updated 6 domain clients to use hybrid pattern:
+  - DataAPIClient
+  - TrainingAPIClient
+  - OperationsAPIClient
+  - IndicatorsAPIClient
+  - StrategiesAPIClient
+  - SystemAPIClient
 
-# Clean up
-git branch -d feature/mcp-async-operations
-git push origin main
-git push origin --delete feature/mcp-async-operations
+### Docstring Enhancements
+- Enhanced all 12 MCP tools with comprehensive docstrings:
+  - Clear one-line summaries
+  - Extended descriptions with context
+  - Args with valid values and format examples
+  - Returns with complete structure documentation
+  - Raises with specific error scenarios
+  - Examples with working code
+  - See Also with related tools for discovery
+  - Notes with behavioral details
+
+### Documentation
+- Updated MCP_TOOLS.md with docstring standards
+- Updated README with response handling pattern
+- Linked to architecture documentation
+
+## Testing
+- ✅ All unit tests pass
+- ✅ All quality checks pass
+- ✅ No breaking changes
+- ✅ Backward compatibility maintained
+
+## Related
+- Addresses code review feedback from PR #74
+- Implements Option 4 (Hybrid) approach from improvement plan"
 ```
 
 ---
 
-## Success Criteria (Phase 1 Complete)
+## Success Criteria
 
-- [x] Domain-specific API clients implemented (Data, Training, Operations)
-- [x] Base HTTP client with shared functionality
-- [x] Unified facade with backward compatibility
-- [x] 4 new MCP tools (list, status, cancel, results)
-- [x] 2 updated MCP tools (trigger_data_loading, start_training)
-- [x] Training endpoint returns operation_id
-- [x] Operations results endpoint created
-- [x] Operations list default limit changed to 10
-- [x] All unit tests pass (>80% coverage)
-- [x] All integration tests pass
+- [x] 3 extraction methods added to BaseAPIClient
+- [x] 6 domain clients updated with hybrid pattern
+- [x] 12 MCP tool docstrings enhanced to full standard
+- [x] All unit tests pass
+- [x] All quality checks pass
 - [x] Documentation updated
 - [x] Backward compatibility maintained
 - [x] Zero breaking changes
-
----
-
-## Estimated Effort
-
-| Phase | Tasks | Estimated Time |
-|-------|-------|----------------|
-| Phase 1: API Client Refactor | 5 tasks | 4-6 hours |
-| Phase 2: Backend Enhancements | 3 tasks | 1-2 hours |
-| Phase 3: MCP Tools | 6 tasks | 3-4 hours |
-| Phase 4: Integration & Docs | 2 tasks | 2-3 hours |
-| Phase 5: Cleanup & Merge | 3 tasks | 1 hour |
-| **Total** | **19 tasks** | **11-16 hours** |
-
----
-
-## Risk Mitigation
-
-**Risk 1**: Backward compatibility breaks
-- **Mitigation**: Facade pattern maintains old interface
-- **Testing**: Verify existing tools still work
-
-**Risk 2**: Integration tests flaky
-- **Mitigation**: Use proper test isolation, cleanup between tests
-- **Testing**: Run tests multiple times
-
-**Risk 3**: Domain client refactor too large
-- **Mitigation**: Incremental approach, one client at a time
-- **Testing**: Test each client independently
+- [x] PR created and ready for review
 
 ---
 

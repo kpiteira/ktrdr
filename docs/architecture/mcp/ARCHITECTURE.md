@@ -1,20 +1,20 @@
-# MCP Async Operations Integration - Architecture Document
+# MCP Response Handling & Documentation - Architecture Document
 
 **Version**: 1.0
 **Status**: Draft - In Review
-**Last Updated**: 2025-10-04
-**Phase**: 1 (MCP Integration Layer)
-**Related**: [Requirements Document](./mcp-async-operations-requirements.md)
+**Last Updated**: 2025-10-05
+**Phase**: Response Handling Standardization
+**Related**: [Implementation Document](./IMPLEMENTATION.md)
 
 ---
 
 ## 🎯 Architecture Principles
 
-1. **Stateless MCP Layer** - MCP server is a pure pass-through, no state storage
-2. **Leverage Existing Backend** - Use OperationsService as-is, minimal changes
-3. **Simple HTTP Integration** - MCP → Backend API → OperationsService
-4. **Type Safety** - Strong typing for operation states and responses
-5. **Backward Compatibility** - Existing MCP tools continue to work
+1. **Backward Compatibility** - No breaking changes to existing tools or clients
+2. **Gradual Migration** - Incremental improvements, not big-bang refactor
+3. **Type Safety** - Strong typing for response extraction and error handling
+4. **Production Ready** - Error handling for critical operations, simple extraction for common cases
+5. **LLM-Friendly** - Comprehensive docstrings are the primary interface for AI agents
 
 ---
 
@@ -26,507 +26,490 @@ graph TB
         AGENT[Claude Agent]
     end
 
-    subgraph "MCP Server (Stateless)"
-        MT1[trigger_data_loading]
-        MT2[start_training]
-        MT3[list_operations]
-        MT4[get_operation_status]
-        MT5[cancel_operation]
-        MT6[get_operation_results]
+    subgraph "MCP Server Layer"
+        MT1[list_operations]
+        MT2[get_operation_status]
+        MT3[start_training]
 
-        AC[KTRDRAPIClient]
+        DS1["Docstring: Args, Returns, Examples"]
+        DS2["Docstring: Error scenarios"]
+        DS3["Docstring: Related tools"]
+    end
+
+    subgraph "API Client Layer"
+        DC[DataAPIClient]
+        TC[TrainingAPIClient]
+        OC[OperationsAPIClient]
+
+        BASE[BaseAPIClient]
+
+        EXTRACT["_extract_list()"]
+        EXTRACT2["_extract_dict()"]
+        EXTRACT3["_extract_or_raise()"]
     end
 
     subgraph "Backend API"
-        EP1["POST /api/v1/data/load"]
-        EP2["POST /api/v1/trainings/start"]
-        EP3["GET /api/v1/operations"]
-        EP4["GET /api/v1/operations/{id}"]
-        EP5["POST /api/v1/operations/{id}/cancel"]
-        EP6["GET /api/v1/operations/{id}/results (NEW)"]
+        EP1["POST /data/load"]
+        EP2["POST /trainings/start"]
+        EP3["GET /operations"]
+
+        ENV["ApiResponse envelope"]
     end
 
-    subgraph "Backend Services"
-        OS[OperationsService<br/>In-Memory Registry]
-        DS[DataService]
-        TS[TrainingService]
-    end
-
-    subgraph "Existing Infrastructure"
-        DM[DataManager<br/>ServiceOrchestrator]
-        TM[TrainingManager<br/>ServiceOrchestrator]
-
-        IHS[IB Host Service]
-        THS[Training Host Service]
-    end
-
+    AGENT -->|Reads docstrings| DS1
     AGENT --> MT1
     AGENT --> MT2
-    AGENT --> MT3
-    AGENT --> MT4
-    AGENT --> MT5
-    AGENT --> MT6
 
-    MT1 --> AC
-    MT2 --> AC
-    MT3 --> AC
-    MT4 --> AC
-    MT5 --> AC
-    MT6 --> AC
+    MT1 --> OC
+    MT2 --> OC
+    MT3 --> TC
 
-    AC --> EP1
-    AC --> EP2
-    AC --> EP3
-    AC --> EP4
-    AC --> EP5
-    AC --> EP6
+    OC --> BASE
+    TC --> BASE
+    DC --> BASE
 
-    EP1 --> DS
-    EP2 --> TS
-    EP3 --> OS
-    EP4 --> OS
-    EP5 --> OS
-    EP6 --> OS
+    BASE --> EXTRACT
+    BASE --> EXTRACT2
+    BASE --> EXTRACT3
 
-    DS --> OS
-    DS --> DM
-    TS --> OS
-    TS --> TM
+    OC --> EP3
+    TC --> EP2
+    DC --> EP1
 
-    DM --> IHS
-    TM --> THS
+    EP3 --> ENV
+    EP2 --> ENV
+    EP1 --> ENV
 ```
 
 ---
 
 ## Component Architecture
 
-### 1. MCP Server Layer
+### 1. Response Handling Pattern (Hybrid Approach)
 
-**Location**: [mcp/src/server.py](../../mcp/src/server.py)
+**Current Issue**: Inconsistent response extraction across domain clients
+- Some use `response.get("data", [])`
+- Some return full response dict
+- Some use different field names (`models`, `data`, etc.)
+- Error handling scattered and inconsistent
 
-**Responsibility**: Expose MCP tools that call backend APIs
+**Proposed Solution**: Hybrid approach with extraction helpers in BaseAPIClient
 
-**What Already Exists** ✅:
-- Basic tool structure and error handling pattern
-- Tools like `get_market_data()`, `start_model_training()`, etc.
-- API client integration
+**Location**: [mcp/src/clients/base.py](../../mcp/src/clients/base.py)
 
 **What We're Adding** 🆕:
-- 4 new tools: `list_operations()`, `get_operation_status()`, `cancel_operation()`, `get_operation_results()`
-- 2 renamed/updated tools: `trigger_data_loading()` (was `load_data_from_source()`), `start_training()` (update to ensure returns operation_id)
 
-**Tool Pattern** (Already Established ✅):
+#### Simple Extractors (90% of cases)
+
+For common patterns where errors are acceptable (list empty, dict empty):
+
 ```python
-@mcp.tool()
-async def tool_name(...) -> dict[str, Any]:
-    """Tool description for agent"""
-    try:
-        async with get_api_client() as client:
-            result = await client.backend_method(...)
-            return result
-    except KTRDRAPIError as e:
-        return {
-            "success": False,
-            "error": e.message,
-            "details": e.details
-        }
-```
-
-**Key Point**: This section describes the PATTERN we'll follow when adding new tools. The pattern itself already exists - we're just applying it to new operations management tools.
-
----
-
-### 2. API Client Layer
-
-**Current Issue**: `KTRDRAPIClient` is already 321 lines and growing. Adding more methods creates a monolithic class.
-
-**Proposed Architecture** (Scalable):
-
-#### Option A: Domain-Specific Client Classes (Recommended)
-```python
-# mcp/src/clients/base.py
 class BaseAPIClient:
     """Shared HTTP client functionality"""
-    def __init__(self, base_url: str, timeout: float):
-        self.base_url = base_url
-        self.timeout = timeout
-        self.client: Optional[httpx.AsyncClient] = None
 
-    async def _request(self, method: str, endpoint: str, **kwargs) -> dict[str, Any]:
-        """Shared request logic with error handling"""
-        # ... existing implementation
+    def _extract_list(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        default: Optional[list] = None
+    ) -> list[dict[str, Any]]:
+        """
+        Extract list from response envelope.
 
-# mcp/src/clients/data_client.py
-class DataAPIClient(BaseAPIClient):
-    """Data-specific API operations"""
-    async def get_cached_data(...) -> dict[str, Any]: ...
-    async def load_data_operation(...) -> dict[str, Any]: ...
-    async def get_data_info(...) -> dict[str, Any]: ...
+        For non-critical operations where empty list is acceptable.
 
-# mcp/src/clients/training_client.py
-class TrainingAPIClient(BaseAPIClient):
-    """Training-specific API operations"""
-    async def start_training(...) -> dict[str, Any]: ...
-    async def get_training_status(...) -> dict[str, Any]: ...
-    async def get_model_performance(...) -> dict[str, Any]: ...
+        Args:
+            response: API response dict
+            field: Field name to extract (default "data")
+            default: Default value if field missing (default [])
 
-# mcp/src/clients/operations_client.py
-class OperationsAPIClient(BaseAPIClient):
-    """Operations management API"""
-    async def list_operations(...) -> dict[str, Any]: ...
-    async def get_operation_status(...) -> dict[str, Any]: ...
-    async def cancel_operation(...) -> dict[str, Any]: ...
-    async def get_operation_results(...) -> dict[str, Any]: ...
+        Returns:
+            Extracted list or default
 
-# mcp/src/clients/__init__.py
-class KTRDRAPIClient:
-    """Facade combining all domain clients"""
-    def __init__(self, base_url: str = KTRDR_API_URL, timeout: float = API_TIMEOUT):
-        self.data = DataAPIClient(base_url, timeout)
-        self.training = TrainingAPIClient(base_url, timeout)
-        self.operations = OperationsAPIClient(base_url, timeout)
-        # ... other domains
+        Example:
+            response = {"success": true, "data": [...]}
+            items = self._extract_list(response)
+        """
+        if default is None:
+            default = []
+        return response.get(field, default)
 
-# Usage in MCP tools:
-async with get_api_client() as client:
-    result = await client.operations.list_operations(...)
-    # or
-    result = await client.training.start_training(...)
+    def _extract_dict(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        default: Optional[dict] = None
+    ) -> dict[str, Any]:
+        """
+        Extract dict from response envelope.
+
+        For non-critical operations where empty dict is acceptable.
+
+        Args:
+            response: API response dict
+            field: Field name to extract (default "data")
+            default: Default value if field missing (default {})
+
+        Returns:
+            Extracted dict or default
+
+        Example:
+            response = {"success": true, "data": {...}}
+            item = self._extract_dict(response)
+        """
+        if default is None:
+            default = {}
+        return response.get(field, default)
 ```
 
-**Benefits**:
-- ✅ Separation of concerns by domain
-- ✅ Each client class is <100 lines
-- ✅ Easy to test individual domains
-- ✅ Clear ownership and navigation
-- ✅ Backward compatible (facade pattern)
+#### Power Tool (10% of cases)
 
-#### Option B: Keep Monolithic (Current Approach)
-Add 4 new methods to existing `KTRDRAPIClient` (~30 lines total):
+For critical operations that MUST succeed:
+
 ```python
-class KTRDRAPIClient:
-    # ... existing 321 lines ...
+    def _extract_or_raise(
+        self,
+        response: dict[str, Any],
+        field: str = "data",
+        operation: str = "operation"
+    ) -> Any:
+        """
+        Extract field from response or raise detailed error.
 
-    # NEW: Operations methods
-    async def list_operations(...) -> dict[str, Any]: ...
-    async def get_operation_status(...) -> dict[str, Any]: ...
-    async def cancel_operation(...) -> dict[str, Any]: ...
-    async def get_operation_results(...) -> dict[str, Any]: ...
+        For critical operations that MUST succeed (training start, data loading).
+
+        Args:
+            response: API response dict
+            field: Field name to extract
+            operation: Operation name for error message
+
+        Returns:
+            Extracted value
+
+        Raises:
+            KTRDRAPIError: If field missing or response indicates error
+
+        Example:
+            response = {"success": true, "data": {...}}
+            data = self._extract_or_raise(response, operation="training start")
+        """
+        # Check explicit error flag
+        if not response.get("success", True):
+            error_msg = response.get("error", "Unknown error")
+            raise KTRDRAPIError(
+                f"{operation.capitalize()} failed: {error_msg}",
+                details=response
+            )
+
+        # Extract field
+        if field not in response:
+            raise KTRDRAPIError(
+                f"{operation.capitalize()} response missing '{field}' field",
+                details=response
+            )
+
+        return response[field]
 ```
-
-**Decision**: ✅ **Option A** - Domain-Specific Client Classes (better long-term scalability)
-
-**Rationale**: Better separation of concerns, easier testing, clearer ownership, prevents monolithic growth
 
 ---
 
-### 3. Backend API Layer
+### 2. Domain Client Updates
 
-**Location**: [ktrdr/api/endpoints/](../../ktrdr/api/endpoints/)
+Each domain client will adopt the hybrid pattern:
 
-#### 3.1 Existing Endpoints (Minimal Changes)
+#### DataAPIClient Pattern
 
-##### Data Endpoint
-**File**: [ktrdr/api/endpoints/data.py](../../ktrdr/api/endpoints/data.py)
+**File**: [mcp/src/clients/data_client.py](../../mcp/src/clients/data_client.py)
 
-**Existing** (No Changes):
+**Common Case** (simple extractor):
 ```python
-@router.get("/data/{symbol}/{timeframe}")
-async def get_data(...) -> dict[str, Any]:
-    """Get cached data - synchronous, no operation_id"""
-    # Returns OHLCV data immediately
+async def get_symbols(self) -> list[dict[str, Any]]:
+    """Get available symbols"""
+    response = await self._request("GET", "/symbols")
+    return self._extract_list(response)  # Empty list acceptable
 ```
 
+**Critical Case** (power tool):
 ```python
-@router.post("/data/load")
-async def load_data(...) -> dict[str, Any]:
-    """Trigger data loading - async, returns operation_id"""
-    # Already returns operation_id from OperationsService ✅
-```
-
-##### Training Endpoint
-**File**: [ktrdr/api/endpoints/training.py](../../ktrdr/api/endpoints/training.py)
-
-**Minor Update Needed**:
-```python
-@router.post("/trainings/start")
-async def start_training(
-    request: TrainingStartRequest,
-    background_tasks: BackgroundTasks,
-    training_service: TrainingService = Depends(get_training_service),
-    operations_service: OperationsService = Depends(get_operations_service)
+async def load_data_operation(
+    self,
+    symbol: str,
+    timeframe: str,
+    mode: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Start training - returns operation_id"""
+    """Trigger data loading (MUST return operation_id)"""
+    payload = {"symbol": symbol, "timeframe": timeframe, "mode": mode}
+    if start_date:
+        payload["start_date"] = start_date
+    if end_date:
+        payload["end_date"] = end_date
 
-    # CHANGE: Ensure operation_id is returned in response
-    result = await training_service.start_training(...)
+    response = await self._request("POST", "/api/v1/data/load", json=payload)
 
-    return {
-        "success": True,
-        "operation_id": result["operation_id"],  # ← Ensure this is present
-        "session_id": result.get("session_id"),
-        "message": "Training started"
-    }
+    # CRITICAL: Must have operation_id
+    return self._extract_or_raise(response, operation="data loading")
 ```
 
-**Change Required**: ~5 lines - ensure `operation_id` is in response body
+#### TrainingAPIClient Pattern
 
-##### Operations Endpoints
-**File**: [ktrdr/api/endpoints/operations.py](../../ktrdr/api/endpoints/operations.py)
+**File**: [mcp/src/clients/training_client.py](../../mcp/src/clients/training_client.py)
 
-**Existing** (No Changes):
 ```python
-@router.get("/operations")
-async def list_operations(...) -> OperationListResponse:
-    """List operations with filters - already exists ✅"""
+async def list_trained_models(self) -> list[dict[str, Any]]:
+    """List trained models"""
+    response = await self._request("GET", "/api/v1/models")
+    # Backend returns {models: [...]} instead of {data: [...]}
+    return self._extract_list(response, field="models")  # Simple
 
-@router.get("/operations/{operation_id}")
-async def get_operation(...) -> OperationStatusResponse:
-    """Get operation status - already exists ✅"""
+async def start_neural_training(...) -> dict[str, Any]:
+    """Start training (MUST return operation_id)"""
+    payload = {...}
+    response = await self._request("POST", "/api/v1/trainings/start", json=payload)
 
-@router.post("/operations/{operation_id}/cancel")
-async def cancel_operation(...) -> OperationCancelResponse:
-    """Cancel operation - already exists ✅"""
+    # CRITICAL: Must succeed
+    return self._extract_or_raise(response, operation="training start")
 ```
 
-**New Endpoint** (Phase 1):
+#### OperationsAPIClient Pattern
+
+**File**: [mcp/src/clients/operations_client.py](../../mcp/src/clients/operations_client.py)
+
 ```python
-@router.get("/operations/{operation_id}/results")
-async def get_operation_results(
-    operation_id: str,
-    operations_service: OperationsService = Depends(get_operations_service)
-) -> dict[str, Any]:
-    """Get operation results from result_summary"""
-
-    operation = await operations_service.get_operation(operation_id)
-
-    if not operation:
-        raise HTTPException(status_code=404, detail="Operation not found")
-
-    if operation.status not in [OperationStatus.COMPLETED, OperationStatus.FAILED]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Operation not finished (status: {operation.status})"
-        )
-
-    return {
-        "success": True,
-        "operation_id": operation_id,
-        "operation_type": operation.operation_type.value,
-        "status": operation.status.value,
-        "results": operation.result_summary or {}
-    }
-```
-
-**Change Required**: ~20 lines - new endpoint
-
-#### 3.2 API Endpoint Default Parameters
-
-**File**: [ktrdr/api/endpoints/operations.py](../../ktrdr/api/endpoints/operations.py)
-
-**Minor Update**:
-```python
-@router.get("/operations")
-async def list_operations(
-    operation_type: Optional[OperationType] = None,
-    status: Optional[OperationStatus] = None,
-    active_only: bool = False,
-    limit: int = Query(10, ge=1, le=100),  # ← Change default from 100 to 10
-    offset: int = Query(0, ge=0),
-    operations_service: OperationsService = Depends(get_operations_service)
-) -> OperationListResponse:
+async def list_operations(...) -> dict[str, Any]:
     """List operations"""
-    # ... existing implementation
-```
+    params = {...}
+    response = await self._request("GET", "/api/v1/operations", params=params)
+    # Return full response (includes data, total_count, active_count)
+    return response
 
-**Change Required**: 1 line - change default limit
+async def get_operation_status(self, operation_id: str) -> dict[str, Any]:
+    """Get operation status"""
+    response = await self._request("GET", f"/api/v1/operations/{operation_id}")
+    return self._extract_dict(response)  # Simple extraction
+```
 
 ---
 
-### 4. Operations Service Layer
+### 3. MCP Tool Docstring Standards
 
-**Location**: [ktrdr/api/services/operations_service.py](../../ktrdr/api/services/operations_service.py)
+**The Primary Interface**: LLMs interact with tools through docstrings, not code.
 
-**Status**: ✅ Already Exists - No Changes Needed
+**Current Issue**: Docstrings vary in quality and completeness
+- Some lack parameter format examples
+- Return structures not fully documented
+- Error scenarios not explained
+- No references to related tools
 
-**Current Capabilities**:
+**Proposed Standard** (Google Style with enhancements):
+
 ```python
-class OperationsService:
-    # In-memory registry
-    _operations: dict[str, OperationInfo] = {}
-    _operation_tasks: dict[str, asyncio.Task] = {}
-    _cancellation_coordinator: CancellationCoordinator
+@mcp.tool()
+async def list_operations(
+    operation_type: Optional[str] = None,
+    status: Optional[str] = None,
+    active_only: bool = False,
+    limit: int = 10,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """
+    List operations with optional filters.
 
-    # Already implemented methods ✅
-    async def create_operation(...) -> OperationInfo
-    async def start_operation(...) -> None
-    async def update_progress(...) -> None
-    async def complete_operation(...) -> None
-    async def fail_operation(...) -> None
-    async def cancel_operation(...) -> dict[str, Any]
-    async def get_operation(...) -> Optional[OperationInfo]
-    async def list_operations(...) -> tuple[list[OperationInfo], int, int]
-    async def retry_operation(...) -> OperationInfo
-    async def cleanup_old_operations(...) -> int
+    Discover operations without prior knowledge. Filter by type, status,
+    or show only active operations. Returns most recent operations first.
+
+    Args:
+        operation_type: Filter by type. Valid values:
+            - "data_load": Data loading operations
+            - "training": Neural network training
+            - "backtesting": Strategy backtesting
+            - None: All types
+        status: Filter by status. Valid values:
+            - "pending": Queued, not started
+            - "running": Currently executing
+            - "completed": Finished successfully
+            - "failed": Finished with errors
+            - "cancelled": Manually cancelled
+            - None: All statuses
+        active_only: Only show pending + running operations
+        limit: Maximum operations to return (default 10, max 100)
+        offset: Number of operations to skip for pagination
+
+    Returns:
+        Dict with structure:
+        {
+            "success": bool,
+            "data": [
+                {
+                    "operation_id": str,
+                    "operation_type": str,
+                    "status": str,
+                    "created_at": str (ISO timestamp),
+                    "progress_percentage": float,
+                    "current_step": str,
+                    "symbol": Optional[str],
+                    "duration_seconds": float
+                },
+                ...
+            ],
+            "total_count": int,     # Total matching operations
+            "active_count": int,    # Currently running operations
+            "returned_count": int   # Number in this response
+        }
+
+    Raises:
+        KTRDRAPIError: If backend communication fails
+
+    Examples:
+        # Get all active operations
+        result = await list_operations(active_only=True)
+        # Returns: {"data": [...], "active_count": 2}
+
+        # Get recent training operations
+        result = await list_operations(
+            operation_type="training",
+            status="completed",
+            limit=5
+        )
+        # Returns last 5 completed training operations
+
+        # Pagination example
+        page1 = await list_operations(limit=10, offset=0)
+        page2 = await list_operations(limit=10, offset=10)
+
+    See Also:
+        - get_operation_status(): Get detailed progress for specific operation
+        - cancel_operation(): Cancel running operation
+        - get_operation_results(): Get results after completion
+
+    Notes:
+        - Operations sorted by created_at DESC (most recent first)
+        - Default limit is 10 to minimize token usage
+        - Use active_only=True to find currently running operations
+        - Pagination uses offset/limit pattern
+    """
+    # Implementation...
 ```
 
-**Key Features Already Present**:
-- ✅ In-memory operation tracking
-- ✅ Progress updates (lock-free for performance)
-- ✅ Cancellation with propagation to host services
-- ✅ Live status updates for training (polls host service)
-- ✅ Pagination with sorting (most recent first)
-- ✅ Filtering by type, status, active_only
-
-**No Changes Required** - This is the core that already works!
-
----
-
-### 5. Service Layer Integration
-
-#### 5.1 Data Service
-**Location**: [ktrdr/api/services/data_service.py](../../ktrdr/api/services/data_service.py)
-
-**Current Flow** (Already Correct ✅):
-```
-API Endpoint → DataService → OperationsService.create_operation()
-                           → DataManager.load_data(...)
-                           → OperationsService.update_progress()
-                           → OperationsService.complete_operation()
-```
-
-**No Changes Needed** - Already integrates with OperationsService
-
-#### 5.2 Training Service
-**Location**: [ktrdr/api/services/training_service.py](../../ktrdr/api/services/training_service.py)
-
-**Current Flow**:
-```
-API Endpoint → TrainingService → OperationsService.create_operation()
-                               → TrainingManager.train_multi_symbol_strategy(...)
-                               → OperationsService.update_progress()
-                               → OperationsService.complete_operation()
-```
-
-**Minor Update Needed**: Ensure `operation_id` is returned in `start_training()` response
-
-**Verification Question for Karl**: Does `TrainingService.start_training()` already integrate with OperationsService? If so, we just need to ensure the API endpoint returns the `operation_id`.
+**Key Sections**:
+1. **One-line summary** - What the tool does
+2. **Extended description** - Context and behavior
+3. **Args** - Parameter formats with valid values and examples
+4. **Returns** - Complete structure with field descriptions
+5. **Raises** - Error scenarios
+6. **Examples** - Working code showing common use cases
+7. **See Also** - Related tools for agent discovery
+8. **Notes** - Important behavioral details
 
 ---
 
 ## Data Flow Diagrams
 
-### Flow 1: Agent Triggers Data Loading
+### Flow 1: LLM Tool Selection
 
 ```mermaid
 sequenceDiagram
-    participant Agent
-    participant MCP as MCP Server
+    participant Agent as AI Agent
+    participant DS as Tool Docstring
+    participant Tool as MCP Tool
+    participant Client as API Client
     participant API as Backend API
-    participant OpS as OperationsService
-    participant DS as DataService
-    participant DM as DataManager
-    participant IB as IB Host Service
 
-    Agent->>MCP: trigger_data_loading("AAPL", "1h", "tail")
-    MCP->>API: POST /api/v1/data/load
-    API->>OpS: create_operation(DATA_LOAD, metadata)
-    OpS-->>API: operation_id
-    API->>DS: load_data_async(operation_id, ...)
-    API-->>MCP: {"operation_id": "op_data_load_..."}
-    MCP-->>Agent: {"operation_id": "op_data_load_..."}
+    Agent->>DS: Read docstring
+    Note over Agent,DS: Comprehensive Args, Returns, Examples
 
-    Note over DS,DM: Background execution
-    DS->>DM: load_data(progress_callback)
-    DM->>IB: fetch_historical_data(...)
-    IB-->>DM: data chunks
-    DM->>OpS: update_progress(operation_id, 45%)
-    IB-->>DM: more data chunks
-    DM->>OpS: update_progress(operation_id, 90%)
-    DM-->>DS: complete
-    DS->>OpS: complete_operation(operation_id, result_summary)
+    Agent->>DS: Check Examples section
+    Note over Agent,DS: Sees working code patterns
 
-    Note over Agent: Later, agent checks status
-    Agent->>MCP: get_operation_status("op_data_load_...")
-    MCP->>API: GET /api/v1/operations/{operation_id}
-    API->>OpS: get_operation(operation_id)
-    OpS-->>API: OperationInfo (status=completed, progress=100%)
-    API-->>MCP: operation details
-    MCP-->>Agent: status + result_summary
+    Agent->>DS: Check See Also section
+    Note over Agent,DS: Discovers related tools
+
+    Agent->>Tool: Call with correct parameters
+    Note over Agent,Tool: Parameters match docstring format
+
+    Tool->>Client: client.operations.list_operations(...)
+    Client->>API: GET /operations?...
+    API-->>Client: ApiResponse envelope
+    Client->>Client: _extract_list(response)
+    Client-->>Tool: Extracted data
+    Tool-->>Agent: Result matching Returns section
 ```
 
-### Flow 2: Agent Lists Operations
+### Flow 2: Response Extraction (Hybrid Pattern)
 
 ```mermaid
 sequenceDiagram
-    participant Agent
-    participant MCP as MCP Server
-    participant API as Backend API
-    participant OpS as OperationsService
+    participant Client as Domain Client
+    participant Base as BaseAPIClient
+    participant Extract as Extractor Methods
 
-    Agent->>MCP: list_operations(type="training", active_only=True)
-    MCP->>API: GET /api/v1/operations?type=training&active_only=true&limit=10
-    API->>OpS: list_operations(type=TRAINING, active_only=True, limit=10)
-    OpS->>OpS: Filter operations, sort by created_at DESC
-    OpS-->>API: (operations_list, total_count=47, active_count=2)
-    API-->>MCP: {"data": [...], "total_count": 47, "active_count": 2}
-    MCP-->>Agent: List of active training operations
+    Note over Client: Common case (list operations)
+    Client->>Base: _request("GET", "/operations")
+    Base-->>Client: {"success": true, "data": [...]}
+    Client->>Extract: _extract_list(response)
+    Extract-->>Client: [...]
+    Note over Extract: Empty list if missing - acceptable
 
-    Note over Agent: Agent sees 2 active training operations
-    Agent->>MCP: get_operation_status("op_training_...")
-    MCP->>API: GET /api/v1/operations/{operation_id}
-    API->>OpS: get_operation(operation_id)
+    Note over Client: Critical case (start training)
+    Client->>Base: _request("POST", "/trainings/start")
+    Base-->>Client: {"success": true, "operation_id": "..."}
+    Client->>Extract: _extract_or_raise(response, "operation_id", "training start")
 
-    Note over OpS: For training, poll host service for live status
-    OpS->>OpS: _update_training_operation_from_host_service()
-    OpS-->>API: Updated OperationInfo with live progress
-    API-->>MCP: Live training status (Epoch 32/50)
-    MCP-->>Agent: "Training 65% complete, Epoch 32/50"
-```
-
-### Flow 3: Agent Cancels Operation
-
-```mermaid
-sequenceDiagram
-    participant Agent
-    participant MCP as MCP Server
-    participant API as Backend API
-    participant OpS as OperationsService
-    participant THS as Training Host Service
-
-    Agent->>MCP: cancel_operation("op_training_...", "User changed mind")
-    MCP->>API: POST /api/v1/operations/{operation_id}/cancel
-    API->>OpS: cancel_operation(operation_id, reason)
-    OpS->>OpS: Set cancellation_token
-    OpS->>OpS: Cancel asyncio task
-    OpS->>OpS: Extract session_id from metadata
-    OpS->>THS: stop_training(session_id)
-    THS->>THS: Graceful shutdown, save checkpoint
-    THS-->>OpS: Cancellation acknowledged
-    OpS->>OpS: Mark operation as CANCELLED
-    OpS-->>API: cancellation_result
-    API-->>MCP: {"success": true, "status": "cancelled", ...}
-    MCP-->>Agent: "Operation cancelled successfully"
+    alt Field present
+        Extract-->>Client: "op_training_..."
+    else Field missing
+        Extract->>Extract: raise KTRDRAPIError
+        Extract-->>Client: Exception with details
+    end
 ```
 
 ---
 
 ## Error Handling Architecture
 
-### MCP Layer Error Handling
+### Extraction Method Error Patterns
+
+**Simple Extractors** - Graceful degradation:
+```python
+# Backend returns {data: []}
+items = self._extract_list(response)  # → []
+
+# Backend returns {}
+items = self._extract_list(response)  # → []
+
+# Backend returns {models: [...]}
+items = self._extract_list(response, field="models")  # → [...]
+```
+
+**Power Tool** - Strict validation:
+```python
+# Backend returns {success: false, error: "Not found"}
+self._extract_or_raise(response)
+# → KTRDRAPIError: "Operation failed: Not found"
+
+# Backend returns {success: true} (missing field)
+self._extract_or_raise(response, field="operation_id")
+# → KTRDRAPIError: "Operation response missing 'operation_id' field"
+
+# Backend returns {success: true, operation_id: "..."}
+operation_id = self._extract_or_raise(response, field="operation_id")
+# → "op_training_..."
+```
+
+### MCP Layer Error Responses
+
+All MCP tools follow consistent error pattern:
 
 ```python
 @mcp.tool()
-async def mcp_tool(...) -> dict[str, Any]:
-    """MCP tool with error handling"""
+async def some_tool(...) -> dict[str, Any]:
+    """Tool docstring..."""
     try:
         async with get_api_client() as client:
-            result = await client.backend_method(...)
+            result = await client.domain.method(...)
             return result
-
     except KTRDRAPIError as e:
-        # Backend returned structured error
         logger.error(f"API error: {e.message}", error=str(e))
         return {
             "success": False,
@@ -534,9 +517,7 @@ async def mcp_tool(...) -> dict[str, Any]:
             "status_code": e.status_code,
             "details": e.details
         }
-
     except Exception as e:
-        # Unexpected error
         logger.error(f"Unexpected error: {str(e)}")
         return {
             "success": False,
@@ -544,166 +525,156 @@ async def mcp_tool(...) -> dict[str, Any]:
         }
 ```
 
-### Backend Error Responses
-
-**Operation Not Found**:
-```json
-{
-  "success": false,
-  "error": "Operation not found: op_training_20251004_999999_invalid",
-  "status_code": 404
-}
-```
-
-**Operation Not Complete**:
-```json
-{
-  "success": false,
-  "error": "Operation not finished (status: running)",
-  "operation_status": "running",
-  "progress_percentage": 45.2
-}
-```
-
-**Operation Failed**:
-```json
-{
-  "success": true,
-  "data": {
-    "operation_id": "op_training_...",
-    "status": "failed",
-    "error_message": "Training failed: CUDA out of memory at epoch 6/50",
-    "progress": {"percentage": 12.5, "current_step": "Epoch 6/50 (failed)"}
-  }
-}
-```
-
 ---
 
-## Security Considerations
+## Migration Strategy
 
-### Phase 1 (No Authentication)
-- MCP server runs locally on user's machine
-- Backend API is localhost-only (Docker network)
-- No external access → No authentication needed
+### Phase 1: Add Extraction Methods
 
-### Phase 2 (Future)
-- If exposing backend externally → Add API key authentication
-- If multi-user → Add user-based operation isolation
-- Consider rate limiting for operation creation
+**Scope**: BaseAPIClient only
+**Risk**: None - new methods, no existing code affected
+**Testing**: Unit tests for extraction logic
+
+### Phase 2: Update Domain Clients
+
+**Scope**: DataAPIClient, TrainingAPIClient, OperationsAPIClient, IndicatorsAPIClient, StrategiesAPIClient, SystemAPIClient
+**Risk**: Low - methods still return same types, just using extractors
+**Testing**: Existing unit tests should pass unchanged
+
+**Migration Pattern** (per client):
+1. Identify critical operations (MUST succeed) → use `_extract_or_raise`
+2. Identify common operations (empty acceptable) → use `_extract_list` / `_extract_dict`
+3. Keep full response returns where entire envelope needed
+
+### Phase 3: Enhance All Docstrings
+
+**Scope**: All 12 MCP tools
+**Risk**: None - documentation only
+**Impact**: HIGH - Primary LLM interface improvement
+
+**Standard Sections**:
+1. One-line summary
+2. Extended description
+3. Args with valid values and formats
+4. Returns with complete structure
+5. Raises with error scenarios
+6. Examples with working code
+7. See Also with related tools
+8. Notes with behavioral details
 
 ---
 
 ## Performance Characteristics
 
-### Expected Response Times (Phase 1)
+### Extraction Overhead
 
-| Operation | Expected Time | Notes |
-|-----------|---------------|-------|
-| `trigger_data_loading()` | <1s | Returns operation_id immediately |
-| `start_training()` | <2s | Returns operation_id immediately |
-| `list_operations()` | <500ms | In-memory lookup, up to 1000 ops |
-| `get_operation_status()` | <500ms | In-memory + optional host service poll |
-| `cancel_operation()` | <1s | Includes host service cancellation |
-| `get_operation_results()` | <200ms | In-memory result_summary |
+| Method | Overhead | Use Case |
+|--------|----------|----------|
+| `_extract_list()` | ~1μs | List operations, get symbols, list models |
+| `_extract_dict()` | ~1μs | Get operation status, get data info |
+| `_extract_or_raise()` | ~2μs | Start training, load data operation |
 
-### Scalability Limits (Phase 1)
+**Negligible Impact**: Extraction adds <2μs per API call (API calls are ~50-500ms)
 
-| Metric | Limit | Notes |
-|--------|-------|-------|
-| Concurrent operations | 100+ | Limited by backend resources |
-| Total tracked operations | 10,000+ | In-memory dict, ~100MB RAM |
-| Concurrent agents | 10+ | HTTP connection pooling |
-| Operations per agent per hour | 100+ | No rate limiting |
+### Docstring Impact on LLM Performance
 
-### Phase 2 Improvements
-- PostgreSQL persistence → Unlimited operation history
-- Configurable retention policies
-- Better query performance for large datasets
+**Token Reduction** (better structured prompts):
+- Before: Agent makes 2-3 attempts due to unclear parameter formats (~1500 tokens wasted)
+- After: Agent gets it right first time (~1500 tokens saved per interaction)
+
+**Improved Discovery**:
+- Before: Agent doesn't know `get_operation_status` exists after `start_training`
+- After: "See Also" section guides agent to next logical tool
 
 ---
 
-## Architecture Findings (Research Complete ✅)
+## Architecture Decisions
 
-### Finding 1: Training Service Already Integrated ✅
-**Status**: `TrainingService` ALREADY integrates with `OperationsService` via `ServiceOrchestrator.start_managed_operation()`
+### Decision 1: Why Hybrid Approach?
 
-**How it works**:
-1. `TrainingService.start_training()` calls `self.start_managed_operation()` ([training_service.py:103](../../ktrdr/api/services/training_service.py#L103))
-2. `start_managed_operation()` creates operation via `OperationsService.create_operation()` ([service_orchestrator.py:996](../../ktrdr/async_infrastructure/service_orchestrator.py#L996))
-3. Returns `{"operation_id": "...", "status": "started", "message": "..."}`
-4. `start_training()` receives this and adds `task_id` field (same as operation_id)
+**Alternatives Considered**:
+1. Always unwrap to `data` field
+2. Always return full response
+3. Custom response classes
+4. Hybrid (selected)
 
-**Current Response** ([training_service.py:123-133](../../ktrdr/api/services/training_service.py#L123-L133)):
+**Why Hybrid**:
+- ✅ Backward compatible (existing code unchanged)
+- ✅ Flexibility for different patterns
+- ✅ Type-safe extraction for critical operations
+- ✅ Simple extraction for common cases
+- ✅ No breaking changes required
+
+### Decision 2: Why Not Custom Response Classes?
+
+**Considered**:
 ```python
-return {
-    "success": True,
-    "task_id": operation_id,  # ← Already has operation_id, just named task_id
-    "status": "training_started",
-    "message": message,
-    # ... other fields
-}
+class OperationListResponse(BaseModel):
+    data: list[OperationInfo]
+    total_count: int
+    active_count: int
 ```
 
-**What We Need**: Add `"operation_id": operation_id` to response (keep `task_id` for backward compat)
+**Why Not**:
+- ❌ Breaking change (returns Pydantic model instead of dict)
+- ❌ Complex migration (all callers need updates)
+- ❌ Overkill for stateless MCP layer
+- ❌ Doesn't improve LLM interface (docstrings do)
 
-**Change Required**: 1 line - add to return dict
+### Decision 3: Why Focus on Docstrings?
 
-### Finding 2: Result Summary Structure ✅
-**Current Structure** (already correct, no changes needed):
+**Key Insight**: LLMs interact with tools through **signatures and docstrings**, not implementation.
 
-**Data Loading** - Populated in DataService:
-- `bars_loaded`, `date_range`, `gaps_filled`, `data_source`, `storage_location`
+**Impact Comparison**:
+- Response handling standardization: 90% internal, 10% LLM-facing
+- Docstring quality: 100% LLM-facing, direct impact on agent behavior
 
-**Training** - Populated in TrainingService:
-- `training_metrics`, `validation_metrics`, `artifacts` (model_path, analytics_directory)
-
-**Verdict**: Structure is already correct ✅
-
-### Finding 3: Progress Context Structure ✅
-**Current Implementation** (from ProgressRenderer classes):
-
-Each service has its own ProgressRenderer that defines domain-specific context:
-- **Training**: `epoch_index`, `total_epochs`, `batch_number`, `batch_total`, `epoch_metrics`, `gpu_usage` (optional)
-- **Data Loading**: `symbol`, `timeframe`, `mode`, `segment_index`, `total_segments`
-
-**Verdict**: Already standardized per domain ✅ Progress context is defined by each ProgressRenderer implementation.
+**Therefore**: Massive docstring improvements are the highest ROI change.
 
 ---
 
 ## Implementation Checklist
 
-### MCP Server Changes
-- [ ] Add `trigger_data_loading()` tool (rename existing `load_data_from_source()`)
-- [ ] Update `start_training()` tool (ensure returns operation_id)
-- [ ] Add `list_operations()` tool (new)
-- [ ] Add `get_operation_status()` tool (new)
-- [ ] Add `cancel_operation()` tool (new)
-- [ ] Add `get_operation_results()` tool (new)
+### BaseAPIClient Changes
+- [ ] Add `_extract_list()` method
+- [ ] Add `_extract_dict()` method
+- [ ] Add `_extract_or_raise()` method
+- [ ] Unit tests for all extractors
+- [ ] Test error scenarios
 
-### API Client Changes
-- [ ] Add `list_operations()` method
-- [ ] Add `get_operation_status()` method
-- [ ] Add `cancel_operation()` method
-- [ ] Add `get_operation_results()` method
+### Domain Client Updates
+- [ ] DataAPIClient: Apply hybrid pattern
+- [ ] TrainingAPIClient: Apply hybrid pattern
+- [ ] OperationsAPIClient: Apply hybrid pattern
+- [ ] IndicatorsAPIClient: Apply hybrid pattern
+- [ ] StrategiesAPIClient: Apply hybrid pattern
+- [ ] SystemAPIClient: Apply hybrid pattern
 
-### Backend API Changes
-- [ ] Verify training endpoint returns `operation_id`
-- [ ] Add `/operations/{operation_id}/results` endpoint
-- [ ] Change default `limit=10` in operations list endpoint
-
-### Backend Service Changes
-- [ ] Verify `TrainingService` integrates with `OperationsService`
-- [ ] Ensure `result_summary` is populated correctly for all operation types
+### MCP Tool Docstring Enhancements
+- [ ] list_operations: Full standard docstring
+- [ ] get_operation_status: Full standard docstring
+- [ ] cancel_operation: Full standard docstring
+- [ ] get_operation_results: Full standard docstring
+- [ ] trigger_data_loading: Full standard docstring
+- [ ] start_training: Full standard docstring
+- [ ] get_market_data: Full standard docstring
+- [ ] get_symbols: Full standard docstring
+- [ ] get_indicators: Full standard docstring
+- [ ] get_strategies: Full standard docstring
+- [ ] list_trained_models: Full standard docstring
+- [ ] health_check: Full standard docstring
 
 ### Testing
-- [ ] Test all MCP tools with agent
-- [ ] Test pagination (limit, offset)
-- [ ] Test filtering (type, status, active_only)
-- [ ] Test cancellation propagation
-- [ ] Test error scenarios (not found, not complete, etc.)
-- [ ] Test backward compatibility (existing tools still work)
+- [ ] All unit tests pass
+- [ ] New extraction method tests pass
+- [ ] Code coverage >80%
+- [ ] All quality checks pass (make quality)
+
+### Documentation
+- [ ] Update MCP_TOOLS.md with new docstring standards
+- [ ] Update README with response handling pattern
+- [ ] Add migration guide for future client additions
 
 ---
 
-**Next Steps**: Address open questions, then move to implementation plan.
+**Next**: See [Implementation Plan](./IMPLEMENTATION.md) for detailed task breakdown and TDD workflow.
