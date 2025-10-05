@@ -11,8 +11,10 @@ import structlog
 
 from .clients import (
     DataAPIClient,
+    IndicatorsAPIClient,
     KTRDRAPIError,
     OperationsAPIClient,
+    StrategiesAPIClient,
     SystemAPIClient,
     TrainingAPIClient,
 )
@@ -46,6 +48,8 @@ class KTRDRAPIClient:
         self.training = TrainingAPIClient(base_url, timeout)
         self.operations = OperationsAPIClient(base_url, timeout)
         self.system = SystemAPIClient(base_url, timeout)
+        self.indicators = IndicatorsAPIClient(base_url, timeout)
+        self.strategies = StrategiesAPIClient(base_url, timeout)
 
         logger.info("Unified API client initialized", base_url=self.base_url)
 
@@ -55,6 +59,8 @@ class KTRDRAPIClient:
         await self.training.__aenter__()
         await self.operations.__aenter__()
         await self.system.__aenter__()
+        await self.indicators.__aenter__()
+        await self.strategies.__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -63,6 +69,8 @@ class KTRDRAPIClient:
         await self.training.__aexit__(exc_type, exc_val, exc_tb)
         await self.operations.__aexit__(exc_type, exc_val, exc_tb)
         await self.system.__aexit__(exc_type, exc_val, exc_tb)
+        await self.indicators.__aexit__(exc_type, exc_val, exc_tb)
+        await self.strategies.__aexit__(exc_type, exc_val, exc_tb)
 
     # ====================
     # Operations Methods (backward compatibility)
@@ -101,6 +109,26 @@ class KTRDRAPIClient:
     async def get_data_info(self, symbol: str) -> dict[str, Any]:
         """Delegate to data client (backward compat)"""
         return await self.data.get_data_info(symbol)
+
+    async def get_symbols(self) -> list[dict[str, Any]]:
+        """Delegate to data client (backward compat)"""
+        return await self.data.get_symbols()
+
+    # ====================
+    # Indicators Methods (backward compatibility)
+    # ====================
+
+    async def get_indicators(self) -> list[dict[str, Any]]:
+        """Delegate to indicators client (backward compat)"""
+        return await self.indicators.list_indicators()
+
+    # ====================
+    # Strategies Methods (backward compatibility)
+    # ====================
+
+    async def get_strategies(self) -> dict[str, Any]:
+        """Delegate to strategies client (backward compat)"""
+        return await self.strategies.list_strategies()
 
     # ====================
     # Training Methods (backward compatibility)
