@@ -1,0 +1,44 @@
+name: MCP Signature Validation
+
+on:
+  pull_request:
+    paths:
+      - 'mcp/src/server.py'
+      - 'mcp/src/clients/**'
+      - 'ktrdr/api/**'
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Start backend
+        run: |
+          ./start_ktrdr.sh &
+          sleep 30
+
+      - name: Validate MCP signatures
+        run: |
+          uv run python scripts/validate_mcp_signatures.py --strict
+
+      - name: Upload validation report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-validation-report
+          path: validation-report.txt
