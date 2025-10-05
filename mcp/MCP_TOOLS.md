@@ -163,24 +163,6 @@ operation_id = result["data"]["operation_id"]
 status = await get_operation_status(operation_id)
 ```
 
-### `load_data_from_source`
-
-Load data from a specific source (IB Gateway or local cache).
-
-**Parameters:**
-- `symbol` (required): Trading symbol
-- `timeframe` (default: "1h"): Data timeframe
-- `source` (default: "ib"): Data source ("ib" or "local")
-- `start_date` (optional): Start date
-- `end_date` (optional): End date
-
-**Returns:** Data loading results
-
-**Example:**
-```python
-data = await load_data_from_source("EURUSD", source="ib", timeframe="1h")
-```
-
 ### `get_data_summary`
 
 Get summary statistics about available data for a symbol.

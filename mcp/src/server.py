@@ -117,41 +117,6 @@ async def get_market_data(
 
 
 @mcp.tool()
-async def load_data_from_source(
-    symbol: str,
-    timeframe: str = "1h",
-    mode: str = "tail",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-) -> dict[str, Any]:
-    """Instruct backend to load data from external sources (e.g., Interactive Brokers)
-
-    Args:
-        symbol: Trading symbol (e.g., 'AAPL', 'TSLA')
-        timeframe: Data timeframe ('1m', '5m', '1h', '1d')
-        mode: Loading mode ('local', 'tail', 'backfill', 'full')
-              - 'local': cached data only
-              - 'tail': recent data gaps
-              - 'backfill': historical data
-              - 'full': both historical and recent
-        start_date: Start date override (YYYY-MM-DD format, optional)
-        end_date: End date override (YYYY-MM-DD format, optional)
-
-    Returns operational metrics about what was loaded.
-    """
-    try:
-        async with get_api_client() as client:
-            result = await client.load_data_operation(
-                symbol, timeframe, mode, start_date, end_date
-            )
-            logger.info("Data loading operation completed", symbol=symbol, mode=mode)
-            return result
-    except Exception as e:
-        logger.error("Failed to load data from source", symbol=symbol, error=str(e))
-        raise
-
-
-@mcp.tool()
 async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]:
     """Get summary information about available data for a symbol
 
@@ -425,10 +390,10 @@ async def trigger_data_loading(
     end_date: Optional[str] = None,
     mode: str = "local",
 ) -> dict[str, Any]:
-    """Start async data loading operation
+    """Load market data from external sources (IB Gateway) or local cache
 
-    Trigger a background data loading job. Returns immediately with operation_id
-    for tracking progress. Use get_operation_status() to monitor progress.
+    Triggers data loading in the background. Returns immediately with operation_id
+    for tracking progress. Use get_operation_status() to monitor the data load.
 
     Args:
         symbol: Trading symbol (e.g., "AAPL", "EURUSD")
@@ -438,7 +403,7 @@ async def trigger_data_loading(
         mode: Loading mode (local, ib, hybrid)
 
     Returns:
-        dict with operation_id for tracking the async operation
+        dict with operation_id for tracking the data loading operation
     """
     try:
         async with get_api_client() as client:
@@ -468,20 +433,21 @@ async def start_training(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Start async neural network training operation
+    """Train a neural network model on market data
 
-    Trigger a background training job. Returns immediately with operation_id
-    for tracking progress. Use get_operation_status() to monitor training.
+    Trains a neural network to predict trading signals using historical market data.
+    Training runs in the background. Returns immediately with operation_id for
+    tracking progress. Use get_operation_status() to monitor training progress.
 
     Args:
         symbols: List of trading symbols to train on (e.g., ["AAPL", "MSFT"])
         timeframe: Data timeframe (1h, 4h, 1d)
-        config: Optional training configuration dict
+        config: Optional training configuration dict (epochs, batch_size, learning_rate)
         start_date: Training data start date (YYYY-MM-DD, optional)
         end_date: Training data end date (YYYY-MM-DD, optional)
 
     Returns:
-        dict with operation_id for tracking the async training operation
+        dict with operation_id for tracking the training operation
     """
     try:
         async with get_api_client() as client:
