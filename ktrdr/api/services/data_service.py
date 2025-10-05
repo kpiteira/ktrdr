@@ -39,7 +39,6 @@ class DataService(BaseService):
         self.data_manager = DataManager(data_dir=data_dir)
         self.logger.info("DataService initialized")
 
-
     @log_entry_exit(logger=logger, log_args=True)
     @log_performance(threshold_ms=200, logger=logger)
     def load_cached_data(

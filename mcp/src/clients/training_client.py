@@ -34,9 +34,7 @@ class TrainingAPIClient(BaseAPIClient):
 
     async def get_model_performance(self, task_id: str) -> dict[str, Any]:
         """Get trained model performance metrics"""
-        return await self._request(
-            "GET", f"/trainings/{task_id}/performance"
-        )
+        return await self._request("GET", f"/trainings/{task_id}/performance")
 
     async def list_trained_models(self) -> list[dict[str, Any]]:
         """List all trained models"""

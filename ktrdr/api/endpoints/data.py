@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ktrdr import get_logger
 from ktrdr.api.dependencies import get_data_service
-from ktrdr.api.models.base import ApiResponse, ErrorResponse
+from ktrdr.api.models.base import ApiResponse
 from ktrdr.api.models.data import (
     DataLoadApiResponse,
     DataLoadOperationResponse,

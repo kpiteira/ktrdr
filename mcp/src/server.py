@@ -1,6 +1,5 @@
 """KTRDR MCP Server - Main entry point"""
 
-import json
 from typing import Any, Optional
 
 import structlog
@@ -151,8 +150,6 @@ async def get_data_summary(symbol: str, timeframe: str = "1h") -> dict[str, Any]
         raise
 
 
-
-
 @mcp.tool()
 async def get_available_indicators() -> list[dict[str, Any]]:
     """Get list of available indicators that can be used in strategies
@@ -206,7 +203,9 @@ async def get_training_status(task_id: str) -> dict[str, Any]:
         async with get_api_client() as client:
             status = await client.get_training_status(task_id)
 
-        logger.info("Training status retrieved", task_id=task_id, status=status.get("status"))
+        logger.info(
+            "Training status retrieved", task_id=task_id, status=status.get("status")
+        )
         return status
 
     except Exception as e:
@@ -350,9 +349,7 @@ async def cancel_operation(
     try:
         async with get_api_client() as client:
             result = await client.operations.cancel_operation(operation_id, reason)
-            logger.info(
-                "Cancelled operation", operation_id=operation_id, reason=reason
-            )
+            logger.info("Cancelled operation", operation_id=operation_id, reason=reason)
             return result
     except Exception as e:
         logger.error("Failed to cancel operation", error=str(e))

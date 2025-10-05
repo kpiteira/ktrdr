@@ -130,7 +130,9 @@ def test_app():
     # Session-related mocks
     test_session_id = "12345678-1234-5678-9012-123456789012"
     mock_db.create_session.return_value = test_session_id
-    mock_db.execute_query.return_value = []  # Default empty list for checking existing sessions
+    mock_db.execute_query.return_value = (
+        []
+    )  # Default empty list for checking existing sessions
 
     # Store session data for dynamic responses
     created_sessions = {}

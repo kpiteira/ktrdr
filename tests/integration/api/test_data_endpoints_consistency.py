@@ -262,7 +262,6 @@ class TestAPIEndpointConsistency:
         assert response_data["status"] == "started"
 
 
-
 class TestAPIEndpointTransformationRequirements:
     """Test specific Phase 3 transformation requirements."""
 

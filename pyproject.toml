@@ -43,6 +43,7 @@ dependencies = [
     "starlette>=0.47.2",
     "urllib3>=2.5.0",
     "python-multipart>=0.0.18",
+    "structlog>=23.0.0",
 ]
 
 [project.optional-dependencies]

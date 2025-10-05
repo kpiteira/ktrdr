@@ -42,6 +42,4 @@ class OperationsAPIClient(BaseAPIClient):
 
     async def get_operation_results(self, operation_id: str) -> dict[str, Any]:
         """Get operation results (summary)"""
-        return await self._request(
-            "GET", f"/operations/{operation_id}/results"
-        )
+        return await self._request("GET", f"/operations/{operation_id}/results")

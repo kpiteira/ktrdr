@@ -46,9 +46,7 @@ class BaseAPIClient:
         if self.client:
             await self.client.aclose()
 
-    async def _request(
-        self, method: str, endpoint: str, **kwargs
-    ) -> dict[str, Any]:
+    async def _request(self, method: str, endpoint: str, **kwargs) -> dict[str, Any]:
         """Make HTTP request with error handling"""
         if not self.client:
             raise KTRDRAPIError(
@@ -67,9 +65,7 @@ class BaseAPIClient:
                 "API response",
                 status=response.status_code,
                 data_keys=(
-                    list(data.keys())
-                    if isinstance(data, dict)
-                    else type(data).__name__
+                    list(data.keys()) if isinstance(data, dict) else type(data).__name__
                 ),
             )
             return data
