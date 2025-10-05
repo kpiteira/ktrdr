@@ -279,19 +279,70 @@ async def list_operations(
     active_only: bool = False,
     limit: int = 10,
 ) -> dict[str, Any]:
-    """List all operations with optional filtering
+    """
+    List operations with optional filters.
 
-    Get a list of data loading, training, or other async operations.
-    Filter by status (running, completed, failed) or type (data_load, training).
+    Discover operations without prior knowledge. Filter by type, status,
+    or show only active operations. Returns most recent operations first.
 
     Args:
-        operation_type: Filter by type (data_load, training, backtest)
-        status: Filter by status (running, completed, failed, cancelled, pending)
-        active_only: Show only active operations (running/pending)
-        limit: Maximum number of operations to return (default 10, max 100)
+        operation_type: Filter by type. Valid values:
+            - "data_load": Data loading operations
+            - "training": Neural network training
+            - "backtesting": Strategy backtesting
+            - None: All types
+        status: Filter by status. Valid values:
+            - "pending": Queued, not started
+            - "running": Currently executing
+            - "completed": Finished successfully
+            - "failed": Finished with errors
+            - "cancelled": Manually cancelled
+            - None: All statuses
+        active_only: Only show pending + running operations
+        limit: Maximum operations to return (default 10, max 100)
 
     Returns:
-        dict with operation list and counts
+        Dict with structure:
+        {
+            "success": bool,
+            "data": [
+                {
+                    "operation_id": str,
+                    "operation_type": str,
+                    "status": str,
+                    "created_at": str,  # ISO timestamp
+                    "progress_percentage": float,
+                    "current_step": str,
+                    "symbol": Optional[str],
+                    "duration_seconds": float
+                },
+                ...
+            ],
+            "total_count": int,      # Total matching operations
+            "active_count": int,     # Currently running operations
+            "returned_count": int    # Number in this response
+        }
+
+    Examples:
+        # Get all active operations
+        result = await list_operations(active_only=True)
+
+        # Get recent training operations
+        result = await list_operations(
+            operation_type="training",
+            status="completed",
+            limit=5
+        )
+
+    See Also:
+        - get_operation_status(): Get detailed progress for specific operation
+        - cancel_operation(): Cancel running operation
+        - get_operation_results(): Get results after completion
+
+    Notes:
+        - Operations sorted by created_at DESC (most recent first)
+        - Default limit is 10 to minimize token usage
+        - Use active_only=True to find currently running operations
     """
     try:
         async with get_api_client() as client:
