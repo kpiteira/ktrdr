@@ -148,6 +148,17 @@ class OpenAPIFetcher:
 
 
 @dataclass
+class ValidationError:
+    """Validation error details"""
+
+    tool: str
+    error_type: str  # missing_required, type_mismatch, etc.
+    message: str
+    details: dict[str, Any] = field(default_factory=dict)
+    severity: str = "CRITICAL"  # CRITICAL, HIGH, MEDIUM, LOW
+
+
+@dataclass
 class ParameterInfo:
     """Information about a function parameter"""
 
@@ -305,6 +316,208 @@ class MCPToolParser:
             return ast.unparse(default_node)
 
 
+class SignatureComparator:
+    """Compare MCP tool signatures against OpenAPI spec"""
+
+    def __init__(self, openapi_fetcher: OpenAPIFetcher, config: ValidationConfig):
+        self.fetcher = openapi_fetcher
+        self.config = config
+
+    def compare_all(self, tools: dict[str, ToolSignature]) -> list[ValidationError]:
+        """Compare all tools against their endpoints"""
+        all_errors = []
+
+        for tool_name, tool_sig in tools.items():
+            if tool_name not in self.config.tools:
+                # Tool not in mapping - skip (might be helper tool)
+                continue
+
+            tool_config = self.config.tools[tool_name]
+            endpoint = tool_config["endpoint"]
+            method = tool_config["method"]
+
+            # Get schema from OpenAPI
+            schema = self.fetcher.get_request_schema(endpoint, method)
+            if not schema:
+                # GET requests have no body - that's OK
+                if method.upper() == "GET":
+                    continue
+                all_errors.append(
+                    ValidationError(
+                        tool=tool_name,
+                        error_type="no_schema",
+                        message=f"No schema found for {method} {endpoint}",
+                        severity="MEDIUM",
+                    )
+                )
+                continue
+
+            # Compare parameters
+            errors = self._compare_parameters(tool_sig, schema, tool_config)
+            all_errors.extend(errors)
+
+        return all_errors
+
+    def _compare_parameters(
+        self,
+        tool_sig: ToolSignature,
+        schema: dict[str, Any],
+        tool_config: dict[str, Any],
+    ) -> list[ValidationError]:
+        """Compare tool parameters against schema properties"""
+        errors = []
+
+        # Get required fields from schema
+        required_fields = set(schema.get("required", []))
+        tool_params = set(tool_sig.parameters.keys())
+        tool_required = {
+            name
+            for name, param in tool_sig.parameters.items()
+            if param.required
+        }
+
+        # Check for missing required parameters
+        missing = required_fields - tool_params
+        if missing:
+            errors.append(
+                ValidationError(
+                    tool=tool_sig.name,
+                    error_type="missing_required",
+                    message=f"Missing required parameters: {', '.join(missing)}",
+                    details={
+                        "schema_requires": list(required_fields),
+                        "tool_has": list(tool_required),
+                        "missing": list(missing),
+                    },
+                    severity="CRITICAL",
+                )
+            )
+
+        # Check for type mismatches
+        for param_name, param_info in tool_sig.parameters.items():
+            if param_name not in schema.get("properties", {}):
+                continue  # Extra params OK if optional
+
+            schema_prop = schema["properties"][param_name]
+            schema_type = self._openapi_to_python_type(schema_prop)
+
+            if param_info.type != schema_type:
+                errors.append(
+                    ValidationError(
+                        tool=tool_sig.name,
+                        error_type="type_mismatch",
+                        message=f"Parameter '{param_name}' type mismatch",
+                        details={
+                            "parameter": param_name,
+                            "schema_expects": schema_type,
+                            "tool_has": param_info.type,
+                        },
+                        severity="CRITICAL"
+                        if tool_config.get("critical", False)
+                        else "HIGH",
+                    )
+                )
+
+        return errors
+
+    def _openapi_to_python_type(self, schema: dict) -> str:
+        """Convert OpenAPI type to Python type annotation"""
+        if "type" not in schema:
+            return "Any"
+
+        openapi_type = schema["type"]
+
+        if openapi_type == "array":
+            if "items" in schema:
+                item_type = self._openapi_to_python_type(schema["items"])
+                return f"list[{item_type}]"
+            return "list[Any]"
+        elif openapi_type == "object":
+            return "dict[str, Any]"
+        else:
+            type_map = {
+                "string": "str",
+                "integer": "int",
+                "number": "float",
+                "boolean": "bool",
+            }
+            return type_map.get(openapi_type, "Any")
+
+
+class ReportGenerator:
+    """Generate human-readable validation reports"""
+
+    def generate_report(
+        self, errors: list[ValidationError], total_tools: int
+    ) -> tuple[str, int]:
+        """
+        Generate colored terminal report.
+
+        Returns:
+            (report_string, exit_code)
+        """
+        if not errors:
+            return self._success_report(total_tools), 0
+
+        return self._error_report(errors, total_tools), 1
+
+    def _success_report(self, total_tools: int) -> str:
+        """Generate success report"""
+        lines = [
+            "=" * 70,
+            "MCP TOOL SIGNATURE VALIDATION PASSED",
+            "=" * 70,
+            "",
+            f"✅ All {total_tools} MCP tools match backend API contracts",
+            "",
+            "=" * 70,
+        ]
+        return "\n".join(lines)
+
+    def _error_report(self, errors: list[ValidationError], total_tools: int) -> str:
+        """Generate error report"""
+        lines = [
+            "=" * 70,
+            "MCP TOOL SIGNATURE VALIDATION FAILED",
+            "=" * 70,
+            "",
+        ]
+
+        # Group errors by tool
+        errors_by_tool: dict[str, list[ValidationError]] = {}
+        for error in errors:
+            if error.tool not in errors_by_tool:
+                errors_by_tool[error.tool] = []
+            errors_by_tool[error.tool].append(error)
+
+        # Report each tool's errors
+        for tool_name, tool_errors in errors_by_tool.items():
+            lines.append(f"❌ {tool_name}")
+            for error in tool_errors:
+                lines.append(f"   ERROR: {error.message}")
+                if error.details:
+                    for key, value in error.details.items():
+                        lines.append(f"     {key}: {value}")
+            lines.append("")
+
+        # Summary
+        invalid_tools = len(errors_by_tool)
+        valid_tools = total_tools - invalid_tools
+        lines.extend(
+            [
+                "SUMMARY:",
+                f"  Total tools validated: {total_tools}",
+                f"  ✅ Valid tools:         {valid_tools}",
+                f"  ❌ Invalid tools:       {invalid_tools}",
+                "",
+                "VALIDATION FAILED - Fix errors above before committing.",
+                "=" * 70,
+            ]
+        )
+
+        return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     """
     Main entry point for validation script.
@@ -338,17 +551,44 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    # Load configuration
+    # 1. Load configuration
     try:
         config = ValidationConfig.from_file(args.config)
     except Exception as e:
         print(f"❌ Failed to load config: {e}", file=sys.stderr)
         return 1
 
-    print(f"✅ Loaded config for {len(config.tools)} tools")
+    # 2. Fetch OpenAPI spec
+    try:
+        fetcher = OpenAPIFetcher(args.backend_url)
+        fetcher.fetch()
+    except ConnectionError as e:
+        print(f"❌ {e}", file=sys.stderr)
+        print("Ensure backend is running at", args.backend_url, file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"❌ Failed to fetch OpenAPI spec: {e}", file=sys.stderr)
+        return 1
 
-    # TODO: Implement validation logic
-    return 0
+    # 3. Parse MCP tools
+    try:
+        parser_obj = MCPToolParser()
+        tools = parser_obj.parse_tools(args.server)
+    except Exception as e:
+        print(f"❌ Failed to parse MCP tools: {e}", file=sys.stderr)
+        return 1
+
+    # 4. Compare signatures
+    comparator = SignatureComparator(fetcher, config)
+    errors = comparator.compare_all(tools)
+
+    # 5. Generate report
+    reporter = ReportGenerator()
+    report, exit_code = reporter.generate_report(errors, len(tools))
+
+    print(report)
+
+    return exit_code
 
 
 if __name__ == "__main__":
