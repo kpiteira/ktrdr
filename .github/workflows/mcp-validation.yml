@@ -1,0 +1,52 @@
+name: MCP Signature Validation
+
+on:
+  pull_request:
+    paths:
+      - 'mcp/src/server.py'
+      - 'mcp/src/clients/**'
+      - 'ktrdr/api/**'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Start API server
+        run: |
+          uv run python scripts/run_api_server.py --host 0.0.0.0 --port 8000 &
+          sleep 5
+
+      - name: Wait for API server
+        run: |
+          timeout 30 bash -c 'until curl -f http://localhost:8000/api/v1/health 2>/dev/null; do sleep 1; done'
+          echo "✅ API server is ready"
+
+      - name: Validate MCP signatures
+        run: |
+          uv run python scripts/validate_mcp_signatures.py --strict
+
+      - name: Upload validation report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-validation-report
+          path: validation-report.txt

@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Tool to Backend API Endpoint Mapping",
+  "description": "Maps MCP tool names to their corresponding backend API endpoints for validation",
+  "tools": {
+    "start_training": {
+      "endpoint": "/api/v1/trainings/start",
+      "method": "POST",
+      "critical": true,
+      "description": "Start neural network training"
+    },
+    "trigger_data_loading": {
+      "endpoint": "/api/v1/data/load",
+      "method": "POST",
+      "critical": true,
+      "description": "Trigger async data loading operation"
+    },
+    "list_operations": {
+      "endpoint": "/api/v1/operations",
+      "method": "GET",
+      "critical": false,
+      "description": "List operations with filters"
+    },
+    "get_operation_status": {
+      "endpoint": "/api/v1/operations/{operation_id}",
+      "method": "GET",
+      "critical": false,
+      "path_params": ["operation_id"],
+      "description": "Get detailed operation status"
+    },
+    "cancel_operation": {
+      "endpoint": "/api/v1/operations/{operation_id}/cancel",
+      "method": "POST",
+      "critical": false,
+      "path_params": ["operation_id"],
+      "description": "Cancel running operation"
+    },
+    "get_operation_results": {
+      "endpoint": "/api/v1/operations/{operation_id}/results",
+      "method": "GET",
+      "critical": false,
+      "path_params": ["operation_id"],
+      "description": "Get operation results summary"
+    },
+    "get_market_data": {
+      "endpoint": "/api/v1/data/{symbol}/{timeframe}",
+      "method": "GET",
+      "critical": false,
+      "path_params": ["symbol", "timeframe"],
+      "description": "Get cached market data"
+    },
+    "get_symbols": {
+      "endpoint": "/api/v1/symbols",
+      "method": "GET",
+      "critical": false,
+      "description": "Get available trading symbols"
+    },
+    "get_indicators": {
+      "endpoint": "/api/v1/indicators/",
+      "method": "GET",
+      "critical": false,
+      "description": "List available indicators"
+    },
+    "get_strategies": {
+      "endpoint": "/api/v1/strategies/",
+      "method": "GET",
+      "critical": false,
+      "description": "List available strategies"
+    },
+    "list_trained_models": {
+      "endpoint": "/api/v1/models",
+      "method": "GET",
+      "critical": false,
+      "description": "List trained models"
+    },
+    "health_check": {
+      "endpoint": "/health",
+      "method": "GET",
+      "critical": false,
+      "description": "Backend health check"
+    }
+  }
+}

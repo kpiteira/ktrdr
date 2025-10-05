@@ -1,0 +1,10 @@
+repos:
+  - repo: local
+    hooks:
+      - id: validate-mcp-signatures
+        name: Validate MCP Tool Signatures
+        entry: bash -c 'if lsof -i:8000 -sTCP:LISTEN -t >/dev/null 2>&1; then uv run python scripts/validate_mcp_signatures.py; else echo "⚠️  Backend not running - skipping MCP validation"; fi'
+        language: system
+        files: ^mcp/src/server\.py$
+        pass_filenames: false
+        stages: [commit]
