@@ -104,3 +104,30 @@ After making changes:
 3. Test your MCP tools
 
 Never restart other containers - they don't need it for MCP changes!
+
+## 🔍 Signature Validation
+
+The project includes automated validation to ensure MCP tool signatures match backend API contracts.
+
+### How It Works
+
+- **Pre-commit hook**: Validates signatures when modifying `mcp/src/server.py`
+- **CI validation**: Runs on PRs affecting MCP or backend code
+- **Type safety**: Ensures parameters match between MCP tools and backend endpoints
+
+### Running Validation Manually
+
+```bash
+# Ensure backend is running
+./start_ktrdr.sh
+
+# Run validation
+uv run python scripts/validate_mcp_signatures.py
+
+# See detailed docs
+cat scripts/README.md
+```
+
+### Configuration
+
+Tool-to-endpoint mapping is defined in [`endpoint_mapping.json`](endpoint_mapping.json).
