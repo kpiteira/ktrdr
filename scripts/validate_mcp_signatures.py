@@ -60,7 +60,7 @@ class OpenAPIFetcher:
         Raises:
             ConnectionError: If backend not reachable
         """
-        url = f"{self.base_url}/openapi.json"
+        url = f"{self.base_url}/api/v1/openapi.json"
 
         try:
             response = httpx.get(url, timeout=10.0)
