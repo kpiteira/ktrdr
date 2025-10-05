@@ -121,7 +121,10 @@ The project includes automated validation to ensure MCP tool signatures match ba
 # Ensure backend is running
 ./start_ktrdr.sh
 
-# Run validation
+# Run validation (via Makefile - recommended)
+make validate-mcp
+
+# Or run script directly
 uv run python scripts/validate_mcp_signatures.py
 
 # See detailed docs

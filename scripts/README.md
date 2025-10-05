@@ -13,7 +13,10 @@ Automatically validates MCP tool signatures against backend API contracts.
 # Start backend
 ./start_ktrdr.sh
 
-# Run validation
+# Run validation (via Makefile - recommended)
+make validate-mcp
+
+# Or run script directly
 uv run python scripts/validate_mcp_signatures.py
 
 # Strict mode (warnings as errors)

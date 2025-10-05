@@ -1,4 +1,4 @@
-.PHONY: test-unit test-integration test-e2e test-host test-coverage test-all test-performance lint lint-fix format typecheck quality test-fast ci
+.PHONY: test-unit test-integration test-e2e test-host test-coverage test-all test-performance lint lint-fix format typecheck quality test-fast ci validate-mcp
 
 # Test commands
 test-unit:
@@ -44,6 +44,17 @@ quality: lint format typecheck
 
 test-fast: test-unit
 	@echo "✅ Fast tests complete"
+
+# Validation commands
+validate-mcp:
+	@echo "🔍 Validating MCP tool signatures against OpenAPI spec..."
+	@if lsof -i:8000 -sTCP:LISTEN -t >/dev/null 2>&1; then \
+		uv run python scripts/validate_mcp_signatures.py; \
+	else \
+		echo "❌ Backend not running on port 8000"; \
+		echo "   Start backend: ./start_ktrdr.sh"; \
+		exit 1; \
+	fi
 
 # CI command (used by GitHub Actions)
 ci: test-unit lint format typecheck
