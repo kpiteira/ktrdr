@@ -29,8 +29,8 @@
       "description": "Get detailed operation status"
     },
     "cancel_operation": {
-      "endpoint": "/api/v1/operations/{operation_id}/cancel",
-      "method": "POST",
+      "endpoint": "/api/v1/operations/{operation_id}",
+      "method": "DELETE",
       "critical": false,
       "path_params": ["operation_id"],
       "description": "Cancel running operation"

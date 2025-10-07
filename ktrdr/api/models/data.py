@@ -266,10 +266,12 @@ class DataLoadRequest(BaseModel):
         default="local",
         description="Loading mode: 'local' for cached data only, 'tail' for recent gaps, 'backfill' for historical, 'full' for backfill + tail",
     )
-    start_date: Optional[datetime] = Field(
-        None, description="Optional start date override"
+    start_date: Optional[str] = Field(
+        None, description="Optional start date override (YYYY-MM-DD or ISO format)"
     )
-    end_date: Optional[datetime] = Field(None, description="Optional end date override")
+    end_date: Optional[str] = Field(
+        None, description="Optional end date override (YYYY-MM-DD or ISO format)"
+    )
     filters: Optional[DataFilters] = Field(None, description="Data filtering options")
 
     model_config = {
@@ -310,8 +312,21 @@ class DataLoadRequest(BaseModel):
     @model_validator(mode="after")
     def validate_dates(self) -> "DataLoadRequest":
         """Validate that start_date is before end_date if both are provided."""
-        if self.start_date and self.end_date and self.start_date > self.end_date:
-            raise ValueError("start_date must be before end_date")
+        if self.start_date and self.end_date:
+            # Parse dates for comparison
+            from datetime import datetime
+
+            try:
+                start = datetime.fromisoformat(self.start_date.replace("Z", "+00:00"))
+                end = datetime.fromisoformat(self.end_date.replace("Z", "+00:00"))
+                if start > end:
+                    raise ValueError("start_date must be before end_date")
+            except ValueError as e:
+                if "start_date must be before end_date" in str(e):
+                    raise
+                raise ValueError(
+                    f"Invalid date format. Use YYYY-MM-DD or ISO format: {e}"
+                ) from e
         return self
 
 

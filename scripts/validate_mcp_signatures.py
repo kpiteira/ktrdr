@@ -401,7 +401,14 @@ class SignatureComparator:
             schema_prop = schema["properties"][param_name]
             schema_type = self._openapi_to_python_type(schema_prop)
 
-            if param_info.type != schema_type:
+            # Check if parameter is required in the schema
+            is_required_in_schema = param_name in schema.get("required", [])
+
+            # Normalize types for comparison
+            tool_type_normalized = self._normalize_optional_type(param_info.type)
+            schema_type_normalized = self._normalize_optional_type(schema_type)
+
+            if tool_type_normalized != schema_type_normalized:
                 errors.append(
                     ValidationError(
                         tool=tool_sig.name,
@@ -411,6 +418,7 @@ class SignatureComparator:
                             "parameter": param_name,
                             "schema_expects": schema_type,
                             "tool_has": param_info.type,
+                            "is_required": is_required_in_schema,
                         },
                         severity="CRITICAL"
                         if tool_config.get("critical", False)
@@ -420,8 +428,39 @@ class SignatureComparator:
 
         return errors
 
+    def _normalize_optional_type(self, type_str: str) -> str:
+        """
+        Normalize Optional[T] to T for comparison.
+
+        This allows comparing Optional[str] from MCP tools with str from OpenAPI.
+        Both are acceptable since optional-ness is checked separately via 'required' field.
+        """
+        import re
+        # Match Optional[...] pattern
+        match = re.match(r'Optional\[(.+)\]', type_str)
+        if match:
+            return match.group(1)
+        return type_str
+
     def _openapi_to_python_type(self, schema: dict) -> str:
         """Convert OpenAPI type to Python type annotation"""
+        # Handle anyOf (used for Optional types in Pydantic)
+        if "anyOf" in schema:
+            # Filter out null types
+            non_null_types = [
+                s for s in schema["anyOf"] if s.get("type") != "null"
+            ]
+            if len(non_null_types) == 1:
+                # Optional[T] case - return just T since MCP tools use Optional[T]
+                return self._openapi_to_python_type(non_null_types[0])
+            elif len(non_null_types) > 1:
+                # Union of multiple types
+                types = [self._openapi_to_python_type(s) for s in non_null_types]
+                return f"Union[{', '.join(types)}]"
+            else:
+                # Only null type
+                return "None"
+
         if "type" not in schema:
             return "Any"
 

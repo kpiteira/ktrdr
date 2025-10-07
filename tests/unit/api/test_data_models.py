@@ -26,13 +26,13 @@ class TestDataLoadRequest:
         request = DataLoadRequest(
             symbol="AAPL",
             timeframe="1d",
-            start_date=datetime(2023, 1, 1),
-            end_date=datetime(2023, 1, 31),
+            start_date="2023-01-01",
+            end_date="2023-01-31",
         )
         assert request.symbol == "AAPL"
         assert request.timeframe == "1d"
-        assert request.start_date == datetime(2023, 1, 1)
-        assert request.end_date == datetime(2023, 1, 31)
+        assert request.start_date == "2023-01-01"
+        assert request.end_date == "2023-01-31"
         assert request.mode == "local"  # Default value
 
     def test_request_without_dates(self):
@@ -56,8 +56,8 @@ class TestDataLoadRequest:
             DataLoadRequest(
                 symbol="AAPL",
                 timeframe="1d",
-                start_date=datetime(2023, 2, 1),  # After end_date
-                end_date=datetime(2023, 1, 1),
+                start_date="2023-02-01",  # After end_date
+                end_date="2023-01-01",
             )
         # Check that the error message mentions date validation
         assert "start_date" in str(exc_info.value) or "end_date" in str(exc_info.value)
