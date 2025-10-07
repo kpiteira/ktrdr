@@ -1,1335 +1,768 @@
 # Training Service Unified Architecture - Implementation Plan
 
 **Parent Documents**:
+
 - [01-analysis.md](./01-analysis.md)
 - [02-requirements.md](./02-requirements.md)
 - [03-architecture.md](./03-architecture.md)
+- [05-migration-strategy.md](./05-migration-strategy.md)
 
 **Status**: Ready for Implementation
-**Version**: 1.0
-**Date**: 2025-01-05
+**Version**: 2.0 (Complete Rewrite)
+**Date**: 2025-01-06
 
 ---
 
 ## Overview
 
-This document breaks down the implementation of the unified training architecture into discrete, testable tasks following **Test-Driven Development (TDD)** principles.
+This document breaks down the implementation using **TRUE Progressive Refactoring** - extracting and validating one piece at a time, continuously testing end-to-end.
 
-**Key Architecture Components**:
-- `TrainingExecutor`: Environment-agnostic training logic (consolidates duplicates)
-- `ExecutionModeSelector`: Intelligent mode selection with health checks and fallback
-- Result callback mechanism: Host service posts results back to backend
-- Compression and retry: Robust model transfer with gzip compression
+**What's Different from v1.0**:
 
-**Implementation Philosophy**:
-- **TDD-first**: Write tests before implementation
-- **Incremental**: Small, mergeable changes
-- **Quality gates**: `make test-unit` + `make quality` before every commit
-- **Non-breaking**: Preserve existing functionality until cutover
+- ❌ **OLD**: Build entire TrainingExecutor, then flip a switch
+- ✅ **NEW**: Extract one method at a time, test continuously, always working system
+
+**Key Principle**: Every single commit leaves the system in a working, testable state.
 
 ---
 
-## Branching Strategy
+## Implementation Philosophy
 
-We'll use a **single long-lived feature branch** with **direct commits** for all work.
+### The Progressive Extraction Pattern
 
-### Setup (One Time)
+1. **Pick ONE method** from StrategyTrainer
+2. **Extract to new module** (preserve exact logic)
+3. **Add comprehensive tests** (unit + integration)
+4. **Update StrategyTrainer** to call extracted method
+5. **Test end-to-end** (full training must work)
+6. **Commit** (working system)
+7. **Repeat** for next method
 
-```bash
-# Start from main
-git checkout main
-git pull origin main
+### Continuous Testing Strategy
 
-# Create and push feature branch
-git checkout -b feat/unified-training-architecture
-git push -u origin feat/unified-training-architecture
-```
-
-### Daily Workflow
-
-**For every task** (simple approach):
+**Every commit must pass**:
 
 ```bash
-# 1. Make sure you're on feature branch
-git checkout feat/unified-training-architecture
-git pull origin feat/unified-training-architecture
-
-# 2. Work on task (following TDD)
-#    - Write tests
-#    - Implement code
-#    - Run make test-unit && make quality
-
-# 3. Commit directly to feature branch
-git add <files>
-git commit -m "test: add tests for TrainingExecutor device detection"
-
-git add <files>
-git commit -m "feat(training): implement device detection in TrainingExecutor
-
-- Checks MPS, CUDA, falls back to CPU
-- Logs selected device
-- Configures model.to(device)
-
-Refs: #123"
-
-# 4. Push regularly (at least daily)
-git push origin feat/unified-training-architecture
-```
-
-### Branch Lifecycle
-
-```
-main (protected)
- └── feat/unified-training-architecture (all work happens here)
-      ├── commit: test: add executor tests
-      ├── commit: feat: implement executor
-      ├── commit: test: add selector tests
-      ├── commit: feat: implement selector
-      └── ... (all tasks as sequential commits)
-
-When complete:
-  → Pull Request: feat/unified-training-architecture → main
-  → Review, approve, squash & merge
-  → Delete feat/unified-training-architecture
-```
-
-### Key Principles
-
-1. **One branch**: All work on `feat/unified-training-architecture`
-2. **Small commits**: Commit after each TDD cycle (test, then implementation)
-3. **Push frequently**: At least once per day, ideally after each task
-4. **Quality gates**: MUST pass before every commit
-5. **No sub-branches**: Keep it simple, linear history
-
-### When to Commit
-
-```bash
-# Good commit rhythm (example from Phase 1, Task 1.1):
-
-git commit -m "test: add TrainingExecutor initialization tests"
-# ~5-10 minutes later
-git commit -m "feat(training): implement TrainingExecutor initialization"
-
-git commit -m "test: add device detection tests (CPU, MPS, CUDA)"
-# ~10-15 minutes later
-git commit -m "feat(training): implement device detection logic"
-
-git commit -m "test: add data loading tests"
-# ~30-45 minutes later
-git commit -m "feat(training): implement data loading step"
-
-# ... continue for each step
-```
-
-### Commit Message Format
-
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-
-**Types**: `test`, `feat`, `fix`, `refactor`, `docs`, `chore`
-**Scope**: `training`, `api`, `host-service`, `tests`
-**Subject**: Imperative mood, lowercase, no period
-
-**Examples**:
-```bash
-git commit -m "test: add ExecutionModeSelector health check tests"
-
-git commit -m "feat(training): implement mode selection with fallback
-
-- Health check host service with 2s timeout
-- Fallback to local when host unavailable
-- Raise error when GPU required but unavailable
-
-Closes #123"
-
-git commit -m "fix(host-service): correct gzip compression byte encoding
-
-Issue was using wrong encoding after compression.
-Now properly base64-encodes compressed bytes.
-
-Fixes #456"
-```
-
-### What NOT to Do
-
-❌ **Don't create sub-branches** - adds complexity
-❌ **Don't batch commits** - commit after each TDD cycle
-❌ **Don't commit broken code** - quality gates must pass
-❌ **Don't squash locally** - keep clean history, squash on merge to main
-
----
-
-## Quality Gates (MANDATORY)
-
-**Before EVERY commit**:
-
-```bash
-# 1. Run unit tests (must complete in <2s)
+# 1. Unit tests
 make test-unit
 
-# 2. Run quality checks (lint, format, typecheck)
+# 2. Integration tests
+make test-integration
+
+# 3. END-TO-END TRAINING TEST (CRITICAL - NEW!)
+make test-e2e-training
+
+# 4. Quality checks
 make quality
-
-# 3. If both pass, commit
-git add .
-git commit -m "feat(training): descriptive message
-
-- Specific change 1
-- Specific change 2
-
-🤖 Generated with Claude Code"
 ```
 
-**If tests fail**: Fix before committing (no exceptions)
-**If quality fails**: Fix formatting/typing before committing
+### End-to-End Training Test (Autonomous Validation)
+
+**NEW**: Automated test that runs full training pipeline with REAL strategy
+
+```python
+# tests/e2e/test_training_pipeline.py
+
+@pytest.mark.e2e
+@pytest.mark.slow
+def test_full_training_pipeline_local():
+    """
+    End-to-end test: Full training pipeline from API to model save.
+
+    This test MUST pass after every extraction/refactoring.
+    If it fails, the refactoring broke something.
+
+    Uses REAL proven strategy (neuro_mean_reversion.yaml) with minimal dataset.
+    """
+    # Setup: Small test dataset
+    symbols = ["EURUSD"]
+    timeframes = ["1h"]
+    start_date = "2024-01-01"
+    end_date = "2024-01-07"  # Just 1 week for speed
+
+    # Load REAL proven strategy (not a test mock!)
+    strategy_path = "strategies/neuro_mean_reversion.yaml"
+    strategy_config = load_strategy_config(strategy_path)
+
+    # Execute training
+    result = train_strategy(
+        symbols=symbols,
+        timeframes=timeframes,
+        start_date=start_date,
+        end_date=end_date,
+        strategy_config=strategy_config,
+        execution_mode="local",
+    )
+
+    # Validate results
+    assert result["success"] == True
+    assert os.path.exists(result["model_path"])
+    assert result["test_metrics"]["accuracy"] > 0.5  # Sanity check
+
+    # Validate model can be loaded and used
+    model = load_model(result["model_path"])
+    assert model is not None
+
+    # Validate predictions work
+    test_data = load_test_data(symbols[0], timeframes[0])
+    predictions = model.predict(test_data)
+    assert len(predictions) > 0
+
+@pytest.mark.e2e
+@pytest.mark.slow
+@pytest.mark.requires_host_service
+def test_full_training_pipeline_host():
+    """
+    End-to-end test: Full training via host service.
+
+    This validates host service integration works.
+    """
+    # Same as above but execution_mode="host"
+    # Requires host service running
+    ...
+
+@pytest.mark.e2e
+def test_training_pipeline_with_cancellation():
+    """Test that cancellation works end-to-end."""
+    ...
+
+@pytest.mark.e2e
+def test_training_pipeline_with_progress():
+    """Test that progress reporting works end-to-end."""
+    ...
+```
+
+**Run Frequency**:
+
+- After EVERY extraction/refactoring
+- Before EVERY commit
+- In CI/CD pipeline
+
+**Performance Target**:
+
+- < 2 minutes for local e2e test
+- Use minimal dataset (1 week, 1 symbol)
+- Use REAL strategy configuration (validates all real code paths)
+- Reduce epochs if needed for speed (e.g., 5-10 epochs instead of 100)
+- Focus on correctness, not training quality
+
+**Why Use Real Strategy (neuro_mean_reversion.yaml)**:
+
+- ✅ Tests actual production code paths (not mocked logic)
+- ✅ Validates real indicator calculations, fuzzy logic, feature engineering
+- ✅ Catches issues that simplified test strategy would miss
+- ✅ If neuro_mean_reversion works, all strategies should work
+- ✅ No need to maintain separate test-only strategy configuration
 
 ---
 
-## Test-Driven Development Approach
+## Progressive Extraction Plan
 
-### TDD Cycle (Red-Green-Refactor)
+### Phase 1: Foundation Infrastructure (1 week)
 
-For EVERY task:
+**Goal**: Set up testing infrastructure and extract first non-training method
 
-1. **RED**: Write failing test first
-   ```bash
-   # Create test file
-   touch tests/unit/training/test_new_feature.py
-   # Write test that fails
-   make test-unit  # Should fail
-   ```
+#### TASK 1.1: Create End-to-End Test Infrastructure
 
-2. **GREEN**: Write minimal code to pass
-   ```bash
-   # Implement feature
-   # Run tests until they pass
-   make test-unit  # Should pass
-   ```
-
-3. **REFACTOR**: Clean up code
-   ```bash
-   # Improve implementation
-   # Ensure tests still pass
-   make test-unit  # Should still pass
-   make quality   # Should pass
-   ```
-
-4. **COMMIT**: Save progress
-   ```bash
-   git add .
-   git commit -m "test: add test for feature X"
-   git add .
-   git commit -m "feat: implement feature X"
-   ```
-
-### Testing Standards
-
-**Unit Tests**:
-- **Speed**: Must complete in <2 seconds total
-- **Coverage**: Aim for >80% on new code
-- **Isolation**: Mock external dependencies (HTTP, file system, database)
-- **Clarity**: Descriptive test names, clear assertions
-
-**Integration Tests** (when needed):
-- Test component interactions
-- Use real dependencies where practical
-- Mark with `@pytest.mark.integration`
-
----
-
-## Phase 1: Foundation Layer (TDD-First)
-
-**Objective**: Build core components with zero impact on existing code
-
-**Duration**: 3-4 days
-
-**Branch**: `feature/unified-training-architecture`
-
----
-
-### TASK-1.1: Create TrainingExecutor Foundation
-
-**Objective**: Extract and consolidate training logic into environment-agnostic executor
-
-**Branch**: `feat/unified-training-architecture`
+**Objective**: Set up automated e2e testing before any refactoring
 
 **Files**:
-- `ktrdr/training/executor.py` (NEW)
-- `tests/unit/training/test_executor.py` (NEW)
 
-**TDD Steps**:
+- `tests/e2e/test_training_pipeline.py` (NEW)
+- `tests/e2e/conftest.py` (NEW - shared fixtures)
+- `Makefile` (MODIFY - add `test-e2e-training` target)
 
-1. **Write test for initialization** (RED)
-   ```python
-   def test_executor_initialization():
-       executor = TrainingExecutor(config={...})
-       assert executor.config is not None
-       assert executor.model_storage is not None
-   ```
+**Tasks**:
 
-2. **Implement initialization** (GREEN)
-   ```python
-   class TrainingExecutor:
-       def __init__(self, config, progress_callback=None):
-           self.config = config
-           self.model_storage = ModelStorage()
-   ```
+1. Create e2e test using **real** `strategies/neuro_mean_reversion.yaml`
+2. Override epochs to 5-10 for speed (config override in test)
+3. Add Makefile target: `test-e2e-training`
+4. Document how to run e2e tests locally
+5. Ensure test passes with CURRENT code (baseline)
 
-3. **Write test for device detection** (RED)
-   ```python
-   def test_device_detection_cpu_only(monkeypatch):
-       # Mock PyTorch backends to return False
-       executor = TrainingExecutor(config={...})
-       assert executor.device == "cpu"
+**Strategy Configuration Override**:
 
-   def test_device_detection_mps_available(monkeypatch):
-       # Mock MPS available
-       executor = TrainingExecutor(config={...})
-       assert executor.device == "mps"
-   ```
-
-4. **Implement device detection** (GREEN)
-   ```python
-   def _detect_device(self):
-       if torch.backends.mps.is_available():
-           return "mps"
-       elif torch.cuda.is_available():
-           return "cuda"
-       return "cpu"
-   ```
-
-5. **Continue TDD for each pipeline step**:
-   - Data loading
-   - Indicator calculation
-   - Fuzzy generation
-   - Feature engineering
-   - Label generation
-   - Model training
-   - Evaluation
-   - Model saving
-
-**Key Methods** (implement via TDD):
 ```python
-class TrainingExecutor:
-    def __init__(self, config, progress_callback=None, cancellation_token=None)
-    def execute(self, symbols, timeframes, start_date, end_date, **kwargs) -> dict
+# Load real strategy, override for speed
+strategy_config = load_strategy_config("strategies/neuro_mean_reversion.yaml")
 
-    # Private methods (test indirectly through execute)
-    def _detect_device(self) -> str
-    def _load_data(self, ...) -> dict
-    def _calculate_indicators(self, ...) -> dict
-    def _generate_fuzzy(self, ...) -> dict
-    def _engineer_features(self, ...) -> tuple
-    def _generate_labels(self, ...) -> np.ndarray
-    def _split_data(self, ...) -> tuple
-    def _create_model(self, ...) -> torch.nn.Module
-    def _train_model(self, ...) -> dict
-    def _evaluate_model(self, ...) -> dict
-    def _calculate_importance(self, ...) -> dict
-    def _save_model(self, ...) -> str
-    def _build_results(self, ...) -> dict
+# Override training config for fast e2e test
+strategy_config["training"]["epochs"] = 5  # Instead of 100
+strategy_config["training"]["batch_size"] = 64  # Keep reasonable size
+# All other settings remain from real strategy
 ```
-
-**What to Extract**:
-- Source: `ktrdr/training/train_strategy.py` (StrategyTrainer methods)
-- Also reference: `training-host-service/services/training_service.py`
-- Consolidate: Take best implementation from each
 
 **Acceptance Criteria**:
-- [ ] TrainingExecutor detects hardware (CPU/MPS/CUDA) correctly
-- [ ] Can execute full training pipeline end-to-end
-- [ ] Progress callback invoked at each step
-- [ ] Cancellation token checked periodically
-- [ ] Model saved via ModelStorage
-- [ ] Returns standardized result dict
-- [ ] **Zero knowledge of execution environment** (local vs host)
-- [ ] All tests pass (`make test-unit`)
-- [ ] Code quality passes (`make quality`)
-- [ ] Test coverage >80%
 
-**Commit Strategy**:
-```bash
-# Commit after each TDD cycle
-git commit -m "test: add device detection tests"
-git commit -m "feat(training): implement device detection"
-git commit -m "test: add data loading tests"
-git commit -m "feat(training): implement data loading"
-# ... etc for each step
-```
+- [ ] `make test-e2e-training` runs and passes with current code
+- [ ] Test uses **real** neuro_mean_reversion.yaml strategy
+- [ ] Test completes in < 2 minutes
+- [ ] Test validates model saved and loadable
+- [ ] Test validates predictions work
+- [ ] CI integration documented
+
+**Why First**: We need automated validation BEFORE we start extracting code.
 
 **Estimated**: 2 days
 
 ---
 
-### TASK-1.2: Create ExecutionModeSelector
+#### TASK 1.2: Extract Device Detection (First Extraction)
 
-**Objective**: Intelligent mode selection with health checks and fallback
+**Objective**: Extract simplest method to validate progressive pattern
 
-**Branch**: `feat/unified-training-architecture`
+**Current State** (in StrategyTrainer):
 
-**Files**:
-- `ktrdr/training/execution_mode_selector.py` (NEW)
-- `tests/unit/training/test_execution_mode_selector.py` (NEW)
-
-**TDD Steps**:
-
-1. **Test: Default mode from env var** (RED)
-   ```python
-   def test_default_mode_from_env(monkeypatch):
-       monkeypatch.setenv("TRAINING_DEFAULT_MODE", "local")
-       selector = ExecutionModeSelector()
-       assert selector.default_mode == "local"
-   ```
-
-2. **Implement: Read env var** (GREEN)
-   ```python
-   def __init__(self):
-       self.default_mode = os.getenv("TRAINING_DEFAULT_MODE", "auto")
-   ```
-
-3. **Test: Health check success** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_health_check_success(mock_http_client):
-       mock_http_client.get.return_value.status_code = 200
-       selector = ExecutionModeSelector()
-       assert await selector._is_host_available() == True
-   ```
-
-4. **Implement: Health check** (GREEN)
-   ```python
-   async def _is_host_available(self):
-       try:
-           async with httpx.AsyncClient() as client:
-               response = await client.get(f"{self.host_url}/health", timeout=2.0)
-               return response.status_code == 200
-       except:
-           return False
-   ```
-
-5. **Test: Mode selection logic** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_select_local_when_requested():
-       selector = ExecutionModeSelector()
-       mode = await selector.select_mode(requested_mode="local")
-       assert mode == "local"
-
-   @pytest.mark.asyncio
-   async def test_select_host_with_fallback(mock_health_check):
-       mock_health_check.return_value = False  # Host unavailable
-       selector = ExecutionModeSelector()
-       mode = await selector.select_mode(requested_mode="host", require_gpu=False)
-       assert mode == "local"  # Fallback
-
-   @pytest.mark.asyncio
-   async def test_error_when_gpu_required_host_unavailable(mock_health_check):
-       mock_health_check.return_value = False
-       selector = ExecutionModeSelector()
-       with pytest.raises(ExecutionModeError):
-           await selector.select_mode(requested_mode="host", require_gpu=True)
-   ```
-
-6. **Implement: Selection logic** (GREEN)
-
-**Key Methods**:
 ```python
-class ExecutionModeSelector:
-    def __init__(self, default_mode="auto")
-    async def select_mode(self, requested_mode=None, require_gpu=False) -> str
-    async def _is_host_available(self) -> bool
-    def set_default_mode(self, mode: str) -> None
+class StrategyTrainer:
+    def _detect_device(self):
+        if torch.backends.mps.is_available():
+            return "mps"
+        elif torch.cuda.is_available():
+            return "cuda"
+        return "cpu"
 ```
 
-**Acceptance Criteria**:
-- [ ] Reads default mode from TRAINING_DEFAULT_MODE env var
-- [ ] Health checks host service with 2s timeout
-- [ ] Selects "local" when requested
-- [ ] Selects "host" when requested and available
-- [ ] Falls back to "local" when host unavailable (if GPU not required)
-- [ ] Raises error when GPU required but host unavailable
-- [ ] Auto mode selects based on requirements and availability
-- [ ] All tests pass (`make test-unit`)
-- [ ] Code quality passes (`make quality`)
-- [ ] Test coverage >85%
+**New State**:
 
-**Commit Strategy**:
-```bash
-git commit -m "test: add execution mode selector tests"
-git commit -m "feat(training): implement execution mode selector"
-```
-
-**Estimated**: 1 day
-
----
-
-### TASK-1.3: Add Result Callback Endpoint
-
-**Objective**: Backend endpoint to receive training results from host service
-
-**Branch**: `feat/unified-training-architecture`
-
-**Files**:
-- `ktrdr/api/endpoints/training.py` (MODIFY - add endpoint)
-- `ktrdr/api/services/training_service.py` (MODIFY - add method)
-- `tests/unit/api/test_training_endpoints.py` (MODIFY - add tests)
-
-**TDD Steps**:
-
-1. **Test: Endpoint receives results** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_receive_results_endpoint(test_client):
-       payload = {
-           "session_id": "test-session",
-           "model_state_dict_b64": "base64-encoded-data",
-           "compression": "gzip",
-           "training_metrics": {...},
-           "test_metrics": {...},
-           "config": {...},
-           "feature_names": [...],
-           "feature_importance": {...}
-       }
-       response = await test_client.post("/api/v1/trainings/results", json=payload)
-       assert response.status_code == 200
-   ```
-
-2. **Implement: Endpoint** (GREEN)
-   ```python
-   @router.post("/results")
-   async def receive_training_results(...):
-       # Implementation
-   ```
-
-3. **Test: Model decompression** (RED)
-   ```python
-   def test_model_decompression():
-       # Create compressed model
-       model_bytes = create_test_model_bytes()
-       compressed = gzip.compress(model_bytes)
-       compressed_b64 = base64.b64encode(compressed).decode()
-
-       # Call service method
-       result = await service.receive_training_results(
-           session_id="test",
-           model_state_dict_b64=compressed_b64,
-           compression="gzip",
-           ...
-       )
-
-       # Verify model saved
-       assert result["success"] == True
-       assert "model_path" in result
-   ```
-
-4. **Implement: Decompression and saving** (GREEN)
-
-**Key Methods**:
 ```python
-# In TrainingService
-async def receive_training_results(
-    self,
-    session_id: str,
-    model_state_dict_b64: str,
-    compression: str,
-    training_metrics: dict,
-    test_metrics: dict,
-    config: dict,
-    feature_names: list,
-    feature_importance: dict,
-) -> dict
+# ktrdr/training/device_detection.py (NEW)
+def detect_training_device() -> str:
+    """Detect best available device for training."""
+    if torch.backends.mps.is_available():
+        return "mps"
+    elif torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+# ktrdr/training/train_strategy.py (MODIFIED)
+from ktrdr.training.device_detection import detect_training_device
+
+class StrategyTrainer:
+    def _detect_device(self):
+        # Now just calls extracted function
+        return detect_training_device()
 ```
 
-**Acceptance Criteria**:
-- [ ] Endpoint accepts POST at /api/v1/trainings/results
-- [ ] Validates session_id exists
-- [ ] Decompresses gzip-compressed model
-- [ ] Deserializes PyTorch state dict
-- [ ] Saves model via ModelStorage
-- [ ] Updates operation status to completed
-- [ ] Returns success with model_path
-- [ ] Handles errors gracefully (400, 404, 500)
-- [ ] All tests pass (`make test-unit`)
-- [ ] Code quality passes (`make quality`)
-- [ ] Test coverage >80%
+**Testing Strategy**:
 
-**Commit Strategy**:
+1. **Unit test extracted function**:
+
+```python
+# tests/unit/training/test_device_detection.py
+def test_device_detection_cpu(monkeypatch):
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    assert detect_training_device() == "cpu"
+
+def test_device_detection_mps(monkeypatch):
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: True)
+    assert detect_training_device() == "mps"
+```
+
+2. **Run e2e test**:
+
 ```bash
-git commit -m "test: add result callback endpoint tests"
-git commit -m "feat(training): add result callback endpoint"
+make test-e2e-training  # MUST STILL PASS
 ```
 
-**Estimated**: 1 day
+3. **Commit**:
 
----
-
-## Phase 2: Integration Layer
-
-**Objective**: Wire new components into existing orchestration
-
-**Duration**: 2-3 days
-
-**Branch**: `feature/unified-training-architecture` (merge sub-branches first)
-
----
-
-### TASK-2.1: Integrate ExecutionModeSelector into TrainingService
-
-**Objective**: Replace env var logic with ExecutionModeSelector
-
-**Files**:
-- `ktrdr/api/services/training_service.py` (MODIFY)
-- `ktrdr/training/training_manager.py` (MODIFY)
-- `tests/unit/api/test_training_service.py` (MODIFY)
-
-**TDD Steps**:
-
-1. **Test: Service uses selector** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_service_uses_mode_selector(mock_selector):
-       mock_selector.select_mode.return_value = "local"
-       service = TrainingService()
-       await service.start_training(
-           symbols=["EURUSD"],
-           strategy_name="test",
-           execution_mode="auto"
-       )
-       mock_selector.select_mode.assert_called_once_with(
-           requested_mode="auto",
-           require_gpu=False
-       )
-   ```
-
-2. **Implement: Inject selector into service** (GREEN)
-
-3. **Test: Mode selection logged** (RED)
-   ```python
-   def test_selected_mode_logged(caplog):
-       # Verify log message shows selected mode
-   ```
-
-4. **Implement: Logging** (GREEN)
-
-**Acceptance Criteria**:
-- [ ] TrainingService initializes ExecutionModeSelector
-- [ ] start_training() accepts optional execution_mode parameter
-- [ ] Selector used to determine execution mode
-- [ ] Selected mode logged for observability
-- [ ] Fallback behavior works correctly
-- [ ] Backward compatible (no breaking changes)
-- [ ] All existing tests still pass
-- [ ] New tests pass (`make test-unit`)
-- [ ] Code quality passes (`make quality`)
-
-**Estimated**: 1 day
-
----
-
-### TASK-2.2: Add Config Endpoint for Default Mode
-
-**Objective**: Allow runtime configuration of default execution mode
-
-**Files**:
-- `ktrdr/api/endpoints/training.py` (MODIFY - add endpoint)
-- `tests/unit/api/test_training_endpoints.py` (MODIFY)
-
-**TDD Steps**:
-
-1. **Test: GET config returns current default** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_get_training_config(test_client):
-       response = await test_client.get("/api/v1/trainings/config")
-       assert response.status_code == 200
-       assert "default_execution_mode" in response.json()
-   ```
-
-2. **Implement: GET endpoint** (GREEN)
-
-3. **Test: PUT config updates default** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_update_default_mode(test_client):
-       response = await test_client.put(
-           "/api/v1/trainings/config",
-           json={"default_execution_mode": "host"}
-       )
-       assert response.status_code == 200
-       assert response.json()["new_default"] == "host"
-   ```
-
-4. **Implement: PUT endpoint** (GREEN)
-
-**Acceptance Criteria**:
-- [ ] GET /api/v1/trainings/config returns current default
-- [ ] PUT /api/v1/trainings/config updates default
-- [ ] Validates mode values ("auto", "local", "host")
-- [ ] Returns previous and new default in response
-- [ ] Changes persist for session lifetime
-- [ ] All tests pass (`make test-unit`)
-- [ ] Code quality passes (`make quality`)
-
-**Estimated**: 0.5 day
-
----
-
-### TASK-2.3: Update LocalTrainingRunner to use TrainingExecutor
-
-**Objective**: Replace StrategyTrainer with TrainingExecutor in local path
-
-**Files**:
-- `ktrdr/api/services/training/local_runner.py` (MODIFY)
-- `tests/unit/api/services/training/test_local_runner.py` (MODIFY)
-
-**TDD Steps**:
-
-1. **Test: LocalRunner uses TrainingExecutor** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_local_runner_uses_executor(mock_executor):
-       runner = LocalTrainingRunner(
-           context=context,
-           progress_bridge=bridge,
-           cancellation_token=token,
-       )
-       await runner.run()
-       mock_executor.execute.assert_called_once()
-   ```
-
-2. **Implement: Replace StrategyTrainer** (GREEN)
-   ```python
-   # In LocalTrainingRunner
-   self._executor = TrainingExecutor(
-       config=config,
-       progress_callback=self._build_progress_callback(),
-       cancellation_token=self._cancellation_token,
-   )
-
-   raw_result = await asyncio.to_thread(self._executor.execute, ...)
-   ```
-
-3. **Test: Progress callback wired correctly** (RED)
-   ```python
-   def test_progress_callback_invoked(mock_bridge):
-       # Verify bridge receives progress updates
-   ```
-
-4. **Implement: Progress wiring** (GREEN)
-
-**Acceptance Criteria**:
-- [ ] LocalRunner instantiates TrainingExecutor
-- [ ] Progress callback passed to executor
-- [ ] Cancellation token passed to executor
-- [ ] Results aggregated correctly
-- [ ] All existing functionality preserved
-- [ ] Integration tests pass
-- [ ] All tests pass (`make test-unit`)
-- [ ] Code quality passes (`make quality`)
-
-**Estimated**: 1 day
-
----
-
-## Phase 3: Host Service Integration
-
-**Objective**: Update host service to use TrainingExecutor and post results back
-
-**Duration**: 2-3 days
-
-**Branch**: `feature/unified-training-architecture`
-
----
-
-### TASK-3.1: Update Host Service to use TrainingExecutor
-
-**Objective**: Replace host service training logic with TrainingExecutor
-
-**Files**:
-- `training-host-service/services/training_service.py` (MODIFY)
-- `training-host-service/requirements.txt` (MODIFY - ensure ktrdr package)
-- `tests/unit/host/test_training_service.py` (MODIFY)
-
-**TDD Steps**:
-
-1. **Test: Host service uses TrainingExecutor** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_host_service_uses_executor(mock_executor):
-       service = TrainingService()
-       session = await service.create_session(config)
-       # Verify executor instantiated with correct params
-   ```
-
-2. **Implement: Replace custom training loop** (GREEN)
-   ```python
-   # In _run_real_training
-   executor = TrainingExecutor(
-       config=session.config,
-       progress_callback=lambda p, m, **d: session.update_progress(p, m, **d),
-       cancellation_token=session.cancellation_token,
-   )
-
-   result = executor.execute(
-       symbols=symbols,
-       timeframes=timeframes,
-       ...
-   )
-   ```
-
-3. **Test: Progress updates session state** (RED)
-   ```python
-   def test_progress_updates_session():
-       # Verify session.update_progress called
-   ```
-
-4. **Implement: Progress wiring** (GREEN)
-
-**Acceptance Criteria**:
-- [ ] Host service imports TrainingExecutor from ktrdr package
-- [ ] Custom training loop removed
-- [ ] TrainingExecutor instantiated with session config
-- [ ] Progress callback updates session state
-- [ ] Hardware detection works (finds MPS on Mac)
-- [ ] Training completes successfully
-- [ ] All tests pass
-- [ ] Code quality passes
-
-**Estimated**: 1 day
-
----
-
-### TASK-3.2: Implement Result Posting with Compression
-
-**Objective**: Host service POSTs results back to backend after training
-
-**Files**:
-- `training-host-service/services/training_service.py` (MODIFY)
-- `tests/unit/host/test_result_posting.py` (NEW)
-
-**TDD Steps**:
-
-1. **Test: Model compression** (RED)
-   ```python
-   def test_model_compression():
-       model_bytes = create_test_model()
-       compressed = compress_model(model_bytes)
-       assert len(compressed) < len(model_bytes)
-       assert gzip.decompress(compressed) == model_bytes
-   ```
-
-2. **Implement: Compression** (GREEN)
-   ```python
-   def compress_model(model_state_dict):
-       buffer = io.BytesIO()
-       torch.save(model_state_dict, buffer)
-       model_bytes = buffer.getvalue()
-       compressed = gzip.compress(model_bytes)
-       return base64.b64encode(compressed).decode()
-   ```
-
-3. **Test: Result posting** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_post_results_to_backend(mock_http):
-       await post_results(
-           callback_url="http://backend/api/v1/trainings/results",
-           session_id="test",
-           model_state_dict=...,
-           ...
-       )
-       mock_http.post.assert_called_once()
-       payload = mock_http.post.call_args[1]["json"]
-       assert payload["compression"] == "gzip"
-   ```
-
-4. **Implement: Posting** (GREEN)
-
-5. **Test: Retry with exponential backoff** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_retry_on_failure(mock_http):
-       mock_http.post.side_effect = [
-           httpx.HTTPError("Network error"),
-           httpx.HTTPError("Network error"),
-           httpx.Response(200, json={"success": True})
-       ]
-       await post_results_with_retry(...)
-       assert mock_http.post.call_count == 3
-   ```
-
-6. **Implement: Retry logic** (GREEN)
-   ```python
-   async def _post_results_with_retry(self, callback_url, **payload):
-       max_attempts = 3
-       backoff = 1.0
-
-       for attempt in range(1, max_attempts + 1):
-           try:
-               async with httpx.AsyncClient() as client:
-                   response = await client.post(callback_url, json=payload)
-                   response.raise_for_status()
-                   return
-           except httpx.HTTPError as e:
-               if attempt >= max_attempts:
-                   logger.error(f"Failed after {attempt} attempts")
-               else:
-                   await asyncio.sleep(backoff)
-                   backoff = min(backoff * 2, 8.0)
-   ```
-
-**Acceptance Criteria**:
-- [ ] Model serialized and compressed with gzip
-- [ ] Compression ratio logged for observability
-- [ ] POST request sent to callback_url
-- [ ] Retry with exponential backoff (1s, 2s, 4s, max 8s)
-- [ ] After 3 failures, log error but don't crash
-- [ ] Results remain in session state if posting fails
-- [ ] All tests pass
-- [ ] Code quality passes
-
-**Estimated**: 1.5 days
-
----
-
-### TASK-3.3: Add Callback URL to Training Start Request
-
-**Objective**: Backend passes callback URL when starting host training
-
-**Files**:
-- `ktrdr/api/services/training/host_session.py` (MODIFY)
-- `ktrdr/training/training_adapter.py` (MODIFY)
-- `tests/unit/api/services/training/test_host_session.py` (MODIFY)
-
-**TDD Steps**:
-
-1. **Test: Callback URL included in request** (RED)
-   ```python
-   @pytest.mark.asyncio
-   async def test_callback_url_in_request(mock_adapter):
-       manager = HostSessionManager(...)
-       await manager.start_session()
-
-       # Verify adapter called with callback_url
-       call_args = mock_adapter.train_multi_symbol_strategy.call_args
-       assert "callback_url" in call_args[1]
-       assert call_args[1]["callback_url"] == "http://backend:8000/api/v1/trainings/results"
-   ```
-
-2. **Implement: Add callback_url parameter** (GREEN)
-
-**Acceptance Criteria**:
-- [ ] HostSessionManager constructs callback_url from config
-- [ ] Callback URL passed to adapter
-- [ ] Adapter includes in HTTP POST to host service
-- [ ] Host service receives and stores callback_url in session
-- [ ] All tests pass
-- [ ] Code quality passes
-
-**Estimated**: 0.5 day
-
----
-
-## Phase 4: End-to-End Testing & Cleanup
-
-**Objective**: Validate complete flows, remove deprecated code
-
-**Duration**: 2 days
-
-**Branch**: `feature/unified-training-architecture`
-
----
-
-### TASK-4.1: End-to-End Integration Tests
-
-**Objective**: Test complete flows in both execution modes
-
-**Files**:
-- `tests/integration/training/test_local_training_flow.py` (NEW)
-- `tests/integration/training/test_host_training_flow.py` (NEW)
-
-**Test Scenarios**:
-
-1. **Local Training Flow**:
-   - Start training request
-   - Training executes in-process
-   - Model saved to models/ directory
-   - Strategy status updates to "trained"
-   - Can load and use trained model
-
-2. **Host Service Training Flow**:
-   - Start training request with execution_mode="host"
-   - Host service receives request
-   - Training executes on host
-   - Results posted back to backend
-   - Model saved to models/ directory
-   - Strategy status updates to "trained"
-
-3. **Fallback Scenario**:
-   - Request with execution_mode="host"
-   - Host service unavailable
-   - Falls back to local
-   - Training succeeds
-
-4. **GPU Required Scenario**:
-   - Request with require_gpu=True
-   - Host service unavailable
-   - Training fails with appropriate error
-
-**Acceptance Criteria**:
-- [ ] Local flow test passes end-to-end
-- [ ] Host flow test passes end-to-end
-- [ ] Fallback test passes
-- [ ] GPU required test passes
-- [ ] Models saved correctly in all scenarios
-- [ ] Strategy status correct in all scenarios
-- [ ] All integration tests pass
-- [ ] Code quality passes
-
-**Estimated**: 1 day
-
----
-
-### TASK-4.2: Remove Deprecated Code
-
-**Objective**: Clean up old implementations after successful migration
-
-**Files**:
-- `ktrdr/training/train_strategy.py` (MODIFY - mark deprecated or remove)
-- `training-host-service/services/training_service.py` (already updated)
-
-**Steps**:
-
-1. **Verify all tests pass with new code**
-   ```bash
-   make test-unit
-   make test-integration
-   ```
-
-2. **Mark StrategyTrainer as deprecated**
-   ```python
-   class StrategyTrainer:
-       """DEPRECATED: Use TrainingExecutor instead.
-
-       This class will be removed in version 2.0.
-       """
-       def __init__(self):
-           warnings.warn(
-               "StrategyTrainer is deprecated. Use TrainingExecutor.",
-               DeprecationWarning,
-               stacklevel=2
-           )
-   ```
-
-3. **Update documentation**
-   - Update CLAUDE.md to reference TrainingExecutor
-   - Update training README if exists
-
-4. **Create removal ticket** for next release
-
-**Acceptance Criteria**:
-- [ ] StrategyTrainer marked deprecated
-- [ ] Deprecation warnings shown when used
-- [ ] All references updated to TrainingExecutor
-- [ ] Documentation updated
-- [ ] All tests pass
-- [ ] Code quality passes
-
-**Estimated**: 0.5 day
-
----
-
-### TASK-4.3: Update Logging to Structured Format
-
-**Objective**: Ensure consistent numbered-step logging in TrainingExecutor
-
-**Files**:
-- `ktrdr/training/executor.py` (MODIFY)
-- `tests/unit/training/test_executor_logging.py` (NEW)
-
-**TDD Steps**:
-
-1. **Test: Log format** (RED)
-   ```python
-   def test_logging_format(caplog):
-       executor = TrainingExecutor(...)
-       executor.execute(...)
-
-       # Verify logs contain numbered steps
-       logs = [r.message for r in caplog.records]
-       assert "Step 1: Loading market data" in logs
-       assert "Step 2: Calculating technical indicators" in logs
-   ```
-
-2. **Implement: Structured logging** (GREEN)
-   ```python
-   def _log_step(self, step_num, message, **details):
-       logger.info(f"Step {step_num}: {message}")
-       for key, value in details.items():
-           logger.debug(f"  {key}: {value}")
-   ```
-
-**Acceptance Criteria**:
-- [ ] All major steps logged with numbers (Step 1-12)
-- [ ] Sub-steps logged with indentation
-- [ ] Details logged at DEBUG level
-- [ ] Log format consistent with requirements
-- [ ] Tests verify log output
-- [ ] All tests pass
-- [ ] Code quality passes
-
-**Estimated**: 0.5 day
-
----
-
-## Phase 5: Documentation & Deployment
-
-**Objective**: Document changes, prepare for merge
-
-**Duration**: 1 day
-
-**Branch**: `feature/unified-training-architecture`
-
----
-
-### TASK-5.1: Update Documentation
-
-**Files**:
-- `CLAUDE.md` (UPDATE)
-- `training-host-service/README.md` (UPDATE)
-- `docs/architecture/training/README.md` (UPDATE)
-
-**Updates**:
-
-1. **CLAUDE.md**:
-   - Update training architecture section
-   - Reference TrainingExecutor
-   - Update common commands
-
-2. **Host Service README**:
-   - Explain TrainingExecutor usage
-   - Document callback mechanism
-   - Update deployment instructions
-
-3. **Architecture README**:
-   - Mark as implemented
-   - Add links to code
-
-**Acceptance Criteria**:
-- [ ] All documentation updated
-- [ ] Code examples accurate
-- [ ] Architecture diagrams match implementation
-- [ ] READMEs clear and helpful
-
-**Estimated**: 0.5 day
-
----
-
-### TASK-5.2: Create Pull Request
-
-**Objective**: Prepare comprehensive PR for review
-
-**PR Description Template**:
-
-```markdown
-# Training Service Unified Architecture
-
-## Summary
-Implements the unified training architecture as designed in docs/architecture/training/.
-
-**Key Changes**:
-- Consolidates duplicate training logic into TrainingExecutor
-- Adds intelligent execution mode selection with fallback
-- Implements host service result callback mechanism
-- Adds gzip compression for model transfer
-
-## Changes
-
-### New Components
-- `TrainingExecutor`: Environment-agnostic training core
-- `ExecutionModeSelector`: Intelligent mode selection
-- Result callback endpoint: `/api/v1/trainings/results`
-
-### Modified Components
-- `LocalTrainingRunner`: Now uses TrainingExecutor
-- `HostSessionManager`: Adds callback URL support
-- Host service: Uses TrainingExecutor, posts results back
-
-### Deprecated
-- `StrategyTrainer`: Marked deprecated (to be removed in v2.0)
-
-## Testing
-
-**Unit Tests**: All pass (< 2s)
 ```bash
-make test-unit
-```
+git add ktrdr/training/device_detection.py tests/unit/training/test_device_detection.py
+git commit -m "refactor(training): extract device detection to standalone function
 
-**Integration Tests**: All pass
-```bash
-make test-integration
-```
+- Extracted _detect_device logic to device_detection.py
+- StrategyTrainer now calls extracted function
+- All tests pass including e2e
 
-**Code Quality**: All pass
-```bash
-make quality
-```
-
-**Coverage**: >80% on new code
-
-## Breaking Changes
-None - fully backward compatible
-
-## Migration Guide
-See docs/architecture/training/README.md
-
-## Checklist
-- [x] All tests pass
-- [x] Code quality checks pass
-- [x] Documentation updated
-- [x] Integration tests added
-- [x] TDD approach followed
-- [x] Small, focused commits
-- [x] No breaking changes
+Verified: make test-unit && make test-e2e-training"
 ```
 
 **Acceptance Criteria**:
-- [ ] PR created with comprehensive description
-- [ ] All CI checks pass
-- [ ] Code reviewed by at least one team member
-- [ ] Documentation reviewed
-- [ ] Approved for merge
 
-**Estimated**: 0.5 day
+- [ ] New module `device_detection.py` created
+- [ ] Unit tests pass (>90% coverage)
+- [ ] StrategyTrainer updated to use extracted function
+- [ ] **E2E test still passes** (CRITICAL)
+- [ ] All existing tests pass
+- [ ] Code quality passes
 
----
-
-## Quality Checklist (MANDATORY)
-
-Before considering this implementation complete:
-
-### Code Quality
-- [ ] `make test-unit` passes (< 2s)
-- [ ] `make quality` passes (lint, format, typecheck)
-- [ ] Test coverage >80% on new code
-- [ ] No pylint warnings
-- [ ] Type hints on all public methods
-
-### Architecture
-- [ ] No code duplication
-- [ ] Clear separation of concerns
-- [ ] Dependencies point inward
-- [ ] Components are testable in isolation
-
-### Testing
-- [ ] TDD approach followed for all tasks
-- [ ] Unit tests for all new code
-- [ ] Integration tests for flows
-- [ ] Edge cases covered
-- [ ] Error cases tested
-
-### Documentation
-- [ ] Code is self-documenting
-- [ ] Complex logic has comments
-- [ ] Architecture docs updated
-- [ ] README files updated
-- [ ] Examples are accurate
-
-### Backward Compatibility
-- [ ] No breaking changes to APIs
-- [ ] Deprecated code marked clearly
-- [ ] Migration path documented
-- [ ] Existing tests still pass
+**Estimated**: 1 day
 
 ---
 
-## Risk Management
+#### TASK 1.3: Extract Data Loading Logic
 
-### High Risk Areas
+**Objective**: Extract data loading to standalone module
 
-1. **TrainingExecutor Consolidation**
-   - **Risk**: Bugs introduced during consolidation
-   - **Mitigation**: TDD, comprehensive tests, gradual rollout
+**Current State**: `StrategyTrainer._load_data()`
 
-2. **Host Service Communication**
-   - **Risk**: Network failures, timeouts
-   - **Mitigation**: Retry logic, fallback, extensive error handling
+**New State**:
 
-3. **Model Transfer**
-   - **Risk**: Corruption, size limits
-   - **Mitigation**: Compression, validation, checksums (HTTP)
+```python
+# ktrdr/training/data_loading.py (NEW)
+from ktrdr.data.data_manager import DataManager
 
-### Rollback Plan
+def load_training_data(
+    symbols: list[str],
+    timeframes: list[str],
+    start_date: str,
+    end_date: str,
+    data_mode: str = "local",
+) -> dict[str, Any]:
+    """Load market data for training."""
+    # Extract exact logic from StrategyTrainer._load_data
+    ...
 
-If issues arise after merge:
+# ktrdr/training/train_strategy.py (MODIFIED)
+from ktrdr.training.data_loading import load_training_data
 
-1. **Immediate**: Revert PR
-   ```bash
-   git revert <merge-commit>
-   ```
+class StrategyTrainer:
+    def _load_data(self, symbols, timeframes, start_date, end_date):
+        return load_training_data(symbols, timeframes, start_date, end_date, self.data_mode)
+```
 
-2. **Investigation**: Identify root cause
-   - Check logs
-   - Review test results
-   - Reproduce locally
+**Testing**:
 
-3. **Fix Forward**: Create hotfix branch
-   ```bash
-   git checkout -b hotfix/training-issue
-   # Fix issue
-   # Test thoroughly
-   # Create new PR
-   ```
+1. Unit tests for `load_training_data()`
+2. Mock DataManager for fast tests
+3. **Run e2e test - must pass**
+4. Commit
 
----
+**Acceptance Criteria**:
 
-## Timeline Estimate
+- [ ] `data_loading.py` created with unit tests
+- [ ] StrategyTrainer uses extracted function
+- [ ] **E2E test passes**
+- [ ] All existing tests pass
 
-**Total Duration**: 10-12 days
-
-| Phase | Tasks | Duration |
-|-------|-------|----------|
-| Phase 1: Foundation | 1.1, 1.2, 1.3 | 4 days |
-| Phase 2: Integration | 2.1, 2.2, 2.3 | 2.5 days |
-| Phase 3: Host Service | 3.1, 3.2, 3.3 | 3 days |
-| Phase 4: Testing & Cleanup | 4.1, 4.2, 4.3 | 2 days |
-| Phase 5: Docs & Deployment | 5.1, 5.2 | 1 day |
-| **Buffer** | Testing, reviews, fixes | 2 days |
-
-**Total**: ~14 days (2-3 weeks)
+**Estimated**: 1 day
 
 ---
 
-## Success Metrics
+#### TASK 1.4: Extract Indicator Calculation
 
-**Code Metrics**:
-- Lines of code reduced by >40%
-- Test coverage >80%
-- Zero code duplication
-- All quality checks pass
+**Objective**: Extract indicator calculation logic
 
-**Functional Metrics**:
-- Both execution modes work correctly
-- Models saved in all scenarios
-- Strategy status accurate
-- Fallback works reliably
+**Pattern**: Same as 1.3 - extract, test, validate e2e, commit
 
-**Performance Metrics**:
-- Training time ≤ 5% slower than before
-- Test suite still completes in < 2s
-- No memory leaks
-
-**User Experience**:
-- Clear error messages
-- Helpful logging
-- Transparent mode selection
+**Estimated**: 1 day
 
 ---
 
-**Status**: Ready for Implementation
-**Next**: Begin TASK-1.1 (TrainingExecutor Foundation)
+#### TASK 1.5: Extract Fuzzy Generation
+
+**Objective**: Extract fuzzy membership generation logic
+
+**Pattern**: Same as 1.3 - extract, test, validate e2e, commit
+
+**Estimated**: 1 day
+
+---
+
+### Phase 2: Feature Engineering & Labels (1 week)
+
+Continue progressive extraction pattern:
+
+- TASK 2.1: Extract feature engineering
+- TASK 2.2: Extract label generation
+- TASK 2.3: Extract train/test split
+
+Each follows same pattern: extract → test → e2e validate → commit
+
+---
+
+### Phase 3: Model Creation & Training (1 week)
+
+#### TASK 3.1: Extract Model Creation
+
+**Objective**: Extract model architecture creation
+
+**Challenge**: This is tightly coupled to ModelTrainer
+
+**Approach**: Extract configuration logic, keep ModelTrainer unchanged
+
+---
+
+#### TASK 3.2: Create Progress Callback Wrapper (CAREFUL!)
+
+**Objective**: Add step-level progress reporting WITHOUT changing ModelTrainer signature
+
+**Current**: ModelTrainer callback: `(epoch, total_epochs, metrics)`
+
+**New**: Wrapper that adds step context
+
+```python
+# ktrdr/training/progress_integration.py (NEW)
+from ktrdr.async_infrastructure.progress import GenericProgressManager
+
+class TrainingProgressIntegrator:
+    """
+    Integrates ModelTrainer's epoch/batch progress with GenericProgressManager's step progress.
+
+    CRITICAL: Does NOT change ModelTrainer's callback signature!
+    """
+
+    def __init__(self, progress_manager: GenericProgressManager, step_number: int = 7):
+        self.progress_manager = progress_manager
+        self.step_number = step_number
+
+    def create_callback(self) -> Callable[[int, int, dict], None]:
+        """
+        Create callback for ModelTrainer.
+
+        Returns callback with EXACT signature ModelTrainer expects.
+        """
+        def callback(epoch: int, total_epochs: int, metrics: dict[str, float]) -> None:
+            # Report nested progress within current step
+            self.progress_manager.update_step_progress(
+                step_current=epoch,
+                step_total=total_epochs,
+                message=f"Epoch {epoch}/{total_epochs}",
+                context={
+                    "epoch": epoch,
+                    "total_epochs": total_epochs,
+                    "metrics": metrics,
+                },
+            )
+        return callback
+```
+
+**Usage in StrategyTrainer**:
+
+```python
+# Before
+trainer = ModelTrainer(config, progress_callback=self.progress_callback)
+
+# After
+integrator = TrainingProgressIntegrator(self.progress_manager, step_number=7)
+trainer = ModelTrainer(config, progress_callback=integrator.create_callback())
+```
+
+**Testing**:
+
+1. Unit test: Verify wrapper preserves signature
+2. Integration test: Verify progress updates flow correctly
+3. **E2E test: Verify progress reported during training**
+4. Commit
+
+**Acceptance Criteria**:
+
+- [ ] Wrapper created and tested
+- [ ] StrategyTrainer updated to use wrapper
+- [ ] Progress visible in e2e test
+- [ ] **E2E test passes**
+- [ ] ModelTrainer signature unchanged
+
+**Estimated**: 2 days
+
+---
+
+#### TASK 3.3: Extract Model Training Orchestration
+
+**Objective**: Extract the logic AROUND ModelTrainer, not ModelTrainer itself
+
+**Pattern**: Extract, test, e2e validate, commit
+
+**Estimated**: 1 day
+
+---
+
+### Phase 4: Post-Training Steps (1 week)
+
+- TASK 4.1: Extract model evaluation
+- TASK 4.2: Extract feature importance
+- TASK 4.3: Extract model saving
+- TASK 4.4: Extract result building
+
+Each: extract → test → e2e validate → commit
+
+---
+
+### Phase 5: Consolidation into TrainingExecutor (1 week)
+
+**NOW** we create TrainingExecutor - but it just orchestrates the extracted functions!
+
+#### TASK 5.1: Create TrainingExecutor Shell
+
+**Objective**: Create TrainingExecutor that calls all extracted functions
+
+```python
+# ktrdr/training/executor.py (NEW)
+from ktrdr.training.device_detection import detect_training_device
+from ktrdr.training.data_loading import load_training_data
+from ktrdr.training.indicator_calculation import calculate_indicators
+# ... import all extracted functions
+
+class TrainingExecutor:
+    """
+    Consolidated training executor using extracted, battle-tested functions.
+
+    This class does NOT reimplement anything - it orchestrates extracted functions.
+    """
+
+    def __init__(self, config, progress_callback=None, cancellation_token=None):
+        self.config = config
+        self.progress_callback = progress_callback
+        self.cancellation_token = cancellation_token
+        self.device = detect_training_device()
+
+    def execute(self, symbols, timeframes, start_date, end_date, **kwargs):
+        """Execute training pipeline using extracted functions."""
+        # Step 1: Load data
+        data = load_training_data(symbols, timeframes, start_date, end_date)
+
+        # Step 2: Calculate indicators
+        indicators = calculate_indicators(data, self.config["strategy_config"])
+
+        # Step 3: Generate fuzzy
+        fuzzy = generate_fuzzy_members(indicators, self.config["strategy_config"])
+
+        # ... continue with all extracted functions
+
+        return results
+```
+
+**Testing**:
+
+1. Unit test: TrainingExecutor.execute() calls all functions
+2. **E2E test with TrainingExecutor directly**
+3. Compare results: StrategyTrainer vs TrainingExecutor (should be identical)
+4. Commit
+
+**Acceptance Criteria**:
+
+- [ ] TrainingExecutor created
+- [ ] Uses ALL extracted functions
+- [ ] **E2E test passes with TrainingExecutor**
+- [ ] Side-by-side comparison: results match StrategyTrainer exactly
+
+**Estimated**: 2 days
+
+---
+
+#### TASK 5.2: Add Feature Flag to StrategyTrainer
+
+**Objective**: StrategyTrainer can delegate to TrainingExecutor
+
+```python
+# ktrdr/training/train_strategy.py
+class StrategyTrainer:
+    def train_multi_symbol_strategy(self, **kwargs):
+        # Feature flag check
+        if os.getenv("USE_TRAINING_EXECUTOR", "false").lower() == "true":
+            # Delegate to TrainingExecutor
+            executor = TrainingExecutor(
+                config=self.config,
+                progress_callback=self.progress_callback,
+                cancellation_token=self.cancellation_token,
+            )
+            return executor.execute(**kwargs)
+        else:
+            # Original implementation (calls extracted functions)
+            return self._original_train(**kwargs)
+```
+
+**Testing**:
+
+1. **E2E test with flag OFF** - uses extracted functions directly
+2. **E2E test with flag ON** - uses TrainingExecutor
+3. **Compare results** - must be identical
+4. Commit
+
+**Acceptance Criteria**:
+
+- [ ] Feature flag implemented
+- [ ] Both paths tested
+- [ ] Results identical
+- [ ] **E2E tests pass both ways**
+
+**Estimated**: 1 day
+
+---
+
+### Phase 6: Host Service Integration (1 week)
+
+#### TASK 6.1: Update Host Service to Use Extracted Functions
+
+**Objective**: Host service uses same extracted functions
+
+**Current**: Host service has duplicate logic
+
+**New**: Host service imports and uses extracted functions
+
+**Pattern**: Replace one function at a time, test after each
+
+**Estimated**: 3 days
+
+---
+
+#### TASK 6.2: Add Result Callback Endpoint
+
+**Objective**: Backend can receive results from host service
+
+**Pattern**: Add endpoint, test, commit
+
+**Estimated**: 2 days
+
+---
+
+### Phase 7: Gradual Rollout (3-4 weeks)
+
+**NOW** we do the gradual rollout from migration strategy doc:
+
+- Week 1: Canary (10% with `USE_TRAINING_EXECUTOR=true`)
+- Week 2-3: Expanded (50%)
+- Week 4: Full (100%)
+
+**Quality Gates**: See [05-migration-strategy.md](./05-migration-strategy.md)
+
+---
+
+### Phase 8: Cleanup (1 week)
+
+- Remove feature flag
+- Remove old StrategyTrainer implementation
+- Keep only TrainingExecutor
+
+---
+
+## Testing Strategy Summary
+
+### Test Pyramid
+
+```
+        E2E Tests (Few, Slow, High Value)
+       /                                \
+      Integration Tests (Some, Medium)
+     /                                  \
+    Unit Tests (Many, Fast, Low-Level)
+```
+
+### Test Frequency
+
+| Test Type | When to Run | Duration | Purpose |
+|-----------|-------------|----------|---------|
+| **Unit** | After every change | < 2s | Validate individual functions |
+| **Integration** | After every extraction | < 30s | Validate components work together |
+| **E2E Training** | After every commit | < 2min | Validate FULL pipeline works |
+| **E2E Host** | Before rollout phase | < 5min | Validate host service integration |
+
+### Autonomous Test Execution
+
+```bash
+# Developer workflow
+./scripts/test-extraction.sh
+
+# This script runs:
+# 1. make test-unit
+# 2. make test-integration
+# 3. make test-e2e-training
+# 4. make quality
+#
+# If ALL pass: "✅ Safe to commit"
+# If ANY fail: "❌ Extraction broke something - do NOT commit"
+```
+
+### CI/CD Integration
+
+```yaml
+# .github/workflows/training-refactoring.yml
+name: Training Refactoring Tests
+
+on:
+  push:
+    branches: [feat/progressive-training-refactor]
+    paths:
+      - 'ktrdr/training/**'
+      - 'tests/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run unit tests
+        run: make test-unit
+      - name: Run integration tests
+        run: make test-integration
+      - name: Run e2e training tests
+        run: make test-e2e-training
+      - name: Quality checks
+        run: make quality
+```
+
+---
+
+## Timeline
+
+| Phase | Duration | Key Milestone | E2E Tests |
+|-------|----------|---------------|-----------|
+| **Phase 1: Foundation** | 1 week | E2E test infrastructure + 5 extractions | ✅ Pass after EACH |
+| **Phase 2: Features** | 1 week | 3 more extractions | ✅ Pass after EACH |
+| **Phase 3: Model** | 1 week | 3 extractions + progress integration | ✅ Pass after EACH |
+| **Phase 4: Post-Training** | 1 week | 4 extractions | ✅ Pass after EACH |
+| **Phase 5: Consolidation** | 1 week | TrainingExecutor created, feature flag added | ✅ Pass both paths |
+| **Phase 6: Host Service** | 1 week | Host service uses extracted functions | ✅ Pass local + host |
+| **Phase 7: Rollout** | 3-4 weeks | Progressive rollout with monitoring | ✅ Continuous validation |
+| **Phase 8: Cleanup** | 1 week | Remove legacy code | ✅ Final validation |
+| **Total** | **10-11 weeks** | Truly progressive, always working | ✅ Tested continuously |
+
+---
+
+## Quality Gates
+
+**After EVERY extraction**:
+
+- ✅ Unit tests pass (extracted function)
+- ✅ Integration tests pass
+- ✅ **E2E training test passes** (CRITICAL - proves nothing broke)
+- ✅ Code quality passes
+- ✅ No performance regression (< 10% slower)
+
+**Before moving to next phase**:
+
+- ✅ All extractions in phase complete
+- ✅ All tests passing
+- ✅ Code review approved
+- ✅ Documentation updated
+
+**Before rollout phase**:
+
+- ✅ TrainingExecutor produces identical results to StrategyTrainer
+- ✅ Host service integration tested
+- ✅ Performance benchmarks meet targets
+- ✅ Side-by-side comparison validates equivalence
+
+---
+
+## Key Differences from v1.0
+
+| Aspect | v1.0 (WRONG) | v2.0 (CORRECT) |
+|--------|--------------|----------------|
+| **Approach** | Build everything, then flip switch | Extract one piece at a time |
+| **Testing** | Test at end | Test after EVERY extraction |
+| **System State** | Broken during development | **Always working** |
+| **Rollback** | Revert entire branch | Revert single commit |
+| **Validation** | Manual testing | **Automated e2e tests** |
+| **Commits** | Few large commits | Many small commits |
+| **Risk** | High (big bang) | Low (incremental) |
+
+---
+
+## Success Criteria
+
+- ✅ Every commit leaves system in working state
+- ✅ E2E tests run and pass after every extraction
+- ✅ Can deploy to production at ANY point (with feature flag)
+- ✅ TrainingExecutor produces identical results to StrategyTrainer
+- ✅ Host service integration validated automatically
+- ✅ Zero production incidents during rollout
+- ✅ Clear rollback path at every stage
+
+---
+
+**Status**: Ready for Implementation (TRUE Progressive Refactoring)
+**Next**: TASK 1.1 - Create E2E Test Infrastructure
+**Remember**: Test continuously, extract incrementally, never break the build
