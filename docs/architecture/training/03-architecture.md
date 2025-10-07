@@ -868,5 +868,651 @@ models/
 
 ---
 
-**Status**: Architecture Design Approved
-**Next**: Implementation Plan (Separate Document)
+## Battle-Tested Code Preservation
+
+### Principle
+
+When refactoring working code, we follow the **Preserve-Then-Reorganize** principle:
+
+1. **Map exactly how current code works** (signatures, flows, patterns, threading)
+2. **Document the exact patterns** in this architecture document
+3. **New code MUST preserve these patterns exactly**
+4. **Only change: location, organization, naming**
+5. **DO NOT change: signatures, logic, threading model, call patterns**
+
+### Red Flags You're Violating This Principle
+
+- Creating new wrappers/adapters around working code
+- Changing signatures "for consistency"
+- "Improving" working logic without understanding why it works
+- Introducing abstraction layers that weren't there before
+- Changing threading/async model without deep analysis
+
+### Battle-Tested Patterns from StrategyTrainer
+
+These patterns MUST be preserved in TrainingExecutor:
+
+#### 1. Progress Callback Signature
+
+**Pattern**: ModelTrainer callback uses `(epoch, total_epochs, metrics)` signature
+
+**Why**: This signature is used throughout the training codebase, has proven stable, and supports both epoch and batch-level progress with rich metrics.
+
+**Preservation Rule**: TrainingExecutor MUST pass callbacks through to ModelTrainer unchanged. Do not create adapter/wrapper functions that change the signature.
+
+**Example**:
+```python
+# ✅ CORRECT - Pass through unchanged
+trainer = ModelTrainer(
+    training_config,
+    progress_callback=self.progress_callback,  # Direct pass-through
+    cancellation_token=self.cancellation_token,
+)
+
+# ❌ WRONG - Creating wrapper that changes signature
+def wrapper_callback(epoch, total_epochs, metrics):
+    self.progress_callback("training", f"Epoch {epoch}", epoch=epoch, ...)
+trainer = ModelTrainer(training_config, progress_callback=wrapper_callback)
+```
+
+#### 2. Logging for Step Visibility
+
+**Pattern**: StrategyTrainer used `print()` statements for pipeline steps
+
+**Why**: Simple, worked reliably for developer visibility during execution
+
+**Preservation Rule**: Replace `print()` with `logger.info()` for step logging. Progress callbacks are ONLY for ModelTrainer's epoch/batch updates, NOT for pipeline steps.
+
+**Key Distinction**:
+
+- **Logging** (`logger.info()`): Developer visibility, what step we're on, diagnostics
+- **Progress callbacks**: Programmatic feature ONLY used by ModelTrainer for epoch/batch metrics
+
+**Example**:
+```python
+# ✅ CORRECT - Logging for developer visibility
+def _load_data(...):
+    logger.info("Step 1: Loading market data for %s", symbols)  # Just logging
+    data = load_market_data(symbols, timeframes, start_date, end_date)
+    logger.info("Loaded %d rows of data", len(data))
+    return data
+
+def _train_model(...):
+    logger.info("Step 7: Training neural network model")
+    # ModelTrainer INTERNALLY uses progress_callback for epoch/batch updates
+    trainer = ModelTrainer(
+        training_config,
+        progress_callback=self.progress_callback,  # ONLY ModelTrainer calls this
+    )
+    metrics = trainer.train(X_train, y_train, X_test, y_test)
+    return metrics
+
+# ❌ WRONG - Using progress callback for pipeline steps
+def _load_data(...):
+    self.progress_callback("data_loading", "Loading data", step=1)  # NO!
+    # Progress callbacks are NOT for pipeline steps!
+```
+
+**Why This Matters**:
+
+- Progress callbacks have specific signature: `(epoch, total_epochs, metrics)`
+- They're for training loop progress (epochs, batches, loss/accuracy)
+- Pipeline steps (loading data, calculating indicators) just need logging
+- Mixing these concepts causes signature mismatches and confusion
+
+#### 3. Direct Execution (No Threading in Executor)
+
+**Pattern**: StrategyTrainer executes synchronously, caller handles threading
+
+**Why**: Training logic should be simple sync code, async/threading is orchestration concern
+
+**Preservation Rule**: TrainingExecutor.execute() is synchronous, host service uses `asyncio.to_thread()`
+
+**Example**:
+```python
+# ✅ CORRECT - Executor is synchronous
+class TrainingExecutor:
+    def execute(self, symbols, timeframes, ...):  # Synchronous method
+        # Direct calls, no async
+        data = self._load_data(...)
+        indicators = self._calculate_indicators(...)
+        return results
+
+# Host service handles threading
+result = await asyncio.to_thread(executor.execute, ...)
+
+# ❌ WRONG - Making executor async
+class TrainingExecutor:
+    async def execute(self, ...):  # Async adds complexity
+        data = await self._load_data(...)  # All methods need to be async
+```
+
+---
+
+## Critical Distinctions
+
+### Progress vs Logging
+
+**These are TWO SEPARATE CONCEPTS that must never be conflated:**
+
+#### Progress (Programmatic Status Updates)
+
+**Purpose**: Real-time UI updates for user feedback
+
+**Mechanism**:
+- `progress_callback(epoch, total_epochs, metrics)`
+- Routes to Operations Service → Progress Renderer → CLI/UI
+- Updates session state in host service
+
+**Hierarchical Structure** (Steps / Epochs / Batches):
+
+- **Step level**: Major pipeline phases (12 steps total)
+  - Step 1: Loading market data
+  - Step 2: Calculating technical indicators
+  - Step 3: Generating fuzzy membership values
+  - Step 4: Engineering features
+  - Step 5: Generating labels
+  - Step 6: Splitting train/test data
+  - Step 7: Training neural network model
+  - Step 8: Evaluating model performance
+  - Step 9: Calculating feature importance
+  - Step 10: Saving model
+  - Step 11: Building results
+  - Step 12: Complete
+
+- **Epoch level** (within Step 7 only): Training iterations
+  - Update once per epoch (~every 30 seconds)
+  - Progress: current_epoch / total_epochs
+  - Includes metrics: train_loss, train_accuracy, val_loss, val_accuracy
+
+- **Batch level** (within each epoch of Step 7): Training batches
+  - Adaptive throttling targeting ~300ms intervals
+  - Progress: current_batch / total_batches_per_epoch
+  - Includes metrics: batch_loss, batch_accuracy
+
+**Frequency**:
+
+- **Step updates**: 12 total (once per major phase)
+- **Epoch updates**: Once per epoch (~every 30 seconds, only in Step 7)
+- **Batch updates**: Adaptive throttling ~300ms intervals (only in Step 7)
+
+**Implementation Pattern** (using GenericProgressManager):
+
+```python
+from ktrdr.async_infrastructure.progress import GenericProgressManager
+
+# Initialize with 12 total steps
+progress_manager = GenericProgressManager(
+    operation_id=operation_id,
+    total_steps=12,
+    renderer=TrainingProgressRenderer(),
+    callback=operations_service.send_progress_update,
+)
+
+# Step 1: Data loading
+with progress_manager.step(1, "Loading market data"):
+    data = self._load_data(symbols, timeframes, start_date, end_date)
+    # progress_manager automatically reports step completion
+
+# Step 2: Indicators
+with progress_manager.step(2, "Calculating technical indicators"):
+    indicators = self._calculate_indicators(data, strategy_config)
+
+# Steps 3-6: Continue pattern...
+
+# Step 7: Training (with nested epoch/batch progress)
+with progress_manager.step(7, "Training neural network model"):
+    # ModelTrainer internally calls progress_callback for epoch/batch updates
+    trainer = ModelTrainer(
+        training_config,
+        progress_callback=self._create_training_callback(progress_manager),
+        cancellation_token=self.cancellation_token,
+    )
+    metrics = trainer.train(X_train, y_train, X_test, y_test)
+
+# Steps 8-12: Continue pattern...
+
+def _create_training_callback(self, progress_manager):
+    """Create callback that integrates ModelTrainer progress with step progress."""
+    def callback(epoch: int, total_epochs: int, metrics: dict[str, float]):
+        # This is called by ModelTrainer - preserve exact signature!
+        # Report nested progress within Step 7
+        progress_manager.update_step_progress(
+            step_current=epoch,
+            step_total=total_epochs,
+            message=f"Epoch {epoch}/{total_epochs}",
+            context={
+                "epoch": epoch,
+                "total_epochs": total_epochs,
+                "metrics": metrics,
+            },
+        )
+    return callback
+```
+
+**Content**: Structured data with metrics
+
+```python
+# Step-level progress
+{
+    "operation_id": "train-123",
+    "current_step": 7,
+    "total_steps": 12,
+    "percentage": 58.3,  # Overall progress across all 12 steps
+    "message": "Training neural network model",
+    "context": {...},
+}
+
+# Epoch-level progress (nested within Step 7)
+{
+    "operation_id": "train-123",
+    "current_step": 7,
+    "total_steps": 12,
+    "percentage": 58.3,  # Overall progress
+    "step_percentage": 5.0,  # Progress within Step 7 (epoch 5/100)
+    "message": "Training neural network model - Epoch 5/100",
+    "context": {
+        "epoch": 5,
+        "total_epochs": 100,
+        "train_loss": 0.234,
+        "train_accuracy": 0.89,
+        "val_loss": 0.245,
+        "val_accuracy": 0.87,
+    },
+}
+
+# Batch-level progress (nested within epoch within Step 7)
+{
+    "operation_id": "train-123",
+    "current_step": 7,
+    "total_steps": 12,
+    "percentage": 58.3,  # Overall progress
+    "step_percentage": 5.0,  # Progress within Step 7
+    "batch_percentage": 30.0,  # Progress within current epoch (batch 30/100)
+    "message": "Training neural network model - Epoch 5/100 - Batch 30/100",
+    "context": {
+        "epoch": 5,
+        "total_epochs": 100,
+        "batch": 30,
+        "total_batches": 100,
+        "batch_loss": 0.240,
+        "batch_accuracy": 0.88,
+    },
+}
+```
+
+**Pattern Consistency with Data Loading**:
+
+This hierarchical pattern mirrors the Data Loading progress structure:
+
+| Component | Data Loading | Training |
+|-----------|-------------|----------|
+| **Level 1** | Steps (load, validate, repair) | Steps (12 pipeline phases) |
+| **Level 2** | Segments (date ranges) | Epochs (training iterations) |
+| **Level 3** | Items (individual bars) | Batches (training batches) |
+
+**Example parallel**:
+```python
+# Data Loading: Steps / Segments / Items
+progress_manager.step(1, "Loading data")
+  → progress_manager.update_segment(segment=1, total_segments=10)
+    → progress_manager.update_items(items_processed=1000, total_items=10000)
+
+# Training: Steps / Epochs / Batches
+progress_manager.step(7, "Training model")
+  → progress_manager.update_step_progress(epoch=5, total_epochs=100)
+    → (ModelTrainer internally reports batch progress via callback)
+```
+
+This consistency makes progress reporting predictable and intuitive across all KTRDR operations.
+
+**Adaptive Throttling**:
+
+- Start with 10-batch stride
+- Measure time between updates
+- If < 150ms → double stride (less frequent)
+- If > 450ms → halve stride (more frequent)
+- Target: ~300ms between progress updates
+
+#### Logging (Developer/Admin Visibility)
+
+**Purpose**: Debugging and operational monitoring
+
+**Mechanism**:
+- `logger.info()`, `logger.debug()`, `logger.warning()`
+- Written to log files
+- Viewed by developers/admins, not users
+
+**Frequency**: Sparse - only significant events
+- Pipeline step completion
+- Epoch milestones (every 10th epoch)
+- Errors and warnings
+- Adaptive stride changes (debug level)
+
+**Content**: Human-readable messages
+```python
+logger.info("Step 1: Loading market data for EURUSD")
+logger.debug("Batch updates too fast (0.08s), increasing stride 10 → 20")
+logger.warning("Training taking longer than expected")
+```
+
+**RULE**: Progress and logging are SEPARATE systems. Never use `logger.info()` for progress updates. Never use `progress_callback()` for logging.
+
+---
+
+## Threading and Async Model
+
+### Critical: Event Loop Blocking Prevention
+
+**Problem**: Training runs for hours and is CPU-bound. If executed directly in async context, it blocks the event loop.
+
+**Impact**: No status checks, no cancellation, service appears hung
+
+**Solution**: Host service MUST use `asyncio.to_thread()`
+
+**Architecture**:
+```
+FastAPI Server (async event loop on main thread)
+  ↓
+BackgroundTasks.add_task(...)
+  ↓
+_run_training_session() (async function, runs in event loop)
+  ↓
+await asyncio.to_thread(executor.execute, ...)  ← CRITICAL
+  ↓
+executor.execute() (sync function, runs in thread pool thread)
+  ↓
+ModelTrainer.train() (sync, CPU-bound, runs for hours)
+  ↓
+progress_callback() (called from thread pool thread)
+  ↓
+session.update_progress() (thread-safe)
+```
+
+**Why asyncio.to_thread() is Safe**:
+- ModelTrainer uses `DataLoader(num_workers=0)` (default)
+- No subprocess spawning from thread
+- No conflict with PyTorch multiprocessing
+
+**Why NOT Using asyncio.to_thread() Fails**:
+- Training blocks event loop for hours
+- Status check requests timeout (cannot be processed)
+- Cancellation requests ignored (cannot be processed)
+- Service appears completely hung
+
+### Thread Safety Requirements
+
+**Components Called from Thread Pool**:
+- `progress_callback()` - called from training thread
+- `session.update_progress()` - must be thread-safe
+- `session.stop_requested` - must be thread-safe read
+
+**Thread Safety Guarantees**:
+```python
+# TrainingSession attributes accessed from training thread
+class TrainingSession:
+    stop_requested: bool  # Read from thread - must be atomic
+    message: str  # Written from thread
+    last_updated: datetime  # Written from thread
+
+    def update_progress(self, epoch, batch, metrics):
+        # Called from thread - must be thread-safe
+        # Simple attribute assignment is atomic in Python
+        self.epoch = epoch
+        self.batch = batch
+        self.last_updated = datetime.utcnow()
+```
+
+### Async/Sync Boundaries
+
+**Boundary Map**:
+```
+Layer                   Context         Why
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+API Endpoints          async           FastAPI requirement
+TrainingService        async           Orchestration, I/O-bound
+LocalTrainingRunner    async           Orchestration
+HostServiceAdapter     async           HTTP calls
+─────────────────────────────────────────────────────
+asyncio.to_thread()    ← BOUNDARY →
+─────────────────────────────────────────────────────
+TrainingExecutor       sync            CPU-bound, long-running
+ModelTrainer           sync            PyTorch operations
+DataManager.load_data  sync            I/O but blocking OK in thread
+```
+
+**Rule**: Everything above the boundary is async. Everything below is sync and runs in thread pool.
+
+---
+
+## Cancellation Architecture
+
+### Latency Requirements
+
+**Target**: < 100ms from user clicking "Cancel" to training stopping
+
+**Why**: Users expect near-instant response to cancellation
+
+### Cancellation Propagation
+
+**Flow**:
+```
+User clicks Cancel (CLI/UI)
+  ↓ < 10ms
+POST /api/v1/operations/{id}/cancel
+  ↓ < 10ms
+OperationsService.cancel_operation()
+  ↓ < 5ms
+cancellation_token.cancel()
+  ↓ < 5ms
+TrainingService checks token (async polling)
+  ↓ < 50ms
+Host service session.stop_requested = True
+  ↓ < 10ms (next batch iteration)
+ModelTrainer._check_cancelled() raises CancellationError
+  ↓ immediate
+Training stops
+```
+
+**Total Latency**: ~90ms worst case
+
+### Check Frequency
+
+**Critical**: Cancellation MUST be checked frequently enough for < 100ms latency
+
+**Check Points** (in order of frequency):
+1. **Every batch** in ModelTrainer (~10-50ms intervals on GPU)
+2. **Every epoch** in ModelTrainer
+3. **Before progress callbacks** in ModelTrainer
+4. **Between pipeline steps** in TrainingExecutor
+
+**Implementation**:
+```python
+# ModelTrainer - checked EVERY batch
+for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
+    self._check_cancelled()  # < 100ms guaranteed
+    # Training operations
+```
+
+**Thread Safety**:
+```python
+class SessionCancellationToken:
+    def is_cancelled(self) -> bool:
+        return session.stop_requested  # Atomic read, thread-safe
+```
+
+---
+
+## Interface Contracts
+
+### TrainingExecutor.execute()
+
+**Signature**:
+```python
+def execute(
+    self,
+    symbols: List[str],
+    timeframes: List[str],
+    start_date: str,
+    end_date: str,
+    validation_split: float = 0.2,
+    data_mode: str = "local",
+    **kwargs,
+) -> dict[str, Any]:
+```
+
+**Context**: Synchronous, runs in thread pool (via asyncio.to_thread)
+
+**Returns**:
+```python
+{
+    "model_path": "models/strategy_name/EURUSD_5m_v1",
+    "training_metrics": {
+        "final_train_loss": 0.234,
+        "final_train_accuracy": 0.89,
+        ...
+    },
+    "test_metrics": {
+        "accuracy": 0.87,
+        "precision": 0.88,
+        ...
+    },
+    "feature_importance": {...},
+    "data_summary": {...}
+}
+```
+
+**Preservation Rule**: This signature matches StrategyTrainer exactly. DO NOT CHANGE.
+
+### Progress Callback
+
+**Signature**:
+```python
+def progress_callback(epoch: int, total_epochs: int, metrics: dict) -> None:
+```
+
+**Called by**: ModelTrainer (from training thread)
+
+**Call Frequency**:
+- Epoch completion: ~every 30 seconds
+- Batch progress: controlled by stride (adaptive, ~300ms intervals)
+
+**Example Metrics Dict**:
+```python
+{
+    "progress_type": "epoch",  # or "batch"
+    "epoch": 5,
+    "total_epochs": 100,
+    "batch": 120,  # if batch update
+    "total_batches_per_epoch": 500,
+    "train_loss": 0.234,
+    "train_accuracy": 0.89,
+    "val_loss": 0.245,
+    "val_accuracy": 0.87,
+    "learning_rate": 0.001,
+}
+```
+
+**Threading**: Called from thread pool thread, must be thread-safe
+
+**Preservation Rule**: This is ModelTrainer's established signature. DO NOT create wrappers that change it.
+
+### CancellationToken Protocol
+
+**Required Methods**:
+```python
+class CancellationToken(Protocol):
+    def is_cancelled(self) -> bool: ...
+    def cancel(self, reason: str = "Operation cancelled") -> None: ...
+    async def wait_for_cancellation(self) -> None: ...
+
+    @property
+    def is_cancelled_requested(self) -> bool: ...
+```
+
+**Implementation for Host Service**:
+```python
+class SessionCancellationToken:
+    def is_cancelled(self) -> bool:
+        return session.stop_requested  # Atomic, thread-safe
+
+    def cancel(self, reason: str = "Operation cancelled") -> None:
+        session.stop_requested = True
+
+    async def wait_for_cancellation(self) -> None:
+        while not session.stop_requested:
+            await asyncio.sleep(0.1)
+
+    @property
+    def is_cancelled_requested(self) -> bool:
+        return session.stop_requested
+```
+
+---
+
+## Common Pitfalls
+
+### 1. Event Loop Blocking
+
+**Symptom**: Host service appears hung, status checks timeout
+
+**Cause**: Running CPU-bound training directly in async function
+
+**Solution**: Use `asyncio.to_thread(executor.execute, ...)`
+
+**Detection**: Monitor request latency - if status checks timeout, event loop is blocked
+
+### 2. Progress Callback Flooding
+
+**Symptom**: Thousands of progress updates per second, log files fill up
+
+**Cause**: Calling progress callback on every batch without throttling
+
+**Solution**: Use adaptive stride (check time since last update, adjust frequency)
+
+**Detection**: Monitor callback frequency - should be ~3-5 per second, not hundreds
+
+### 3. Signature Mismatch
+
+**Symptom**: TypeError about unexpected arguments
+
+**Cause**: Creating wrappers that change callback signatures
+
+**Solution**: Pass callbacks through unchanged from StrategyTrainer pattern
+
+**Detection**: Stack traces showing signature mismatches in callback invocations
+
+### 4. Progress vs Logging Conflation
+
+**Symptom**: `logger.info()` calls for every batch, or missing UI progress updates
+
+**Cause**: Using logging for progress or callbacks for logging
+
+**Solution**: Keep them separate - logging for devs, callbacks for UI
+
+**Detection**: Log files with excessive entries, or UI not updating
+
+### 5. Cancellation Not Propagating
+
+**Symptom**: Training continues after cancel request
+
+**Cause**: Not passing cancellation token to TrainingExecutor/ModelTrainer
+
+**Solution**: Create SessionCancellationToken and pass to executor
+
+**Detection**: Monitor cancellation latency - should be < 100ms
+
+### 6. Thread Safety Violations
+
+**Symptom**: Race conditions, occasional crashes, inconsistent state
+
+**Cause**: Modifying shared state from training thread without synchronization
+
+**Solution**: Use thread-safe operations (atomic reads/writes, locks if needed)
+
+**Detection**: Intermittent failures, especially under load
+
+---
+
+**Status**: Architecture Design Approved - Updated with Battle-Tested Patterns
+**Next**: [Migration Strategy](./05-migration-strategy.md) | [Interface Contracts](./06-interface-contracts.md) | [Implementation Plan](./04-implementation-plan.md)
