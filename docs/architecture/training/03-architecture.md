@@ -1,8 +1,7 @@
-# Training Service Unified Architecture
+# Training Service Architecture - Shared Pipeline, Separate Orchestration
 
-**Date**: 2025-01-05
-**Status**: Design Approved
-**Architect**: System Architect
+**Date**: 2025-01-07
+**Status**: Architecture Design
 **Previous**: [02-requirements.md](./02-requirements.md)
 **Next**: Implementation Plan (TBD)
 
@@ -10,1509 +9,932 @@
 
 ## Executive Summary
 
-This architecture unifies the KTRDR training system into a single, coherent design that eliminates code duplication while supporting multiple execution environments. The core principle is **separation of concerns**: training logic, execution orchestration, and environment-specific adapters are cleanly separated into distinct architectural layers.
+This architecture eliminates code duplication in the KTRDR training system by extracting shared training logic into a reusable `TrainingPipeline` component, while keeping orchestration concerns (progress reporting, cancellation, async boundaries) separate and environment-specific.
 
-**Key Design Decisions**:
-1. **Single Source of Truth**: All training logic consolidated into one reusable component
-2. **Environment Agnostic Core**: Training logic independent of execution environment
-3. **Flexible Orchestration**: Runtime selection of execution environment with intelligent fallback
-4. **Asynchronous Result Transfer**: Host services post results back to primary backend
-5. **Compression by Default**: All model transfers use gzip compression
+**Core Principle**: Share the work, separate the coordination.
 
----
+**Two-Phase Approach**:
 
-## Architectural Principles
+- **Phase 1** (This Document): Minimal refactoring to eliminate duplication
+  - Extract pure training logic into `TrainingPipeline`
+  - Preserve all current behavior (async model, cancellation, mode selection)
+  - Goal: Zero divergence while ensuring everything works
 
-### 1. Separation of Concerns
+- **Phase 2** (Future): Risk-bearing improvements
+  - Harmonize async model (explore single pattern)
+  - Unify cancellation mechanisms
+  - Dynamic execution mode selection
+  - Progress improvements
+  - Any other risky changes
 
-The system is organized into three distinct layers:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ Presentation Layer (API, CLI)                           │
-│ - User-facing interfaces                                │
-│ - Request validation and response formatting            │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│ Orchestration Layer                                     │
-│ - Execution mode selection                              │
-│ - Progress tracking                                     │
-│ - Operation lifecycle management                        │
-│ - Environment routing                                   │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│ Execution Layer                                         │
-│ - Core training logic (environment-agnostic)            │
-│ - Environment-specific adapters                         │
-│ - Model persistence                                     │
-└─────────────────────────────────────────────────────────┘
-```
-
-### 2. Single Responsibility
-
-Each component has exactly one reason to change:
-
-- **TrainingExecutor**: Changes when training algorithm changes
-- **ExecutionModeSelector**: Changes when selection criteria change
-- **TrainingAdapter**: Changes when communication protocol changes
-- **ModelStorage**: Changes when persistence requirements change
-
-### 3. Dependency Inversion
-
-High-level orchestration does not depend on low-level execution details. All dependencies point inward through well-defined interfaces.
-
-### 4. Open/Closed Principle
-
-The system is open for extension (new execution modes) but closed for modification (existing modes don't change when adding new ones).
-
-### 5. Separation of Concerns: Environment vs Hardware
-
-**Critical Distinction**: The architecture separates two orthogonal concerns:
-
-**Execution Environment** (Where code runs):
-- Local (Docker container, CPU-only)
-- Host Service (Native macOS, MPS-capable)
-- Future: Cloud (Remote server, CUDA-capable)
-
-**Hardware Environment** (What resources are available):
-- CPU-only
-- Apple Silicon (MPS)
-- NVIDIA GPU (CUDA)
-
-**Key Insight**: TrainingExecutor is agnostic to **execution environment** but aware of **hardware environment**.
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Execution Environment (Orchestration Concern)       │
-│ - Local vs Host vs Cloud                            │
-│ - HTTP vs In-process                                │
-│ - Progress routing                                  │
-│ - Result transfer                                   │
-└─────────────────────────────────────────────────────┘
-                      ▲
-                      │ Orthogonal to
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│ Hardware Environment (Training Concern)             │
-│ - PyTorch device detection                          │
-│ - CPU vs GPU configuration                          │
-│ - Memory management                                 │
-│ - Batch size adaptation                             │
-└─────────────────────────────────────────────────────┘
-```
-
-**Why This Matters**:
-- Same TrainingExecutor code runs in ANY execution environment
-- TrainingExecutor automatically uses BEST available hardware in EACH environment
-- Docker (local) finds CPU → uses CPU
-- Host Service finds MPS → uses MPS
-- Cloud finds CUDA → uses CUDA
-- **No conditional logic based on execution environment needed**
+**This document focuses exclusively on Phase 1.**
 
 ---
 
-## System Architecture
+## Problem Statement
+
+### Current State: Both Paths Work, But Code is Duplicated
+
+**Both execution paths work correctly today**:
+- Local (Docker container): Training executes, saves models, reports progress
+- Host Service (Native macOS): Training executes, saves models, reports progress
+
+**The problem is code duplication**:
+
+| Component | Backend | Host Service | Duplication % |
+|-----------|---------|--------------|---------------|
+| Data loading | `StrategyTrainer` | `TrainingService._run_real_training()` | 80% |
+| Indicators | Uses `IndicatorEngine` | Uses `IndicatorEngine` | 80% |
+| Fuzzy logic | Uses `FuzzyEngine` | Uses `FuzzyEngine` | 80% |
+| Feature engineering | Uses `FuzzyNeuralProcessor` | Simplified version | 70% |
+| Training loop | Uses `ModelTrainer` | Custom loop | 60% |
+| Model saving | Uses `ModelStorage` | Uses `ModelStorage` | 100% |
+| **Total** | **~1,500 lines** | **~1,000 lines** | **~80%** |
+
+**Consequences of duplication**:
+- Bugs fixed in one place but not the other
+- Features added requiring duplicate work
+- Divergent behavior over time
+- Double testing overhead
+
+### Previous Failed Attempt
+
+**What we tried**: Create a unified `TrainingExecutor` that works for both local and host execution with a single orchestration layer.
+
+**Why it failed**:
+1. Tried to unify progress mechanisms (callback-based vs polling-based)
+2. Tried to unify cancellation (in-memory token vs HTTP flag)
+3. Tried to unify async boundaries (different contexts)
+
+**These are fundamentally different and forcing unification added complexity without benefit.**
+
+### The Right Approach for Phase 1
+
+**Extract what's identical (the work), accept what's different (the coordination):**
+
+- **Shared**: TrainingPipeline with pure work functions
+- **Different but OK**: Progress mechanisms (callbacks vs polling)
+- **Different but OK**: Cancellation mechanisms (token vs HTTP)
+- **Different but OK**: Async patterns (to_thread wrapper vs direct async)
+- **Different but OK**: Mode selection (env var at startup)
+
+**Phase 2 can explore harmonization after Phase 1 proves the pattern works.**
+
+---
+
+## Architecture Overview
 
 ### Conceptual Model
 
 ```
-                    ┌─────────────────────┐
-                    │   User Request      │
-                    │  (API or CLI)       │
-                    └──────────┬──────────┘
-                               │
-                               ↓
-                    ┌─────────────────────┐
-                    │  Training Service   │
-                    │  (Orchestrator)     │
-                    └──────────┬──────────┘
-                               │
-                   ┌───────────┴───────────┐
-                   │                       │
-                   ↓                       ↓
-        ┌──────────────────┐    ┌──────────────────┐
-        │ Execution Mode   │    │ Execution Mode   │
-        │   Selector       │    │   Coordinator    │
-        └────────┬─────────┘    └────────┬─────────┘
-                 │                       │
-        ┌────────┴─────────┐    ┌────────┴─────────┐
-        ↓                  ↓    ↓                  ↓
-   ┌─────────┐      ┌──────────┐      ┌──────────────┐
-   │  Local  │      │   Host   │      │   Future:    │
-   │  Runner │      │  Session │      │   Cloud/GPU  │
-   └────┬────┘      └────┬─────┘      └──────────────┘
-        │                │
-        └────────┬───────┘
-                 │
-                 ↓
-        ┌──────────────────┐
-        │ Training Executor│
-        │  (Core Logic)    │
-        └────────┬─────────┘
-                 │
-                 ↓
-        ┌──────────────────┐
-        │  Model Storage   │
-        │  (Persistence)   │
-        └──────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     User Request                         │
+│                    (API or CLI)                          │
+└────────────────────────┬─────────────────────────────────┘
+                         │
+                         ↓
+┌──────────────────────────────────────────────────────────┐
+│            TrainingService (execution mode selection)    │
+│  - Reads USE_TRAINING_HOST_SERVICE env var at startup   │
+│  - Routes to local OR host orchestrator                  │
+└────────────┬────────────────────────┬────────────────────┘
+             │                        │
+    ┌────────┴────────┐      ┌────────┴────────┐
+    │ Local Mode      │      │ Host Mode       │
+    └────────┬────────┘      └────────┬────────┘
+             │                        │
+             ↓                        ↓
+┌────────────────────────┐  ┌────────────────────────┐
+│ LocalTrainingOrch.     │  │ HostTrainingOrch.      │
+│ - Callback progress    │  │ - Session progress     │
+│ - Token cancellation   │  │ - HTTP cancellation    │
+│ - asyncio.to_thread()  │  │ - Direct async         │
+│   wraps entire run     │  │   (preserve current)   │
+└────────────┬───────────┘  └────────────┬───────────┘
+             │                           │
+             │    Both use same logic    │
+             └───────────┬───────────────┘
+                         │
+                         ↓
+              ┌─────────────────────────────────┐
+              │ TrainingPipeline                │
+              │ (Pure Work Logic)               │
+              │                                 │
+              │ - load_price_data()             │
+              │ - calculate_indicators()        │
+              │ - generate_fuzzy_memberships()  │
+              │ - engineer_features()           │
+              │ - generate_labels()             │
+              │ - combine_multi_symbol_data()   │
+              │ - split_data()                  │
+              │ - create_model()                │
+              │ - train_model()                 │
+              │ - evaluate_model()              │
+              │ - save_model()                  │
+              │                                 │
+              │ Uses DeviceManager for GPU      │
+              └─────────────────────────────────┘
 ```
 
-### Logical Architecture
+### Key Components (Phase 1)
 
-#### Layer 1: Presentation (API/CLI)
+1. **TrainingPipeline** (New - Shared)
+   - Pure, synchronous work functions
+   - No callbacks, no cancellation checks, no async
+   - Accepts callbacks/tokens only in `train_model()` (ModelTrainer interface)
+   - Used by both orchestrators
 
-**Responsibility**: Interface with external systems and users
+2. **DeviceManager** (New - Shared)
+   - Centralized GPU/device detection (MPS, CUDA, CPU)
+   - Device capability checking
+   - Used by all training code
 
-**Components**:
-- REST API endpoints (`/api/v1/trainings/*`)
-- CLI commands (`ktrdr models train`)
-- Request/response models (Pydantic schemas)
+3. **LocalTrainingOrchestrator** (Refactored from `LocalTrainingRunner`)
+   - Uses `TrainingPipeline` for work
+   - Manages local progress callbacks (preserve current)
+   - Checks local cancellation token (preserve current)
+   - Wraps execution in `asyncio.to_thread()` (preserve current)
 
-**Key Design**: Thin layer that delegates immediately to orchestration layer
-
-#### Layer 2: Orchestration
-
-**Responsibility**: Coordinate training operations across environments
-
-**Components**:
-
-1. **TrainingService** (ServiceOrchestrator)
-   - Manages operation lifecycle
-   - Coordinates with OperationsService
-   - Handles background task execution
-
-2. **ExecutionModeSelector**
-   - Environment health checking
-   - Mode selection logic
-   - Fallback strategy
-
-3. **ProgressCoordinator**
-   - Unified progress tracking interface
-   - Environment-specific progress handlers
-   - Real-time status updates
-
-**Key Design**: No direct knowledge of training algorithms or environment specifics
-
-#### Layer 3: Execution
-
-**Responsibility**: Execute training and manage environment-specific concerns
-
-**Components**:
-
-1. **TrainingExecutor** (Core)
-   - Environment-agnostic training logic
-   - Data loading, transformation, training, evaluation
-   - Model creation and training loop
-   - **Does NOT know about execution environment**
-
-2. **LocalTrainingRunner** (Adapter)
-   - Wraps TrainingExecutor for in-process execution
-   - Manages async/sync boundary
-   - Direct access to backend services
-
-3. **HostSessionManager** (Adapter)
-   - Wraps TrainingExecutor for remote execution
-   - Manages HTTP communication
-   - Handles result transfer
-
-4. **ModelStorage** (Persistence)
-   - Model versioning
-   - Metadata management
-   - File system abstraction
+4. **HostTrainingOrchestrator** (Refactored from `training_service._run_real_training`)
+   - Uses `TrainingPipeline` for work
+   - Updates session state for progress (preserve current)
+   - Checks `session.stop_requested` for cancellation (preserve current)
+   - Direct async execution (preserve current - NO to_thread)
 
 ---
 
-## Key Architectural Patterns
+## Execution Mode Selection (Current System - Preserved)
 
-### Pattern 1: Strategy Pattern (Execution Modes)
+### How Backend Decides Execution Mode
 
-**Problem**: Need to switch between different execution environments at runtime
+**Current Implementation** (at startup - preserved in Phase 1):
 
-**Solution**: Define a common interface for execution, implement different strategies
+1. Environment variable `USE_TRAINING_HOST_SERVICE` read at TrainingManager initialization
+2. TrainingAdapter created with `use_host_service` flag
+3. TrainingService checks `is_using_host_service()` when building context
+4. Context includes `use_host_service` flag
+5. `_legacy_operation_entrypoint()` routes based on flag:
+   - `True` → `_run_host_training()` → HostSessionManager
+   - `False` → `_run_local_training()` → LocalTrainingRunner
+
+**Characteristics (Phase 1 - keep as-is)**:
+- **Static**: Set at process startup, cannot change without restart
+- **Global**: All training requests use same mode
+- **Simple**: No health checks or fallback logic
+
+**Phase 2 could add**: Dynamic selection, health checks, fallback
+
+### How Host Service is Triggered (Current - Preserved)
+
+**Current Flow**:
 
 ```
-┌──────────────────────────────────────────────┐
-│          TrainingRunner (Interface)          │
-│  - async run() -> TrainingResult             │
-└───────────────────┬──────────────────────────┘
-                    │
-        ┌───────────┴───────────┐
-        │                       │
-        ↓                       ↓
-┌──────────────┐        ┌──────────────┐
-│LocalRunner   │        │HostSession   │
-│              │        │  Manager     │
-│- In-process  │        │- Remote HTTP │
-│- Thread pool │        │- Polling     │
-│- Direct save │        │- POST results│
-└──────────────┘        └──────────────┘
+TrainingService._run_host_training()
+  ↓
+Creates HostSessionManager
+  ↓
+HostSessionManager.start_session()
+  ↓
+TrainingAdapter.train_multi_symbol_strategy()
+  ↓
+POST /training/start to host service
+  ↓
+Host service creates TrainingSession
+  ↓
+Host service runs _run_real_training() in background (async, not threaded)
+  ↓
+Returns session_id to backend
+  ↓
+HostSessionManager.poll_session()
+  ↓
+Loop: GET /training/status/{session_id} every 2 seconds
+  ↓
+Until status is terminal (completed/failed/cancelled)
 ```
 
-**Benefit**: Add new execution modes without changing orchestration layer
+**Key Points**:
+- Backend polls host service every 2 seconds (configurable via `poll_interval`)
+- Poll interval has exponential backoff (2s → 3s → 4.5s up to max 10s)
+- Polling continues until training reaches terminal state
+- Progress updates retrieved from session state during each poll
 
-### Pattern 2: Adapter Pattern (Environment Bridging)
+---
 
-**Problem**: TrainingExecutor is synchronous, API is async; environments differ
+## Device Detection (New Component - Phase 1)
 
-**Solution**: Adapters translate between executor and environment
+### Problem: Inconsistent Device Management
 
-**Local Adapter**:
-- Async → Sync: Uses `asyncio.to_thread()`
-- Progress: Direct OperationsService updates
-- Results: Immediate return
+Currently device detection is scattered:
+- `LocalTrainingRunner`: Simple `torch.device("cuda" if torch.cuda.is_available() else "cpu")`
+- Host service: Complex MPS/CUDA detection with configuration
+- No shared logic for device capabilities
 
-**Host Adapter**:
-- Async → HTTP: POST request, poll for status
-- Progress: HTTP polling, local state updates
-- Results: Callback POST to backend
+### Solution: Centralized DeviceManager
 
-### Pattern 3: Repository Pattern (Model Storage)
-
-**Problem**: Decouple model persistence from business logic
-
-**Solution**: ModelStorage acts as repository with consistent interface
+**Design**: Single class that detects device and returns capabilities
 
 **Responsibilities**:
-- Abstract file system details
-- Manage versioning strategy
-- Provide query interface
-- Handle metadata
+- Detect best available device (CUDA > MPS > CPU)
+- Return device capabilities (mixed precision support, memory, etc.)
+- Log detection decisions
+- Provide manual override option
 
-### Pattern 4: Observer Pattern (Progress Tracking)
+**Key Insight**: Different devices have different capabilities:
+- **CUDA**: Full capabilities (mixed precision, memory profiling)
+- **MPS**: Limited capabilities (no mixed precision, no memory query)
+- **CPU**: Fallback (no GPU features)
 
-**Problem**: Multiple consumers need training progress updates
+**Usage**: Training adapts to device capabilities rather than assuming features
 
-**Solution**: Callback-based progress notifications
-
-```
-TrainingExecutor
-       │
-       │ progress_callback(phase, message, **details)
-       │
-       ├─────────────┬─────────────┐
-       │             │             │
-       ↓             ↓             ↓
-OperationsService  Session    Future: WebSocket
-   (backend)       (host)        (real-time)
-```
-
-**Benefit**: Add new progress consumers without changing executor
-
-### Pattern 5: Template Method Pattern (Training Pipeline)
-
-**Problem**: Training has fixed steps but configurable implementations
-
-**Solution**: TrainingExecutor defines pipeline structure, steps are pluggable
-
-**Fixed Pipeline**:
-1. Data loading
-2. Indicator calculation
-3. Fuzzy membership generation
-4. Feature engineering
-5. Label generation
-6. Dataset preparation
-7. Model creation
-8. Training execution
-9. Evaluation
-10. Feature importance
-11. Model persistence
-12. Result aggregation
-
-**Variable Implementations**: Each step uses injected components (DataManager, IndicatorEngine, etc.)
+**Phase 1 Focus**: Extract current device detection logic into shared component
 
 ---
 
-## Data Flow Architecture
+## Component Design (Phase 1)
 
-### Local Execution Data Flow
+### TrainingPipeline (New Component)
 
-```
-User Request
-    ↓
-API validates request
-    ↓
-TrainingService.start_training()
-    ↓
-ExecutionModeSelector → "local"
-    ↓
-Create LocalTrainingRunner
-    ↓
-Queue background task
-    ↓
-Response to user (operation_id)
+**Location**: `ktrdr/training/pipeline.py`
 
+**Responsibility**: Execute pure training transformations - no coordination
 
-[Background Task]
-    ↓
-asyncio.to_thread(executor.execute)
-    ↓
-TrainingExecutor runs (sync)
-    ├─ progress_callback → OperationsService
-    ├─ Loads data, trains model
-    └─ ModelStorage.save_model()
-    ↓
-Returns results
-    ↓
-OperationsService.complete_operation()
-    ↓
-User polls /operations/{id} → "completed"
-```
+**Design Principles**:
+1. **Pure functions**: Input → transformation → output
+2. **No callbacks**: Returns data (except `train_model()` which passes through)
+3. **No cancellation checks**: Caller handles coordination
+4. **No async**: Synchronous work, caller manages async
+5. **No progress reporting**: Caller reports progress
 
-**Characteristics**:
-- Synchronous execution in thread pool
-- Direct backend service access
-- Immediate model persistence
-- No network latency
-- **Hardware**: Uses CPU (Docker cannot access MPS)
+**Key Methods** (signatures only):
+- `load_price_data(...) -> dict[str, dict[str, pd.DataFrame]]`
+- `calculate_indicators(...) -> dict[str, dict[str, pd.DataFrame]]`
+- `generate_fuzzy_memberships(...) -> dict[str, dict[str, pd.DataFrame]]`
+- `engineer_features(...) -> tuple[dict, dict]`
+- `generate_labels(...) -> dict[str, np.ndarray]`
+- `combine_multi_symbol_data(...) -> tuple[np.ndarray, np.ndarray, np.ndarray]`
+- `split_data(...) -> tuple[tuple, tuple, tuple]`
+- `create_model(...) -> MLPTradingModel`
+- `train_model(..., progress_callback, cancellation_token) -> dict` ← Only method accepting callbacks/tokens
+- `evaluate_model(...) -> dict[str, float]`
+- `save_model(...) -> str`
 
-### Host Service Execution Data Flow
-
-```
-User Request
-    ↓
-API validates request
-    ↓
-TrainingService.start_training()
-    ↓
-ExecutionModeSelector → "host"
-    ↓
-Create HostSessionManager
-    ↓
-Queue background task
-    ↓
-Response to user (operation_id)
-
-
-[Background Task]
-    ↓
-POST to host service /training/start
-    (includes callback_url)
-    ↓
-Host service creates session
-    ↓
-Backend starts polling loop
-
-
-[On Host Service]
-    ↓
-Start TrainingExecutor (sync)
-    ├─ progress_callback → Session.update_progress()
-    ├─ Loads data, trains model
-    └─ Serialize model + compress (gzip)
-    ↓
-POST results to callback_url
-    (retry with exponential backoff)
-
-
-[Backend Receives Results]
-    ↓
-TrainingService.receive_training_results()
-    ↓
-Decompress + deserialize model
-    ↓
-ModelStorage.save_model()
-    ↓
-OperationsService.complete_operation()
-    ↓
-User polls /operations/{id} → "completed"
-```
-
-**Characteristics**:
-- Asynchronous, distributed execution
-- Network communication overhead
-- **Hardware**: Uses MPS on Mac (native access to Metal)
-- GPU acceleration capability
-- Deferred model persistence
-- Retry resilience
+**Key Point**: Only `train_model()` accepts callbacks/tokens because `ModelTrainer` interface requires them
 
 ---
 
-## Component Responsibilities
+### LocalTrainingOrchestrator (Phase 1 - Preserve Current Pattern)
 
-### TrainingExecutor
+**Location**: `ktrdr/api/services/training/local_runner.py`
 
-**Type**: Core Business Logic
-**Lifecycle**: Created per training operation
-**Dependencies**: DataManager, IndicatorEngine, FuzzyEngine, ModelTrainer, ModelStorage
+**Responsibility**: Coordinate training with local (in-process) mechanisms
 
-**Responsibilities**:
-- Execute complete training pipeline
-- Coordinate data processing components
-- **Detect and use available compute resources (CPU/GPU)**
-- Report progress via callback
-- Save trained models
-- Aggregate results
+**Current Pattern** (preserve in Phase 1):
 
-**Environment Agnostic Means**:
-- Does NOT know whether it's running in Docker container or host service (execution location)
-- Does NOT know whether it was invoked via HTTP or in-process (invocation method)
-- Does NOT handle communication with orchestration layer (HTTP, async boundaries)
-- Does NOT manage operation lifecycle (OperationsService, session state)
-
-**Hardware Aware Means**:
-- DOES detect available hardware (CPU, MPS, CUDA)
-- DOES configure PyTorch to use best available device
-- DOES adapt training to available resources
-
-**Why Synchronous**: Training is inherently sequential and compute-bound. Async adds complexity without benefit.
-
-**GPU Detection Strategy**:
-```
-On initialization:
-1. Check PyTorch backends (torch.backends.mps.is_available(), torch.cuda.is_available())
-2. Select device: CUDA > MPS > CPU
-3. Configure model and data loaders for selected device
-4. Log selected device for observability
-```
-
-This is standard PyTorch practice - the same code works on CPU, MPS (Mac), or CUDA (Linux/Windows) without modification.
-
-### ExecutionModeSelector
-
-**Type**: Decision Component
-**Lifecycle**: Singleton (one per TrainingService)
-**Dependencies**: HTTP client (for health checks)
-
-**Responsibilities**:
-- Evaluate execution mode requests
-- Check environment health/availability
-- Apply fallback logic
-- Manage default mode configuration
-
-**Decision Criteria**:
-- Requested mode (user preference)
-- GPU requirements
-- Host service availability
-- System default configuration
-
-**Output**: Concrete execution mode ("local" or "host")
-
-### ModelStorage
-
-**Type**: Repository
-**Lifecycle**: Singleton
-**Dependencies**: File system
-
-**Responsibilities**:
-- Version management (incremental versioning)
-- Metadata persistence (config, metrics, features)
-- Model serialization (PyTorch state dicts)
-- Query interface (list, load, delete)
-- Symlink management (latest version)
-
-**Storage Structure**:
-```
-models/
-└── {strategy_name}/
-    ├── {symbol}_{timeframe}_v1/
-    │   ├── model.pt
-    │   ├── model_full.pt
-    │   ├── config.json
-    │   ├── metrics.json
-    │   ├── features.json
-    │   └── metadata.json
-    ├── {symbol}_{timeframe}_v2/
-    │   └── ...
-    └── {symbol}_{timeframe}_latest → v2/
-```
-
-### ProgressCoordinator
-
-**Type**: Mediator
-**Lifecycle**: Created per operation
-**Dependencies**: OperationsService (local) or TrainingSession (host)
-
-**Responsibilities**:
-- Provide unified callback interface to TrainingExecutor
-- Route progress updates to appropriate destination
-- Transform progress data to environment-specific format
-
-**Implementation Variants**:
-
-**Local Mode**:
-- Directly updates OperationsService
-- Synchronous, in-process communication
-- Real-time progress available to API
-
-**Host Mode**:
-- Updates TrainingSession state
-- Polled by backend via GET /status
-- Eventual consistency
-
----
-
-## Interface Contracts
-
-### TrainingRunner Interface
-
-**Purpose**: Abstraction for different execution environments
-
-**Contract**:
-- Input: Training configuration, symbols, timeframes, date range
-- Output: Training results (model path, metrics, artifacts)
-- Behavior: Execute training to completion or raise exception
-- Guarantees: Model saved if execution succeeds
-
-**Implementations**: LocalTrainingRunner, HostSessionManager, Future: CloudGPURunner
-
-### ProgressCallback Interface
-
-**Purpose**: Decouple progress reporting from training logic
-
-**Contract**:
-- Input: Phase name, message, optional structured details
-- Output: None (fire-and-forget)
-- Behavior: Report progress without blocking training
-- Guarantees: Non-blocking, exception-safe
-
-### ResultTransfer Interface
-
-**Purpose**: Standardize model transfer from host services to backend
-
-**Contract**:
-- Protocol: HTTP POST with JSON payload
-- Compression: Gzip (required)
-- Encoding: Base64
-- Retry: Exponential backoff (3 attempts)
-- Response: Success confirmation with model_path
-
----
-
-## Design Decisions
-
-### Decision 1: Synchronous Training Core
-
-**Question**: Should TrainingExecutor be async or sync?
-
-**Decision**: Synchronous
-
-**Rationale**:
-- Training is CPU/GPU-bound, not I/O-bound
-- Sequential pipeline with no concurrency within training
-- Async adds complexity without performance benefit
-- Wrapped by async adapters when needed (LocalTrainingRunner)
-
-**Trade-offs**:
-- ✅ Simpler code, easier to reason about
-- ✅ Can run in thread pool or separate process
-- ❌ Blocks thread during execution (mitigated by thread pool)
-
-### Decision 2: Host Service Posts Results Back
-
-**Question**: How should host service return trained models?
-
-**Options Considered**:
-- A) Backend polls and retrieves model when complete
-- B) Host service posts results to backend callback
-- C) Shared filesystem
-
-**Decision**: Option B (callback POST)
-
-**Rationale**:
-- **Scalability**: Works with remote host services (future: cloud GPU)
-- **Simplicity**: Host service controls when to send results
-- **Reliability**: Retry logic handles transient failures
-- **Separation**: Backend is source of truth for model storage
-
-**Trade-offs**:
-- ✅ Works remotely, not tied to localhost
-- ✅ Clear ownership (backend stores, host executes)
-- ✅ Retry resilience built-in
-- ❌ Requires callback URL configuration
-- ❌ HTTP payload size limits (mitigated by compression)
-
-### Decision 3: Gzip Compression
-
-**Question**: How to handle large model transfers?
-
-**Decision**: Gzip compression (3-5x reduction)
-
-**Rationale**:
-- Simple, widely supported
-- Effective compression ratio for PyTorch models
-- Negligible CPU overhead compared to training time
-- No special infrastructure needed
-
-**Alternatives Considered**:
-- Streaming: Complex, unclear benefit
-- No compression: May hit HTTP limits
-- Shared filesystem: Doesn't work remotely
-
-### Decision 4: Execution Mode Selection Strategy
-
-**Question**: How should system choose between local and host execution?
-
-**Decision**: Three-tier selection with fallback
-
-1. **Per-Request Override**: User can specify mode for each request
-2. **System Default**: Configurable default (env var or API)
-3. **Intelligent Auto**: Based on requirements and availability
-
-**Auto Mode Logic**:
-- If GPU required AND host available → "host"
-- If GPU required AND host unavailable → ERROR
-- If GPU not required → "local" (prefer local for faster startup)
-
-**Fallback Logic**:
-- If requested "host" AND host unavailable AND !require_gpu → WARN + fallback to "local"
-- If requested "host" AND host unavailable AND require_gpu → ERROR
-
-**Rationale**:
-- **Flexibility**: Users control when needed
-- **Simplicity**: Sensible defaults for common cases
-- **Resilience**: Automatic fallback when possible
-- **Transparency**: Always log selected mode
-
-### Decision 5: Progress Tracking Separation
-
-**Question**: Should progress updates and logging be unified?
-
-**Decision**: Separate concerns
-
-**Logging**:
-- Purpose: Debugging, audit trail
-- Destination: Log files
-- Format: Structured, numbered steps
-- Audience: Developers, operators
-
-**Progress**:
-- Purpose: User feedback, monitoring
-- Destination: OperationsService or Session state
-- Format: Phase + message + metrics
-- Audience: End users, monitoring systems
-
-**Rationale**: Different consumers, different requirements, different lifecycles
-
----
-
-## Quality Attributes
-
-### Performance
-
-**Target**: Training throughput unaffected by architecture
-
-**Strategy**:
-- Training logic runs in native Python (no async overhead)
-- No unnecessary data serialization until results transfer
-- Thread pool for local execution (non-blocking API)
-- GPU acceleration via host service when available
-
-**Measurement**: Training time should be ≤ 5% slower than direct execution
-
-### Scalability
-
-**Horizontal**: Multiple host services can be registered (future)
-
-**Vertical**: Training workload scales with hardware (GPU)
-
-**Constraints**: Model size limited by HTTP payload (mitigated by compression)
-
-### Reliability
-
-**Failure Modes**:
-
-1. **Host Service Down**:
-   - Detection: Health check failure
-   - Response: Fallback to local (if GPU not required)
-   - Recovery: Automatic when service returns
-
-2. **Network Failure During Result Transfer**:
-   - Detection: HTTP timeout/error
-   - Response: Exponential backoff retry (3 attempts)
-   - Recovery: Results remain in session state for manual retrieval
-
-3. **Training Failure**:
-   - Detection: Exception in TrainingExecutor
-   - Response: Mark operation as failed, preserve error details
-   - Recovery: User retry with corrected configuration
-
-**Availability Target**: 99.9% (excluding planned maintenance)
-
-### Maintainability
-
-**Code Duplication**: Eliminated (single TrainingExecutor)
-
-**Change Impact**:
-- Algorithm changes: Only TrainingExecutor
-- New execution mode: Add new adapter, no core changes
-- API changes: Only presentation layer
-- Storage changes: Only ModelStorage
-
-**Testing**:
-- Unit tests: Each component independently
-- Integration tests: Adapter + executor combinations
-- E2E tests: Full flow local and host
-
-### Security
-
-**Trust Boundary**: Backend trusts host service (same deployment)
-
-**Future Considerations** (when adding remote services):
-- API key authentication for callback endpoint
-- TLS for model transfer
-- Input validation for all external data
-
----
-
-## Future Extensibility
-
-### Cloud GPU Integration
-
-**Design Support**: Architecture already supports remote execution
-
-**Required Changes**:
-- New adapter: CloudGPUSessionManager
-- Authentication/authorization
-- Longer timeout values
-- Cost tracking
-
-**No Changes Needed**:
-- TrainingExecutor (environment-agnostic)
-- ModelStorage (same interface)
-- API contracts (same endpoints)
-
-### Real-time Progress Streaming
-
-**Design Support**: Progress callback pattern allows multiple consumers
-
-**Required Changes**:
-- Add WebSocket endpoint
-- New progress handler: WebSocketProgressPublisher
-- Subscribe users to operation updates
-
-**No Changes Needed**:
-- TrainingExecutor (same callback)
-- Existing polling mechanism (backward compatible)
-
-### Multi-Model Training
-
-**Design Support**: TrainingExecutor processes one strategy at a time
-
-**Required Changes**:
-- Batch orchestration layer
-- Resource allocation
-- Dependency management
-
-**No Changes Needed**:
-- TrainingExecutor (single responsibility)
-- Execution mode selection
-
----
-
-## Risks and Mitigations
-
-### Risk 1: HTTP Payload Size Limits
-
-**Risk**: Very large models may exceed HTTP limits even with compression
-
-**Likelihood**: Low (gzip provides 3-5x compression)
-
-**Impact**: High (training succeeds but results lost)
-
-**Mitigation**:
-- Primary: Gzip compression (implemented)
-- Secondary: Chunked transfer encoding (if needed)
-- Tertiary: Fallback to shared volume for large models (future)
-
-**Monitoring**: Track compressed payload sizes, alert if approaching limits
-
-### Risk 2: Host Service Unavailability
-
-**Risk**: Host service down when GPU required
-
-**Likelihood**: Medium (depends on infrastructure)
-
-**Impact**: High (GPU training blocked)
-
-**Mitigation**:
-- Primary: Health check with fallback (implemented)
-- Secondary: Multiple host services (future)
-- Tertiary: Queue requests for retry (future)
-
-**Monitoring**: Host service uptime, fallback frequency
-
-### Risk 3: Model Corruption During Transfer
-
-**Risk**: Network issues corrupt model during POST
-
-**Likelihood**: Very Low (HTTP includes checksums)
-
-**Impact**: High (model unusable)
-
-**Mitigation**:
-- Primary: HTTP transport reliability
-- Secondary: Model validation on backend (load state dict before saving)
-- Tertiary: Retry on deserialization failure
-
-**Monitoring**: Deserialization error rate
-
----
-
-## Appendix: Terminology
-
-**Training Operation**: Complete workflow from user request to saved model
-
-**Execution Mode**: Environment where training runs (local or host)
-
-**Session**: Host service's internal tracking of a training operation
-
-**Operation ID**: Backend's identifier for a training operation
-
-**Callback URL**: Endpoint where host service sends results
-
-**Progress Phase**: Logical step in training pipeline (e.g., "data_loading")
-
-**Model Artifact**: Trained model plus metadata (config, metrics, features)
-
----
-
-## Battle-Tested Code Preservation
-
-### Principle
-
-When refactoring working code, we follow the **Preserve-Then-Reorganize** principle:
-
-1. **Map exactly how current code works** (signatures, flows, patterns, threading)
-2. **Document the exact patterns** in this architecture document
-3. **New code MUST preserve these patterns exactly**
-4. **Only change: location, organization, naming**
-5. **DO NOT change: signatures, logic, threading model, call patterns**
-
-### Red Flags You're Violating This Principle
-
-- Creating new wrappers/adapters around working code
-- Changing signatures "for consistency"
-- "Improving" working logic without understanding why it works
-- Introducing abstraction layers that weren't there before
-- Changing threading/async model without deep analysis
-
-### Battle-Tested Patterns from StrategyTrainer
-
-These patterns MUST be preserved in TrainingExecutor:
-
-#### 1. Progress Callback Signature
-
-**Pattern**: ModelTrainer callback uses `(epoch, total_epochs, metrics)` signature
-
-**Why**: This signature is used throughout the training codebase, has proven stable, and supports both epoch and batch-level progress with rich metrics.
-
-**Preservation Rule**: TrainingExecutor MUST pass callbacks through to ModelTrainer unchanged. Do not create adapter/wrapper functions that change the signature.
-
-**Example**:
 ```python
-# ✅ CORRECT - Pass through unchanged
-trainer = ModelTrainer(
-    training_config,
-    progress_callback=self.progress_callback,  # Direct pass-through
-    cancellation_token=self.cancellation_token,
-)
+async def run(self) -> dict[str, Any]:
+    # Wrap ENTIRE execution in thread pool (current behavior)
+    return await asyncio.to_thread(self._execute_training)
 
-# ❌ WRONG - Creating wrapper that changes signature
-def wrapper_callback(epoch, total_epochs, metrics):
-    self.progress_callback("training", f"Epoch {epoch}", epoch=epoch, ...)
-trainer = ModelTrainer(training_config, progress_callback=wrapper_callback)
-```
+def _execute_training(self) -> dict[str, Any]:
+    # Synchronous orchestration
 
-#### 2. Logging for Step Visibility
+    # Check cancellation (current: in-memory token)
+    self._check_cancellation()
 
-**Pattern**: StrategyTrainer used `print()` statements for pipeline steps
+    # Report progress (current: callback to bridge)
+    self._bridge.on_phase("data_loading", message="...")
 
-**Why**: Simple, worked reliably for developer visibility during execution
+    # Do work (NEW: use pipeline)
+    result = self._pipeline.load_price_data(...)
 
-**Preservation Rule**: Replace `print()` with `logger.info()` for step logging. Progress callbacks are ONLY for ModelTrainer's epoch/batch updates, NOT for pipeline steps.
-
-**Key Distinction**:
-
-- **Logging** (`logger.info()`): Developer visibility, what step we're on, diagnostics
-- **Progress callbacks**: Programmatic feature ONLY used by ModelTrainer for epoch/batch metrics
-
-**Example**:
-```python
-# ✅ CORRECT - Logging for developer visibility
-def _load_data(...):
-    logger.info("Step 1: Loading market data for %s", symbols)  # Just logging
-    data = load_market_data(symbols, timeframes, start_date, end_date)
-    logger.info("Loaded %d rows of data", len(data))
-    return data
-
-def _train_model(...):
-    logger.info("Step 7: Training neural network model")
-    # ModelTrainer INTERNALLY uses progress_callback for epoch/batch updates
-    trainer = ModelTrainer(
-        training_config,
-        progress_callback=self.progress_callback,  # ONLY ModelTrainer calls this
+    # Training step passes callbacks through (current behavior)
+    training_results = self._pipeline.train_model(
+        ...,
+        progress_callback=self._create_training_callback(),
+        cancellation_token=self._token
     )
-    metrics = trainer.train(X_train, y_train, X_test, y_test)
-    return metrics
-
-# ❌ WRONG - Using progress callback for pipeline steps
-def _load_data(...):
-    self.progress_callback("data_loading", "Loading data", step=1)  # NO!
-    # Progress callbacks are NOT for pipeline steps!
 ```
 
-**Why This Matters**:
-
-- Progress callbacks have specific signature: `(epoch, total_epochs, metrics)`
-- They're for training loop progress (epochs, batches, loss/accuracy)
-- Pipeline steps (loading data, calculating indicators) just need logging
-- Mixing these concepts causes signature mismatches and confusion
-
-#### 3. Direct Execution (No Threading in Executor)
-
-**Pattern**: StrategyTrainer executes synchronously, caller handles threading
-
-**Why**: Training logic should be simple sync code, async/threading is orchestration concern
-
-**Preservation Rule**: TrainingExecutor.execute() is synchronous, host service uses `asyncio.to_thread()`
-
-**Example**:
-```python
-# ✅ CORRECT - Executor is synchronous
-class TrainingExecutor:
-    def execute(self, symbols, timeframes, ...):  # Synchronous method
-        # Direct calls, no async
-        data = self._load_data(...)
-        indicators = self._calculate_indicators(...)
-        return results
-
-# Host service handles threading
-result = await asyncio.to_thread(executor.execute, ...)
-
-# ❌ WRONG - Making executor async
-class TrainingExecutor:
-    async def execute(self, ...):  # Async adds complexity
-        data = await self._load_data(...)  # All methods need to be async
-```
+**What Changes**: Use `TrainingPipeline` for work
+**What Stays**: Async pattern, callbacks, cancellation, progress reporting
 
 ---
 
-## Critical Distinctions
+### HostTrainingOrchestrator (Phase 1 - Preserve Current Pattern)
 
-### Progress vs Logging
+**Location**: `training-host-service/orchestrator.py` (new file)
 
-**These are TWO SEPARATE CONCEPTS that must never be conflated:**
+**Responsibility**: Coordinate training with host service (session-based) mechanisms
 
-#### Progress (Programmatic Status Updates)
+**Current Pattern** (preserve in Phase 1):
 
-**Purpose**: Real-time UI updates for user feedback
-
-**Mechanism**:
-- `progress_callback(epoch, total_epochs, metrics)`
-- Routes to Operations Service → Progress Renderer → CLI/UI
-- Updates session state in host service
-
-**Hierarchical Structure** (Steps / Epochs / Batches):
-
-- **Step level**: Major pipeline phases (12 steps total)
-  - Step 1: Loading market data
-  - Step 2: Calculating technical indicators
-  - Step 3: Generating fuzzy membership values
-  - Step 4: Engineering features
-  - Step 5: Generating labels
-  - Step 6: Splitting train/test data
-  - Step 7: Training neural network model
-  - Step 8: Evaluating model performance
-  - Step 9: Calculating feature importance
-  - Step 10: Saving model
-  - Step 11: Building results
-  - Step 12: Complete
-
-- **Epoch level** (within Step 7 only): Training iterations
-  - Update once per epoch (~every 30 seconds)
-  - Progress: current_epoch / total_epochs
-  - Includes metrics: train_loss, train_accuracy, val_loss, val_accuracy
-
-- **Batch level** (within each epoch of Step 7): Training batches
-  - Adaptive throttling targeting ~300ms intervals
-  - Progress: current_batch / total_batches_per_epoch
-  - Includes metrics: batch_loss, batch_accuracy
-
-**Frequency**:
-
-- **Step updates**: 12 total (once per major phase)
-- **Epoch updates**: Once per epoch (~every 30 seconds, only in Step 7)
-- **Batch updates**: Adaptive throttling ~300ms intervals (only in Step 7)
-
-**Implementation Pattern** (using GenericProgressManager):
+Host service `_run_real_training()` is **already async** and does **NOT** use `asyncio.to_thread()`.
 
 ```python
-from ktrdr.async_infrastructure.progress import GenericProgressManager
+async def run(self) -> dict[str, Any]:
+    # Direct async execution (current behavior)
 
-# Initialize with 12 total steps
-progress_manager = GenericProgressManager(
-    operation_id=operation_id,
-    total_steps=12,
-    renderer=TrainingProgressRenderer(),
-    callback=operations_service.send_progress_update,
-)
+    # Check cancellation (current: session flag)
+    if self._check_stop_requested():
+        return self._cancelled_result()
 
-# Step 1: Data loading
-with progress_manager.step(1, "Loading market data"):
-    data = self._load_data(symbols, timeframes, start_date, end_date)
-    # progress_manager automatically reports step completion
+    # Report progress (current: session state)
+    self._update_progress(phase="data_loading", message="...")
 
-# Step 2: Indicators
-with progress_manager.step(2, "Calculating technical indicators"):
-    indicators = self._calculate_indicators(data, strategy_config)
+    # Do work (NEW: use pipeline - but still async context)
+    result = self._pipeline.load_price_data(...)
 
-# Steps 3-6: Continue pattern...
-
-# Step 7: Training (with nested epoch/batch progress)
-with progress_manager.step(7, "Training neural network model"):
-    # ModelTrainer internally calls progress_callback for epoch/batch updates
-    trainer = ModelTrainer(
-        training_config,
-        progress_callback=self._create_training_callback(progress_manager),
-        cancellation_token=self.cancellation_token,
+    # Training step passes callbacks through (current behavior)
+    training_results = self._pipeline.train_model(
+        ...,
+        progress_callback=self._create_training_callback(),
+        cancellation_token=SessionCancellationToken(session)
     )
-    metrics = trainer.train(X_train, y_train, X_test, y_test)
-
-# Steps 8-12: Continue pattern...
-
-def _create_training_callback(self, progress_manager):
-    """Create callback that integrates ModelTrainer progress with step progress."""
-    def callback(epoch: int, total_epochs: int, metrics: dict[str, float]):
-        # This is called by ModelTrainer - preserve exact signature!
-        # Report nested progress within Step 7
-        progress_manager.update_step_progress(
-            step_current=epoch,
-            step_total=total_epochs,
-            message=f"Epoch {epoch}/{total_epochs}",
-            context={
-                "epoch": epoch,
-                "total_epochs": total_epochs,
-                "metrics": metrics,
-            },
-        )
-    return callback
 ```
 
-**Content**: Structured data with metrics
+**What Changes**: Use `TrainingPipeline` for work
+**What Stays**: Async pattern (direct, no to_thread), session progress, HTTP cancellation
 
-```python
-# Step-level progress
-{
-    "operation_id": "train-123",
-    "current_step": 7,
-    "total_steps": 12,
-    "percentage": 58.3,  # Overall progress across all 12 steps
-    "message": "Training neural network model",
-    "context": {...},
-}
+**Key Difference from Local**:
+- Local wraps entire execution in `asyncio.to_thread()`
+- Host runs directly in async context
 
-# Epoch-level progress (nested within Step 7)
-{
-    "operation_id": "train-123",
-    "current_step": 7,
-    "total_steps": 12,
-    "percentage": 58.3,  # Overall progress
-    "step_percentage": 5.0,  # Progress within Step 7 (epoch 5/100)
-    "message": "Training neural network model - Epoch 5/100",
-    "context": {
-        "epoch": 5,
-        "total_epochs": 100,
-        "train_loss": 0.234,
-        "train_accuracy": 0.89,
-        "val_loss": 0.245,
-        "val_accuracy": 0.87,
-    },
-}
+**Why**: Host service is already async (FastAPI), can call sync pipeline methods directly
 
-# Batch-level progress (nested within epoch within Step 7)
-{
-    "operation_id": "train-123",
-    "current_step": 7,
-    "total_steps": 12,
-    "percentage": 58.3,  # Overall progress
-    "step_percentage": 5.0,  # Progress within Step 7
-    "batch_percentage": 30.0,  # Progress within current epoch (batch 30/100)
-    "message": "Training neural network model - Epoch 5/100 - Batch 30/100",
-    "context": {
-        "epoch": 5,
-        "total_epochs": 100,
-        "batch": 30,
-        "total_batches": 100,
-        "batch_loss": 0.240,
-        "batch_accuracy": 0.88,
-    },
-}
-```
-
-**Pattern Consistency with Data Loading**:
-
-This hierarchical pattern mirrors the Data Loading progress structure:
-
-| Component | Data Loading | Training |
-|-----------|-------------|----------|
-| **Level 1** | Steps (load, validate, repair) | Steps (12 pipeline phases) |
-| **Level 2** | Segments (date ranges) | Epochs (training iterations) |
-| **Level 3** | Items (individual bars) | Batches (training batches) |
-
-**Example parallel**:
-```python
-# Data Loading: Steps / Segments / Items
-progress_manager.step(1, "Loading data")
-  → progress_manager.update_segment(segment=1, total_segments=10)
-    → progress_manager.update_items(items_processed=1000, total_items=10000)
-
-# Training: Steps / Epochs / Batches
-progress_manager.step(7, "Training model")
-  → progress_manager.update_step_progress(epoch=5, total_epochs=100)
-    → (ModelTrainer internally reports batch progress via callback)
-```
-
-This consistency makes progress reporting predictable and intuitive across all KTRDR operations.
-
-**Adaptive Throttling**:
-
-- Start with 10-batch stride
-- Measure time between updates
-- If < 150ms → double stride (less frequent)
-- If > 450ms → halve stride (more frequent)
-- Target: ~300ms between progress updates
-
-#### Logging (Developer/Admin Visibility)
-
-**Purpose**: Debugging and operational monitoring
-
-**Mechanism**:
-- `logger.info()`, `logger.debug()`, `logger.warning()`
-- Written to log files
-- Viewed by developers/admins, not users
-
-**Frequency**: Sparse - only significant events
-- Pipeline step completion
-- Epoch milestones (every 10th epoch)
-- Errors and warnings
-- Adaptive stride changes (debug level)
-
-**Content**: Human-readable messages
-```python
-logger.info("Step 1: Loading market data for EURUSD")
-logger.debug("Batch updates too fast (0.08s), increasing stride 10 → 20")
-logger.warning("Training taking longer than expected")
-```
-
-**RULE**: Progress and logging are SEPARATE systems. Never use `logger.info()` for progress updates. Never use `progress_callback()` for logging.
+**Phase 2 Could Explore**: Should we unify these patterns? Trade-offs need analysis.
 
 ---
 
-## Threading and Async Model
+## Model Persistence (Phase 1 - Critical Gap to Fix)
 
-### Critical: Event Loop Blocking Prevention
+### Problem: Host Service Doesn't Save Models
 
-**Problem**: Training runs for hours and is CPU-bound. If executed directly in async context, it blocks the event loop.
+**Current State**:
+- **Local**: Uses `ModelStorage` to save trained models to `models/` directory
+- **Host**: Does NOT save models - just sets `session.status = "completed"`
 
-**Impact**: No status checks, no cancellation, service appears hung
+**Consequence**: Models trained on host service are lost when session ends
 
-**Solution**: Host service MUST use `asyncio.to_thread()`
-
-**Architecture**:
-```
-FastAPI Server (async event loop on main thread)
-  ↓
-BackgroundTasks.add_task(...)
-  ↓
-_run_training_session() (async function, runs in event loop)
-  ↓
-await asyncio.to_thread(executor.execute, ...)  ← CRITICAL
-  ↓
-executor.execute() (sync function, runs in thread pool thread)
-  ↓
-ModelTrainer.train() (sync, CPU-bound, runs for hours)
-  ↓
-progress_callback() (called from thread pool thread)
-  ↓
-session.update_progress() (thread-safe)
-```
-
-**Why asyncio.to_thread() is Safe**:
-- ModelTrainer uses `DataLoader(num_workers=0)` (default)
-- No subprocess spawning from thread
-- No conflict with PyTorch multiprocessing
-
-**Why NOT Using asyncio.to_thread() Fails**:
-- Training blocks event loop for hours
-- Status check requests timeout (cannot be processed)
-- Cancellation requests ignored (cannot be processed)
-- Service appears completely hung
-
-### Thread Safety Requirements
-
-**Components Called from Thread Pool**:
-- `progress_callback()` - called from training thread
-- `session.update_progress()` - must be thread-safe
-- `session.stop_requested` - must be thread-safe read
-
-**Thread Safety Guarantees**:
+**Evidence**:
 ```python
-# TrainingSession attributes accessed from training thread
-class TrainingSession:
-    stop_requested: bool  # Read from thread - must be atomic
-    message: str  # Written from thread
-    last_updated: datetime  # Written from thread
-
-    def update_progress(self, epoch, batch, metrics):
-        # Called from thread - must be thread-safe
-        # Simple attribute assignment is atomic in Python
-        self.epoch = epoch
-        self.batch = batch
-        self.last_updated = datetime.utcnow()
+# Host service training_service.py line 795:
+session.status = "completed"
+# No ModelStorage.save_model() call
+# No model_path in session
 ```
 
-### Async/Sync Boundaries
+**This must be fixed in Phase 1** - otherwise host service training is useless.
 
-**Boundary Map**:
-```
-Layer                   Context         Why
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-API Endpoints          async           FastAPI requirement
-TrainingService        async           Orchestration, I/O-bound
-LocalTrainingRunner    async           Orchestration
-HostServiceAdapter     async           HTTP calls
-─────────────────────────────────────────────────────
-asyncio.to_thread()    ← BOUNDARY →
-─────────────────────────────────────────────────────
-TrainingExecutor       sync            CPU-bound, long-running
-ModelTrainer           sync            PyTorch operations
-DataManager.load_data  sync            I/O but blocking OK in thread
+### Solution: Host Service Uses Shared ModelStorage
+
+**Design**: Host service saves model using same `ModelStorage` as backend
+
+**Why This Works**:
+- Host service runs natively (not in Docker)
+- Has direct filesystem access to `models/` directory
+- Can import `ModelStorage` from `ktrdr` package
+- Both services write to same shared location
+
+**Implementation**:
+
+```python
+# Host orchestrator after training completes:
+from ktrdr.training.model_storage import ModelStorage
+
+def _execute_training(self) -> dict[str, Any]:
+    # ... training steps ...
+
+    # Save model (NEW in Phase 1)
+    model_path = self._pipeline.save_model(
+        model=trained_model,
+        strategy_name=self._get_strategy_name(),
+        symbols=self._get_symbols(),
+        timeframes=self._get_timeframes(),
+        config=self._get_strategy_config(),
+        metrics=training_results,
+        feature_names=feature_names,
+        scaler=scaler
+    )
+
+    # Store model_path in session for backend retrieval
+    self._session.model_path = model_path
+    self._session.status = "completed"
+
+    return {
+        "success": True,
+        "model_path": model_path,
+        "training_metrics": training_results,
+        ...
+    }
 ```
 
-**Rule**: Everything above the boundary is async. Everything below is sync and runs in thread pool.
+**Backend retrieves model_path from session**:
+
+```python
+# HostSessionManager.poll_session() already does this:
+snapshot = await self._adapter.get_training_status(session_id)
+
+# Snapshot includes model_path from session
+artifacts = {
+    "model_path": snapshot.get("model_path"),  # Now present
+    ...
+}
+```
+
+### Key Points
+
+1. **Same Storage, Different Processes**:
+   - Both backend and host service use `ModelStorage`
+   - Both write to shared `models/` directory
+   - Model files accessible to both
+
+2. **No Network Transfer Needed**:
+   - Host service saves directly to filesystem
+   - Backend reads from same filesystem
+   - No need to transfer model bytes over HTTP
+
+3. **Consistent Model Format**:
+   - Same `ModelStorage.save_model()` method
+   - Same file structure
+   - Same metadata format
+
+4. **TrainingPipeline Handles This**:
+   - Pipeline already has `save_model()` method
+   - Both orchestrators call it
+   - Works identically in both contexts
+
+### Limitation (Phase 1)
+
+**Assumption**: Backend and host service run on the same machine (or share filesystem)
+
+**Why**: Both must access the same `models/` directory
+
+**Current Deployment**: This assumption holds
+- Development: Both run on same macOS machine
+- Docker: Backend in container, host service on host, shared via volume mount
+
+**Phase 2 Improvement**: Add remote model transfer for distributed deployment (see Phase 2 doc)
+
+### Success Criteria (Phase 1)
+
+- ✅ Host service saves models via `ModelStorage`
+- ✅ Model path returned in session snapshot
+- ✅ Backend can load models trained on host service
+- ✅ Models from both modes are interchangeable
+- ✅ Works for same-machine deployment (current setup)
 
 ---
 
-## Cancellation Architecture
+## Progress Communication (Phase 1 - Preserve Current)
 
-### Latency Requirements
+### Local Flow (Callback-Based - Keep)
 
-**Target**: < 100ms from user clicking "Cancel" to training stopping
-
-**Why**: Users expect near-instant response to cancellation
-
-### Cancellation Propagation
-
-**Flow**:
 ```
-User clicks Cancel (CLI/UI)
-  ↓ < 10ms
+ModelTrainer.train()
+  └─> progress_callback(epoch, metrics)
+      └─> LocalTrainingOrchestrator callback
+          └─> TrainingProgressBridge.on_epoch()
+              └─> GenericProgressManager.update()
+                  └─> ProgressRenderer displays (immediate)
+```
+
+**Latency**: Immediate (same process)
+
+### Host Flow (Polling-Based - Keep)
+
+```
+ModelTrainer.train()
+  └─> progress_callback(epoch, metrics)
+      └─> HostTrainingOrchestrator callback
+          └─> session.update_progress(epoch, batch, metrics)
+              └─> Stored in TrainingSession state
+
+[Backend polls separately every 2s]
+HostSessionManager.poll_session()
+  └─> GET /training/status/{session_id}
+      └─> Returns session.get_progress_dict()
+          └─> TrainingProgressBridge.on_remote_snapshot()
+              └─> GenericProgressManager.update()
+                  └─> ProgressRenderer displays (delayed)
+```
+
+**Latency**: Up to 2s (polling interval)
+
+**Phase 1**: Accept these are different, both work fine
+**Phase 2**: Could explore WebSocket streaming
+
+---
+
+## Cancellation Propagation (Phase 1 - Preserve Current)
+
+### Local Flow (Token-Based - Keep)
+
+```
+User cancels
+  ↓
 POST /api/v1/operations/{id}/cancel
-  ↓ < 10ms
+  ↓
 OperationsService.cancel_operation()
-  ↓ < 5ms
-cancellation_token.cancel()
-  ↓ < 5ms
-TrainingService checks token (async polling)
-  ↓ < 50ms
-Host service session.stop_requested = True
-  ↓ < 10ms (next batch iteration)
-ModelTrainer._check_cancelled() raises CancellationError
-  ↓ immediate
+  ↓
+cancellation_token.cancel()  # In-memory flag
+  ↓
+LocalTrainingOrchestrator._check_cancellation()
+  ↓
+Raises CancellationError
+  ↓
 Training stops
 ```
 
-**Total Latency**: ~90ms worst case
+**Latency**: < 50ms
 
-### Check Frequency
+### Host Flow (HTTP-Based - Keep)
 
-**Critical**: Cancellation MUST be checked frequently enough for < 100ms latency
-
-**Check Points** (in order of frequency):
-1. **Every batch** in ModelTrainer (~10-50ms intervals on GPU)
-2. **Every epoch** in ModelTrainer
-3. **Before progress callbacks** in ModelTrainer
-4. **Between pipeline steps** in TrainingExecutor
-
-**Implementation**:
-```python
-# ModelTrainer - checked EVERY batch
-for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
-    self._check_cancelled()  # < 100ms guaranteed
-    # Training operations
+```
+User cancels
+  ↓
+POST /api/v1/operations/{id}/cancel
+  ↓
+OperationsService.cancel_operation()
+  ↓
+cancellation_token.cancel()  # Backend token
+  ↓
+HostSessionManager detects on next poll
+  ↓
+POST /training/stop to host service
+  ↓
+session.stop_requested = True
+  ↓
+HostTrainingOrchestrator._check_stop_requested()
+  ↓
+Returns cancelled result OR raises CancellationError
+  ↓
+Training stops
 ```
 
-**Thread Safety**:
-```python
-class SessionCancellationToken:
-    def is_cancelled(self) -> bool:
-        return session.stop_requested  # Atomic read, thread-safe
+**Latency**: < 2.5s (poll interval + check)
+
+**Phase 1**: Accept these are different, both work acceptably
+**Phase 2**: Could explore token passing to host service
+
+---
+
+## Data Flow Diagrams (Phase 1)
+
+### Local Execution Flow
+
+```
+API Request
+  ↓
+TrainingService.start_training()
+  ↓
+Check is_using_host_service() → False
+  ↓
+Create LocalTrainingOrchestrator(pipeline, bridge, token)
+  ↓
+asyncio.create_task(orchestrator.run())
+  ↓
+asyncio.to_thread(orchestrator._execute_training) ← Single async boundary
+  ↓
+[Worker Thread - Synchronous]
+  For each step:
+    ├─> Check cancellation token
+    ├─> Report progress via bridge
+    ├─> Call pipeline.step_method()
+    └─> Return to async context
+  ↓
+Update operation status
+  ↓
+User polls /operations/{id}
+```
+
+### Host Service Execution Flow
+
+```
+API Request
+  ↓
+TrainingService.start_training()
+  ↓
+Check is_using_host_service() → True
+  ↓
+Create HostSessionManager
+  ↓
+POST /training/start to host service
+  ↓
+Host creates TrainingSession
+  ↓
+Host creates HostTrainingOrchestrator(pipeline, session)
+  ↓
+Host runs orchestrator.run() in background ← Already async, no to_thread
+  ↓
+Returns session_id to backend
+  ↓
+[Backend Polling Loop]
+while not terminal:
+  GET /training/status/{session_id} (every 2s)
+  ↓
+  Update operation status
+  ↓
+User polls /operations/{id}
+
+[Meanwhile on Host Service - Direct Async]
+HostTrainingOrchestrator.run():
+  For each step:
+    ├─> Check session.stop_requested
+    ├─> Update session progress
+    ├─> Call pipeline.step_method() ← Direct call, no threading
+    └─> Continue async
 ```
 
 ---
 
-## Interface Contracts
+## Design Decisions (Phase 1)
 
-### TrainingExecutor.execute()
+### Decision 1: Extract Pure Pipeline, Keep Orchestration Patterns
 
-**Signature**:
-```python
-def execute(
-    self,
-    symbols: List[str],
-    timeframes: List[str],
-    start_date: str,
-    end_date: str,
-    validation_split: float = 0.2,
-    data_mode: str = "local",
-    **kwargs,
-) -> dict[str, Any]:
-```
+**Question**: How to eliminate duplication without breaking working systems?
 
-**Context**: Synchronous, runs in thread pool (via asyncio.to_thread)
+**Decision**: Extract shared work into TrainingPipeline, preserve all orchestration patterns
 
-**Returns**:
-```python
-{
-    "model_path": "models/strategy_name/EURUSD_5m_v1",
-    "training_metrics": {
-        "final_train_loss": 0.234,
-        "final_train_accuracy": 0.89,
-        ...
-    },
-    "test_metrics": {
-        "accuracy": 0.87,
-        "precision": 0.88,
-        ...
-    },
-    "feature_importance": {...},
-    "data_summary": {...}
-}
-```
+**Rationale**:
+- 80% duplication is in the work (data loading, indicators, fuzzy, training)
+- Orchestration is only 20% and already works
+- Phase 1 minimizes risk by changing only what's necessary
 
-**Preservation Rule**: This signature matches StrategyTrainer exactly. DO NOT CHANGE.
+**What Changes**:
+- Both orchestrators call same `TrainingPipeline` methods
+- Zero code duplication
 
-### Progress Callback
+**What Stays**:
+- Local: asyncio.to_thread wrapper, callback progress, token cancellation
+- Host: Direct async, polling progress, HTTP cancellation
+- Mode selection via env var at startup
 
-**Signature**:
-```python
-def progress_callback(epoch: int, total_epochs: int, metrics: dict) -> None:
-```
+### Decision 2: Centralize Device Management
 
-**Called by**: ModelTrainer (from training thread)
+**Question**: How to handle scattered device detection?
 
-**Call Frequency**:
-- Epoch completion: ~every 30 seconds
-- Batch progress: controlled by stride (adaptive, ~300ms intervals)
+**Decision**: Create shared `DeviceManager` component
 
-**Example Metrics Dict**:
-```python
-{
-    "progress_type": "epoch",  # or "batch"
-    "epoch": 5,
-    "total_epochs": 100,
-    "batch": 120,  # if batch update
-    "total_batches_per_epoch": 500,
-    "train_loss": 0.234,
-    "train_accuracy": 0.89,
-    "val_loss": 0.245,
-    "val_accuracy": 0.87,
-    "learning_rate": 0.001,
-}
-```
+**Rationale**:
+- Device detection is currently inconsistent
+- MPS/CUDA/CPU have different capabilities
+- Training should adapt to device limitations
 
-**Threading**: Called from thread pool thread, must be thread-safe
+**Benefit**: Single source of truth, used by both orchestrators
 
-**Preservation Rule**: This is ModelTrainer's established signature. DO NOT create wrappers that change it.
+### Decision 3: Preserve All Async Patterns (Phase 1)
 
-### CancellationToken Protocol
+**Question**: Should we try to unify async patterns in Phase 1?
 
-**Required Methods**:
-```python
-class CancellationToken(Protocol):
-    def is_cancelled(self) -> bool: ...
-    def cancel(self, reason: str = "Operation cancelled") -> None: ...
-    async def wait_for_cancellation(self) -> None: ...
+**Decision**: No - preserve current patterns
 
-    @property
-    def is_cancelled_requested(self) -> bool: ...
-```
+**Rationale**:
+- Local uses `asyncio.to_thread()` - works fine
+- Host uses direct async - works fine
+- Unifying adds risk without clear benefit in Phase 1
 
-**Implementation for Host Service**:
-```python
-class SessionCancellationToken:
-    def is_cancelled(self) -> bool:
-        return session.stop_requested  # Atomic, thread-safe
+**Phase 2**: Can explore harmonization after proving extraction works
 
-    def cancel(self, reason: str = "Operation cancelled") -> None:
-        session.stop_requested = True
+### Decision 4: Preserve Cancellation Mechanisms (Phase 1)
 
-    async def wait_for_cancellation(self) -> None:
-        while not session.stop_requested:
-            await asyncio.sleep(0.1)
+**Question**: Should we try to unify cancellation in Phase 1?
 
-    @property
-    def is_cancelled_requested(self) -> bool:
-        return session.stop_requested
-```
+**Decision**: No - preserve current mechanisms
+
+**Rationale**:
+- Local token-based cancellation works (< 50ms)
+- Host HTTP-based cancellation works (< 2.5s)
+- Latency acceptable for both
+
+**Phase 2**: Can explore token passing if needed
+
+### Decision 5: Keep Static Mode Selection (Phase 1)
+
+**Question**: Should we add dynamic mode selection in Phase 1?
+
+**Decision**: No - keep env var at startup
+
+**Rationale**:
+- Current system is reliable and predictable
+- Dynamic selection adds complexity and failure modes
+- Phase 1 goal is eliminate duplication, not add features
+
+**Phase 2**: Can add health checks, fallback logic, dynamic selection
 
 ---
 
-## Common Pitfalls
+## Testing Strategy (Phase 1)
 
-### 1. Event Loop Blocking
+### Critical Property: Functional Equivalence
 
-**Symptom**: Host service appears hung, status checks timeout
+**Primary Goal**: Prove both orchestrators produce identical training results
 
-**Cause**: Running CPU-bound training directly in async function
+**Why**: This validates that refactoring succeeded without changing behavior
 
-**Solution**: Use `asyncio.to_thread(executor.execute, ...)`
+### Unit Testing (TrainingPipeline)
 
-**Detection**: Monitor request latency - if status checks timeout, event loop is blocked
+**Objective**: Verify each pipeline method works correctly in isolation
 
-### 2. Progress Callback Flooding
+**Approach**:
+- Test each method independently with mocked dependencies
+- Verify input/output contracts
+- Test edge cases (empty data, invalid configs, missing symbols)
 
-**Symptom**: Thousands of progress updates per second, log files fill up
+**Why This Matters**: Pipeline is shared - bugs here affect both execution modes
 
-**Cause**: Calling progress callback on every batch without throttling
+**Example Tests**:
+- `test_load_price_data_returns_correct_structure()`
+- `test_calculate_indicators_applies_all_configured_indicators()`
+- `test_generate_fuzzy_memberships_handles_missing_data()`
+- `test_combine_multi_symbol_data_preserves_sample_balance()`
+- `test_split_data_respects_split_ratios()`
 
-**Solution**: Use adaptive stride (check time since last update, adjust frequency)
+### Integration Testing (Orchestrators)
 
-**Detection**: Monitor callback frequency - should be ~3-5 per second, not hundreds
+**Objective**: Verify coordination works correctly with real pipeline
 
-### 3. Signature Mismatch
+**Approach**:
+- Test with real `TrainingPipeline` instance (not mocked)
+- Verify progress callbacks/updates are invoked correctly
+- Test cancellation at various execution points
+- Verify error propagation
 
-**Symptom**: TypeError about unexpected arguments
+**Why This Matters**: Ensures orchestration differences don't break training
 
-**Cause**: Creating wrappers that change callback signatures
+**Example Tests**:
+- `test_local_orchestrator_completes_full_training_flow()`
+- `test_local_orchestrator_reports_progress_correctly()`
+- `test_local_orchestrator_respects_cancellation_token()`
+- `test_host_orchestrator_updates_session_state_correctly()`
+- `test_host_orchestrator_respects_stop_requested_flag()`
 
-**Solution**: Pass callbacks through unchanged from StrategyTrainer pattern
+### Equivalence Testing (Critical for Phase 1)
 
-**Detection**: Stack traces showing signature mismatches in callback invocations
+**Objective**: **PROVE** both orchestrators produce identical results
 
-### 4. Progress vs Logging Conflation
+**Approach**:
+- Run same training configuration through both orchestrators
+- Compare final model weights (within numerical tolerance ~1e-5)
+- Compare training metrics (loss, accuracy, etc.)
+- Verify saved model files are structurally identical
 
-**Symptom**: `logger.info()` calls for every batch, or missing UI progress updates
+**Why This Matters**: THIS IS THE PRIMARY VALIDATION THAT PHASE 1 SUCCEEDED
 
-**Cause**: Using logging for progress or callbacks for logging
+**Success Criteria**:
+- Model weights within 0.001% difference
+- Training metrics within 0.1% difference
+- Model files load and predict identically
 
-**Solution**: Keep them separate - logging for devs, callbacks for UI
+**Example Tests**:
+- `test_local_and_host_produce_identical_model_weights()`
+- `test_local_and_host_produce_identical_training_metrics()`
+- `test_models_from_both_modes_predict_identically()`
 
-**Detection**: Log files with excessive entries, or UI not updating
+### Device Detection Testing
 
-### 5. Cancellation Not Propagating
+**Objective**: Verify `DeviceManager` works correctly in all environments
 
-**Symptom**: Training continues after cancel request
+**Approach**:
+- Mock `torch.cuda.is_available()` and `torch.backends.mps.is_available()`
+- Test each device path (CUDA, MPS, CPU)
+- Verify capabilities set correctly for each device
+- Test on actual hardware when possible
 
-**Cause**: Not passing cancellation token to TrainingExecutor/ModelTrainer
+**Why This Matters**: Wrong device selection causes training failures
 
-**Solution**: Create SessionCancellationToken and pass to executor
+**Example Tests**:
+- `test_device_manager_selects_cuda_when_available()`
+- `test_device_manager_selects_mps_on_apple_silicon()`
+- `test_device_manager_falls_back_to_cpu()`
+- `test_mps_disables_mixed_precision()`
+- `test_cuda_enables_all_features()`
 
-**Detection**: Monitor cancellation latency - should be < 100ms
+### Performance Testing
 
-### 6. Thread Safety Violations
+**Objective**: Ensure refactoring doesn't add significant overhead
 
-**Symptom**: Race conditions, occasional crashes, inconsistent state
+**Approach**:
+- Benchmark training time before/after Phase 1
+- Measure function call overhead (should be negligible)
+- Profile hot paths if performance degrades
 
-**Cause**: Modifying shared state from training thread without synchronization
+**Success Criteria**: < 2% overhead
 
-**Solution**: Use thread-safe operations (atomic reads/writes, locks if needed)
+**Why This Matters**: Training is already expensive, can't add significant cost
 
-**Detection**: Intermittent failures, especially under load
+### End-to-End Testing
+
+**Objective**: Verify complete user flows work
+
+**Approach**:
+- Test via API endpoints (simulate real usage)
+- Verify progress updates reach CLI/UI correctly
+- Test cancellation from user perspective
+- Verify trained models load and work in backtesting
+
+**Why This Matters**: Tests actual user experience, not just internal APIs
+
+**Example Tests**:
+- `test_api_train_via_local_returns_working_model()`
+- `test_api_train_via_host_with_polling_completes()`
+- `test_cli_cancel_local_training_stops_immediately()`
+- `test_cli_cancel_host_training_stops_within_3s()`
 
 ---
 
-**Status**: Architecture Design Approved - Updated with Battle-Tested Patterns
-**Next**: [Migration Strategy](./05-migration-strategy.md) | [Interface Contracts](./06-interface-contracts.md) | [Implementation Plan](./04-implementation-plan.md)
+## Phase 2 Improvements (Out of Scope for This Doc)
+
+After Phase 1 is complete and proven stable, Phase 2 could explore:
+
+1. **Async Harmonization**
+   - Should host orchestrator wrap execution in `asyncio.to_thread()` like local?
+   - Trade-offs: Code similarity vs. current working pattern
+
+2. **Cancellation Unification**
+   - Pass cancellation token ID to host service?
+   - Host service polls backend for token status?
+   - Trade-offs: Lower latency vs. added complexity
+
+3. **Dynamic Mode Selection**
+   - Health check host service before routing
+   - Automatic fallback to local if host unavailable
+   - Trade-offs: Reliability vs. complexity
+
+4. **Progress Streaming**
+   - WebSocket-based real-time progress from host?
+   - Trade-offs: Real-time updates vs. infrastructure complexity
+
+5. **Other Improvements**
+   - Identified during Phase 1 implementation
+
+---
+
+## Risks and Mitigations (Phase 1)
+
+### Risk 1: Extraction Introduces Bugs
+
+**Risk**: Moving code from StrategyTrainer to TrainingPipeline changes behavior
+
+**Likelihood**: Medium
+**Impact**: High (broken training)
+
+**Mitigation**:
+- Extract methods one at a time
+- Comprehensive equivalence testing after each extraction
+- Keep old code working until equivalence proven
+- Gradual rollout (local first, validate, then host)
+
+### Risk 2: Device Detection Edge Cases
+
+**Risk**: DeviceManager doesn't handle all hardware correctly
+
+**Likelihood**: Medium
+**Impact**: Medium (training uses wrong device or fails)
+
+**Mitigation**:
+- Test on all supported hardware (CUDA GPU, Apple Silicon, CPU)
+- Provide manual override option
+- Extensive logging of detection decisions
+- Fallback to CPU on any detection error
+
+### Risk 3: Progress/Cancellation Regressions
+
+**Risk**: Refactoring breaks progress updates or cancellation
+
+**Likelihood**: Low (we're preserving current patterns)
+**Impact**: Medium (user confusion, not data loss)
+
+**Mitigation**:
+- Comprehensive testing of progress at each step
+- Test cancellation at every pipeline stage
+- Manual testing with real CLI/UI
+
+### Risk 4: Performance Regression
+
+**Risk**: Additional function call overhead slows training
+
+**Likelihood**: Low
+**Impact**: Low (training is hours, overhead is microseconds)
+
+**Mitigation**:
+- Benchmark before/after
+- Accept < 2% overhead
+- Profile only if overhead exceeds threshold
+
+---
+
+## Success Criteria (Phase 1)
+
+Phase 1 is successful when:
+
+1. ✅ **Zero Duplication**: No training logic exists in multiple places
+2. ✅ **Functional Equivalence**: Both orchestrators produce identical results (proven by tests)
+3. ✅ **Working Coordination**: Progress and cancellation work correctly in both modes
+4. ✅ **All Tests Pass**: Unit, integration, equivalence, E2E tests all pass
+5. ✅ **No Performance Regression**: Training time within 2% of current
+6. ✅ **Behavioral Preservation**: All current behaviors maintained (async, cancellation, mode selection)
+
+---
+
+**Status**: Phase 1 Architecture Design - Ready for Review
+**Next**: Implementation Plan (after architecture approval)
