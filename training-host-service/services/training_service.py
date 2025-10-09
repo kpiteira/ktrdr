@@ -530,18 +530,27 @@ class TrainingService:
                 "batch_size", 128
             )  # Increased for better GPU utilization
 
+            # Get date range from data_config (with fallback to 1 year)
+            start_date_str = data_config.get("start_date")
+            end_date_str = data_config.get("end_date")
+
+            # Fallback to 1 year if not provided
+            if not start_date_str or not end_date_str:
+                end_date = datetime.utcnow()
+                start_date = end_date - timedelta(days=365)
+                start_date_str = start_date.strftime("%Y-%m-%d")
+                end_date_str = end_date.strftime("%Y-%m-%d")
+                logger.warning(
+                    f"No date range provided in config, using default: {start_date_str} to {end_date_str}"
+                )
+
             logger.info(
-                f"Training configuration: {len(symbols)} symbols, {len(timeframes)} timeframes, {epochs} epochs"
+                f"Training configuration: {len(symbols)} symbols, {len(timeframes)} timeframes, "
+                f"{epochs} epochs, date range: {start_date_str} to {end_date_str}"
             )
 
             # Initialize KTRDR components
             data_manager = DataManager()
-
-            # Calculate date range (1 year of data)
-            end_date = datetime.utcnow()
-            start_date = end_date - timedelta(days=365)
-            start_date_str = start_date.strftime("%Y-%m-%d")
-            end_date_str = end_date.strftime("%Y-%m-%d")
 
             # Load data for all symbols using TrainingPipeline (eliminating duplication)
             training_data = {}
