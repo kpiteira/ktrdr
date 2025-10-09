@@ -231,6 +231,11 @@ class TrainingPipeline:
         Returns:
             Dictionary mapping timeframes to DataFrames with indicators
         """
+        logger.info(
+            f"🔧 TrainingPipeline.calculate_indicators() - Processing {len(price_data)} timeframe(s) "
+            f"with {len(indicator_configs)} indicator(s)"
+        )
+
         # Handle single timeframe case (backward compatibility)
         if len(price_data) == 1:
             timeframe, tf_price_data = next(iter(price_data.items()))
@@ -449,6 +454,11 @@ class TrainingPipeline:
         Returns:
             Dictionary mapping timeframes to DataFrames with fuzzy membership values
         """
+        logger.info(
+            f"🔧 TrainingPipeline.generate_fuzzy_memberships() - Processing {len(indicators)} timeframe(s) "
+            f"with {len(fuzzy_configs)} fuzzy indicator(s)"
+        )
+
         # Initialize fuzzy engine
         fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
         fuzzy_engine = FuzzyEngine(fuzzy_config)
@@ -493,6 +503,10 @@ class TrainingPipeline:
         Returns:
             Tuple of (features tensor, feature names list)
         """
+        logger.info(
+            f"🔧 TrainingPipeline.create_features() - Creating features from {len(fuzzy_data)} timeframe(s)"
+        )
+
         # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
         processor = FuzzyNeuralProcessor(feature_config)
 
@@ -500,10 +514,16 @@ class TrainingPipeline:
         if len(fuzzy_data) == 1:
             timeframe, tf_fuzzy_data = next(iter(fuzzy_data.items()))
             features, feature_names = processor.prepare_input(tf_fuzzy_data)
+            logger.info(
+                f"✅ Created {features.shape[1]} features from {features.shape[0]} samples"
+            )
             return features, feature_names
 
         # Multi-timeframe case - use the new multi-timeframe method
         features, feature_names = processor.prepare_multi_timeframe_input(fuzzy_data)
+        logger.info(
+            f"✅ Created {features.shape[1]} features from {features.shape[0]} samples (multi-timeframe)"
+        )
         return features, feature_names
 
     @staticmethod
@@ -523,6 +543,12 @@ class TrainingPipeline:
         Returns:
             Tensor of labels
         """
+        logger.info(
+            f"🔧 TrainingPipeline.create_labels() - Generating labels from {len(price_data)} timeframe(s) "
+            f"(threshold={label_config.get('zigzag_threshold', 'N/A')}, "
+            f"lookahead={label_config.get('label_lookahead', 'N/A')})"
+        )
+
         # CRITICAL: For multi-timeframe, MUST use the same base timeframe as features
         # Features are generated from timeframes[0], so labels must also use timeframes[0]
         # This ensures tensor size consistency (same number of samples)
@@ -557,7 +583,14 @@ class TrainingPipeline:
             "Using ZigZag segment labeling (balanced) instead of sparse extreme labeling..."
         )
         labels = labeler.generate_segment_labels(tf_price_data)
-        return torch.LongTensor(labels.values)
+        label_tensor = torch.LongTensor(labels.values)
+
+        # Log label distribution
+        unique, counts = torch.unique(label_tensor, return_counts=True)
+        dist = {int(u): int(c) for u, c in zip(unique, counts)}
+        logger.info(f"✅ Generated {len(label_tensor)} labels - Distribution: {dist}")
+
+        return label_tensor
 
     @staticmethod
     def _sort_timeframes_by_frequency(timeframes: list[str]) -> list[str]:
