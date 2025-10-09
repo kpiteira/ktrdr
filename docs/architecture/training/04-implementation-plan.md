@@ -174,15 +174,13 @@ class TrainingPipeline:
 - [ ] All existing tests pass
 
 **Testing Strategy**:
+
 ```bash
 # Unit tests
 uv run pytest tests/unit/training/test_training_pipeline_data.py -v
 
-# Integration tests
-make test-integration
-
 # Equivalence test (critical!)
-uv run pytest tests/integration/training/test_training_equivalence.py -v
+uv run pytest tests/equivalence/test_training_equivalence.py -v
 ```
 
 **Commit Message**:
@@ -445,73 +443,7 @@ Tested: Equivalence tests confirm identical behavior
 
 ---
 
-### TASK-2.2: Integration Test Local Orchestrator
-
-**Objective**: Comprehensive integration testing
-
-**Files**:
-- `tests/integration/training/test_local_orchestrator.py` (CREATE)
-- `tests/integration/training/test_training_equivalence.py` (MODIFY - add orchestrator tests)
-
-**Test Coverage**:
-```python
-@pytest.mark.integration
-async def test_local_orchestrator_full_workflow():
-    """Test complete training workflow via LocalTrainingOrchestrator."""
-    # Setup context, progress bridge, cancellation token
-    # Run training
-    # Assert results are valid
-    ...
-
-@pytest.mark.integration
-async def test_local_orchestrator_progress_reporting():
-    """Verify progress updates flow correctly."""
-    # Setup with progress callback
-    # Run training
-    # Assert all expected progress updates received
-    ...
-
-@pytest.mark.integration
-async def test_local_orchestrator_cancellation():
-    """Verify cancellation stops training gracefully."""
-    # Setup with cancellation token
-    # Start training
-    # Cancel after 2 epochs
-    # Assert training stopped and cleanup occurred
-    ...
-
-@pytest.mark.integration
-async def test_equivalence_local_orchestrator_vs_old():
-    """PRIMARY TEST: Confirm identical behavior to old local_runner."""
-    # Run same training with old and new paths
-    # Compare all outputs (model weights, metrics, feature importance)
-    # Assert < 0.1% difference (account for random initialization)
-    ...
-```
-
-**Acceptance Criteria**:
-- [ ] All integration tests pass
-- [ ] Equivalence test confirms < 0.1% difference
-- [ ] Coverage > 90% for LocalTrainingOrchestrator
-- [ ] Performance within 5% of baseline
-
-**Commit Message**:
-```
-test(training): add comprehensive LocalTrainingOrchestrator tests
-
-- Integration tests for full workflow
-- Progress reporting verification
-- Cancellation behavior tests
-- Equivalence tests confirm identical behavior
-
-All tests pass with < 0.1% difference from baseline
-```
-
-**Estimated Effort**: 1 day
-
----
-
-## Phase 3: Refactor Host Service (Week 2-3)
+## Phase 3: Refactor Host Service (Week 2)
 
 ### TASK-3.1: Create HostTrainingOrchestrator + Model Persistence
 
@@ -699,83 +631,16 @@ Tested: Unit tests + integration tests
 
 ---
 
-### TASK-3.3: Integration Test Host Orchestrator
+## Phase 4: Equivalence Testing (Week 2-3)
 
-**Objective**: Comprehensive integration testing including model persistence
-
-**Files**:
-- `tests/integration/training/test_host_orchestrator.py` (CREATE)
-- `tests/integration/training/test_training_equivalence.py` (MODIFY)
-
-**Test Coverage**:
-```python
-@pytest.mark.integration
-@pytest.mark.requires_shared_storage
-async def test_host_orchestrator_full_workflow():
-    """Test complete training workflow via HostTrainingOrchestrator."""
-    # Setup session with shared model storage
-    # Run training
-    # Assert model saved to shared location
-    # Assert backend can load model
-    ...
-
-@pytest.mark.integration
-async def test_host_orchestrator_model_persistence():
-    """Verify model persistence to shared ModelStorage."""
-    # Run training on host service
-    # Check model file exists in shared storage
-    # Load model from backend side
-    # Verify model works for inference
-    ...
-
-@pytest.mark.integration
-async def test_equivalence_host_vs_local():
-    """PRIMARY TEST: Confirm host and local produce identical results."""
-    # Run same training locally and on host
-    # Compare model weights, metrics, feature importance
-    # Assert < 0.1% difference
-    ...
-
-@pytest.mark.integration
-async def test_equivalence_host_new_vs_old():
-    """Confirm new host orchestrator vs old host service."""
-    # Run with old training_service._run_real_training
-    # Run with new HostTrainingOrchestrator
-    # Compare results
-    # Assert < 0.1% difference
-    ...
-```
-
-**Acceptance Criteria**:
-- [ ] All integration tests pass
-- [ ] Model persistence validated
-- [ ] Equivalence tests confirm < 0.1% difference
-- [ ] Performance within 5% of baseline
-
-**Commit Message**:
-```
-test(training): add HostTrainingOrchestrator integration tests
-
-- Full workflow tests including model persistence
-- Equivalence tests vs local training
-- Equivalence tests vs old host implementation
-
-All tests pass with < 0.1% difference
-```
-
-**Estimated Effort**: 1.5 days
-
----
-
-## Phase 4: Equivalence Testing (Week 3)
-
-### TASK-4.1: Create Comprehensive Equivalence Test Suite
+### TASK-3.3: Create Comprehensive Equivalence Test Suite
 
 **Objective**: PRIMARY VALIDATION - Prove Phase 1 preserves all behavior
 
 **Files**:
-- `tests/integration/training/test_training_equivalence.py` (COMPREHENSIVE REWRITE)
-- `tests/integration/training/fixtures/equivalence_strategies.py` (CREATE - test strategies)
+
+- `tests/equivalence/test_training_equivalence.py` (COMPREHENSIVE REWRITE)
+- `tests/equivalence/fixtures/equivalence_strategies.py` (CREATE - test strategies)
 
 **Test Matrix**:
 ```python
@@ -856,6 +721,7 @@ def generate_equivalence_report(results_db):
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All equivalence tests pass (< 0.1% difference)
 - [ ] Equivalence report generated
 - [ ] Test coverage includes:
@@ -868,6 +734,7 @@ def generate_equivalence_report(results_db):
   - [ ] Prediction comparison
 
 **Commit Message**:
+
 ```
 test(training): comprehensive equivalence test suite
 
@@ -883,33 +750,26 @@ PRIMARY VALIDATION: All equivalence tests pass
 
 ---
 
-### TASK-4.2: Run Full Test Suite and Performance Benchmarks
+### TASK-3.4: Run Full Test Suite and Performance Benchmarks
 
 **Objective**: Final validation before merge
 
 **Testing Checklist**:
+
 ```bash
 # 1. Unit tests
 make test-unit
 # Expected: All pass, > 90% coverage
 
-# 2. Integration tests
-make test-integration
-# Expected: All pass
-
-# 3. Equivalence tests (CRITICAL)
-uv run pytest tests/integration/training/test_training_equivalence.py -v
+# 2. Equivalence tests (CRITICAL)
+uv run pytest tests/equivalence/test_training_equivalence.py -v
 # Expected: All pass with < 0.1% difference
 
-# 4. Performance benchmarks
+# 3. Performance benchmarks
 uv run pytest tests/performance/test_training_performance.py -v
 # Expected: < 5% difference from baseline
 
-# 5. E2E tests
-make test-e2e
-# Expected: All pass
-
-# 6. Quality checks
+# 4. Quality checks
 make quality
 # Expected: All pass
 ```
@@ -938,19 +798,18 @@ def test_training_performance_benchmark(execution, benchmark):
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All unit tests pass (> 90% coverage)
-- [ ] All integration tests pass
 - [ ] All equivalence tests pass (< 0.1% diff)
 - [ ] Performance benchmarks pass (< 5% regression)
-- [ ] All e2e tests pass
 - [ ] Code quality passes (lint, format, typecheck)
 
 **Commit Message**:
+
 ```
 test(training): validate Phase 1 complete
 
 - All unit tests pass (93% coverage)
-- All integration tests pass
 - Equivalence tests: < 0.1% difference
 - Performance: < 2% regression
 - All quality checks pass
@@ -964,11 +823,12 @@ Phase 1 validation complete - ready for merge
 
 ## Phase 5: Documentation and Merge (Week 3)
 
-### TASK-5.1: Update Documentation
+### TASK-3.5: Update Documentation
 
 **Objective**: Document new architecture and migration path
 
 **Files**:
+
 - `docs/architecture/training/03-architecture.md` (already updated)
 - `ktrdr/training/README.md` (CREATE)
 - `training-host-service/README.md` (UPDATE)
@@ -1021,16 +881,18 @@ result = await orchestrator.run()
 
 ## Testing
 
-See [equivalence tests](../../tests/integration/training/test_training_equivalence.py) for validation that Phase 1 preserves all behavior.
+See [equivalence tests](../../tests/equivalence/test_training_equivalence.py) for validation that Phase 1 preserves all behavior.
 ```
 
 **Acceptance Criteria**:
+
 - [ ] All README files updated
 - [ ] Architecture docs accurate
 - [ ] Testing guide includes equivalence testing section
 - [ ] Migration notes documented
 
 **Commit Message**:
+
 ```
 docs(training): update documentation for Phase 1 architecture
 
@@ -1045,7 +907,7 @@ All documentation reflects Phase 1 implementation
 
 ---
 
-### TASK-5.2: Create Pull Request
+### TASK-3.6: Create Pull Request
 
 **Objective**: Merge Phase 1 to main
 
@@ -1085,12 +947,13 @@ tests/integration/training/test_training_equivalence.py
 ```
 
 ### Test Coverage
+
 - Unit tests: 93% coverage ✅
-- Integration tests: All pass ✅
-- E2E tests: All pass ✅
+- Equivalence tests: All pass ✅
 - Performance: < 2% regression ✅
 
 ### Quality Checks
+
 - Lint: Pass ✅
 - Format: Pass ✅
 - Typecheck: Pass ✅
@@ -1119,7 +982,6 @@ Phase 2 will add remote model transfer to eliminate this requirement.
 ## Checklist
 
 - [x] All unit tests pass (> 90% coverage)
-- [x] All integration tests pass
 - [x] Equivalence tests pass (< 0.1% difference)
 - [x] Performance benchmarks pass (< 5% regression)
 - [x] Documentation updated
@@ -1127,6 +989,7 @@ Phase 2 will add remote model transfer to eliminate this requirement.
 ```
 
 **Review Checklist**:
+
 - [ ] All tests pass in CI
 - [ ] Code review approved
 - [ ] Documentation reviewed
@@ -1167,11 +1030,11 @@ See docs/architecture/training/ for detailed architecture.
 | Phase | Tasks | Estimated Effort | Key Deliverables |
 |-------|-------|------------------|------------------|
 | **Phase 1: Foundation** | TASK-1.1 to 1.4 | 1 week | DeviceManager, TrainingPipeline (all methods) |
-| **Phase 2: Orchestrators** | TASK-2.1 to 2.2 | 3 days | LocalTrainingOrchestrator + tests |
-| **Phase 3: Host Service** | TASK-3.1 to 3.3 | 5 days | HostTrainingOrchestrator + model persistence + tests |
-| **Phase 4: Validation** | TASK-4.1 to 4.2 | 3 days | Comprehensive equivalence tests + benchmarks |
-| **Phase 5: Documentation** | TASK-5.1 to 5.2 | 1.5 days | Docs + PR |
-| **Total** | 15 tasks | **2.5-3 weeks** | Zero duplication, zero behavior change |
+| **Phase 2: Orchestrators** | TASK-2.1 | 2 days | LocalTrainingOrchestrator |
+| **Phase 3: Host Service** | TASK-3.1 to 3.2 | 3.5 days | HostTrainingOrchestrator + model persistence |
+| **Phase 4: Validation** | TASK-3.3 to 3.4 | 3 days | Comprehensive equivalence tests + benchmarks |
+| **Phase 5: Documentation** | TASK-3.5 to 3.6 | 1.5 days | Docs + PR |
+| **Total** | 11 tasks | **2-2.5 weeks** | Zero duplication, zero behavior change |
 
 ---
 
@@ -1180,7 +1043,7 @@ See docs/architecture/training/ for detailed architecture.
 ### High-Risk Areas
 
 1. **Model Persistence**: Host service saving models is new functionality
-   - **Mitigation**: Extensive integration tests, verify file exists and loads correctly
+   - **Mitigation**: Equivalence tests verify models exist and load correctly
 
 2. **Equivalence Testing**: Must confirm < 0.1% difference
    - **Mitigation**: Comprehensive test matrix, detailed comparison report
@@ -1210,7 +1073,7 @@ Phase 1 is successful if:
 - ✅ **Zero behavior change**: Equivalence tests pass (< 0.1% diff)
 - ✅ **Zero performance regression**: < 5% difference in benchmarks
 - ✅ **Models persist**: Host service saves models correctly
-- ✅ **All tests pass**: Unit, integration, e2e, equivalence
+- ✅ **All tests pass**: Unit, equivalence, performance
 - ✅ **Production stable**: No incidents after deployment
 
 ---
