@@ -230,9 +230,6 @@ class TrainingAdapter(AsyncServiceAdapter):
                 # Build training configuration from provided config dict
                 training_configuration = {
                     "validation_split": validation_split,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "data_mode": data_mode,
                 }
 
                 # Merge in additional training config fields (e.g., epochs, batch_size)
@@ -254,6 +251,9 @@ class TrainingAdapter(AsyncServiceAdapter):
                             "symbols": symbols,
                             "timeframes": timeframes,
                             "data_source": data_mode,
+                            # CRITICAL: Dates must be in data_configuration for host service
+                            "start_date": start_date,
+                            "end_date": end_date,
                         },
                         "gpu_configuration": {
                             "enable_gpu": True,

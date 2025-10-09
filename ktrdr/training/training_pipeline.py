@@ -86,13 +86,14 @@ class TrainingPipeline:
         # EXTRACTED FROM: train_strategy.py:584-592
         if len(timeframes) == 1:
             timeframe = timeframes[0]
-            data = data_manager.load_data(symbol, timeframe, mode=data_mode)
-
-            # Filter by date range if possible
-            if hasattr(data.index, "to_pydatetime"):
-                data = TrainingPipeline._filter_data_by_date_range(
-                    data, start_date, end_date
-                )
+            # Pass dates to DataManager for efficient filtering
+            data = data_manager.load_data(
+                symbol,
+                timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                mode=data_mode,
+            )
 
             return {timeframe: data}
 
@@ -127,35 +128,9 @@ class TrainingPipeline:
 
         return multi_data
 
-    @staticmethod
-    def _filter_data_by_date_range(
-        data: pd.DataFrame, start_date: str, end_date: str
-    ) -> pd.DataFrame:
-        """
-        Helper method to filter data by date range.
-
-        EXTRACTED FROM: StrategyTrainer._filter_data_by_date_range() (train_strategy.py:624-639)
-
-        Args:
-            data: DataFrame with datetime index
-            start_date: Start date string
-            end_date: End date string
-
-        Returns:
-            Filtered DataFrame
-        """
-        # Convert dates to timezone-aware if the data index is timezone-aware
-        start = pd.to_datetime(start_date)
-        end = pd.to_datetime(end_date)
-
-        # Make dates timezone-aware if needed
-        if hasattr(data.index, "tz") and data.index.tz is not None:
-            if start.tz is None:
-                start = start.tz_localize("UTC")
-            if end.tz is None:
-                end = end.tz_localize("UTC")
-
-        return data.loc[start:end]
+    # _filter_data_by_date_range() method removed
+    # Date filtering now handled by DataManager.load_data() which is more efficient
+    # and provides consistent behavior across local and host execution paths
 
     @staticmethod
     def validate_data_quality(
@@ -178,7 +153,7 @@ class TrainingPipeline:
                 - issues (list): List of validation issues found
                 - total_rows (int): Total rows across all timeframes
         """
-        result = {
+        result: dict[str, Any] = {
             "valid": True,
             "timeframes_checked": len(data),
             "issues": [],
@@ -201,13 +176,14 @@ class TrainingPipeline:
             missing_cols = [col for col in required_columns if col not in df.columns]
             if missing_cols:
                 result["valid"] = False
-                result["issues"].append(
-                    f"{timeframe}: Missing columns {missing_cols}"
-                )
+                result["issues"].append(f"{timeframe}: Missing columns {missing_cols}")
 
             # Check for excessive NaN values (only if columns exist)
             if not df.empty and not missing_cols:
-                nan_pct = (df[required_columns].isnull().sum().sum() / (len(df) * len(required_columns))) * 100
+                nan_pct = (
+                    df[required_columns].isnull().sum().sum()
+                    / (len(df) * len(required_columns))
+                ) * 100
                 if nan_pct > 5.0:  # More than 5% NaN is problematic
                     result["valid"] = False
                     result["issues"].append(

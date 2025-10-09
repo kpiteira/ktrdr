@@ -26,13 +26,16 @@ class TestTrainingPipelineDataLoading:
 
         # Mock DataManager
         mock_dm = MagicMock()
-        mock_data = pd.DataFrame({
-            "open": [1.10, 1.11, 1.12],
-            "high": [1.11, 1.12, 1.13],
-            "low": [1.09, 1.10, 1.11],
-            "close": [1.11, 1.12, 1.12],
-            "volume": [1000, 1100, 1050],
-        }, index=pd.date_range(start="2024-01-01", periods=3, freq="1h"))
+        mock_data = pd.DataFrame(
+            {
+                "open": [1.10, 1.11, 1.12],
+                "high": [1.11, 1.12, 1.13],
+                "low": [1.09, 1.10, 1.11],
+                "close": [1.11, 1.12, 1.12],
+                "volume": [1000, 1100, 1050],
+            },
+            index=pd.date_range(start="2024-01-01", periods=3, freq="1h"),
+        )
         mock_dm.load_data.return_value = mock_data
 
         # Act
@@ -42,14 +45,17 @@ class TestTrainingPipelineDataLoading:
             start_date=start_date,
             end_date=end_date,
             data_mode="local",
-            data_manager=mock_dm
+            data_manager=mock_dm,
         )
 
         # Assert
         assert isinstance(result, dict)
         assert "1h" in result
         assert len(result["1h"]) == 3
-        mock_dm.load_data.assert_called_once_with(symbol, "1h", mode="local")
+        # Verify dates are passed to load_data for efficient filtering
+        mock_dm.load_data.assert_called_once_with(
+            symbol, "1h", start_date=start_date, end_date=end_date, mode="local"
+        )
 
     def test_load_market_data_multi_timeframe(self):
         """Test loading data for multiple timeframes (extracted logic)."""
@@ -65,20 +71,26 @@ class TestTrainingPipelineDataLoading:
 
         # Mock multi-timeframe data
         mock_multi_data = {
-            "1h": pd.DataFrame({
-                "open": [1.10, 1.11],
-                "high": [1.11, 1.12],
-                "low": [1.09, 1.10],
-                "close": [1.11, 1.12],
-                "volume": [1000, 1100],
-            }, index=pd.date_range(start="2024-01-01", periods=2, freq="1h")),
-            "4h": pd.DataFrame({
-                "open": [1.10],
-                "high": [1.11],
-                "low": [1.09],
-                "close": [1.11],
-                "volume": [4000],
-            }, index=pd.date_range(start="2024-01-01", periods=1, freq="4h"))
+            "1h": pd.DataFrame(
+                {
+                    "open": [1.10, 1.11],
+                    "high": [1.11, 1.12],
+                    "low": [1.09, 1.10],
+                    "close": [1.11, 1.12],
+                    "volume": [1000, 1100],
+                },
+                index=pd.date_range(start="2024-01-01", periods=2, freq="1h"),
+            ),
+            "4h": pd.DataFrame(
+                {
+                    "open": [1.10],
+                    "high": [1.11],
+                    "low": [1.09],
+                    "close": [1.11],
+                    "volume": [4000],
+                },
+                index=pd.date_range(start="2024-01-01", periods=1, freq="4h"),
+            ),
         }
         mock_mtc.load_multi_timeframe_data.return_value = mock_multi_data
 
@@ -90,7 +102,7 @@ class TestTrainingPipelineDataLoading:
             end_date=end_date,
             data_mode="local",
             data_manager=mock_dm,
-            multi_timeframe_coordinator=mock_mtc
+            multi_timeframe_coordinator=mock_mtc,
         )
 
         # Assert
@@ -114,20 +126,26 @@ class TestTrainingPipelineDataLoading:
 
         # Only return 2 out of 3 timeframes (simulating partial failure)
         mock_multi_data = {
-            "1h": pd.DataFrame({
-                "open": [1.10],
-                "high": [1.11],
-                "low": [1.09],
-                "close": [1.11],
-                "volume": [1000],
-            }, index=pd.date_range(start="2024-01-01", periods=1, freq="1h")),
-            "4h": pd.DataFrame({
-                "open": [1.10],
-                "high": [1.11],
-                "low": [1.09],
-                "close": [1.11],
-                "volume": [4000],
-            }, index=pd.date_range(start="2024-01-01", periods=1, freq="4h"))
+            "1h": pd.DataFrame(
+                {
+                    "open": [1.10],
+                    "high": [1.11],
+                    "low": [1.09],
+                    "close": [1.11],
+                    "volume": [1000],
+                },
+                index=pd.date_range(start="2024-01-01", periods=1, freq="1h"),
+            ),
+            "4h": pd.DataFrame(
+                {
+                    "open": [1.10],
+                    "high": [1.11],
+                    "low": [1.09],
+                    "close": [1.11],
+                    "volume": [4000],
+                },
+                index=pd.date_range(start="2024-01-01", periods=1, freq="4h"),
+            ),
         }
         mock_mtc.load_multi_timeframe_data.return_value = mock_multi_data
 
@@ -139,7 +157,7 @@ class TestTrainingPipelineDataLoading:
             end_date=end_date,
             data_mode="local",
             data_manager=mock_dm,
-            multi_timeframe_coordinator=mock_mtc
+            multi_timeframe_coordinator=mock_mtc,
         )
 
         # Assert - should succeed with warning (partial success is allowed)
@@ -169,29 +187,11 @@ class TestTrainingPipelineDataLoading:
                 end_date=end_date,
                 data_mode="local",
                 data_manager=mock_dm,
-                multi_timeframe_coordinator=mock_mtc
+                multi_timeframe_coordinator=mock_mtc,
             )
 
-    def test_filter_data_by_date_range(self):
-        """Test date range filtering (extracted helper method)."""
-        # Arrange
-        df = pd.DataFrame({
-            "open": [1.10, 1.11, 1.12, 1.13, 1.14],
-            "high": [1.11, 1.12, 1.13, 1.14, 1.15],
-            "low": [1.09, 1.10, 1.11, 1.12, 1.13],
-            "close": [1.11, 1.12, 1.12, 1.13, 1.14],
-            "volume": [1000, 1100, 1050, 1200, 1150],
-        }, index=pd.date_range(start="2024-01-01", periods=5, freq="1D"))
-
-        # Act
-        result = TrainingPipeline._filter_data_by_date_range(
-            df, "2024-01-02", "2024-01-04"
-        )
-
-        # Assert
-        assert len(result) == 3  # Jan 2, 3, 4
-        assert result.index[0] == pd.Timestamp("2024-01-02")
-        assert result.index[-1] == pd.Timestamp("2024-01-04")
+    # test_filter_data_by_date_range() removed
+    # Date filtering is now delegated to DataManager.load_data() directly
 
 
 class TestTrainingPipelineDataValidation:
@@ -201,13 +201,16 @@ class TestTrainingPipelineDataValidation:
         """Test validation passes for valid multi-timeframe data."""
         # Arrange
         data = {
-            "1h": pd.DataFrame({
-                "open": [1.10] * 150,
-                "high": [1.11] * 150,
-                "low": [1.09] * 150,
-                "close": [1.11] * 150,
-                "volume": [1000] * 150,
-            }, index=pd.date_range(start="2024-01-01", periods=150, freq="1h"))
+            "1h": pd.DataFrame(
+                {
+                    "open": [1.10] * 150,
+                    "high": [1.11] * 150,
+                    "low": [1.09] * 150,
+                    "close": [1.11] * 150,
+                    "volume": [1000] * 150,
+                },
+                index=pd.date_range(start="2024-01-01", periods=150, freq="1h"),
+            )
         }
 
         # Act
@@ -223,13 +226,16 @@ class TestTrainingPipelineDataValidation:
         """Test validation fails with insufficient data rows."""
         # Arrange
         data = {
-            "1h": pd.DataFrame({
-                "open": [1.10] * 50,
-                "high": [1.11] * 50,
-                "low": [1.09] * 50,
-                "close": [1.11] * 50,
-                "volume": [1000] * 50,
-            }, index=pd.date_range(start="2024-01-01", periods=50, freq="1h"))
+            "1h": pd.DataFrame(
+                {
+                    "open": [1.10] * 50,
+                    "high": [1.11] * 50,
+                    "low": [1.09] * 50,
+                    "close": [1.11] * 50,
+                    "volume": [1000] * 50,
+                },
+                index=pd.date_range(start="2024-01-01", periods=50, freq="1h"),
+            )
         }
 
         # Act
@@ -243,11 +249,14 @@ class TestTrainingPipelineDataValidation:
         """Test validation fails when required columns are missing."""
         # Arrange
         data = {
-            "1h": pd.DataFrame({
-                "open": [1.10] * 150,
-                "high": [1.11] * 150,
-                # Missing: low, close, volume
-            }, index=pd.date_range(start="2024-01-01", periods=150, freq="1h"))
+            "1h": pd.DataFrame(
+                {
+                    "open": [1.10] * 150,
+                    "high": [1.11] * 150,
+                    # Missing: low, close, volume
+                },
+                index=pd.date_range(start="2024-01-01", periods=150, freq="1h"),
+            )
         }
 
         # Act
@@ -261,13 +270,16 @@ class TestTrainingPipelineDataValidation:
     def test_validate_data_quality_excessive_nan_values(self):
         """Test validation fails with excessive NaN values."""
         # Arrange
-        df = pd.DataFrame({
-            "open": [1.10] * 100,
-            "high": [1.11] * 100,
-            "low": [None] * 100,  # 100% NaN in one column = 20% overall
-            "close": [1.11] * 100,
-            "volume": [1000] * 100,
-        }, index=pd.date_range(start="2024-01-01", periods=100, freq="1h"))
+        df = pd.DataFrame(
+            {
+                "open": [1.10] * 100,
+                "high": [1.11] * 100,
+                "low": [None] * 100,  # 100% NaN in one column = 20% overall
+                "close": [1.11] * 100,
+                "volume": [1000] * 100,
+            },
+            index=pd.date_range(start="2024-01-01", periods=100, freq="1h"),
+        )
 
         data = {"1h": df}
 
@@ -282,20 +294,26 @@ class TestTrainingPipelineDataValidation:
         """Test validation works correctly with multiple timeframes."""
         # Arrange
         data = {
-            "1h": pd.DataFrame({
-                "open": [1.10] * 150,
-                "high": [1.11] * 150,
-                "low": [1.09] * 150,
-                "close": [1.11] * 150,
-                "volume": [1000] * 150,
-            }, index=pd.date_range(start="2024-01-01", periods=150, freq="1h")),
-            "4h": pd.DataFrame({
-                "open": [1.10] * 100,
-                "high": [1.11] * 100,
-                "low": [1.09] * 100,
-                "close": [1.11] * 100,
-                "volume": [4000] * 100,
-            }, index=pd.date_range(start="2024-01-01", periods=100, freq="4h"))
+            "1h": pd.DataFrame(
+                {
+                    "open": [1.10] * 150,
+                    "high": [1.11] * 150,
+                    "low": [1.09] * 150,
+                    "close": [1.11] * 150,
+                    "volume": [1000] * 150,
+                },
+                index=pd.date_range(start="2024-01-01", periods=150, freq="1h"),
+            ),
+            "4h": pd.DataFrame(
+                {
+                    "open": [1.10] * 100,
+                    "high": [1.11] * 100,
+                    "low": [1.09] * 100,
+                    "close": [1.11] * 100,
+                    "volume": [4000] * 100,
+                },
+                index=pd.date_range(start="2024-01-01", periods=100, freq="4h"),
+            ),
         }
 
         # Act

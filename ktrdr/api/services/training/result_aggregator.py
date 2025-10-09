@@ -39,9 +39,13 @@ def _sanitize_for_json(data: Any) -> Any:
     elif isinstance(data, (np.integer, np.floating)):
         # Convert numpy scalars to Python types
         return data.item()
-    elif hasattr(data, "__dict__") and not isinstance(data, (str, bytes, bool, int, float)):
+    elif hasattr(data, "__dict__") and not isinstance(
+        data, (str, bytes, bool, int, float)
+    ):
         # Skip complex objects that aren't basic types
-        logger.warning(f"Skipping non-serializable object of type {type(data).__name__}")
+        logger.warning(
+            f"Skipping non-serializable object of type {type(data).__name__}"
+        )
         return f"<{type(data).__name__} object>"
     else:
         return data

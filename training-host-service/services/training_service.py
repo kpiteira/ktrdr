@@ -28,8 +28,8 @@ from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 # Import existing ktrdr training components
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 from ktrdr.training.memory_manager import MemoryBudget, MemoryManager
-from ktrdr.training.training_pipeline import TrainingPipeline
 from ktrdr.training.performance_optimizer import PerformanceConfig, PerformanceOptimizer
+from ktrdr.training.training_pipeline import TrainingPipeline
 
 logger = get_logger(__name__)
 
@@ -531,8 +531,10 @@ class TrainingService:
             )  # Increased for better GPU utilization
 
             # Get date range from data_config (with fallback to 1 year)
+            logger.debug(f"DEBUG: data_config = {data_config}")
             start_date_str = data_config.get("start_date")
             end_date_str = data_config.get("end_date")
+            logger.debug(f"DEBUG: start_date_str = {start_date_str}, end_date_str = {end_date_str}")
 
             # Fallback to 1 year if not provided
             if not start_date_str or not end_date_str:

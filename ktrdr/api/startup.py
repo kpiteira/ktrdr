@@ -36,7 +36,8 @@ async def lifespan(app: FastAPI):
 
     # Initialize training service to log training mode at startup
     from ktrdr.api.endpoints.training import get_training_service
-    training_service = await get_training_service()
+
+    _ = await get_training_service()  # Initialize service (logs training mode)
     logger.info("✅ TrainingService initialized")
 
     logger.info("🎉 API startup completed")
