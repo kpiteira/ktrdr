@@ -26,6 +26,7 @@ from ..neural.models.mlp import MLPTradingModel
 from .fuzzy_neural_processor import FuzzyNeuralProcessor
 from .model_storage import ModelStorage
 from .model_trainer import ModelTrainer
+from .training_pipeline import TrainingPipeline
 from .zigzag_labeler import ZigZagLabeler
 
 logger = get_logger(__name__)
@@ -570,6 +571,9 @@ class StrategyTrainer:
     ) -> dict[str, pd.DataFrame]:
         """Load price data for training with multi-timeframe support.
 
+        REFACTORED: Now delegates to TrainingPipeline.load_market_data()
+        to eliminate code duplication with host service.
+
         Args:
             symbol: Trading symbol
             timeframes: List of timeframes for multi-timeframe training
@@ -580,63 +584,18 @@ class StrategyTrainer:
         Returns:
             Dictionary mapping timeframes to OHLCV DataFrames
         """
-        # Handle single timeframe case (backward compatibility)
-        if len(timeframes) == 1:
-            timeframe = timeframes[0]
-            data = self.data_manager.load_data(symbol, timeframe, mode=data_mode)
-
-            # Filter by date range if possible
-            if hasattr(data.index, "to_pydatetime"):
-                data = self._filter_data_by_date_range(data, start_date, end_date)
-
-            return {timeframe: data}
-
-        # Multi-timeframe case - use first timeframe (highest frequency) as base
-        base_timeframe = timeframes[0]  # Always use first timeframe as base
-        multi_data = self.multi_timeframe_coordinator.load_multi_timeframe_data(
+        # Delegate to TrainingPipeline (extracted common logic)
+        return TrainingPipeline.load_market_data(
             symbol=symbol,
             timeframes=timeframes,
             start_date=start_date,
             end_date=end_date,
-            base_timeframe=base_timeframe,
-            mode=data_mode,
+            data_mode=data_mode,
+            data_manager=self.data_manager,
+            multi_timeframe_coordinator=self.multi_timeframe_coordinator,
         )
 
-        # Validate multi-timeframe loading success
-        if len(multi_data) != len(timeframes):
-            available_tfs = list(multi_data.keys())
-            missing_tfs = set(timeframes) - set(available_tfs)
-            logger.warning(
-                f"⚠️ Multi-timeframe loading partial success: {len(multi_data)}/{len(timeframes)} timeframes loaded. "
-                f"Missing: {missing_tfs}, Available: {available_tfs}"
-            )
-
-            # Continue with available timeframes but warn user
-            if len(multi_data) == 0:
-                raise ValueError(f"No timeframes successfully loaded for {symbol}")
-        else:
-            logger.info(
-                f"✅ Multi-timeframe data loaded successfully: {', '.join(multi_data.keys())}"
-            )
-
-        return multi_data
-
-    def _filter_data_by_date_range(
-        self, data: pd.DataFrame, start_date: str, end_date: str
-    ) -> pd.DataFrame:
-        """Helper method to filter data by date range."""
-        # Convert dates to timezone-aware if the data index is timezone-aware
-        start = pd.to_datetime(start_date)
-        end = pd.to_datetime(end_date)
-
-        # Make dates timezone-aware if needed
-        if hasattr(data.index, "tz") and data.index.tz is not None:
-            if start.tz is None:
-                start = start.tz_localize("UTC")
-            if end.tz is None:
-                end = end.tz_localize("UTC")
-
-        return data.loc[start:end]
+    # _filter_data_by_date_range() removed - now in TrainingPipeline
 
     def _calculate_indicators(
         self,

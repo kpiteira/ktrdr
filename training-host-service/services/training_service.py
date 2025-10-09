@@ -28,6 +28,7 @@ from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 # Import existing ktrdr training components
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 from ktrdr.training.memory_manager import MemoryBudget, MemoryManager
+from ktrdr.training.training_pipeline import TrainingPipeline
 from ktrdr.training.performance_optimizer import PerformanceConfig, PerformanceOptimizer
 
 logger = get_logger(__name__)
@@ -536,39 +537,40 @@ class TrainingService:
             # Initialize KTRDR components
             data_manager = DataManager()
 
-            # Load data for all symbols and timeframes
+            # Calculate date range (1 year of data)
+            end_date = datetime.utcnow()
+            start_date = end_date - timedelta(days=365)
+            start_date_str = start_date.strftime("%Y-%m-%d")
+            end_date_str = end_date.strftime("%Y-%m-%d")
+
+            # Load data for all symbols using TrainingPipeline (eliminating duplication)
             training_data = {}
             total_data_points = 0
 
             for symbol in symbols:
-                training_data[symbol] = {}
-                for timeframe in timeframes:
-                    try:
-                        # Load historical data
-                        data = data_manager.load_data(
-                            symbol=symbol,
-                            timeframe=timeframe,
-                            start_date=datetime.utcnow()
-                            - timedelta(days=365),  # 1 year of data
-                            end_date=datetime.utcnow(),
-                            mode="local",
-                            validate=True,
-                        )
+                try:
+                    # Use TrainingPipeline to load data (same logic as local path)
+                    symbol_data = TrainingPipeline.load_market_data(
+                        symbol=symbol,
+                        timeframes=timeframes,
+                        start_date=start_date_str,
+                        end_date=end_date_str,
+                        data_mode="local",
+                        data_manager=data_manager,
+                    )
 
-                        if data is not None and len(data) > 0:
-                            training_data[symbol][timeframe] = data
-                            total_data_points += len(data)
-                            logger.info(
-                                f"Loaded {len(data)} data points for {symbol} {timeframe}"
-                            )
-                        else:
-                            logger.warning(f"No data loaded for {symbol} {timeframe}")
+                    training_data[symbol] = symbol_data
+                    symbol_points = sum(len(df) for df in symbol_data.values())
+                    total_data_points += symbol_points
 
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to load data for {symbol} {timeframe}: {str(e)}"
-                        )
-                        continue
+                    logger.info(
+                        f"Loaded {symbol_points} data points for {symbol} "
+                        f"across {len(symbol_data)} timeframes"
+                    )
+
+                except Exception as e:
+                    logger.error(f"Failed to load data for {symbol}: {str(e)}")
+                    continue
 
             if total_data_points == 0:
                 raise Exception("No training data available")

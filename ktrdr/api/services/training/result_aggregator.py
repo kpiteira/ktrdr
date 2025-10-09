@@ -23,8 +23,8 @@ def _sanitize_for_json(data: Any) -> Any:
     Returns:
         JSON-serializable version of the data
     """
-    import torch
     import numpy as np
+    import torch
 
     if isinstance(data, dict):
         return {k: _sanitize_for_json(v) for k, v in data.items()}
