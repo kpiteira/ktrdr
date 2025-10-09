@@ -10,6 +10,43 @@ from ktrdr.api.services.training.context import TrainingOperationContext
 logger = get_logger(__name__)
 
 
+def _sanitize_for_json(data: Any) -> Any:
+    """
+    Recursively sanitize data to be JSON-serializable.
+
+    Converts torch tensors, numpy arrays, and other non-serializable types
+    to serializable formats.
+
+    Args:
+        data: Data to sanitize
+
+    Returns:
+        JSON-serializable version of the data
+    """
+    import torch
+    import numpy as np
+
+    if isinstance(data, dict):
+        return {k: _sanitize_for_json(v) for k, v in data.items()}
+    elif isinstance(data, (list, tuple)):
+        return [_sanitize_for_json(item) for item in data]
+    elif isinstance(data, torch.Tensor):
+        # Convert tensor to list
+        return data.detach().cpu().tolist()
+    elif isinstance(data, np.ndarray):
+        # Convert numpy array to list
+        return data.tolist()
+    elif isinstance(data, (np.integer, np.floating)):
+        # Convert numpy scalars to Python types
+        return data.item()
+    elif hasattr(data, "__dict__") and not isinstance(data, (str, bytes, bool, int, float)):
+        # Skip complex objects that aren't basic types
+        logger.warning(f"Skipping non-serializable object of type {type(data).__name__}")
+        return f"<{type(data).__name__} object>"
+    else:
+        return data
+
+
 def from_local_run(
     context: TrainingOperationContext,
     raw_result: dict[str, Any],
@@ -97,7 +134,7 @@ def from_local_run(
     if data_summary:
         session_info["data_summary"] = data_summary
 
-    return {
+    result = {
         "training_metrics": training_metrics,
         "validation_metrics": validation_metrics,
         "test_metrics": test_metrics,
@@ -106,6 +143,9 @@ def from_local_run(
         "session_info": session_info,
         "model_info": model_info_raw,
     }
+
+    # Sanitize the entire result to ensure JSON serializability
+    return _sanitize_for_json(result)
 
 
 def from_host_run(
@@ -196,7 +236,7 @@ def from_host_run(
     # Add model info if available
     model_info = host_snapshot.get("model_info") or {}
 
-    return {
+    result = {
         "training_metrics": training_metrics,
         "validation_metrics": validation_metrics,
         "test_metrics": test_metrics,
@@ -205,3 +245,6 @@ def from_host_run(
         "session_info": session_info,
         "model_info": model_info,
     }
+
+    # Sanitize the entire result to ensure JSON serializability
+    return _sanitize_for_json(result)
