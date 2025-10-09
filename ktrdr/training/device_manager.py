@@ -7,11 +7,11 @@ compute devices (CUDA, MPS, CPU) across the training system.
 Extracted from training-host-service/services/training_service.py lines 504-517
 to eliminate code duplication between local and host training paths.
 """
+
 import logging
 from typing import Any
 
 import torch
-
 
 logger = logging.getLogger(__name__)
 

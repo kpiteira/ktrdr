@@ -22,6 +22,7 @@ from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.logging import get_logger
 from ktrdr.training.data_optimization import DataConfig, DataLoadingOptimizer
+from ktrdr.training.device_manager import DeviceManager
 from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 
 # Import existing ktrdr training components
@@ -304,31 +305,26 @@ class TrainingService:
     def _initialize_global_resources(self):
         """Initialize global GPU resources."""
         try:
-            # Check for CUDA or Apple Silicon MPS
-            if torch.cuda.is_available():
+            # Use DeviceManager to detect device and capabilities
+            device_info = DeviceManager.get_device_info()
+            device_type = device_info["device"]
+            capabilities = device_info["capabilities"]
+
+            if device_type in ("cuda", "mps"):
+                # Configure based on device capabilities
                 gpu_config = GPUMemoryConfig(
                     memory_fraction=0.8,
-                    enable_mixed_precision=True,
-                    enable_memory_profiling=True,
+                    enable_mixed_precision=capabilities["mixed_precision"],
+                    enable_memory_profiling=capabilities["memory_info"],
+                    enable_memory_pooling=(device_type == "cuda"),  # Only CUDA supports pooling
                     profiling_interval_seconds=1.0,
                 )
                 self.global_gpu_manager = GPUMemoryManager(gpu_config)
                 logger.info(
-                    f"Global GPU manager initialized with {self.global_gpu_manager.num_devices} CUDA devices"
+                    f"Global GPU manager initialized with {device_info['device_name']}"
                 )
-            elif torch.backends.mps.is_available():
-                # Apple Silicon MPS support - disable CUDA-specific features
-                gpu_config = GPUMemoryConfig(
-                    memory_fraction=0.8,
-                    enable_mixed_precision=False,  # Disable mixed precision for MPS compatibility
-                    enable_memory_profiling=False,  # Disable profiling for MPS compatibility
-                    enable_memory_pooling=False,  # Disable memory pooling for MPS compatibility
-                    profiling_interval_seconds=1.0,
-                )
-                self.global_gpu_manager = GPUMemoryManager(gpu_config)
-                logger.info("Global GPU manager initialized with Apple Silicon MPS")
             else:
-                logger.info("No GPU available (CUDA or MPS), running in CPU-only mode")
+                logger.info("No GPU available, running in CPU-only mode")
         except Exception as e:
             logger.error(f"Failed to initialize global GPU resources: {str(e)}")
             self.global_gpu_manager = None
@@ -500,21 +496,14 @@ class TrainingService:
         - FuzzyNeuralProcessor for neural network training
         """
         try:
-            # Determine device - prioritize MPS for Apple Silicon, then CUDA, then CPU
-            if torch.backends.mps.is_available():
-                device = torch.device("mps")
-                device_type = "mps"
-                logger.info("Using Apple Silicon MPS for GPU acceleration")
-            elif torch.cuda.is_available():
-                device = torch.device("cuda")
-                device_type = "cuda"
-                logger.info(
-                    f"Using CUDA GPU {torch.cuda.get_device_name(0)} for acceleration"
-                )
-            else:
-                device = torch.device("cpu")
-                device_type = "cpu"
-                logger.info("No GPU available, using CPU")
+            # Use DeviceManager for centralized device detection
+            device = DeviceManager.get_torch_device()
+            device_type = device.type
+            device_info = DeviceManager.get_device_info()
+            logger.info(
+                f"Using {device_info['device_name']} for training "
+                f"(mixed_precision={device_info['capabilities']['mixed_precision']})"
+            )
 
             # Extract training configuration from the structured format
             config = session.config

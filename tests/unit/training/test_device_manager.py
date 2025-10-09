@@ -8,9 +8,10 @@ Tests cover:
 - Device info retrieval
 - Device capability detection
 """
-import pytest
+
+from unittest.mock import patch
+
 import torch
-from unittest.mock import patch, MagicMock
 
 from ktrdr.training.device_manager import DeviceManager
 
@@ -64,9 +65,7 @@ class TestDeviceDetection:
 
     @patch("torch.backends.mps.is_available")
     @patch("torch.cuda.is_available")
-    def test_detect_device_cpu_fallback(
-        self, mock_cuda_available, mock_mps_available
-    ):
+    def test_detect_device_cpu_fallback(self, mock_cuda_available, mock_mps_available):
         """Test CPU is used when no GPU available."""
         mock_mps_available.return_value = False
         mock_cuda_available.return_value = False
