@@ -141,10 +141,27 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
     ) -> Optional[dict[str, Any]]:
         """Temporary adapter that reuses legacy training manager wiring."""
         context.operation_id = operation_id
-        if context.use_host_service:
-            return await self._run_host_training(context=context)
 
-        return await self._run_local_training(context=context)
+        # Log training mode clearly before execution
+        if context.use_host_service:
+            logger.info("=" * 80)
+            logger.info("🚀 EXECUTING TRAINING: HOST SERVICE MODE")
+            logger.info(f"   Operation ID: {operation_id}")
+            logger.info(f"   Symbols: {', '.join(context.symbols)}")
+            logger.info(f"   Strategy: {context.strategy_name}")
+            logger.info("   GPU Training: Available (if host service has GPU)")
+            logger.info("=" * 80)
+            return await self._run_host_training(context=context)
+        else:
+            logger.info("=" * 80)
+            logger.info("💻 EXECUTING TRAINING: LOCAL MODE (Docker Container)")
+            logger.info(f"   Operation ID: {operation_id}")
+            logger.info(f"   Symbols: {', '.join(context.symbols)}")
+            logger.info(f"   Strategy: {context.strategy_name}")
+            logger.info("   GPU Training: Not available")
+            logger.info("   CPU Training: Active")
+            logger.info("=" * 80)
+            return await self._run_local_training(context=context)
 
     async def _run_local_training(
         self, *, context: TrainingOperationContext
