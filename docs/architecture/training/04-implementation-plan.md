@@ -631,199 +631,9 @@ Tested: Unit tests + integration tests
 
 ---
 
-## Phase 4: Equivalence Testing (Week 2-3)
+## Phase 4: Documentation and Merge (Week 2-3)
 
-### TASK-3.3: Create Comprehensive Equivalence Test Suite
-
-**Objective**: PRIMARY VALIDATION - Prove Phase 1 preserves all behavior
-
-**Files**:
-
-- `tests/equivalence/test_training_equivalence.py` (COMPREHENSIVE REWRITE)
-- `tests/equivalence/fixtures/equivalence_strategies.py` (CREATE - test strategies)
-
-**Test Matrix**:
-```python
-# Test all combinations:
-# - Old local vs New local
-# - Old host vs New host
-# - New local vs New host
-# - Multiple strategies
-# - Multiple symbol/timeframe combinations
-
-@pytest.mark.equivalence
-@pytest.mark.parametrize("strategy", ["neuro_mean_reversion", "simple_ma_crossover"])
-@pytest.mark.parametrize("execution", ["local_old", "local_new", "host_old", "host_new"])
-async def test_training_equivalence_comprehensive(strategy, execution):
-    """Comprehensive equivalence testing across all paths."""
-    # Run training with specified strategy and execution path
-    result = await run_training(strategy, execution)
-
-    # Store results for comparison
-    results_db[f"{strategy}_{execution}"] = result
-
-    # Compare with baseline if exists
-    if baseline := results_db.get(f"{strategy}_baseline"):
-        assert_equivalent(result, baseline, tolerance=0.001)
-
-def assert_equivalent(result1, result2, tolerance=0.001):
-    """Assert two training results are equivalent within tolerance."""
-    # Model weights (allow small numeric difference)
-    assert_model_weights_close(result1["model"], result2["model"], rtol=tolerance)
-
-    # Metrics (exact match for most, tolerance for floats)
-    assert result1["metrics"]["accuracy"] == pytest.approx(
-        result2["metrics"]["accuracy"], rel=tolerance
-    )
-
-    # Feature importance (order may differ slightly, check top features)
-    assert_top_features_match(
-        result1["feature_importance"],
-        result2["feature_importance"],
-        top_n=10
-    )
-
-    # Artifacts (model_path exists, loadable)
-    assert os.path.exists(result1["model_path"])
-    assert os.path.exists(result2["model_path"])
-
-    # Both models produce similar predictions
-    test_data = load_test_data()
-    pred1 = result1["model"].predict(test_data)
-    pred2 = result2["model"].predict(test_data)
-    assert np.allclose(pred1, pred2, rtol=tolerance)
-```
-
-**Equivalence Report**:
-```python
-# Generate detailed comparison report
-def generate_equivalence_report(results_db):
-    """Generate detailed report comparing all execution paths."""
-    report = {
-        "summary": {
-            "total_comparisons": len(results_db),
-            "passed": count_passing_comparisons(),
-            "failed": count_failing_comparisons(),
-            "max_difference": calculate_max_difference(),
-        },
-        "details": [
-            {
-                "comparison": "local_old vs local_new",
-                "strategy": "neuro_mean_reversion",
-                "metrics_diff": {...},
-                "weights_diff": 0.0003,
-                "passed": True,
-            },
-            # ... more comparisons ...
-        ]
-    }
-    return report
-```
-
-**Acceptance Criteria**:
-
-- [ ] All equivalence tests pass (< 0.1% difference)
-- [ ] Equivalence report generated
-- [ ] Test coverage includes:
-  - [ ] Multiple strategies (at least 2)
-  - [ ] Both local and host execution
-  - [ ] Old vs new implementations
-  - [ ] Model weights comparison
-  - [ ] Metrics comparison
-  - [ ] Feature importance comparison
-  - [ ] Prediction comparison
-
-**Commit Message**:
-
-```
-test(training): comprehensive equivalence test suite
-
-- Test all combinations of execution paths
-- Compare old vs new implementations
-- Validate < 0.1% difference in all outputs
-- Generate detailed equivalence report
-
-PRIMARY VALIDATION: All equivalence tests pass
-```
-
-**Estimated Effort**: 2 days
-
----
-
-### TASK-3.4: Run Full Test Suite and Performance Benchmarks
-
-**Objective**: Final validation before merge
-
-**Testing Checklist**:
-
-```bash
-# 1. Unit tests
-make test-unit
-# Expected: All pass, > 90% coverage
-
-# 2. Equivalence tests (CRITICAL)
-uv run pytest tests/equivalence/test_training_equivalence.py -v
-# Expected: All pass with < 0.1% difference
-
-# 3. Performance benchmarks
-uv run pytest tests/performance/test_training_performance.py -v
-# Expected: < 5% difference from baseline
-
-# 4. Quality checks
-make quality
-# Expected: All pass
-```
-
-**Performance Benchmark**:
-```python
-@pytest.mark.performance
-@pytest.mark.parametrize("execution", ["local_old", "local_new", "host_old", "host_new"])
-def test_training_performance_benchmark(execution, benchmark):
-    """Benchmark training performance across all paths."""
-    def run_training():
-        return train_strategy(
-            strategy="neuro_mean_reversion",
-            symbols=["EURUSD"],
-            timeframes=["1h"],
-            start_date="2024-01-01",
-            end_date="2024-01-07",
-            execution=execution
-        )
-
-    result = benchmark(run_training)
-
-    # Assert no significant regression
-    baseline = load_baseline_timing(execution.replace("_new", "_old"))
-    assert result.stats["mean"] < baseline * 1.05  # Max 5% slower
-```
-
-**Acceptance Criteria**:
-
-- [ ] All unit tests pass (> 90% coverage)
-- [ ] All equivalence tests pass (< 0.1% diff)
-- [ ] Performance benchmarks pass (< 5% regression)
-- [ ] Code quality passes (lint, format, typecheck)
-
-**Commit Message**:
-
-```
-test(training): validate Phase 1 complete
-
-- All unit tests pass (93% coverage)
-- Equivalence tests: < 0.1% difference
-- Performance: < 2% regression
-- All quality checks pass
-
-Phase 1 validation complete - ready for merge
-```
-
-**Estimated Effort**: 1 day
-
----
-
-## Phase 5: Documentation and Merge (Week 3)
-
-### TASK-3.5: Update Documentation
+### TASK-3.3: Update Documentation
 
 **Objective**: Document new architecture and migration path
 
@@ -881,14 +691,13 @@ result = await orchestrator.run()
 
 ## Testing
 
-See [equivalence tests](../../tests/equivalence/test_training_equivalence.py) for validation that Phase 1 preserves all behavior.
+End-to-end validation will be performed manually to ensure Phase 1 preserves all behavior.
 ```
 
 **Acceptance Criteria**:
 
 - [ ] All README files updated
 - [ ] Architecture docs accurate
-- [ ] Testing guide includes equivalence testing section
 - [ ] Migration notes documented
 
 **Commit Message**:
@@ -898,16 +707,15 @@ docs(training): update documentation for Phase 1 architecture
 
 - Add ktrdr/training/README.md explaining new architecture
 - Update host service README with model persistence info
-- Update testing guide with equivalence testing section
 
 All documentation reflects Phase 1 implementation
 ```
 
-**Estimated Effort**: 1 day
+**Estimated Effort**: 0.5 days
 
 ---
 
-### TASK-3.6: Create Pull Request
+### TASK-3.4: Create Pull Request
 
 **Objective**: Merge Phase 1 to main
 
@@ -938,19 +746,12 @@ This PR implements Phase 1 of the training architecture refactoring, eliminating
 
 ## Testing
 
-### Equivalence Tests (PRIMARY VALIDATION)
-```
-tests/integration/training/test_training_equivalence.py
-- Old local vs New local: < 0.05% difference ✅
-- Old host vs New host: < 0.08% difference ✅
-- New local vs New host: < 0.1% difference ✅
-```
+End-to-end validation performed manually to verify behavior preservation.
 
 ### Test Coverage
 
 - Unit tests: 93% coverage ✅
-- Equivalence tests: All pass ✅
-- Performance: < 2% regression ✅
+- Manual E2E testing: Verified ✅
 
 ### Quality Checks
 
@@ -982,8 +783,7 @@ Phase 2 will add remote model transfer to eliminate this requirement.
 ## Checklist
 
 - [x] All unit tests pass (> 90% coverage)
-- [x] Equivalence tests pass (< 0.1% difference)
-- [x] Performance benchmarks pass (< 5% regression)
+- [x] Manual E2E testing verified
 - [x] Documentation updated
 - [x] Code quality checks pass
 ```
@@ -993,8 +793,7 @@ Phase 2 will add remote model transfer to eliminate this requirement.
 - [ ] All tests pass in CI
 - [ ] Code review approved
 - [ ] Documentation reviewed
-- [ ] Performance benchmarks reviewed
-- [ ] Equivalence report reviewed
+- [ ] Manual E2E testing verified
 
 **Merge Strategy**:
 1. Squash merge to main (or keep detailed commits if preferred)
@@ -1014,8 +813,7 @@ Major refactoring of training architecture:
 - Preserve all existing async/progress/cancellation behavior
 
 Validated:
-- Equivalence tests: < 0.1% difference from old implementation
-- Performance: < 2% regression
+- Manual E2E testing: Behavior preserved
 - All tests pass (93% coverage)
 
 See docs/architecture/training/ for detailed architecture.
@@ -1032,9 +830,8 @@ See docs/architecture/training/ for detailed architecture.
 | **Phase 1: Foundation** | TASK-1.1 to 1.4 | 1 week | DeviceManager, TrainingPipeline (all methods) |
 | **Phase 2: Orchestrators** | TASK-2.1 | 2 days | LocalTrainingOrchestrator |
 | **Phase 3: Host Service** | TASK-3.1 to 3.2 | 3.5 days | HostTrainingOrchestrator + model persistence |
-| **Phase 4: Validation** | TASK-3.3 to 3.4 | 3 days | Comprehensive equivalence tests + benchmarks |
-| **Phase 5: Documentation** | TASK-3.5 to 3.6 | 1.5 days | Docs + PR |
-| **Total** | 11 tasks | **2-2.5 weeks** | Zero duplication, zero behavior change |
+| **Phase 4: Documentation** | TASK-3.3 to 3.4 | 1 day | Docs + PR |
+| **Total** | 9 tasks | **1.5-2 weeks** | Zero duplication, zero behavior change |
 
 ---
 
@@ -1043,13 +840,13 @@ See docs/architecture/training/ for detailed architecture.
 ### High-Risk Areas
 
 1. **Model Persistence**: Host service saving models is new functionality
-   - **Mitigation**: Equivalence tests verify models exist and load correctly
+   - **Mitigation**: Manual E2E testing verifies models exist and load correctly
 
-2. **Equivalence Testing**: Must confirm < 0.1% difference
-   - **Mitigation**: Comprehensive test matrix, detailed comparison report
+2. **Behavior Preservation**: Must confirm training produces identical results
+   - **Mitigation**: Manual E2E testing comparing old vs new implementations
 
 3. **Performance Regression**: Training must not slow down significantly
-   - **Mitigation**: Performance benchmarks, < 5% tolerance
+   - **Mitigation**: Manual timing checks during E2E testing
 
 ### Rollback Plan
 
@@ -1070,10 +867,10 @@ If issues discovered in production:
 Phase 1 is successful if:
 
 - ✅ **Zero duplication**: TrainingPipeline used by both orchestrators
-- ✅ **Zero behavior change**: Equivalence tests pass (< 0.1% diff)
-- ✅ **Zero performance regression**: < 5% difference in benchmarks
+- ✅ **Zero behavior change**: Manual E2E testing confirms identical results
+- ✅ **Zero performance regression**: Manual timing checks show no significant slowdown
 - ✅ **Models persist**: Host service saves models correctly
-- ✅ **All tests pass**: Unit, equivalence, performance
+- ✅ **All tests pass**: Unit tests (> 90% coverage)
 - ✅ **Production stable**: No incidents after deployment
 
 ---
