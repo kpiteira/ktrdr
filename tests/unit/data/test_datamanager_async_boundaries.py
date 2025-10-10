@@ -224,6 +224,22 @@ class TestDataManagerAsyncBoundaries:
         # - All other calls should be through the utility (not direct)
         expected_calls = 1  # Only in _run_async_method
 
+        # Debug info for CI troubleshooting
+        if actual_calls != expected_calls:
+            print(f"\n=== DEBUG INFO ===")
+            print(f"Source length: {len(source)} chars")
+            print(f"Clean source length: {len(clean_source)} chars")
+            print(f"Has _run_async_method: {hasattr(data_manager, '_run_async_method')}")
+            print(f"'_run_async_method' in source: {'_run_async_method' in source}")
+            print(f"'asyncio.run' in source: {'asyncio.run' in source}")
+            print(f"'asyncio.run' in clean_source: {'asyncio.run' in clean_source}")
+
+            # Show context around where asyncio.run should be
+            if '_run_async_method' in clean_source:
+                idx = clean_source.find('_run_async_method')
+                context = clean_source[max(0, idx):min(len(clean_source), idx+500)]
+                print(f"\n_run_async_method context:\n{context[:200]}...")
+
         # Verify proper architecture: minimal, centralized asyncio.run() usage
         assert (
             actual_calls == expected_calls
