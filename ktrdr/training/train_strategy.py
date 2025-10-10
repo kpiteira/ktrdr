@@ -204,22 +204,32 @@ class StrategyTrainer:
             config["model"], combined_features.shape[1], len(symbols)
         )
 
-        # Step 9: Train model
+        # Step 9: Train model (using TrainingPipeline for multi-symbol)
         print("\n9. Training multi-symbol neural network...")
-        training_results = self._train_model(
-            model,
-            train_data,
-            val_data,
-            config,
-            symbols,
-            timeframes,
-            progress_callback,
+        training_results = TrainingPipeline.train_model(
+            model=model,
+            X_train=train_data[0],
+            y_train=train_data[1],
+            X_val=val_data[0],
+            y_val=val_data[1],
+            training_config=config["model"]["training"],
+            progress_callback=progress_callback,
             cancellation_token=cancellation_token,
+            symbol_indices_train=train_data[2],
+            symbol_indices_val=val_data[2],
+            symbols=symbols,
         )
 
-        # Step 10: Evaluate model
+        # Step 10: Evaluate model (using TrainingPipeline for multi-symbol)
         print("\n10. Evaluating multi-symbol model...")
-        test_metrics = self._evaluate_model(model, test_data)
+        test_metrics = TrainingPipeline.evaluate_model(
+            model=model,
+            X_test=test_data[0] if test_data else None,
+            y_test=test_data[1] if test_data else None,
+            symbol_indices_test=(
+                test_data[2] if test_data and len(test_data) > 2 else None
+            ),
+        )
         if test_data is not None:
             print(
                 f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}"
@@ -461,14 +471,29 @@ class StrategyTrainer:
         if np.isinf(train_data[0]).any():
             raise ValueError("Training data contains infinite values")
 
-        model = self._create_model(config["model"], features.shape[1])
-        training_results = self._train_model(
-            model, train_data, val_data, config, symbol, timeframes, progress_callback
+        # Use TrainingPipeline for model operations (eliminates duplication)
+        model = TrainingPipeline.create_model(
+            input_dim=features.shape[1],
+            output_dim=3,  # BUY, HOLD, SELL
+            model_config=config["model"],
+        )
+        training_results = TrainingPipeline.train_model(
+            model=model,
+            X_train=train_data[0],
+            y_train=train_data[1],
+            X_val=val_data[0],
+            y_val=val_data[1],
+            training_config=config["model"]["training"],
+            progress_callback=progress_callback,
         )
 
         # Step 8: Evaluate model
         print("\n8. Evaluating model...")
-        test_metrics = self._evaluate_model(model, test_data)
+        test_metrics = TrainingPipeline.evaluate_model(
+            model=model,
+            X_test=test_data[0] if test_data else None,
+            y_test=test_data[1] if test_data else None,
+        )
         if test_data is not None:
             print(
                 f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}"
