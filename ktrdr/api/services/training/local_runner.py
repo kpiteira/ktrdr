@@ -1,23 +1,27 @@
-"""Local training runner that integrates StrategyTrainer with the orchestrator."""
+"""Local training runner - thin wrapper around LocalTrainingOrchestrator."""
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from ktrdr import get_logger
 from ktrdr.api.services.training.context import TrainingOperationContext
+from ktrdr.api.services.training.local_orchestrator import LocalTrainingOrchestrator
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
-from ktrdr.api.services.training.result_aggregator import from_local_run
-from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
-from ktrdr.training.train_strategy import StrategyTrainer
+from ktrdr.async_infrastructure.cancellation import CancellationToken
+from ktrdr.training.model_storage import ModelStorage
 
 logger = get_logger(__name__)
 
 
 class LocalTrainingRunner:
-    """Execute training locally while forwarding progress to the orchestrator."""
+    """
+    Execute training locally while forwarding progress to the orchestrator.
+
+    REFACTORED: This is now a thin wrapper around LocalTrainingOrchestrator.
+    All training logic has been delegated to LocalTrainingOrchestrator which
+    uses TrainingPipeline for the actual work.
+    """
 
     def __init__(
         self,
@@ -25,81 +29,42 @@ class LocalTrainingRunner:
         context: TrainingOperationContext,
         progress_bridge: TrainingProgressBridge,
         cancellation_token: CancellationToken | None,
-        strategy_trainer: StrategyTrainer | None = None,
+        model_storage: ModelStorage | None = None,
     ) -> None:
+        """
+        Initialize the local training runner.
+
+        Args:
+            context: Training operation context
+            progress_bridge: Progress bridge for reporting
+            cancellation_token: Optional cancellation token
+            model_storage: Optional model storage (creates default if not provided)
+        """
         self._context = context
         self._bridge = progress_bridge
         self._cancellation_token = cancellation_token
-        self._trainer = strategy_trainer or StrategyTrainer()
+        self._model_storage = model_storage or ModelStorage()
 
-    async def run(self) -> dict[str, Any]:
-        """Run the synchronous training workflow in a worker thread."""
-        self._bridge.on_phase("initializing", message="Preparing training environment")
-        self._raise_if_cancelled()
-
-        try:
-            raw_result = await asyncio.to_thread(self._execute_training)
-        except CancellationError:
-            logger.info("Local training cancelled for %s", self._context.strategy_name)
-            self._bridge.on_phase("cancelled", message="Training cancelled")
-            raise
-
-        # Aggregate result into standardized format
-        aggregated_result = from_local_run(self._context, raw_result or {})
-
-        self._bridge.on_complete()
-        return aggregated_result
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-    def _execute_training(self) -> dict[str, Any]:
-        self._bridge.on_phase("data_preparation", message="Loading market data")
-        self._raise_if_cancelled()
-
-        progress_callback = self._build_progress_callback()
-
-        return self._trainer.train_multi_symbol_strategy(
-            strategy_config_path=str(self._context.strategy_path),
-            symbols=self._context.symbols,
-            timeframes=self._context.timeframes,
-            start_date=self._context.start_date or "2020-01-01",
-            end_date=self._context.end_date or datetime.utcnow().strftime("%Y-%m-%d"),
-            validation_split=self._context.training_config.get("validation_split", 0.2),
-            data_mode=self._context.training_config.get("data_mode", "local"),
-            progress_callback=progress_callback,
-            cancellation_token=self._cancellation_token,
+        # Create orchestrator instance
+        self._orchestrator = LocalTrainingOrchestrator(
+            context=context,
+            progress_bridge=progress_bridge,
+            cancellation_token=cancellation_token,
+            model_storage=self._model_storage,
         )
 
-    def _build_progress_callback(
-        self,
-    ) -> Callable[[int, int, dict[str, Any] | None], None]:
-        def _callback(
-            epoch: int, total_epochs: int, metrics: dict[str, Any] | None = None
-        ) -> None:
-            self._raise_if_cancelled()
-            metrics = metrics or {}
-            progress_type = metrics.get("progress_type")
+    async def run(self) -> dict[str, Any]:
+        """
+        Run the training workflow via orchestrator.
 
-            if progress_type == "batch":
-                self._bridge.on_batch(
-                    epoch=epoch,
-                    batch=metrics.get("batch", 0),
-                    total_batches=metrics.get("total_batches_per_epoch"),
-                    metrics=metrics,
-                )
-            elif progress_type == "epoch":
-                self._bridge.on_epoch(
-                    epoch=epoch,
-                    total_epochs=total_epochs,
-                    metrics=metrics,
-                )
-            else:
-                message = metrics.get("message") or "Training update"
-                self._bridge.on_phase(progress_type or "update", message=message)
+        Delegates all work to LocalTrainingOrchestrator, maintaining
+        backward-compatible API.
 
-        return _callback
+        Returns:
+            Training result with standardized format
 
-    def _raise_if_cancelled(self) -> None:
-        if self._cancellation_token and self._cancellation_token.is_cancelled():
-            raise CancellationError("Training operation cancelled")
+        Raises:
+            CancellationError: If training is cancelled
+        """
+        # Delegate to orchestrator
+        return await self._orchestrator.run()
