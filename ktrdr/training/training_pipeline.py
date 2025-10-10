@@ -1082,15 +1082,14 @@ class TrainingPipeline:
         # Step 11: Save model
         logger.info("💾 Saving model...")
         feature_names = list(all_symbols_feature_names.values())[0]
-
-        # For multi-symbol models, use composite identifier
-        symbols_str = "_".join(symbols)
         primary_timeframe = timeframes[0] if timeframes else "1h"
 
+        # Symbol-agnostic model storage: symbol parameter is deprecated
+        # Models are stored as: models/{strategy_name}/{timeframe}_v{N}/
         model_path = model_storage.save_model(
             model=model,
             strategy_name=strategy_config["name"],
-            symbol=symbols_str if len(symbols) > 1 else symbols[0],
+            symbol="MULTI" if len(symbols) > 1 else symbols[0],  # Placeholder only
             timeframe=primary_timeframe,
             config=strategy_config,
             training_metrics=training_results,
