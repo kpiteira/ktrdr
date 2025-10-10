@@ -861,3 +861,268 @@ class TrainingPipeline:
             "recall": recall,
             "f1_score": f1,
         }
+
+    # ======================================================================
+    # MULTI-SYMBOL METHODS
+    # Extracted from: ktrdr/training/train_strategy.py::StrategyTrainer
+    # ======================================================================
+
+    @staticmethod
+    def combine_multi_symbol_data(
+        all_symbols_features: dict[str, torch.Tensor],
+        all_symbols_labels: dict[str, torch.Tensor],
+        symbols: list[str],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Combine features and labels from multiple symbols sequentially, preserving temporal order.
+
+        DESIGN PRINCIPLE: Strategies are symbol-agnostic. A trading strategy operates on
+        patterns in technical indicators and price action, not on symbol names. The model
+        learns "when RSI is oversold AND MACD crosses up, buy" - this pattern is universal
+        across all symbols.
+
+        TEMPORAL PRESERVATION: Concatenates data sequentially (AAPL all → MSFT all → TSLA all)
+        to preserve time series order within each symbol. This is critical for learning
+        temporal patterns.
+
+        INDICATOR RESETS: Caller must reset indicator state (moving averages, etc.) at
+        symbol boundaries since each symbol's data is a separate time series. Concatenating
+        AAPL's last day with MSFT's first day doesn't represent continuous time.
+
+        NO DATA LOSS: Uses ALL data from all symbols - no sampling, no random selection.
+
+        Args:
+            all_symbols_features: Dict mapping symbol to features tensor
+            all_symbols_labels: Dict mapping symbol to labels tensor
+            symbols: List of symbol names in order
+
+        Returns:
+            Tuple of (combined_features, combined_labels)
+            Note: No symbol_indices returned - strategies are symbol-agnostic
+        """
+        combined_features_list = []
+        combined_labels_list = []
+
+        for symbol in symbols:
+            # Concatenate sequentially - preserves temporal order
+            combined_features_list.append(all_symbols_features[symbol])
+            combined_labels_list.append(all_symbols_labels[symbol])
+
+        # Concatenate all symbols (AAPL all data, then MSFT all data, etc.)
+        combined_features = torch.cat(combined_features_list, dim=0)
+        combined_labels = torch.cat(combined_labels_list, dim=0)
+
+        # NO SHUFFLE - temporal order is critical for time series
+        # NO SYMBOL_INDICES - strategies don't care about symbol names
+        return combined_features, combined_labels
+
+    # ======================================================================
+    # HIGH-LEVEL ORCHESTRATION METHOD
+    # ======================================================================
+
+    @staticmethod
+    def train_strategy(
+        symbols: list[str],
+        timeframes: list[str],
+        strategy_config: dict[str, Any],
+        start_date: str,
+        end_date: str,
+        model_storage,  # ModelStorage instance
+        data_mode: str = "local",
+        progress_callback=None,
+        cancellation_token: Optional[CancellationToken] = None,
+        data_manager: Optional[DataManager] = None,
+    ) -> dict[str, Any]:
+        """
+        Complete training pipeline from data to trained model.
+
+        Orchestrates all steps: load data → indicators → fuzzy → features →
+        labels → train → evaluate → save. Returns standardized result.
+
+        Key: progress_callback and cancellation_token are PASSED THROUGH
+        to train_model(), not handled here. This avoids the trap of trying
+        to unify progress/cancellation mechanisms.
+
+        Args:
+            symbols: Trading symbols to train on
+            timeframes: Timeframes for multi-timeframe training
+            strategy_config: Complete strategy configuration
+            start_date: Start date for training data
+            end_date: End date for training data
+            model_storage: ModelStorage instance for saving
+            data_mode: Data loading mode ('local', 'tail', 'backfill')
+            progress_callback: Optional progress callback (orchestrator-provided)
+            cancellation_token: Optional cancellation token (orchestrator-provided)
+            data_manager: Optional DataManager instance
+
+        Returns:
+            Standardized result dict with model_path, metrics, artifacts
+        """
+        logger.info(
+            f"🚀 TrainingPipeline.train_strategy() - Starting training for {len(symbols)} symbol(s): {symbols}"
+        )
+        logger.info(f"   Timeframes: {timeframes}, Mode: {data_mode}")
+
+        # Initialize components if needed
+        if data_manager is None:
+            from ktrdr.data.data_manager import DataManager as DM
+
+            data_manager = DM()
+
+        multi_timeframe_coordinator = None
+        if len(timeframes) > 1:
+            from ktrdr.data.multi_timeframe_coordinator import (
+                MultiTimeframeCoordinator as MTC,
+            )
+
+            multi_timeframe_coordinator = MTC(data_manager)
+
+        # Process each symbol
+        all_symbols_features = {}
+        all_symbols_labels = {}
+        all_symbols_feature_names = {}
+
+        for symbol in symbols:
+            logger.info(f"📊 Processing symbol: {symbol}")
+
+            # Step 1: Load market data
+            price_data = TrainingPipeline.load_market_data(
+                symbol=symbol,
+                timeframes=timeframes,
+                start_date=start_date,
+                end_date=end_date,
+                data_mode=data_mode,
+                data_manager=data_manager,
+                multi_timeframe_coordinator=multi_timeframe_coordinator,
+            )
+
+            # Step 2: Calculate indicators
+            indicators_data = TrainingPipeline.calculate_indicators(
+                price_data, strategy_config["indicators"]
+            )
+
+            # Step 3: Generate fuzzy memberships
+            fuzzy_data = TrainingPipeline.generate_fuzzy_memberships(
+                indicators_data, strategy_config["fuzzy_sets"]
+            )
+
+            # Step 4: Engineer features
+            features, feature_names = TrainingPipeline.create_features(
+                fuzzy_data, strategy_config.get("model", {}).get("features", {})
+            )
+
+            # Step 5: Generate labels
+            labels = TrainingPipeline.create_labels(
+                price_data, strategy_config["training"]["labels"]
+            )
+
+            # Store for this symbol
+            all_symbols_features[symbol] = features
+            all_symbols_labels[symbol] = labels
+            all_symbols_feature_names[symbol] = feature_names
+
+        # Step 6: Combine multi-symbol data (or pass through for single symbol)
+        logger.info(f"🔗 Combining data from {len(symbols)} symbol(s)")
+        combined_features, combined_labels = TrainingPipeline.combine_multi_symbol_data(
+            all_symbols_features, all_symbols_labels, symbols
+        )
+
+        # Step 7: Split data
+        data_split_config = strategy_config["training"]["data_split"]
+        test_size = data_split_config.get("test_size", 0.1)
+        val_size = data_split_config.get("validation_size", 0.2)
+
+        # Calculate split indices
+        total_samples = len(combined_features)
+        test_split = int(total_samples * (1 - test_size))
+        val_split = int(test_split * (1 - val_size))
+
+        # Split sequentially (preserve temporal order)
+        X_train = combined_features[:val_split]
+        y_train = combined_labels[:val_split]
+
+        X_val = combined_features[val_split:test_split]
+        y_val = combined_labels[val_split:test_split]
+
+        X_test = combined_features[test_split:]
+        y_test = combined_labels[test_split:]
+
+        logger.info(
+            f"📊 Data splits - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}"
+        )
+
+        # Step 8: Create model (symbol-agnostic)
+        input_dim = combined_features.shape[1]
+        output_dim = 3  # Buy (0), Hold (1), Sell (2)
+        model = TrainingPipeline.create_model(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            model_config=strategy_config["model"],
+        )
+
+        # Step 9: Train model (PASS THROUGH callbacks/token)
+        logger.info("🏋️ Training model...")
+        training_results = TrainingPipeline.train_model(
+            model=model,
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
+            training_config=strategy_config["model"]["training"],
+            progress_callback=progress_callback,  # ← Pass through
+            cancellation_token=cancellation_token,  # ← Pass through
+        )
+
+        # Step 10: Evaluate model
+        logger.info("📈 Evaluating model...")
+        test_metrics = TrainingPipeline.evaluate_model(
+            model=model, X_test=X_test, y_test=y_test
+        )
+
+        # Step 11: Save model
+        logger.info("💾 Saving model...")
+        feature_names = list(all_symbols_feature_names.values())[0]
+
+        # For multi-symbol models, use composite identifier
+        symbols_str = "_".join(symbols)
+        primary_timeframe = timeframes[0] if timeframes else "1h"
+
+        model_path = model_storage.save_model(
+            model=model,
+            strategy_name=strategy_config["name"],
+            symbol=symbols_str if len(symbols) > 1 else symbols[0],
+            timeframe=primary_timeframe,
+            config=strategy_config,
+            training_metrics=training_results,
+            feature_names=feature_names,
+            feature_importance=None,  # Can be added later
+            scaler=None,  # Symbol-agnostic doesn't use scaler
+        )
+
+        logger.info(f"✅ Training complete! Model saved to: {model_path}")
+
+        # Return standardized format
+        return {
+            "model_path": model_path,
+            "training_metrics": training_results,
+            "test_metrics": test_metrics,
+            "artifacts": {
+                "feature_importance": None,  # Can be added later
+                "per_symbol_metrics": None,  # Can be added later
+            },
+            "model_info": {
+                "parameters_count": sum(p.numel() for p in model.parameters()),
+                "trainable_parameters": sum(
+                    p.numel() for p in model.parameters() if p.requires_grad
+                ),
+                "architecture": "symbol_agnostic_mlp",
+            },
+            "data_summary": {
+                "symbols": symbols,
+                "timeframes": timeframes,
+                "start_date": start_date,
+                "end_date": end_date,
+                "total_samples": len(combined_features),
+                "feature_count": combined_features.shape[1],
+            },
+        }
