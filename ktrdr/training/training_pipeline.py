@@ -17,14 +17,23 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
+from sklearn.metrics import (
+    f1_score,
+    precision_score,
+    recall_score,
+)
 
 from ktrdr import get_logger
+from ktrdr.async_infrastructure.cancellation import CancellationToken
 from ktrdr.data.data_manager import DataManager
 from ktrdr.data.multi_timeframe_coordinator import MultiTimeframeCoordinator
 from ktrdr.fuzzy.config import FuzzyConfigLoader
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators.indicator_engine import IndicatorEngine
+from ktrdr.neural.models.mlp import MLPTradingModel
 from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
+from ktrdr.training.model_trainer import ModelTrainer
 from ktrdr.training.zigzag_labeler import ZigZagLabeler
 
 logger = get_logger(__name__)
@@ -615,3 +624,240 @@ class TrainingPipeline:
 
         # Sort by frequency (lower minutes = higher frequency)
         return sorted(timeframes, key=lambda tf: frequency_map.get(tf, 1440))
+
+    # ======================================================================
+    # MODEL METHODS
+    # Extracted from: ktrdr/training/train_strategy.py::StrategyTrainer
+    # ======================================================================
+
+    @staticmethod
+    def create_model(
+        input_dim: int,
+        output_dim: int,
+        model_config: dict[str, Any],
+    ) -> nn.Module:
+        """
+        Create neural network model.
+
+        EXTRACTED FROM: StrategyTrainer._create_model() (train_strategy.py:921-940)
+
+        Args:
+            input_dim: Number of input features
+            output_dim: Number of output classes
+            model_config: Model configuration dict containing:
+                - type: Model type (default: "mlp")
+                - hidden_layers: List of hidden layer sizes
+                - dropout: Dropout rate
+                - num_classes: Number of output classes
+
+        Returns:
+            Neural network module ready for training
+
+        Raises:
+            ValueError: If model type is not supported
+        """
+        logger.info(
+            f"🔧 TrainingPipeline.create_model() - Creating model with "
+            f"input_dim={input_dim}, output_dim={output_dim}"
+        )
+
+        model_type = model_config.get("type", "mlp").lower()
+
+        if model_type == "mlp":
+            # Create MLPTradingModel and build the model
+            mlp_model = MLPTradingModel(model_config)
+            model = mlp_model.build_model(input_dim)
+            logger.info(
+                f"✅ Created MLP model with hidden_layers={model_config.get('hidden_layers', [])}"
+            )
+            return model
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+    @staticmethod
+    def train_model(
+        model: nn.Module,
+        X_train: torch.Tensor,
+        y_train: torch.Tensor,
+        X_val: torch.Tensor,
+        y_val: torch.Tensor,
+        training_config: dict[str, Any],
+        progress_callback=None,
+        cancellation_token: Optional[CancellationToken] = None,
+        symbol_indices_train: Optional[torch.Tensor] = None,
+        symbol_indices_val: Optional[torch.Tensor] = None,
+        symbols: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        """
+        Train the neural network model.
+
+        EXTRACTED FROM: StrategyTrainer._train_model() (train_strategy.py:942-1019)
+
+        This is a SYNCHRONOUS method with no async operations. Orchestrators
+        wrap this method differently for their execution environments.
+
+        Args:
+            model: Neural network model to train
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features
+            y_val: Validation labels
+            training_config: Training configuration dict containing:
+                - epochs: Number of training epochs
+                - batch_size: Batch size
+                - learning_rate: Learning rate
+            progress_callback: Optional callback(epoch, total_epochs, metrics)
+            cancellation_token: Optional cancellation token
+            symbol_indices_train: Optional symbol indices for multi-symbol training
+            symbol_indices_val: Optional symbol indices for multi-symbol validation
+            symbols: Optional list of symbols for multi-symbol training
+
+        Returns:
+            Training results dict containing:
+                - train_loss: Final training loss
+                - val_loss: Final validation loss
+                - train_accuracy: Final training accuracy
+                - val_accuracy: Final validation accuracy
+                - epochs_completed: Number of epochs completed
+                - training_history: History of metrics per epoch
+        """
+        logger.info(
+            f"🔧 TrainingPipeline.train_model() - Training model "
+            f"(epochs={training_config.get('epochs', 'N/A')}, "
+            f"batch_size={training_config.get('batch_size', 'N/A')})"
+        )
+
+        # Determine if this is multi-symbol training
+        is_multi_symbol = (
+            symbol_indices_train is not None
+            and symbol_indices_val is not None
+            and symbols is not None
+            and len(symbols) > 1  # type: ignore[arg-type]
+        )
+
+        # Create trainer instance
+        trainer = ModelTrainer(
+            training_config,
+            progress_callback=progress_callback,
+            cancellation_token=cancellation_token,
+        )
+
+        # Train model (single or multi-symbol)
+        if is_multi_symbol:
+            logger.debug(f"Multi-symbol training for {len(symbols)} symbols: {symbols}")  # type: ignore[arg-type]
+            result = trainer.train_multi_symbol(
+                model=model,
+                X_train=X_train,
+                y_train=y_train,
+                symbol_indices_train=symbol_indices_train,  # type: ignore[arg-type]
+                symbols=symbols,  # type: ignore[arg-type]
+                X_val=X_val,
+                y_val=y_val,
+                symbol_indices_val=symbol_indices_val,  # type: ignore[arg-type]
+            )
+        else:
+            logger.debug("Single-symbol training")
+            result = trainer.train(
+                model=model,
+                X_train=X_train,
+                y_train=y_train,
+                X_val=X_val,
+                y_val=y_val,
+            )
+
+        # Use the actual keys returned by ModelTrainer
+        train_loss = result.get("final_train_loss", None)
+        val_loss = result.get("final_val_loss", None)
+        if train_loss is not None and val_loss is not None:
+            logger.info(
+                f"✅ Training complete - "
+                f"Final train_loss={train_loss:.4f}, "
+                f"val_loss={val_loss:.4f}"
+            )
+        else:
+            logger.info(
+                f"✅ Training complete - "
+                f"Final train_loss={train_loss}, "
+                f"val_loss={val_loss}"
+            )
+
+        return result
+
+    @staticmethod
+    def evaluate_model(
+        model: nn.Module,
+        X_test: Optional[torch.Tensor],
+        y_test: Optional[torch.Tensor],
+        symbol_indices_test: Optional[torch.Tensor] = None,
+    ) -> dict[str, Any]:
+        """
+        Evaluate model on test set.
+
+        EXTRACTED FROM: StrategyTrainer._evaluate_model() (train_strategy.py:1021-1080)
+
+        Args:
+            model: Trained model
+            X_test: Test features (None for no test data)
+            y_test: Test labels (None for no test data)
+            symbol_indices_test: Optional symbol indices for multi-symbol evaluation
+
+        Returns:
+            Test metrics dict containing:
+                - test_accuracy: Test set accuracy
+                - test_loss: Test set loss
+                - precision: Weighted precision score
+                - recall: Weighted recall score
+                - f1_score: Weighted F1 score
+        """
+        logger.info(
+            "🔧 TrainingPipeline.evaluate_model() - Evaluating model on test set"
+        )
+
+        # Handle no test data case
+        if X_test is None or y_test is None:
+            logger.warning("No test data provided - returning zero metrics")
+            return {
+                "test_accuracy": 0.0,
+                "test_loss": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1_score": 0.0,
+            }
+
+        model.eval()
+        with torch.no_grad():
+            outputs = model(X_test)
+
+            # Calculate accuracy
+            _, predicted = torch.max(outputs, 1)
+            accuracy = (predicted == y_test).float().mean().item()
+
+            # Calculate loss
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(outputs, y_test).item()
+
+            # Convert tensors to numpy for sklearn metrics
+            y_true = y_test.cpu().numpy()
+            y_pred = predicted.cpu().numpy()
+
+            # Calculate precision, recall, and f1_score using weighted average
+            # This handles multi-class classification properly
+            precision = precision_score(
+                y_true, y_pred, average="weighted", zero_division=0
+            )
+            recall = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+            f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+
+        logger.info(
+            f"✅ Evaluation complete - "
+            f"test_accuracy={accuracy:.4f}, test_loss={loss:.4f}, "
+            f"precision={precision:.4f}, recall={recall:.4f}, f1_score={f1:.4f}"
+        )
+
+        return {
+            "test_accuracy": accuracy,
+            "test_loss": loss,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1,
+        }
