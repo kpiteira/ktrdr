@@ -10,20 +10,14 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
 from ktrdr.data.data_manager import DataManager
-from ktrdr.fuzzy.config import FuzzyConfig
-from ktrdr.fuzzy.engine import FuzzyEngine
-from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.logging import get_logger
 from ktrdr.training.data_optimization import DataConfig, DataLoadingOptimizer
 from ktrdr.training.device_manager import DeviceManager
-from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 
 # Import existing ktrdr training components
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
@@ -588,63 +582,88 @@ class TrainingService:
 
             logger.info(f"Total training data points: {total_data_points}")
 
-            # Initialize indicators and fuzzy engine
-            indicator_engine = IndicatorEngine()
-            # Use simple fuzzy config to get training working
-            fuzzy_config = FuzzyConfig(
-                {
-                    "rsi": {
-                        "low": {"type": "triangular", "parameters": [0.0, 0.0, 30.0]},
-                        "high": {
-                            "type": "triangular",
-                            "parameters": [70.0, 100.0, 100.0],
-                        },
-                    }
-                }
-            )
-            FuzzyEngine(fuzzy_config)
+            # Extract feature engineering configs from strategy config
+            # Get configs with fallback to simple defaults
+            indicator_configs = model_config.get("indicators", [
+                {"name": "rsi", "period": 14},
+                {"name": "macd", "fast_period": 12, "slow_period": 26}
+            ])
 
-            # Initialize fuzzy neural processor for feature preparation
-            FuzzyNeuralProcessor(
-                config={"lookback_periods": 0}  # Simple config for feature processing
-            )
+            fuzzy_configs = model_config.get("fuzzy_sets", {
+                "rsi": {
+                    "low": {"type": "triangular", "parameters": [0.0, 0.0, 30.0]},
+                    "high": {"type": "triangular", "parameters": [70.0, 100.0, 100.0]},
+                }
+            })
+
+            feature_config = model_config.get("feature_engineering", {"lookback_periods": 0})
+            label_config = model_config.get("labels", {
+                "zigzag_threshold": 0.03,
+                "label_lookahead": 5
+            })
+
+            # Prepare features and labels for each symbol using TrainingPipeline
+            features_by_symbol = {}
+            labels_by_symbol = {}
+
+            for symbol in training_data:
+                symbol_price_data = training_data[symbol]
+
+                # Use TrainingPipeline for feature engineering
+                indicators = TrainingPipeline.calculate_indicators(
+                    symbol_price_data, indicator_configs
+                )
+                fuzzy_data = TrainingPipeline.generate_fuzzy_memberships(
+                    indicators, fuzzy_configs
+                )
+                features, feature_names = TrainingPipeline.create_features(
+                    fuzzy_data, feature_config
+                )
+                labels = TrainingPipeline.create_labels(
+                    symbol_price_data, label_config
+                )
+
+                features_by_symbol[symbol] = features
+                labels_by_symbol[symbol] = labels
+
+            # Determine model input size from features
+            first_symbol = list(features_by_symbol.keys())[0]
+            input_size = features_by_symbol[first_symbol].shape[1]
+            logger.info(f"Model input size: {input_size} features")
 
             # Create a simple neural network model for trading signals
             class TradingModel(nn.Module):
                 def __init__(
-                    self, input_size=20, hidden_size=512, output_size=3
-                ):  # Increased from 128 to 512
+                    self, input_size, hidden_size=512, output_size=3
+                ):
                     super().__init__()
                     self.layers = nn.Sequential(
-                        nn.Linear(input_size, hidden_size),  # 20 -> 512
+                        nn.Linear(input_size, hidden_size),
                         nn.ReLU(),
                         nn.Dropout(0.2),
-                        nn.Linear(hidden_size, hidden_size // 2),  # 512 -> 256
+                        nn.Linear(hidden_size, hidden_size // 2),
                         nn.ReLU(),
                         nn.Dropout(0.2),
-                        nn.Linear(
-                            hidden_size // 2, hidden_size // 4
-                        ),  # 256 -> 128 (added layer)
+                        nn.Linear(hidden_size // 2, hidden_size // 4),
                         nn.ReLU(),
                         nn.Dropout(0.2),
-                        nn.Linear(hidden_size // 4, output_size),  # 128 -> 3
+                        nn.Linear(hidden_size // 4, output_size),
                     )
 
                 def forward(self, x):
                     return self.layers(x)
 
-            # Create and move model to device with larger size
-            model = TradingModel(
-                input_size=20, hidden_size=512, output_size=3
-            )  # Increased from 128 to 512
+            # Create and move model to device with dynamic input size
+            model = TradingModel(input_size=input_size, hidden_size=512, output_size=3)
             model.to(device)
 
             # Setup optimizer
             optimizer = optim.Adam(model.parameters(), lr=0.001)
             criterion = nn.CrossEntropyLoss()
 
-            # Calculate total batches
-            session.total_batches = max(1, total_data_points // batch_size)
+            # Calculate total samples for batch calculation
+            total_samples = sum(len(f) for f in features_by_symbol.values())
+            session.total_batches = max(1, total_samples // batch_size)
 
             # Training loop
             for epoch in range(epochs):
@@ -656,91 +675,79 @@ class TrainingService:
                 epoch_accuracy = 0.0
                 batches_processed = 0
 
-                # Process each symbol and timeframe
-                for symbol in training_data:
-                    for timeframe in training_data[symbol]:
+                # Process each symbol's features
+                for symbol in features_by_symbol:
+                    if session.stop_requested:
+                        break
+
+                    # Get pre-computed features and labels for this symbol
+                    symbol_features = features_by_symbol[symbol]
+                    symbol_labels = labels_by_symbol[symbol]
+
+                    # Move to device
+                    symbol_features = symbol_features.to(device)
+                    symbol_labels = symbol_labels.to(device)
+
+                    # Process data in batches
+                    for batch_start in range(0, len(symbol_features), batch_size):
                         if session.stop_requested:
                             break
 
-                        data = training_data[symbol][timeframe]
+                        batch_end = min(batch_start + batch_size, len(symbol_features))
 
-                        # Process data in batches
-                        for batch_start in range(0, len(data), batch_size):
+                        # Get batch
+                        features_batch = symbol_features[batch_start:batch_end]
+                        labels_batch = symbol_labels[batch_start:batch_end]
+
+                        if len(features_batch) < batch_size // 2:  # Skip small batches
+                            continue
+
+                        try:
+                            # Forward pass
+                            optimizer.zero_grad()
+                            outputs = model(features_batch)
+                            loss = criterion(outputs, labels_batch)
+
+                            # Backward pass
+                            loss.backward()
+                            optimizer.step()
+
+                            # Calculate accuracy
+                            _, predicted = torch.max(outputs.data, 1)
+                            correct = (predicted == labels_batch).sum().item()
+                            accuracy = correct / len(labels_batch)
+
+                            epoch_loss += loss.item()
+                            epoch_accuracy += accuracy
+                            batches_processed += 1
+
+                            # Update progress
+                            session.update_progress(
+                                epoch=epoch,
+                                batch=batches_processed,
+                                metrics={
+                                    "loss": loss.item(),
+                                    "accuracy": accuracy,
+                                    "device": device_type,
+                                    "completed_batches": batches_processed,
+                                    "total_batches": session.total_batches,
+                                },
+                            )
+
+                            # Small delay to prevent overwhelming
+                            await asyncio.sleep(0.1)
+
                             if session.stop_requested:
                                 break
 
-                            batch_end = min(batch_start + batch_size, len(data))
-                            batch_data = data.iloc[batch_start:batch_end]
+                        except Exception as e:
+                            logger.error(
+                                f"Error processing batch for {symbol}: {str(e)}"
+                            )
+                            continue
 
-                            if len(batch_data) < batch_size // 2:  # Skip small batches
-                                continue
-
-                            try:
-                                # For now, use simplified feature preparation to get training working
-                                # Calculate basic indicators using the engine
-                                indicator_data = indicator_engine.apply(batch_data)
-
-                                # Prepare neural network input (simplified for demo)
-                                # In real implementation, this would be more sophisticated feature engineering
-                                features = self._prepare_neural_features(indicator_data)
-                                labels = self._generate_training_labels(batch_data)
-
-                                # Convert to tensors and move to device
-                                features_tensor = torch.FloatTensor(features).to(device)
-                                labels_tensor = torch.LongTensor(labels).to(device)
-
-                                # Validate tensor shapes match
-                                if features_tensor.shape[0] != labels_tensor.shape[0]:
-                                    logger.warning(
-                                        f"Tensor shape mismatch: features {features_tensor.shape} vs labels {labels_tensor.shape}, skipping batch"
-                                    )
-                                    continue
-
-                                # Forward pass
-                                optimizer.zero_grad()
-                                outputs = model(features_tensor)
-                                loss = criterion(outputs, labels_tensor)
-
-                                # Backward pass
-                                loss.backward()
-                                optimizer.step()
-
-                                # Calculate accuracy
-                                _, predicted = torch.max(outputs.data, 1)
-                                correct = (predicted == labels_tensor).sum().item()
-                                accuracy = correct / len(labels_tensor)
-
-                                epoch_loss += loss.item()
-                                epoch_accuracy += accuracy
-                                batches_processed += 1
-
-                                # Update progress
-                                session.update_progress(
-                                    epoch=epoch,
-                                    batch=batches_processed,
-                                    metrics={
-                                        "loss": loss.item(),
-                                        "accuracy": accuracy,
-                                        "device": device_type,
-                                        "completed_batches": batches_processed,
-                                        "total_batches": session.total_batches,
-                                    },
-                                )
-
-                                # Small delay to prevent overwhelming
-                                await asyncio.sleep(0.1)
-
-                                if session.stop_requested:
-                                    break
-
-                            except Exception as e:
-                                logger.error(
-                                    f"Error processing batch for {symbol} {timeframe}: {str(e)}"
-                                )
-                                continue
-
-                        if session.stop_requested:
-                            break
+                    if session.stop_requested:
+                        break
 
                 if session.stop_requested:
                     break
@@ -800,85 +807,7 @@ class TrainingService:
             logger.error(f"Real training failed: {str(e)}")
             raise
 
-    def _prepare_neural_features(self, indicator_data: pd.DataFrame) -> np.ndarray:
-        """Prepare feature matrix for neural network input."""
-        # Simplified feature preparation using basic price data
-        features = []
-
-        # Use basic price features from the data (process all available data)
-        for i in range(len(indicator_data)):
-            feature_vector = []
-
-            try:
-                row = indicator_data.iloc[i]
-
-                # Basic price features (normalized)
-                if "open" in row:
-                    feature_vector.append(
-                        float(row["open"]) / 100000.0
-                    )  # Normalize forex prices
-                if "high" in row:
-                    feature_vector.append(float(row["high"]) / 100000.0)
-                if "low" in row:
-                    feature_vector.append(float(row["low"]) / 100000.0)
-                if "close" in row:
-                    feature_vector.append(float(row["close"]) / 100000.0)
-
-                # Simple derived features
-                if len(feature_vector) >= 4:
-                    # High-Low range
-                    feature_vector.append(
-                        (feature_vector[1] - feature_vector[2]) * 100000.0
-                    )
-                    # Open-Close change
-                    feature_vector.append(
-                        (feature_vector[3] - feature_vector[0]) * 100000.0
-                    )
-
-                # Pad to reach 20 features with small random values
-                while len(feature_vector) < 20:
-                    feature_vector.append(np.random.normal(0, 0.01))
-
-                # Ensure exactly 20 features
-                feature_vector = feature_vector[:20]
-
-            except Exception:
-                # Fallback to random features if processing fails
-                feature_vector = np.random.normal(0, 0.01, 20).tolist()
-
-            features.append(feature_vector)
-
-        return np.array(features)
-
-    def _generate_training_labels(self, batch_data) -> list[int]:
-        """Generate training labels based on price movement."""
-        labels = []
-
-        try:
-            close_prices = batch_data["close"].values
-
-            for i in range(len(close_prices)):
-                if i < len(close_prices) - 1:
-                    # Simple label generation based on next price movement
-                    price_change = (
-                        close_prices[i + 1] - close_prices[i]
-                    ) / close_prices[i]
-
-                    if price_change > 0.01:  # 1% increase
-                        labels.append(0)  # Buy signal
-                    elif price_change < -0.01:  # 1% decrease
-                        labels.append(2)  # Sell signal
-                    else:
-                        labels.append(1)  # Hold signal
-                else:
-                    labels.append(1)  # Default to hold for last item
-
-        except Exception as e:
-            logger.warning(f"Error generating labels: {str(e)}, using default labels")
-            # Fallback to random labels
-            labels = [np.random.randint(0, 3) for _ in range(len(batch_data))]
-
-        return labels
+    # Old simplified feature engineering methods removed - now using TrainingPipeline
 
     async def stop_session(self, session_id: str, save_checkpoint: bool = True) -> bool:
         """
