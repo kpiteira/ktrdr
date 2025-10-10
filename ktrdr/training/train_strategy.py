@@ -23,11 +23,9 @@ from ..fuzzy.engine import FuzzyEngine
 from ..indicators.indicator_engine import IndicatorEngine
 from ..logging import get_logger
 from ..neural.models.mlp import MLPTradingModel
-from .fuzzy_neural_processor import FuzzyNeuralProcessor
 from .model_storage import ModelStorage
 from .model_trainer import ModelTrainer
 from .training_pipeline import TrainingPipeline
-from .zigzag_labeler import ZigZagLabeler
 
 logger = get_logger(__name__)
 
@@ -604,6 +602,8 @@ class StrategyTrainer:
     ) -> dict[str, pd.DataFrame]:
         """Calculate technical indicators with multi-timeframe support.
 
+        DELEGATED TO: TrainingPipeline.calculate_indicators()
+
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
             indicator_configs: List of indicator configurations
@@ -611,16 +611,7 @@ class StrategyTrainer:
         Returns:
             Dictionary mapping timeframes to DataFrames with calculated indicators
         """
-        # Handle single timeframe case (backward compatibility)
-        if len(price_data) == 1:
-            timeframe, data = next(iter(price_data.items()))
-            indicators = self._calculate_indicators_single_timeframe(
-                data, indicator_configs
-            )
-            return {timeframe: indicators}
-
-        # Multi-timeframe case
-        return self._calculate_indicators_multi_timeframe(price_data, indicator_configs)
+        return TrainingPipeline.calculate_indicators(price_data, indicator_configs)
 
     def _calculate_indicators_single_timeframe(
         self, price_data: pd.DataFrame, indicator_configs: list[dict[str, Any]]
@@ -804,6 +795,8 @@ class StrategyTrainer:
     ) -> dict[str, pd.DataFrame]:
         """Generate fuzzy membership values with multi-timeframe support.
 
+        DELEGATED TO: TrainingPipeline.generate_fuzzy_memberships()
+
         Args:
             indicators: Dictionary mapping timeframes to technical indicators DataFrames
             fuzzy_configs: Fuzzy set configurations
@@ -811,40 +804,7 @@ class StrategyTrainer:
         Returns:
             Dictionary mapping timeframes to DataFrames with fuzzy membership values
         """
-        # Initialize fuzzy engine if not already done
-        if self.fuzzy_engine is None:
-            from ..fuzzy.config import FuzzyConfigLoader
-
-            # The fuzzy_configs from strategy file are already in the correct format
-            # Just pass them directly to FuzzyConfigLoader
-            fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
-            self.fuzzy_engine = FuzzyEngine(fuzzy_config)
-
-        # Ensure fuzzy engine is initialized
-        assert self.fuzzy_engine is not None
-
-        # Handle single timeframe case (backward compatibility)
-        if len(indicators) == 1 and isinstance(
-            list(indicators.values())[0], pd.DataFrame
-        ):
-            timeframe, tf_indicators = next(iter(indicators.items()))
-
-            # Process each indicator (original single-timeframe logic)
-            fuzzy_results: dict[str, Any] = {}
-            for indicator_name, indicator_data in tf_indicators.items():
-                if indicator_name in fuzzy_configs:
-                    # Fuzzify the indicator
-                    membership_values = self.fuzzy_engine.fuzzify(
-                        str(indicator_name), indicator_data
-                    )
-                    fuzzy_results.update(membership_values)
-
-            return {timeframe: pd.DataFrame(fuzzy_results, index=tf_indicators.index)}
-
-        # Multi-timeframe case - use the new multi-timeframe method
-        return self.fuzzy_engine.generate_multi_timeframe_memberships(
-            indicators, fuzzy_configs
-        )
+        return TrainingPipeline.generate_fuzzy_memberships(indicators, fuzzy_configs)
 
     def _engineer_features(
         self,
@@ -855,6 +815,8 @@ class StrategyTrainer:
     ) -> tuple[torch.Tensor, list[str], Any]:
         """Engineer features for neural network training using pure fuzzy approach with multi-timeframe support.
 
+        DELEGATED TO: TrainingPipeline.create_features()
+
         Args:
             fuzzy_data: Dictionary mapping timeframes to fuzzy membership values
             indicators: Dictionary mapping timeframes to technical indicators (not used in pure fuzzy mode)
@@ -864,23 +826,17 @@ class StrategyTrainer:
         Returns:
             Tuple of (features tensor, feature names, None for scaler)
         """
-        # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
-        processor = FuzzyNeuralProcessor(feature_config)
-
-        # Handle single timeframe case (backward compatibility)
-        if len(fuzzy_data) == 1:
-            timeframe, tf_fuzzy_data = next(iter(fuzzy_data.items()))
-            features, feature_names = processor.prepare_input(tf_fuzzy_data)
-            return features, feature_names, None  # No scaler needed for fuzzy values
-
-        # Multi-timeframe case - use the new multi-timeframe method
-        features, feature_names = processor.prepare_multi_timeframe_input(fuzzy_data)
+        features, feature_names = TrainingPipeline.create_features(
+            fuzzy_data, feature_config
+        )
         return features, feature_names, None  # No scaler needed for fuzzy values
 
     def _generate_labels(
         self, price_data: dict[str, pd.DataFrame], label_config: dict[str, Any]
     ) -> torch.Tensor:
         """Generate training labels using ZigZag method with multi-timeframe support.
+
+        DELEGATED TO: TrainingPipeline.create_labels()
 
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
@@ -889,38 +845,7 @@ class StrategyTrainer:
         Returns:
             Tensor of labels
         """
-        # CRITICAL: For multi-timeframe, MUST use the same base timeframe as features
-        # Features are generated from timeframes[0], so labels must also use timeframes[0]
-        # This ensures tensor size consistency (same number of samples)
-        if len(price_data) == 1:
-            # Single timeframe case
-            timeframe, tf_price_data = next(iter(price_data.items()))
-            print(f"Generating labels from {timeframe} data")
-        else:
-            # Multi-timeframe case - use SAME base timeframe as features (highest frequency)
-            # Features use frequency-based ordering, so we must match that
-            timeframe_list = sorted(price_data.keys())
-            # Convert to frequency-based order (highest frequency first)
-            frequency_order = self._sort_timeframes_by_frequency(timeframe_list)
-            base_timeframe = frequency_order[
-                0
-            ]  # Use highest frequency (same as features)
-            tf_price_data = price_data[base_timeframe]
-            print(
-                f"Generating labels from base timeframe {base_timeframe} (out of {frequency_order}) - matching features"
-            )
-
-        labeler = ZigZagLabeler(
-            threshold=label_config["zigzag_threshold"],
-            lookahead=label_config["label_lookahead"],
-        )
-
-        # Use segment-based labeling for better class balance
-        print(
-            "Using ZigZag segment labeling (balanced) instead of sparse extreme labeling..."
-        )
-        labels = labeler.generate_segment_labels(tf_price_data)
-        return torch.LongTensor(labels.values)
+        return TrainingPipeline.create_labels(price_data, label_config)
 
     def _get_label_distribution(self, labels: torch.Tensor) -> dict[str, Any]:
         """Get label distribution statistics.
