@@ -17,7 +17,7 @@ from ktrdr.api.services.training import (
     TrainingProgressBridge,
     build_training_context,
 )
-from ktrdr.api.services.training.local_runner import LocalTrainingRunner
+from ktrdr.api.services.training.local_orchestrator import LocalTrainingOrchestrator
 from ktrdr.api.services.training.training_progress_renderer import (
     TrainingProgressRenderer,
 )
@@ -177,13 +177,14 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
             cancellation_token=self._current_cancellation_token,
         )
 
-        runner = LocalTrainingRunner(
+        orchestrator = LocalTrainingOrchestrator(
             context=context,
             progress_bridge=bridge,
             cancellation_token=self._current_cancellation_token,
+            model_storage=self.model_storage,
         )
 
-        return await runner.run()
+        return await orchestrator.run()
 
     async def _run_host_training(
         self, *, context: TrainingOperationContext

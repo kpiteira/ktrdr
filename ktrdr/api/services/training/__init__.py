@@ -3,7 +3,6 @@
 from .context import TrainingOperationContext, build_training_context
 from .host_session import HostSessionManager
 from .local_orchestrator import LocalTrainingOrchestrator
-from .local_runner import LocalTrainingRunner
 from .progress_bridge import TrainingProgressBridge
 
 # Note: result_aggregator.from_host_run will be removed in Task 3.1
@@ -13,7 +12,6 @@ from .result_aggregator import from_host_run
 __all__ = [
     "TrainingOperationContext",
     "TrainingProgressBridge",
-    "LocalTrainingRunner",
     "LocalTrainingOrchestrator",
     "HostSessionManager",
     "build_training_context",
