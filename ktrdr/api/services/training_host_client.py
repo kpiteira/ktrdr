@@ -142,8 +142,6 @@ class TrainingHostClient:
                     "batch_size": config.get("batch_size", 32),
                     "learning_rate": config.get("learning_rate", 0.001),
                     "early_stopping": config.get("early_stopping", True),
-                    "start_date": config.get("start_date"),
-                    "end_date": config.get("end_date"),
                 },
                 "data_configuration": {
                     "symbols": symbols,  # Multi-symbol support
@@ -151,6 +149,9 @@ class TrainingHostClient:
                     "data_source": config.get("data_source", "local"),
                     "indicators": config.get("indicators", []),
                     "fuzzy_config": config.get("fuzzy_config", {}),
+                    # CRITICAL: Dates must be in data_config for host service to respect them
+                    "start_date": config.get("start_date"),
+                    "end_date": config.get("end_date"),
                 },
                 "gpu_configuration": {
                     "enable_gpu": config.get("enable_gpu", True),

@@ -23,10 +23,9 @@ from ..fuzzy.engine import FuzzyEngine
 from ..indicators.indicator_engine import IndicatorEngine
 from ..logging import get_logger
 from ..neural.models.mlp import MLPTradingModel
-from .fuzzy_neural_processor import FuzzyNeuralProcessor
 from .model_storage import ModelStorage
 from .model_trainer import ModelTrainer
-from .zigzag_labeler import ZigZagLabeler
+from .training_pipeline import TrainingPipeline
 
 logger = get_logger(__name__)
 
@@ -205,22 +204,32 @@ class StrategyTrainer:
             config["model"], combined_features.shape[1], len(symbols)
         )
 
-        # Step 9: Train model
+        # Step 9: Train model (using TrainingPipeline for multi-symbol)
         print("\n9. Training multi-symbol neural network...")
-        training_results = self._train_model(
-            model,
-            train_data,
-            val_data,
-            config,
-            symbols,
-            timeframes,
-            progress_callback,
+        training_results = TrainingPipeline.train_model(
+            model=model,
+            X_train=train_data[0],
+            y_train=train_data[1],
+            X_val=val_data[0],
+            y_val=val_data[1],
+            training_config=config["model"]["training"],
+            progress_callback=progress_callback,
             cancellation_token=cancellation_token,
+            symbol_indices_train=train_data[2],
+            symbol_indices_val=val_data[2],
+            symbols=symbols,
         )
 
-        # Step 10: Evaluate model
+        # Step 10: Evaluate model (using TrainingPipeline for multi-symbol)
         print("\n10. Evaluating multi-symbol model...")
-        test_metrics = self._evaluate_model(model, test_data)
+        test_metrics = TrainingPipeline.evaluate_model(
+            model=model,
+            X_test=test_data[0] if test_data else None,
+            y_test=test_data[1] if test_data else None,
+            symbol_indices_test=(
+                test_data[2] if test_data and len(test_data) > 2 else None
+            ),
+        )
         if test_data is not None:
             print(
                 f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}"
@@ -462,14 +471,29 @@ class StrategyTrainer:
         if np.isinf(train_data[0]).any():
             raise ValueError("Training data contains infinite values")
 
-        model = self._create_model(config["model"], features.shape[1])
-        training_results = self._train_model(
-            model, train_data, val_data, config, symbol, timeframes, progress_callback
+        # Use TrainingPipeline for model operations (eliminates duplication)
+        model = TrainingPipeline.create_model(
+            input_dim=features.shape[1],
+            output_dim=3,  # BUY, HOLD, SELL
+            model_config=config["model"],
+        )
+        training_results = TrainingPipeline.train_model(
+            model=model,
+            X_train=train_data[0],
+            y_train=train_data[1],
+            X_val=val_data[0],
+            y_val=val_data[1],
+            training_config=config["model"]["training"],
+            progress_callback=progress_callback,
         )
 
         # Step 8: Evaluate model
         print("\n8. Evaluating model...")
-        test_metrics = self._evaluate_model(model, test_data)
+        test_metrics = TrainingPipeline.evaluate_model(
+            model=model,
+            X_test=test_data[0] if test_data else None,
+            y_test=test_data[1] if test_data else None,
+        )
         if test_data is not None:
             print(
                 f"Test accuracy: {test_metrics['test_accuracy']:.4f}, Test loss: {test_metrics['test_loss']:.4f}"
@@ -570,6 +594,9 @@ class StrategyTrainer:
     ) -> dict[str, pd.DataFrame]:
         """Load price data for training with multi-timeframe support.
 
+        REFACTORED: Now delegates to TrainingPipeline.load_market_data()
+        to eliminate code duplication with host service.
+
         Args:
             symbol: Trading symbol
             timeframes: List of timeframes for multi-timeframe training
@@ -580,63 +607,18 @@ class StrategyTrainer:
         Returns:
             Dictionary mapping timeframes to OHLCV DataFrames
         """
-        # Handle single timeframe case (backward compatibility)
-        if len(timeframes) == 1:
-            timeframe = timeframes[0]
-            data = self.data_manager.load_data(symbol, timeframe, mode=data_mode)
-
-            # Filter by date range if possible
-            if hasattr(data.index, "to_pydatetime"):
-                data = self._filter_data_by_date_range(data, start_date, end_date)
-
-            return {timeframe: data}
-
-        # Multi-timeframe case - use first timeframe (highest frequency) as base
-        base_timeframe = timeframes[0]  # Always use first timeframe as base
-        multi_data = self.multi_timeframe_coordinator.load_multi_timeframe_data(
+        # Delegate to TrainingPipeline (extracted common logic)
+        return TrainingPipeline.load_market_data(
             symbol=symbol,
             timeframes=timeframes,
             start_date=start_date,
             end_date=end_date,
-            base_timeframe=base_timeframe,
-            mode=data_mode,
+            data_mode=data_mode,
+            data_manager=self.data_manager,
+            multi_timeframe_coordinator=self.multi_timeframe_coordinator,
         )
 
-        # Validate multi-timeframe loading success
-        if len(multi_data) != len(timeframes):
-            available_tfs = list(multi_data.keys())
-            missing_tfs = set(timeframes) - set(available_tfs)
-            logger.warning(
-                f"⚠️ Multi-timeframe loading partial success: {len(multi_data)}/{len(timeframes)} timeframes loaded. "
-                f"Missing: {missing_tfs}, Available: {available_tfs}"
-            )
-
-            # Continue with available timeframes but warn user
-            if len(multi_data) == 0:
-                raise ValueError(f"No timeframes successfully loaded for {symbol}")
-        else:
-            logger.info(
-                f"✅ Multi-timeframe data loaded successfully: {', '.join(multi_data.keys())}"
-            )
-
-        return multi_data
-
-    def _filter_data_by_date_range(
-        self, data: pd.DataFrame, start_date: str, end_date: str
-    ) -> pd.DataFrame:
-        """Helper method to filter data by date range."""
-        # Convert dates to timezone-aware if the data index is timezone-aware
-        start = pd.to_datetime(start_date)
-        end = pd.to_datetime(end_date)
-
-        # Make dates timezone-aware if needed
-        if hasattr(data.index, "tz") and data.index.tz is not None:
-            if start.tz is None:
-                start = start.tz_localize("UTC")
-            if end.tz is None:
-                end = end.tz_localize("UTC")
-
-        return data.loc[start:end]
+    # _filter_data_by_date_range() removed - now in TrainingPipeline
 
     def _calculate_indicators(
         self,
@@ -645,6 +627,8 @@ class StrategyTrainer:
     ) -> dict[str, pd.DataFrame]:
         """Calculate technical indicators with multi-timeframe support.
 
+        DELEGATED TO: TrainingPipeline.calculate_indicators()
+
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
             indicator_configs: List of indicator configurations
@@ -652,16 +636,7 @@ class StrategyTrainer:
         Returns:
             Dictionary mapping timeframes to DataFrames with calculated indicators
         """
-        # Handle single timeframe case (backward compatibility)
-        if len(price_data) == 1:
-            timeframe, data = next(iter(price_data.items()))
-            indicators = self._calculate_indicators_single_timeframe(
-                data, indicator_configs
-            )
-            return {timeframe: indicators}
-
-        # Multi-timeframe case
-        return self._calculate_indicators_multi_timeframe(price_data, indicator_configs)
+        return TrainingPipeline.calculate_indicators(price_data, indicator_configs)
 
     def _calculate_indicators_single_timeframe(
         self, price_data: pd.DataFrame, indicator_configs: list[dict[str, Any]]
@@ -845,6 +820,8 @@ class StrategyTrainer:
     ) -> dict[str, pd.DataFrame]:
         """Generate fuzzy membership values with multi-timeframe support.
 
+        DELEGATED TO: TrainingPipeline.generate_fuzzy_memberships()
+
         Args:
             indicators: Dictionary mapping timeframes to technical indicators DataFrames
             fuzzy_configs: Fuzzy set configurations
@@ -852,40 +829,7 @@ class StrategyTrainer:
         Returns:
             Dictionary mapping timeframes to DataFrames with fuzzy membership values
         """
-        # Initialize fuzzy engine if not already done
-        if self.fuzzy_engine is None:
-            from ..fuzzy.config import FuzzyConfigLoader
-
-            # The fuzzy_configs from strategy file are already in the correct format
-            # Just pass them directly to FuzzyConfigLoader
-            fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
-            self.fuzzy_engine = FuzzyEngine(fuzzy_config)
-
-        # Ensure fuzzy engine is initialized
-        assert self.fuzzy_engine is not None
-
-        # Handle single timeframe case (backward compatibility)
-        if len(indicators) == 1 and isinstance(
-            list(indicators.values())[0], pd.DataFrame
-        ):
-            timeframe, tf_indicators = next(iter(indicators.items()))
-
-            # Process each indicator (original single-timeframe logic)
-            fuzzy_results: dict[str, Any] = {}
-            for indicator_name, indicator_data in tf_indicators.items():
-                if indicator_name in fuzzy_configs:
-                    # Fuzzify the indicator
-                    membership_values = self.fuzzy_engine.fuzzify(
-                        str(indicator_name), indicator_data
-                    )
-                    fuzzy_results.update(membership_values)
-
-            return {timeframe: pd.DataFrame(fuzzy_results, index=tf_indicators.index)}
-
-        # Multi-timeframe case - use the new multi-timeframe method
-        return self.fuzzy_engine.generate_multi_timeframe_memberships(
-            indicators, fuzzy_configs
-        )
+        return TrainingPipeline.generate_fuzzy_memberships(indicators, fuzzy_configs)
 
     def _engineer_features(
         self,
@@ -896,6 +840,8 @@ class StrategyTrainer:
     ) -> tuple[torch.Tensor, list[str], Any]:
         """Engineer features for neural network training using pure fuzzy approach with multi-timeframe support.
 
+        DELEGATED TO: TrainingPipeline.create_features()
+
         Args:
             fuzzy_data: Dictionary mapping timeframes to fuzzy membership values
             indicators: Dictionary mapping timeframes to technical indicators (not used in pure fuzzy mode)
@@ -905,23 +851,17 @@ class StrategyTrainer:
         Returns:
             Tuple of (features tensor, feature names, None for scaler)
         """
-        # Pure neuro-fuzzy architecture: only fuzzy memberships as inputs
-        processor = FuzzyNeuralProcessor(feature_config)
-
-        # Handle single timeframe case (backward compatibility)
-        if len(fuzzy_data) == 1:
-            timeframe, tf_fuzzy_data = next(iter(fuzzy_data.items()))
-            features, feature_names = processor.prepare_input(tf_fuzzy_data)
-            return features, feature_names, None  # No scaler needed for fuzzy values
-
-        # Multi-timeframe case - use the new multi-timeframe method
-        features, feature_names = processor.prepare_multi_timeframe_input(fuzzy_data)
+        features, feature_names = TrainingPipeline.create_features(
+            fuzzy_data, feature_config
+        )
         return features, feature_names, None  # No scaler needed for fuzzy values
 
     def _generate_labels(
         self, price_data: dict[str, pd.DataFrame], label_config: dict[str, Any]
     ) -> torch.Tensor:
         """Generate training labels using ZigZag method with multi-timeframe support.
+
+        DELEGATED TO: TrainingPipeline.create_labels()
 
         Args:
             price_data: Dictionary mapping timeframes to OHLCV data
@@ -930,38 +870,7 @@ class StrategyTrainer:
         Returns:
             Tensor of labels
         """
-        # CRITICAL: For multi-timeframe, MUST use the same base timeframe as features
-        # Features are generated from timeframes[0], so labels must also use timeframes[0]
-        # This ensures tensor size consistency (same number of samples)
-        if len(price_data) == 1:
-            # Single timeframe case
-            timeframe, tf_price_data = next(iter(price_data.items()))
-            print(f"Generating labels from {timeframe} data")
-        else:
-            # Multi-timeframe case - use SAME base timeframe as features (highest frequency)
-            # Features use frequency-based ordering, so we must match that
-            timeframe_list = sorted(price_data.keys())
-            # Convert to frequency-based order (highest frequency first)
-            frequency_order = self._sort_timeframes_by_frequency(timeframe_list)
-            base_timeframe = frequency_order[
-                0
-            ]  # Use highest frequency (same as features)
-            tf_price_data = price_data[base_timeframe]
-            print(
-                f"Generating labels from base timeframe {base_timeframe} (out of {frequency_order}) - matching features"
-            )
-
-        labeler = ZigZagLabeler(
-            threshold=label_config["zigzag_threshold"],
-            lookahead=label_config["label_lookahead"],
-        )
-
-        # Use segment-based labeling for better class balance
-        print(
-            "Using ZigZag segment labeling (balanced) instead of sparse extreme labeling..."
-        )
-        labels = labeler.generate_segment_labels(tf_price_data)
-        return torch.LongTensor(labels.values)
+        return TrainingPipeline.create_labels(price_data, label_config)
 
     def _get_label_distribution(self, labels: torch.Tensor) -> dict[str, Any]:
         """Get label distribution statistics.

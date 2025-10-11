@@ -34,6 +34,12 @@ async def lifespan(app: FastAPI):
     logger.info("✅ New IB architecture: connections created on-demand")
     logger.info("✅ DataManager uses IbDataAdapter when enable_ib=True")
 
+    # Initialize training service to log training mode at startup
+    from ktrdr.api.endpoints.training import get_training_service
+
+    _ = await get_training_service()  # Initialize service (logs training mode)
+    logger.info("✅ TrainingService initialized")
+
     logger.info("🎉 API startup completed")
 
     yield

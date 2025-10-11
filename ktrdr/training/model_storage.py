@@ -36,19 +36,23 @@ class ModelStorage:
     ) -> str:
         """Save a trained model with all metadata.
 
+        SYMBOL-AGNOSTIC: Models are now symbol-agnostic and stored without
+        symbol identifiers in the path. The symbol parameter is kept for
+        backwards compatibility but not used in the directory structure.
+
         Args:
             model: Trained PyTorch model
             strategy_name: Name of the trading strategy
-            symbol: Trading symbol (e.g., "AAPL")
-            timeframe: Timeframe (e.g., "1h")
+            symbol: DEPRECATED - kept for backwards compatibility only
+            timeframe: Primary timeframe (e.g., "1d", "1h")
             config: Full strategy configuration
             training_metrics: Training results and metrics
             feature_names: List of feature names
             feature_importance: Feature importance scores
-            scaler: Feature scaler object
+            scaler: Feature scaler object (None for symbol-agnostic models)
 
         Returns:
-            Path to saved model directory
+            Path to saved model directory (format: models/{strategy}/{timeframe}_v{N}/)
         """
         # Create version directory
         model_dir = self._create_version_directory(strategy_name, symbol, timeframe)
@@ -312,10 +316,16 @@ class ModelStorage:
     ) -> Path:
         """Create a new versioned directory for a model.
 
+        SYMBOL-AGNOSTIC: Model directories no longer include symbols in the path
+        since models are trained on multiple symbols and are symbol-agnostic.
+
+        Directory structure: models/{strategy_name}/{timeframe}_v{N}/
+        Example: models/neuro_mean_reversion/1d_v7/
+
         Args:
             strategy_name: Strategy name
-            symbol: Trading symbol
-            timeframe: Timeframe
+            symbol: Trading symbol (DEPRECATED - kept for backwards compatibility)
+            timeframe: Primary timeframe
 
         Returns:
             Path to new version directory
@@ -323,9 +333,10 @@ class ModelStorage:
         strategy_dir = self.base_path / strategy_name
         strategy_dir.mkdir(exist_ok=True)
 
-        # Find next version number
+        # Symbol-agnostic versioning: only use timeframe
+        # Models are reusable across all symbols
         existing_versions = []
-        pattern = f"{symbol}_{timeframe}_v"
+        pattern = f"{timeframe}_v"
 
         for path in strategy_dir.iterdir():
             if path.is_dir() and path.name.startswith(pattern):
@@ -336,7 +347,7 @@ class ModelStorage:
                     continue
 
         next_version = max(existing_versions, default=0) + 1
-        version_dir = strategy_dir / f"{symbol}_{timeframe}_v{next_version}"
+        version_dir = strategy_dir / f"{timeframe}_v{next_version}"
         version_dir.mkdir(exist_ok=True)
 
         return version_dir

@@ -49,22 +49,33 @@ class TrainingManager:
                     "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
                 )
 
-                logger.info(
-                    f"Training integration enabled using host service at {host_service_url}"
-                )
+                logger.info("=" * 80)
+                logger.info("🚀 TRAINING MODE: HOST SERVICE")
+                logger.info(f"   URL: {host_service_url}")
+                logger.info("   GPU Training: Available (if host service has GPU)")
+                logger.info("=" * 80)
 
             elif env_enabled in ("false", "0", "no"):
                 use_host_service = False
                 host_service_url = None
 
-                logger.info("Training integration enabled (local training)")
+                logger.info("=" * 80)
+                logger.info("💻 TRAINING MODE: LOCAL (Docker Container)")
+                logger.info("   GPU Training: Not available in Docker")
+                logger.info("   CPU Training: Available")
+                logger.info("=" * 80)
 
             else:
                 # Default to local training if not explicitly set
                 use_host_service = False
                 host_service_url = None
 
-                logger.info("Training integration enabled (local training - default)")
+                logger.info("=" * 80)
+                logger.info("💻 TRAINING MODE: LOCAL (Docker Container) - DEFAULT")
+                logger.info("   GPU Training: Not available in Docker")
+                logger.info("   CPU Training: Available")
+                logger.info("   To enable GPU: Set USE_TRAINING_HOST_SERVICE=true")
+                logger.info("=" * 80)
 
             # Initialize TrainingAdapter with configuration
             return TrainingAdapter(

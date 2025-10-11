@@ -18,6 +18,7 @@ from ktrdr.async_infrastructure.cancellation import (
 )
 
 from .analytics import TrainingAnalyzer
+from .device_manager import DeviceManager
 from .multi_symbol_data_loader import MultiSymbolDataLoader
 
 
@@ -109,16 +110,10 @@ class ModelTrainer:
         """
         self.config = config
         self.cancellation_token = cancellation_token
-        # GPU device selection with Apple Silicon support
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-            print(f"🚀 Using CUDA GPU: {torch.cuda.get_device_name(0)}")
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-            print("🚀 Using Apple Silicon GPU (MPS)")
-        else:
-            self.device = torch.device("cpu")
-            print("⚠️ Using CPU - GPU acceleration not available")
+        # GPU device selection with Apple Silicon support via DeviceManager
+        self.device = DeviceManager.get_torch_device()
+        device_info = DeviceManager.get_device_info()
+        print(f"🚀 Using {device_info['device_name']} for training")
         self.history: list[TrainingMetrics] = []
         self.best_model_state: Optional[dict[str, Any]] = None
         self.best_val_accuracy = 0.0

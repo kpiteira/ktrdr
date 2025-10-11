@@ -1,44 +1,83 @@
 # KTRDR Scripts
 
-Utility scripts for the KTRDR trading system.
+Utility scripts for KTRDR development and operations.
 
-## MCP Signature Validation
+## Training Mode Switching
 
-Automatically validates MCP tool signatures against backend API contracts.
+### switch-training-mode.sh
 
-### Usage
+Easily switch between local (CPU) and host service (GPU) training modes.
 
-**Local validation**:
+**Usage:**
+
 ```bash
-# Start backend
-./start_ktrdr.sh
+# Switch to local training mode (CPU in Docker)
+./scripts/switch-training-mode.sh local
 
-# Run validation (via Makefile - recommended)
-make validate-mcp
-
-# Or run script directly
-uv run python scripts/validate_mcp_signatures.py
-
-# Strict mode (warnings as errors)
-uv run python scripts/validate_mcp_signatures.py --strict
+# Switch to host service training mode (GPU if available)
+./scripts/switch-training-mode.sh host
 ```
 
-**Pre-commit hook** (automatic):
-- Runs when `mcp/src/server.py` modified
-- Requires backend running
-- Blocks commit if validation fails
+**What it does:**
 
-**CI validation** (automatic):
-- Runs on PRs affecting MCP or backend
-- Blocks merge if validation fails
+1. Sets the appropriate `USE_TRAINING_HOST_SERVICE` environment variable
+2. Recreates the backend container with `docker-compose up -d` (not `restart`!)
+3. New environment variables are applied immediately
+4. Shows confirmation and log viewing instructions
 
-### Troubleshooting
+**Important Notes:**
 
-**"Backend not reachable"**:
-- Ensure backend running: `./start_ktrdr.sh`
-- Check port 8000: `lsof -i:8000`
+- ⚠️ **Must use `docker-compose up -d`**, not `restart`
+  - `restart` keeps old environment variables
+  - `up -d` recreates container with new config
 
-**Validation failures**:
-- Read error report carefully
-- Check parameter names and types
-- Consult `mcp/endpoint_mapping.json`
+- The backend container restart is fast (~3-5 seconds)
+- Other services (IB host, training host, Redis) are NOT restarted
+
+**Verify Mode:**
+
+```bash
+# View logs to confirm current mode
+docker-compose -f docker/docker-compose.yml logs backend | grep "TRAINING MODE"
+```
+
+**Expected Output:**
+
+```
+# Host Service Mode:
+🚀 TRAINING MODE: HOST SERVICE
+   URL: http://host.docker.internal:5002
+   GPU Training: Available (if host service has GPU)
+
+# Local Mode:
+💻 TRAINING MODE: LOCAL (Docker Container)
+   GPU Training: Not available in Docker
+   CPU Training: Available
+```
+
+## Manual Mode Switching (Alternative)
+
+If you prefer not to use the script:
+
+```bash
+# Export the variable
+export USE_TRAINING_HOST_SERVICE=false  # or true
+
+# Recreate container (must use 'up -d', not 'restart')
+cd docker && docker-compose up -d backend
+
+# View logs
+docker-compose logs -f backend | grep "TRAINING MODE"
+```
+
+## Why docker-compose restart Doesn't Work
+
+```bash
+# ❌ This does NOT work - restart keeps old env vars
+docker-compose restart backend
+
+# ✅ This works - up -d recreates with new env vars
+docker-compose up -d backend
+```
+
+The `restart` command only restarts the container process, keeping the existing container configuration including environment variables. The `up -d` command recreates the container with the current docker-compose.yml configuration and environment.
