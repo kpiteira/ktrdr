@@ -10,11 +10,6 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-
-from ktrdr.data.data_manager import DataManager
 from ktrdr.logging import get_logger
 from ktrdr.training.data_optimization import DataConfig, DataLoadingOptimizer
 from ktrdr.training.device_manager import DeviceManager
@@ -23,7 +18,6 @@ from ktrdr.training.device_manager import DeviceManager
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 from ktrdr.training.memory_manager import MemoryBudget, MemoryManager
 from ktrdr.training.performance_optimizer import PerformanceConfig, PerformanceOptimizer
-from ktrdr.training.training_pipeline import TrainingPipeline
 
 logger = get_logger(__name__)
 
@@ -311,7 +305,9 @@ class TrainingService:
                     memory_fraction=0.8,
                     enable_mixed_precision=capabilities["mixed_precision"],
                     enable_memory_profiling=capabilities["memory_info"],
-                    enable_memory_pooling=(device_type == "cuda"),  # Only CUDA supports pooling
+                    enable_memory_pooling=(
+                        device_type == "cuda"
+                    ),  # Only CUDA supports pooling
                     profiling_interval_seconds=1.0,
                 )
                 self.global_gpu_manager = GPUMemoryManager(gpu_config)
@@ -482,329 +478,57 @@ class TrainingService:
 
     async def _run_real_training(self, session: TrainingSession):
         """
-        Run actual GPU-accelerated training using existing KTRDR components.
+        Run training using HostTrainingOrchestrator.
 
-        This method integrates:
-        - DataManager for market data loading
-        - IndicatorEngine for technical indicators
-        - FuzzyEngine for fuzzy logic processing
-        - FuzzyNeuralProcessor for neural network training
+        This method is now a thin wrapper that delegates all work to
+        HostTrainingOrchestrator, which uses TrainingPipeline for training logic.
+
+        PERFORMANCE FIX: The old implementation had 14 minutes of sleep overhead per
+        100 epochs. The orchestrator uses intelligent throttling instead (8ms overhead).
         """
         try:
-            # Use DeviceManager for centralized device detection
-            device = DeviceManager.get_torch_device()
-            device_type = device.type
-            device_info = DeviceManager.get_device_info()
+            # Import orchestrator
+            import sys
+            from pathlib import Path
+
+            orchestrator_path = Path(__file__).parent.parent
+            if str(orchestrator_path) not in sys.path:
+                sys.path.insert(0, str(orchestrator_path))
+
+            from orchestrator import HostTrainingOrchestrator
+
+            from ktrdr.training.model_storage import ModelStorage
+
+            # Create ModelStorage for saving models
+            model_storage = ModelStorage()
+
+            # Create orchestrator
+            orchestrator = HostTrainingOrchestrator(
+                session=session,
+                model_storage=model_storage,
+            )
+
+            # Run training via orchestrator (direct async - no thread wrapper)
+            result = await orchestrator.run()
+
+            # Result already includes:
+            # - model_path (saved via ModelStorage)
+            # - training_metrics
+            # - test_metrics
+            # - resource_usage (GPU info)
+            # - session_id
+
+            # Session status already updated by orchestrator
             logger.info(
-                f"Using {device_info['device_name']} for training "
-                f"(mixed_precision={device_info['capabilities']['mixed_precision']})"
+                f"Training orchestration completed for session {session.session_id}"
             )
 
-            # Extract training configuration from the structured format
-            config = session.config
-
-            # Read from model_configuration, data_configuration, and training_configuration
-            model_config = config.get("model_config", {})
-            data_config = config.get("data_config", {})
-            training_config = config.get("training_config", {})
-
-            # Get symbols and timeframes from data_configuration (multi-symbol support)
-            symbols = data_config.get("symbols", model_config.get("symbols", ["AAPL"]))
-            timeframes = data_config.get(
-                "timeframes", model_config.get("timeframes", ["1D"])
-            )
-
-            # If symbols is a single string, convert to list
-            if isinstance(symbols, str):
-                symbols = [symbols]
-
-            # Training parameters
-            epochs = training_config.get("epochs", 10)
-            batch_size = training_config.get(
-                "batch_size", 128
-            )  # Increased for better GPU utilization
-
-            # Get date range from data_config (with fallback to 1 year)
-            logger.debug(f"DEBUG: data_config = {data_config}")
-            start_date_str = data_config.get("start_date")
-            end_date_str = data_config.get("end_date")
-            logger.debug(f"DEBUG: start_date_str = {start_date_str}, end_date_str = {end_date_str}")
-
-            # Fallback to 1 year if not provided
-            if not start_date_str or not end_date_str:
-                end_date = datetime.utcnow()
-                start_date = end_date - timedelta(days=365)
-                start_date_str = start_date.strftime("%Y-%m-%d")
-                end_date_str = end_date.strftime("%Y-%m-%d")
-                logger.warning(
-                    f"No date range provided in config, using default: {start_date_str} to {end_date_str}"
-                )
-
-            logger.info(
-                f"Training configuration: {len(symbols)} symbols, {len(timeframes)} timeframes, "
-                f"{epochs} epochs, date range: {start_date_str} to {end_date_str}"
-            )
-
-            # Initialize KTRDR components
-            data_manager = DataManager()
-
-            # Load data for all symbols using TrainingPipeline (eliminating duplication)
-            training_data = {}
-            total_data_points = 0
-
-            for symbol in symbols:
-                try:
-                    # Use TrainingPipeline to load data (same logic as local path)
-                    symbol_data = TrainingPipeline.load_market_data(
-                        symbol=symbol,
-                        timeframes=timeframes,
-                        start_date=start_date_str,
-                        end_date=end_date_str,
-                        data_mode="local",
-                        data_manager=data_manager,
-                    )
-
-                    training_data[symbol] = symbol_data
-                    symbol_points = sum(len(df) for df in symbol_data.values())
-                    total_data_points += symbol_points
-
-                    logger.info(
-                        f"Loaded {symbol_points} data points for {symbol} "
-                        f"across {len(symbol_data)} timeframes"
-                    )
-
-                except Exception as e:
-                    logger.error(f"Failed to load data for {symbol}: {str(e)}")
-                    continue
-
-            if total_data_points == 0:
-                raise Exception("No training data available")
-
-            logger.info(f"Total training data points: {total_data_points}")
-
-            # Extract feature engineering configs from strategy config
-            # Get configs with fallback to simple defaults
-            indicator_configs = model_config.get("indicators", [
-                {"name": "rsi", "period": 14},
-                {"name": "macd", "fast_period": 12, "slow_period": 26}
-            ])
-
-            fuzzy_configs = model_config.get("fuzzy_sets", {
-                "rsi": {
-                    "low": {"type": "triangular", "parameters": [0.0, 0.0, 30.0]},
-                    "high": {"type": "triangular", "parameters": [70.0, 100.0, 100.0]},
-                }
-            })
-
-            feature_config = model_config.get("feature_engineering", {"lookback_periods": 0})
-            label_config = model_config.get("labels", {
-                "zigzag_threshold": 0.03,
-                "label_lookahead": 5
-            })
-
-            # Prepare features and labels for each symbol using TrainingPipeline
-            features_by_symbol = {}
-            labels_by_symbol = {}
-
-            for symbol in training_data:
-                symbol_price_data = training_data[symbol]
-
-                # Use TrainingPipeline for feature engineering
-                indicators = TrainingPipeline.calculate_indicators(
-                    symbol_price_data, indicator_configs
-                )
-                fuzzy_data = TrainingPipeline.generate_fuzzy_memberships(
-                    indicators, fuzzy_configs
-                )
-                features, feature_names = TrainingPipeline.create_features(
-                    fuzzy_data, feature_config
-                )
-                labels = TrainingPipeline.create_labels(
-                    symbol_price_data, label_config
-                )
-
-                features_by_symbol[symbol] = features
-                labels_by_symbol[symbol] = labels
-
-            # Determine model input size from features
-            first_symbol = list(features_by_symbol.keys())[0]
-            input_size = features_by_symbol[first_symbol].shape[1]
-            logger.info(f"Model input size: {input_size} features")
-
-            # Create a simple neural network model for trading signals
-            class TradingModel(nn.Module):
-                def __init__(
-                    self, input_size, hidden_size=512, output_size=3
-                ):
-                    super().__init__()
-                    self.layers = nn.Sequential(
-                        nn.Linear(input_size, hidden_size),
-                        nn.ReLU(),
-                        nn.Dropout(0.2),
-                        nn.Linear(hidden_size, hidden_size // 2),
-                        nn.ReLU(),
-                        nn.Dropout(0.2),
-                        nn.Linear(hidden_size // 2, hidden_size // 4),
-                        nn.ReLU(),
-                        nn.Dropout(0.2),
-                        nn.Linear(hidden_size // 4, output_size),
-                    )
-
-                def forward(self, x):
-                    return self.layers(x)
-
-            # Create and move model to device with dynamic input size
-            model = TradingModel(input_size=input_size, hidden_size=512, output_size=3)
-            model.to(device)
-
-            # Setup optimizer
-            optimizer = optim.Adam(model.parameters(), lr=0.001)
-            criterion = nn.CrossEntropyLoss()
-
-            # Calculate total samples for batch calculation
-            total_samples = sum(len(f) for f in features_by_symbol.values())
-            session.total_batches = max(1, total_samples // batch_size)
-
-            # Training loop
-            for epoch in range(epochs):
-                if session.stop_requested:
-                    logger.info(f"Training stopped by request at epoch {epoch}")
-                    break
-
-                epoch_loss = 0.0
-                epoch_accuracy = 0.0
-                batches_processed = 0
-
-                # Process each symbol's features
-                for symbol in features_by_symbol:
-                    if session.stop_requested:
-                        break
-
-                    # Get pre-computed features and labels for this symbol
-                    symbol_features = features_by_symbol[symbol]
-                    symbol_labels = labels_by_symbol[symbol]
-
-                    # Move to device
-                    symbol_features = symbol_features.to(device)
-                    symbol_labels = symbol_labels.to(device)
-
-                    # Process data in batches
-                    for batch_start in range(0, len(symbol_features), batch_size):
-                        if session.stop_requested:
-                            break
-
-                        batch_end = min(batch_start + batch_size, len(symbol_features))
-
-                        # Get batch
-                        features_batch = symbol_features[batch_start:batch_end]
-                        labels_batch = symbol_labels[batch_start:batch_end]
-
-                        if len(features_batch) < batch_size // 2:  # Skip small batches
-                            continue
-
-                        try:
-                            # Forward pass
-                            optimizer.zero_grad()
-                            outputs = model(features_batch)
-                            loss = criterion(outputs, labels_batch)
-
-                            # Backward pass
-                            loss.backward()
-                            optimizer.step()
-
-                            # Calculate accuracy
-                            _, predicted = torch.max(outputs.data, 1)
-                            correct = (predicted == labels_batch).sum().item()
-                            accuracy = correct / len(labels_batch)
-
-                            epoch_loss += loss.item()
-                            epoch_accuracy += accuracy
-                            batches_processed += 1
-
-                            # Update progress
-                            session.update_progress(
-                                epoch=epoch,
-                                batch=batches_processed,
-                                metrics={
-                                    "loss": loss.item(),
-                                    "accuracy": accuracy,
-                                    "device": device_type,
-                                    "completed_batches": batches_processed,
-                                    "total_batches": session.total_batches,
-                                },
-                            )
-
-                            # Small delay to prevent overwhelming
-                            await asyncio.sleep(0.1)
-
-                            if session.stop_requested:
-                                break
-
-                        except Exception as e:
-                            logger.error(
-                                f"Error processing batch for {symbol}: {str(e)}"
-                            )
-                            continue
-
-                    if session.stop_requested:
-                        break
-
-                if session.stop_requested:
-                    break
-
-                # Log epoch results
-                if batches_processed > 0:
-                    avg_loss = epoch_loss / batches_processed
-                    avg_accuracy = epoch_accuracy / batches_processed
-
-                    logger.info(
-                        f"Epoch {epoch + 1}/{epochs} - Loss: {avg_loss:.4f}, Accuracy: {avg_accuracy:.4f}"
-                    )
-
-                    # Update session with epoch metrics
-                    session.update_progress(
-                        epoch=epoch + 1,
-                        batch=batches_processed,
-                        metrics={
-                            "epoch_loss": avg_loss,
-                            "epoch_accuracy": avg_accuracy,
-                            "device": device_type,
-                            "total_batches": batches_processed,
-                            "completed_batches": batches_processed,
-                        },
-                    )
-
-                # Memory cleanup between epochs
-                if session.gpu_manager and hasattr(
-                    session.gpu_manager, "cleanup_memory"
-                ):
-                    session.gpu_manager.cleanup_memory()
-
-                # Allow other tasks to run
-                await asyncio.sleep(0.5)
-
-                if session.stop_requested:
-                    logger.info(
-                        "Stop requested after epoch %s for session %s",
-                        epoch,
-                        session.session_id,
-                    )
-                    break
-
-            # Log completion status based on whether it was cancelled or completed normally
-            if session.stop_requested:
-                logger.info(
-                    f"Training CANCELLED for session {session.session_id} - cancellation completed successfully"
-                )
-                session.status = "cancelled"
-            else:
-                logger.info(
-                    f"Training COMPLETED normally for session {session.session_id}"
-                )
-                session.status = "completed"
+            return result
 
         except Exception as e:
-            logger.error(f"Real training failed: {str(e)}")
+            session.status = "failed"
+            session.message = f"Training failed: {str(e)}"
+            logger.error(f"Training failed for session {session.session_id}: {str(e)}")
             raise
 
     # Old simplified feature engineering methods removed - now using TrainingPipeline
