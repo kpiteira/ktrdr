@@ -240,6 +240,11 @@ class ModelTrainer:
 
             for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
                 self._check_cancelled()
+
+                # Move batch to device (DataLoader tensors default to CPU)
+                batch_X = batch_X.to(self.device)
+                batch_y = batch_y.to(self.device)
+
                 # DEBUG: Check for NaN in first batch of first epoch
                 if epoch == 0 and batch_idx == 0:
                     print(
@@ -552,6 +557,11 @@ class ModelTrainer:
     ) -> dict[str, Any]:
         """Train the multi-symbol neural network model with balanced sampling.
 
+        DEPRECATED: This method is deprecated in favor of the symbol-agnostic design.
+        Use train() instead, which handles both single and multi-symbol data uniformly.
+        The symbol-agnostic approach concatenates all symbol data and trains on patterns
+        in technical indicators, not symbol identities.
+
         Args:
             model: PyTorch model to train (must support symbol indices)
             X_train: Training features
@@ -565,6 +575,14 @@ class ModelTrainer:
         Returns:
             Training history and metrics
         """
+        import warnings
+
+        warnings.warn(
+            "train_multi_symbol() is deprecated. Use train() instead for symbol-agnostic training.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         # Move model to device
         model = model.to(self.device)
 

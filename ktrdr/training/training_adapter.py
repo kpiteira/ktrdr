@@ -242,7 +242,7 @@ class TrainingAdapter(AsyncServiceAdapter):
 
                 response = await self._call_host_service_post(
                     "/training/start",
-                    json={
+                    data={
                         "strategy_yaml": strategy_yaml_content,
                         # Runtime overrides
                         "symbols": symbols,

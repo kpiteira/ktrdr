@@ -684,33 +684,32 @@ class TrainingPipeline:
         training_config: dict[str, Any],
         progress_callback=None,
         cancellation_token: Optional[CancellationToken] = None,
-        symbol_indices_train: Optional[torch.Tensor] = None,
-        symbol_indices_val: Optional[torch.Tensor] = None,
-        symbols: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         """
-        Train the neural network model.
+        Train the neural network model (symbol-agnostic).
 
         EXTRACTED FROM: StrategyTrainer._train_model() (train_strategy.py:942-1019)
 
         This is a SYNCHRONOUS method with no async operations. Orchestrators
         wrap this method differently for their execution environments.
 
+        SYMBOL-AGNOSTIC DESIGN: This method treats all input data the same way,
+        regardless of how many symbols contributed to it. Features from 1 symbol
+        or 10 symbols are handled identically - the model learns patterns in
+        technical indicators and fuzzy memberships, not symbol identities.
+
         Args:
             model: Neural network model to train
-            X_train: Training features
-            y_train: Training labels
-            X_val: Validation features
-            y_val: Validation labels
+            X_train: Training features (concatenated from all symbols)
+            y_train: Training labels (concatenated from all symbols)
+            X_val: Validation features (concatenated from all symbols)
+            y_val: Validation labels (concatenated from all symbols)
             training_config: Training configuration dict containing:
                 - epochs: Number of training epochs
                 - batch_size: Batch size
                 - learning_rate: Learning rate
             progress_callback: Optional callback(epoch, total_epochs, metrics)
             cancellation_token: Optional cancellation token
-            symbol_indices_train: Optional symbol indices for multi-symbol training
-            symbol_indices_val: Optional symbol indices for multi-symbol validation
-            symbols: Optional list of symbols for multi-symbol training
 
         Returns:
             Training results dict containing:
@@ -727,14 +726,6 @@ class TrainingPipeline:
             f"batch_size={training_config.get('batch_size', 'N/A')})"
         )
 
-        # Determine if this is multi-symbol training
-        is_multi_symbol = (
-            symbol_indices_train is not None
-            and symbol_indices_val is not None
-            and symbols is not None
-            and len(symbols) > 1  # type: ignore[arg-type]
-        )
-
         # Create trainer instance
         trainer = ModelTrainer(
             training_config,
@@ -742,28 +733,17 @@ class TrainingPipeline:
             cancellation_token=cancellation_token,
         )
 
-        # Train model (single or multi-symbol)
-        if is_multi_symbol:
-            logger.debug(f"Multi-symbol training for {len(symbols)} symbols: {symbols}")  # type: ignore[arg-type]
-            result = trainer.train_multi_symbol(
-                model=model,
-                X_train=X_train,
-                y_train=y_train,
-                symbol_indices_train=symbol_indices_train,  # type: ignore[arg-type]
-                symbols=symbols,  # type: ignore[arg-type]
-                X_val=X_val,
-                y_val=y_val,
-                symbol_indices_val=symbol_indices_val,  # type: ignore[arg-type]
-            )
-        else:
-            logger.debug("Single-symbol training")
-            result = trainer.train(
-                model=model,
-                X_train=X_train,
-                y_train=y_train,
-                X_val=X_val,
-                y_val=y_val,
-            )
+        # Symbol-agnostic training: Always use the same path regardless of number of symbols
+        # The model doesn't care if features came from 1 symbol or 10 - it just sees
+        # technical indicators and fuzzy memberships concatenated together.
+        logger.debug(f"Symbol-agnostic training with {len(X_train)} samples")
+        result = trainer.train(
+            model=model,
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
+        )
 
         # Use the actual keys returned by ModelTrainer
         train_loss = result.get("final_train_loss", None)
@@ -823,6 +803,11 @@ class TrainingPipeline:
                 "recall": 0.0,
                 "f1_score": 0.0,
             }
+
+        # Move test data to the same device as the model
+        device = next(model.parameters()).device
+        X_test = X_test.to(device)
+        y_test = y_test.to(device)
 
         model.eval()
         with torch.no_grad():
