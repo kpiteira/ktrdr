@@ -257,29 +257,26 @@ class TrainingProgressBridge:
         except (TypeError, ValueError):  # pragma: no cover - defensive guard
             percentage_float = self._last_percentage
 
-        message = progress_info.get("message")
-        if not message:
-            if (
-                epoch_index
-                and self._total_epochs
-                and clamped_items_processed
-                and self._total_batches
-            ):
-                message = (
-                    f"Epoch {epoch_index}/{self._total_epochs} · Batch "
-                    f"{clamped_items_processed}/{self._total_batches}"
-                )
-            elif epoch_index and self._total_epochs:
-                message = f"Epoch {epoch_index}/{self._total_epochs}"
-            else:
-                message = "Polling host session"
-
-        # Calculate batch number within current epoch for display
+        # Calculate batch number within current epoch for display (do this FIRST)
         batch_number = None
         batch_total_per_epoch = progress_info.get("total_batches")
         if clamped_items_processed and batch_total_per_epoch:
             # items_processed is global batch count, convert to batch within epoch
             batch_number = ((clamped_items_processed - 1) % batch_total_per_epoch) + 1
+
+        # Build message using per-epoch batch numbers (consistent with local training)
+        message = progress_info.get("message")
+        if not message:
+            if epoch_index and self._total_epochs and batch_number and batch_total_per_epoch:
+                # Use batch within epoch (e.g., "Batch 35/70") not cumulative (e.g., "Batch 3535/7000")
+                message = (
+                    f"Epoch {epoch_index}/{self._total_epochs} · Batch "
+                    f"{batch_number}/{batch_total_per_epoch}"
+                )
+            elif epoch_index and self._total_epochs:
+                message = f"Epoch {epoch_index}/{self._total_epochs}"
+            else:
+                message = "Polling host session"
 
         context_payload: dict[str, Any] = {
             "host_status": status or snapshot.get("status"),
