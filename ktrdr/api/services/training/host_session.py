@@ -57,9 +57,15 @@ class HostSessionManager:
         logger.info("HOST SESSION MANAGER FINAL RESULT")
         logger.info(f"  Keys: {list(host_snapshot.keys())}")
         logger.info(f"  model_path: {host_snapshot.get('model_path')}")
-        logger.info(f"  training_metrics keys: {list(host_snapshot.get('training_metrics', {}).keys())}")
-        logger.info(f"  test_metrics keys: {list(host_snapshot.get('test_metrics', {}).keys())}")
-        logger.info(f"  artifacts keys: {list(host_snapshot.get('artifacts', {}).keys())}")
+        logger.info(
+            f"  training_metrics keys: {list(host_snapshot.get('training_metrics', {}).keys())}"
+        )
+        logger.info(
+            f"  test_metrics keys: {list(host_snapshot.get('test_metrics', {}).keys())}"
+        )
+        logger.info(
+            f"  artifacts keys: {list(host_snapshot.get('artifacts', {}).keys())}"
+        )
         logger.info(f"  session_id: {host_snapshot.get('session_id')}")
         logger.info(f"  status: {host_snapshot.get('status')}")
         logger.info("=" * 80)
@@ -164,7 +170,9 @@ class HostSessionManager:
                     # TASK 3.3: Fetch final result from /result endpoint
                     # The /status endpoint returns progress format, but we need the
                     # complete training result for harmonization with local training
-                    logger.info(f"Training completed, fetching result for session {session_id}")
+                    logger.info(
+                        f"Training completed, fetching result for session {session_id}"
+                    )
                     result = await self._adapter.get_training_result(session_id)
                     return result
 

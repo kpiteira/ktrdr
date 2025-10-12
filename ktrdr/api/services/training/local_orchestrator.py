@@ -131,10 +131,16 @@ class LocalTrainingOrchestrator:
         logger.info("LOCAL TRAINING RESULT STRUCTURE")
         logger.info(f"  Keys: {list(result.keys())}")
         logger.info(f"  model_path: {result.get('model_path')}")
-        logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
-        logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+        logger.info(
+            f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}"
+        )
+        logger.info(
+            f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}"
+        )
         logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
-        logger.info(f"  session_info keys: {list(result.get('session_info', {}).keys())}")
+        logger.info(
+            f"  session_info keys: {list(result.get('session_info', {}).keys())}"
+        )
         logger.info("=" * 80)
 
         return result

@@ -6,14 +6,15 @@ from TrainingPipeline, enabling result harmonization between local and host path
 """
 
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 # Add training-host-service to path for imports
-training_host_service_path = Path(__file__).parent.parent.parent.parent / "training-host-service"
+training_host_service_path = (
+    Path(__file__).parent.parent.parent.parent / "training-host-service"
+)
 if str(training_host_service_path) not in sys.path:
     sys.path.insert(0, str(training_host_service_path))
 
@@ -93,7 +94,10 @@ class TestTrainingSessionResultStorage:
 
         assert training_session.training_result is not None
         assert training_session.training_result["model_path"] == "/path/to/model.pt"
-        assert training_session.training_result["training_metrics"]["final_train_loss"] == 0.123
+        assert (
+            training_session.training_result["training_metrics"]["final_train_loss"]
+            == 0.123
+        )
         assert training_session.training_result["test_metrics"]["test_accuracy"] == 0.86
 
     def test_training_session_result_is_optional(self, training_session):
@@ -113,7 +117,10 @@ class TestTrainingSessionResultStorage:
         updated_result["training_metrics"]["final_train_loss"] = 0.100
         training_session.training_result = updated_result
 
-        assert training_session.training_result["training_metrics"]["final_train_loss"] == 0.100
+        assert (
+            training_session.training_result["training_metrics"]["final_train_loss"]
+            == 0.100
+        )
 
     def test_training_session_result_preserves_all_fields(
         self, training_session, mock_training_result
