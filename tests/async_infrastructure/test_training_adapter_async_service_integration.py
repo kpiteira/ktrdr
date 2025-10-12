@@ -190,12 +190,19 @@ class TestTrainingAdapterConnectionPoolPerformance(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    def test_no_http_client_created_in_local_mode(self):
-        """Test that HTTP client is not created in local training mode."""
-        adapter = TrainingAdapter(use_host_service=False)
+    def test_local_mode_raises_error(self):
+        """Test that TrainingAdapter raises error when use_host_service=False.
 
-        # Should not initialize HTTP client for local mode
-        self.assertIsNone(getattr(adapter, "_http_client", None))
+        TrainingAdapter is now HOST-SERVICE-ONLY after Phase 2 refactoring.
+        Local training uses LocalTrainingOrchestrator directly.
+        """
+        from ktrdr.training.training_adapter import TrainingProviderError
+
+        with self.assertRaises(TrainingProviderError) as context:
+            TrainingAdapter(use_host_service=False)
+
+        self.assertIn("no longer supports local training", str(context.exception))
+        self.assertIn("LocalTrainingOrchestrator", str(context.exception))
 
 
 if __name__ == "__main__":

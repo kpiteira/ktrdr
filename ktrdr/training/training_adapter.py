@@ -78,19 +78,18 @@ class TrainingAdapter(AsyncServiceAdapter):
             )
             AsyncServiceAdapter.__init__(self, config)
 
-        # Initialize appropriate components based on mode
+        # TrainingAdapter is now HOST-SERVICE-ONLY
+        # Local training uses LocalTrainingOrchestrator directly, not this adapter
         if not use_host_service:
-            # Local training mode (existing behavior)
-            from .train_strategy import StrategyTrainer
-
-            self.local_trainer: Optional[StrategyTrainer] = StrategyTrainer()
-            logger.info("TrainingAdapter initialized for local training")
-        else:
-            # Host service mode
-            self.local_trainer = None
-            logger.info(
-                f"TrainingAdapter initialized for host service at {self.host_service_url}"
+            raise TrainingProviderError(
+                "TrainingAdapter no longer supports local training. "
+                "Use LocalTrainingOrchestrator for local training execution.",
+                provider="Training",
             )
+
+        logger.info(
+            f"TrainingAdapter initialized for host service at {self.host_service_url}"
+        )
 
         # Statistics
         self.requests_made = 0
@@ -271,24 +270,12 @@ class TrainingAdapter(AsyncServiceAdapter):
                 }
 
             else:
-                # Use local training (existing behavior)
-                logger.info(f"Starting local training for {symbols} on {timeframes}")
-
-                if self.local_trainer is None:
-                    raise TrainingProviderError(
-                        "Local trainer not initialized", provider="Training"
-                    )
-
-                return self.local_trainer.train_multi_symbol_strategy(
-                    strategy_config_path=strategy_config_path,
-                    symbols=symbols,
-                    timeframes=timeframes,
-                    start_date=start_date,
-                    end_date=end_date,
-                    validation_split=validation_split,
-                    data_mode=data_mode,
-                    progress_callback=progress_callback,
-                    cancellation_token=cancellation_token,
+                # TrainingAdapter is host-service-only
+                raise TrainingProviderError(
+                    "TrainingAdapter does not support local training. "
+                    "This code path should not be reached. "
+                    "Use LocalTrainingOrchestrator for local training.",
+                    provider="Training",
                 )
 
         except TrainingProviderError:

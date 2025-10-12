@@ -936,5 +936,53 @@ Phase 1 is successful when:
 
 ---
 
-**Status**: Phase 1 Architecture Design - Ready for Review
-**Next**: Implementation Plan (after architecture approval)
+## Implementation Status (Phase 2 - Task 3.2)
+
+**Date**: 2025-01-10
+
+### Deprecated Code Removal
+
+As part of Phase 2 Task 3.2, the following deprecated code has been removed:
+
+1. **StrategyTrainer** (`ktrdr/training/train_strategy.py`) - DELETED
+   - Replaced by: LocalTrainingOrchestrator and HostTrainingOrchestrator
+   - Reason: Both orchestrators now use TrainingPipeline directly (zero duplication)
+
+2. **MultiSymbolMLPTradingModel** and **MultiSymbolMLP** (`ktrdr/neural/models/mlp.py`) - DELETED
+   - Reason: Contradicts symbol-agnostic architecture (Phase 2 TASK-2.0)
+   - Architecture decision: Strategies operate on patterns, not symbol names
+   - Multi-symbol training uses sequential concatenation, not embeddings
+   - Uses regular MLPTradingModel (same as single-symbol)
+
+3. **TrainingAdapter Local Training Code** (`ktrdr/training/training_adapter.py`) - DELETED
+   - Lines removed: Local trainer initialization (82-92), local execution path (273-292)
+   - Reason: Dead code bypassing orchestrators
+   - TrainingAdapter is now HOST-SERVICE-ONLY
+   - Local training uses LocalTrainingOrchestrator directly
+
+4. **result_aggregator.py** - DEFERRED to Task 3.3
+   - Will be deleted after host service harmonization (Task 3.3)
+   - Reason: Host service will store and return TrainingPipeline result format directly
+   - No transformation needed when both paths return same format
+
+### Current Architecture
+
+- **TrainingPipeline**: Single source of truth for training logic (shared by both orchestrators)
+- **LocalTrainingOrchestrator**: Handles local training with in-process coordination
+- **HostTrainingOrchestrator**: Handles host service training with session-based coordination
+- **TrainingAdapter**: HOST-SERVICE-ONLY communication layer (no local training code)
+
+### Symbol-Agnostic Design
+
+Multi-symbol training follows symbol-agnostic principles:
+- Strategies learn patterns from technical indicators and fuzzy memberships
+- NO symbol names, indices, or embeddings in training
+- Multi-symbol data concatenated sequentially (AAPL all → MSFT all → etc.)
+- Temporal order preserved within each symbol
+- Model uses regular MLPTradingModel (not MultiSymbolMLPTradingModel)
+- Strategy can be trained on any symbols and used on any data
+
+---
+
+**Status**: Phase 2 Task 3.2 Complete - Deprecated Code Removed
+**Next**: Phase 2 Task 3.3 - Host Service Result Harmonization
