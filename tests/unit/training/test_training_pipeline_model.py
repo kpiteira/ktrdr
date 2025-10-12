@@ -205,24 +205,26 @@ class TestTrainModel:
             )
 
     def test_train_model_multi_symbol(self):
-        """Test training with multi-symbol data (includes symbol indices)."""
+        """
+        Test training with multi-symbol data.
+
+        SYMBOL-AGNOSTIC: Multi-symbol data is concatenated before training.
+        The model treats features from multiple symbols the same as single-symbol data.
+        No symbol_indices needed - model learns patterns in indicators, not symbol identity.
+        """
         model = nn.Sequential(nn.Linear(10, 3))
 
-        # Multi-symbol training data includes symbol indices
+        # Multi-symbol training data (concatenated from multiple symbols)
         X_train = torch.randn(100, 10)
         y_train = torch.randint(0, 3, (100,))
-        symbol_indices_train = torch.randint(0, 2, (100,))  # 2 symbols
 
         X_val = torch.randn(20, 10)
         y_val = torch.randint(0, 3, (20,))
-        symbol_indices_val = torch.randint(0, 2, (20,))
 
         training_config = {
             "epochs": 2,
             "batch_size": 16,
         }
-
-        symbols = ["AAPL", "MSFT"]
 
         result = TrainingPipeline.train_model(
             model=model,
@@ -231,9 +233,6 @@ class TestTrainModel:
             X_val=X_val,
             y_val=y_val,
             training_config=training_config,
-            symbol_indices_train=symbol_indices_train,
-            symbol_indices_val=symbol_indices_val,
-            symbols=symbols,
         )
 
         # Verify result
@@ -296,18 +295,23 @@ class TestEvaluateModel:
         assert result["f1_score"] == 0.0
 
     def test_evaluate_model_multi_symbol(self):
-        """Test evaluation with multi-symbol data (includes symbol indices)."""
+        """
+        Test evaluation with multi-symbol data.
+
+        SYMBOL-AGNOSTIC: Multi-symbol test data is concatenated before evaluation.
+        The model evaluates features from multiple symbols the same as single-symbol data.
+        No symbol_indices needed - model evaluates patterns in indicators, not symbol identity.
+        """
         model = nn.Sequential(nn.Linear(10, 3))
 
+        # Multi-symbol test data (concatenated from multiple symbols)
         X_test = torch.randn(30, 10)
         y_test = torch.randint(0, 3, (30,))
-        symbol_indices_test = torch.randint(0, 2, (30,))  # 2 symbols
 
         result = TrainingPipeline.evaluate_model(
             model=model,
             X_test=X_test,
             y_test=y_test,
-            symbol_indices_test=symbol_indices_test,
         )
 
         # Verify result structure

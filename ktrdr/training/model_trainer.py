@@ -332,6 +332,14 @@ class ModelTrainer:
                             epoch * total_bars + bars_processed_this_epoch
                         )
 
+                        # Calculate progress percentage (source of truth)
+                        progress_percent = (
+                            (completed_batches / total_batches) * 100.0
+                            if total_batches > 0
+                            else 0.0
+                        )
+                        progress_percent = max(0.0, min(progress_percent, 100.0))
+
                         # Create batch-level metrics
                         batch_metrics = {
                             "epoch": epoch,
@@ -340,6 +348,7 @@ class ModelTrainer:
                             "total_batches_per_epoch": total_batches_per_epoch,
                             "completed_batches": completed_batches,
                             "total_batches": total_batches,
+                            "progress_percent": progress_percent,
                             "bars_processed_this_epoch": bars_processed_this_epoch,
                             "total_bars_processed": total_bars_processed,
                             "total_bars": total_bars,
@@ -484,13 +493,26 @@ class ModelTrainer:
             if self.progress_callback:
                 try:
                     self._check_cancelled()
+
+                    # Calculate progress percentage (source of truth)
+                    completed_batches_at_epoch_end = (
+                        epoch + 1
+                    ) * total_batches_per_epoch
+                    progress_percent = (
+                        (completed_batches_at_epoch_end / total_batches) * 100.0
+                        if total_batches > 0
+                        else 0.0
+                    )
+                    progress_percent = max(0.0, min(progress_percent, 100.0))
+
                     # Epoch-level metrics (complete epoch with validation)
                     epoch_metrics = {
                         "epoch": epoch,
                         "total_epochs": epochs,
                         "total_batches_per_epoch": total_batches_per_epoch,
-                        "completed_batches": (epoch + 1) * total_batches_per_epoch,
+                        "completed_batches": completed_batches_at_epoch_end,
                         "total_batches": total_batches,
+                        "progress_percent": progress_percent,
                         "total_bars_processed": (epoch + 1)
                         * total_bars,  # All bars in completed epochs
                         "total_bars": total_bars,

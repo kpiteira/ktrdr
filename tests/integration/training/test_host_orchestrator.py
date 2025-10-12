@@ -308,9 +308,9 @@ class TestThrottledProgressCallback:
         # Should NOT contain any actual sleep function calls
         # Use regex to find sleep() calls (not just the word "sleep" in comments)
         sleep_calls = re.findall(r"\b(asyncio\.sleep|time\.sleep)\s*\(", source)
-        assert len(sleep_calls) == 0, (
-            f"Callback must NOT contain sleep operations! Found: {sleep_calls}"
-        )
+        assert (
+            len(sleep_calls) == 0
+        ), f"Callback must NOT contain sleep operations! Found: {sleep_calls}"
 
 
 class TestHostTrainingOrchestratorExecution:
@@ -363,9 +363,9 @@ class TestHostTrainingOrchestratorExecution:
 
         # Get source code and verify NO to_thread usage
         source = inspect.getsource(orchestrator.run)
-        assert "to_thread" not in source, (
-            "Host orchestrator should NOT use asyncio.to_thread"
-        )
+        assert (
+            "to_thread" not in source
+        ), "Host orchestrator should NOT use asyncio.to_thread"
 
     @pytest.mark.asyncio
     async def test_run_respects_cancellation(self, training_session, model_storage):
@@ -476,9 +476,9 @@ class TestPerformanceOptimizations:
         source = inspect.getsource(HostTrainingOrchestrator)
 
         # Should NOT contain any sleep operations
-        assert "asyncio.sleep" not in source, (
-            "Orchestrator must NOT contain asyncio.sleep!"
-        )
+        assert (
+            "asyncio.sleep" not in source
+        ), "Orchestrator must NOT contain asyncio.sleep!"
         assert "time.sleep" not in source, "Orchestrator must NOT contain time.sleep!"
 
     def test_throttling_constants_defined(self):

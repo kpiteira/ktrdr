@@ -263,15 +263,28 @@ class TrainingProgressBridge:
         if clamped_items_processed and batch_total_per_epoch:
             # items_processed is global batch count, convert to batch within epoch
             batch_number = ((clamped_items_processed - 1) % batch_total_per_epoch) + 1
+            logger.debug(
+                f"DEBUG PROGRESS: clamped_items_processed={clamped_items_processed}, "
+                f"batch_total_per_epoch={batch_total_per_epoch}, calculated batch_number={batch_number}, "
+                f"total_batches={self._total_batches}"
+            )
 
         # Build message using per-epoch batch numbers (consistent with local training)
         message = progress_info.get("message")
         if not message:
-            if epoch_index and self._total_epochs and batch_number and batch_total_per_epoch:
+            if (
+                epoch_index
+                and self._total_epochs
+                and batch_number
+                and batch_total_per_epoch
+            ):
                 # Use batch within epoch (e.g., "Batch 35/70") not cumulative (e.g., "Batch 3535/7000")
                 message = (
                     f"Epoch {epoch_index}/{self._total_epochs} · Batch "
                     f"{batch_number}/{batch_total_per_epoch}"
+                )
+                logger.debug(
+                    f"DEBUG PROGRESS: Built message with batch_number={batch_number}/{batch_total_per_epoch}"
                 )
             elif epoch_index and self._total_epochs:
                 message = f"Epoch {epoch_index}/{self._total_epochs}"

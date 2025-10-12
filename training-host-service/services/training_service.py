@@ -32,10 +32,12 @@ class TrainingSession:
         self.start_time = datetime.utcnow()
         self.last_updated = datetime.utcnow()
 
-        # Progress tracking
+        # Progress tracking - store complete data from ModelTrainer (source of truth)
+        self._last_progress_data: Optional[dict[str, Any]] = None
+
+        # Legacy fields for backwards compatibility
         self.current_epoch = 0
         self.current_batch = 0
-
         self.total_epochs = config.get("training_config", {}).get("epochs", 100)
         self.total_batches = 0
         self.items_processed = 0
@@ -66,80 +68,70 @@ class TrainingSession:
         self.error = None
 
     def update_progress(self, epoch: int, batch: int, metrics: dict[str, float]):
-        """Update training progress and metrics."""
-        try:
-            epoch_index = int(epoch)
-        except (TypeError, ValueError):
-            epoch_index = self.current_epoch or 0
+        """
+        Update training progress - store complete data from ModelTrainer (source of truth).
 
-        is_epoch_summary = any(str(key).startswith("epoch_") for key in metrics)
-        if not is_epoch_summary:
-            epoch_index += 1
-
-        epoch_index = max(epoch_index, 1)
-        self.current_epoch = max(self.current_epoch, epoch_index)
-
-        try:
-            batch_index = int(batch)
-        except (TypeError, ValueError):
-            batch_index = self.current_batch
-        self.current_batch = max(self.current_batch, batch_index)
+        ModelTrainer/TrainingPipeline is execution-agnostic and calculates all progress data.
+        This method just stores the data and passes it through in get_progress_dict().
+        """
         self.last_updated = datetime.utcnow()
 
-        total_batches_candidate = metrics.get("total_batches") or metrics.get(
+        # Store complete progress data from ModelTrainer (single source of truth)
+        self._last_progress_data = {
+            "epoch": metrics.get("epoch", epoch),
+            "total_epochs": metrics.get("total_epochs", self.total_epochs),
+            "batch": metrics.get("batch", batch),
+            "total_batches_per_epoch": metrics.get("total_batches_per_epoch"),
+            "completed_batches": metrics.get("completed_batches"),
+            "total_batches": metrics.get("total_batches"),
+            "progress_percent": metrics.get("progress_percent"),
+            "progress_type": metrics.get("progress_type"),
+        }
+
+        # Update legacy fields for backwards compatibility
+        try:
+            self.current_epoch = int(self._last_progress_data["epoch"])
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            self.current_batch = int(self._last_progress_data["batch"])
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            self.total_batches = int(
+                self._last_progress_data["total_batches_per_epoch"] or 0
+            )
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            self.items_processed = int(self._last_progress_data["completed_batches"] or 0)
+        except (TypeError, ValueError):
+            pass
+
+        # Build message for display (legacy field)
+        message_parts = []
+        epoch_val = self._last_progress_data.get("epoch")
+        total_epochs_val = self._last_progress_data.get("total_epochs")
+        batch_val = self._last_progress_data.get("batch")
+        total_batches_per_epoch_val = self._last_progress_data.get(
             "total_batches_per_epoch"
         )
-        if total_batches_candidate is not None:
-            try:
-                total_batches_int = int(total_batches_candidate)
-                if total_batches_int > 0:
-                    self.total_batches = max(self.total_batches, total_batches_int)
-            except (TypeError, ValueError):
-                pass
 
-        if self.current_batch and self.current_batch > self.total_batches:
-            self.total_batches = self.current_batch
+        if epoch_val and total_epochs_val:
+            message_parts.append(f"Epoch {epoch_val}/{total_epochs_val}")
+        elif epoch_val:
+            message_parts.append(f"Epoch {epoch_val}")
 
-        completed_batches = metrics.get("completed_batches")
-        if completed_batches is None:
-            completed_batches = self.current_batch
-        try:
-            completed_batches_int = int(completed_batches)
-        except (TypeError, ValueError):
-            completed_batches_int = self.current_batch
-
-        # Calculate cumulative items processed across all epochs
-        # items_processed = (completed_epochs * batches_per_epoch) + current_batch
-        if self.total_batches and self.current_epoch > 0:
-            # Epochs are 1-indexed, so completed epochs = current_epoch - 1
-            cumulative_items = (
-                (self.current_epoch - 1) * self.total_batches
-            ) + completed_batches_int
-            self.items_processed = max(self.items_processed, cumulative_items)
-        else:
-            # Fallback to batch-only if we don't have epoch info
-            self.items_processed = max(self.items_processed, completed_batches_int)
-
-        # Don't artificially increase total_batches - it's batches PER EPOCH
-        # The total across all epochs is calculated in get_progress_dict()
-
-        message_parts = []
-        if self.total_epochs:
-            message_parts.append(
-                f"Epoch {min(self.current_epoch, self.total_epochs)}/{self.total_epochs}"
-            )
-        else:
-            message_parts.append(f"Epoch {self.current_epoch}")
-
-        if self.total_batches:
-            message_parts.append(
-                f"Batch {min(self.items_processed, self.total_batches)}/{self.total_batches}"
-            )
+        if batch_val and total_batches_per_epoch_val:
+            message_parts.append(f"Batch {batch_val}/{total_batches_per_epoch_val}")
 
         if message_parts:
             self.message = " · ".join(message_parts)
             self.current_item = message_parts[-1]
-        else:  # pragma: no cover - fallback
+        else:
             self.message = "Training in progress"
             self.current_item = self.message
 
@@ -157,37 +149,39 @@ class TrainingSession:
                     self.best_metrics[key] = value
 
     def get_progress_dict(self) -> dict[str, Any]:
-        """Get progress information as dictionary."""
-        # Calculate total items across ALL epochs, not just one epoch
-        items_total = (
-            self.total_batches * self.total_epochs
-            if self.total_batches and self.total_epochs
-            else None
-        )
+        """
+        Get progress information - pass through from ModelTrainer (execution-agnostic).
 
-        if items_total:
-            # Progress based on total batches across all epochs
-            progress_percent = (
-                (self.items_processed / items_total) * 100.0 if items_total > 0 else 0.0
-            )
-        else:
-            # Fallback to epoch-based progress if batch info unavailable
-            progress_percent = (
-                (self.current_epoch / self.total_epochs) * 100.0
-                if self.total_epochs > 0
-                else 0.0
-            )
+        All progress calculations happen in TrainingPipeline/ModelTrainer (single source of truth).
+        This method just returns the data for transmission to backend.
+        """
+        if self._last_progress_data:
+            # Pass through complete progress data from ModelTrainer
+            return {
+                "epoch": self._last_progress_data.get("epoch", 0),
+                "total_epochs": self._last_progress_data.get(
+                    "total_epochs", self.total_epochs
+                ),
+                "batch": self._last_progress_data.get("batch", 0),
+                "total_batches": self._last_progress_data.get(
+                    "total_batches_per_epoch", 0
+                ),
+                "progress_percent": self._last_progress_data.get("progress_percent", 0.0),
+                "items_processed": self._last_progress_data.get("completed_batches", 0),
+                "items_total": self._last_progress_data.get("total_batches"),
+                "message": self.message,
+                "current_item": self.current_item or self.message,
+            }
 
-        progress_percent = max(0.0, min(progress_percent, 100.0))
-
+        # Fallback if no data yet (initialization phase)
         return {
-            "epoch": self.current_epoch,
+            "epoch": 0,
             "total_epochs": self.total_epochs,
-            "batch": self.current_batch,
-            "total_batches": self.total_batches,
-            "progress_percent": progress_percent,
-            "items_processed": self.items_processed,
-            "items_total": items_total,
+            "batch": 0,
+            "total_batches": 0,
+            "progress_percent": 0.0,
+            "items_processed": 0,
+            "items_total": None,
             "message": self.message,
             "current_item": self.current_item or self.message,
         }

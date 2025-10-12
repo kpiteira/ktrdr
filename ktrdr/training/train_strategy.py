@@ -204,7 +204,7 @@ class StrategyTrainer:
             config["model"], combined_features.shape[1], len(symbols)
         )
 
-        # Step 9: Train model (using TrainingPipeline for multi-symbol)
+        # Step 9: Train model (symbol-agnostic - no symbol_indices needed)
         print("\n9. Training multi-symbol neural network...")
         training_results = TrainingPipeline.train_model(
             model=model,
@@ -215,20 +215,14 @@ class StrategyTrainer:
             training_config=config["model"]["training"],
             progress_callback=progress_callback,
             cancellation_token=cancellation_token,
-            symbol_indices_train=train_data[2],
-            symbol_indices_val=val_data[2],
-            symbols=symbols,
         )
 
-        # Step 10: Evaluate model (using TrainingPipeline for multi-symbol)
+        # Step 10: Evaluate model (symbol-agnostic - no symbol_indices needed)
         print("\n10. Evaluating multi-symbol model...")
         test_metrics = TrainingPipeline.evaluate_model(
             model=model,
             X_test=test_data[0] if test_data else None,
             y_test=test_data[1] if test_data else None,
-            symbol_indices_test=(
-                test_data[2] if test_data and len(test_data) > 2 else None
-            ),
         )
         if test_data is not None:
             print(
