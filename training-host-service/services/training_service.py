@@ -598,43 +598,18 @@ class TrainingService:
         """
         Get detailed status of a training session.
 
-        TASK 3.3: Returns training_result when status='completed' for harmonization.
-        This enables local and host training to return identical result formats.
+        TASK 3.3: Always returns progress format (even when completed).
+        Use session.training_result directly to get final training results.
 
         Returns:
-            - When completed: Complete training result from TrainingPipeline
-            - When running: Progress dict with current status
+            dict: Status with progress, metrics, resource_usage for all states
         """
         if session_id not in self.sessions:
             raise Exception(f"Session {session_id} not found")
 
         session = self.sessions[session_id]
 
-        # TASK 3.3: If training is complete and result is available, return it
-        # This harmonizes with local training format (no transformation needed)
-        if session.status == "completed" and session.training_result:
-            result = {
-                **session.training_result,  # TrainingPipeline format!
-                "session_id": session_id,
-                "status": session.status,
-                "start_time": session.start_time.isoformat(),
-                "last_updated": session.last_updated.isoformat(),
-            }
-
-            # TASK 3.3: Verification logging for result harmonization
-            logger.info("=" * 80)
-            logger.info(f"STATUS ENDPOINT RETURNING COMPLETED RESULT (session {session_id})")
-            logger.info(f"  Keys: {list(result.keys())}")
-            logger.info(f"  model_path: {result.get('model_path')}")
-            logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
-            logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
-            logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
-            logger.info(f"  session_id: {result.get('session_id')}")
-            logger.info("=" * 80)
-
-            return result
-
-        # Otherwise return progress (for "running" or "failed" status)
+        # Always return progress format (separation of concerns: status vs results)
         return {
             "session_id": session_id,
             "status": session.status,

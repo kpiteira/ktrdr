@@ -187,29 +187,105 @@ async def get_training_status(session_id: str):
     Get the status of a training session.
 
     Returns detailed information about the training progress,
-    metrics, and resource usage.
+    metrics, and resource usage for ALL session states (initializing,
+    running, completed, failed).
+
+    TASK 3.3: This endpoint always returns status/progress format.
+    Use GET /result/{session_id} to retrieve final training results.
     """
     try:
         service = get_service()
 
-        # Get session status from service
-        status_info = service.get_session_status(session_id)
+        # Get session directly (bypassing get_session_status to avoid result format)
+        session = service.sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
+        # Always return progress format (even when completed)
         return TrainingStatusResponse(
             session_id=session_id,
-            status=status_info["status"],
-            progress=status_info["progress"],
-            metrics=status_info["metrics"]["current"],
-            gpu_usage=status_info["resource_usage"],
-            start_time=status_info["start_time"],
-            last_updated=status_info["last_updated"],
-            error=status_info.get("error"),
+            status=session.status,
+            progress=session.get_progress_dict(),
+            metrics={"current": session.metrics, "best": session.best_metrics},
+            gpu_usage=session.get_resource_usage(),
+            start_time=session.start_time.isoformat(),
+            last_updated=session.last_updated.isoformat(),
+            error=session.error,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get status for session {session_id}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to get training status: {str(e)}"
+        ) from e
+
+
+@router.get("/result/{session_id}")
+async def get_training_result(session_id: str):
+    """
+    Get the final training result.
+
+    Returns the complete training result in TrainingPipeline format.
+    Only valid when training status is "completed".
+
+    TASK 3.3: This endpoint returns the harmonized TrainingPipeline result format,
+    eliminating the need for result_aggregator transformation.
+
+    Returns:
+        dict: Training result with keys: model_path, training_metrics, test_metrics,
+              artifacts, model_info, data_summary, resource_usage, session_id, etc.
+
+    Raises:
+        404: Session not found
+        400: Training not completed yet
+    """
+    try:
+        service = get_service()
+
+        session = service.sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        if session.status != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Training not completed yet (status: {session.status})"
+            )
+
+        if not session.training_result:
+            raise HTTPException(
+                status_code=500,
+                detail="Training completed but result not available"
+            )
+
+        # Return the harmonized TrainingPipeline result format
+        result = {
+            **session.training_result,
+            "session_id": session_id,
+            "status": session.status,
+            "start_time": session.start_time.isoformat(),
+            "last_updated": session.last_updated.isoformat(),
+        }
+
+        # TASK 3.3: Verification logging
+        logger.info("=" * 80)
+        logger.info(f"RESULT ENDPOINT RETURNING COMPLETED RESULT (session {session_id})")
+        logger.info(f"  Keys: {list(result.keys())}")
+        logger.info(f"  model_path: {result.get('model_path')}")
+        logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
+        logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+        logger.info("=" * 80)
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get result for session {session_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get training result: {str(e)}"
         ) from e
 
 

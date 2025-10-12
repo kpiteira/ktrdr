@@ -298,6 +298,29 @@ class TrainingAdapter(AsyncServiceAdapter):
 
         return await self._call_host_service_get(f"/training/status/{session_id}")
 
+    async def get_training_result(self, session_id: str) -> dict[str, Any]:
+        """
+        Get final training result (host service only).
+
+        TASK 3.3: Fetches the complete training result in TrainingPipeline format.
+        Only valid when training status is "completed".
+
+        Args:
+            session_id: Training session ID
+
+        Returns:
+            dict: Complete training result with harmonized format
+
+        Raises:
+            TrainingProviderError: If not using host service or result unavailable
+        """
+        if not self.use_host_service:
+            raise TrainingProviderError(
+                "Result retrieval only available for host service mode"
+            )
+
+        return await self._call_host_service_get(f"/training/result/{session_id}")
+
     async def stop_training(self, session_id: str) -> dict[str, Any]:
         """Stop a training session (host service only)."""
         if not self.use_host_service:
