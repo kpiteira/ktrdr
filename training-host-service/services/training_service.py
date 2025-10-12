@@ -284,6 +284,16 @@ class TrainingService:
         self.session_timeout_minutes = session_timeout_minutes
         self.sessions: dict[str, TrainingSession] = {}
 
+        # Model storage - host service has situational awareness of shared models path
+        # Host service runs from training-host-service/, models are in project root
+        from pathlib import Path
+
+        from ktrdr.training.model_storage import ModelStorage
+
+        project_root = Path(__file__).parent.parent.parent
+        models_path = project_root / "models"
+        self.model_storage = ModelStorage(base_path=str(models_path))
+
         # Global resource managers
         self.global_gpu_manager: Optional[GPUMemoryManager] = None
         self._initialize_global_resources()
@@ -497,15 +507,12 @@ class TrainingService:
 
             from orchestrator import HostTrainingOrchestrator
 
-            from ktrdr.training.model_storage import ModelStorage
-
-            # Create ModelStorage for saving models
-            model_storage = ModelStorage()
-
-            # Create orchestrator
+            # Host service has its own ModelStorage instance configured at service level
+            # This provides situational awareness - the service knows where models should be saved
+            # The orchestrator receives this and passes it through to TrainingPipeline
             orchestrator = HostTrainingOrchestrator(
                 session=session,
-                model_storage=model_storage,
+                model_storage=self.model_storage,  # Use service-level ModelStorage
             )
 
             # Run training via orchestrator (direct async - no thread wrapper)
