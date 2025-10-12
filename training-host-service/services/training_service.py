@@ -67,6 +67,12 @@ class TrainingSession:
         # Error tracking
         self.error = None
 
+        # Training result storage (Task 3.3: Result Harmonization)
+        # Store complete training result from TrainingPipeline for harmonization
+        # with local training format. This enables status endpoint to return
+        # the actual training result instead of requiring transformation.
+        self.training_result: Optional[dict[str, Any]] = None
+
     def update_progress(self, epoch: int, batch: int, metrics: dict[str, float]):
         """
         Update training progress - store complete data from ModelTrainer (source of truth).
@@ -589,12 +595,46 @@ class TrainingService:
         return True
 
     def get_session_status(self, session_id: str) -> dict[str, Any]:
-        """Get detailed status of a training session."""
+        """
+        Get detailed status of a training session.
+
+        TASK 3.3: Returns training_result when status='completed' for harmonization.
+        This enables local and host training to return identical result formats.
+
+        Returns:
+            - When completed: Complete training result from TrainingPipeline
+            - When running: Progress dict with current status
+        """
         if session_id not in self.sessions:
             raise Exception(f"Session {session_id} not found")
 
         session = self.sessions[session_id]
 
+        # TASK 3.3: If training is complete and result is available, return it
+        # This harmonizes with local training format (no transformation needed)
+        if session.status == "completed" and session.training_result:
+            result = {
+                **session.training_result,  # TrainingPipeline format!
+                "session_id": session_id,
+                "status": session.status,
+                "start_time": session.start_time.isoformat(),
+                "last_updated": session.last_updated.isoformat(),
+            }
+
+            # TASK 3.3: Verification logging for result harmonization
+            logger.info("=" * 80)
+            logger.info(f"STATUS ENDPOINT RETURNING COMPLETED RESULT (session {session_id})")
+            logger.info(f"  Keys: {list(result.keys())}")
+            logger.info(f"  model_path: {result.get('model_path')}")
+            logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
+            logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+            logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
+            logger.info(f"  session_id: {result.get('session_id')}")
+            logger.info("=" * 80)
+
+            return result
+
+        # Otherwise return progress (for "running" or "failed" status)
         return {
             "session_id": session_id,
             "status": session.status,

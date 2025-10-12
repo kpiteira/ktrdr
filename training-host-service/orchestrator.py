@@ -194,6 +194,22 @@ class HostTrainingOrchestrator:
             }
             result["session_id"] = self._session.session_id
 
+            # TASK 3.3: Store complete training result in session for harmonization
+            # This enables the status endpoint to return the TrainingPipeline result
+            # directly, eliminating the need for result_aggregator transformation
+            self._session.training_result = result
+
+            # TASK 3.3: Verification logging for result harmonization
+            logger.info("=" * 80)
+            logger.info("HOST TRAINING RESULT STRUCTURE (before storing)")
+            logger.info(f"  Keys: {list(result.keys())}")
+            logger.info(f"  model_path: {result.get('model_path')}")
+            logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
+            logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+            logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
+            logger.info(f"  resource_usage keys: {list(result.get('resource_usage', {}).keys())}")
+            logger.info("=" * 80)
+
             # Update session status
             self._session.status = "completed"
             self._session.message = "Training completed successfully"
