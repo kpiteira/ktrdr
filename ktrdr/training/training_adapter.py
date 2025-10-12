@@ -236,30 +236,19 @@ class TrainingAdapter(AsyncServiceAdapter):
                 if training_config:
                     training_configuration.update(training_config)
 
+                # Load strategy YAML file
+                with open(strategy_config_path) as f:
+                    strategy_yaml_content = f.read()
+
                 response = await self._call_host_service_post(
                     "/training/start",
-                    {
-                        "model_configuration": {
-                            "strategy_config": strategy_config_path,
-                            "symbols": symbols,
-                            "timeframes": timeframes,
-                            "model_type": "mlp",
-                            "multi_symbol": len(symbols) > 1,
-                        },
-                        "training_configuration": training_configuration,
-                        "data_configuration": {
-                            "symbols": symbols,
-                            "timeframes": timeframes,
-                            "data_source": data_mode,
-                            # CRITICAL: Dates must be in data_configuration for host service
-                            "start_date": start_date,
-                            "end_date": end_date,
-                        },
-                        "gpu_configuration": {
-                            "enable_gpu": True,
-                            "memory_fraction": 0.8,
-                            "mixed_precision": True,
-                        },
+                    json={
+                        "strategy_yaml": strategy_yaml_content,
+                        # Runtime overrides
+                        "symbols": symbols,
+                        "timeframes": timeframes,
+                        "start_date": start_date,
+                        "end_date": end_date,
                     },
                 )
 

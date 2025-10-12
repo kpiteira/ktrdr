@@ -112,52 +112,32 @@ class TrainingHostClient:
 
         Args:
             config: Training configuration containing:
-                - strategy_config: Strategy configuration from YAML
-                - symbol: Trading symbol
-                - timeframes: List of timeframes
-                - training_params: Training parameters (epochs, validation_split, etc.)
-                - data_config: Data loading configuration
+                - strategy_path: Path to strategy YAML file (required)
+                - symbols: Optional list of symbols to override strategy
+                - timeframes: Optional list of timeframes to override strategy
+                - start_date: Optional start date override (YYYY-MM-DD)
+                - end_date: Optional end date override (YYYY-MM-DD)
 
         Returns:
             Session ID for the started training session
         """
         try:
-            # Prepare request payload for host service
-            # Support both single symbol and multi-symbol configurations
-            symbols = config.get(
-                "symbols", [config.get("symbol")] if config.get("symbol") else ["AAPL"]
-            )
+            # Load strategy YAML file
+            strategy_path = config.get("strategy_path")
+            if not strategy_path:
+                raise ValueError("strategy_path is required in config")
 
+            with open(strategy_path) as f:
+                strategy_yaml_content = f.read()
+
+            # Prepare request payload with YAML content + optional overrides
             request_payload = {
-                "model_configuration": {
-                    "strategy_config": config.get("strategy_config", {}),
-                    "symbols": symbols,  # Multi-symbol support
-                    "timeframes": config.get("timeframes", []),
-                    "model_type": config.get("model_type", "mlp"),
-                    "multi_symbol": config.get("multi_symbol", len(symbols) > 1),
-                },
-                "training_configuration": {
-                    "epochs": config.get("epochs", 100),
-                    "validation_split": config.get("validation_split", 0.2),
-                    "batch_size": config.get("batch_size", 32),
-                    "learning_rate": config.get("learning_rate", 0.001),
-                    "early_stopping": config.get("early_stopping", True),
-                },
-                "data_configuration": {
-                    "symbols": symbols,  # Multi-symbol support
-                    "timeframes": config.get("timeframes", []),
-                    "data_source": config.get("data_source", "local"),
-                    "indicators": config.get("indicators", []),
-                    "fuzzy_config": config.get("fuzzy_config", {}),
-                    # CRITICAL: Dates must be in data_config for host service to respect them
-                    "start_date": config.get("start_date"),
-                    "end_date": config.get("end_date"),
-                },
-                "gpu_configuration": {
-                    "enable_gpu": config.get("enable_gpu", True),
-                    "memory_fraction": config.get("gpu_memory_fraction", 0.8),
-                    "mixed_precision": config.get("mixed_precision", True),
-                },
+                "strategy_yaml": strategy_yaml_content,
+                # Runtime overrides (optional)
+                "symbols": config.get("symbols"),
+                "timeframes": config.get("timeframes"),
+                "start_date": config.get("start_date"),
+                "end_date": config.get("end_date"),
             }
 
             client = await self._get_client()
