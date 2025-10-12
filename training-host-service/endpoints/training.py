@@ -35,11 +35,19 @@ class TrainingStartRequest(BaseModel):
     """Request to start a training session."""
 
     session_id: Optional[str] = Field(default=None, description="Optional session ID")
-    model_configuration: dict[str, Any] = Field(description="Model configuration")
-    training_configuration: dict[str, Any] = Field(description="Training configuration")
-    data_configuration: dict[str, Any] = Field(description="Data configuration")
-    gpu_configuration: Optional[dict[str, Any]] = Field(
-        default=None, description="GPU-specific configuration"
+    strategy_yaml: str = Field(description="Strategy configuration as YAML string")
+    # Runtime overrides (optional)
+    symbols: Optional[list[str]] = Field(
+        default=None, description="Override symbols from strategy"
+    )
+    timeframes: Optional[list[str]] = Field(
+        default=None, description="Override timeframes from strategy"
+    )
+    start_date: Optional[str] = Field(
+        default=None, description="Override start date (YYYY-MM-DD)"
+    )
+    end_date: Optional[str] = Field(
+        default=None, description="Override end date (YYYY-MM-DD)"
     )
 
 
@@ -111,10 +119,12 @@ async def start_training(request: TrainingStartRequest):
 
         # Prepare configuration for training service
         config = {
-            "model_config": request.model_configuration,
-            "training_config": request.training_configuration,
-            "data_config": request.data_configuration,
-            "gpu_config": request.gpu_configuration or {},
+            "strategy_yaml": request.strategy_yaml,
+            # Runtime overrides (optional)
+            "symbols": request.symbols,
+            "timeframes": request.timeframes,
+            "start_date": request.start_date,
+            "end_date": request.end_date,
         }
 
         # Create training session
@@ -131,9 +141,7 @@ async def start_training(request: TrainingStartRequest):
             status="started",
             message=f"Training session {session_id} started successfully",
             gpu_allocated=gpu_allocated,
-            estimated_duration_minutes=request.training_configuration.get(
-                "estimated_duration_minutes"
-            ),
+            estimated_duration_minutes=None,  # Can be computed from strategy YAML if needed
         )
 
     except Exception as e:

@@ -85,12 +85,10 @@ class MockTrainingSession:
 def training_session():
     """Create a mock training session for testing."""
     config = {
-        "symbols": ["AAPL"],
-        "timeframes": ["1d"],
-        "start_date": "2024-01-01",
-        "end_date": "2024-12-31",
-        "strategy_config": {
+        "model_config": {
             "name": "test_strategy",
+            "symbols": ["AAPL"],  # Fallback location
+            "timeframes": ["1d"],  # Fallback location
             "model": {
                 "hidden_layers": [64, 32],
                 "dropout": 0.2,
@@ -103,6 +101,12 @@ def training_session():
             },
             "indicators": [],
             "fuzzy": {"rules": []},
+        },
+        "data_config": {
+            "symbols": ["AAPL"],  # Primary location
+            "timeframes": ["1d"],  # Primary location
+            "start_date": "2024-01-01",
+            "end_date": "2024-12-31",
         },
         "training_config": {
             "epochs": 10,
@@ -148,11 +152,11 @@ class TestHostTrainingOrchestratorInitialization:
             model_storage=model_storage,
         )
 
-        # Should extract symbols, timeframes, dates from session.config
-        assert orchestrator._session.config["symbols"] == ["AAPL"]
-        assert orchestrator._session.config["timeframes"] == ["1d"]
-        assert orchestrator._session.config["start_date"] == "2024-01-01"
-        assert orchestrator._session.config["end_date"] == "2024-12-31"
+        # Should extract symbols, timeframes, dates from session.config.data_config
+        assert orchestrator._session.config["data_config"]["symbols"] == ["AAPL"]
+        assert orchestrator._session.config["data_config"]["timeframes"] == ["1d"]
+        assert orchestrator._session.config["data_config"]["start_date"] == "2024-01-01"
+        assert orchestrator._session.config["data_config"]["end_date"] == "2024-12-31"
 
 
 class TestSessionCancellationToken:
@@ -527,8 +531,8 @@ class TestConfigExtraction:
 
     def test_handles_multi_symbol_config(self, training_session, model_storage):
         """Test handling of multi-symbol configuration."""
-        # Update session to have multiple symbols
-        training_session.config["symbols"] = ["AAPL", "MSFT", "GOOGL"]
+        # Update session to have multiple symbols in data_config
+        training_session.config["data_config"]["symbols"] = ["AAPL", "MSFT", "GOOGL"]
 
         from orchestrator import HostTrainingOrchestrator
 

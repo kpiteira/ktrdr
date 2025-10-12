@@ -122,13 +122,8 @@ class HostTrainingOrchestrator:
         """
         Execute training via TrainingPipeline.
 
-        Flow:
-        1. Extract configuration from session
-        2. Create throttled progress callback
-        3. Create session-based cancellation token
-        4. Call TrainingPipeline.train_strategy() (direct - no thread wrapper)
-        5. Add host metadata to result
-        6. Save model path to session artifacts
+        This method loads strategy YAML and calls TrainingPipeline, matching
+        LocalTrainingOrchestrator's approach. Runtime overrides are applied on top.
 
         Returns:
             Training result dict with model_path, metrics, and metadata
@@ -137,37 +132,42 @@ class HostTrainingOrchestrator:
             f"Starting host training orchestrator for session {self._session.session_id}"
         )
 
-        # Extract configuration from session
-        symbols = self._extract_symbols()
-        timeframes = self._extract_timeframes()
-        strategy_config = self._extract_strategy_config()
-        start_date = self._session.config.get("start_date")
-        end_date = self._session.config.get("end_date")
-        training_config = self._session.config.get("training_config", {})
-
-        # Create DataManager instance
-        data_manager = DataManager()
-
-        # Create throttled progress callback
-        progress_callback = self._create_throttled_progress_callback()
-
-        # Create session-based cancellation token
-        cancellation_token = SessionCancellationToken(self._session)
-
-        # Update session status
-        self._session.status = "running"
-        self._session.message = "Starting training pipeline"
-
         try:
+            # Load strategy config from YAML string
+            strategy_config = self._load_strategy_config()
+
+            # Extract runtime configuration from session (overrides)
+            symbols = self._extract_symbols(strategy_config)
+            timeframes = self._extract_timeframes(strategy_config)
+            start_date_str, end_date_str = self._extract_date_range()
+
+            logger.info(
+                f"Training configuration: {len(symbols)} symbols, {len(timeframes)} timeframes, "
+                f"date range: {start_date_str} to {end_date_str}"
+            )
+
+            # Create DataManager instance
+            data_manager = DataManager()
+
+            # Create throttled progress callback
+            progress_callback = self._create_throttled_progress_callback()
+
+            # Create session-based cancellation token
+            cancellation_token = SessionCancellationToken(self._session)
+
+            # Update session status
+            self._session.status = "running"
+            self._session.message = "Starting training pipeline"
+
             # Call TrainingPipeline.train_strategy() - direct async call
             result = TrainingPipeline.train_strategy(
                 symbols=symbols,
                 timeframes=timeframes,
                 strategy_config=strategy_config,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=start_date_str,
+                end_date=end_date_str,
                 model_storage=self._model_storage,
-                data_mode=training_config.get("data_mode", "local"),
+                data_mode="local",  # Always local for now
                 progress_callback=progress_callback,
                 cancellation_token=cancellation_token,
                 data_manager=data_manager,
@@ -249,17 +249,105 @@ class HostTrainingOrchestrator:
 
         return callback
 
-    def _extract_symbols(self) -> list[str]:
-        """Extract symbols from session configuration."""
-        return self._session.config.get("symbols", [])
+    def _load_strategy_config(self) -> dict[str, Any]:
+        """
+        Load and parse strategy configuration from YAML string.
 
-    def _extract_timeframes(self) -> list[str]:
-        """Extract timeframes from session configuration."""
-        return self._session.config.get("timeframes", [])
+        Returns:
+            Parsed strategy configuration dict
+        """
+        import yaml
 
-    def _extract_strategy_config(self) -> dict[str, Any]:
-        """Extract strategy configuration from session."""
-        return self._session.config.get("strategy_config", {})
+        strategy_yaml = self._session.config.get("strategy_yaml")
+        if not strategy_yaml:
+            raise ValueError("No strategy_yaml provided in session config")
+
+        return yaml.safe_load(strategy_yaml)
+
+    def _extract_symbols(self, strategy_config: dict[str, Any]) -> list[str]:
+        """
+        Extract symbols with runtime override support.
+
+        Args:
+            strategy_config: Parsed strategy configuration
+
+        Returns:
+            List of symbols to train on
+        """
+        # Runtime override takes precedence
+        override_symbols = self._session.config.get("symbols")
+        if override_symbols:
+            return (
+                override_symbols
+                if isinstance(override_symbols, list)
+                else [override_symbols]
+            )
+
+        # Extract from strategy YAML
+        training_data = strategy_config.get("training_data", {})
+        symbols_config = training_data.get("symbols", {})
+
+        if isinstance(symbols_config, dict):
+            return symbols_config.get("list", ["AAPL"])
+        elif isinstance(symbols_config, list):
+            return symbols_config
+        else:
+            return ["AAPL"]
+
+    def _extract_timeframes(self, strategy_config: dict[str, Any]) -> list[str]:
+        """
+        Extract timeframes with runtime override support.
+
+        Args:
+            strategy_config: Parsed strategy configuration
+
+        Returns:
+            List of timeframes to use
+        """
+        # Runtime override takes precedence
+        override_timeframes = self._session.config.get("timeframes")
+        if override_timeframes:
+            return (
+                override_timeframes
+                if isinstance(override_timeframes, list)
+                else [override_timeframes]
+            )
+
+        # Extract from strategy YAML
+        training_data = strategy_config.get("training_data", {})
+        timeframes_config = training_data.get("timeframes", {})
+
+        if isinstance(timeframes_config, dict):
+            return timeframes_config.get("list", ["1d"])
+        elif isinstance(timeframes_config, list):
+            return timeframes_config
+        else:
+            return ["1d"]
+
+    def _extract_date_range(self) -> tuple[str, str]:
+        """
+        Extract date range with fallback to 1 year.
+
+        Returns:
+            Tuple of (start_date, end_date) as strings
+        """
+        from datetime import datetime, timedelta
+
+        # Runtime overrides
+        start_date = self._session.config.get("start_date")
+        end_date = self._session.config.get("end_date")
+
+        # Fallback to 1 year if not provided
+        if not start_date or not end_date:
+            end_date_dt = datetime.utcnow()
+            start_date_dt = end_date_dt - timedelta(days=365)
+            start_date = start_date_dt.strftime("%Y-%m-%d")
+            end_date = end_date_dt.strftime("%Y-%m-%d")
+            logger.warning(
+                f"No date range provided, using default: {start_date} to {end_date}"
+            )
+
+        return start_date, end_date
 
     def _get_device_info(self) -> dict[str, Any]:
         """
