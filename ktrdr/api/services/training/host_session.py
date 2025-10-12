@@ -109,17 +109,31 @@ class HostSessionManager:
         )
 
         try:
+            poll_iteration = 0
             while True:
+                poll_iteration += 1
+                logger.info(
+                    f"🔍 POLL ITERATION {poll_iteration}: Checking status for session {session_id}, interval={interval}s"
+                )
                 self._ensure_not_cancelled()
 
                 try:
+                    logger.info(
+                        f"🔍 POLL ITERATION {poll_iteration}: Calling get_training_status()..."
+                    )
                     snapshot = await self._adapter.get_training_status(session_id)
+                    logger.info(
+                        f"🔍 POLL ITERATION {poll_iteration}: Got status={snapshot.get('status')}, retries={retries}"
+                    )
                     retries = 0
                     interval = min(
                         self._max_poll_interval, interval * self._backoff_factor
                     )
                 except Exception as exc:  # pragma: no cover - network failure path
                     retries += 1
+                    logger.error(
+                        f"🔍 POLL ITERATION {poll_iteration}: Exception during status check: {type(exc).__name__}: {exc}"
+                    )
                     if retries > self._max_retries:
                         logger.error(
                             "Polling failed for session %s after %s retries: %s",
@@ -145,6 +159,9 @@ class HostSessionManager:
                 self._bridge.on_remote_snapshot(snapshot)
 
                 status = str(snapshot.get("status") or "").lower()
+                logger.info(
+                    f"🔍 POLL ITERATION {poll_iteration}: Status is '{status}', checking if terminal..."
+                )
                 if status in _TERMINAL_SUCCESS:
                     self._bridge.on_complete(
                         f"Remote training session {session_id} completed"
@@ -164,7 +181,13 @@ class HostSessionManager:
                     self._bridge.on_phase("failed", message=error_message)
                     raise RuntimeError(error_message)
 
+                logger.info(
+                    f"🔍 POLL ITERATION {poll_iteration}: Status not terminal, sleeping {interval}s before next poll"
+                )
                 await asyncio.sleep(interval)
+                logger.info(
+                    f"🔍 POLL ITERATION {poll_iteration}: Sleep complete, looping back for next iteration"
+                )
         except CancellationError:
             await self.cancel_session()
             raise
