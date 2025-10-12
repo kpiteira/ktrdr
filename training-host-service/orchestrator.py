@@ -183,10 +183,6 @@ class HostTrainingOrchestrator:
             }
             result["session_id"] = self._session.session_id
 
-            # Store model_path in session artifacts
-            if "model_path" in result:
-                self._session.artifacts["model_path"] = result["model_path"]
-
             # Update session status
             self._session.status = "completed"
             self._session.message = "Training completed successfully"
