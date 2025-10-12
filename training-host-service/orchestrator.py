@@ -159,18 +159,29 @@ class HostTrainingOrchestrator:
             self._session.status = "running"
             self._session.message = "Starting training pipeline"
 
-            # Call TrainingPipeline.train_strategy() - direct async call
-            result = TrainingPipeline.train_strategy(
-                symbols=symbols,
-                timeframes=timeframes,
-                strategy_config=strategy_config,
-                start_date=start_date_str,
-                end_date=end_date_str,
-                model_storage=self._model_storage,
-                data_mode="local",  # Always local for now
-                progress_callback=progress_callback,
-                cancellation_token=cancellation_token,
-                data_manager=data_manager,
+            # CRITICAL: Run training in thread pool to avoid blocking the async event loop
+            # TrainingPipeline.train_strategy() is CPU-bound synchronous code that takes
+            # 18+ seconds. If we call it directly, it blocks the FastAPI event loop and
+            # prevents /status endpoint from responding during training.
+            import asyncio
+            import functools
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,  # Use default executor (ThreadPoolExecutor)
+                functools.partial(
+                    TrainingPipeline.train_strategy,
+                    symbols=symbols,
+                    timeframes=timeframes,
+                    strategy_config=strategy_config,
+                    start_date=start_date_str,
+                    end_date=end_date_str,
+                    model_storage=self._model_storage,
+                    data_mode="local",
+                    progress_callback=progress_callback,
+                    cancellation_token=cancellation_token,
+                    data_manager=data_manager,
+                ),
             )
 
             # Add host metadata
