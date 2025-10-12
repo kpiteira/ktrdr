@@ -428,56 +428,222 @@ See [APPENDIX C](#appendix-c-task-31-reference-implementation) for complete code
 
 ---
 
-### TASK-3.2: Cleanup and Documentation
+### TASK-3.2: Cleanup and Deletion of Deprecated Code
 
 #### Plan
 
-**Objective**: Mark deprecated code, update documentation to reflect new architecture, and document performance optimizations.
+**Objective**: DELETE deprecated code and files that are no longer used after Phase 2 refactoring.
 
-**Why**: Clean up transition artifacts, provide clear migration path, document lessons learned.
+**Why**: Eliminate technical debt, ensure single source of truth, prevent confusion about which code to use. After thorough codebase analysis, this task removes ~1,800+ lines of deprecated code.
 
-**What Changes**:
-- Mark `StrategyTrainer` as deprecated:
-  - Add `@deprecated` warning
-  - Document migration path to orchestrators
-  - Keep functional for backward compatibility (Phase 3 will remove)
-- Update architecture documentation:
-  - Mark TrainingPipeline methods as implemented
-  - Document orchestrators
-  - Add performance optimization notes
-- Create PERFORMANCE.md:
-  - Document 29× speedup from removing sleep
-  - Explain throttling strategy
-  - Provide configuration guidance
-- Update README/relevant docs:
-  - Reflect new architecture
-  - Update training examples
+**CRITICAL FINDINGS FROM CODEBASE ANALYSIS**:
 
-**Architectural Decisions**:
-1. **Deprecate, don't delete** → Gives users time to migrate
-2. **Document performance wins** → Helps others avoid similar mistakes
-3. **Clear migration path** → Users know how to update their code
+Based on exhaustive investigation, the following components MUST be deleted:
 
-**Risks & Mitigations**:
-- **Risk**: Users miss deprecation warning
-  - **Mitigation**: Warning logged on every use
+---
+
+**DELETION #1: result_aggregator.py (255 lines) - DEFERRED TO TASK-3.3**
+
+**File**: `ktrdr/api/services/training/result_aggregator.py`
+
+**Status**: Used ONLY by HostSessionManager
+**Reason for Deletion**: Task 3.3 will fix host service to return TrainingPipeline result directly
+
+**IMPORTANT: DO NOT DELETE IN TASK-3.2!**
+- Keep result_aggregator.py working during Task 3.2 cleanup
+- This allows running both local and host training to verify everything works
+- Delete ONLY after Task 3.3 is complete and verified (see Task 3.3 acceptance criteria)
+
+**Why It Exists**:
+- Host service status endpoint returns SESSION METADATA format
+- TrainingPipeline returns TRAINING RESULT format
+- result_aggregator transforms one into the other
+- Task 3.3 fixes host service to store and return training result directly
+
+**Dependencies**: Complete TASK-3.3 first (fix host service result storage), then delete this
+
+---
+
+**DELETION #2: train_strategy.py - StrategyTrainer class (1,417 lines)**
+
+**File**: `ktrdr/training/train_strategy.py`
+
+**Status**: ONLY used by TrainingAdapter local mode
+**Reason for Deletion**: LocalTrainingOrchestrator and HostTrainingOrchestrator replace it
+
+**What to Delete**:
+- [ ] Delete `ktrdr/training/train_strategy.py` (entire file - 1,417 lines)
+- [ ] Remove import from `ktrdr/training/__init__.py`
+- [ ] Update all test files that import StrategyTrainer
+
+**Evidence StrategyTrainer is Unused**:
+- ✅ LocalTrainingOrchestrator uses TrainingPipeline directly (NOT StrategyTrainer)
+- ✅ HostTrainingOrchestrator uses TrainingPipeline directly (NOT StrategyTrainer)
+- ✅ TrainingService routes to orchestrators (NOT StrategyTrainer)
+- ⚠️ ONLY TrainingAdapter local mode still uses it (lines 84-86, 282-292)
+
+**Action**: First complete TrainingAdapter cleanup (see DELETION #3), then delete this file
+
+---
+
+**DELETION #3: TrainingAdapter Local Training Code (~200 lines)**
+
+**File**: `ktrdr/training/training_adapter.py`
+
+**Problem Found**: TrainingAdapter has deprecated local training code that BYPASSES LocalTrainingOrchestrator!
+
+**What's Wrong**:
+- Lines 82-86: Imports and instantiates StrategyTrainer for local mode
+- Lines 273-292: Calls `self.local_trainer.train_multi_symbol_strategy()` directly
+- This BYPASSES LocalTrainingOrchestrator entirely
+- BUT: TrainingService DOES use LocalTrainingOrchestrator (correctly)
+- Result: TrainingAdapter local code is NEVER CALLED (dead code!)
+
+**Root Cause**:
+- TrainingAdapter was designed BEFORE Phase 2 orchestrator refactoring
+- It was a "dual-mode" adapter (local OR host)
+- Phase 2 introduced orchestrators, so now:
+  - Local mode: TrainingService → LocalTrainingOrchestrator ✅
+  - Host mode: TrainingService → TrainingAdapter → Host Service ✅
+- Adapter is now HOST-SERVICE-ONLY, but still has dead local code
+
+**What to Delete**:
+- [ ] Delete lines 82-87: StrategyTrainer import and instantiation
+  ```python
+  # DELETE THIS:
+  if not use_host_service:
+      from .train_strategy import StrategyTrainer
+      self.local_trainer: Optional[StrategyTrainer] = StrategyTrainer()
+  else:
+      self.local_trainer = None
+  ```
+- [ ] Delete lines 273-292: Local training execution path
+  ```python
+  # DELETE THIS:
+  else:
+      # Use local training (existing behavior)
+      logger.info(f"Starting local training for {symbols} on {timeframes}")
+
+      if self.local_trainer is None:
+          raise TrainingProviderError(...)
+
+      return self.local_trainer.train_multi_symbol_strategy(...)
+  ```
+- [ ] Simplify `__init__` to require `use_host_service=True`
+- [ ] Update tests using `TrainingAdapter(use_host_service=False)`
+
+**After Cleanup, TrainingAdapter becomes**:
+- Host-service-only communication layer
+- No local training code
+- Clear single responsibility
+
+---
+
+**DELETION #4: MultiSymbolMLPTradingModel class (~150 lines)**
+
+**File**: `ktrdr/neural/models/mlp.py`
+
+**Status**: ONLY used by StrategyTrainer (which is being deleted)
+**Reason for Deletion**: Phase 2 architecture specifies symbol-agnostic design (NO embeddings)
+
+**What to Delete**:
+- [ ] Delete `MultiSymbolMLPTradingModel` class (lines 188+, ~150 lines)
+- [ ] Delete `MultiSymbolMLP` nn.Module class (if exists)
+- [ ] Delete any helper classes for symbol embeddings
+
+**Evidence It's Unused**:
+- ✅ Only imported in `train_strategy.py` (line 1274) - training code
+- ✅ Only instantiated in `train_strategy.py` (line 1276) - during training
+- ✅ NOT used in inference (backtesting/trading uses MLPTradingModel)
+- ✅ Existing saved models are MLPTradingModel (model_type: "Sequential")
+- ✅ NO imports in backtesting or trading code
+
+**Architecture Decision** (from 03-architecture.md, Task 2.0):
+- "NO symbol embeddings - Model sees only technical indicators and fuzzy memberships"
+- "Strategies are symbol-agnostic"
+- Multi-symbol training = sequential concatenation (AAPL all → MSFT all → etc.)
+- Uses regular `MLPTradingModel`, not `MultiSymbolMLPTradingModel`
+
+**Contradiction in Codebase**:
+- Architecture doc says: NO embeddings
+- Old code still has: MultiSymbolMLPTradingModel with embeddings
+- Resolution: Architecture is correct, old code is deprecated
+
+---
+
+**DELETION SUMMARY**:
+
+| File/Component | Lines | Status | Reason |
+|----------------|-------|--------|--------|
+| result_aggregator.py | 255 | **KEEP in 3.2, delete in 3.3** | Host service will return TrainingPipeline format |
+| train_strategy.py | 1,417 | Delete in 3.2 (after adapter cleanup) | Replaced by orchestrators |
+| TrainingAdapter local code | ~200 | Delete in 3.2 | Dead code bypassing orchestrators |
+| MultiSymbolMLPTradingModel | ~150 | Delete in 3.2 (with train_strategy) | Contradicts symbol-agnostic architecture |
+| **TOTAL (3.2)** | **~1,750** | **Delete in 3.2** | **Phase 2 complete, old code obsolete** |
+| **TOTAL (3.3)** | **+255** | **Delete after verification** | **After harmonization verified** |
+| **GRAND TOTAL** | **~2,000** | **Delete across 3.2 + 3.3** | **Eliminates all deprecated code** |
+
+---
+
+**DOCUMENTATION UPDATES**:
+
+1. **Update 03-architecture.md**:
+   - [ ] Mark TrainingPipeline methods as implemented
+   - [ ] Document orchestrators as canonical training pattern
+   - [ ] Remove all references to StrategyTrainer
+   - [ ] Add performance optimization section
+   - [ ] Clarify symbol-agnostic design (no embeddings)
+
+2. **Update inline comments**:
+   - [ ] Remove "TODO: delete StrategyTrainer" comments
+   - [ ] Update code referencing old patterns
+
+---
+
+**ARCHITECTURAL DECISIONS**:
+
+1. **DELETE, don't deprecate** → Phase 2 complete means old code should be removed
+2. **Single source of truth** → Orchestrators + TrainingPipeline are the ONLY way
+3. **Symbol-agnostic design** → NO embeddings, strategies work on any symbol
+4. **Host adapter is host-only** → No local training code in adapter
+
+---
+
+**RISKS & MITIGATIONS**:
+
+- **Risk**: Deleting StrategyTrainer breaks existing code
+  - **Mitigation**: Only TrainingAdapter uses it; refactor adapter first (DELETION #3)
+- **Risk**: Breaking change for external consumers
+  - **Mitigation**: StrategyTrainer was internal-only; orchestrators are the public API
 - **Risk**: Documentation gets out of sync
-  - **Mitigation**: Update all references in single commit
+  - **Mitigation**: Update all references in same commit as deletion
+- **Risk**: Deleting multi-symbol logic removes useful feature
+  - **Mitigation**: Multi-symbol still supported via symbol-agnostic design (Task 2.0)
 
-**Dependencies**: TASK-2.1 and TASK-3.1 (orchestrators must exist for migration)
+---
 
-**Estimated Effort**: 0.5 days
+**DEPENDENCIES**:
+
+- TASK-2.1 complete (LocalTrainingOrchestrator exists)
+- TASK-3.1 complete (HostTrainingOrchestrator exists)
+- **DO NOT** depend on TASK-3.3 (keep result_aggregator working for verification!)
+
+**ESTIMATED EFFORT**: 1 day
 
 #### Acceptance Criteria
 
-**Code Deprecation**:
-- [ ] StrategyTrainer marked @deprecated
-  - [ ] warnings.warn() called in __init__
-  - [ ] Docstring updated with migration guide
-  - [ ] Still functional (backward compatible)
-- [ ] No broken references in codebase
-  - [ ] All imports still work
-  - [ ] Deprecation warning appears in tests
+**Code Deletion**:
+- [ ] result_aggregator.py **KEPT** (do not delete!)
+  - [ ] Verify it's still working for host training
+  - [ ] Will be deleted in TASK-3.3 after verification
+- [ ] StrategyTrainer DELETED
+  - [ ] train_strategy.py removed from imports
+  - [ ] TrainingAdapter refactored to use orchestrators
+  - [ ] All tests updated
+- [ ] Multi-symbol embedding code DELETED or CLARIFIED
+  - [ ] Decision documented
+  - [ ] If deleted: MultiSymbolMLPTradingModel removed
+  - [ ] If kept: Architecture doc updated to explain embeddings
 
 **Documentation Updates**:
 - [ ] 03-architecture.md updated
@@ -517,7 +683,511 @@ See [APPENDIX D](#appendix-d-task-32-reference-implementation) for:
 
 ---
 
-### TASK-3.3: Manual E2E Validation (Karl Leads)
+### TASK-3.3: Fix Host Service Result Storage and Aggregation
+
+#### Plan
+
+**Objective**: Eliminate result_aggregator.py by fixing host service to store and return TrainingPipeline result format directly, following the architectural principle that TrainingPipeline is responsible for standardizing training output.
+
+**Why This is Critical**: The current discrepancy between local and host result formats violates the "shared work, separate coordination" principle from 03-architecture.md. TrainingPipeline already returns standardized format—host service should preserve it, not transform it.
+
+**Current Problem**:
+
+```
+LOCAL FLOW (Correct):
+  LocalTrainingOrchestrator
+    ↓ calls
+  TrainingPipeline.train_strategy()
+    ↓ returns
+  {"model_path": ..., "training_metrics": {...}, "test_metrics": {...}, ...}
+    ↓ adds session metadata
+  LocalTrainingOrchestrator returns SAME FORMAT
+    ↓
+  TrainingService receives TrainingPipeline format ✅
+
+HOST FLOW (Broken):
+  HostTrainingOrchestrator
+    ↓ calls
+  TrainingPipeline.train_strategy()
+    ↓ returns
+  {"model_path": ..., "training_metrics": {...}, "test_metrics": {...}, ...}
+    ↓ BUT THEN...
+  TrainingSession stores progress/metrics in DIFFERENT FORMAT
+    ↓
+  Status endpoint returns SESSION METADATA (not training result!)
+    ↓
+  result_aggregator.from_host_run() transforms it BACK
+    ↓
+  TrainingService receives reconstructed format ❌
+```
+
+**Root Cause Analysis**:
+
+1. **TrainingSession** (training-host-service/services/training_service.py:25-69) stores:
+   - Progress tracking fields: `current_epoch`, `current_batch`, `metrics`
+   - Session metadata: `status`, `message`, `error`
+   - Resource managers: `gpu_manager`, `memory_manager`
+   - **MISSING**: The actual TrainingPipeline result!
+
+2. **Status endpoint** (training-host-service/services/training_service.py:~300) returns:
+   - Session progress dict (not training result)
+   - Metrics from session state (not from TrainingPipeline)
+   - **MISSING**: `model_path`, `artifacts`, proper `test_metrics`
+
+3. **HostSessionManager** (ktrdr/api/services/training/host_session.py:57) calls:
+   - `from_host_run(context, host_snapshot)` to reconstruct result
+   - This is architectural violation—TrainingPipeline already standardized it!
+
+**Architectural Principle Violated**:
+
+From 03-architecture.md:
+> **TrainingPipeline Responsibility**: Execute pure training transformations, return standardized output
+> **Orchestrator Responsibility**: Handle environment-specific coordination, add session metadata
+
+**Current violation**: Host service discards TrainingPipeline output and reconstructs it later via result_aggregator.
+
+---
+
+**Solution Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ TrainingPipeline (Shared Work Logic)                       │
+│ - Responsibility: Standardize training output format        │
+│ - Returns: Complete training result with all metrics       │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ↓ (returns standardized result)
+         ┌─────────────────────────────┐
+         │                             │
+         ↓                             ↓
+┌────────────────────┐        ┌────────────────────┐
+│ LocalOrchestrator  │        │ HostOrchestrator   │
+│ - Add session_info │        │ - Store in session │
+│ - Return result    │        │ - Add session_id   │
+└────────────────────┘        └────────┬───────────┘
+         │                             │
+         ↓                             ↓
+    (returns result)         (session stores result)
+                                      │
+                                      ↓
+                            ┌──────────────────────┐
+                            │ Status Endpoint      │
+                            │ - Return stored      │
+                            │   training result    │
+                            │ - Add status/progress│
+                            └──────────┬───────────┘
+                                      │
+                                      ↓
+                            ┌──────────────────────┐
+                            │ HostSessionManager   │
+                            │ - Return snapshot    │
+                            │   directly (NO       │
+                            │   aggregation!)      │
+                            └──────────────────────┘
+```
+
+**Key Insight**: Host service should store the TrainingPipeline result AS-IS, then return it when status = "completed". No transformation needed!
+
+---
+
+**What Changes**:
+
+**CHANGE #1: TrainingSession stores training result**
+
+File: `training-host-service/services/training_service.py`
+
+Add field to store complete training result:
+
+```python
+class TrainingSession:
+    def __init__(self, session_id: str, config: dict[str, Any]):
+        # ... existing fields ...
+
+        # NEW: Store complete training result from TrainingPipeline
+        self.training_result: Optional[dict[str, Any]] = None
+```
+
+**CHANGE #2: HostTrainingOrchestrator stores result in session**
+
+File: `training-host-service/orchestrator.py` (lines 185-205)
+
+```python
+# After TrainingPipeline.train_strategy() returns:
+result = await loop.run_in_executor(...)
+
+# Add host metadata (keep existing)
+result["resource_usage"] = {...}
+result["session_id"] = self._session.session_id
+
+# NEW: Store complete result in session
+self._session.training_result = result
+
+# Update session status
+self._session.status = "completed"
+self._session.message = "Training completed successfully"
+
+return result
+```
+
+**CHANGE #3: Status endpoint returns training result when complete**
+
+File: `training-host-service/services/training_service.py` (status endpoint)
+
+```python
+def get_session_status(self, session_id: str) -> dict[str, Any]:
+    """Get detailed status of a training session."""
+    if session_id not in self.sessions:
+        raise Exception(f"Session {session_id} not found")
+
+    session = self.sessions[session_id]
+
+    # NEW: If training complete, return the actual training result
+    if session.status == "completed" and session.training_result:
+        return {
+            **session.training_result,  # TrainingPipeline format!
+            "session_id": session_id,
+            "status": session.status,
+            "start_time": session.start_time.isoformat(),
+            "last_updated": session.last_updated.isoformat(),
+        }
+
+    # Otherwise return progress (for "running" status)
+    return {
+        "session_id": session_id,
+        "status": session.status,
+        "progress": session.get_progress_dict(),
+        "metrics": {"current": session.metrics, "best": session.best_metrics},
+        "resource_usage": session.get_resource_usage(),
+        "start_time": session.start_time.isoformat(),
+        "last_updated": session.last_updated.isoformat(),
+        "error": session.error,
+    }
+```
+
+**CHANGE #4: HostSessionManager returns snapshot directly**
+
+File: `ktrdr/api/services/training/host_session.py` (line 51-57)
+
+```python
+async def run(self) -> dict[str, Any]:
+    """Start the host session and poll until completion."""
+    await self.start_session()
+    host_snapshot = await self.poll_session()
+
+    # NEW: Return snapshot directly (NO aggregation!)
+    # When status=completed, snapshot IS the TrainingPipeline result
+    return host_snapshot
+```
+
+**CHANGE #5: Delete result_aggregator.py** (FINAL STEP - after verification)
+
+After above changes are complete and verified working, delete result_aggregator:
+
+- [ ] Delete `ktrdr/api/services/training/result_aggregator.py`
+- [ ] Remove import from `ktrdr/api/services/training/__init__.py`
+- [ ] Remove import from `ktrdr/api/services/training/host_session.py`
+- [ ] Delete test file `tests/unit/api/services/training/test_result_aggregator.py`
+
+**IMPORTANT**: This is the LAST step. Do not delete until all verification tests pass!
+
+---
+
+**Architectural Benefits**:
+
+1. **Single Source of Truth**: TrainingPipeline is THE authoritative source of result format
+2. **No Duplication**: Result format defined once, used everywhere
+3. **Local/Host Equivalence**: Both paths return identical structure
+4. **Simplified Code**: Remove 255 lines of transformation logic
+5. **Principle Compliance**: Shared work (pipeline), separate coordination (orchestrators)
+
+---
+
+**Testing Strategy**:
+
+1. **Unit test**: TrainingSession stores and retrieves training_result
+2. **Integration test**: Status endpoint returns correct format when completed
+3. **E2E test**: Full training flow returns identical format to local
+4. **Comparison test**: Assert local and host results have same schema
+
+---
+
+**Verification Logging**:
+
+To enable easy verification that local and host training return harmonized results, add structured logging at key points:
+
+**LOG #1: LocalTrainingOrchestrator result structure (ktrdr/api/services/training/local_orchestrator.py)**
+
+```python
+async def run(self) -> dict[str, Any]:
+    # ... training execution ...
+
+    result["session_info"] = {
+        "operation_id": self._context.operation_id,
+        "strategy_name": self._context.strategy_name,
+        # ...
+    }
+
+    # NEW: Log result structure for verification
+    logger.info("=" * 80)
+    logger.info("LOCAL TRAINING RESULT STRUCTURE")
+    logger.info(f"  Keys: {list(result.keys())}")
+    logger.info(f"  model_path: {result.get('model_path')}")
+    logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
+    logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+    logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
+    logger.info(f"  session_info keys: {list(result.get('session_info', {}).keys())}")
+    logger.info("=" * 80)
+
+    return result
+```
+
+**LOG #2: HostTrainingOrchestrator result before storing (training-host-service/orchestrator.py)**
+
+```python
+async def run(self) -> dict[str, Any]:
+    # ... training execution ...
+
+    result["resource_usage"] = {...}
+    result["session_id"] = self._session.session_id
+
+    # NEW: Log result structure BEFORE storing in session
+    logger.info("=" * 80)
+    logger.info("HOST TRAINING RESULT STRUCTURE (before storing)")
+    logger.info(f"  Keys: {list(result.keys())}")
+    logger.info(f"  model_path: {result.get('model_path')}")
+    logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
+    logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+    logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
+    logger.info(f"  resource_usage keys: {list(result.get('resource_usage', {}).keys())}")
+    logger.info("=" * 80)
+
+    # Store in session
+    self._session.training_result = result
+
+    return result
+```
+
+**LOG #3: Status endpoint when returning completed result (training-host-service/services/training_service.py)**
+
+```python
+def get_session_status(self, session_id: str) -> dict[str, Any]:
+    session = self.sessions[session_id]
+
+    if session.status == "completed" and session.training_result:
+        result = {
+            **session.training_result,
+            "session_id": session_id,
+            "status": session.status,
+            # ...
+        }
+
+        # NEW: Log result structure being returned
+        logger.info("=" * 80)
+        logger.info(f"STATUS ENDPOINT RETURNING COMPLETED RESULT (session {session_id})")
+        logger.info(f"  Keys: {list(result.keys())}")
+        logger.info(f"  model_path: {result.get('model_path')}")
+        logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
+        logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+        logger.info(f"  artifacts keys: {list(result.get('artifacts', {}).keys())}")
+        logger.info(f"  session_id: {result.get('session_id')}")
+        logger.info("=" * 80)
+
+        return result
+```
+
+**LOG #4: HostSessionManager final result (ktrdr/api/services/training/host_session.py)**
+
+```python
+async def run(self) -> dict[str, Any]:
+    await self.start_session()
+    host_snapshot = await self.poll_session()
+
+    # NEW: Log final result structure
+    logger.info("=" * 80)
+    logger.info("HOST SESSION MANAGER FINAL RESULT")
+    logger.info(f"  Keys: {list(host_snapshot.keys())}")
+    logger.info(f"  model_path: {host_snapshot.get('model_path')}")
+    logger.info(f"  training_metrics keys: {list(host_snapshot.get('training_metrics', {}).keys())}")
+    logger.info(f"  test_metrics keys: {list(host_snapshot.get('test_metrics', {}).keys())}")
+    logger.info(f"  artifacts keys: {list(host_snapshot.get('artifacts', {}).keys())}")
+    logger.info(f"  session_id: {host_snapshot.get('session_id')}")
+    logger.info(f"  status: {host_snapshot.get('status')}")
+    logger.info("=" * 80)
+
+    return host_snapshot
+```
+
+**Verification Test Script**:
+
+Create a test script that runs identical training on both paths and compares logs:
+
+```bash
+#!/bin/bash
+# verify_result_harmonization.sh
+
+echo "=== Running LOCAL training ==="
+ktrdr models train \
+  --strategy config/strategies/example.yaml \
+  --symbols AAPL \
+  --timeframes 1d \
+  --start-date 2024-01-01 \
+  --end-date 2024-12-31 \
+  2>&1 | tee local_training.log
+
+echo ""
+echo "=== Running HOST training ==="
+USE_TRAINING_HOST_SERVICE=true ktrdr models train \
+  --strategy config/strategies/example.yaml \
+  --symbols AAPL \
+  --timeframes 1d \
+  --start-date 2024-01-01 \
+  --end-date 2024-12-31 \
+  2>&1 | tee host_training.log
+
+echo ""
+echo "=== Extracting result structures ==="
+grep -A 10 "LOCAL TRAINING RESULT STRUCTURE" local_training.log > local_structure.txt
+grep -A 10 "HOST SESSION MANAGER FINAL RESULT" host_training.log > host_structure.txt
+
+echo ""
+echo "=== Comparison ==="
+echo "LOCAL structure:"
+cat local_structure.txt
+echo ""
+echo "HOST structure:"
+cat host_structure.txt
+
+echo ""
+echo "=== VERIFICATION ==="
+echo "Both should have identical keys:"
+echo "  - model_path"
+echo "  - training_metrics"
+echo "  - test_metrics"
+echo "  - artifacts"
+echo "  - model_info"
+echo "  - data_summary"
+echo "  - session_info (local) / session_id (host)"
+echo "  - resource_usage"
+```
+
+**Expected Log Output** (harmonized):
+
+```
+================================================================================
+LOCAL TRAINING RESULT STRUCTURE
+  Keys: ['model_path', 'training_metrics', 'test_metrics', 'artifacts', 'model_info', 'data_summary', 'session_info', 'resource_usage']
+  model_path: /path/to/model.pt
+  training_metrics keys: ['final_train_loss', 'final_val_loss', 'final_train_accuracy', ...]
+  test_metrics keys: ['test_accuracy', 'test_loss', 'precision', 'recall', 'f1_score']
+  artifacts keys: ['feature_importance', 'per_symbol_metrics']
+  session_info keys: ['operation_id', 'strategy_name', 'symbols', 'timeframes', ...]
+================================================================================
+
+================================================================================
+HOST SESSION MANAGER FINAL RESULT
+  Keys: ['model_path', 'training_metrics', 'test_metrics', 'artifacts', 'model_info', 'data_summary', 'resource_usage', 'session_id', 'status', 'start_time', 'last_updated']
+  model_path: /path/to/model.pt
+  training_metrics keys: ['final_train_loss', 'final_val_loss', 'final_train_accuracy', ...]
+  test_metrics keys: ['test_accuracy', 'test_loss', 'precision', 'recall', 'f1_score']
+  artifacts keys: ['feature_importance', 'per_symbol_metrics']
+  session_id: abc-123-def
+  status: completed
+================================================================================
+```
+
+**Success Criteria**:
+- [ ] Both logs show identical core keys (model_path, training_metrics, test_metrics, artifacts)
+- [ ] Training metrics have same structure (final_train_loss, final_val_loss, etc.)
+- [ ] Test metrics have same structure (test_accuracy, precision, recall, f1_score)
+- [ ] model_path exists in both
+- [ ] Only difference: local has session_info, host has session_id/status/timestamps
+
+**Manual Verification Required**:
+- [ ] Run `verify_result_harmonization.sh` script
+- [ ] Compare local_structure.txt and host_structure.txt
+- [ ] Verify both trainings completed successfully
+- [ ] Confirm log output shows harmonized results
+- [ ] **ONLY AFTER verification passes, proceed to delete result_aggregator.py**
+
+---
+
+**Risks & Mitigations**:
+
+- **Risk**: Status endpoint returns different structure during polling vs completion
+  - **Mitigation**: Document this behavior; polling returns progress, completion returns result
+- **Risk**: Breaking change for any code parsing status response
+  - **Mitigation**: This is internal API; only HostSessionManager uses it
+- **Risk**: Training result might be large for session storage
+  - **Mitigation**: Results are small (< 10KB typically); acceptable for in-memory storage
+
+---
+
+**Dependencies**:
+
+- TASK-3.1 complete (HostTrainingOrchestrator exists)
+- TrainingPipeline returns standardized format (TASK-2.0 complete)
+
+**Estimated Effort**: 0.5 days (straightforward refactoring)
+
+#### Acceptance Criteria
+
+**TrainingSession**:
+- [ ] Add `training_result` field to store complete result
+- [ ] Field is Optional[dict[str, Any]]
+- [ ] Initially None, set when training completes
+
+**HostTrainingOrchestrator**:
+- [ ] Stores TrainingPipeline result in session.training_result
+- [ ] Result stored BEFORE setting status = "completed"
+- [ ] Result includes all fields from TrainingPipeline
+
+**Status Endpoint**:
+- [ ] Returns training_result when status = "completed"
+- [ ] Returns progress dict when status = "running"
+- [ ] Includes session metadata in both cases
+- [ ] Schema documented clearly
+
+**HostSessionManager**:
+- [ ] Returns host snapshot directly (no aggregation)
+- [ ] No longer calls from_host_run()
+- [ ] Result matches LocalTrainingOrchestrator format
+
+**Result Aggregator Deletion** (FINAL STEP):
+- [ ] **WAIT**: Verify harmonization works first using verification script
+- [ ] Run both local and host training with same parameters
+- [ ] Confirm logs show identical result structures
+- [ ] **THEN** delete `ktrdr/api/services/training/result_aggregator.py`
+- [ ] Remove import from `ktrdr/api/services/training/__init__.py`
+- [ ] Remove import from `ktrdr/api/services/training/host_session.py`
+- [ ] Delete test file `tests/unit/api/services/training/test_result_aggregator.py`
+- [ ] No references remain
+
+**Schema Validation**:
+- [ ] Local and host results have identical schema
+- [ ] Both include: model_path, training_metrics, test_metrics, artifacts, model_info
+- [ ] Both include session_info (orchestrator-added)
+- [ ] Integration test verifies schema equivalence
+
+**Code Quality**:
+- [ ] Clear comments explaining dual-mode status endpoint
+- [ ] Type hints on training_result field
+- [ ] Documentation updated
+
+#### Files Modified
+
+- `training-host-service/services/training_service.py` - Add training_result field, update status endpoint, add verification logging
+- `training-host-service/orchestrator.py` - Store result in session, add verification logging
+- `ktrdr/api/services/training/local_orchestrator.py` - Add verification logging
+- `ktrdr/api/services/training/host_session.py` - Remove from_host_run() call, add verification logging
+- `verify_result_harmonization.sh` - CREATE (verification script)
+- `ktrdr/api/services/training/result_aggregator.py` - DELETE (AFTER verification passes!)
+- `ktrdr/api/services/training/__init__.py` - Remove import (AFTER verification)
+- `tests/unit/api/services/training/test_result_aggregator.py` - DELETE (AFTER verification)
+
+---
+
+### TASK-3.4: Manual E2E Validation (Karl Leads)
 
 #### Plan
 
