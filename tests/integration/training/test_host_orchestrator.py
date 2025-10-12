@@ -84,36 +84,43 @@ class MockTrainingSession:
 @pytest.fixture
 def training_session():
     """Create a mock training session for testing."""
+    # Minimal strategy YAML for testing
+    strategy_yaml = """
+name: "test_strategy"
+training_data:
+  symbols:
+    list: ["AAPL"]
+  timeframes:
+    list: ["1d"]
+indicators:
+  - name: "rsi"
+    period: 14
+fuzzy_sets:
+  rsi:
+    low:
+      type: "triangular"
+      parameters: [0, 20, 35]
+model:
+  type: "mlp"
+  architecture:
+    hidden_layers: [64, 32]
+  features:
+    lookback_periods: 0
+  training:
+    epochs: 10
+    batch_size: 32
+training:
+  labels:
+    source: "zigzag"
+    zigzag_threshold: 0.03
+"""
     config = {
-        "model_config": {
-            "name": "test_strategy",
-            "symbols": ["AAPL"],  # Fallback location
-            "timeframes": ["1d"],  # Fallback location
-            "model": {
-                "hidden_layers": [64, 32],
-                "dropout": 0.2,
-                "learning_rate": 0.001,
-            },
-            "training": {
-                "epochs": 10,
-                "batch_size": 32,
-                "validation_split": 0.2,
-            },
-            "indicators": [],
-            "fuzzy": {"rules": []},
-        },
-        "data_config": {
-            "symbols": ["AAPL"],  # Primary location
-            "timeframes": ["1d"],  # Primary location
-            "start_date": "2024-01-01",
-            "end_date": "2024-12-31",
-        },
-        "training_config": {
-            "epochs": 10,
-            "batch_size": 32,
-            "validation_split": 0.2,
-            "data_mode": "local",
-        },
+        "strategy_yaml": strategy_yaml,
+        # Runtime overrides
+        "symbols": None,  # Will use from YAML
+        "timeframes": None,  # Will use from YAML
+        "start_date": "2024-01-01",
+        "end_date": "2024-12-31",
     }
     return MockTrainingSession(session_id="test-session-123", config=config)
 
@@ -152,11 +159,11 @@ class TestHostTrainingOrchestratorInitialization:
             model_storage=model_storage,
         )
 
-        # Should extract symbols, timeframes, dates from session.config.data_config
-        assert orchestrator._session.config["data_config"]["symbols"] == ["AAPL"]
-        assert orchestrator._session.config["data_config"]["timeframes"] == ["1d"]
-        assert orchestrator._session.config["data_config"]["start_date"] == "2024-01-01"
-        assert orchestrator._session.config["data_config"]["end_date"] == "2024-12-31"
+        # Should have strategy_yaml in config
+        assert "strategy_yaml" in orchestrator._session.config
+        assert "start_date" in orchestrator._session.config
+        assert orchestrator._session.config["start_date"] == "2024-01-01"
+        assert orchestrator._session.config["end_date"] == "2024-12-31"
 
 
 class TestSessionCancellationToken:
@@ -301,9 +308,9 @@ class TestThrottledProgressCallback:
         # Should NOT contain any actual sleep function calls
         # Use regex to find sleep() calls (not just the word "sleep" in comments)
         sleep_calls = re.findall(r"\b(asyncio\.sleep|time\.sleep)\s*\(", source)
-        assert (
-            len(sleep_calls) == 0
-        ), f"Callback must NOT contain sleep operations! Found: {sleep_calls}"
+        assert len(sleep_calls) == 0, (
+            f"Callback must NOT contain sleep operations! Found: {sleep_calls}"
+        )
 
 
 class TestHostTrainingOrchestratorExecution:
@@ -356,9 +363,9 @@ class TestHostTrainingOrchestratorExecution:
 
         # Get source code and verify NO to_thread usage
         source = inspect.getsource(orchestrator.run)
-        assert (
-            "to_thread" not in source
-        ), "Host orchestrator should NOT use asyncio.to_thread"
+        assert "to_thread" not in source, (
+            "Host orchestrator should NOT use asyncio.to_thread"
+        )
 
     @pytest.mark.asyncio
     async def test_run_respects_cancellation(self, training_session, model_storage):
@@ -469,9 +476,9 @@ class TestPerformanceOptimizations:
         source = inspect.getsource(HostTrainingOrchestrator)
 
         # Should NOT contain any sleep operations
-        assert (
-            "asyncio.sleep" not in source
-        ), "Orchestrator must NOT contain asyncio.sleep!"
+        assert "asyncio.sleep" not in source, (
+            "Orchestrator must NOT contain asyncio.sleep!"
+        )
         assert "time.sleep" not in source, "Orchestrator must NOT contain time.sleep!"
 
     def test_throttling_constants_defined(self):
@@ -499,8 +506,9 @@ class TestConfigExtraction:
             model_storage=model_storage,
         )
 
-        # Extract symbols
-        symbols = orchestrator._extract_symbols()
+        # Load strategy and extract symbols
+        strategy_config = orchestrator._load_strategy_config()
+        symbols = orchestrator._extract_symbols(strategy_config)
         assert symbols == ["AAPL"]
 
     def test_extracts_timeframes_from_config(self, training_session, model_storage):
@@ -512,11 +520,12 @@ class TestConfigExtraction:
             model_storage=model_storage,
         )
 
-        timeframes = orchestrator._extract_timeframes()
+        strategy_config = orchestrator._load_strategy_config()
+        timeframes = orchestrator._extract_timeframes(strategy_config)
         assert timeframes == ["1d"]
 
     def test_extracts_strategy_config(self, training_session, model_storage):
-        """Test extraction of strategy configuration."""
+        """Test extraction of strategy configuration from YAML."""
         from orchestrator import HostTrainingOrchestrator
 
         orchestrator = HostTrainingOrchestrator(
@@ -524,15 +533,15 @@ class TestConfigExtraction:
             model_storage=model_storage,
         )
 
-        strategy_config = orchestrator._extract_strategy_config()
+        strategy_config = orchestrator._load_strategy_config()
         assert strategy_config is not None
         assert "name" in strategy_config
         assert strategy_config["name"] == "test_strategy"
 
     def test_handles_multi_symbol_config(self, training_session, model_storage):
-        """Test handling of multi-symbol configuration."""
-        # Update session to have multiple symbols in data_config
-        training_session.config["data_config"]["symbols"] = ["AAPL", "MSFT", "GOOGL"]
+        """Test handling of multi-symbol configuration via runtime override."""
+        # Set runtime override for symbols
+        training_session.config["symbols"] = ["AAPL", "MSFT", "GOOGL"]
 
         from orchestrator import HostTrainingOrchestrator
 
@@ -541,6 +550,7 @@ class TestConfigExtraction:
             model_storage=model_storage,
         )
 
-        symbols = orchestrator._extract_symbols()
+        strategy_config = orchestrator._load_strategy_config()
+        symbols = orchestrator._extract_symbols(strategy_config)
         assert len(symbols) == 3
         assert symbols == ["AAPL", "MSFT", "GOOGL"]
