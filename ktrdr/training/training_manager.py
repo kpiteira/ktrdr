@@ -36,58 +36,43 @@ class TrainingManager:
         # Simple environment variable handling (mirror IB pattern exactly)
         self.training_adapter = self._initialize_training_adapter()
 
-    def _initialize_training_adapter(self) -> TrainingAdapter:
-        """Initialize training adapter based on environment variables."""
-        try:
-            # Environment variable override for enabled flag (quick toggle)
-            env_enabled = os.getenv("USE_TRAINING_HOST_SERVICE", "").lower()
+    def _initialize_training_adapter(self) -> Optional[TrainingAdapter]:
+        """Initialize training adapter based on environment variables.
 
-            if env_enabled in ("true", "1", "yes"):
-                use_host_service = True
-                # Use environment URL if provided
-                host_service_url = os.getenv(
-                    "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
-                )
+        Returns None for local mode (uses LocalTrainingOrchestrator directly).
+        Returns TrainingAdapter for host service mode.
+        """
+        # Environment variable override for enabled flag (quick toggle)
+        env_enabled = os.getenv("USE_TRAINING_HOST_SERVICE", "").lower()
 
-                logger.info("=" * 80)
-                logger.info("🚀 TRAINING MODE: HOST SERVICE")
-                logger.info(f"   URL: {host_service_url}")
-                logger.info("   GPU Training: Available (if host service has GPU)")
-                logger.info("=" * 80)
+        if env_enabled in ("true", "1", "yes"):
+            # Host service mode - create adapter
+            host_service_url = os.getenv(
+                "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
+            )
 
-            elif env_enabled in ("false", "0", "no"):
-                use_host_service = False
-                host_service_url = None
+            logger.info("=" * 80)
+            logger.info("🚀 TRAINING MODE: HOST SERVICE")
+            logger.info(f"   URL: {host_service_url}")
+            logger.info("   GPU Training: Available (if host service has GPU)")
+            logger.info("=" * 80)
 
-                logger.info("=" * 80)
-                logger.info("💻 TRAINING MODE: LOCAL (Docker Container)")
-                logger.info("   GPU Training: Not available in Docker")
-                logger.info("   CPU Training: Available")
-                logger.info("=" * 80)
-
-            else:
-                # Default to local training if not explicitly set
-                use_host_service = False
-                host_service_url = None
-
-                logger.info("=" * 80)
-                logger.info("💻 TRAINING MODE: LOCAL (Docker Container) - DEFAULT")
-                logger.info("   GPU Training: Not available in Docker")
-                logger.info("   CPU Training: Available")
-                logger.info("   To enable GPU: Set USE_TRAINING_HOST_SERVICE=true")
-                logger.info("=" * 80)
-
-            # Initialize TrainingAdapter with configuration
             return TrainingAdapter(
-                use_host_service=use_host_service, host_service_url=host_service_url
+                use_host_service=True, host_service_url=host_service_url
             )
 
-        except Exception as e:
-            logger.warning(
-                f"Failed to load training host service config, using local training: {e}"
-            )
-            # Fallback to local training
-            return TrainingAdapter(use_host_service=False)
+        else:
+            # Local training mode - no adapter needed
+            logger.info("=" * 80)
+            logger.info("💻 TRAINING MODE: LOCAL (Docker Container)")
+            logger.info("   Uses: LocalTrainingOrchestrator directly")
+            logger.info("   GPU Training: Not available in Docker")
+            logger.info("   CPU Training: Available")
+            if env_enabled not in ("false", "0", "no"):
+                logger.info("   To enable GPU: Set USE_TRAINING_HOST_SERVICE=true")
+            logger.info("=" * 80)
+
+            return None
 
     async def train_multi_symbol_strategy(
         self,
@@ -104,6 +89,8 @@ class TrainingManager:
         """
         Train a multi-symbol strategy using the configured adapter.
 
+        NOTE: TrainingManager is legacy - use TrainingService directly instead.
+
         Args:
             strategy_config_path: Path to strategy configuration file
             symbols: List of trading symbols
@@ -117,6 +104,12 @@ class TrainingManager:
         Returns:
             Dictionary with training results
         """
+        if self.training_adapter is None:
+            raise RuntimeError(
+                "TrainingManager is in local mode. "
+                "Use TrainingService with LocalTrainingOrchestrator directly instead."
+            )
+
         return await self.training_adapter.train_multi_symbol_strategy(
             strategy_config_path=strategy_config_path,
             symbols=symbols,
@@ -139,6 +132,8 @@ class TrainingManager:
         Returns:
             Training status information
         """
+        if self.training_adapter is None:
+            raise RuntimeError("Host service operations not available in local mode")
         return await self.training_adapter.get_training_status(session_id)
 
     async def stop_training(self, session_id: str) -> dict[str, Any]:
@@ -151,19 +146,25 @@ class TrainingManager:
         Returns:
             Stop operation result
         """
+        if self.training_adapter is None:
+            raise RuntimeError("Host service operations not available in local mode")
         return await self.training_adapter.stop_training(session_id)
 
     def get_adapter_statistics(self) -> dict[str, Any]:
         """Get training adapter usage statistics."""
+        if self.training_adapter is None:
+            return {"mode": "local", "host_service": False}
         return self.training_adapter.get_statistics()
 
     def is_using_host_service(self) -> bool:
         """Check if training manager is configured to use host service."""
-        return self.training_adapter.use_host_service
+        return (
+            self.training_adapter is not None and self.training_adapter.use_host_service
+        )
 
     def get_host_service_url(self) -> Optional[str]:
         """Get host service URL if using host service."""
-        if self.training_adapter.use_host_service:
+        if self.training_adapter is not None and self.training_adapter.use_host_service:
             return self.training_adapter.host_service_url
         return None
 

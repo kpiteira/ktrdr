@@ -597,9 +597,9 @@ class OperationsService:
             adapter = training_service.adapter
 
             # Verify we're in host service mode
-            if not adapter.use_host_service:
+            if adapter is None or not adapter.use_host_service:
                 logger.warning(
-                    f"Training operation {operation.operation_id} expected host service but adapter is in local mode"
+                    f"Training operation {operation.operation_id} expected host service but not in host service mode"
                 )
                 return None
 
