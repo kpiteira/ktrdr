@@ -186,9 +186,32 @@ class IndicatorFactory:
                 },
             )
 
+        # Validate that all indicator names are unique
+        self._validate_unique_names()
+
         logger.debug(
             f"Initialized IndicatorFactory with {len(self.indicators_config.indicators)} indicator configurations"
         )
+
+    def _validate_unique_names(self) -> None:
+        """
+        Validate that all indicator names are unique.
+
+        Raises:
+            ConfigurationError: If duplicate indicator names are found
+        """
+        names = [config.name for config in self.indicators_config.indicators]
+        duplicates = [name for name in set(names) if names.count(name) > 1]
+
+        if duplicates:
+            raise ConfigurationError(
+                message=f"Duplicate indicator names found: {', '.join(sorted(set(duplicates)))}",
+                error_code="CONFIG-DuplicateIndicatorNames",
+                details={
+                    "duplicate_names": sorted(set(duplicates)),
+                    "all_names": names,
+                },
+            )
 
     def build(self) -> list[BaseIndicator]:
         """
