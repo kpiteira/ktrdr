@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
@@ -154,6 +155,34 @@ def create_application() -> FastAPI:
                     "code": exc.error_code or "PROCESSING_ERROR",
                     "message": exc.message,
                     "details": exc.details or {},
+                },
+            },
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Handle Pydantic validation errors with detailed error messages."""
+        error_details = []
+        for error in exc.errors():
+            error_details.append(
+                {
+                    "field": " -> ".join(str(x) for x in error["loc"]),
+                    "message": error["msg"],
+                    "type": error["type"],
+                }
+            )
+
+        logger.error(f"Request validation error: {error_details}", exc_info=False)
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Request validation failed",
+                    "details": error_details,
                 },
             },
         )

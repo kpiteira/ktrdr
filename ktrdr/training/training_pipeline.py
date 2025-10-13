@@ -31,6 +31,7 @@ from ktrdr.data.multi_timeframe_coordinator import MultiTimeframeCoordinator
 from ktrdr.fuzzy.config import FuzzyConfigLoader
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators.indicator_engine import IndicatorEngine
+from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.neural.models.mlp import MLPTradingModel
 from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 from ktrdr.training.model_trainer import ModelTrainer
@@ -271,26 +272,17 @@ class TrainingPipeline:
         # Fix indicator configs to add 'type' field if missing
         fixed_configs = []
 
-        # Mapping from strategy names to registry names
-        name_mapping = {
-            "bollinger_bands": "BollingerBands",
-            "keltner_channels": "KeltnerChannels",
-            "momentum": "Momentum",
-            "volume_sma": "SMA",  # Use SMA for volume_sma for now
-            "atr": "ATR",
-            "rsi": "RSI",
-            "sma": "SMA",
-            "ema": "EMA",
-            "macd": "MACD",
-        }
-
+        # Use BUILT_IN_INDICATORS registry to map names (supports lowercase, PascalCase, etc.)
         for config in indicator_configs:
             if isinstance(config, dict) and "type" not in config:
-                # Infer type from name using proper mapping
+                # Infer type from name using BUILT_IN_INDICATORS registry
                 config = config.copy()
                 indicator_name = config["name"].lower()
-                if indicator_name in name_mapping:
-                    config["type"] = name_mapping[indicator_name]
+
+                # Try to find in BUILT_IN_INDICATORS (which has lowercase mappings)
+                if indicator_name in BUILT_IN_INDICATORS:
+                    # Use the indicator name directly since BUILT_IN_INDICATORS accepts it
+                    config["type"] = indicator_name
                 else:
                     # Fallback: convert snake_case to PascalCase
                     config["type"] = "".join(
@@ -367,25 +359,17 @@ class TrainingPipeline:
         # Fix indicator configs to add 'type' field if missing (same as single timeframe)
         fixed_configs = []
 
-        # Mapping from strategy names to registry names
-        name_mapping = {
-            "bollinger_bands": "BollingerBands",
-            "keltner_channels": "KeltnerChannels",
-            "momentum": "Momentum",
-            "volume_sma": "SMA",  # Use SMA for volume_sma for now
-            "sma": "SMA",
-            "ema": "EMA",
-            "rsi": "RSI",
-            "macd": "MACD",
-        }
-
+        # Use BUILT_IN_INDICATORS registry to map names (supports lowercase, PascalCase, etc.)
         for config in indicator_configs:
             if isinstance(config, dict) and "type" not in config:
-                # Infer type from name using proper mapping
+                # Infer type from name using BUILT_IN_INDICATORS registry
                 config = config.copy()
                 indicator_name = config["name"].lower()
-                if indicator_name in name_mapping:
-                    config["type"] = name_mapping[indicator_name]
+
+                # Try to find in BUILT_IN_INDICATORS (which has lowercase mappings)
+                if indicator_name in BUILT_IN_INDICATORS:
+                    # Use the indicator name directly since BUILT_IN_INDICATORS accepts it
+                    config["type"] = indicator_name
                 else:
                     # Fallback: convert snake_case to PascalCase
                     config["type"] = "".join(

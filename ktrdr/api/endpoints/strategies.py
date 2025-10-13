@@ -252,10 +252,11 @@ def _validate_strategy_config(
 
     # Get name mapping for strategy indicators
     name_mapping = {
-        # Common aliases to official names
+        # Common aliases to official names (both snake_case and camelCase variants)
         "bollinger_bands": "BollingerBands",
         "bbands": "BollingerBands",
         "keltner_channels": "KeltnerChannels",
+        "keltnerchannels": "KeltnerChannels",
         "momentum": "Momentum",
         "volume_sma": "SMA",
         "atr": "ATR",
@@ -268,17 +269,20 @@ def _validate_strategy_config(
         "adx": "ADX",
         "zigzag": "ZigZag",
         "williams_r": "WilliamsR",
+        "williamsr": "WilliamsR",  # camelCase variant
         "obv": "OBV",
         "cci": "CCI",
         "roc": "ROC",
         "vwap": "VWAP",
         "parabolic_sar": "ParabolicSAR",
+        "parabolicsar": "ParabolicSAR",  # camelCase variant
         "psar": "ParabolicSAR",
         "ichimoku": "Ichimoku",
         "rvi": "RVI",
         "mfi": "MFI",
         "aroon": "Aroon",
         "donchian_channels": "DonchianChannels",
+        "donchianchannels": "DonchianChannels",  # camelCase variant
         "donchian": "DonchianChannels",
         "ad_line": "ADLine",
         "accumulation_distribution": "AccumulationDistribution",
@@ -286,11 +290,15 @@ def _validate_strategy_config(
         "chaikin_money_flow": "ChaikinMoneyFlow",
         "supertrend": "SuperTrend",
         "fisher_transform": "FisherTransform",
+        "fishertransform": "FisherTransform",  # camelCase variant
         "bollinger_band_width": "BollingerBandWidth",
+        "bollingerbandwidth": "BollingerBandWidth",  # camelCase variant
         "bb_width": "BollingerBandWidth",
         "volume_ratio": "VolumeRatio",
+        "volumeratio": "VolumeRatio",  # camelCase variant
         "squeeze_intensity": "SqueezeIntensity",
         "distance_from_ma": "DistanceFromMA",
+        "distancefromma": "DistanceFromMA",  # camelCase variant
     }
 
     # 1. Check basic structure
@@ -424,9 +432,18 @@ def _validate_strategy_config(
             all_possible_targets = set(indicator_names) | expected_derived
 
             # Check if fuzzy sets reference valid indicators/metrics
+            # Note: Fuzzy set names may have suffixes like _14, _standard, _fast to distinguish
+            # between multiple instances of the same indicator with different parameters.
+            # Extract the base indicator name by splitting on _ and taking the first part.
             invalid_fuzzy_refs = []
             for fuzzy_name in fuzzy_configs.keys():
-                if fuzzy_name not in all_possible_targets:
+                # Extract base indicator name (e.g., "rsi_14" -> "rsi", "macd_standard" -> "macd")
+                base_name = fuzzy_name.split("_")[0]
+                # Check both the full name and the base name
+                if (
+                    fuzzy_name not in all_possible_targets
+                    and base_name not in all_possible_targets
+                ):
                     invalid_fuzzy_refs.append(fuzzy_name)
 
             if invalid_fuzzy_refs:

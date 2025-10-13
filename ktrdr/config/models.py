@@ -256,13 +256,19 @@ class SymbolSelectionCriteria(BaseModel):
 class SymbolConfiguration(BaseModel):
     """Configuration for symbols in strategy."""
 
+    model_config = {"populate_by_name": True}
+
     mode: SymbolMode = Field(..., description="Symbol specification mode")
 
     # For single symbol mode (legacy)
     symbol: Optional[str] = Field(None, description="Single symbol for legacy mode")
 
-    # For multi-symbol mode
-    symbols: Optional[list[str]] = Field(None, description="Explicit list of symbols")
+    # For multi-symbol mode - accept both 'symbols' and 'list' as field names
+    symbols: Optional[list[str]] = Field(
+        None,
+        description="Explicit list of symbols",
+        validation_alias="list",  # Accept 'list' in YAML input
+    )
     selection_criteria: Optional[SymbolSelectionCriteria] = Field(
         None, description="Automatic symbol selection criteria"
     )
@@ -293,6 +299,8 @@ class SymbolConfiguration(BaseModel):
 class TimeframeConfiguration(BaseModel):
     """Configuration for timeframes in strategy."""
 
+    model_config = {"populate_by_name": True}
+
     mode: TimeframeMode = Field(..., description="Timeframe specification mode")
 
     # For single timeframe mode (legacy)
@@ -300,9 +308,11 @@ class TimeframeConfiguration(BaseModel):
         None, description="Single timeframe for legacy mode"
     )
 
-    # For multi-timeframe mode
+    # For multi-timeframe mode - accept both 'timeframes' and 'list' as field names
     timeframes: Optional[list[str]] = Field(
-        None, description="List of timeframes for features"
+        None,
+        description="List of timeframes for features",
+        validation_alias="list",  # Accept 'list' in YAML input
     )
     base_timeframe: Optional[str] = Field(
         None, description="Reference timeframe for alignment"

@@ -45,7 +45,9 @@ from ktrdr.indicators.zigzag_indicator import ZigZagIndicator
 logger = get_logger(__name__)
 
 # Registry of built-in indicators for direct access
+# Includes PascalCase (official), UPPERCASE, and lowercase variants for compatibility
 BUILT_IN_INDICATORS: dict[str, type[BaseIndicator]] = {
+    # PascalCase and UPPERCASE variants
     "RSI": RSIIndicator,
     "RSIIndicator": RSIIndicator,
     "SMA": SimpleMovingAverage,
@@ -109,6 +111,40 @@ BUILT_IN_INDICATORS: dict[str, type[BaseIndicator]] = {
     "SqueezeIntensityIndicator": SqueezeIntensityIndicator,
     "DistanceFromMA": DistanceFromMAIndicator,
     "DistanceFromMAIndicator": DistanceFromMAIndicator,
+    # Lowercase and camelCase variants for strategy compatibility
+    "rsi": RSIIndicator,
+    "sma": SimpleMovingAverage,
+    "ema": ExponentialMovingAverage,
+    "macd": MACDIndicator,
+    "zigzag": ZigZagIndicator,
+    "stochastic": StochasticIndicator,
+    "stoch": StochasticIndicator,
+    "williamsr": WilliamsRIndicator,
+    "atr": ATRIndicator,
+    "obv": OBVIndicator,
+    "bollingerbands": BollingerBandsIndicator,
+    "bbands": BollingerBandsIndicator,
+    "cci": CCIIndicator,
+    "momentum": MomentumIndicator,
+    "roc": ROCIndicator,
+    "vwap": VWAPIndicator,
+    "parabolicsar": ParabolicSARIndicator,
+    "psar": ParabolicSARIndicator,
+    "ichimoku": IchimokuIndicator,
+    "rvi": RVIIndicator,
+    "mfi": MFIIndicator,
+    "aroon": AroonIndicator,
+    "donchianchannels": DonchianChannelsIndicator,
+    "keltnerchannels": KeltnerChannelsIndicator,
+    "adline": ADLineIndicator,
+    "cmf": CMFIndicator,
+    "adx": ADXIndicator,
+    "supertrend": SuperTrendIndicator,
+    "fishertransform": FisherTransformIndicator,
+    "bollingerbandwidth": BollingerBandWidthIndicator,
+    "volumeratio": VolumeRatioIndicator,
+    "squeezeintensity": SqueezeIntensityIndicator,
+    "distancefromma": DistanceFromMAIndicator,
 }
 
 
