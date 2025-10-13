@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DataConfig(BaseModel):
@@ -77,13 +77,17 @@ class IbHostServiceConfig(BaseModel):
 class IndicatorConfig(BaseModel):
     """Configuration for a technical indicator."""
 
-    type: str = Field(..., description="The type/class of indicator")
-    name: Optional[str] = Field(None, description="Custom name for the indicator")
+    indicator: str = Field(
+        ..., description="Base indicator type (rsi, macd, bbands, etc.)"
+    )
+    name: str = Field(
+        ..., description="Unique name for this indicator instance (used in fuzzy_sets)"
+    )
     params: dict[str, Any] = Field(
         default_factory=dict, description="Parameters for indicator initialization"
     )
 
-    @field_validator("type")
+    @field_validator("indicator")
     @classmethod
     def validate_indicator_type(cls, v: str) -> str:
         """Validate that the indicator type is not empty."""
@@ -91,6 +95,45 @@ class IndicatorConfig(BaseModel):
         if not v:
             raise ValueError("Indicator type cannot be empty")
         return v
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Ensure name is valid identifier."""
+        if not v or not v.strip():
+            raise ValueError("Indicator name cannot be empty")
+
+        # Allow alphanumeric, underscore, dash
+        import re
+
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", v):
+            raise ValueError(
+                f"Indicator name '{v}' must start with letter and "
+                "contain only letters, numbers, underscore, or dash"
+            )
+        return v.strip()
+
+    def __init__(self, **data: Any):
+        """Initialize IndicatorConfig, extracting params from flat format if needed.
+
+        Supports both:
+        - Flat format: {indicator: 'rsi', name: 'rsi_14', period: 14}
+        - Nested format: {indicator: 'rsi', name: 'rsi_14', params: {period: 14}}
+        """
+        # Extract non-reserved fields into params
+        reserved = {"indicator", "name", "params"}
+        params = data.get("params", {})
+
+        # Move all non-reserved fields to params
+        for key in list(data.keys()):
+            if key not in reserved:
+                params[key] = data.pop(key)
+
+        # Set params back
+        if params:
+            data["params"] = params
+
+        super().__init__(**data)
 
 
 class TimeframeIndicatorConfig(BaseModel):
@@ -488,6 +531,24 @@ class StrategyConfigurationV2(BaseModel):
         """Validate scope consistency with training/deployment configuration."""
         # Additional validation can be added here
         return v
+
+    @model_validator(mode="after")
+    def validate_indicator_name_uniqueness(self) -> "StrategyConfigurationV2":
+        """Validate that all indicator names are unique."""
+        if self.indicators:
+            names = []
+            for ind in self.indicators:
+                if isinstance(ind, dict) and "name" in ind:
+                    names.append(ind["name"])
+
+            duplicates = {name for name in names if names.count(name) > 1}
+            if duplicates:
+                raise ValueError(
+                    f"Duplicate indicator names found: {duplicates}. "
+                    "Each indicator must have a unique 'name' field."
+                )
+
+        return self
 
 
 class LegacyStrategyConfiguration(BaseModel):
