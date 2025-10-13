@@ -22,15 +22,15 @@ class TestIndicatorFactory:
         """Test initialization with different config types."""
         # Test with IndicatorsConfig
         config = IndicatorsConfig(
-            indicators=[IndicatorConfig(type="RSI", params={"period": 14})]
+            indicators=[IndicatorConfig(indicator="rsi", name="rsi_14", period=14)]
         )
         factory = IndicatorFactory(config)
         assert len(factory.indicators_config.indicators) == 1
 
         # Test with list of IndicatorConfig
         configs = [
-            IndicatorConfig(type="RSI", params={"period": 14}),
-            IndicatorConfig(type="SMA", params={"period": 20}),
+            IndicatorConfig(indicator="rsi", name="rsi_14", period=14),
+            IndicatorConfig(indicator="sma", name="sma_20", period=20),
         ]
         factory = IndicatorFactory(configs)
         assert len(factory.indicators_config.indicators) == 2
@@ -43,9 +43,9 @@ class TestIndicatorFactory:
     def test_build_basic_indicators(self):
         """Test building basic indicators."""
         configs = [
-            IndicatorConfig(type="RSI", params={"period": 14}),
-            IndicatorConfig(type="SMA", params={"period": 20}),
-            IndicatorConfig(type="EMA", params={"period": 12}),
+            IndicatorConfig(indicator="rsi", name="rsi_14", period=14),
+            IndicatorConfig(indicator="sma", name="sma_20", period=20),
+            IndicatorConfig(indicator="ema", name="ema_12", period=12),
         ]
         factory = IndicatorFactory(configs)
         indicators = factory.build()
@@ -65,16 +65,17 @@ class TestIndicatorFactory:
 
     def test_indicator_custom_names(self):
         """Test creating indicators with custom names."""
-        configs = [IndicatorConfig(type="RSI", name="CustomRSI", params={"period": 14})]
+        configs = [IndicatorConfig(indicator="rsi", name="CustomRSI", period=14)]
         factory = IndicatorFactory(configs)
         indicators = factory.build()
 
-        # Check that the custom name was applied
-        assert indicators[0].name == "CustomRSI"
+        # Check that the custom name is stored for column naming
+        assert hasattr(indicators[0], "_custom_column_name")
+        assert indicators[0]._custom_column_name == "CustomRSI"
 
     def test_invalid_indicator_type(self):
         """Test behavior with an invalid indicator type."""
-        configs = [IndicatorConfig(type="NonExistentIndicator", params={})]
+        configs = [IndicatorConfig(indicator="NonExistentIndicator", name="bad_indicator")]
         factory = IndicatorFactory(configs)
 
         # This should raise an error
@@ -84,7 +85,7 @@ class TestIndicatorFactory:
 
     def test_invalid_parameters(self):
         """Test behavior with invalid indicator parameters."""
-        configs = [IndicatorConfig(type="RSI", params={"period": -5})]  # Invalid period
+        configs = [IndicatorConfig(indicator="rsi", name="rsi_bad", period=-5)]  # Invalid period
         factory = IndicatorFactory(configs)
 
         # This should fail during indicator initialization
@@ -95,9 +96,9 @@ class TestIndicatorFactory:
     def test_partial_failures(self):
         """Test behavior when some indicators fail but others succeed."""
         configs = [
-            IndicatorConfig(type="RSI", params={"period": 14}),  # Valid
-            IndicatorConfig(type="SMA", params={"period": -5}),  # Invalid
-            IndicatorConfig(type="EMA", params={"period": 12}),  # Valid
+            IndicatorConfig(indicator="rsi", name="rsi_14", period=14),  # Valid
+            IndicatorConfig(indicator="sma", name="sma_bad", period=-5),  # Invalid
+            IndicatorConfig(indicator="ema", name="ema_12", period=12),  # Valid
         ]
         factory = IndicatorFactory(configs)
 
@@ -111,15 +112,15 @@ class TestIndicatorFactory:
 
     def test_load_from_yaml_file(self, tmp_path):
         """Test loading indicators from a YAML file."""
-        # Create a temporary YAML file
+        # Create a temporary YAML file with new explicit naming format
         yaml_content = """
         indicators:
-          - type: RSI
-            params:
-              period: 14
-          - type: SMA
-            params:
-              period: 10
+          - indicator: rsi
+            name: rsi_14
+            period: 14
+          - indicator: sma
+            name: sma_10
+            period: 10
         """
         yaml_file = tmp_path / "test_indicators.yaml"
         yaml_file.write_text(yaml_content)
