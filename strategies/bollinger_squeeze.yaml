@@ -74,7 +74,10 @@ model:  # Pure fuzzy-neural architecture configuration
     scale_features: true  # Feature normalization for stable neural network training
   training:  # Neural network optimization configuration
     learning_rate: 0.001  # Standard learning rate for stable convergence
-    batch_size: 32  # Standard batch size balancing stability and memory
+    batch_size: 512  # Optimized for GPU efficiency with small models (was 32)
+    # RATIONALE: Small model (1.8K params) + large dataset (885K samples) = 27K batches at size 32
+    # GPU kernel launch overhead dominates. batch_size=512 reduces to 1,730 batches (16x fewer)
+    # Expected: 3-5x speedup on GPU vs CPU. Trade-off: slightly noisier gradients (acceptable)
     epochs: 100  # Standard training duration for convergence
     optimizer: "adam"  # Adam optimizer for adaptive learning and momentum
 

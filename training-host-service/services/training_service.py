@@ -458,8 +458,14 @@ class TrainingService:
             # Start resource monitoring
             if session.gpu_manager:
                 session.gpu_manager.start_monitoring()
-            if session.memory_manager:
-                session.memory_manager.start_monitoring()
+            # PERFORMANCE FIX: Memory monitoring disabled - causes 2x slowdown due to aggressive
+            # gc.collect() cycles every 1 second. The monitoring thread iterates through all
+            # Python objects, counts tensors, and triggers automatic cleanup at 80% memory usage,
+            # which runs gc.collect() 4 times per cleanup. This blocks the GPU training thread.
+            # See analysis: memory_manager.py sets monitoring_interval_seconds=1.0 (line 419)
+            # and auto_cleanup triggers at 80% threshold (line 299-323).
+            # if session.memory_manager:
+            #     session.memory_manager.start_monitoring()
 
             # Real GPU training implementation
             await self._run_real_training(session)
@@ -482,8 +488,9 @@ class TrainingService:
             try:
                 if session.gpu_manager:
                     session.gpu_manager.stop_monitoring()
-                if session.memory_manager:
-                    session.memory_manager.stop_monitoring()
+                # Memory monitoring disabled (see start_monitoring comment above)
+                # if session.memory_manager:
+                #     session.memory_manager.stop_monitoring()
             except Exception as e:
                 logger.warning(
                     f"Error stopping monitoring for session {session.session_id}: {str(e)}"

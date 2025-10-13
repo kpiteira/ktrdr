@@ -1,0 +1,770 @@
+# === STRATEGY IDENTITY ===
+name: "mtf_forex_neural"
+description: "Multi-timeframe forex neural strategy using 30+ indicators across momentum, trend, volatility, and volume. Trained on major forex pairs with 5m entry signals, 1h intermediate trend, and 1d major trend context."
+version: "2.0"
+hypothesis: "Forex markets exhibit consistent multi-timeframe patterns across major pairs. By combining momentum oscillators for entry timing, trend indicators for directional bias, volatility measures for regime adaptation, and volume proxies for institutional flow, the neural network can learn generalizable trading patterns that work across different currency pairs and market conditions."
+
+# === STRATEGY SCOPE ===
+scope: "universal"  # Trained model can deploy to any forex pair
+
+# === TRAINING APPROACH ===
+training_data:
+  symbols:
+    mode: "multi_symbol"  # Train across multiple forex pairs for robust cross-market learning
+    list:
+    # Major USD pairs - high liquidity, strong trends
+    - "EURUSD"  # Most liquid pair, clean trends, European session focus
+    - "GBPUSD"  # Volatile, strong intraday moves, responds well to news
+    - "USDJPY"  # Risk-on/off indicator, Asian session leader
+    - "USDCAD"  # Commodity-correlated, oil price influence
+    # Cross pairs - different characteristics, diversified patterns
+    - "AUDUSD"  # Commodity currency, Asian-Pacific exposure
+    - "EURJPY"  # Cross pair, combines EUR and JPY characteristics
+    - "EURGBP"  # European cross, mean-reverting tendencies
+    - "AUDJPY"  # Risk sentiment proxy, volatile cross pair
+  timeframes:
+    mode: "multi_timeframe"  # Critical: provides hierarchical context
+    list:
+    - "5m"   # ENTRY TIMEFRAME: precise entry/exit signals, captures intraday moves
+    - "1h"   # INTERMEDIATE TREND: filters false signals, confirms momentum direction
+    - "1d"   # MAJOR TREND: provides regime context (bull/bear/range), prevents counter-trend disasters
+    base_timeframe: "5m"  # Primary decision timeframe for signal generation
+  history_required: 300  # Need 300 bars minimum for 200-period SMA and other long indicators
+
+# === DEPLOYMENT TARGETS ===
+deployment:
+  target_symbols:
+    mode: "universal"  # Once trained, can trade any forex pair
+  target_timeframes:
+    mode: "multi_timeframe"
+    supported:
+    - "5m"   # Scalping and day trading
+    - "15m"  # Short-term swing trades
+    - "1h"   # Intraday position trades
+    - "4h"   # Swing trading
+    - "1d"   # Position trading
+
+# === TECHNICAL INDICATORS ===
+indicators:
+
+# ===== MOMENTUM INDICATORS (12) =====
+# Purpose: Identify overbought/oversold conditions and momentum shifts
+# Why multiple periods: Different timeframes capture short-term vs sustained momentum
+
+- name: "rsi"  # Primary momentum oscillator
+  period: 14  # Standard period, balanced sensitivity
+  source: "close"
+  # Fuzzy sets: extreme_oversold(0-25), oversold(15-40), neutral_low(35-55), neutral_high(45-65), overbought(60-85), extreme_overbought(75-100)
+  
+- name: "rsi"  # Fast RSI for 5m timeframe responsiveness
+  period: 7   # More sensitive to recent price changes
+  source: "close"
+  # Fuzzy sets: oversold(0-35), neutral(30-70), overbought(65-100)
+  
+- name: "rsi"  # Slow RSI for 1d timeframe context
+  period: 21  # Smoother, filters noise on daily charts
+  source: "close"
+  # Fuzzy sets: oversold(0-40), neutral(35-65), overbought(60-100)
+
+- name: "macd"  # Trend-following momentum indicator
+  fast_period: 12   # Standard settings
+  slow_period: 26   # Widely used, institutional level
+  signal_period: 9  # Signal line for crossovers
+  source: "close"
+  # Fuzzy sets: strong_bearish(-100 to -10), bearish(-20 to 0), neutral(-5 to 5), bullish(0 to 20), strong_bullish(10 to 100)
+  
+- name: "macd"  # Fast MACD for 5m entries
+  fast_period: 5    # Responsive to quick moves
+  slow_period: 13   # Catches early momentum
+  signal_period: 5  # Quick signal confirmation
+  source: "close"
+  # Fuzzy sets: bearish(-50 to 0), neutral(-5 to 5), bullish(0 to 50)
+
+- name: "stoch"  # Stochastic oscillator for range-bound markets
+  k_period: 14  # Standard settings
+  d_period: 3   # Signal smoothing
+  source: "close"
+  # Fuzzy sets: oversold(0-30), neutral(25-75), overbought(70-100)
+  
+- name: "stoch"  # Fast stochastic for 5m scalping
+  k_period: 5   # Very responsive
+  d_period: 3   # Quick signal
+  source: "close"
+  # Fuzzy sets: oversold(0-35), neutral(30-70), overbought(65-100)
+
+- name: "cci"  # Commodity Channel Index - good for forex
+  period: 20  # Detects cyclical turns
+  source: "close"
+  # Fuzzy sets: extreme_oversold(-300 to -100), oversold(-150 to -50), neutral(-75 to 75), overbought(50 to 150), extreme_overbought(100 to 300)
+
+- name: "momentum"  # Pure momentum calculation
+  period: 10  # Short-term momentum
+  source: "close"
+  # Fuzzy sets: strong_bearish(-20 to -2), bearish(-5 to 0), neutral(-2 to 2), bullish(0 to 5), strong_bullish(2 to 20)
+
+- name: "roc"  # Rate of Change - percentage momentum
+  period: 12  # Standardized momentum measurement
+  source: "close"
+  # Fuzzy sets: strong_decline(-15 to -3), decline(-5 to 0), neutral(-2 to 2), advance(0 to 5), strong_advance(3 to 15)
+
+- name: "williamsR"  # Williams %R - inverse of stochastic
+  period: 14  # Momentum oscillator
+  source: "close"
+  # Fuzzy sets: oversold(-100 to -70), neutral(-70 to -30), overbought(-30 to 0)
+
+- name: "fishertransform"  # Fisher Transform - Gaussian normalization
+  period: 10  # Converts prices to normal distribution
+  source: "close"
+  # Fuzzy sets: extreme_oversold(-4 to -2), oversold(-2.5 to -0.5), neutral(-1 to 1), overbought(0.5 to 2.5), extreme_overbought(2 to 4)
+
+# ===== TREND INDICATORS (12) =====
+# Purpose: Identify trend direction and strength across timeframes
+# Why multiple MAs: Create support/resistance confluence zones
+
+- name: "sma"  # 20-period SMA - short-term trend
+  period: 20  # Classic 1-month trading days
+  source: "close"
+  # Fuzzy sets: far_below(0.80-0.97), below(0.93-1.00), at_ma(0.98-1.02), above(1.00-1.07), far_above(1.03-1.20)
+  
+- name: "sma"  # 50-period SMA - intermediate trend
+  period: 50  # Quarter-year trend line
+  source: "close"
+  # Fuzzy sets: below(0.85-1.00), at_ma(0.97-1.03), above(1.00-1.15)
+  
+- name: "sma"  # 200-period SMA - major trend (bull vs bear)
+  period: 200  # Year-long trend, highly respected
+  source: "close"
+  # Fuzzy sets: below(0.80-1.00), at_ma(0.95-1.05), above(1.00-1.25)
+
+- name: "ema"  # 9-period EMA - very fast trend
+  period: 9   # Responsive to recent price action
+  source: "close"
+  # Fuzzy sets: below(0.90-1.00), at_ma(0.98-1.02), above(1.00-1.10)
+  
+- name: "ema"  # 21-period EMA - swing trend
+  period: 21  # Fibonacci number, popular swing level
+  source: "close"
+  # Fuzzy sets: below(0.88-1.00), at_ma(0.97-1.03), above(1.00-1.12)
+  
+- name: "ema"  # 55-period EMA - intermediate trend
+  period: 55  # Another Fibonacci level
+  source: "close"
+  # Fuzzy sets: below(0.85-1.00), at_ma(0.96-1.04), above(1.00-1.15)
+
+- name: "adx"  # Average Directional Index - trend strength
+  period: 14  # Standard period for trend strength
+  source: "close"
+  # Fuzzy sets: no_trend(0-25), weak_trend(15-35), moderate_trend(25-55), strong_trend(45-75), very_strong_trend(65-100)
+  # ADX doesn't tell direction, just if trending or ranging
+  
+- name: "adx"  # Longer ADX for major timeframe
+  period: 21  # Smoother trend strength reading
+  source: "close"
+  # Fuzzy sets: weak(0-30), moderate(20-50), strong(40-100)
+
+- name: "supertrend"  # SuperTrend - dynamic support/resistance
+  period: 10  # ATR-based trend indicator
+  source: "close"
+  # Binary trend follower, good for trend confirmation
+
+- name: "parabolicsar"  # Parabolic SAR - trailing stop and trend
+  period: 14  # Acceleration-based trend follower
+  source: "close"
+  # Provides dynamic support/resistance levels
+
+- name: "aroon"  # Aroon - measures trend emergence
+  period: 25  # Identifies when new trends are starting
+  source: "close"
+  # Fuzzy sets: strong_down(-100 to -40), down(-60 to 0), neutral(-30 to 30), up(0 to 60), strong_up(40 to 100)
+
+# ===== VOLATILITY INDICATORS (7) =====
+# Purpose: Measure market volatility for position sizing and breakout detection
+# Why important: Forex volatility changes drastically between sessions and events
+
+- name: "bbands"  # Bollinger Bands - volatility channels
+  period: 20      # 20-period standard deviation bands
+  source: "close"
+  std_dev: 2      # 2 standard deviations (95% confidence)
+  # Fuzzy sets: below_lower(0.80-1.00), lower_middle(0.90-1.02), middle(0.96-1.04), upper_middle(0.98-1.10), above_upper(1.00-1.20)
+  # Price relative to bands indicates volatility extremes
+  
+- name: "bbands"  # Long-term Bollinger Bands
+  period: 50      # Longer period for major trend bands
+  source: "close"
+  std_dev: 2
+  # Fuzzy sets: below_lower(0.85-1.00), middle(0.97-1.03), above_upper(1.00-1.15)
+
+- name: "atr"  # Average True Range - absolute volatility
+  period: 14  # Standard ATR period
+  source: "close"
+  # Fuzzy sets: low_volatility(0-1.5), moderate_volatility(1.0-3.5), high_volatility(3.0-8.0), extreme_volatility(6.0-20.0)
+  # Critical for position sizing and stop placement
+  
+- name: "atr"  # Longer ATR for context
+  period: 21  # Smoother volatility reading
+  source: "close"
+  # Fuzzy sets: low(0-1.5), moderate(1.0-4.0), high(3.5-15.0)
+
+- name: "keltnerchannels"  # Keltner Channels - ATR-based bands
+  period: 20  # Similar to Bollinger but uses ATR
+  source: "close"
+  # ATR-based channels, less sensitive to spikes
+
+- name: "bollingerbandwidth"  # BBW - measures squeeze/expansion
+  period: 20  # Width of Bollinger Bands
+  source: "close"
+  # Fuzzy sets: squeeze(0-0.05), narrow(0.03-0.10), normal(0.08-0.18), wide(0.15-0.40), extreme(0.35-1.00)
+  # Low BBW = squeeze = imminent breakout
+
+- name: "donchianchannels"  # Donchian Channels - breakout levels
+  period: 20  # High/low channels for breakouts
+  source: "close"
+  # Classic breakout indicator
+
+# ===== VOLUME INDICATORS (5) =====
+# Purpose: In forex, volume is tick volume (not true volume). Still useful for flow detection
+# Why useful: Institutional activity leaves footprints in tick volume
+
+- name: "obv"  # On-Balance Volume - cumulative volume direction
+  period: 14  # Volume-weighted momentum
+  source: "close"
+  # Detects accumulation/distribution
+
+- name: "vwap"  # Volume Weighted Average Price
+  period: 14  # Institutional average entry price
+  source: "close"
+  # Fuzzy sets: below(0.90-1.00), at_vwap(0.98-1.02), above(1.00-1.10)
+  # Price tends to revert to VWAP
+
+- name: "mfi"  # Money Flow Index - volume-weighted RSI
+  period: 14  # Combines price and volume
+  source: "close"
+  # Fuzzy sets: oversold(0-30), neutral_low(25-55), neutral_high(45-75), overbought(70-100)
+  # Better than RSI for volume confirmation
+
+- name: "cmf"  # Chaikin Money Flow - accumulation/distribution
+  period: 20  # Measures buying/selling pressure
+  source: "close"
+  # Fuzzy sets: strong_distribution(-0.30 to -0.05), distribution(-0.10 to 0), neutral(-0.05 to 0.05), accumulation(0 to 0.10), strong_accumulation(0.05 to 0.30)
+  # Positive = accumulation, negative = distribution
+
+- name: "volumeratio"  # Volume Ratio - relative volume strength
+  period: 20  # Current volume vs average volume
+  source: "close"
+  # Fuzzy sets: low_volume(0-0.7), average_volume(0.6-1.4), high_volume(1.2-2.5), extreme_volume(2.0-10.0)
+  # High volume = strong move, low volume = weak move
+
+# ===== MULTI-PURPOSE INDICATORS (1) =====
+- name: "distancefromma"  # Price distance from moving average
+  period: 50  # Mean reversion indicator
+  source: "close"
+  # Fuzzy sets: far_below(-0.15 to -0.03), below(-0.05 to 0), at_ma(-0.02 to 0.02), above(0 to 0.05), far_above(0.03 to 0.15)
+  # Extreme distance = mean reversion opportunity
+
+# === FUZZY LOGIC CONFIGURATION ===
+# Fuzzy sets convert crisp indicator values into fuzzy membership degrees
+# Triangular membership: [left_edge, peak, right_edge]
+# Overlapping ranges allow smooth transitions between market states
+
+fuzzy_sets:
+  
+  # RSI FUZZY SETS - Momentum interpretation
+  rsi_14:  # Standard RSI - 6 granular levels for precise momentum reading
+    extreme_oversold:
+      type: "triangular"
+      parameters: [0, 10, 25]  # RSI below 25 = severely oversold, strong reversal candidate
+    oversold:
+      type: "triangular"
+      parameters: [15, 30, 40]  # RSI 20-40 = oversold, potential bounce
+    neutral_low:
+      type: "triangular"
+      parameters: [35, 45, 55]  # RSI 35-55 = neutral-bearish, no clear signal
+    neutral_high:
+      type: "triangular"
+      parameters: [45, 55, 65]  # RSI 45-65 = neutral-bullish, no clear signal
+    overbought:
+      type: "triangular"
+      parameters: [60, 70, 85]  # RSI 60-85 = overbought, potential pullback
+    extreme_overbought:
+      type: "triangular"
+      parameters: [75, 90, 100]  # RSI above 75 = severely overbought, strong reversal risk
+  
+  rsi_7:  # Fast RSI - 3 simple levels for quick signals
+    oversold:
+      type: "triangular"
+      parameters: [0, 20, 35]  # Fast oversold signal
+    neutral:
+      type: "triangular"
+      parameters: [30, 50, 70]  # Neutral momentum
+    overbought:
+      type: "triangular"
+      parameters: [65, 80, 100]  # Fast overbought signal
+  
+  rsi_21:  # Slow RSI - 3 levels for trend context
+    oversold:
+      type: "triangular"
+      parameters: [0, 25, 40]  # Sustained oversold condition
+    neutral:
+      type: "triangular"
+      parameters: [35, 50, 65]  # Trend neutral
+    overbought:
+      type: "triangular"
+      parameters: [60, 75, 100]  # Sustained overbought condition
+  
+  # MACD FUZZY SETS - Trend momentum interpretation
+  macd_standard:  # 5 levels for directional strength
+    strong_bearish:
+      type: "triangular"
+      parameters: [-100, -50, -10]  # Strong downward momentum
+    bearish:
+      type: "triangular"
+      parameters: [-20, -5, 0]  # Weak downward momentum
+    neutral:
+      type: "triangular"
+      parameters: [-5, 0, 5]  # No clear trend
+    bullish:
+      type: "triangular"
+      parameters: [0, 5, 20]  # Weak upward momentum
+    strong_bullish:
+      type: "triangular"
+      parameters: [10, 50, 100]  # Strong upward momentum
+  
+  macd_fast:  # 3 simple levels for quick entries
+    bearish:
+      type: "triangular"
+      parameters: [-50, -10, 0]
+    neutral:
+      type: "triangular"
+      parameters: [-5, 0, 5]
+    bullish:
+      type: "triangular"
+      parameters: [0, 10, 50]
+  
+  # STOCHASTIC FUZZY SETS
+  stoch_14:
+    oversold:
+      type: "triangular"
+      parameters: [0, 15, 30]  # Below 30 = oversold
+    neutral:
+      type: "triangular"
+      parameters: [25, 50, 75]  # Mid-range = neutral
+    overbought:
+      type: "triangular"
+      parameters: [70, 85, 100]  # Above 70 = overbought
+  
+  stoch_5:  # Fast stochastic
+    oversold:
+      type: "triangular"
+      parameters: [0, 20, 35]
+    neutral:
+      type: "triangular"
+      parameters: [30, 50, 70]
+    overbought:
+      type: "triangular"
+      parameters: [65, 80, 100]
+  
+  # ADX FUZZY SETS - Trend strength (not direction!)
+  adx_14:  # 5 levels of trend strength
+    no_trend:
+      type: "triangular"
+      parameters: [0, 12, 25]  # ADX < 25 = ranging, choppy market
+    weak_trend:
+      type: "triangular"
+      parameters: [15, 25, 35]  # ADX 25-35 = weak trend emerging
+    moderate_trend:
+      type: "triangular"
+      parameters: [25, 40, 55]  # ADX 25-55 = healthy trend
+    strong_trend:
+      type: "triangular"
+      parameters: [45, 60, 75]  # ADX 45-75 = strong trend, good for trend following
+    very_strong_trend:
+      type: "triangular"
+      parameters: [65, 80, 100]  # ADX > 65 = very strong trend, but may be exhausting
+  
+  adx_21:  # Simplified 3-level ADX
+    weak:
+      type: "triangular"
+      parameters: [0, 15, 30]
+    moderate:
+      type: "triangular"
+      parameters: [20, 35, 50]
+    strong:
+      type: "triangular"
+      parameters: [40, 60, 100]
+  
+  # BOLLINGER BANDS FUZZY SETS - Price position relative to bands
+  bbands_20:  # 5 zones for precise positioning
+    below_lower:
+      type: "triangular"
+      parameters: [0.80, 0.92, 1.00]  # Price below lower band = oversold, mean reversion opportunity
+    lower_middle:
+      type: "triangular"
+      parameters: [0.90, 0.96, 1.02]  # Between lower band and middle = bearish zone
+    middle:
+      type: "triangular"
+      parameters: [0.96, 1.00, 1.04]  # At middle band = neutral, no edge
+    upper_middle:
+      type: "triangular"
+      parameters: [0.98, 1.04, 1.10]  # Between middle and upper = bullish zone
+    above_upper:
+      type: "triangular"
+      parameters: [1.00, 1.08, 1.20]  # Price above upper band = overbought, reversal risk
+  
+  bbands_50:  # 3 zones for longer-term context
+    below_lower:
+      type: "triangular"
+      parameters: [0.85, 0.94, 1.00]
+    middle:
+      type: "triangular"
+      parameters: [0.97, 1.00, 1.03]
+    above_upper:
+      type: "triangular"
+      parameters: [1.00, 1.06, 1.15]
+  
+  # MOVING AVERAGE FUZZY SETS - Price position relative to MA
+  sma_20:  # 5 zones for short-term MA
+    far_below:
+      type: "triangular"
+      parameters: [0.80, 0.90, 0.97]  # Price 10-20% below MA = extreme oversold
+    below:
+      type: "triangular"
+      parameters: [0.93, 0.97, 1.00]  # Price 3-7% below MA = pullback
+    at_ma:
+      type: "triangular"
+      parameters: [0.98, 1.00, 1.02]  # Price at MA = neutral
+    above:
+      type: "triangular"
+      parameters: [1.00, 1.03, 1.07]  # Price 3-7% above MA = rally
+    far_above:
+      type: "triangular"
+      parameters: [1.03, 1.10, 1.20]  # Price 10-20% above MA = extreme overbought
+  
+  sma_50:  # 3 zones for intermediate MA
+    below:
+      type: "triangular"
+      parameters: [0.85, 0.93, 1.00]
+    at_ma:
+      type: "triangular"
+      parameters: [0.97, 1.00, 1.03]
+    above:
+      type: "triangular"
+      parameters: [1.00, 1.07, 1.15]
+  
+  sma_200:  # 3 zones for major trend MA (bull vs bear)
+    below:
+      type: "triangular"
+      parameters: [0.80, 0.90, 1.00]  # Below 200 SMA = bear market
+    at_ma:
+      type: "triangular"
+      parameters: [0.95, 1.00, 1.05]  # At 200 SMA = major support/resistance
+    above:
+      type: "triangular"
+      parameters: [1.00, 1.10, 1.25]  # Above 200 SMA = bull market
+  
+  # EMA FUZZY SETS - Similar to SMA but more responsive
+  ema_9:  # Fast EMA
+    below:
+      type: "triangular"
+      parameters: [0.90, 0.96, 1.00]
+    at_ma:
+      type: "triangular"
+      parameters: [0.98, 1.00, 1.02]
+    above:
+      type: "triangular"
+      parameters: [1.00, 1.04, 1.10]
+  
+  ema_21:  # Swing EMA
+    below:
+      type: "triangular"
+      parameters: [0.88, 0.95, 1.00]
+    at_ma:
+      type: "triangular"
+      parameters: [0.97, 1.00, 1.03]
+    above:
+      type: "triangular"
+      parameters: [1.00, 1.05, 1.12]
+  
+  ema_55:  # Intermediate EMA
+    below:
+      type: "triangular"
+      parameters: [0.85, 0.93, 1.00]
+    at_ma:
+      type: "triangular"
+      parameters: [0.96, 1.00, 1.04]
+    above:
+      type: "triangular"
+      parameters: [1.00, 1.07, 1.15]
+  
+  # ATR FUZZY SETS - Volatility regime classification
+  atr_14:  # 4 volatility regimes
+    low_volatility:
+      type: "triangular"
+      parameters: [0.0, 0.5, 1.5]  # Low ATR = consolidation, range-bound
+    moderate_volatility:
+      type: "triangular"
+      parameters: [1.0, 2.0, 3.5]  # Moderate ATR = normal trading
+    high_volatility:
+      type: "triangular"
+      parameters: [3.0, 5.0, 8.0]  # High ATR = trending, larger stops needed
+    extreme_volatility:
+      type: "triangular"
+      parameters: [6.0, 10.0, 20.0]  # Extreme ATR = news event, reduce size
+  
+  atr_21:  # Simplified 3-level ATR
+    low:
+      type: "triangular"
+      parameters: [0.0, 0.5, 1.5]
+    moderate:
+      type: "triangular"
+      parameters: [1.0, 2.5, 4.0]
+    high:
+      type: "triangular"
+      parameters: [3.5, 6.0, 15.0]
+  
+  # CCI FUZZY SETS - Cyclical turns
+  cci:  # 5 levels for extreme detection
+    extreme_oversold:
+      type: "triangular"
+      parameters: [-300, -200, -100]  # CCI < -100 = extreme oversold
+    oversold:
+      type: "triangular"
+      parameters: [-150, -100, -50]  # CCI -100 to -50 = oversold
+    neutral:
+      type: "triangular"
+      parameters: [-75, 0, 75]  # CCI -75 to 75 = neutral
+    overbought:
+      type: "triangular"
+      parameters: [50, 100, 150]  # CCI 50 to 100 = overbought
+    extreme_overbought:
+      type: "triangular"
+      parameters: [100, 200, 300]  # CCI > 100 = extreme overbought
+  
+  # MOMENTUM FUZZY SETS
+  momentum:
+    strong_bearish:
+      type: "triangular"
+      parameters: [-20, -10, -2]
+    bearish:
+      type: "triangular"
+      parameters: [-5, -2, 0]
+    neutral:
+      type: "triangular"
+      parameters: [-2, 0, 2]
+    bullish:
+      type: "triangular"
+      parameters: [0, 2, 5]
+    strong_bullish:
+      type: "triangular"
+      parameters: [2, 10, 20]
+  
+  # ROC FUZZY SETS
+  roc:
+    strong_decline:
+      type: "triangular"
+      parameters: [-15, -8, -3]
+    decline:
+      type: "triangular"
+      parameters: [-5, -2, 0]
+    neutral:
+      type: "triangular"
+      parameters: [-2, 0, 2]
+    advance:
+      type: "triangular"
+      parameters: [0, 2, 5]
+    strong_advance:
+      type: "triangular"
+      parameters: [3, 8, 15]
+  
+  # WILLIAMS %R FUZZY SETS
+  williamsR:
+    oversold:
+      type: "triangular"
+      parameters: [-100, -85, -70]
+    neutral:
+      type: "triangular"
+      parameters: [-70, -50, -30]
+    overbought:
+      type: "triangular"
+      parameters: [-30, -15, 0]
+  
+  # MFI FUZZY SETS - Volume-weighted momentum
+  mfi:
+    oversold:
+      type: "triangular"
+      parameters: [0, 15, 30]
+    neutral_low:
+      type: "triangular"
+      parameters: [25, 40, 55]
+    neutral_high:
+      type: "triangular"
+      parameters: [45, 60, 75]
+    overbought:
+      type: "triangular"
+      parameters: [70, 85, 100]
+  
+  # CMF FUZZY SETS - Money flow direction
+  cmf:  # Positive = buying pressure, Negative = selling pressure
+    strong_distribution:
+      type: "triangular"
+      parameters: [-0.30, -0.15, -0.05]  # Heavy selling
+    distribution:
+      type: "triangular"
+      parameters: [-0.10, -0.05, 0.0]  # Moderate selling
+    neutral:
+      type: "triangular"
+      parameters: [-0.05, 0.0, 0.05]  # Balanced
+    accumulation:
+      type: "triangular"
+      parameters: [0.0, 0.05, 0.10]  # Moderate buying
+    strong_accumulation:
+      type: "triangular"
+      parameters: [0.05, 0.15, 0.30]  # Heavy buying
+  
+  # FISHER TRANSFORM FUZZY SETS - Normalized price oscillator
+  fishertransform:
+    extreme_oversold:
+      type: "triangular"
+      parameters: [-4.0, -3.0, -2.0]
+    oversold:
+      type: "triangular"
+      parameters: [-2.5, -1.5, -0.5]
+    neutral:
+      type: "triangular"
+      parameters: [-1.0, 0.0, 1.0]
+    overbought:
+      type: "triangular"
+      parameters: [0.5, 1.5, 2.5]
+    extreme_overbought:
+      type: "triangular"
+      parameters: [2.0, 3.0, 4.0]
+  
+  # AROON FUZZY SETS - Trend emergence
+  aroon:  # Aroon Up - Aroon Down
+    strong_down:
+      type: "triangular"
+      parameters: [-100, -75, -40]  # Strong downtrend
+    down:
+      type: "triangular"
+      parameters: [-60, -30, 0]  # Weak downtrend
+    neutral:
+      type: "triangular"
+      parameters: [-30, 0, 30]  # No clear trend
+    up:
+      type: "triangular"
+      parameters: [0, 30, 60]  # Weak uptrend
+    strong_up:
+      type: "triangular"
+      parameters: [40, 75, 100]  # Strong uptrend
+  
+  # BOLLINGER BAND WIDTH FUZZY SETS - Squeeze detection
+  bollingerbandwidth:  # Low BBW = squeeze = big move coming
+    squeeze:
+      type: "triangular"
+      parameters: [0.0, 0.02, 0.05]  # Tight squeeze, breakout imminent
+    narrow:
+      type: "triangular"
+      parameters: [0.03, 0.06, 0.10]  # Consolidating
+    normal:
+      type: "triangular"
+      parameters: [0.08, 0.12, 0.18]  # Normal volatility
+    wide:
+      type: "triangular"
+      parameters: [0.15, 0.25, 0.40]  # High volatility
+    extreme:
+      type: "triangular"
+      parameters: [0.35, 0.50, 1.00]  # Extreme volatility, climax
+  
+  # VOLUME RATIO FUZZY SETS - Relative volume
+  volumeratio:  # Current volume / average volume
+    low_volume:
+      type: "triangular"
+      parameters: [0.0, 0.4, 0.7]  # Low participation, unreliable moves
+    average_volume:
+      type: "triangular"
+      parameters: [0.6, 1.0, 1.4]  # Normal volume
+    high_volume:
+      type: "triangular"
+      parameters: [1.2, 1.8, 2.5]  # High participation, strong moves
+    extreme_volume:
+      type: "triangular"
+      parameters: [2.0, 3.5, 10.0]  # Institutional activity, major moves
+  
+  # DISTANCE FROM MA FUZZY SETS - Mean reversion potential
+  distancefromma:  # (Price - MA) / MA
+    far_below:
+      type: "triangular"
+      parameters: [-0.15, -0.08, -0.03]  # Stretched down, reversion likely
+    below:
+      type: "triangular"
+      parameters: [-0.05, -0.02, 0.0]  # Below average
+    at_ma:
+      type: "triangular"
+      parameters: [-0.02, 0.0, 0.02]  # Fair value
+    above:
+      type: "triangular"
+      parameters: [0.0, 0.02, 0.05]  # Above average
+    far_above:
+      type: "triangular"
+      parameters: [0.03, 0.08, 0.15]  # Stretched up, reversion likely
+  
+  # VWAP FUZZY SETS - Institutional reference price
+  vwap:
+    below:
+      type: "triangular"
+      parameters: [0.90, 0.96, 1.00]  # Below VWAP = selling pressure
+    at_vwap:
+      type: "triangular"
+      parameters: [0.98, 1.00, 1.02]  # At VWAP = fair value
+    above:
+      type: "triangular"
+      parameters: [1.00, 1.04, 1.10]  # Above VWAP = buying pressure
+
+# === NEURAL NETWORK MODEL ===
+# Architecture designed for 200+ fuzzy features
+model:
+  type: "mlp"  # Multi-Layer Perceptron
+  architecture:
+    hidden_layers: [256, 128, 64, 32]  # Deep network: 256->128->64->32 neurons
+    # Layer 1 (256): Captures raw fuzzy combinations and multi-timeframe patterns
+    # Layer 2 (128): Learns intermediate pattern abstractions
+    # Layer 3 (64): Refines high-level trading concepts
+    # Layer 4 (32): Final decision layer before output
+    activation: "relu"  # ReLU for fast training and gradient flow
+    output_activation: "softmax"  # Softmax for BUY/SELL/HOLD probabilities
+    dropout: 0.3  # 30% dropout for regularization, prevents overfitting
+  features:
+    include_price_context: true  # Include raw OHLC data alongside fuzzy features
+    lookback_periods: 5  # Use 5 historical bars for temporal pattern recognition
+    scale_features: true  # Normalize all features to [0,1] range
+  training:
+    learning_rate: 0.0005  # Conservative learning rate for stable convergence
+    batch_size: 64  # Optimized for GPU efficiency (was 64)
+    # RATIONALE: Large model (612K params, 78M FLOPs/batch) benefits from larger batches
+    # batch_size=128 reduces batches from 13,842 to 6,921 (2x fewer kernel launches)
+    # Expected: 10-15% GPU speedup. Can increase to 256 if gradients remain stable.
+    epochs: 150  # Extended training for complex pattern learning
+    optimizer: "adam"  # Adam optimizer with momentum and adaptive learning
+
+# === DECISION LOGIC ===
+decisions:
+  output_format: "classification"  # Discrete classes: BUY, SELL, HOLD
+  confidence_threshold: 0.65  # Require 65% confidence to take a trade
+  # Higher threshold = fewer but higher quality signals
+  position_awareness: true  # Consider existing position before generating new signals
+  filters:
+    min_signal_separation: 3  # Minimum 3 bars between signals (avoid overtrading)
+    volume_filter: false  # Don't filter by volume (forex tick volume less reliable)
+
+# === TRAINING CONFIGURATION ===
+training:
+  method: "supervised"  # Supervised learning with labeled data
+  labels:
+    source: "zigzag"  # Use ZigZag indicator to identify significant price swings
+    zigzag_threshold: 0.025  # 2.5% minimum price move = significant swing
+    # In forex: 250 pips for 1.0000 pair, 25 pips for 100.00 pair
+    label_lookahead: 15  # Look 15 bars ahead to determine trade outcome
+    # BUY if price went up 2.5%+, SELL if down 2.5%+, HOLD otherwise
+  data_split:
+    train: 0.7  # 70% training data - learn patterns
+    validation: 0.15  # 15% validation data - tune hyperparameters
+    test: 0.15  # 15% test data - evaluate final performance (out-of-sample)
