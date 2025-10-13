@@ -57,24 +57,24 @@
 ./scripts/migrate_indicator_naming.py config/strategies/*.yaml --output-dir migrated/
 ```
 
+### Phase 3: Validation Updates (COMPLETE)
+**Commit:** `d58b6c1` - feat(validation): implement simplified validation with explicit naming (Phase 3)
+
+- ✅ Added `_validate_indicator_fuzzy_matching()` method
+  - Direct name matching (no more auto-generation guessing)
+  - Clear errors for missing fuzzy sets
+  - Warnings for orphan fuzzy sets
+- ✅ Added `_validate_indicator_definitions()` method
+  - Validates required 'indicator' and 'name' fields
+  - Name format validation (regex-based)
+  - Clear error messages with indicator index
+- ✅ 16 comprehensive tests
+
+**Files Modified:**
+- [ktrdr/config/strategy_validator.py](../../ktrdr/config/strategy_validator.py:403-508)
+- [tests/unit/config/test_strategy_validation_explicit_naming.py](../../tests/unit/config/test_strategy_validation_explicit_naming.py) (new)
+
 ## ⏳ Remaining Phases
-
-### Phase 3: Validation Updates (NOT STARTED)
-**Estimated Effort:** Medium (~2-3 hours)
-
-**Tasks:**
-1. Simplify indicator-fuzzy matching validation
-   - Remove auto-generation logic from validation
-   - Direct name matching: `fuzzy_sets.rsi_14` matches `indicators[].name == "rsi_14"`
-   - Update validation error messages
-
-2. Add indicator definition validation
-   - Ensure all fuzzy_sets reference valid indicator names
-   - Clear error messages for typos/mismatches
-
-**Files to Modify:**
-- `ktrdr/config/strategy_validator.py`
-- `ktrdr/fuzzy/config.py` (validation logic)
 
 ### Phase 4: Engine & Pipeline Updates (IN PROGRESS)
 **Estimated Effort:** High (~4-6 hours)
@@ -157,23 +157,28 @@ make quality
 
 ## 📊 Summary
 
-**Progress:** 3/6 phases complete (50%)
+**Progress:** 4/6 phases complete (67%)
 - ✅ Phase 1: Configuration Models
 - ✅ Phase 2: Factory & Base Indicator
-- ⏳ Phase 3: Validation (not started)
+- ✅ Phase 3: Validation Simplification
 - ⚠️  Phase 4: Pipeline (partially done, blocked by tests)
-- ✅ Phase 5: Migration Script (complete, uncommitted)
+- ✅ Phase 5: Migration Script
 - ⏳ Phase 6: Documentation (not started)
 
 **Test Status:**
-- ✅ 42 new tests passing (16 config + 11 factory + 15 migration)
-- ❌ 5 training pipeline tests failing (need schema updates)
+- ✅ 58 new tests passing (16 config + 11 factory + 16 validation + 15 migration)
+- ❌ 5 training pipeline tests failing (need schema updates - Phase 4.2)
 - ✅ All quality checks passing
 
+**Commits:**
+1. `3d9bc50` - Phase 1: Configuration models
+2. `edd10a8` - Phase 2: Factory & base indicator
+3. `9617135` + `a8fad10` - Test updates & fixes
+4. `0d79e6a` - Phase 5: Migration script
+5. `d58b6c1` - Phase 3: Validation
+
 **Next Steps:**
-1. ✅ Commit Phase 5 (migration script)
-2. Fix training pipeline tests (Phase 4.2)
-3. Simplify TrainingPipeline code
-4. Implement Phase 3 validation
-5. Update documentation (Phase 6)
-6. Mark PR as ready for review
+1. Fix training pipeline tests (Phase 4.2)
+2. Simplify TrainingPipeline code (~80-100 lines removal)
+3. Update documentation (Phase 6)
+4. Mark PR as ready for review
