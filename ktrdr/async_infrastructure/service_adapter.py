@@ -169,6 +169,9 @@ class AsyncServiceAdapter(ABC):
         # Request tracing (with memory bounds)
         self._trace_data: dict[str, dict[str, Any]] = {}
 
+        # Track event loop ID to detect when we're in a different loop
+        self._event_loop_id: Optional[int] = None
+
         logger.info(
             f"Initialized {self.get_service_name()} adapter "
             f"(type={self.get_service_type()}, timeout={self.timeout}s, retries={self.max_retries})"
@@ -267,6 +270,19 @@ class AsyncServiceAdapter(ABC):
 
     async def _setup_connection_pool(self) -> None:
         """Initialize HTTP client with connection pooling."""
+        import asyncio
+
+        current_loop = asyncio.get_running_loop()
+
+        # Store the event loop ID so we can detect loop changes
+        self._event_loop_id = id(current_loop)
+
+        logger.info(
+            f"🔧 {self.get_service_name()}: Setting up connection pool, "
+            f"event_loop_id={self._event_loop_id}, "
+            f"old_client_exists={self._http_client is not None}"
+        )
+
         # Connection limits for efficiency
         limits = httpx.Limits(
             max_connections=self.config.connection_pool_limit,
@@ -282,8 +298,8 @@ class AsyncServiceAdapter(ABC):
         )
         self._connection_pool = self._http_client
 
-        logger.debug(
-            f"{self.get_service_name()}: Connection pool initialized "
+        logger.info(
+            f"✅ {self.get_service_name()}: Connection pool initialized "
             f"(max_connections={self.config.connection_pool_limit}, timeout={self.timeout}s)"
         )
 
@@ -343,6 +359,40 @@ class AsyncServiceAdapter(ABC):
                     cancellation_token, f"POST {endpoint} attempt {attempt + 1}"
                 )
 
+                # CRITICAL: Check if we're in a different event loop than when client was created
+                # This happens when operations run in different background tasks
+                import asyncio
+
+                current_loop_id = id(asyncio.get_running_loop())
+                if (
+                    self._event_loop_id is not None
+                    and current_loop_id != self._event_loop_id
+                ):
+                    logger.warning(
+                        f"⚠️ {self.get_service_name()}: Event loop changed! "
+                        f"old={self._event_loop_id}, new={current_loop_id} - Reinitializing client"
+                    )
+                    # Close old client (may fail if loop is closed, that's OK)
+                    if self._http_client:
+                        try:
+                            await self._http_client.aclose()
+                        except Exception:
+                            pass
+                    self._http_client = None
+                    # Reinitialize with new event loop
+                    await self._setup_connection_pool()
+
+                # Log before making request
+                logger.info(
+                    f"🌐 {self.get_service_name()}: POST {endpoint} attempt {attempt + 1}, "
+                    f"client_exists={self._http_client is not None}, "
+                    f"client_closed={self._http_client.is_closed if self._http_client else 'N/A'}, "
+                    f"event_loop_id={current_loop_id}"
+                )
+
+                # Ensure client is initialized (should always be true after setup)
+                assert self._http_client is not None, "HTTP client not initialized"
+
                 request_start_time = time.time()
                 response = await self._http_client.post(
                     url, json=data, timeout=self.timeout
@@ -384,7 +434,31 @@ class AsyncServiceAdapter(ABC):
                 )
                 await asyncio.sleep(delay)
 
+            except httpx.HTTPStatusError as e:
+                # HTTP error with response available - extract meaningful error message
+                self._errors_encountered += 1
+
+                # Try to extract error detail from response body
+                error_detail = None
+                try:
+                    response_data = e.response.json()
+                    error_detail = response_data.get("detail", str(e))
+                except Exception:
+                    error_detail = str(e)
+
+                # Log the detailed error
+                logger.error(
+                    f"❌ {self.get_service_name()}: POST {endpoint} HTTP error: "
+                    f"status={e.response.status_code}, detail={error_detail}"
+                )
+
+                raise HostServiceConnectionError(
+                    f"Host service error (HTTP {e.response.status_code}): {error_detail}",
+                    self.get_service_name(),
+                ) from e
+
             except httpx.HTTPError as e:
+                # Other HTTP errors (no response available)
                 self._errors_encountered += 1
                 raise HostServiceConnectionError(
                     f"HTTP error for POST {endpoint}: {str(e)}", self.get_service_name()
@@ -392,6 +466,12 @@ class AsyncServiceAdapter(ABC):
 
             except Exception as e:
                 self._errors_encountered += 1
+                logger.error(
+                    f"❌ {self.get_service_name()}: POST {endpoint} exception: {type(e).__name__}: {str(e)}, "
+                    f"client_exists={self._http_client is not None}, "
+                    f"client_closed={self._http_client.is_closed if self._http_client else 'N/A'}",
+                    exc_info=True,
+                )
                 raise HostServiceError(
                     f"Unexpected error for POST {endpoint}: {str(e)}",
                     self.get_service_name(),

@@ -17,7 +17,7 @@ from ktrdr.api.services.training import (
     TrainingProgressBridge,
     build_training_context,
 )
-from ktrdr.api.services.training.local_runner import LocalTrainingRunner
+from ktrdr.api.services.training.local_orchestrator import LocalTrainingOrchestrator
 from ktrdr.api.services.training.training_progress_renderer import (
     TrainingProgressRenderer,
 )
@@ -26,7 +26,6 @@ from ktrdr.backtesting.model_loader import ModelLoader
 from ktrdr.errors import ValidationError
 from ktrdr.training.model_storage import ModelStorage
 from ktrdr.training.training_adapter import TrainingAdapter
-from ktrdr.training.training_manager import TrainingManager
 
 logger = get_logger(__name__)
 
@@ -34,8 +33,12 @@ logger = get_logger(__name__)
 _loaded_models: dict[str, Any] = {}
 
 
-class TrainingService(ServiceOrchestrator[TrainingAdapter]):
-    """Service for neural network training operations."""
+class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
+    """Service for neural network training operations.
+
+    Adapter is None for local training mode (uses LocalTrainingOrchestrator directly).
+    Adapter is TrainingAdapter for host service mode.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -46,10 +49,38 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
         self.operations_service = get_operations_service()
         logger.info("Training service initialized with TrainingProgressRenderer")
 
-    def _initialize_adapter(self) -> TrainingAdapter:
-        """Initialize training adapter via the legacy training manager."""
-        self.training_manager = TrainingManager()
-        return self.training_manager.training_adapter
+    def _initialize_adapter(self) -> TrainingAdapter | None:
+        """Initialize training adapter only for host service mode.
+
+        For local training, returns None since LocalTrainingOrchestrator is used directly.
+        """
+        import os
+
+        # Check if host service is enabled
+        env_enabled = os.getenv("USE_TRAINING_HOST_SERVICE", "").lower()
+        use_host_service = env_enabled in ("true", "1", "yes")
+
+        if not use_host_service:
+            # Local training mode - no adapter needed (uses LocalTrainingOrchestrator directly)
+            logger.info("=" * 80)
+            logger.info("💻 TRAINING MODE: LOCAL (Docker Container)")
+            logger.info("   Uses: LocalTrainingOrchestrator directly")
+            logger.info("   GPU Training: Not available in Docker")
+            logger.info("   CPU Training: Available")
+            logger.info("=" * 80)
+            return None
+
+        # Host service mode - create adapter
+        host_service_url = os.getenv(
+            "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
+        )
+        logger.info("=" * 80)
+        logger.info("🚀 TRAINING MODE: HOST SERVICE")
+        logger.info(f"   URL: {host_service_url}")
+        logger.info("   GPU Training: Available (if host service has GPU)")
+        logger.info("=" * 80)
+
+        return TrainingAdapter(use_host_service=True, host_service_url=host_service_url)
 
     def _get_service_name(self) -> str:
         return "TrainingService"
@@ -141,10 +172,27 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
     ) -> Optional[dict[str, Any]]:
         """Temporary adapter that reuses legacy training manager wiring."""
         context.operation_id = operation_id
-        if context.use_host_service:
-            return await self._run_host_training(context=context)
 
-        return await self._run_local_training(context=context)
+        # Log training mode clearly before execution
+        if context.use_host_service:
+            logger.info("=" * 80)
+            logger.info("🚀 EXECUTING TRAINING: HOST SERVICE MODE")
+            logger.info(f"   Operation ID: {operation_id}")
+            logger.info(f"   Symbols: {', '.join(context.symbols)}")
+            logger.info(f"   Strategy: {context.strategy_name}")
+            logger.info("   GPU Training: Available (if host service has GPU)")
+            logger.info("=" * 80)
+            return await self._run_host_training(context=context)
+        else:
+            logger.info("=" * 80)
+            logger.info("💻 EXECUTING TRAINING: LOCAL MODE (Docker Container)")
+            logger.info(f"   Operation ID: {operation_id}")
+            logger.info(f"   Symbols: {', '.join(context.symbols)}")
+            logger.info(f"   Strategy: {context.strategy_name}")
+            logger.info("   GPU Training: Not available")
+            logger.info("   CPU Training: Active")
+            logger.info("=" * 80)
+            return await self._run_local_training(context=context)
 
     async def _run_local_training(
         self, *, context: TrainingOperationContext
@@ -160,13 +208,14 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
             cancellation_token=self._current_cancellation_token,
         )
 
-        runner = LocalTrainingRunner(
+        orchestrator = LocalTrainingOrchestrator(
             context=context,
             progress_bridge=bridge,
             cancellation_token=self._current_cancellation_token,
+            model_storage=self.model_storage,
         )
 
-        return await runner.run()
+        return await orchestrator.run()
 
     async def _run_host_training(
         self, *, context: TrainingOperationContext
@@ -181,6 +230,11 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
             progress_manager=progress_manager,
             cancellation_token=self._current_cancellation_token,
         )
+
+        # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
+        assert (
+            self.adapter is not None
+        ), "Adapter should not be None in host service mode"
 
         manager = HostSessionManager(
             adapter=self.adapter,
@@ -200,6 +254,11 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter]):
         """Cancel a training session via TrainingManager."""
         if not self.is_using_host_service():
             raise ValidationError("Host training service is not enabled")
+
+        # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
+        assert (
+            self.adapter is not None
+        ), "Adapter should not be None in host service mode"
 
         try:
             logger.info(f"Cancelling training session {session_id} (reason: {reason})")

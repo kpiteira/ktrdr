@@ -18,6 +18,7 @@ from ktrdr.async_infrastructure.cancellation import (
 )
 
 from .analytics import TrainingAnalyzer
+from .device_manager import DeviceManager
 from .multi_symbol_data_loader import MultiSymbolDataLoader
 
 
@@ -109,16 +110,10 @@ class ModelTrainer:
         """
         self.config = config
         self.cancellation_token = cancellation_token
-        # GPU device selection with Apple Silicon support
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-            print(f"🚀 Using CUDA GPU: {torch.cuda.get_device_name(0)}")
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-            print("🚀 Using Apple Silicon GPU (MPS)")
-        else:
-            self.device = torch.device("cpu")
-            print("⚠️ Using CPU - GPU acceleration not available")
+        # GPU device selection with Apple Silicon support via DeviceManager
+        self.device = DeviceManager.get_torch_device()
+        device_info = DeviceManager.get_device_info()
+        print(f"🚀 Using {device_info['device_name']} for training")
         self.history: list[TrainingMetrics] = []
         self.best_model_state: Optional[dict[str, Any]] = None
         self.best_val_accuracy = 0.0
@@ -245,6 +240,11 @@ class ModelTrainer:
 
             for batch_idx, (batch_X, batch_y) in enumerate(train_loader):
                 self._check_cancelled()
+
+                # Move batch to device (DataLoader tensors default to CPU)
+                batch_X = batch_X.to(self.device)
+                batch_y = batch_y.to(self.device)
+
                 # DEBUG: Check for NaN in first batch of first epoch
                 if epoch == 0 and batch_idx == 0:
                     print(
@@ -332,6 +332,14 @@ class ModelTrainer:
                             epoch * total_bars + bars_processed_this_epoch
                         )
 
+                        # Calculate progress percentage (source of truth)
+                        progress_percent = (
+                            (completed_batches / total_batches) * 100.0
+                            if total_batches > 0
+                            else 0.0
+                        )
+                        progress_percent = max(0.0, min(progress_percent, 100.0))
+
                         # Create batch-level metrics
                         batch_metrics = {
                             "epoch": epoch,
@@ -340,6 +348,7 @@ class ModelTrainer:
                             "total_batches_per_epoch": total_batches_per_epoch,
                             "completed_batches": completed_batches,
                             "total_batches": total_batches,
+                            "progress_percent": progress_percent,
                             "bars_processed_this_epoch": bars_processed_this_epoch,
                             "total_bars_processed": total_bars_processed,
                             "total_bars": total_bars,
@@ -484,13 +493,26 @@ class ModelTrainer:
             if self.progress_callback:
                 try:
                     self._check_cancelled()
+
+                    # Calculate progress percentage (source of truth)
+                    completed_batches_at_epoch_end = (
+                        epoch + 1
+                    ) * total_batches_per_epoch
+                    progress_percent = (
+                        (completed_batches_at_epoch_end / total_batches) * 100.0
+                        if total_batches > 0
+                        else 0.0
+                    )
+                    progress_percent = max(0.0, min(progress_percent, 100.0))
+
                     # Epoch-level metrics (complete epoch with validation)
                     epoch_metrics = {
                         "epoch": epoch,
                         "total_epochs": epochs,
                         "total_batches_per_epoch": total_batches_per_epoch,
-                        "completed_batches": (epoch + 1) * total_batches_per_epoch,
+                        "completed_batches": completed_batches_at_epoch_end,
                         "total_batches": total_batches,
+                        "progress_percent": progress_percent,
                         "total_bars_processed": (epoch + 1)
                         * total_bars,  # All bars in completed epochs
                         "total_bars": total_bars,
@@ -557,6 +579,11 @@ class ModelTrainer:
     ) -> dict[str, Any]:
         """Train the multi-symbol neural network model with balanced sampling.
 
+        DEPRECATED: This method is deprecated in favor of the symbol-agnostic design.
+        Use train() instead, which handles both single and multi-symbol data uniformly.
+        The symbol-agnostic approach concatenates all symbol data and trains on patterns
+        in technical indicators, not symbol identities.
+
         Args:
             model: PyTorch model to train (must support symbol indices)
             X_train: Training features
@@ -570,6 +597,14 @@ class ModelTrainer:
         Returns:
             Training history and metrics
         """
+        import warnings
+
+        warnings.warn(
+            "train_multi_symbol() is deprecated. Use train() instead for symbol-agnostic training.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         # Move model to device
         model = model.to(self.device)
 

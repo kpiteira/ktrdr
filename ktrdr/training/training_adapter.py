@@ -78,19 +78,18 @@ class TrainingAdapter(AsyncServiceAdapter):
             )
             AsyncServiceAdapter.__init__(self, config)
 
-        # Initialize appropriate components based on mode
+        # TrainingAdapter is now HOST-SERVICE-ONLY
+        # Local training uses LocalTrainingOrchestrator directly, not this adapter
         if not use_host_service:
-            # Local training mode (existing behavior)
-            from .train_strategy import StrategyTrainer
-
-            self.local_trainer: Optional[StrategyTrainer] = StrategyTrainer()
-            logger.info("TrainingAdapter initialized for local training")
-        else:
-            # Host service mode
-            self.local_trainer = None
-            logger.info(
-                f"TrainingAdapter initialized for host service at {self.host_service_url}"
+            raise TrainingProviderError(
+                "TrainingAdapter no longer supports local training. "
+                "Use LocalTrainingOrchestrator for local training execution.",
+                provider="Training",
             )
+
+        logger.info(
+            f"TrainingAdapter initialized for host service at {self.host_service_url}"
+        )
 
         # Statistics
         self.requests_made = 0
@@ -230,36 +229,25 @@ class TrainingAdapter(AsyncServiceAdapter):
                 # Build training configuration from provided config dict
                 training_configuration = {
                     "validation_split": validation_split,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "data_mode": data_mode,
                 }
 
                 # Merge in additional training config fields (e.g., epochs, batch_size)
                 if training_config:
                     training_configuration.update(training_config)
 
+                # Load strategy YAML file
+                with open(strategy_config_path) as f:
+                    strategy_yaml_content = f.read()
+
                 response = await self._call_host_service_post(
                     "/training/start",
-                    {
-                        "model_configuration": {
-                            "strategy_config": strategy_config_path,
-                            "symbols": symbols,
-                            "timeframes": timeframes,
-                            "model_type": "mlp",
-                            "multi_symbol": len(symbols) > 1,
-                        },
-                        "training_configuration": training_configuration,
-                        "data_configuration": {
-                            "symbols": symbols,
-                            "timeframes": timeframes,
-                            "data_source": data_mode,
-                        },
-                        "gpu_configuration": {
-                            "enable_gpu": True,
-                            "memory_fraction": 0.8,
-                            "mixed_precision": True,
-                        },
+                    data={
+                        "strategy_yaml": strategy_yaml_content,
+                        # Runtime overrides
+                        "symbols": symbols,
+                        "timeframes": timeframes,
+                        "start_date": start_date,
+                        "end_date": end_date,
                     },
                 )
 
@@ -282,24 +270,12 @@ class TrainingAdapter(AsyncServiceAdapter):
                 }
 
             else:
-                # Use local training (existing behavior)
-                logger.info(f"Starting local training for {symbols} on {timeframes}")
-
-                if self.local_trainer is None:
-                    raise TrainingProviderError(
-                        "Local trainer not initialized", provider="Training"
-                    )
-
-                return self.local_trainer.train_multi_symbol_strategy(
-                    strategy_config_path=strategy_config_path,
-                    symbols=symbols,
-                    timeframes=timeframes,
-                    start_date=start_date,
-                    end_date=end_date,
-                    validation_split=validation_split,
-                    data_mode=data_mode,
-                    progress_callback=progress_callback,
-                    cancellation_token=cancellation_token,
+                # TrainingAdapter is host-service-only
+                raise TrainingProviderError(
+                    "TrainingAdapter does not support local training. "
+                    "This code path should not be reached. "
+                    "Use LocalTrainingOrchestrator for local training.",
+                    provider="Training",
                 )
 
         except TrainingProviderError:
@@ -321,6 +297,29 @@ class TrainingAdapter(AsyncServiceAdapter):
             )
 
         return await self._call_host_service_get(f"/training/status/{session_id}")
+
+    async def get_training_result(self, session_id: str) -> dict[str, Any]:
+        """
+        Get final training result (host service only).
+
+        TASK 3.3: Fetches the complete training result in TrainingPipeline format.
+        Only valid when training status is "completed".
+
+        Args:
+            session_id: Training session ID
+
+        Returns:
+            dict: Complete training result with harmonized format
+
+        Raises:
+            TrainingProviderError: If not using host service or result unavailable
+        """
+        if not self.use_host_service:
+            raise TrainingProviderError(
+                "Result retrieval only available for host service mode"
+            )
+
+        return await self._call_host_service_get(f"/training/result/{session_id}")
 
     async def stop_training(self, session_id: str) -> dict[str, Any]:
         """Stop a training session (host service only)."""

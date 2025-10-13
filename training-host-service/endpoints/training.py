@@ -35,11 +35,19 @@ class TrainingStartRequest(BaseModel):
     """Request to start a training session."""
 
     session_id: Optional[str] = Field(default=None, description="Optional session ID")
-    model_configuration: dict[str, Any] = Field(description="Model configuration")
-    training_configuration: dict[str, Any] = Field(description="Training configuration")
-    data_configuration: dict[str, Any] = Field(description="Data configuration")
-    gpu_configuration: Optional[dict[str, Any]] = Field(
-        default=None, description="GPU-specific configuration"
+    strategy_yaml: str = Field(description="Strategy configuration as YAML string")
+    # Runtime overrides (optional)
+    symbols: Optional[list[str]] = Field(
+        default=None, description="Override symbols from strategy"
+    )
+    timeframes: Optional[list[str]] = Field(
+        default=None, description="Override timeframes from strategy"
+    )
+    start_date: Optional[str] = Field(
+        default=None, description="Override start date (YYYY-MM-DD)"
+    )
+    end_date: Optional[str] = Field(
+        default=None, description="Override end date (YYYY-MM-DD)"
     )
 
 
@@ -111,10 +119,12 @@ async def start_training(request: TrainingStartRequest):
 
         # Prepare configuration for training service
         config = {
-            "model_config": request.model_configuration,
-            "training_config": request.training_configuration,
-            "data_config": request.data_configuration,
-            "gpu_config": request.gpu_configuration or {},
+            "strategy_yaml": request.strategy_yaml,
+            # Runtime overrides (optional)
+            "symbols": request.symbols,
+            "timeframes": request.timeframes,
+            "start_date": request.start_date,
+            "end_date": request.end_date,
         }
 
         # Create training session
@@ -131,16 +141,37 @@ async def start_training(request: TrainingStartRequest):
             status="started",
             message=f"Training session {session_id} started successfully",
             gpu_allocated=gpu_allocated,
-            estimated_duration_minutes=request.training_configuration.get(
-                "estimated_duration_minutes"
-            ),
+            estimated_duration_minutes=None,  # Can be computed from strategy YAML if needed
         )
 
     except Exception as e:
-        logger.error(f"Failed to start training session: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start training: {str(e)}"
-        ) from e
+        logger.error(f"Failed to start training session: {str(e)}", exc_info=True)
+        # Log current session state to help diagnose issues
+        service = get_service()
+        active_sessions = [
+            (sid, s.status) for sid, s in service.sessions.items()
+            if s.status in ["running", "initializing"]
+        ]
+        logger.error(f"Active sessions at failure: {active_sessions}")
+
+        # Return appropriate HTTP status code based on error type
+        if "Maximum concurrent sessions" in str(e):
+            # 503 Service Unavailable - temporary condition, client should retry later
+            raise HTTPException(
+                status_code=503,
+                detail=f"Service temporarily unavailable: {str(e)}. Please try again in a moment."
+            ) from e
+        elif "already exists" in str(e):
+            # 409 Conflict - session ID conflict
+            raise HTTPException(
+                status_code=409,
+                detail=f"Session conflict: {str(e)}"
+            ) from e
+        else:
+            # 500 Internal Server Error - unexpected errors
+            raise HTTPException(
+                status_code=500, detail=f"Failed to start training: {str(e)}"
+            ) from e
 
 
 @router.post("/stop")
@@ -179,29 +210,105 @@ async def get_training_status(session_id: str):
     Get the status of a training session.
 
     Returns detailed information about the training progress,
-    metrics, and resource usage.
+    metrics, and resource usage for ALL session states (initializing,
+    running, completed, failed).
+
+    TASK 3.3: This endpoint always returns status/progress format.
+    Use GET /result/{session_id} to retrieve final training results.
     """
     try:
         service = get_service()
 
-        # Get session status from service
-        status_info = service.get_session_status(session_id)
+        # Get session directly (bypassing get_session_status to avoid result format)
+        session = service.sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
+        # Always return progress format (even when completed)
         return TrainingStatusResponse(
             session_id=session_id,
-            status=status_info["status"],
-            progress=status_info["progress"],
-            metrics=status_info["metrics"]["current"],
-            gpu_usage=status_info["resource_usage"],
-            start_time=status_info["start_time"],
-            last_updated=status_info["last_updated"],
-            error=status_info.get("error"),
+            status=session.status,
+            progress=session.get_progress_dict(),
+            metrics={"current": session.metrics, "best": session.best_metrics},
+            gpu_usage=session.get_resource_usage(),
+            start_time=session.start_time.isoformat(),
+            last_updated=session.last_updated.isoformat(),
+            error=session.error,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get status for session {session_id}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to get training status: {str(e)}"
+        ) from e
+
+
+@router.get("/result/{session_id}")
+async def get_training_result(session_id: str):
+    """
+    Get the final training result.
+
+    Returns the complete training result in TrainingPipeline format.
+    Only valid when training status is "completed".
+
+    TASK 3.3: This endpoint returns the harmonized TrainingPipeline result format,
+    eliminating the need for result_aggregator transformation.
+
+    Returns:
+        dict: Training result with keys: model_path, training_metrics, test_metrics,
+              artifacts, model_info, data_summary, resource_usage, session_id, etc.
+
+    Raises:
+        404: Session not found
+        400: Training not completed yet
+    """
+    try:
+        service = get_service()
+
+        session = service.sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        if session.status != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Training not completed yet (status: {session.status})"
+            )
+
+        if not session.training_result:
+            raise HTTPException(
+                status_code=500,
+                detail="Training completed but result not available"
+            )
+
+        # Return the harmonized TrainingPipeline result format
+        result = {
+            **session.training_result,
+            "session_id": session_id,
+            "status": session.status,
+            "start_time": session.start_time.isoformat(),
+            "last_updated": session.last_updated.isoformat(),
+        }
+
+        # TASK 3.3: Verification logging
+        logger.info("=" * 80)
+        logger.info(f"RESULT ENDPOINT RETURNING COMPLETED RESULT (session {session_id})")
+        logger.info(f"  Keys: {list(result.keys())}")
+        logger.info(f"  model_path: {result.get('model_path')}")
+        logger.info(f"  training_metrics keys: {list(result.get('training_metrics', {}).keys())}")
+        logger.info(f"  test_metrics keys: {list(result.get('test_metrics', {}).keys())}")
+        logger.info("=" * 80)
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get result for session {session_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get training result: {str(e)}"
         ) from e
 
 

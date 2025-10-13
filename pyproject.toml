@@ -9,7 +9,7 @@ name = "KTRDR"
 version = "1.0.7.2"
 description = "Advanced trading system with fuzzy logic and machine learning capabilities"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "pandas>=2.0.0",
     "numpy>=1.24.0",

@@ -9,7 +9,6 @@ from typing import Any
 from ktrdr import get_logger
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
-from ktrdr.api.services.training.result_aggregator import from_host_run
 from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
 from ktrdr.training.training_adapter import TrainingAdapter
 
@@ -53,8 +52,27 @@ class HostSessionManager:
         await self.start_session()
         host_snapshot = await self.poll_session()
 
-        # Aggregate result into standardized format
-        return from_host_run(self._context, host_snapshot)
+        # TASK 3.3: Verification logging for result harmonization
+        logger.info("=" * 80)
+        logger.info("HOST SESSION MANAGER FINAL RESULT")
+        logger.info(f"  Keys: {list(host_snapshot.keys())}")
+        logger.info(f"  model_path: {host_snapshot.get('model_path')}")
+        logger.info(
+            f"  training_metrics keys: {list(host_snapshot.get('training_metrics', {}).keys())}"
+        )
+        logger.info(
+            f"  test_metrics keys: {list(host_snapshot.get('test_metrics', {}).keys())}"
+        )
+        logger.info(
+            f"  artifacts keys: {list(host_snapshot.get('artifacts', {}).keys())}"
+        )
+        logger.info(f"  session_id: {host_snapshot.get('session_id')}")
+        logger.info(f"  status: {host_snapshot.get('status')}")
+        logger.info("=" * 80)
+
+        # TASK 3.3: Return result directly (already in TrainingPipeline format!)
+        # No transformation needed - result_aggregator.py is now obsolete
+        return host_snapshot
 
     async def start_session(self) -> str:
         """Start a remote training session through the adapter."""
@@ -149,7 +167,14 @@ class HostSessionManager:
                     self._bridge.on_complete(
                         f"Remote training session {session_id} completed"
                     )
-                    return snapshot
+                    # TASK 3.3: Fetch final result from /result endpoint
+                    # The /status endpoint returns progress format, but we need the
+                    # complete training result for harmonization with local training
+                    logger.info(
+                        f"Training completed, fetching result for session {session_id}"
+                    )
+                    result = await self._adapter.get_training_result(session_id)
+                    return result
 
                 if status in _TERMINAL_CANCELLATION:
                     self._cancel_sent = True

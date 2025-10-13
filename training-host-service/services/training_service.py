@@ -10,19 +10,9 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import numpy as np
-import pandas as pd
-import torch
-import torch.nn as nn
-import torch.optim as optim
-
-from ktrdr.data.data_manager import DataManager
-from ktrdr.fuzzy.config import FuzzyConfig
-from ktrdr.fuzzy.engine import FuzzyEngine
-from ktrdr.indicators.indicator_engine import IndicatorEngine
 from ktrdr.logging import get_logger
 from ktrdr.training.data_optimization import DataConfig, DataLoadingOptimizer
-from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
+from ktrdr.training.device_manager import DeviceManager
 
 # Import existing ktrdr training components
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
@@ -42,10 +32,12 @@ class TrainingSession:
         self.start_time = datetime.utcnow()
         self.last_updated = datetime.utcnow()
 
-        # Progress tracking
+        # Progress tracking - store complete data from ModelTrainer (source of truth)
+        self._last_progress_data: Optional[dict[str, Any]] = None
+
+        # Legacy fields for backwards compatibility
         self.current_epoch = 0
         self.current_batch = 0
-
         self.total_epochs = config.get("training_config", {}).get("epochs", 100)
         self.total_batches = 0
         self.items_processed = 0
@@ -75,81 +67,77 @@ class TrainingSession:
         # Error tracking
         self.error = None
 
+        # Training result storage (Task 3.3: Result Harmonization)
+        # Store complete training result from TrainingPipeline for harmonization
+        # with local training format. This enables status endpoint to return
+        # the actual training result instead of requiring transformation.
+        self.training_result: Optional[dict[str, Any]] = None
+
     def update_progress(self, epoch: int, batch: int, metrics: dict[str, float]):
-        """Update training progress and metrics."""
-        try:
-            epoch_index = int(epoch)
-        except (TypeError, ValueError):
-            epoch_index = self.current_epoch or 0
+        """
+        Update training progress - store complete data from ModelTrainer (source of truth).
 
-        is_epoch_summary = any(str(key).startswith("epoch_") for key in metrics)
-        if not is_epoch_summary:
-            epoch_index += 1
-
-        epoch_index = max(epoch_index, 1)
-        self.current_epoch = max(self.current_epoch, epoch_index)
-
-        try:
-            batch_index = int(batch)
-        except (TypeError, ValueError):
-            batch_index = self.current_batch
-        self.current_batch = max(self.current_batch, batch_index)
+        ModelTrainer/TrainingPipeline is execution-agnostic and calculates all progress data.
+        This method just stores the data and passes it through in get_progress_dict().
+        """
         self.last_updated = datetime.utcnow()
 
-        total_batches_candidate = metrics.get("total_batches") or metrics.get(
+        # Store complete progress data from ModelTrainer (single source of truth)
+        self._last_progress_data = {
+            "epoch": metrics.get("epoch", epoch),
+            "total_epochs": metrics.get("total_epochs", self.total_epochs),
+            "batch": metrics.get("batch", batch),
+            "total_batches_per_epoch": metrics.get("total_batches_per_epoch"),
+            "completed_batches": metrics.get("completed_batches"),
+            "total_batches": metrics.get("total_batches"),
+            "progress_percent": metrics.get("progress_percent"),
+            "progress_type": metrics.get("progress_type"),
+        }
+
+        # Update legacy fields for backwards compatibility
+        try:
+            self.current_epoch = int(self._last_progress_data["epoch"])
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            self.current_batch = int(self._last_progress_data["batch"])
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            self.total_batches = int(
+                self._last_progress_data["total_batches_per_epoch"] or 0
+            )
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            self.items_processed = int(self._last_progress_data["completed_batches"] or 0)
+        except (TypeError, ValueError):
+            pass
+
+        # Build message for display (legacy field)
+        message_parts = []
+        epoch_val = self._last_progress_data.get("epoch")
+        total_epochs_val = self._last_progress_data.get("total_epochs")
+        batch_val = self._last_progress_data.get("batch")
+        total_batches_per_epoch_val = self._last_progress_data.get(
             "total_batches_per_epoch"
         )
-        if total_batches_candidate is not None:
-            try:
-                total_batches_int = int(total_batches_candidate)
-                if total_batches_int > 0:
-                    self.total_batches = max(self.total_batches, total_batches_int)
-            except (TypeError, ValueError):
-                pass
 
-        if self.current_batch and self.current_batch > self.total_batches:
-            self.total_batches = self.current_batch
+        if epoch_val and total_epochs_val:
+            message_parts.append(f"Epoch {epoch_val}/{total_epochs_val}")
+        elif epoch_val:
+            message_parts.append(f"Epoch {epoch_val}")
 
-        completed_batches = metrics.get("completed_batches")
-        if completed_batches is None:
-            completed_batches = self.current_batch
-        try:
-            completed_batches_int = int(completed_batches)
-        except (TypeError, ValueError):
-            completed_batches_int = self.current_batch
-
-        # Calculate cumulative items processed across all epochs
-        # items_processed = (completed_epochs * batches_per_epoch) + current_batch
-        if self.total_batches and self.current_epoch > 0:
-            # Epochs are 1-indexed, so completed epochs = current_epoch - 1
-            cumulative_items = (
-                (self.current_epoch - 1) * self.total_batches
-            ) + completed_batches_int
-            self.items_processed = max(self.items_processed, cumulative_items)
-        else:
-            # Fallback to batch-only if we don't have epoch info
-            self.items_processed = max(self.items_processed, completed_batches_int)
-
-        # Don't artificially increase total_batches - it's batches PER EPOCH
-        # The total across all epochs is calculated in get_progress_dict()
-
-        message_parts = []
-        if self.total_epochs:
-            message_parts.append(
-                f"Epoch {min(self.current_epoch, self.total_epochs)}/{self.total_epochs}"
-            )
-        else:
-            message_parts.append(f"Epoch {self.current_epoch}")
-
-        if self.total_batches:
-            message_parts.append(
-                f"Batch {min(self.items_processed, self.total_batches)}/{self.total_batches}"
-            )
+        if batch_val and total_batches_per_epoch_val:
+            message_parts.append(f"Batch {batch_val}/{total_batches_per_epoch_val}")
 
         if message_parts:
             self.message = " · ".join(message_parts)
             self.current_item = message_parts[-1]
-        else:  # pragma: no cover - fallback
+        else:
             self.message = "Training in progress"
             self.current_item = self.message
 
@@ -167,37 +155,39 @@ class TrainingSession:
                     self.best_metrics[key] = value
 
     def get_progress_dict(self) -> dict[str, Any]:
-        """Get progress information as dictionary."""
-        # Calculate total items across ALL epochs, not just one epoch
-        items_total = (
-            self.total_batches * self.total_epochs
-            if self.total_batches and self.total_epochs
-            else None
-        )
+        """
+        Get progress information - pass through from ModelTrainer (execution-agnostic).
 
-        if items_total:
-            # Progress based on total batches across all epochs
-            progress_percent = (
-                (self.items_processed / items_total) * 100.0 if items_total > 0 else 0.0
-            )
-        else:
-            # Fallback to epoch-based progress if batch info unavailable
-            progress_percent = (
-                (self.current_epoch / self.total_epochs) * 100.0
-                if self.total_epochs > 0
-                else 0.0
-            )
+        All progress calculations happen in TrainingPipeline/ModelTrainer (single source of truth).
+        This method just returns the data for transmission to backend.
+        """
+        if self._last_progress_data:
+            # Pass through complete progress data from ModelTrainer
+            return {
+                "epoch": self._last_progress_data.get("epoch", 0),
+                "total_epochs": self._last_progress_data.get(
+                    "total_epochs", self.total_epochs
+                ),
+                "batch": self._last_progress_data.get("batch", 0),
+                "total_batches": self._last_progress_data.get(
+                    "total_batches_per_epoch", 0
+                ),
+                "progress_percent": self._last_progress_data.get("progress_percent", 0.0),
+                "items_processed": self._last_progress_data.get("completed_batches", 0),
+                "items_total": self._last_progress_data.get("total_batches"),
+                "message": self.message,
+                "current_item": self.current_item or self.message,
+            }
 
-        progress_percent = max(0.0, min(progress_percent, 100.0))
-
+        # Fallback if no data yet (initialization phase)
         return {
-            "epoch": self.current_epoch,
+            "epoch": 0,
             "total_epochs": self.total_epochs,
-            "batch": self.current_batch,
-            "total_batches": self.total_batches,
-            "progress_percent": progress_percent,
-            "items_processed": self.items_processed,
-            "items_total": items_total,
+            "batch": 0,
+            "total_batches": 0,
+            "progress_percent": 0.0,
+            "items_processed": 0,
+            "items_total": None,
             "message": self.message,
             "current_item": self.current_item or self.message,
         }
@@ -294,6 +284,16 @@ class TrainingService:
         self.session_timeout_minutes = session_timeout_minutes
         self.sessions: dict[str, TrainingSession] = {}
 
+        # Model storage - host service has situational awareness of shared models path
+        # Host service runs from training-host-service/, models are in project root
+        from pathlib import Path
+
+        from ktrdr.training.model_storage import ModelStorage
+
+        project_root = Path(__file__).parent.parent.parent
+        models_path = project_root / "models"
+        self.model_storage = ModelStorage(base_path=str(models_path))
+
         # Global resource managers
         self.global_gpu_manager: Optional[GPUMemoryManager] = None
         self._initialize_global_resources()
@@ -304,31 +304,28 @@ class TrainingService:
     def _initialize_global_resources(self):
         """Initialize global GPU resources."""
         try:
-            # Check for CUDA or Apple Silicon MPS
-            if torch.cuda.is_available():
+            # Use DeviceManager to detect device and capabilities
+            device_info = DeviceManager.get_device_info()
+            device_type = device_info["device"]
+            capabilities = device_info["capabilities"]
+
+            if device_type in ("cuda", "mps"):
+                # Configure based on device capabilities
                 gpu_config = GPUMemoryConfig(
                     memory_fraction=0.8,
-                    enable_mixed_precision=True,
-                    enable_memory_profiling=True,
+                    enable_mixed_precision=capabilities["mixed_precision"],
+                    enable_memory_profiling=capabilities["memory_info"],
+                    enable_memory_pooling=(
+                        device_type == "cuda"
+                    ),  # Only CUDA supports pooling
                     profiling_interval_seconds=1.0,
                 )
                 self.global_gpu_manager = GPUMemoryManager(gpu_config)
                 logger.info(
-                    f"Global GPU manager initialized with {self.global_gpu_manager.num_devices} CUDA devices"
+                    f"Global GPU manager initialized with {device_info['device_name']}"
                 )
-            elif torch.backends.mps.is_available():
-                # Apple Silicon MPS support - disable CUDA-specific features
-                gpu_config = GPUMemoryConfig(
-                    memory_fraction=0.8,
-                    enable_mixed_precision=False,  # Disable mixed precision for MPS compatibility
-                    enable_memory_profiling=False,  # Disable profiling for MPS compatibility
-                    enable_memory_pooling=False,  # Disable memory pooling for MPS compatibility
-                    profiling_interval_seconds=1.0,
-                )
-                self.global_gpu_manager = GPUMemoryManager(gpu_config)
-                logger.info("Global GPU manager initialized with Apple Silicon MPS")
             else:
-                logger.info("No GPU available (CUDA or MPS), running in CPU-only mode")
+                logger.info("No GPU available, running in CPU-only mode")
         except Exception as e:
             logger.error(f"Failed to initialize global GPU resources: {str(e)}")
             self.global_gpu_manager = None
@@ -353,6 +350,11 @@ class TrainingService:
         active_sessions = [
             s for s in self.sessions.values() if s.status in ["running", "initializing"]
         ]
+        all_sessions = [(sid, s.status) for sid, s in self.sessions.items()]
+        logger.info(
+            f"🔍 CREATE_SESSION: Checking limits - active={len(active_sessions)}/{self.max_concurrent_sessions}, "
+            f"all_sessions={all_sessions}"
+        )
         if len(active_sessions) >= self.max_concurrent_sessions:
             raise Exception(
                 f"Maximum concurrent sessions ({self.max_concurrent_sessions}) reached"
@@ -385,7 +387,7 @@ class TrainingService:
                 self._run_training_session(session)
             )
 
-            logger.info(f"Training session {session_id} created successfully")
+            logger.info(f"✅ CREATE_SESSION: session_id={session_id}, status={session.status} - Training task started")
             return session_id
 
         except Exception as e:
@@ -491,392 +493,57 @@ class TrainingService:
 
     async def _run_real_training(self, session: TrainingSession):
         """
-        Run actual GPU-accelerated training using existing KTRDR components.
+        Run training using HostTrainingOrchestrator.
 
-        This method integrates:
-        - DataManager for market data loading
-        - IndicatorEngine for technical indicators
-        - FuzzyEngine for fuzzy logic processing
-        - FuzzyNeuralProcessor for neural network training
+        This method is now a thin wrapper that delegates all work to
+        HostTrainingOrchestrator, which uses TrainingPipeline for training logic.
+
+        PERFORMANCE FIX: The old implementation had 14 minutes of sleep overhead per
+        100 epochs. The orchestrator uses intelligent throttling instead (8ms overhead).
         """
         try:
-            # Determine device - prioritize MPS for Apple Silicon, then CUDA, then CPU
-            if torch.backends.mps.is_available():
-                device = torch.device("mps")
-                device_type = "mps"
-                logger.info("Using Apple Silicon MPS for GPU acceleration")
-            elif torch.cuda.is_available():
-                device = torch.device("cuda")
-                device_type = "cuda"
-                logger.info(
-                    f"Using CUDA GPU {torch.cuda.get_device_name(0)} for acceleration"
-                )
-            else:
-                device = torch.device("cpu")
-                device_type = "cpu"
-                logger.info("No GPU available, using CPU")
+            # Import orchestrator
+            import sys
+            from pathlib import Path
 
-            # Extract training configuration from the structured format
-            config = session.config
+            orchestrator_path = Path(__file__).parent.parent
+            if str(orchestrator_path) not in sys.path:
+                sys.path.insert(0, str(orchestrator_path))
 
-            # Read from model_configuration, data_configuration, and training_configuration
-            model_config = config.get("model_config", {})
-            data_config = config.get("data_config", {})
-            training_config = config.get("training_config", {})
+            from orchestrator import HostTrainingOrchestrator
 
-            # Get symbols and timeframes from data_configuration (multi-symbol support)
-            symbols = data_config.get("symbols", model_config.get("symbols", ["AAPL"]))
-            timeframes = data_config.get(
-                "timeframes", model_config.get("timeframes", ["1D"])
+            # Host service has its own ModelStorage instance configured at service level
+            # This provides situational awareness - the service knows where models should be saved
+            # The orchestrator receives this and passes it through to TrainingPipeline
+            orchestrator = HostTrainingOrchestrator(
+                session=session,
+                model_storage=self.model_storage,  # Use service-level ModelStorage
             )
 
-            # If symbols is a single string, convert to list
-            if isinstance(symbols, str):
-                symbols = [symbols]
+            # Run training via orchestrator (direct async - no thread wrapper)
+            result = await orchestrator.run()
 
-            # Training parameters
-            epochs = training_config.get("epochs", 10)
-            batch_size = training_config.get(
-                "batch_size", 128
-            )  # Increased for better GPU utilization
+            # Result already includes:
+            # - model_path (saved via ModelStorage)
+            # - training_metrics
+            # - test_metrics
+            # - resource_usage (GPU info)
+            # - session_id
 
+            # Session status already updated by orchestrator
             logger.info(
-                f"Training configuration: {len(symbols)} symbols, {len(timeframes)} timeframes, {epochs} epochs"
+                f"Training orchestration completed for session {session.session_id}"
             )
 
-            # Initialize KTRDR components
-            data_manager = DataManager()
-
-            # Load data for all symbols and timeframes
-            training_data = {}
-            total_data_points = 0
-
-            for symbol in symbols:
-                training_data[symbol] = {}
-                for timeframe in timeframes:
-                    try:
-                        # Load historical data
-                        data = data_manager.load_data(
-                            symbol=symbol,
-                            timeframe=timeframe,
-                            start_date=datetime.utcnow()
-                            - timedelta(days=365),  # 1 year of data
-                            end_date=datetime.utcnow(),
-                            mode="local",
-                            validate=True,
-                        )
-
-                        if data is not None and len(data) > 0:
-                            training_data[symbol][timeframe] = data
-                            total_data_points += len(data)
-                            logger.info(
-                                f"Loaded {len(data)} data points for {symbol} {timeframe}"
-                            )
-                        else:
-                            logger.warning(f"No data loaded for {symbol} {timeframe}")
-
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to load data for {symbol} {timeframe}: {str(e)}"
-                        )
-                        continue
-
-            if total_data_points == 0:
-                raise Exception("No training data available")
-
-            logger.info(f"Total training data points: {total_data_points}")
-
-            # Initialize indicators and fuzzy engine
-            indicator_engine = IndicatorEngine()
-            # Use simple fuzzy config to get training working
-            fuzzy_config = FuzzyConfig(
-                {
-                    "rsi": {
-                        "low": {"type": "triangular", "parameters": [0.0, 0.0, 30.0]},
-                        "high": {
-                            "type": "triangular",
-                            "parameters": [70.0, 100.0, 100.0],
-                        },
-                    }
-                }
-            )
-            FuzzyEngine(fuzzy_config)
-
-            # Initialize fuzzy neural processor for feature preparation
-            FuzzyNeuralProcessor(
-                config={"lookback_periods": 0}  # Simple config for feature processing
-            )
-
-            # Create a simple neural network model for trading signals
-            class TradingModel(nn.Module):
-                def __init__(
-                    self, input_size=20, hidden_size=512, output_size=3
-                ):  # Increased from 128 to 512
-                    super().__init__()
-                    self.layers = nn.Sequential(
-                        nn.Linear(input_size, hidden_size),  # 20 -> 512
-                        nn.ReLU(),
-                        nn.Dropout(0.2),
-                        nn.Linear(hidden_size, hidden_size // 2),  # 512 -> 256
-                        nn.ReLU(),
-                        nn.Dropout(0.2),
-                        nn.Linear(
-                            hidden_size // 2, hidden_size // 4
-                        ),  # 256 -> 128 (added layer)
-                        nn.ReLU(),
-                        nn.Dropout(0.2),
-                        nn.Linear(hidden_size // 4, output_size),  # 128 -> 3
-                    )
-
-                def forward(self, x):
-                    return self.layers(x)
-
-            # Create and move model to device with larger size
-            model = TradingModel(
-                input_size=20, hidden_size=512, output_size=3
-            )  # Increased from 128 to 512
-            model.to(device)
-
-            # Setup optimizer
-            optimizer = optim.Adam(model.parameters(), lr=0.001)
-            criterion = nn.CrossEntropyLoss()
-
-            # Calculate total batches
-            session.total_batches = max(1, total_data_points // batch_size)
-
-            # Training loop
-            for epoch in range(epochs):
-                if session.stop_requested:
-                    logger.info(f"Training stopped by request at epoch {epoch}")
-                    break
-
-                epoch_loss = 0.0
-                epoch_accuracy = 0.0
-                batches_processed = 0
-
-                # Process each symbol and timeframe
-                for symbol in training_data:
-                    for timeframe in training_data[symbol]:
-                        if session.stop_requested:
-                            break
-
-                        data = training_data[symbol][timeframe]
-
-                        # Process data in batches
-                        for batch_start in range(0, len(data), batch_size):
-                            if session.stop_requested:
-                                break
-
-                            batch_end = min(batch_start + batch_size, len(data))
-                            batch_data = data.iloc[batch_start:batch_end]
-
-                            if len(batch_data) < batch_size // 2:  # Skip small batches
-                                continue
-
-                            try:
-                                # For now, use simplified feature preparation to get training working
-                                # Calculate basic indicators using the engine
-                                indicator_data = indicator_engine.apply(batch_data)
-
-                                # Prepare neural network input (simplified for demo)
-                                # In real implementation, this would be more sophisticated feature engineering
-                                features = self._prepare_neural_features(indicator_data)
-                                labels = self._generate_training_labels(batch_data)
-
-                                # Convert to tensors and move to device
-                                features_tensor = torch.FloatTensor(features).to(device)
-                                labels_tensor = torch.LongTensor(labels).to(device)
-
-                                # Validate tensor shapes match
-                                if features_tensor.shape[0] != labels_tensor.shape[0]:
-                                    logger.warning(
-                                        f"Tensor shape mismatch: features {features_tensor.shape} vs labels {labels_tensor.shape}, skipping batch"
-                                    )
-                                    continue
-
-                                # Forward pass
-                                optimizer.zero_grad()
-                                outputs = model(features_tensor)
-                                loss = criterion(outputs, labels_tensor)
-
-                                # Backward pass
-                                loss.backward()
-                                optimizer.step()
-
-                                # Calculate accuracy
-                                _, predicted = torch.max(outputs.data, 1)
-                                correct = (predicted == labels_tensor).sum().item()
-                                accuracy = correct / len(labels_tensor)
-
-                                epoch_loss += loss.item()
-                                epoch_accuracy += accuracy
-                                batches_processed += 1
-
-                                # Update progress
-                                session.update_progress(
-                                    epoch=epoch,
-                                    batch=batches_processed,
-                                    metrics={
-                                        "loss": loss.item(),
-                                        "accuracy": accuracy,
-                                        "device": device_type,
-                                        "completed_batches": batches_processed,
-                                        "total_batches": session.total_batches,
-                                    },
-                                )
-
-                                # Small delay to prevent overwhelming
-                                await asyncio.sleep(0.1)
-
-                                if session.stop_requested:
-                                    break
-
-                            except Exception as e:
-                                logger.error(
-                                    f"Error processing batch for {symbol} {timeframe}: {str(e)}"
-                                )
-                                continue
-
-                        if session.stop_requested:
-                            break
-
-                if session.stop_requested:
-                    break
-
-                # Log epoch results
-                if batches_processed > 0:
-                    avg_loss = epoch_loss / batches_processed
-                    avg_accuracy = epoch_accuracy / batches_processed
-
-                    logger.info(
-                        f"Epoch {epoch + 1}/{epochs} - Loss: {avg_loss:.4f}, Accuracy: {avg_accuracy:.4f}"
-                    )
-
-                    # Update session with epoch metrics
-                    session.update_progress(
-                        epoch=epoch + 1,
-                        batch=batches_processed,
-                        metrics={
-                            "epoch_loss": avg_loss,
-                            "epoch_accuracy": avg_accuracy,
-                            "device": device_type,
-                            "total_batches": batches_processed,
-                            "completed_batches": batches_processed,
-                        },
-                    )
-
-                # Memory cleanup between epochs
-                if session.gpu_manager and hasattr(
-                    session.gpu_manager, "cleanup_memory"
-                ):
-                    session.gpu_manager.cleanup_memory()
-
-                # Allow other tasks to run
-                await asyncio.sleep(0.5)
-
-                if session.stop_requested:
-                    logger.info(
-                        "Stop requested after epoch %s for session %s",
-                        epoch,
-                        session.session_id,
-                    )
-                    break
-
-            # Log completion status based on whether it was cancelled or completed normally
-            if session.stop_requested:
-                logger.info(
-                    f"Training CANCELLED for session {session.session_id} - cancellation completed successfully"
-                )
-                session.status = "cancelled"
-            else:
-                logger.info(
-                    f"Training COMPLETED normally for session {session.session_id}"
-                )
-                session.status = "completed"
+            return result
 
         except Exception as e:
-            logger.error(f"Real training failed: {str(e)}")
+            session.status = "failed"
+            session.message = f"Training failed: {str(e)}"
+            logger.error(f"Training failed for session {session.session_id}: {str(e)}")
             raise
 
-    def _prepare_neural_features(self, indicator_data: pd.DataFrame) -> np.ndarray:
-        """Prepare feature matrix for neural network input."""
-        # Simplified feature preparation using basic price data
-        features = []
-
-        # Use basic price features from the data (process all available data)
-        for i in range(len(indicator_data)):
-            feature_vector = []
-
-            try:
-                row = indicator_data.iloc[i]
-
-                # Basic price features (normalized)
-                if "open" in row:
-                    feature_vector.append(
-                        float(row["open"]) / 100000.0
-                    )  # Normalize forex prices
-                if "high" in row:
-                    feature_vector.append(float(row["high"]) / 100000.0)
-                if "low" in row:
-                    feature_vector.append(float(row["low"]) / 100000.0)
-                if "close" in row:
-                    feature_vector.append(float(row["close"]) / 100000.0)
-
-                # Simple derived features
-                if len(feature_vector) >= 4:
-                    # High-Low range
-                    feature_vector.append(
-                        (feature_vector[1] - feature_vector[2]) * 100000.0
-                    )
-                    # Open-Close change
-                    feature_vector.append(
-                        (feature_vector[3] - feature_vector[0]) * 100000.0
-                    )
-
-                # Pad to reach 20 features with small random values
-                while len(feature_vector) < 20:
-                    feature_vector.append(np.random.normal(0, 0.01))
-
-                # Ensure exactly 20 features
-                feature_vector = feature_vector[:20]
-
-            except Exception:
-                # Fallback to random features if processing fails
-                feature_vector = np.random.normal(0, 0.01, 20).tolist()
-
-            features.append(feature_vector)
-
-        return np.array(features)
-
-    def _generate_training_labels(self, batch_data) -> list[int]:
-        """Generate training labels based on price movement."""
-        labels = []
-
-        try:
-            close_prices = batch_data["close"].values
-
-            for i in range(len(close_prices)):
-                if i < len(close_prices) - 1:
-                    # Simple label generation based on next price movement
-                    price_change = (
-                        close_prices[i + 1] - close_prices[i]
-                    ) / close_prices[i]
-
-                    if price_change > 0.01:  # 1% increase
-                        labels.append(0)  # Buy signal
-                    elif price_change < -0.01:  # 1% decrease
-                        labels.append(2)  # Sell signal
-                    else:
-                        labels.append(1)  # Hold signal
-                else:
-                    labels.append(1)  # Default to hold for last item
-
-        except Exception as e:
-            logger.warning(f"Error generating labels: {str(e)}, using default labels")
-            # Fallback to random labels
-            labels = [np.random.randint(0, 3) for _ in range(len(batch_data))]
-
-        return labels
+    # Old simplified feature engineering methods removed - now using TrainingPipeline
 
     async def stop_session(self, session_id: str, save_checkpoint: bool = True) -> bool:
         """
@@ -906,7 +573,7 @@ class TrainingService:
         # Request stop
         session.stop_requested = True
         logger.info(
-            f"Stop flag set for session {session_id} - training will stop at next checkpoint"
+            f"🛑 STOP_SESSION: session_id={session_id}, current_status={session.status}, stop_requested=True"
         )
 
         # TODO: Implement checkpoint saving if requested
@@ -915,30 +582,44 @@ class TrainingService:
             # Implementation would save model state, optimizer state, etc.
 
         # Wait for training task to complete
+        logger.info("⏳ STOP_SESSION: Waiting for training task to complete (timeout=30s)")
         if session.training_task:
             try:
                 await asyncio.wait_for(session.training_task, timeout=30.0)
+                logger.info(f"✅ STOP_SESSION: Training task completed, session_status={session.status}")
             except asyncio.TimeoutError:
                 logger.warning(
-                    f"Training task for session {session_id} did not stop gracefully"
+                    f"⏰ STOP_SESSION: Training task for session {session_id} did not stop gracefully (timeout)"
                 )
                 session.training_task.cancel()
                 session.status = "stopped"
             except asyncio.CancelledError:
                 logger.info(
-                    "Training task for session %s was already cancelled", session_id
+                    f"❌ STOP_SESSION: Training task for session {session_id} was already cancelled"
                 )
                 session.status = "stopped"
+        else:
+            logger.info("⚠️ STOP_SESSION: No training task found")
 
+        logger.info(f"🏁 STOP_SESSION: Returning True, final session_status={session.status}")
         return True
 
     def get_session_status(self, session_id: str) -> dict[str, Any]:
-        """Get detailed status of a training session."""
+        """
+        Get detailed status of a training session.
+
+        TASK 3.3: Always returns progress format (even when completed).
+        Use session.training_result directly to get final training results.
+
+        Returns:
+            dict: Status with progress, metrics, resource_usage for all states
+        """
         if session_id not in self.sessions:
             raise Exception(f"Session {session_id} not found")
 
         session = self.sessions[session_id]
 
+        # Always return progress format (separation of concerns: status vs results)
         return {
             "session_id": session_id,
             "status": session.status,

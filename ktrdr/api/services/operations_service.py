@@ -590,15 +590,21 @@ class OperationsService:
                 )
                 return None
 
-            # Get training host client
-            from ktrdr.api.services.training_host_client import get_training_host_client
-            from ktrdr.config.training_host_settings import get_training_host_settings
+            # Get training adapter from TrainingService (singleton, already configured)
+            from ktrdr.api.services.training_service import get_training_service
 
-            training_host_settings = get_training_host_settings()
-            host_client = get_training_host_client(training_host_settings.base_url)
+            training_service = get_training_service()
+            adapter = training_service.adapter
+
+            # Verify we're in host service mode
+            if adapter is None or not adapter.use_host_service:
+                logger.warning(
+                    f"Training operation {operation.operation_id} expected host service but not in host service mode"
+                )
+                return None
 
             # Query host service status
-            status_data = await host_client.get_training_status(session_id)
+            status_data = await adapter.get_training_status(session_id)
 
             host_status = status_data.get("status", "unknown")
             host_progress = status_data.get("progress", {})

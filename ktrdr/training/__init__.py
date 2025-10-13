@@ -4,7 +4,8 @@ from .model_storage import ModelStorage
 
 # FeatureEngineer removed - using pure fuzzy processing
 from .model_trainer import EarlyStopping, ModelTrainer, TrainingMetrics
-from .train_strategy import StrategyTrainer
+
+# StrategyTrainer removed - use LocalTrainingOrchestrator or HostTrainingOrchestrator
 from .zigzag_labeler import ZigZagConfig, ZigZagLabeler
 
 # Multi-timeframe label generator temporarily disabled while updating for pure fuzzy
@@ -30,7 +31,7 @@ __all__ = [
     "TrainingMetrics",
     "EarlyStopping",
     "ModelStorage",
-    "StrategyTrainer",
+    # "StrategyTrainer",  # Removed - use LocalTrainingOrchestrator or HostTrainingOrchestrator
     # "MultiTimeframeLabelGenerator",  # Temporarily disabled
     # "MultiTimeframeLabelConfig",  # Temporarily disabled
     # "TimeframeLabelConfig",  # Temporarily disabled
