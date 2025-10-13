@@ -1,5 +1,6 @@
 """Strategy configuration validation and upgrade utilities."""
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -398,6 +399,113 @@ class StrategyValidator:
 
         if "risk_management" not in config:
             result.suggestions.append("Add risk_management section for position sizing")
+
+    def _validate_indicator_fuzzy_matching(
+        self, indicators: list[dict[str, Any]], fuzzy_sets: dict[str, Any]
+    ) -> ValidationResult:
+        """Validate indicator-fuzzy set matching with explicit naming.
+
+        With explicit naming, validation is simple:
+        - Every indicator.name must have a corresponding fuzzy_sets entry
+        - Orphan fuzzy_sets (no matching indicator) generate warnings
+
+        Args:
+            indicators: List of indicator configurations
+            fuzzy_sets: Dictionary of fuzzy set definitions
+
+        Returns:
+            ValidationResult with errors for missing fuzzy sets
+        """
+        result = ValidationResult(is_valid=True)
+
+        # Extract indicator names
+        indicator_names = set()
+        for ind in indicators:
+            if isinstance(ind, dict) and "name" in ind:
+                indicator_names.add(ind["name"])
+
+        fuzzy_names = set(fuzzy_sets.keys())
+
+        # Check 1: Every indicator must have fuzzy sets
+        missing_fuzzy = indicator_names - fuzzy_names
+        for name in sorted(missing_fuzzy):  # Sort for consistent error ordering
+            result.is_valid = False
+            result.errors.append(
+                f"Indicator '{name}' has no corresponding fuzzy_sets entry. "
+                f"Add 'fuzzy_sets.{name}' section with fuzzy set definitions."
+            )
+
+        # Check 2: Warn about orphan fuzzy sets (might be intentional for derived features)
+        orphan_fuzzy = fuzzy_names - indicator_names
+        for name in sorted(orphan_fuzzy):
+            result.warnings.append(
+                f"Fuzzy set '{name}' doesn't match any indicator name. "
+                f"This may be intentional for derived features, or could be a typo."
+            )
+
+        return result
+
+    def _validate_indicator_definitions(
+        self, indicators: list[dict[str, Any]]
+    ) -> ValidationResult:
+        """Validate indicator definitions for required fields and format.
+
+        Checks:
+        - Required 'indicator' field (base type)
+        - Required 'name' field (unique identifier)
+        - Name format validation (alphanumeric, underscore, dash, starts with letter)
+
+        Args:
+            indicators: List of indicator configurations
+
+        Returns:
+            ValidationResult with errors for invalid definitions
+        """
+        result = ValidationResult(is_valid=True)
+
+        for i, ind in enumerate(indicators, start=1):
+            if not isinstance(ind, dict):
+                result.is_valid = False
+                result.errors.append(
+                    f"Indicator #{i} must be a dictionary, got {type(ind).__name__}"
+                )
+                continue
+
+            # Check required 'indicator' field
+            if "indicator" not in ind:
+                result.is_valid = False
+                result.errors.append(
+                    f"Indicator #{i} missing required 'indicator' field "
+                    f"(base indicator type like 'rsi', 'macd', etc.)"
+                )
+
+            # Check required 'name' field
+            if "name" not in ind:
+                result.is_valid = False
+                result.errors.append(
+                    f"Indicator #{i} missing required 'name' field "
+                    f"(unique identifier for this indicator instance)"
+                )
+                continue  # Can't validate format without name
+
+            # Validate name format
+            name = ind["name"]
+            if not isinstance(name, str) or not name.strip():
+                result.is_valid = False
+                result.errors.append(
+                    f"Indicator #{i} has invalid name: name cannot be empty"
+                )
+                continue
+
+            # Check name format: must start with letter, contain only alphanumeric/underscore/dash
+            if not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name):
+                result.is_valid = False
+                result.errors.append(
+                    f"Indicator #{i} has invalid name '{name}': "
+                    f"must start with letter and contain only letters, numbers, underscore, or dash"
+                )
+
+        return result
 
     def upgrade_strategy(
         self, config_path: str, output_path: Optional[str] = None
