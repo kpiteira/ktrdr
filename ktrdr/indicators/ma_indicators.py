@@ -237,6 +237,7 @@ class ExponentialMovingAverage(BaseIndicator):
         Get the standardized column name for this indicator.
 
         This overrides the base class method to exclude the 'adjust' parameter.
+        Respects explicit naming via _custom_column_name attribute.
 
         Args:
             suffix (str, optional): Optional suffix to append to the column name.
@@ -244,6 +245,14 @@ class ExponentialMovingAverage(BaseIndicator):
         Returns:
             str: The standardized column name
         """
+        # Use custom name if provided (via IndicatorFactory with explicit naming)
+        if hasattr(self, "_custom_column_name"):
+            col_name = self._custom_column_name
+            if suffix:
+                col_name = f"{col_name}_{suffix}"
+            return col_name
+
+        # Fall back to auto-generated name (backward compatibility)
         # Get the key parameters for the column name (exclude adjust)
         key_params = {
             k: v for k, v in self.params.items() if k not in ["source", "adjust"]

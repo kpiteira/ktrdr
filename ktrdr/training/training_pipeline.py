@@ -31,7 +31,8 @@ from ktrdr.data.multi_timeframe_coordinator import MultiTimeframeCoordinator
 from ktrdr.fuzzy.config import FuzzyConfigLoader
 from ktrdr.fuzzy.engine import FuzzyEngine
 from ktrdr.indicators.indicator_engine import IndicatorEngine
-from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
+
+# BUILT_IN_INDICATORS import removed - no longer needed with explicit naming
 from ktrdr.neural.models.mlp import MLPTradingModel
 from ktrdr.training.fuzzy_neural_processor import FuzzyNeuralProcessor
 from ktrdr.training.model_trainer import ModelTrainer
@@ -268,82 +269,52 @@ class TrainingPipeline:
 
         EXTRACTED FROM: StrategyTrainer._calculate_indicators_single_timeframe()
         (train_strategy.py:625-712)
+
+        With explicit naming, indicator configs already have 'indicator' and 'name' fields.
+        No need for name mapping - validation happens in IndicatorEngine.
         """
-        # Fix indicator configs to add 'type' field if missing
-        fixed_configs = []
-
-        # Use BUILT_IN_INDICATORS registry to map names (supports lowercase, PascalCase, etc.)
-        for config in indicator_configs:
-            if isinstance(config, dict) and "type" not in config:
-                # Infer type from name using BUILT_IN_INDICATORS registry
-                config = config.copy()
-                indicator_name = config["name"].lower()
-
-                # Try to find in BUILT_IN_INDICATORS (which has lowercase mappings)
-                if indicator_name in BUILT_IN_INDICATORS:
-                    # Use the indicator name directly since BUILT_IN_INDICATORS accepts it
-                    config["type"] = indicator_name
-                else:
-                    # Fallback: convert snake_case to PascalCase
-                    config["type"] = "".join(
-                        word.capitalize() for word in indicator_name.split("_")
-                    )
-            fixed_configs.append(config)
-
-        # Initialize indicator engine with configs
-        indicator_engine = IndicatorEngine(indicators=fixed_configs)
+        # Initialize indicator engine with configs (validation happens here)
+        indicator_engine = IndicatorEngine(indicators=indicator_configs)
         # Apply indicators to price data
         indicator_results = indicator_engine.apply(price_data)
 
-        # Create a mapping from original indicator names to calculated column names
-        # This allows fuzzy sets to match the original indicator names
-        mapped_results = pd.DataFrame(index=indicator_results.index)
+        # With explicit naming, column names already match fuzzy set names!
+        # No complex name mapping needed - just apply special transformations
 
-        # Copy price data columns first
-        for col in price_data.columns:
-            if col in indicator_results.columns:
-                mapped_results[col] = indicator_results[col]
+        # Start with all indicator results
+        result = indicator_results.copy()
 
-        # Map indicator results to original names for fuzzy matching
+        # Apply special transformations for specific indicator types
         for config in indicator_configs:
-            original_name = config["name"]  # e.g., 'rsi'
-            indicator_type = config["name"].upper()  # e.g., 'RSI'
+            indicator_type = config.get("indicator", "").lower()
+            indicator_name = config["name"]
 
-            # Find the calculated column that matches this indicator
-            # Look for columns that start with the indicator type
-            for col in indicator_results.columns:
-                if col.upper().startswith(indicator_type):
-                    if indicator_type in ["SMA", "EMA"]:
-                        # For moving averages, create a ratio (price / moving_average)
-                        # This makes the fuzzy sets meaningful (1.0 = at MA, >1.0 = above, <1.0 = below)
-                        mapped_results[original_name] = (
-                            price_data["close"] / indicator_results[col]
-                        )
-                    elif indicator_type == "MACD":
-                        # For MACD, use the main MACD line (not signal or histogram)
-                        # Look for the column that matches the MACD pattern
-                        if (
-                            col.startswith("MACD_")
-                            and "_signal_" not in col
-                            and "_hist_" not in col
-                        ):
-                            mapped_results[original_name] = indicator_results[col]
-                            break
-                    else:
-                        # For other indicators, use the raw values
-                        mapped_results[original_name] = indicator_results[col]
-                        break
-
-                    # If we found a non-MACD indicator, break
-                    if indicator_type != "MACD":
-                        break
+            if indicator_type in ["sma", "ema"]:
+                # For moving averages, create a ratio (price / moving_average)
+                # This makes fuzzy sets meaningful (1.0 = at MA, >1.0 = above, <1.0 = below)
+                if indicator_name in result.columns:
+                    result[indicator_name] = (
+                        price_data["close"] / result[indicator_name]
+                    )
+            elif indicator_type == "macd":
+                # MACD returns multiple columns (main line, signal, histogram)
+                # Select the main MACD line and assign to the configured name
+                macd_cols = [
+                    col
+                    for col in result.columns
+                    if col.startswith("MACD_")
+                    and "_signal_" not in col
+                    and "_hist_" not in col
+                ]
+                if macd_cols:
+                    result[indicator_name] = result[macd_cols[0]]
 
         # Final safety check: replace any inf values with NaN, then fill NaN with 0
         # This prevents overflow from propagating to feature scaling
-        mapped_results = mapped_results.replace([np.inf, -np.inf], np.nan)
-        mapped_results = mapped_results.fillna(0.0)
+        result = result.replace([np.inf, -np.inf], np.nan)
+        result = result.fillna(0.0)
 
-        return mapped_results
+        return result
 
     @staticmethod
     def _calculate_indicators_multi_timeframe(
@@ -355,80 +326,49 @@ class TrainingPipeline:
 
         EXTRACTED FROM: StrategyTrainer._calculate_indicators_multi_timeframe()
         (train_strategy.py:714-800)
+
+        With explicit naming, no need for complex name mapping.
         """
-        # Fix indicator configs to add 'type' field if missing (same as single timeframe)
-        fixed_configs = []
-
-        # Use BUILT_IN_INDICATORS registry to map names (supports lowercase, PascalCase, etc.)
-        for config in indicator_configs:
-            if isinstance(config, dict) and "type" not in config:
-                # Infer type from name using BUILT_IN_INDICATORS registry
-                config = config.copy()
-                indicator_name = config["name"].lower()
-
-                # Try to find in BUILT_IN_INDICATORS (which has lowercase mappings)
-                if indicator_name in BUILT_IN_INDICATORS:
-                    # Use the indicator name directly since BUILT_IN_INDICATORS accepts it
-                    config["type"] = indicator_name
-                else:
-                    # Fallback: convert snake_case to PascalCase
-                    config["type"] = "".join(
-                        word.capitalize() for word in indicator_name.split("_")
-                    )
-            fixed_configs.append(config)
-
-        # Initialize indicator engine with configs and use multi-timeframe method
-        indicator_engine = IndicatorEngine(indicators=fixed_configs)
+        # Initialize indicator engine with configs (validation happens here)
+        indicator_engine = IndicatorEngine(indicators=indicator_configs)
         indicator_results = indicator_engine.apply_multi_timeframe(
-            price_data, fixed_configs
+            price_data, indicator_configs
         )
 
-        # Map results for each timeframe (similar to single timeframe but for each TF)
-        mapped_results = {}
+        # Apply special transformations for each timeframe
+        result = {}
 
         for timeframe, tf_indicators in indicator_results.items():
             tf_price_data = price_data[timeframe]
-            mapped_tf_results = pd.DataFrame(index=tf_indicators.index)
+            tf_result = tf_indicators.copy()
 
-            # Copy price data columns first
-            for col in tf_price_data.columns:
-                if col in tf_indicators.columns:
-                    mapped_tf_results[col] = tf_indicators[col]
-
-            # Map indicator results to original names for fuzzy matching
+            # Apply special transformations for specific indicator types
             for config in indicator_configs:
-                original_name = config["name"]  # e.g., 'rsi'
-                indicator_type = config["name"].upper()  # e.g., 'RSI'
+                indicator_type = config.get("indicator", "").lower()
+                indicator_name = config["name"]
 
-                # Find the calculated column that matches this indicator
-                for col in tf_indicators.columns:
-                    if col.upper().startswith(indicator_type):
-                        if indicator_type in ["SMA", "EMA"]:
-                            # For moving averages, create a ratio (price / moving_average)
-                            mapped_tf_results[original_name] = (
-                                tf_price_data["close"] / tf_indicators[col]
-                            )
-                        elif indicator_type == "MACD":
-                            # For MACD, use the main MACD line (not signal or histogram)
-                            if (
-                                col.startswith("MACD_")
-                                and "_signal_" not in col
-                                and "_hist_" not in col
-                            ):
-                                mapped_tf_results[original_name] = tf_indicators[col]
-                                break
-                        else:
-                            # For other indicators, use the raw values
-                            mapped_tf_results[original_name] = tf_indicators[col]
-                            break
+                if indicator_type in ["sma", "ema"]:
+                    # For moving averages, create a ratio (price / moving_average)
+                    if indicator_name in tf_result.columns:
+                        tf_result[indicator_name] = (
+                            tf_price_data["close"] / tf_result[indicator_name]
+                        )
+                elif indicator_type == "macd":
+                    # MACD returns multiple columns (main line, signal, histogram)
+                    # Select the main MACD line and assign to the configured name
+                    macd_cols = [
+                        col
+                        for col in tf_result.columns
+                        if col.startswith("MACD_")
+                        and "_signal_" not in col
+                        and "_hist_" not in col
+                    ]
+                    if macd_cols:
+                        tf_result[indicator_name] = tf_result[macd_cols[0]]
 
-                        # If we found a non-MACD indicator, break
-                        if indicator_type != "MACD":
-                            break
+            result[timeframe] = tf_result
 
-            mapped_results[timeframe] = mapped_tf_results
-
-        return mapped_results
+        return result
 
     @staticmethod
     def generate_fuzzy_memberships(

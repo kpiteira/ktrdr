@@ -137,8 +137,18 @@ class ZigZagIndicator(BaseIndicator):
         return pd.Series(zigzag, index=data.index, name=self.get_column_name())
 
     def get_column_name(self, suffix: Optional[str] = None) -> str:
-        """Get the column name for this indicator."""
-        base_name = f"ZigZag_{int(self.threshold * 100)}"
+        """
+        Get the column name for this indicator.
+
+        Respects explicit naming via _custom_column_name attribute.
+        """
+        # Use custom name if provided (via IndicatorFactory with explicit naming)
+        if hasattr(self, "_custom_column_name"):
+            base_name = self._custom_column_name
+        else:
+            # Fall back to auto-generated name (backward compatibility)
+            base_name = f"ZigZag_{int(self.threshold * 100)}"
+
         return f"{base_name}_{suffix}" if suffix else base_name
 
     def get_zigzag_labels(self, data: pd.DataFrame) -> pd.Series:

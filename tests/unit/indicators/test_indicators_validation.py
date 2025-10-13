@@ -419,9 +419,9 @@ class TestAllIndicatorsValidation:
 
         # Create indicator configs
         configs = [
-            IndicatorConfig(type="SMA", name="MySMA", params={"period": 5}),
-            IndicatorConfig(type="EMA", name="MyEMA", params={"period": 5}),
-            IndicatorConfig(type="RSI", name="MyRSI", params={"period": 14}),
+            IndicatorConfig(indicator="SMA", name="MySMA", params={"period": 5}),
+            IndicatorConfig(indicator="EMA", name="MyEMA", params={"period": 5}),
+            IndicatorConfig(indicator="RSI", name="MyRSI", params={"period": 14}),
         ]
 
         # Create indicators with factory
@@ -431,10 +431,11 @@ class TestAllIndicatorsValidation:
         # Ensure we got all the indicators
         assert len(indicators) == 3
 
-        # Ensure indicators have custom names
-        assert indicators[0].name == "MySMA"
-        assert indicators[1].name == "MyEMA"
-        assert indicators[2].name == "MyRSI"
+        # Ensure indicators use custom names in column generation
+        # With explicit naming: indicator.name = type, _custom_column_name = unique name
+        assert indicators[0].get_column_name() == "MySMA"
+        assert indicators[1].get_column_name() == "MyEMA"
+        assert indicators[2].get_column_name() == "MyRSI"
 
         # Test all indicators on a dataset
         data = create_reference_dataset_1()
