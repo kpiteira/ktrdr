@@ -211,9 +211,7 @@ class IndicatorFactory:
                     f"Successfully created indicator: {config.name} ({config.indicator})"
                 )
             except Exception as e:
-                error_msg = (
-                    f"Failed to create indicator {config.name} ({config.indicator}): {str(e)}"
-                )
+                error_msg = f"Failed to create indicator {config.name} ({config.indicator}): {str(e)}"
                 logger.error(error_msg)
                 errors.append(
                     {
@@ -266,7 +264,7 @@ class IndicatorFactory:
 
             # Store custom column name for use in get_column_name()
             # This enables explicit naming: user specifies the name they want
-            indicator._custom_column_name = config.name
+            indicator._custom_column_name = config.name  # type: ignore[attr-defined]
             logger.debug(
                 f"Created indicator {config.indicator} with custom name '{config.name}'"
             )

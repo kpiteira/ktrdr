@@ -369,7 +369,7 @@ class ConfigLoader:
             # Check for common indicators across timeframes
             indicator_types_by_tf = {}
             for tf_config in config.timeframes:
-                types = [ind.type for ind in tf_config.indicators]
+                types = [ind.indicator for ind in tf_config.indicators]
                 indicator_types_by_tf[tf_config.timeframe] = set(types)
 
             if len(indicator_types_by_tf) > 1:

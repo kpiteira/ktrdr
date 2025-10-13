@@ -75,7 +75,9 @@ class TestIndicatorFactory:
 
     def test_invalid_indicator_type(self):
         """Test behavior with an invalid indicator type."""
-        configs = [IndicatorConfig(indicator="NonExistentIndicator", name="bad_indicator")]
+        configs = [
+            IndicatorConfig(indicator="NonExistentIndicator", name="bad_indicator")
+        ]
         factory = IndicatorFactory(configs)
 
         # This should raise an error
@@ -85,7 +87,9 @@ class TestIndicatorFactory:
 
     def test_invalid_parameters(self):
         """Test behavior with invalid indicator parameters."""
-        configs = [IndicatorConfig(indicator="rsi", name="rsi_bad", period=-5)]  # Invalid period
+        configs = [
+            IndicatorConfig(indicator="rsi", name="rsi_bad", period=-5)
+        ]  # Invalid period
         factory = IndicatorFactory(configs)
 
         # This should fail during indicator initialization

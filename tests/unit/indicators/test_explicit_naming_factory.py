@@ -4,12 +4,10 @@ Tests for IndicatorFactory and BaseIndicator with explicit naming.
 Tests the integration of explicit naming through the factory and indicator chain.
 """
 
-import pytest
 import pandas as pd
 
 from ktrdr.config.models import IndicatorConfig
 from ktrdr.indicators import IndicatorFactory, RSIIndicator
-from ktrdr.errors import ConfigurationError
 
 
 class TestIndicatorFactoryExplicitNaming:
@@ -90,10 +88,7 @@ class TestIndicatorFactoryExplicitNaming:
     def test_flat_yaml_params_extracted_correctly(self):
         """Test that parameters from flat YAML format are passed to indicator."""
         config = IndicatorConfig(
-            indicator="rsi",
-            name="rsi_14",
-            period=14,
-            source="close"
+            indicator="rsi", name="rsi_14", period=14, source="close"
         )
 
         factory = IndicatorFactory([config])
@@ -111,10 +106,32 @@ class TestIndicatorFactoryExplicitNaming:
         indicators = factory.build()
 
         # Create sample data
-        data = pd.DataFrame({
-            "close": [100, 102, 101, 103, 105, 104, 106, 108, 107, 109,
-                     110, 112, 111, 113, 115, 114, 116, 118, 117, 119]
-        })
+        data = pd.DataFrame(
+            {
+                "close": [
+                    100,
+                    102,
+                    101,
+                    103,
+                    105,
+                    104,
+                    106,
+                    108,
+                    107,
+                    109,
+                    110,
+                    112,
+                    111,
+                    113,
+                    115,
+                    114,
+                    116,
+                    118,
+                    117,
+                    119,
+                ]
+            }
+        )
 
         # Compute indicator
         result = indicators[0].compute(data)

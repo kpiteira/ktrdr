@@ -6,10 +6,9 @@ ensuring proper validation, uniqueness checks, and backward compatibility migrat
 """
 
 import pytest
+from pydantic import ValidationError
 
 from ktrdr.config.models import IndicatorConfig, StrategyConfigurationV2
-from ktrdr.errors import ConfigurationError
-from pydantic import ValidationError
 
 
 class TestIndicatorConfigExplicitNaming:
@@ -35,11 +34,7 @@ class TestIndicatorConfigExplicitNaming:
 
     def test_indicator_config_with_explicit_naming(self):
         """Test creating IndicatorConfig with explicit indicator + name."""
-        config = IndicatorConfig(
-            indicator="rsi",
-            name="rsi_14",
-            params={"period": 14}
-        )
+        config = IndicatorConfig(indicator="rsi", name="rsi_14", params={"period": 14})
 
         assert config.indicator == "rsi"
         assert config.name == "rsi_14"
@@ -50,7 +45,7 @@ class TestIndicatorConfigExplicitNaming:
         config = IndicatorConfig(
             indicator="macd",
             name="macd_standard",
-            params={"fast_period": 12, "slow_period": 26, "signal_period": 9}
+            params={"fast_period": 12, "slow_period": 26, "signal_period": 9},
         )
 
         assert config.indicator == "macd"
@@ -59,11 +54,7 @@ class TestIndicatorConfigExplicitNaming:
     def test_indicator_config_name_validation_empty(self):
         """Test that empty names are rejected."""
         with pytest.raises(ValidationError) as excinfo:
-            IndicatorConfig(
-                indicator="rsi",
-                name="",
-                params={"period": 14}
-            )
+            IndicatorConfig(indicator="rsi", name="", params={"period": 14})
 
         error_msg = str(excinfo.value)
         assert "name" in error_msg.lower() or "empty" in error_msg.lower()
@@ -71,11 +62,7 @@ class TestIndicatorConfigExplicitNaming:
     def test_indicator_config_name_validation_whitespace_only(self):
         """Test that whitespace-only names are rejected."""
         with pytest.raises(ValidationError) as excinfo:
-            IndicatorConfig(
-                indicator="rsi",
-                name="   ",
-                params={"period": 14}
-            )
+            IndicatorConfig(indicator="rsi", name="   ", params={"period": 14})
 
         error_msg = str(excinfo.value)
         assert "name" in error_msg.lower() or "empty" in error_msg.lower()
@@ -85,16 +72,14 @@ class TestIndicatorConfigExplicitNaming:
         invalid_names = [
             "rsi@14",  # Special character
             "rsi 14",  # Space
-            "rsi#fast", # Hash
+            "rsi#fast",  # Hash
             "123rsi",  # Starts with number (should start with letter)
         ]
 
         for invalid_name in invalid_names:
             with pytest.raises(ValidationError) as excinfo:
                 IndicatorConfig(
-                    indicator="rsi",
-                    name=invalid_name,
-                    params={"period": 14}
+                    indicator="rsi", name=invalid_name, params={"period": 14}
                 )
 
             error_msg = str(excinfo.value)
@@ -112,11 +97,7 @@ class TestIndicatorConfigExplicitNaming:
         ]
 
         for valid_name in valid_names:
-            config = IndicatorConfig(
-                indicator="test",
-                name=valid_name,
-                params={}
-            )
+            config = IndicatorConfig(indicator="test", name=valid_name, params={})
             assert config.name == valid_name
 
     def test_indicator_config_flat_yaml_format(self):
@@ -126,7 +107,7 @@ class TestIndicatorConfigExplicitNaming:
             "indicator": "rsi",
             "name": "rsi_14",
             "period": 14,
-            "source": "close"
+            "source": "close",
         }
 
         config = IndicatorConfig(**config_dict)
@@ -140,11 +121,7 @@ class TestIndicatorConfigExplicitNaming:
         config_dict = {
             "indicator": "macd",
             "name": "macd_standard",
-            "params": {
-                "fast_period": 12,
-                "slow_period": 26,
-                "signal_period": 9
-            }
+            "params": {"fast_period": 12, "slow_period": 26, "signal_period": 9},
         }
 
         config = IndicatorConfig(**config_dict)
@@ -154,7 +131,7 @@ class TestIndicatorConfigExplicitNaming:
         assert config.params == {
             "fast_period": 12,
             "slow_period": 26,
-            "signal_period": 9
+            "signal_period": 9,
         }
 
 
@@ -169,28 +146,20 @@ class TestStrategyConfigIndicatorNameUniqueness:
             "scope": "universal",
             "training_data": {
                 "symbols": {"mode": "single", "symbol": "AAPL"},
-                "timeframes": {"mode": "single", "timeframe": "1d"}
+                "timeframes": {"mode": "single", "timeframe": "1d"},
             },
             "deployment": {
                 "target_symbols": {"mode": "universal"},
-                "target_timeframes": {"mode": "single", "timeframe": "1d"}
+                "target_timeframes": {"mode": "single", "timeframe": "1d"},
             },
             "indicators": [
-                {
-                    "indicator": "rsi",
-                    "name": "rsi_14",  # Duplicate name!
-                    "period": 14
-                },
-                {
-                    "indicator": "rsi",
-                    "name": "rsi_14",  # Duplicate name!
-                    "period": 7
-                }
+                {"indicator": "rsi", "name": "rsi_14", "period": 14},  # Duplicate name!
+                {"indicator": "rsi", "name": "rsi_14", "period": 7},  # Duplicate name!
             ],
             "fuzzy_sets": {},
             "model": {},
             "decisions": {},
-            "training": {}
+            "training": {},
         }
 
         with pytest.raises(ValidationError) as excinfo:
@@ -208,31 +177,23 @@ class TestStrategyConfigIndicatorNameUniqueness:
             "scope": "universal",
             "training_data": {
                 "symbols": {"mode": "single", "symbol": "AAPL"},
-                "timeframes": {"mode": "single", "timeframe": "1d"}
+                "timeframes": {"mode": "single", "timeframe": "1d"},
             },
             "deployment": {
                 "target_symbols": {"mode": "universal"},
-                "target_timeframes": {"mode": "single", "timeframe": "1d"}
+                "target_timeframes": {"mode": "single", "timeframe": "1d"},
             },
             "indicators": [
-                {
-                    "indicator": "rsi",
-                    "name": "rsi_14",
-                    "period": 14
-                },
-                {
-                    "indicator": "rsi",
-                    "name": "rsi_fast",  # Different name
-                    "period": 7
-                }
+                {"indicator": "rsi", "name": "rsi_14", "period": 14},
+                {"indicator": "rsi", "name": "rsi_fast", "period": 7},  # Different name
             ],
             "fuzzy_sets": {
                 "rsi_14": {"oversold": [0, 20, 40]},
-                "rsi_fast": {"oversold": [0, 30, 50]}
+                "rsi_fast": {"oversold": [0, 30, 50]},
             },
             "model": {"type": "test"},
             "decisions": {"rules": []},
-            "training": {"epochs": 10}
+            "training": {"epochs": 10},
         }
 
         config = StrategyConfigurationV2(**strategy_dict)
@@ -248,23 +209,17 @@ class TestStrategyConfigIndicatorNameUniqueness:
             "scope": "universal",
             "training_data": {
                 "symbols": {"mode": "single", "symbol": "AAPL"},
-                "timeframes": {"mode": "single", "timeframe": "1d"}
+                "timeframes": {"mode": "single", "timeframe": "1d"},
             },
             "deployment": {
                 "target_symbols": {"mode": "universal"},
-                "target_timeframes": {"mode": "single", "timeframe": "1d"}
+                "target_timeframes": {"mode": "single", "timeframe": "1d"},
             },
-            "indicators": [
-                {
-                    "indicator": "rsi",
-                    "name": "rsi_14",
-                    "period": 14
-                }
-            ],
+            "indicators": [{"indicator": "rsi", "name": "rsi_14", "period": 14}],
             "fuzzy_sets": {"rsi_14": {"oversold": [0, 20, 40]}},
             "model": {"type": "test"},
             "decisions": {"rules": []},
-            "training": {"epochs": 10}
+            "training": {"epochs": 10},
         }
 
         config = StrategyConfigurationV2(**strategy_dict)
@@ -278,17 +233,17 @@ class TestStrategyConfigIndicatorNameUniqueness:
             "scope": "universal",
             "training_data": {
                 "symbols": {"mode": "single", "symbol": "AAPL"},
-                "timeframes": {"mode": "single", "timeframe": "1d"}
+                "timeframes": {"mode": "single", "timeframe": "1d"},
             },
             "deployment": {
                 "target_symbols": {"mode": "universal"},
-                "target_timeframes": {"mode": "single", "timeframe": "1d"}
+                "target_timeframes": {"mode": "single", "timeframe": "1d"},
             },
             "indicators": [],
             "fuzzy_sets": {},
             "model": {"type": "test"},
             "decisions": {"rules": []},
-            "training": {"epochs": 10}
+            "training": {"epochs": 10},
         }
 
         config = StrategyConfigurationV2(**strategy_dict)
