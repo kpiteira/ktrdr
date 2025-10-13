@@ -346,6 +346,15 @@ class LocalDataLoader:
             # Apply date filters if provided
             df = self._apply_date_filters(df, start_date, end_date)
 
+            # Handle forex volume: IB returns -1 for forex pairs (no real volume data)
+            # Convert -1 to 0 for volume-based indicators that require non-negative values
+            if "volume" in df.columns and (df["volume"] < 0).any():
+                negative_count = (df["volume"] < 0).sum()
+                logger.debug(
+                    f"Converting {negative_count} negative volume values (forex sentinel) to 0 for {symbol}"
+                )
+                df.loc[df["volume"] < 0, "volume"] = 0
+
             logger.debug(
                 f"Successfully loaded {len(df)} rows of data for {symbol} ({timeframe})"
             )
