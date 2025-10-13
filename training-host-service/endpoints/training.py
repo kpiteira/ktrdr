@@ -145,10 +145,33 @@ async def start_training(request: TrainingStartRequest):
         )
 
     except Exception as e:
-        logger.error(f"Failed to start training session: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start training: {str(e)}"
-        ) from e
+        logger.error(f"Failed to start training session: {str(e)}", exc_info=True)
+        # Log current session state to help diagnose issues
+        service = get_service()
+        active_sessions = [
+            (sid, s.status) for sid, s in service.sessions.items()
+            if s.status in ["running", "initializing"]
+        ]
+        logger.error(f"Active sessions at failure: {active_sessions}")
+
+        # Return appropriate HTTP status code based on error type
+        if "Maximum concurrent sessions" in str(e):
+            # 503 Service Unavailable - temporary condition, client should retry later
+            raise HTTPException(
+                status_code=503,
+                detail=f"Service temporarily unavailable: {str(e)}. Please try again in a moment."
+            ) from e
+        elif "already exists" in str(e):
+            # 409 Conflict - session ID conflict
+            raise HTTPException(
+                status_code=409,
+                detail=f"Session conflict: {str(e)}"
+            ) from e
+        else:
+            # 500 Internal Server Error - unexpected errors
+            raise HTTPException(
+                status_code=500, detail=f"Failed to start training: {str(e)}"
+            ) from e
 
 
 @router.post("/stop")

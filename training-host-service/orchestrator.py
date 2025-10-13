@@ -166,7 +166,9 @@ class HostTrainingOrchestrator:
             import asyncio
             import functools
 
-            loop = asyncio.get_event_loop()
+            # Use get_running_loop() instead of deprecated get_event_loop()
+            # This gets the event loop for the current async context
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,  # Use default executor (ThreadPoolExecutor)
                 functools.partial(
@@ -264,6 +266,11 @@ class HostTrainingOrchestrator:
 
             elif progress_type == "epoch":
                 # Always update on epoch completion
+                logger.info(
+                    f"Session {self._session.session_id}: Completed epoch {epoch}/{total_epochs} - "
+                    f"train_loss: {metrics.get('train_loss', 'N/A'):.4f}, "
+                    f"val_loss: {metrics.get('val_loss', 'N/A'):.4f}"
+                )
                 self._session.update_progress(
                     epoch=epoch,
                     batch=0,

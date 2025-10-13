@@ -609,6 +609,7 @@ class TrainingPipeline:
         Helper method for multi-timeframe label generation.
         """
         # Timeframe frequency mapping (in minutes)
+        # Note: Normalized to lowercase for case-insensitive lookup
         frequency_map = {
             "1m": 1,
             "5m": 5,
@@ -616,14 +617,19 @@ class TrainingPipeline:
             "30m": 30,
             "1h": 60,
             "4h": 240,
-            "1D": 1440,
-            "1d": 1440,
-            "1W": 10080,
-            "1w": 10080,
+            "1d": 1440,  # Daily
+            "1w": 10080,  # Weekly
         }
 
+        # Default to daily frequency (1440 minutes) for unknown timeframes
+        DEFAULT_TIMEFRAME_MINUTES = 1440
+
         # Sort by frequency (lower minutes = higher frequency)
-        return sorted(timeframes, key=lambda tf: frequency_map.get(tf, 1440))
+        # Normalize to lowercase for case-insensitive comparison
+        return sorted(
+            timeframes,
+            key=lambda tf: frequency_map.get(tf.lower(), DEFAULT_TIMEFRAME_MINUTES),
+        )
 
     # ======================================================================
     # MODEL METHODS

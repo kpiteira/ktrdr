@@ -350,6 +350,11 @@ class TrainingService:
         active_sessions = [
             s for s in self.sessions.values() if s.status in ["running", "initializing"]
         ]
+        all_sessions = [(sid, s.status) for sid, s in self.sessions.items()]
+        logger.info(
+            f"🔍 CREATE_SESSION: Checking limits - active={len(active_sessions)}/{self.max_concurrent_sessions}, "
+            f"all_sessions={all_sessions}"
+        )
         if len(active_sessions) >= self.max_concurrent_sessions:
             raise Exception(
                 f"Maximum concurrent sessions ({self.max_concurrent_sessions}) reached"
@@ -382,7 +387,7 @@ class TrainingService:
                 self._run_training_session(session)
             )
 
-            logger.info(f"Training session {session_id} created successfully")
+            logger.info(f"✅ CREATE_SESSION: session_id={session_id}, status={session.status} - Training task started")
             return session_id
 
         except Exception as e:
@@ -568,7 +573,7 @@ class TrainingService:
         # Request stop
         session.stop_requested = True
         logger.info(
-            f"Stop flag set for session {session_id} - training will stop at next checkpoint"
+            f"🛑 STOP_SESSION: session_id={session_id}, current_status={session.status}, stop_requested=True"
         )
 
         # TODO: Implement checkpoint saving if requested
@@ -577,21 +582,26 @@ class TrainingService:
             # Implementation would save model state, optimizer state, etc.
 
         # Wait for training task to complete
+        logger.info("⏳ STOP_SESSION: Waiting for training task to complete (timeout=30s)")
         if session.training_task:
             try:
                 await asyncio.wait_for(session.training_task, timeout=30.0)
+                logger.info(f"✅ STOP_SESSION: Training task completed, session_status={session.status}")
             except asyncio.TimeoutError:
                 logger.warning(
-                    f"Training task for session {session_id} did not stop gracefully"
+                    f"⏰ STOP_SESSION: Training task for session {session_id} did not stop gracefully (timeout)"
                 )
                 session.training_task.cancel()
                 session.status = "stopped"
             except asyncio.CancelledError:
                 logger.info(
-                    "Training task for session %s was already cancelled", session_id
+                    f"❌ STOP_SESSION: Training task for session {session_id} was already cancelled"
                 )
                 session.status = "stopped"
+        else:
+            logger.info("⚠️ STOP_SESSION: No training task found")
 
+        logger.info(f"🏁 STOP_SESSION: Returning True, final session_status={session.status}")
         return True
 
     def get_session_status(self, session_id: str) -> dict[str, Any]:
