@@ -132,11 +132,17 @@ class MFIIndicator(BaseIndicator):
             )
 
         # Check for non-negative volume values
+        # Note: Forex data may have -1 as sentinel value (no volume), should be handled at data loading
         if (data["volume"] < 0).any():
+            negative_count = (data["volume"] < 0).sum()
             raise DataError(
-                message="MFI indicator requires non-negative volume values",
+                message=f"MFI indicator requires non-negative volume values. Found {negative_count} negative values (possibly forex data with -1 sentinel values). These should be converted to 0 during data loading.",
                 error_code="INDICATOR-InvalidData",
-                details={"negative_volume_count": (data["volume"] < 0).sum()},
+                details={
+                    "negative_volume_count": negative_count,
+                    "min_volume": data["volume"].min(),
+                    "data_length": len(data),
+                },
             )
 
     def compute(self, data: pd.DataFrame) -> pd.Series:
