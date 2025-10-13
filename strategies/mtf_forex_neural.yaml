@@ -312,7 +312,7 @@ fuzzy_sets:
       parameters: [60, 75, 100]  # Sustained overbought condition
   
   # MACD FUZZY SETS - Trend momentum interpretation
-  macd_standard:  # 5 levels for directional strength
+  macd_12_26_9:  # Standard MACD (12,26,9) - 5 levels for directional strength
     strong_bearish:
       type: "triangular"
       parameters: [-100, -50, -10]  # Strong downward momentum
@@ -328,8 +328,8 @@ fuzzy_sets:
     strong_bullish:
       type: "triangular"
       parameters: [10, 50, 100]  # Strong upward momentum
-  
-  macd_fast:  # 3 simple levels for quick entries
+
+  macd_5_13_5:  # Fast MACD (5,13,5) - 3 simple levels for quick entries
     bearish:
       type: "triangular"
       parameters: [-50, -10, 0]
@@ -341,7 +341,7 @@ fuzzy_sets:
       parameters: [0, 10, 50]
   
   # STOCHASTIC FUZZY SETS
-  stoch_14:
+  stochastic_14_3_3:  # Stochastic (14,3,3)
     oversold:
       type: "triangular"
       parameters: [0, 15, 30]  # Below 30 = oversold
@@ -351,8 +351,8 @@ fuzzy_sets:
     overbought:
       type: "triangular"
       parameters: [70, 85, 100]  # Above 70 = overbought
-  
-  stoch_5:  # Fast stochastic
+
+  stochastic_5_3_3:  # Fast stochastic (5,3,3)
     oversold:
       type: "triangular"
       parameters: [0, 20, 35]
@@ -393,7 +393,7 @@ fuzzy_sets:
       parameters: [40, 60, 100]
   
   # BOLLINGER BANDS FUZZY SETS - Price position relative to bands
-  bbands_20:  # 5 zones for precise positioning
+  bollingerbands_20_2.0:  # BBands (20, 2.0) - 5 zones for precise positioning
     below_lower:
       type: "triangular"
       parameters: [0.80, 0.92, 1.00]  # Price below lower band = oversold, mean reversion opportunity
@@ -409,8 +409,8 @@ fuzzy_sets:
     above_upper:
       type: "triangular"
       parameters: [1.00, 1.08, 1.20]  # Price above upper band = overbought, reversal risk
-  
-  bbands_50:  # 3 zones for longer-term context
+
+  bollingerbands_50_2.0:  # BBands (50, 2.0) - 3 zones for longer-term context
     below_lower:
       type: "triangular"
       parameters: [0.85, 0.94, 1.00]
@@ -621,7 +621,7 @@ fuzzy_sets:
       parameters: [0.05, 0.15, 0.30]  # Heavy buying
   
   # FISHER TRANSFORM FUZZY SETS - Normalized price oscillator
-  fishertransform:
+  fishertransform_10_3:  # Fisher Transform (10, 3)
     extreme_oversold:
       type: "triangular"
       parameters: [-4.0, -3.0, -2.0]
