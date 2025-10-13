@@ -208,14 +208,17 @@ class IndicatorFactory:
                 indicator = self._create_indicator(config)
                 indicator_instances.append(indicator)
                 logger.info(
-                    f"Successfully created indicator: {indicator.name} ({config.type})"
+                    f"Successfully created indicator: {config.name} ({config.indicator})"
                 )
             except Exception as e:
-                error_msg = f"Failed to create indicator {config.type}: {str(e)}"
+                error_msg = (
+                    f"Failed to create indicator {config.name} ({config.indicator}): {str(e)}"
+                )
                 logger.error(error_msg)
                 errors.append(
                     {
-                        "type": config.type,
+                        "indicator_type": config.indicator,
+                        "name": config.name,
                         "error": str(e),
                         "config": config.model_dump(),
                     }
@@ -252,37 +255,31 @@ class IndicatorFactory:
         Raises:
             ConfigurationError: If the indicator cannot be instantiated
         """
-        indicator_class = self._get_indicator_class(config.type)
+        indicator_class = self._get_indicator_class(config.indicator)
 
         try:
             # Create a copy of params to avoid modifying the original
             params = config.params.copy()
 
-            # Custom name handling
-            custom_name = None
-            if config.name:
-                custom_name = config.name
-
             # Create the indicator instance
-            # Note: We can't directly pass 'name' to most indicators as they expect specific parameters
-            # Instead, we'll capture the custom name and properly handle it based on indicator type
             indicator = indicator_class(**params)
 
-            # If a custom name was specified, update the indicator's name after creation
-            if custom_name:
-                # Store the original name for reference in case of errors
-                original_name = indicator.name
-                indicator.name = custom_name
-                logger.debug(f"Renamed indicator from {original_name} to {custom_name}")
+            # Store custom column name for use in get_column_name()
+            # This enables explicit naming: user specifies the name they want
+            indicator._custom_column_name = config.name
+            logger.debug(
+                f"Created indicator {config.indicator} with custom name '{config.name}'"
+            )
 
             return indicator
 
         except Exception as e:
             raise ConfigurationError(
-                message=f"Failed to initialize indicator {config.type}",
+                message=f"Failed to initialize indicator {config.indicator}",
                 error_code="CONFIG-IndicatorInitializationFailed",
                 details={
-                    "indicator_type": config.type,
+                    "indicator_type": config.indicator,
+                    "indicator_name": config.name,
                     "params": config.params,
                     "error": str(e),
                 },

@@ -158,11 +158,32 @@ class BaseIndicator(ABC):
         """
         Generate a standardized column name for the indicator output.
 
+        If a custom column name was set (via _custom_column_name attribute),
+        uses that name. Otherwise, generates a name from parameters.
+
         Args:
             suffix (Optional[str]): Optional suffix to append to the name
 
         Returns:
             str: Column name for the indicator output
+        """
+        # Use custom name if provided (via IndicatorFactory with explicit naming)
+        if hasattr(self, "_custom_column_name"):
+            base_name = self._custom_column_name
+        else:
+            # Fall back to auto-generated name (backward compatibility)
+            base_name = self._generate_column_name()
+
+        # Add suffix if provided
+        suffix_str = f"_{suffix}" if suffix else ""
+
+        return f"{base_name}{suffix_str}"
+
+    def _generate_column_name(self) -> str:
+        """
+        Generate column name from parameters (legacy behavior).
+
+        This is used when no custom name is provided for backward compatibility.
         """
         base_name = self.name.lower()
 
@@ -184,7 +205,4 @@ class BaseIndicator(ABC):
             if isinstance(value, (int, float, str)):
                 param_str += f"_{value}"
 
-        # Add suffix if provided
-        suffix_str = f"_{suffix}" if suffix else ""
-
-        return f"{base_name}{param_str}{suffix_str}"
+        return f"{base_name}{param_str}"
