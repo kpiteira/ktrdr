@@ -16,7 +16,7 @@ training_data:
     - "EURUSD"  # Most liquid pair, clean trends, European session focus
     - "GBPUSD"  # Volatile, strong intraday moves, responds well to news
     - "USDJPY"  # Risk-on/off indicator, Asian session leader
-    - "USDCAD"  # Commodity-correlated, oil price influence
+    # - "USDCAD"  # Commodity-correlated, oil price influence
     # Cross pairs - different characteristics, diversified patterns
     - "AUDUSD"  # Commodity currency, Asian-Pacific exposure
     - "EURJPY"  # Cross pair, combines EUR and JPY characteristics
