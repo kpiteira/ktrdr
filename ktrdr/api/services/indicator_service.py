@@ -68,7 +68,11 @@ class IndicatorService(BaseService):
 
                 # Create a temporary instance to get default parameters
                 try:
-                    temp_instance = indicator_class(name=indicator_class.__name__)
+                    # Instantiate without parameters to get defaults
+                    # Each indicator sets its own name via super().__init__()
+                    # Note: type ignore needed because indicator_class has type[BaseIndicator]
+                    # but concrete classes have their own __init__ signatures
+                    temp_instance = indicator_class()  # type: ignore[call-arg]
 
                     # Get indicator type from categorization system
                     try:
