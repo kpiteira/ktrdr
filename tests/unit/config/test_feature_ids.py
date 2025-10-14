@@ -68,7 +68,9 @@ class TestFeatureIdFormat:
     )
     def test_valid_feature_id_formats(self, feature_id):
         """Valid feature_id formats should be accepted."""
-        config = IndicatorConfig(type="rsi", feature_id=feature_id, params={"period": 14})
+        config = IndicatorConfig(
+            type="rsi", feature_id=feature_id, params={"period": 14}
+        )
         assert config.feature_id == feature_id
 
     @pytest.mark.parametrize(
@@ -121,9 +123,7 @@ class TestFeatureIdReservedWords:
     def test_reserved_words_blocked(self, reserved_word):
         """Reserved words should raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            IndicatorConfig(
-                type="rsi", feature_id=reserved_word, params={"period": 14}
-            )
+            IndicatorConfig(type="rsi", feature_id=reserved_word, params={"period": 14})
 
         error = exc_info.value
         error_msg = str(error)
@@ -139,7 +139,9 @@ class TestFeatureIdReservedWords:
     )
     def test_reserved_words_as_substring_allowed(self, allowed_word):
         """Reserved words as substrings should be allowed."""
-        config = IndicatorConfig(type="rsi", feature_id=allowed_word, params={"period": 14})
+        config = IndicatorConfig(
+            type="rsi", feature_id=allowed_word, params={"period": 14}
+        )
         assert config.feature_id == allowed_word
 
 

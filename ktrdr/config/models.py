@@ -81,7 +81,9 @@ class IndicatorConfig(BaseModel):
     feature_id: str = Field(
         ..., description="Unique identifier for fuzzy sets and features (REQUIRED)"
     )
-    name: Optional[str] = Field(None, description="Custom name for the indicator (DEPRECATED)")
+    name: Optional[str] = Field(
+        None, description="Custom name for the indicator (DEPRECATED)"
+    )
     params: dict[str, Any] = Field(
         default_factory=dict, description="Parameters for indicator initialization"
     )
@@ -567,7 +569,9 @@ class StrategyConfigurationV2(BaseModel):
                 feature_ids[feature_id].append(idx)
 
         # Check for duplicates
-        duplicates = {fid: indices for fid, indices in feature_ids.items() if len(indices) > 1}
+        duplicates = {
+            fid: indices for fid, indices in feature_ids.items() if len(indices) > 1
+        }
 
         if duplicates:
             # Format error message with all duplicates

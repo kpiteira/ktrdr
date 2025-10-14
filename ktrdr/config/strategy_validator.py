@@ -295,8 +295,13 @@ class StrategyValidator:
             fuzzy_dict = config.fuzzy_sets
             self._check_legacy_format({"fuzzy_sets": fuzzy_dict}, result)
 
+        # Validate indicator definitions (feature_id format, etc.)
+        if config.indicators:
+            self._validate_indicator_definitions(config.indicators, result)
+
         # Validate indicator-fuzzy matching (STRICT validation)
-        if config.indicators and config.fuzzy_sets:
+        # Run validation if indicators exist, even if fuzzy_sets is empty dict
+        if config.indicators and config.fuzzy_sets is not None:
             self._validate_indicator_fuzzy_matching(
                 config.indicators, config.fuzzy_sets, result
             )
@@ -574,8 +579,64 @@ class StrategyValidator:
                         ):
                             sets[set_name] = set_config["parameters"]
 
+    def _validate_indicator_definitions(
+        self, indicators: list[dict[str, Any]], result: ValidationResult
+    ) -> None:
+        """
+        Validate indicator definitions by parsing each as IndicatorConfig.
+
+        Since indicators are stored as list[dict] in v2 config, Pydantic doesn't
+        validate them at load time. This method explicitly validates each indicator
+        by attempting to parse it as an IndicatorConfig.
+
+        This validates:
+        - feature_id presence (REQUIRED)
+        - feature_id format (must start with letter, alphanumeric/underscore/dash)
+        - feature_id reserved words (open, high, low, close, volume)
+        - type field presence
+
+        Args:
+            indicators: List of indicator configuration dictionaries
+            result: ValidationResult to update with errors
+        """
+        from ktrdr.config.models import IndicatorConfig
+
+        for idx, indicator_dict in enumerate(indicators):
+            try:
+                # Attempt to parse as IndicatorConfig - will raise ValidationError if invalid
+                IndicatorConfig(**indicator_dict)
+            except PydanticValidationError as e:
+                # Extract meaningful error messages
+                result.is_valid = False
+
+                for error in e.errors():
+                    field = ".".join(str(loc) for loc in error["loc"])
+                    error_type = error["type"]
+                    msg = error["msg"]
+
+                    # Format user-friendly error message
+                    if field == "feature_id" and error_type == "missing":
+                        error_msg = (
+                            f"Indicator at index {idx} (type: {indicator_dict.get('type', 'unknown')}) "
+                            f"is missing required field 'feature_id'. "
+                            f"All indicators must have a unique feature_id."
+                        )
+                    elif "feature_id" in field:
+                        # Format or reserved word validation error
+                        error_msg = (
+                            f"Indicator at index {idx} has invalid feature_id: {msg}"
+                        )
+                    else:
+                        error_msg = f"Indicator at index {idx}: {field} - {msg}"
+
+                    result.errors.append(error_msg)
+                    logger.error(f"Indicator validation failed: {error_msg}")
+
     def _validate_indicator_fuzzy_matching(
-        self, indicators: list[dict[str, Any]], fuzzy_sets: dict[str, Any], result: ValidationResult
+        self,
+        indicators: list[dict[str, Any]],
+        fuzzy_sets: dict[str, Any],
+        result: ValidationResult,
     ) -> None:
         """
         Validate that all indicators have corresponding fuzzy_sets (STRICT).

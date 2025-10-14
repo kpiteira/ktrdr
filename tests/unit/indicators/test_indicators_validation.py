@@ -419,9 +419,15 @@ class TestAllIndicatorsValidation:
 
         # Create indicator configs
         configs = [
-            IndicatorConfig(type="SMA", feature_id="my_sma_5", name="MySMA", params={"period": 5}),
-            IndicatorConfig(type="EMA", feature_id="my_ema_5", name="MyEMA", params={"period": 5}),
-            IndicatorConfig(type="RSI", feature_id="my_rsi_14", name="MyRSI", params={"period": 14}),
+            IndicatorConfig(
+                type="SMA", feature_id="my_sma_5", name="MySMA", params={"period": 5}
+            ),
+            IndicatorConfig(
+                type="EMA", feature_id="my_ema_5", name="MyEMA", params={"period": 5}
+            ),
+            IndicatorConfig(
+                type="RSI", feature_id="my_rsi_14", name="MyRSI", params={"period": 14}
+            ),
         ]
 
         # Create indicators with factory

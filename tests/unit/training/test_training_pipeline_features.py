@@ -76,7 +76,9 @@ class TestCalculateIndicators:
             ),
         }
 
-        indicator_configs = [{"type": "rsi", "feature_id": "rsi_14", "name": "rsi", "period": 14}]
+        indicator_configs = [
+            {"type": "rsi", "feature_id": "rsi_14", "name": "rsi", "period": 14}
+        ]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -102,7 +104,9 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"type": "sma", "feature_id": "sma_5", "name": "sma", "period": 5}]
+        indicator_configs = [
+            {"type": "sma", "feature_id": "sma_5", "name": "sma", "period": 5}
+        ]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -131,7 +135,15 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"type": "macd", "feature_id": "macd_12_26", "name": "macd", "fast_period": 12, "slow_period": 26}]
+        indicator_configs = [
+            {
+                "type": "macd",
+                "feature_id": "macd_12_26",
+                "name": "macd",
+                "fast_period": 12,
+                "slow_period": 26,
+            }
+        ]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -157,7 +169,9 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"type": "rsi", "feature_id": "rsi_14", "name": "rsi", "period": 14}]
+        indicator_configs = [
+            {"type": "rsi", "feature_id": "rsi_14", "name": "rsi", "period": 14}
+        ]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)

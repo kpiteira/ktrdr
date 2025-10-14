@@ -7,10 +7,7 @@ Tests cover:
 - Error messages and suggestions
 """
 
-import pytest
-from pathlib import Path
-
-from ktrdr.config.strategy_validator import StrategyValidator, ValidationResult
+from ktrdr.config.strategy_validator import StrategyValidator
 
 
 class TestIndicatorDefinitionsValidation:
@@ -160,7 +157,9 @@ training:
         result = validator.validate_strategy(str(config_path))
 
         assert not result.is_valid
-        assert any("letter" in err.lower() or "format" in err.lower() for err in result.errors)
+        assert any(
+            "letter" in err.lower() or "format" in err.lower() for err in result.errors
+        )
 
     def test_reserved_word_feature_id_rejected(self, tmp_path):
         """Reserved word feature_ids should fail Pydantic validation."""
@@ -250,7 +249,9 @@ training:
         result = validator.validate_strategy(str(config_path))
 
         assert not result.is_valid
-        assert any("duplicate" in err.lower() or "rsi_14" in err for err in result.errors)
+        assert any(
+            "duplicate" in err.lower() or "rsi_14" in err for err in result.errors
+        )
 
 
 class TestIndicatorFuzzyMatchingValidation:
