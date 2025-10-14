@@ -78,7 +78,10 @@ class IndicatorConfig(BaseModel):
     """Configuration for a technical indicator."""
 
     type: str = Field(..., description="The type/class of indicator")
-    name: Optional[str] = Field(None, description="Custom name for the indicator")
+    feature_id: str = Field(
+        ..., description="Unique identifier for fuzzy sets and features (REQUIRED)"
+    )
+    name: Optional[str] = Field(None, description="Custom name for the indicator (DEPRECATED)")
     params: dict[str, Any] = Field(
         default_factory=dict, description="Parameters for indicator initialization"
     )
@@ -91,6 +94,54 @@ class IndicatorConfig(BaseModel):
         if not v:
             raise ValueError("Indicator type cannot be empty")
         return v
+
+    @field_validator("feature_id")
+    @classmethod
+    def validate_feature_id(cls, v: str) -> str:
+        """
+        Validate feature_id format and reserved words.
+
+        Rules:
+        - Must start with a letter
+        - Can contain: letters, numbers, underscore, dash
+        - Cannot be a reserved word (open, high, low, close, volume)
+
+        Args:
+            v: feature_id value to validate
+
+        Returns:
+            Validated feature_id
+
+        Raises:
+            ValueError: If feature_id format is invalid or is a reserved word
+        """
+        import re
+
+        # Check format: must start with letter, contain only alphanumeric, underscore, dash
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", v):
+            raise ValueError(
+                f"feature_id '{v}' must start with a letter and contain "
+                "only letters, numbers, underscore, or dash"
+            )
+
+        # Check reserved words (case-insensitive)
+        reserved_words = ["open", "high", "low", "close", "volume"]
+        if v.lower() in reserved_words:
+            raise ValueError(
+                f"feature_id '{v}' is a reserved word. "
+                f"Reserved words: {', '.join(reserved_words)}"
+            )
+
+        return v
+
+    def get_feature_id(self) -> str:
+        """
+        Get the feature_id for this indicator.
+
+        Returns:
+            The feature_id value
+        """
+        return self.feature_id
 
 
 class TimeframeIndicatorConfig(BaseModel):
@@ -487,6 +538,49 @@ class StrategyConfigurationV2(BaseModel):
     def validate_scope_consistency(cls, v: StrategyScope, info) -> StrategyScope:
         """Validate scope consistency with training/deployment configuration."""
         # Additional validation can be added here
+        return v
+
+    @field_validator("indicators")
+    @classmethod
+    def validate_feature_id_uniqueness(
+        cls, v: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """
+        Validate that all feature_ids are unique across indicators.
+
+        Args:
+            v: List of indicator configuration dictionaries
+
+        Returns:
+            The validated list of indicators
+
+        Raises:
+            ValueError: If duplicate feature_ids are found
+        """
+        feature_ids: dict[str, list[int]] = {}
+
+        for idx, indicator in enumerate(v):
+            feature_id = indicator.get("feature_id")
+            if feature_id:
+                if feature_id not in feature_ids:
+                    feature_ids[feature_id] = []
+                feature_ids[feature_id].append(idx)
+
+        # Check for duplicates
+        duplicates = {fid: indices for fid, indices in feature_ids.items() if len(indices) > 1}
+
+        if duplicates:
+            # Format error message with all duplicates
+            error_parts = []
+            for fid, indices in duplicates.items():
+                error_parts.append(f"'{fid}' appears at indices {indices}")
+
+            raise ValueError(
+                f"Duplicate feature_ids found: {', '.join(error_parts)}. "
+                "Each indicator must have a unique feature_id. "
+                "Use parameters in feature_id for distinction (e.g., 'rsi_14', 'rsi_21')."
+            )
+
         return v
 
 
