@@ -13,7 +13,7 @@ import yaml
 
 from ktrdr.api.endpoints.strategies import _validate_strategy_config
 from ktrdr.api.models.operations import OperationMetadata
-from ktrdr.errors import ValidationError
+from ktrdr.errors import ConfigurationError, ValidationError
 
 # Default locations where strategy YAML files may live (docker + host paths)
 DEFAULT_STRATEGY_PATHS: tuple[Path, ...] = (
@@ -192,17 +192,39 @@ def _load_strategy_config(strategy_path: Path) -> dict[str, Any]:
 
 
 def _validate_strategy(strategy_config: dict[str, Any], strategy_name: str) -> None:
-    """Run shared strategy validation and raise on errors."""
+    """Run shared strategy validation and raise ConfigurationError on errors."""
     issues = _validate_strategy_config(strategy_config, strategy_name)
-    error_messages = [
-        f"{issue.category}: {issue.message}"
-        for issue in issues
-        if getattr(issue, "severity", "").lower() == "error"
+    error_issues = [
+        issue for issue in issues if getattr(issue, "severity", "").lower() == "error"
     ]
 
-    if error_messages:
+    if error_issues:
+        # Build structured error from validation issues
+        error_messages = [
+            f"{issue.category}: {issue.message}" for issue in error_issues
+        ]
         formatted = "\n".join(error_messages)
-        raise ValidationError(f"Strategy validation failed:\n{formatted}")
+
+        # Extract details from issues
+        details = {
+            "errors": [
+                {
+                    "category": issue.category,
+                    "message": issue.message,
+                    "details": issue.details,
+                }
+                for issue in error_issues
+            ]
+        }
+
+        # Create ConfigurationError with full context
+        raise ConfigurationError(
+            message=f"Strategy validation failed: {len(error_issues)} error(s) found",
+            error_code="STRATEGY-ValidationFailed",
+            context={"strategy_name": strategy_name, "error_count": len(error_issues)},
+            details=details,
+            suggestion=f"Fix the validation errors:\n{formatted}",
+        )
 
 
 def _apply_detailed_analytics(strategy_config: dict[str, Any]) -> None:

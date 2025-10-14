@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from ktrdr.api.endpoints.strategies import ValidationIssue
-from ktrdr.errors import ValidationError
+from ktrdr.errors import ConfigurationError, ValidationError
 
 
 @pytest.fixture
@@ -97,7 +97,7 @@ class TestBuildTrainingContext:
             "ktrdr.api.services.training.context._validate_strategy_config",
             return_value=[make_issue("broken config")],
         ):
-            with pytest.raises(ValidationError, match="Strategy validation failed"):
+            with pytest.raises(ConfigurationError, match="Strategy validation failed"):
                 build_training_context(
                     operation_id="op-invalid",
                     strategy_name="test_strategy",

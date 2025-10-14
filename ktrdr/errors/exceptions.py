@@ -49,7 +49,46 @@ class DataError(KtrdrError):
     """
     Base class for errors related to data operations.
 
-    This class of errors covers issues with missing, corrupt, or invalid data.
+    Use for issues with data availability, data sources, or data processing.
+    The fix typically requires **data source action** or **checking data availability**.
+
+    This class of errors covers:
+    - Missing data for requested symbol/timeframe
+    - Data source is unreachable (e.g., IB Gateway down)
+    - Data format issues
+    - Corrupt or malformed data
+    - Insufficient data for calculations
+
+    Examples:
+        No data available:
+            >>> raise DataError(
+            ...     message="No data available for AAPL 1h",
+            ...     error_code="DATA-NoDataAvailable",
+            ...     details={
+            ...         "symbol": "AAPL",
+            ...         "timeframe": "1h",
+            ...         "requested_range": "2024-01-01 to 2024-12-31"
+            ...     }
+            ... )
+
+        Data source unreachable:
+            >>> raise DataError(
+            ...     message="Cannot connect to IB Gateway",
+            ...     error_code="DATA-SourceUnavailable",
+            ...     details={"source": "IB Gateway", "port": 4002}
+            ... )
+
+        API endpoint usage (returns 503):
+            >>> try:
+            ...     load_data(symbol, timeframe)
+            ... except DataError as e:
+            ...     logger.error(f"Data error: {e.message}")
+            ...     raise HTTPException(status_code=503, detail=e.to_dict()) from e
+
+    See Also:
+        - docs/architecture/error-handling/error-classes.md
+        - DataFormatError: For format-specific issues
+        - DataNotFoundError: For missing data files
     """
 
     pass
@@ -84,10 +123,45 @@ class DataValidationError(DataError):
 
 class ValidationError(KtrdrError):
     """
-    Exception raised when input validation fails.
+    Exception raised when API request parameter validation fails.
 
-    This class is used for validating user-provided parameters
-    and other input validation purposes.
+    Use for user input validation, NOT for configuration file issues.
+    The fix typically requires **changing request parameters** rather than editing files.
+
+    This class is used for validating user-provided API parameters:
+    - Invalid parameter values
+    - Out-of-range values
+    - Type mismatches
+    - Missing required parameters
+
+    Examples:
+        Invalid timeframe:
+            >>> raise ValidationError(
+            ...     message="Invalid timeframe '5x'",
+            ...     error_code="VALIDATION-InvalidTimeframe",
+            ...     details={
+            ...         "provided": "5x",
+            ...         "valid_options": ["1m", "5m", "15m", "1h", "1d"]
+            ...     }
+            ... )
+
+        Out of range:
+            >>> raise ValidationError(
+            ...     message="Validation split must be between 0.0 and 1.0",
+            ...     error_code="VALIDATION-OutOfRange",
+            ...     details={"provided": 1.5, "min": 0.0, "max": 1.0}
+            ... )
+
+        API endpoint usage (returns 422):
+            >>> try:
+            ...     validate_parameters(params)
+            ... except ValidationError as e:
+            ...     logger.error(f"Validation error: {e.message}")
+            ...     raise HTTPException(status_code=422, detail=e.to_dict()) from e
+
+    See Also:
+        - docs/architecture/error-handling/error-classes.md
+        - ConfigurationError: For configuration file issues
     """
 
     pass
@@ -170,6 +244,9 @@ class ConfigurationError(KtrdrError):
     """
     Enhanced configuration error with comprehensive error reporting.
 
+    Use for issues with configuration files, strategy YAML files, or system setup.
+    The fix typically requires **editing a file** rather than changing API parameters.
+
     This class provides detailed error information including:
     - message: Human-readable error description
     - error_code: Machine-readable error code (e.g., STRATEGY-MissingFeatureId)
@@ -183,6 +260,34 @@ class ConfigurationError(KtrdrError):
         context: Dictionary with error location (file, section, field)
         details: Dictionary with structured error data
         suggestion: How to fix the error
+
+    Examples:
+        Manual construction:
+            >>> raise ConfigurationError(
+            ...     message="Strategy validation failed: 1 error(s) found",
+            ...     error_code="STRATEGY-ValidationFailed",
+            ...     context={"strategy_name": "mtf_forex_neural", "error_count": 1},
+            ...     details={"errors": [{"category": "fuzzy_sets", "message": "..."}]},
+            ...     suggestion="Fix the validation errors:\\nfuzzy_sets: ..."
+            ... )
+
+        Using factory method:
+            >>> raise ConfigurationError.missing_feature_id(
+            ...     indicator_type="rsi",
+            ...     indicator_index=0,
+            ...     file_path="strategies/my_strategy.yaml"
+            ... )
+
+        API endpoint usage:
+            >>> try:
+            ...     validate_strategy(config)
+            ... except ConfigurationError as e:
+            ...     logger.error(f"Configuration error: {e.format_user_message()}")
+            ...     raise HTTPException(status_code=400, detail=e.to_dict()) from e
+
+    See Also:
+        - docs/architecture/error-handling/error-classes.md
+        - docs/architecture/decisions/0001-error-types-for-api-responses.md
     """
 
     def __init__(

@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
 from ktrdr.api.services.training_service import TrainingService
-from ktrdr.errors import DataError, ValidationError
+from ktrdr.errors import ConfigurationError, DataError, ValidationError
 
 logger = get_logger(__name__)
 
@@ -202,6 +202,11 @@ async def start_training(
             estimated_duration_minutes=result.get("estimated_duration_minutes"),
         )
 
+    except ConfigurationError as e:
+        # Log error with full context before responding
+        logger.error(f"Configuration error: {e.format_user_message()}")
+        # Return structured error response with all details
+        raise HTTPException(status_code=400, detail=e.to_dict()) from e
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except DataError as e:
