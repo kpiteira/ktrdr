@@ -295,6 +295,12 @@ class StrategyValidator:
             fuzzy_dict = config.fuzzy_sets
             self._check_legacy_format({"fuzzy_sets": fuzzy_dict}, result)
 
+        # Validate indicator-fuzzy matching (STRICT validation)
+        if config.indicators and config.fuzzy_sets:
+            self._validate_indicator_fuzzy_matching(
+                config.indicators, config.fuzzy_sets, result
+            )
+
         # V2-specific suggestions
         result.suggestions.append(
             "Strategy is in v2 format - ready for multi-scope training"
@@ -567,3 +573,70 @@ class StrategyValidator:
                             and len(set_config["parameters"]) == 3
                         ):
                             sets[set_name] = set_config["parameters"]
+
+    def _validate_indicator_fuzzy_matching(
+        self, indicators: list[dict[str, Any]], fuzzy_sets: dict[str, Any], result: ValidationResult
+    ) -> None:
+        """
+        Validate that all indicators have corresponding fuzzy_sets (STRICT).
+
+        This implements the simplified validation logic from Phase 1:
+        - Use feature_ids directly (no column name guessing)
+        - Simple set comparison: feature_ids vs fuzzy_keys
+        - STRICT validation: all feature_ids MUST have fuzzy_sets
+        - Warn about orphaned fuzzy sets (might be derived features)
+
+        Args:
+            indicators: List of indicator configuration dictionaries
+            fuzzy_sets: Fuzzy sets configuration dictionary
+            result: ValidationResult to update with errors/warnings
+        """
+        # Extract feature_ids from indicators
+        feature_ids = set()
+        for indicator in indicators:
+            feature_id = indicator.get("feature_id")
+            if feature_id:  # Should always have feature_id due to Pydantic validation
+                feature_ids.add(feature_id)
+
+        # Get fuzzy_set keys
+        fuzzy_keys = set(fuzzy_sets.keys())
+
+        # Check for missing fuzzy_sets (STRICT - this is an ERROR)
+        missing = feature_ids - fuzzy_keys
+        if missing:
+            result.is_valid = False
+            missing_list = sorted(missing)
+
+            error_msg = (
+                f"Missing fuzzy_sets for indicators: {', '.join(missing_list)}. "
+                "All indicators must have corresponding fuzzy_sets defined."
+            )
+            result.errors.append(error_msg)
+            logger.error(f"Indicator-fuzzy validation failed: {error_msg}")
+
+            # Add helpful suggestion with example structure
+            example_feature_id = missing_list[0]
+            suggestion = f"""
+Add fuzzy_sets for missing indicators. Example for '{example_feature_id}':
+
+fuzzy_sets:
+  {example_feature_id}:
+    low: {{type: trapezoid, parameters: [min, min, low_mid, mid]}}
+    medium: {{type: triangle, parameters: [low_mid, mid, high_mid]}}
+    high: {{type: trapezoid, parameters: [mid, high_mid, max, max]}}
+
+Missing feature_ids: {', '.join(missing_list)}
+"""
+            result.suggestions.append(suggestion.strip())
+
+        # Check for orphaned fuzzy_sets (WARNING only - might be derived features)
+        orphans = fuzzy_keys - feature_ids
+        if orphans:
+            orphans_list = sorted(orphans)
+            warning_msg = (
+                f"Fuzzy sets defined without corresponding indicators: {', '.join(orphans_list)}. "
+                "These might be derived features or intentional. "
+                "If unintentional, remove from fuzzy_sets or add corresponding indicators."
+            )
+            result.warnings.append(warning_msg)
+            logger.warning(f"Orphaned fuzzy_sets detected: {warning_msg}")
