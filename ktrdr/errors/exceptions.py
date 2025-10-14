@@ -281,8 +281,8 @@ class ConfigurationError(KtrdrError):
             suggestion=(
                 f"Add 'feature_id' to indicator:\n\n"
                 f"indicators:\n"
-                f"  - type: \"{indicator_type}\"\n"
-                f"    feature_id: \"{indicator_type}_14\"  # ADD THIS\n"
+                f'  - type: "{indicator_type}"\n'
+                f'    feature_id: "{indicator_type}_14"  # ADD THIS\n'
                 f"    period: 14\n\n"
                 f"Or run migration tool:\n"
                 f"  python scripts/migrate_to_feature_ids.py {file_path}"
@@ -307,17 +307,21 @@ class ConfigurationError(KtrdrError):
         return cls(
             message=f"Duplicate feature_id '{feature_id}' found at indices {indices}",
             error_code="STRATEGY-DuplicateFeatureId",
-            context={"file": file_path, "section": "indicators", "feature_id": feature_id},
+            context={
+                "file": file_path,
+                "section": "indicators",
+                "feature_id": feature_id,
+            },
             details={"feature_id": feature_id, "indices": indices},
             suggestion=(
-                f"Ensure each indicator has a unique feature_id.\n"
-                f"Use parameters in feature_id for distinction:\n\n"
-                f"  - type: \"rsi\"\n"
-                f"    feature_id: \"rsi_14\"  # Use period\n"
-                f"    period: 14\n\n"
-                f"  - type: \"rsi\"\n"
-                f"    feature_id: \"rsi_21\"  # Different period\n"
-                f"    period: 21"
+                "Ensure each indicator has a unique feature_id.\n"
+                "Use parameters in feature_id for distinction:\n\n"
+                '  - type: "rsi"\n'
+                '    feature_id: "rsi_14"  # Use period\n'
+                "    period: 14\n\n"
+                '  - type: "rsi"\n'
+                '    feature_id: "rsi_21"  # Different period\n'
+                "    period: 21"
             ),
         )
 
@@ -346,15 +350,15 @@ class ConfigurationError(KtrdrError):
             },
             details={"feature_id": feature_id, "index": indicator_index},
             suggestion=(
-                f"feature_id must start with a letter and contain only:\n"
-                f"  - Letters (a-z, A-Z)\n"
-                f"  - Numbers (0-9)\n"
-                f"  - Underscore (_) or dash (-)\n\n"
-                f"Valid examples:\n"
-                f"  - 'rsi_14' (good)\n"
-                f"  - 'macd_standard' (good)\n"
-                f"  - '123_invalid' (bad - starts with number)\n"
-                f"  - 'rsi@14' (bad - contains special character)"
+                "feature_id must start with a letter and contain only:\n"
+                "  - Letters (a-z, A-Z)\n"
+                "  - Numbers (0-9)\n"
+                "  - Underscore (_) or dash (-)\n\n"
+                "Valid examples:\n"
+                "  - 'rsi_14' (good)\n"
+                "  - 'macd_standard' (good)\n"
+                "  - '123_invalid' (bad - starts with number)\n"
+                "  - 'rsi@14' (bad - contains special character)"
             ),
         )
 
@@ -382,7 +386,11 @@ class ConfigurationError(KtrdrError):
                 "section": f"indicators[{indicator_index}]",
                 "feature_id": feature_id,
             },
-            details={"feature_id": feature_id, "index": indicator_index, "reserved_words": reserved_words},
+            details={
+                "feature_id": feature_id,
+                "index": indicator_index,
+                "reserved_words": reserved_words,
+            },
             suggestion=(
                 f"feature_id '{feature_id}' is reserved for price data.\n"
                 f"Reserved words: {', '.join(reserved_words)}\n\n"

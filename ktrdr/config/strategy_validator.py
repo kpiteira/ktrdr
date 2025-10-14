@@ -6,9 +6,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+from pydantic import ValidationError as PydanticValidationError
 
+from ktrdr import get_logger
 from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
 from ktrdr.config.strategy_loader import strategy_loader
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -130,6 +134,51 @@ class StrategyValidator:
         },
     }
 
+    def _format_pydantic_error(
+        self, error: PydanticValidationError
+    ) -> tuple[list[str], list[str]]:
+        """
+        Format Pydantic validation errors into user-friendly messages.
+
+        Args:
+            error: Pydantic ValidationError
+
+        Returns:
+            Tuple of (error_messages, missing_sections)
+        """
+        error_messages = []
+        missing_sections = []
+
+        for err in error.errors():
+            # Extract field location (e.g., ['indicators'] or ['model', 'architecture'])
+            field_path: tuple[Any, ...] = err.get("loc", ())
+            field_name = (
+                ".".join(str(f) for f in field_path) if field_path else "unknown"
+            )
+
+            # Extract error type and message
+            error_type = err.get("type", "unknown")
+            error_msg = err.get("msg", "Validation failed")
+
+            # Format error message based on type
+            if error_type == "missing":
+                # Track missing sections
+                if field_path and len(field_path) == 1:
+                    missing_sections.append(str(field_path[0]))
+                error_messages.append(f"Missing required field: {field_name}")
+            elif error_type.startswith("type_error"):
+                expected_type = err.get("ctx", {}).get("expected", "correct type")
+                error_messages.append(
+                    f"Field '{field_name}' has incorrect type (expected {expected_type})"
+                )
+            else:
+                # Generic error message
+                error_messages.append(
+                    f"Validation error in '{field_name}': {error_msg}"
+                )
+
+        return error_messages, missing_sections
+
     def validate_strategy(self, config_path: str) -> ValidationResult:
         """Validate a strategy configuration file (supports both v1 and v2 formats).
 
@@ -145,9 +194,39 @@ class StrategyValidator:
             # Use strategy_loader to handle both v1 and v2 formats
             config, is_v2 = strategy_loader.load_strategy_config(config_path)
         except Exception as e:
-            result.is_valid = False
-            result.errors.append(f"Failed to load strategy configuration: {e}")
-            return result
+            # Check if this is a wrapped Pydantic ValidationError
+            pydantic_error = None
+            if hasattr(e, "__cause__") and isinstance(
+                e.__cause__, PydanticValidationError
+            ):
+                pydantic_error = e.__cause__
+            elif isinstance(e, PydanticValidationError):
+                pydantic_error = e
+
+            if pydantic_error:
+                # Format Pydantic validation errors
+                logger.error(f"Pydantic validation failed for {config_path}")
+                result.is_valid = False
+
+                error_messages, missing_sections = self._format_pydantic_error(
+                    pydantic_error
+                )
+                result.errors.extend(error_messages)
+                result.missing_sections.extend(missing_sections)
+
+                # Log each error
+                for error_msg in error_messages:
+                    logger.error(f"Validation error: {error_msg}")
+
+                return result
+            else:
+                # Non-Pydantic error (file not found, YAML parse error, etc.)
+                logger.error(
+                    f"Failed to load strategy configuration {config_path}: {e}"
+                )
+                result.is_valid = False
+                result.errors.append(f"Failed to load strategy configuration: {e}")
+                return result
 
         if is_v2:
             # Type checked - config is StrategyConfigurationV2 when is_v2 is True
@@ -245,12 +324,16 @@ class StrategyValidator:
             if section not in config_dict or config_dict[section] is None:
                 result.is_valid = False
                 result.missing_sections.append(section)
-                result.errors.append(f"Missing required section: {section}")
+                error_msg = f"Missing required section: {section}"
+                result.errors.append(error_msg)
+                logger.error(error_msg)
             elif not isinstance(config_dict[section], expected_type):
                 result.is_valid = False
-                result.errors.append(
+                error_msg = (
                     f"Section '{section}' must be of type {expected_type.__name__}"
                 )
+                result.errors.append(error_msg)
+                logger.error(error_msg)
 
         # Validate neural model configuration
         if config_dict.get("model"):

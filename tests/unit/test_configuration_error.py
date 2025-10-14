@@ -27,8 +27,11 @@ class TestConfigurationError:
                 "section": "indicators[0]",
                 "indicator_type": "rsi",
             },
-            details={"indicator": {"type": "rsi", "period": 14}, "missing_field": "feature_id"},
-            suggestion="Add 'feature_id' to indicator:\n  - type: \"rsi\"\n    feature_id: \"rsi_14\"  # ADD THIS\n    period: 14",
+            details={
+                "indicator": {"type": "rsi", "period": 14},
+                "missing_field": "feature_id",
+            },
+            suggestion='Add \'feature_id\' to indicator:\n  - type: "rsi"\n    feature_id: "rsi_14"  # ADD THIS\n    period: 14',
         )
 
         assert error.message == "Indicator missing required field 'feature_id'"
@@ -122,8 +125,8 @@ class TestConfigurationError:
             suggestion=(
                 "Add 'feature_id' to indicator:\n\n"
                 "indicators:\n"
-                "  - type: \"rsi\"\n"
-                "    feature_id: \"rsi_14\"  # ADD THIS\n"
+                '  - type: "rsi"\n'
+                '    feature_id: "rsi_14"  # ADD THIS\n'
                 "    period: 14\n\n"
                 "Or run migration tool:\n"
                 "  python scripts/migrate_to_feature_ids.py strategy.yaml"
@@ -161,7 +164,9 @@ class TestConfigurationError:
                     {"field": "indicators[0].feature_id", "issue": "missing"},
                     {"field": "indicators[2].feature_id", "issue": "duplicate"},
                 ],
-                "warnings": [{"field": "fuzzy_sets.orphan", "issue": "no matching indicator"}],
+                "warnings": [
+                    {"field": "fuzzy_sets.orphan", "issue": "no matching indicator"}
+                ],
             },
             suggestion="Fix validation errors listed in details",
         )

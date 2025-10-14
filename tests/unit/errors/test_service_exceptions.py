@@ -304,7 +304,14 @@ class TestBackwardCompatibility:
             assert exception.message == "test"
             assert exception.error_code in ["TEST1", "TEST2", "TEST3"]
             assert exception.details == {"key": "value"}
-            assert str(exception) == "test"
+
+            # Only ServiceConfigurationError (subclass of ConfigurationError) includes
+            # error_code in string representation due to enhanced ConfigurationError.__str__
+            if isinstance(exception, ServiceConfigurationError):
+                assert str(exception) == f"[{exception.error_code}] test"
+            else:
+                # ConnectionError subclasses use default __str__
+                assert str(exception) == "test"
 
 
 class TestServiceExceptionUsagePatterns:
