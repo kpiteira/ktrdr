@@ -87,8 +87,12 @@ def migrate_indicator_config(config: dict[str, Any]) -> dict[str, Any]:
     """
     Migrate a single indicator configuration from legacy to new format.
 
+    Supports two legacy formats:
+    1. Original: {name: "rsi", period: 14}  (name = indicator type)
+    2. Intermediate: {type: "rsi", params: {period: 14}}
+
     Args:
-        config: Legacy indicator config with 'type' and 'params'
+        config: Legacy indicator config
 
     Returns:
         Migrated config with 'indicator', 'name', and flattened params
@@ -97,12 +101,18 @@ def migrate_indicator_config(config: dict[str, Any]) -> dict[str, Any]:
     if "indicator" in config and "name" in config:
         return config.copy()
 
-    # Legacy format: has 'type' and possibly 'params'
-    if "type" not in config:
-        raise ValueError(f"Invalid indicator config: missing 'type' field: {config}")
-
-    indicator_type = config["type"]
-    params = config.get("params", {})
+    # Determine indicator type and params from legacy format
+    if "type" in config:
+        # Intermediate legacy format: {type: "rsi", params: {...}}
+        indicator_type = config["type"]
+        params = config.get("params", {})
+    elif "name" in config:
+        # Original legacy format: {name: "rsi", period: 14, ...}
+        indicator_type = config["name"]
+        # All fields except 'name' are parameters
+        params = {k: v for k, v in config.items() if k != "name"}
+    else:
+        raise ValueError(f"Invalid indicator config: missing 'type' or 'name' field: {config}")
 
     # Generate name from type and params
     name = generate_indicator_name(indicator_type, params)
