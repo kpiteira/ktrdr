@@ -92,6 +92,44 @@ IB Gateway → IB Host Service → Data Manager → Indicators → Fuzzy → Neu
 - Never silently swallow exceptions
 - Always log before re-raising
 
+### 6. Indicator Naming Convention
+
+Indicators use **explicit two-field naming**:
+
+1. **indicator**: Base indicator type (what to instantiate)
+   - Examples: "rsi", "macd", "bbands"
+   - Maps to indicator class in factory
+
+2. **name**: Unique identifier (what to call it)
+   - Used in fuzzy_sets, column names, feature references
+   - Must be unique within strategy
+   - Can be descriptive ("macd_standard") or systematic ("macd_12_26_9")
+
+Example:
+```yaml
+indicators:
+  - indicator: "rsi"
+    name: "rsi_14"
+    period: 14
+
+  - indicator: "rsi"
+    name: "rsi_fast"
+    period: 7
+
+fuzzy_sets:
+  rsi_14:
+    oversold: [0, 30, 40]
+    neutral: [35, 50, 65]
+    overbought: [60, 70, 100]
+
+  rsi_fast:
+    oversold: [0, 20, 35]
+    neutral: [30, 50, 70]
+    overbought: [65, 80, 100]
+```
+
+This eliminates implicit name generation and makes fuzzy set matching trivial.
+
 ## 🔍 BEFORE MAKING CHANGES
 
 ### 1. Understand the Current Code
