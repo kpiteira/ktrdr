@@ -77,24 +77,43 @@ class IbHostServiceConfig(BaseModel):
 class IndicatorConfig(BaseModel):
     """Configuration for a technical indicator."""
 
-    type: str = Field(..., description="The type/class of indicator")
+    name: str = Field(..., description="The name/type of indicator (e.g., 'rsi', 'macd')")
     feature_id: str = Field(
         ..., description="Unique identifier for fuzzy sets and features (REQUIRED)"
-    )
-    name: Optional[str] = Field(
-        None, description="Custom name for the indicator (DEPRECATED)"
     )
     params: dict[str, Any] = Field(
         default_factory=dict, description="Parameters for indicator initialization"
     )
 
-    @field_validator("type")
+    model_config = {"extra": "allow"}  # Allow extra fields for flat parameter format
+
+    def model_post_init(self, __context: Any) -> None:
+        """
+        Post-initialization to handle flat parameter format.
+
+        Supports both formats:
+        - Nested: {name: "rsi", feature_id: "rsi_14", params: {period: 14}}
+        - Flat: {name: "rsi", feature_id: "rsi_14", period: 14}
+
+        Flat format fields (except name, feature_id, params) are moved into params dict.
+        """
+        # Get all extra fields that aren't part of the model
+        known_fields = {"name", "feature_id", "params"}
+        extra_fields = {k: v for k, v in self.__dict__.items() if k not in known_fields and not k.startswith("_")}
+
+        if extra_fields:
+            # Move extra fields into params
+            for key in list(extra_fields.keys()):
+                if key in self.__dict__:
+                    self.params[key] = self.__dict__.pop(key)
+
+    @field_validator("name")
     @classmethod
-    def validate_indicator_type(cls, v: str) -> str:
-        """Validate that the indicator type is not empty."""
+    def validate_indicator_name(cls, v: str) -> str:
+        """Validate that the indicator name is not empty."""
         v = v.strip()
         if not v:
-            raise ValueError("Indicator type cannot be empty")
+            raise ValueError("Indicator name cannot be empty")
         return v
 
     @field_validator("feature_id")

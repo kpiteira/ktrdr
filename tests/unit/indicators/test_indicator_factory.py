@@ -23,7 +23,7 @@ class TestIndicatorFactory:
         # Test with IndicatorsConfig
         config = IndicatorsConfig(
             indicators=[
-                IndicatorConfig(type="RSI", feature_id="rsi_14", params={"period": 14})
+                IndicatorConfig(name="RSI", feature_id="rsi_14", params={"period": 14})
             ]
         )
         factory = IndicatorFactory(config)
@@ -31,8 +31,8 @@ class TestIndicatorFactory:
 
         # Test with list of IndicatorConfig
         configs = [
-            IndicatorConfig(type="RSI", feature_id="rsi_14", params={"period": 14}),
-            IndicatorConfig(type="SMA", feature_id="sma_20", params={"period": 20}),
+            IndicatorConfig(name="RSI", feature_id="rsi_14", params={"period": 14}),
+            IndicatorConfig(name="SMA", feature_id="sma_20", params={"period": 20}),
         ]
         factory = IndicatorFactory(configs)
         assert len(factory.indicators_config.indicators) == 2
@@ -45,9 +45,9 @@ class TestIndicatorFactory:
     def test_build_basic_indicators(self):
         """Test building basic indicators."""
         configs = [
-            IndicatorConfig(type="RSI", feature_id="rsi_14", params={"period": 14}),
-            IndicatorConfig(type="SMA", feature_id="sma_20", params={"period": 20}),
-            IndicatorConfig(type="EMA", feature_id="ema_12", params={"period": 12}),
+            IndicatorConfig(name="RSI", feature_id="rsi_14", params={"period": 14}),
+            IndicatorConfig(name="SMA", feature_id="sma_20", params={"period": 20}),
+            IndicatorConfig(name="EMA", feature_id="ema_12", params={"period": 12}),
         ]
         factory = IndicatorFactory(configs)
         indicators = factory.build()
@@ -98,7 +98,7 @@ class TestIndicatorFactory:
     def test_invalid_parameters(self):
         """Test behavior with invalid indicator parameters."""
         configs = [
-            IndicatorConfig(type="RSI", feature_id="rsi_invalid", params={"period": -5})
+            IndicatorConfig(name="RSI", feature_id="rsi_invalid", params={"period": -5})
         ]  # Invalid period
         factory = IndicatorFactory(configs)
 

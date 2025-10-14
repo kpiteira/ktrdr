@@ -208,14 +208,14 @@ class IndicatorFactory:
                 indicator = self._create_indicator(config)
                 indicator_instances.append(indicator)
                 logger.info(
-                    f"Successfully created indicator: {indicator.name} ({config.type})"
+                    f"Successfully created indicator: {indicator.name} ({config.name})"
                 )
             except Exception as e:
-                error_msg = f"Failed to create indicator {config.type}: {str(e)}"
+                error_msg = f"Failed to create indicator {config.name}: {str(e)}"
                 logger.error(error_msg)
                 errors.append(
                     {
-                        "type": config.type,
+                        "type": config.name,
                         "error": str(e),
                         "config": config.model_dump(),
                     }
@@ -252,7 +252,7 @@ class IndicatorFactory:
         Raises:
             ConfigurationError: If the indicator cannot be instantiated
         """
-        indicator_class = self._get_indicator_class(config.type)
+        indicator_class = self._get_indicator_class(config.name)
 
         try:
             # Create a copy of params to avoid modifying the original
@@ -279,10 +279,10 @@ class IndicatorFactory:
 
         except Exception as e:
             raise ConfigurationError(
-                message=f"Failed to initialize indicator {config.type}",
+                message=f"Failed to initialize indicator {config.name}",
                 error_code="CONFIG-IndicatorInitializationFailed",
                 details={
-                    "indicator_type": config.type,
+                    "indicator_type": config.name,
                     "params": config.params,
                     "error": str(e),
                 },

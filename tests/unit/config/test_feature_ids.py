@@ -22,7 +22,7 @@ class TestFeatureIdRequired:
     def test_feature_id_required(self):
         """Missing feature_id should raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            IndicatorConfig(type="rsi", params={"period": 14})
+            IndicatorConfig(name="rsi", params={"period": 14})
 
         error = exc_info.value
         errors = error.errors()
@@ -33,7 +33,7 @@ class TestFeatureIdRequired:
     def test_feature_id_cannot_be_none(self):
         """feature_id=None should raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            IndicatorConfig(type="rsi", feature_id=None, params={"period": 14})
+            IndicatorConfig(name="rsi", feature_id=None, params={"period": 14})
 
         error = exc_info.value
         errors = error.errors()
@@ -42,7 +42,7 @@ class TestFeatureIdRequired:
     def test_feature_id_cannot_be_empty_string(self):
         """feature_id='' should raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            IndicatorConfig(type="rsi", feature_id="", params={"period": 14})
+            IndicatorConfig(name="rsi", feature_id="", params={"period": 14})
 
         error = exc_info.value
         errors = error.errors()
@@ -69,7 +69,7 @@ class TestFeatureIdFormat:
     def test_valid_feature_id_formats(self, feature_id):
         """Valid feature_id formats should be accepted."""
         config = IndicatorConfig(
-            type="rsi", feature_id=feature_id, params={"period": 14}
+            name="rsi", feature_id=feature_id, params={"period": 14}
         )
         assert config.feature_id == feature_id
 
@@ -92,7 +92,7 @@ class TestFeatureIdFormat:
         """Invalid feature_id formats should raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             IndicatorConfig(
-                type="rsi", feature_id=invalid_feature_id, params={"period": 14}
+                name="rsi", feature_id=invalid_feature_id, params={"period": 14}
             )
 
         error = exc_info.value
@@ -123,7 +123,7 @@ class TestFeatureIdReservedWords:
     def test_reserved_words_blocked(self, reserved_word):
         """Reserved words should raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            IndicatorConfig(type="rsi", feature_id=reserved_word, params={"period": 14})
+            IndicatorConfig(name="rsi", feature_id=reserved_word, params={"period": 14})
 
         error = exc_info.value
         error_msg = str(error)
@@ -140,7 +140,7 @@ class TestFeatureIdReservedWords:
     def test_reserved_words_as_substring_allowed(self, allowed_word):
         """Reserved words as substrings should be allowed."""
         config = IndicatorConfig(
-            type="rsi", feature_id=allowed_word, params={"period": 14}
+            name="rsi", feature_id=allowed_word, params={"period": 14}
         )
         assert config.feature_id == allowed_word
 
@@ -218,10 +218,10 @@ class TestFeatureIdNamingPatterns:
     def test_params_based_naming(self):
         """Test naming with parameters (e.g., rsi_14, macd_12_26_9)."""
         indicators = [
-            IndicatorConfig(type="rsi", feature_id="rsi_14", params={"period": 14}),
-            IndicatorConfig(type="rsi", feature_id="rsi_21", params={"period": 21}),
+            IndicatorConfig(name="rsi", feature_id="rsi_14", params={"period": 14}),
+            IndicatorConfig(name="rsi", feature_id="rsi_21", params={"period": 21}),
             IndicatorConfig(
-                type="macd",
+                name="macd",
                 feature_id="macd_12_26_9",
                 params={"fast": 12, "slow": 26, "signal": 9},
             ),
@@ -234,10 +234,10 @@ class TestFeatureIdNamingPatterns:
     def test_semantic_naming(self):
         """Test semantic naming (e.g., rsi_fast, macd_trend)."""
         indicators = [
-            IndicatorConfig(type="rsi", feature_id="rsi_fast", params={"period": 7}),
-            IndicatorConfig(type="rsi", feature_id="rsi_slow", params={"period": 21}),
+            IndicatorConfig(name="rsi", feature_id="rsi_fast", params={"period": 7}),
+            IndicatorConfig(name="rsi", feature_id="rsi_slow", params={"period": 21}),
             IndicatorConfig(
-                type="macd", feature_id="macd_trend", params={"fast": 12, "slow": 26}
+                name="macd", feature_id="macd_trend", params={"fast": 12, "slow": 26}
             ),
         ]
 
@@ -248,9 +248,9 @@ class TestFeatureIdNamingPatterns:
     def test_mixed_naming(self):
         """Test mixed naming patterns in same strategy."""
         indicators = [
-            IndicatorConfig(type="rsi", feature_id="rsi_14", params={"period": 14}),
-            IndicatorConfig(type="macd", feature_id="macd_trend", params={}),
-            IndicatorConfig(type="ema", feature_id="ema_short", params={"period": 9}),
+            IndicatorConfig(name="rsi", feature_id="rsi_14", params={"period": 14}),
+            IndicatorConfig(name="macd", feature_id="macd_trend", params={}),
+            IndicatorConfig(name="ema", feature_id="ema_short", params={"period": 9}),
         ]
 
         for ind in indicators:
@@ -264,7 +264,7 @@ class TestOldFormatRejection:
     def test_old_format_without_feature_id_rejected(self):
         """Old configs without feature_id should raise clear error."""
         with pytest.raises(ValidationError) as exc_info:
-            IndicatorConfig(type="rsi", params={"period": 14})
+            IndicatorConfig(name="rsi", params={"period": 14})
 
         error = exc_info.value
         error_msg = str(error)
@@ -274,7 +274,7 @@ class TestOldFormatRejection:
     def test_error_message_suggests_migration(self):
         """Error message should suggest migration tool."""
         with pytest.raises(ValidationError) as exc_info:
-            IndicatorConfig(type="rsi", params={"period": 14})
+            IndicatorConfig(name="rsi", params={"period": 14})
 
         error = exc_info.value
         # Check if error is informative (ValidationError from Pydantic)
@@ -287,7 +287,7 @@ class TestFeatureIdGetMethod:
 
     def test_get_feature_id_returns_feature_id(self):
         """get_feature_id() should return the feature_id value."""
-        config = IndicatorConfig(type="rsi", feature_id="rsi_14", params={"period": 14})
+        config = IndicatorConfig(name="rsi", feature_id="rsi_14", params={"period": 14})
 
         # Method should exist and return feature_id
         assert hasattr(config, "get_feature_id")
@@ -302,5 +302,5 @@ class TestFeatureIdGetMethod:
         ]
 
         for feature_id, expected in test_cases:
-            config = IndicatorConfig(type="test", feature_id=feature_id, params={})
+            config = IndicatorConfig(name="test", feature_id=feature_id, params={})
             assert config.get_feature_id() == expected

@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
+from ruamel.yaml import YAML
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -49,19 +49,24 @@ def generate_feature_id_from_indicator(indicator_config: dict[str, Any]) -> str:
         MigrationError: If indicator cannot be instantiated or column name generated
     """
     try:
-        # Create IndicatorConfig (without feature_id for now)
-        # We'll use type and params to instantiate the indicator
-        indicator_type = indicator_config.get("type")
-        params = indicator_config.get("params", {})
+        # Get indicator name
+        indicator_name = indicator_config.get("name")
 
-        if not indicator_type:
-            raise MigrationError("Indicator config missing 'type' field")
+        # Params are at the same level as 'name' (flat format)
+        params = {
+            k: v
+            for k, v in indicator_config.items()
+            if k not in ["name", "feature_id"]
+        }
+
+        if not indicator_name:
+            raise MigrationError("Indicator config missing 'name' field")
 
         # Create a temporary config for instantiation
         # Note: feature_id is required in new schema, but we're generating it
         # So we use a temporary placeholder
         temp_config = IndicatorConfig(
-            type=indicator_type, feature_id="temp_placeholder", params=params
+            name=indicator_name, feature_id="temp_placeholder", params=params
         )
 
         # Use IndicatorFactory to instantiate the indicator
@@ -81,11 +86,11 @@ def generate_feature_id_from_indicator(indicator_config: dict[str, Any]) -> str:
 
     except ConfigurationError as e:
         raise MigrationError(
-            f"Failed to generate feature_id for indicator type '{indicator_type}': {e}"
+            f"Failed to generate feature_id for indicator name '{indicator_name}': {e}"
         ) from e
     except Exception as e:
         raise MigrationError(
-            f"Unexpected error generating feature_id for indicator type '{indicator_type}': {e}"
+            f"Unexpected error generating feature_id for indicator name '{indicator_name}': {e}"
         ) from e
 
 
@@ -112,10 +117,15 @@ def migrate_strategy_file(
     """
     file_path_obj = Path(file_path)
 
+    # Use ruamel.yaml to preserve comments and formatting
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    yaml.default_flow_style = False
+
     # Read strategy file
     try:
         with open(file_path_obj) as f:
-            strategy = yaml.safe_load(f)
+            strategy = yaml.load(f)
     except Exception as e:
         raise MigrationError(f"Failed to read strategy file '{file_path}': {e}") from e
 
@@ -153,22 +163,33 @@ def migrate_strategy_file(
 
             # Check for duplicates
             if feature_id in feature_ids_seen:
+                indicator_name = indicator.get("name")
                 raise MigrationError(
                     f"Duplicate feature_id '{feature_id}' would be created for indicator {idx} "
-                    f"(type: {indicator.get('type')}). Multiple indicators with identical parameters "
+                    f"(name: {indicator_name}). Multiple indicators with identical parameters "
                     f"require manually distinct feature_ids. Please add unique feature_ids manually."
                 )
 
             feature_ids_seen.add(feature_id)
 
-            # Add feature_id to indicator
-            indicator["feature_id"] = feature_id
+            # MINIMAL CHANGE: Only add 'feature_id' field
+            # Keep flat structure and preserve all comments
+            # Old format: {name: "rsi", period: 14, source: "close"}
+            # New format: {name: "rsi", feature_id: "rsi_14", period: 14, source: "close"}
+
+            # Add feature_id after name field
+            if "name" in indicator:
+                # Insert feature_id right after name field
+                indicator.insert(1, "feature_id", feature_id)
+            else:
+                # Fallback: just add it at the end
+                indicator["feature_id"] = feature_id
+
             changes_made += 1
 
         except MigrationError as e:
-            errors.append(
-                f"Indicator {idx} ({indicator.get('type', 'unknown')}): {str(e)}"
-            )
+            indicator_name = indicator.get("name", "unknown")
+            errors.append(f"Indicator {idx} ({indicator_name}): {str(e)}")
 
     # If any errors occurred, raise
     if errors:
@@ -193,10 +214,10 @@ def migrate_strategy_file(
         except Exception as e:
             raise MigrationError(f"Failed to create backup file: {e}") from e
 
-    # Write migrated strategy
+    # Write migrated strategy (ruamel.yaml preserves comments and formatting)
     try:
         with open(file_path_obj, "w") as f:
-            yaml.dump(strategy, f, default_flow_style=False, sort_keys=False)
+            yaml.dump(strategy, f)
     except Exception as e:
         raise MigrationError(
             f"Failed to write migrated strategy to '{file_path}': {e}"

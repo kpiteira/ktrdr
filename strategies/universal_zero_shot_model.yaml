@@ -4,7 +4,8 @@
 name: "universal_zero_shot_model"
 description: "Universal neural model with zero-shot generalization to unseen symbols"
 version: "2.0"
-hypothesis: "Symbol-agnostic features enable universal pattern recognition across any asset"
+hypothesis: "Symbol-agnostic features enable universal pattern recognition across
+  any asset"
 scope: "universal"  # Key field for universal architecture
 
 # Training Data Configuration
@@ -27,17 +28,20 @@ deployment:
 
 # Technical Indicators
 indicators:
-  - name: "rsi"
-    period: 14
-    source: "close"
-  - name: "macd"
-    fast_period: 12
-    slow_period: 26
-    signal_period: 9
-    source: "close"
-  - name: "sma"
-    period: 20
-    source: "close"
+- name: "rsi"
+  feature_id: rsi_14
+  period: 14
+  source: "close"
+- name: "macd"
+  feature_id: macd_12_26_9
+  fast_period: 12
+  slow_period: 26
+  signal_period: 9
+  source: "close"
+- name: "sma"
+  feature_id: sma_20
+  period: 20
+  source: "close"
 
 # Fuzzy Logic Configuration
 fuzzy_sets:
@@ -46,7 +50,7 @@ fuzzy_sets:
       type: "triangular"
       parameters: [0, 20, 35]
     neutral:
-      type: "triangular" 
+      type: "triangular"
       parameters: [30, 50, 70]
     overbought:
       type: "triangular"

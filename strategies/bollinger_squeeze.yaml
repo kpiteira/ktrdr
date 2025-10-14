@@ -2,7 +2,8 @@
 name: "bollinger_squeeze"  # Bollinger Band squeeze strategy for volatility breakouts
 description: "Bollinger Band squeeze strategy for volatility breakouts"  # Clear one-line strategy summary
 version: "2.0"  # Clean format version for AI agent compatibility
-hypothesis: "Bollinger Band squeeze conditions followed by expansion create high-probability directional breakout opportunities"  # Core strategy belief being tested
+hypothesis: "Bollinger Band squeeze conditions followed by expansion create high-probability
+  directional breakout opportunities"                                                                                             # Core strategy belief being tested
 
 # === STRATEGY SCOPE ===
 scope: "universal"  # Universal model
@@ -39,9 +40,11 @@ deployment:  # Target configuration for live trading
 # === TECHNICAL INDICATORS ===
 indicators:  # Core technical analysis components
 - name: "rsi"  # Relative Strength Index for momentum and reversal signals
+  feature_id: rsi_14
   period: 14  # Lookback period balancing responsiveness vs stability
   source: "close"  # Price source for calculation consistency
 - name: "macd"  # MACD for trend direction and momentum confirmation
+  feature_id: macd_12_26_9
   fast_period: 12  # Fast EMA period for responsive signal generation
   slow_period: 26  # Slow EMA period for trend stability
   signal_period: 9  # Signal line period for entry/exit timing

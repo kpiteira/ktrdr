@@ -13,7 +13,7 @@ training_data:
     mode: "multi_symbol"
     list: ["EURUSD", "GBPUSD"]  # Train on European forex pairs
   timeframes:
-    mode: "single" 
+    mode: "single"
     timeframe: "1h"
   history_required: 200
 
@@ -28,17 +28,21 @@ deployment:
 # === TECHNICAL INDICATORS ===
 indicators:
 - name: "rsi"
+  feature_id: rsi_14
   period: 14
   source: "close"
 - name: "macd"
+  feature_id: macd_12_26_9
   fast_period: 12
   slow_period: 26
   signal_period: 9
   source: "close"
 - name: "sma"
+  feature_id: sma_20
   period: 20
   source: "close"
 - name: "BollingerBands"
+  feature_id: bollingerbands_20_2.0
   period: 20
   multiplier: 2.0
   source: "close"

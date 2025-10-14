@@ -5,8 +5,9 @@
 This document defines the formal grammar for KTRDR strategy configuration files using Extended Backus-Naur Form (EBNF).
 
 ## Version History
-- **v1.0**: Legacy format with single symbol/timeframe focus  
+- **v1.0**: Legacy format with single symbol/timeframe focus
 - **v2.0**: Clean format with systematic comments, pure fuzzy logic, and AI agent optimization
+- **v2.1**: Added required `feature_id` field to indicators for explicit fuzzy set mapping (2025-10-14)
 
 ## V2.0 Commenting Requirements
 Every parameter in v2.0 strategies MUST include explanatory comments that:
@@ -115,13 +116,16 @@ TargetSymbolMode ::= '"training_only"' | '"group_restricted"' | '"universal"'
 IndicatorSection ::= "indicators:" CommentLine IndicatorList
 IndicatorList ::= ('-' IndicatorDefinition CommentLine)+
 
-IndicatorDefinition ::= "name:" IndicatorName
+IndicatorDefinition ::= "name:" IndicatorName CommentLine
+                        "feature_id:" FeatureId CommentLine
                         IndicatorParameters*
 
-IndicatorName ::= '"rsi"' | '"macd"' | '"sma"' | '"ema"' | '"bollinger"' | 
+IndicatorName ::= '"rsi"' | '"macd"' | '"sma"' | '"ema"' | '"bollinger"' |
                   '"stoch"' | '"atr"' | '"adx"' | '"williams_r"' | String
 
-IndicatorParameters ::= "period:" Integer |
+FeatureId ::= String  # Must be unique within strategy, alphanumeric/underscore/dash only, cannot be reserved word
+
+IndicatorParameters ::= "period:" Integer CommentLine |
                         "fast_period:" Integer |
                         "slow_period:" Integer |
                         "signal_period:" Integer |
