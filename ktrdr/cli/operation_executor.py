@@ -141,7 +141,43 @@ class AsyncOperationExecutor:
         logger.debug(f"Payload: {payload}")
 
         response = await http_client.post(url, json=payload, timeout=self.timeout)
-        response.raise_for_status()
+
+        # Check for errors and parse API error response if present
+        if not response.is_success:
+            logger.debug(f"Request failed with status {response.status_code}")
+            try:
+                error_data = response.json()
+                logger.debug(f"Error response body: {error_data}")
+                if "error" in error_data:
+                    error = error_data["error"]
+                    error_msg = error.get("message", "Unknown error")
+
+                    # Format validation errors nicely
+                    if "details" in error and isinstance(error["details"], list):
+                        details = error["details"]
+                        detail_msgs = [
+                            f"  - {d.get('field', 'unknown')}: {d.get('message', 'error')}"
+                            for d in details
+                        ]
+                        error_msg += "\n" + "\n".join(detail_msgs)
+
+                    logger.debug(f"Raising HTTPStatusError with message: {error_msg}")
+                    raise httpx.HTTPStatusError(
+                        error_msg,
+                        request=response.request,
+                        response=response
+                    )
+            except (ValueError, KeyError) as parse_error:
+                # If we can't parse the error, fall back to default
+                logger.debug(f"Failed to parse error response: {parse_error}")
+                pass
+            except httpx.HTTPStatusError:
+                # Re-raise our custom error
+                raise
+
+            # Raise default error if we couldn't parse a better one
+            logger.debug("Falling back to default error")
+            response.raise_for_status()
 
         response_data = response.json()
         operation_id = adapter.parse_start_response(response_data)
@@ -353,7 +389,16 @@ class AsyncOperationExecutor:
                 # Start the operation
                 try:
                     operation_id = await self._start_operation(adapter, http_client)
+                except httpx.HTTPStatusError as e:
+                    # This is our custom error with parsed details
+                    # e.args[0] contains our custom message, str(e) is the httpx default
+                    error_msg = e.args[0] if e.args else str(e)
+                    console.print(
+                        f"[red]Failed to start operation:[/red]\n{error_msg}", style="bold"
+                    )
+                    return False
                 except httpx.HTTPError as e:
+                    # Fallback for other HTTP errors
                     console.print(
                         f"[red]Failed to start operation: {e}[/red]", style="bold"
                     )
