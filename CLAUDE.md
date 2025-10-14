@@ -17,6 +17,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🚫 ANTI-PATTERNS TO AVOID
 
+### Critical: NEVER Kill the API Server
+
+⛔ **NEVER EVER**: Run `lsof -ti:8000 | xargs kill` or similar commands to kill the API server
+⛔ **REASON**: The API runs in Docker. Killing it destroys the entire Docker container system
+✅ **DO**: If you need to test API changes, ask the user to restart Docker or just test with curl
+
 ### The "Quick Fix" Trap
 
 ❌ **DON'T**: Add try/except blocks to suppress errors
