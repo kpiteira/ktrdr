@@ -206,8 +206,8 @@ class TestExponentialMovingAverage:
         assert ema.params["source"] == "high"
         assert not ema.params["adjust"]
 
-        # Test column name generation
-        assert ema.get_column_name() == "ema_10"
+        # Test column name generation (includes adjust parameter)
+        assert ema.get_column_name() == "ema_10_False"
 
     def test_parameter_validation(self):
         """Test that parameter validation works."""
