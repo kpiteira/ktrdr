@@ -45,6 +45,7 @@ class IndicatorEngine:
                 provided, they will be used directly.
         """
         self.indicators: list[BaseIndicator] = []
+        self.feature_id_map: dict[str, str] = {}  # Maps column_name -> feature_id
 
         if indicators:
             if isinstance(indicators[0], dict):
@@ -64,6 +65,9 @@ class IndicatorEngine:
                 # Create factory with configs and build all indicators
                 factory = IndicatorFactory(indicator_configs)
                 self.indicators = factory.build()
+
+                # Build feature_id_map from configs and indicators
+                self._build_feature_id_map(indicator_configs, self.indicators)
             elif isinstance(indicators[0], BaseIndicator):
                 # Use provided indicator instances directly
                 # Type narrowing: if first element is BaseIndicator, assume all are
@@ -78,6 +82,89 @@ class IndicatorEngine:
         logger.info(
             f"Initialized IndicatorEngine with {len(self.indicators)} indicators"
         )
+
+    def _build_feature_id_map(
+        self, configs: list, indicators: list[BaseIndicator]
+    ) -> None:
+        """
+        Build the feature_id_map mapping column names to feature_ids.
+
+        This method creates the mapping between technical column names (from
+        indicator.get_column_name()) and user-facing feature_ids (from config).
+
+        For multi-output indicators (like MACD), only the primary output is mapped.
+        Primary output is identified as the column without "_signal_" or "_hist_" suffix.
+
+        Args:
+            configs: List of IndicatorConfig objects
+            indicators: List of instantiated indicator instances (parallel to configs)
+        """
+        from ..config.models import IndicatorConfig
+
+        for config, indicator in zip(configs, indicators):
+            # Ensure config is IndicatorConfig
+            if not isinstance(config, IndicatorConfig):
+                continue
+
+            feature_id = config.feature_id
+
+            # Get column name by creating a fresh indicator instance with the params
+            # This ensures we get the correct technical column name without any
+            # name modifications from the factory
+            column_name = self._get_technical_column_name(config, indicator)
+
+            # Check if this is a multi-output indicator by checking indicator type
+            # Multi-output indicators typically return DataFrame from compute()
+            # For now, we handle MACD specifically (produces 3 columns: main, signal, hist)
+            if config.name.lower() == "macd":
+                # MACD produces: MACD_{fast}_{slow}, MACD_signal_{fast}_{slow}_{signal}, MACD_hist_{fast}_{slow}_{signal}
+                # Primary output is the main line (without _signal_ or _hist_)
+                # Column name for MACD main line follows the pattern from get_column_name()
+                # which is typically "macd" + params, resulting in something like "MACD_12_26"
+
+                # For MACD, get_column_name() returns lowercase base name
+                # but actual column is uppercase with specific format
+                fast = indicator.params.get("fast_period", 12)
+                slow = indicator.params.get("slow_period", 26)
+                primary_column = f"MACD_{fast}_{slow}"
+
+                self.feature_id_map[primary_column] = feature_id
+                logger.debug(
+                    f"Mapped MACD primary output '{primary_column}' to feature_id '{feature_id}'"
+                )
+            else:
+                # Single-output indicator: map column_name directly to feature_id
+                self.feature_id_map[column_name] = feature_id
+                logger.debug(
+                    f"Mapped column '{column_name}' to feature_id '{feature_id}'"
+                )
+
+    def _get_technical_column_name(self, config, indicator: BaseIndicator) -> str:
+        """
+        Get the technical column name that an indicator will produce.
+
+        This creates a temporary clean indicator instance to get the column name,
+        avoiding any name modifications from IndicatorFactory.
+
+        Args:
+            config: IndicatorConfig with the indicator parameters
+            indicator: The indicator instance (used for class reference)
+
+        Returns:
+            The technical column name (e.g., "rsi_14", "ema_20")
+        """
+        # Create a fresh instance with just the params to get clean column name
+        indicator_class = type(indicator)
+
+        try:
+            temp_indicator = indicator_class(**config.params)
+            return temp_indicator.get_column_name()
+        except Exception as e:
+            # Fallback to using the existing indicator's column name
+            logger.warning(
+                f"Failed to create temp indicator for column name, using existing: {e}"
+            )
+            return indicator.get_column_name()
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         """

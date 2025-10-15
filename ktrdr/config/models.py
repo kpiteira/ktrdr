@@ -99,19 +99,13 @@ class IndicatorConfig(BaseModel):
 
         Flat format fields (except name, feature_id, params) are moved into params dict.
         """
-        # Get all extra fields that aren't part of the model
-        known_fields = {"name", "feature_id", "params"}
-        extra_fields = {
-            k: v
-            for k, v in self.__dict__.items()
-            if k not in known_fields and not k.startswith("_")
-        }
-
-        if extra_fields:
-            # Move extra fields into params
-            for key in list(extra_fields.keys()):
-                if key in self.__dict__:
-                    self.params[key] = self.__dict__.pop(key)
+        # In Pydantic v2, extra fields are stored in __pydantic_extra__
+        if hasattr(self, "__pydantic_extra__") and self.__pydantic_extra__:
+            # Move all extra fields into params dict
+            for key, value in list(self.__pydantic_extra__.items()):
+                self.params[key] = value
+            # Clear the extra fields
+            self.__pydantic_extra__.clear()
 
     @field_validator("name")
     @classmethod
