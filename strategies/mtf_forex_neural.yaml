@@ -31,11 +31,11 @@ training_data:
   timeframes:
     mode: "multi_timeframe"  # Critical: provides hierarchical context
     list:
-    - "5m"   # ENTRY TIMEFRAME: precise entry/exit signals, captures intraday moves
+#    - "5m"   # ENTRY TIMEFRAME: precise entry/exit signals, captures intraday moves
     - "1h"   # INTERMEDIATE TREND: filters false signals, confirms momentum direction
     - "1d"   # MAJOR TREND: provides regime context (bull/bear/range), prevents counter-trend disasters
-    base_timeframe: "5m"  # Primary decision timeframe for signal generation
-    #base_timeframe: "1h"  # Primary decision timeframe for signal generation
+#    base_timeframe: "5m"  # Primary decision timeframe for signal generation
+    base_timeframe: "1h"  # Primary decision timeframe for signal generation
   history_required: 300  # Need 300 bars minimum for 200-period SMA and other long indicators
 
 # === DEPLOYMENT TARGETS ===

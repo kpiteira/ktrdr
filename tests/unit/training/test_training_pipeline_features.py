@@ -34,8 +34,8 @@ class TestCalculateIndicators:
         }
 
         indicator_configs = [
-            {"type": "rsi", "feature_id": "rsi_14", "name": "rsi", "period": 14},
-            {"type": "sma", "feature_id": "sma_20", "name": "sma", "period": 20},
+            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
+            {"name": "sma", "feature_id": "sma_20", "period": 20},
         ]
 
         # Act
@@ -76,9 +76,7 @@ class TestCalculateIndicators:
             ),
         }
 
-        indicator_configs = [
-            {"type": "rsi", "feature_id": "rsi_14", "name": "rsi", "period": 14}
-        ]
+        indicator_configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -90,7 +88,11 @@ class TestCalculateIndicators:
         assert all(isinstance(df, pd.DataFrame) for df in result.values())
 
     def test_calculate_indicators_handles_sma_ema_ratios(self):
-        """Test that SMA/EMA indicators are converted to ratios (price/MA)."""
+        """Test that SMA/EMA indicators return raw values (Phase 2).
+
+        Note: SMA/EMA ratio transformation (price/MA) will be handled in Phase 3.5
+        via fuzzy layer input_transform, not in the training pipeline.
+        """
         # Arrange
         price_data = {
             "1D": pd.DataFrame(
@@ -104,21 +106,19 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [
-            {"type": "sma", "feature_id": "sma_5", "name": "sma", "period": 5}
-        ]
+        indicator_configs = [{"name": "sma", "feature_id": "sma_5", "period": 5}]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
 
         # Assert
-        # SMA should be ratio: close / sma_value (using feature_id)
+        # Phase 2: SMA should return raw values (not ratios)
         # Skip the initial period where SMA hasn't been calculated yet (values will be 0)
         sma_values = result["1D"]["sma_5"][20:]  # Skip warmup period
         assert len(sma_values) > 0
-        # Ratios should be around 1.0 (close to the MA)
-        assert (sma_values > 0.5).all()  # Reasonable ratio range
-        assert (sma_values < 2.0).all()
+        # Raw SMA values should be close to the price range (100-108)
+        assert (sma_values > 90).all()  # Reasonable price range
+        assert (sma_values < 120).all()
 
     def test_calculate_indicators_handles_macd(self):
         """Test MACD indicator returns main line (not signal or histogram)."""
@@ -137,9 +137,8 @@ class TestCalculateIndicators:
 
         indicator_configs = [
             {
-                "type": "macd",
-                "feature_id": "macd_12_26",
                 "name": "macd",
+                "feature_id": "macd_12_26",
                 "fast_period": 12,
                 "slow_period": 26,
             }
@@ -169,9 +168,7 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [
-            {"type": "rsi", "feature_id": "rsi_14", "name": "rsi", "period": 14}
-        ]
+        indicator_configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
