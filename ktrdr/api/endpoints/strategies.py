@@ -2,6 +2,48 @@
 Strategies endpoints for the KTRDR API.
 
 This module implements the API endpoints for listing and managing trading strategies.
+
+HTTP Status Code Mapping
+------------------------
+The endpoints in this module follow these status code conventions:
+
+200 OK:
+    - Successful retrieval of strategy list
+    - Successful retrieval of strategy details
+    - Successful retrieval of available indicators
+
+400 Bad Request (ConfigurationError):
+    - Strategy file has invalid format or structure
+    - Strategy validation fails (missing fields, invalid values)
+    - Fuzzy sets reference invalid indicators
+    - Feature IDs are missing, duplicate, or invalid format
+    Fix: Edit the strategy YAML file to correct the configuration
+
+422 Unprocessable Entity (ValidationError):
+    - Request parameters are invalid (e.g., invalid strategy name format)
+    - Query parameters don't match expected schema
+    Fix: Correct the API request parameters
+
+404 Not Found:
+    - Strategy file doesn't exist at specified path
+    - Requested strategy name doesn't match any known strategy
+    Fix: Check strategy name or create the strategy file
+
+500 Internal Server Error:
+    - Unexpected errors during file system operations
+    - Python exceptions not caught by specific handlers
+    Fix: Check server logs for stack trace
+
+Error Response Format
+--------------------
+All errors return JSON with this structure:
+    {
+        "message": "Human-readable error description",
+        "error_code": "CATEGORY-ErrorName",
+        "context": {"file": "path/to/file.yaml", ...},
+        "details": {...},
+        "suggestion": "How to fix this error"
+    }
 """
 
 from pathlib import Path
