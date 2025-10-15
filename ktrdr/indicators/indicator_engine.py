@@ -90,10 +90,11 @@ class IndicatorEngine:
         Build the feature_id_map mapping column names to feature_ids.
 
         This method creates the mapping between technical column names (from
-        indicator.get_column_name()) and user-facing feature_ids (from config).
+        indicator output) and user-facing feature_ids (from config).
 
-        For multi-output indicators (like MACD), only the primary output is mapped.
-        Primary output is identified as the column without "_signal_" or "_hist_" suffix.
+        For multi-output indicators, only the primary output (first column) is mapped.
+        We detect multi-output by checking the indicator's type annotation or by
+        testing with sample data.
 
         Args:
             configs: List of IndicatorConfig objects
@@ -108,36 +109,64 @@ class IndicatorEngine:
 
             feature_id = config.feature_id
 
-            # Get column name by creating a fresh indicator instance with the params
-            # This ensures we get the correct technical column name without any
-            # name modifications from the factory
-            column_name = self._get_technical_column_name(config, indicator)
+            # Check if indicator returns DataFrame (multi-output) or Series (single-output)
+            # Approach: Try computing with sample data and check result type
+            # This is more reliable than type annotations which may be Union types
+            is_multi_output = self._is_multi_output_indicator(indicator)
 
-            # Check if this is a multi-output indicator by checking indicator type
-            # Multi-output indicators typically return DataFrame from compute()
-            # For now, we handle MACD specifically (produces 3 columns: main, signal, hist)
-            if config.name.lower() == "macd":
-                # MACD produces: MACD_{fast}_{slow}, MACD_signal_{fast}_{slow}_{signal}, MACD_hist_{fast}_{slow}_{signal}
-                # Primary output is the main line (without _signal_ or _hist_)
-                # Column name for MACD main line follows the pattern from get_column_name()
-                # which is typically "macd" + params, resulting in something like "MACD_12_26"
-
-                # For MACD, get_column_name() returns lowercase base name
-                # but actual column is uppercase with specific format
-                fast = indicator.params.get("fast_period", 12)
-                slow = indicator.params.get("slow_period", 26)
-                primary_column = f"MACD_{fast}_{slow}"
-
-                self.feature_id_map[primary_column] = feature_id
-                logger.debug(
-                    f"Mapped MACD primary output '{primary_column}' to feature_id '{feature_id}'"
-                )
+            if is_multi_output:
+                # Multi-output indicator: need to get actual column names
+                # Create minimal sample data to discover column names
+                primary_column = self._get_primary_output_column(indicator)
+                if primary_column:
+                    self.feature_id_map[primary_column] = feature_id
+                    logger.debug(
+                        f"Mapped multi-output indicator primary column '{primary_column}' to feature_id '{feature_id}'"
+                    )
+                else:
+                    logger.warning(
+                        f"Could not determine primary output for multi-output indicator: {config.name}"
+                    )
             else:
                 # Single-output indicator: map column_name directly to feature_id
+                column_name = self._get_technical_column_name(config, indicator)
                 self.feature_id_map[column_name] = feature_id
                 logger.debug(
                     f"Mapped column '{column_name}' to feature_id '{feature_id}'"
                 )
+
+    def _is_multi_output_indicator(self, indicator: BaseIndicator) -> bool:
+        """
+        Check if an indicator produces multiple outputs (DataFrame) or single (Series).
+
+        Args:
+            indicator: The indicator instance to check
+
+        Returns:
+            True if indicator produces DataFrame (multi-output), False otherwise
+        """
+        try:
+            # Create minimal sample data
+            sample_data = pd.DataFrame(
+                {
+                    "open": [100.0] * 100,
+                    "high": [101.0] * 100,
+                    "low": [99.0] * 100,
+                    "close": [100.0] * 100,
+                    "volume": [1000] * 100,
+                }
+            )
+
+            # Compute and check result type
+            result = indicator.compute(sample_data)
+            return isinstance(result, pd.DataFrame)
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to determine if indicator {indicator.name} is multi-output: {e}"
+            )
+            # Default to False (single-output) on error
+            return False
 
     def _get_technical_column_name(self, config, indicator: BaseIndicator) -> str:
         """
@@ -165,6 +194,48 @@ class IndicatorEngine:
                 f"Failed to create temp indicator for column name, using existing: {e}"
             )
             return indicator.get_column_name()
+
+    def _get_primary_output_column(self, indicator: BaseIndicator) -> Optional[str]:
+        """
+        Get the primary output column name for a multi-output indicator.
+
+        Creates minimal sample data and computes the indicator to discover
+        the actual column names. Returns the first column name (primary output).
+
+        Args:
+            indicator: The indicator instance
+
+        Returns:
+            Primary output column name, or None if couldn't determine
+        """
+        try:
+            # Create minimal sample data (enough for most indicators)
+            # Use 100 rows to handle indicators with larger period requirements
+            sample_data = pd.DataFrame(
+                {
+                    "open": [100.0] * 100,
+                    "high": [101.0] * 100,
+                    "low": [99.0] * 100,
+                    "close": [100.0] * 100,
+                    "volume": [1000] * 100,
+                }
+            )
+
+            # Compute indicator on sample data
+            result = indicator.compute(sample_data)
+
+            # If result is DataFrame, get first column name
+            if isinstance(result, pd.DataFrame):
+                if len(result.columns) > 0:
+                    return result.columns[0]
+
+            return None
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to determine primary output column for {indicator.name}: {e}"
+            )
+            return None
 
     def _create_feature_id_aliases(self, data: pd.DataFrame) -> pd.DataFrame:
         """

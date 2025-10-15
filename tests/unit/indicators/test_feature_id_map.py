@@ -158,5 +158,73 @@ class TestFeatureIdMapColumnNames:
         assert "adjust" not in list(engine.feature_id_map.keys())[0]
 
 
+class TestFeatureIdMapMultiOutput:
+    """Test feature_id_map with various multi-output indicators."""
+
+    def test_bollinger_bands_multi_output(self):
+        """Test feature_id_map with Bollinger Bands (3 outputs: upper, middle, lower)."""
+        # Given: Bollinger Bands config
+        configs = [
+            {
+                "name": "BollingerBands",  # Use correct registered name
+                "feature_id": "bbands_20_2",
+                "period": 20,
+                "multiplier": 2.0,
+            }
+        ]
+
+        # When: Creating engine
+        engine = IndicatorEngine(indicators=configs)
+
+        # Then: Should map first output (upper) to feature_id
+        # BollingerBands produces: upper, middle, lower
+        # Primary output is "upper" (first column)
+        assert "upper" in engine.feature_id_map
+        assert engine.feature_id_map["upper"] == "bbands_20_2"
+
+    def test_stochastic_multi_output(self):
+        """Test feature_id_map with Stochastic (2 outputs: %K, %D)."""
+        # Given: Stochastic config with correct parameter names
+        configs = [
+            {
+                "name": "Stochastic",  # Use correct registered name
+                "feature_id": "stoch_14_3_3",
+                "k_period": 14,
+                "d_period": 3,
+                "smooth_k": 3,
+            }
+        ]
+
+        # When: Creating engine
+        engine = IndicatorEngine(indicators=configs)
+
+        # Then: Should map first output (%K) to feature_id
+        # Stochastic produces 2 columns, first one should be mapped
+        assert (
+            len(engine.feature_id_map) > 0
+        ), "Should have at least one mapping for multi-output"
+        # The first column from Stochastic should be mapped to feature_id
+        assert "stoch_14_3_3" in engine.feature_id_map.values()
+
+    def test_adx_multi_output(self):
+        """Test feature_id_map with ADX (3 outputs: ADX, +DI, -DI)."""
+        # Given: ADX config
+        configs = [
+            {
+                "name": "ADX",  # Use correct registered name
+                "feature_id": "adx_14",
+                "period": 14,
+            }
+        ]
+
+        # When: Creating engine
+        engine = IndicatorEngine(indicators=configs)
+
+        # Then: Should map first output to feature_id
+        # ADX produces multiple columns
+        # Primary output is first column
+        assert len(engine.feature_id_map) > 0, "Should have mapping for ADX"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
