@@ -8,6 +8,8 @@ the error classification in the architecture blueprint.
 
 from typing import Any, Optional
 
+from ktrdr.errors.error_codes import ErrorCodes
+
 
 class KtrdrError(Exception):
     """
@@ -376,7 +378,7 @@ class ConfigurationError(KtrdrError):
         """
         return cls(
             message=f"Indicator '{indicator_type}' at index {indicator_index} missing required field 'feature_id'",
-            error_code="STRATEGY-MissingFeatureId",
+            error_code=ErrorCodes.STRATEGY_MISSING_FEATURE_ID,
             context={
                 "file": file_path,
                 "section": f"indicators[{indicator_index}]",
@@ -411,7 +413,7 @@ class ConfigurationError(KtrdrError):
         """
         return cls(
             message=f"Duplicate feature_id '{feature_id}' found at indices {indices}",
-            error_code="STRATEGY-DuplicateFeatureId",
+            error_code=ErrorCodes.STRATEGY_DUPLICATE_FEATURE_ID,
             context={
                 "file": file_path,
                 "section": "indicators",
@@ -447,7 +449,7 @@ class ConfigurationError(KtrdrError):
         """
         return cls(
             message=f"Invalid feature_id format: '{feature_id}' at index {indicator_index}",
-            error_code="STRATEGY-InvalidFeatureIdFormat",
+            error_code=ErrorCodes.STRATEGY_INVALID_FEATURE_ID_FORMAT,
             context={
                 "file": file_path,
                 "section": f"indicators[{indicator_index}]",
@@ -485,7 +487,7 @@ class ConfigurationError(KtrdrError):
         reserved_words = ["open", "high", "low", "close", "volume"]
         return cls(
             message=f"Reserved feature_id '{feature_id}' at index {indicator_index}",
-            error_code="STRATEGY-ReservedFeatureId",
+            error_code=ErrorCodes.STRATEGY_RESERVED_FEATURE_ID,
             context={
                 "file": file_path,
                 "section": f"indicators[{indicator_index}]",

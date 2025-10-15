@@ -321,9 +321,9 @@ class TrainingPipeline:
                         mapped_results[feature_id] = (
                             price_data["close"] / indicator_results[col]
                         )
+                        break  # Found and processed SMA/EMA
                     elif indicator_type == "MACD":
                         # For MACD, use the main MACD line (not signal or histogram)
-                        # Look for the column that matches the MACD pattern
                         # With feature_id prefixing, columns are like "macd_12_26_9_MACD_12_26"
                         if (
                             "_MACD_" in col
@@ -331,15 +331,12 @@ class TrainingPipeline:
                             and "_hist_" not in col
                         ):
                             mapped_results[feature_id] = indicator_results[col]
-                            break
+                            break  # Found MACD main line
+                        # Continue loop to find MACD main line
                     else:
                         # For other indicators, use the raw values
                         mapped_results[feature_id] = indicator_results[col]
-                        break
-
-                    # If we found a non-MACD indicator, break
-                    if indicator_type != "MACD":
-                        break
+                        break  # Found and processed indicator
 
         # Final safety check: replace any inf values with NaN, then fill NaN with 0
         # This prevents overflow from propagating to feature scaling
@@ -413,6 +410,7 @@ class TrainingPipeline:
                             mapped_tf_results[feature_id] = (
                                 tf_price_data["close"] / tf_indicators[col]
                             )
+                            break  # Found and processed SMA/EMA
                         elif indicator_type == "MACD":
                             # For MACD, use the main MACD line (not signal or histogram)
                             # With feature_id prefixing, columns are like "macd_12_26_9_MACD_12_26"
@@ -422,15 +420,12 @@ class TrainingPipeline:
                                 and "_hist_" not in col
                             ):
                                 mapped_tf_results[feature_id] = tf_indicators[col]
-                                break
+                                break  # Found MACD main line
+                            # Continue loop to find MACD main line
                         else:
                             # For other indicators, use the raw values
                             mapped_tf_results[feature_id] = tf_indicators[col]
-                            break
-
-                        # If we found a non-MACD indicator, break
-                        if indicator_type != "MACD":
-                            break
+                            break  # Found and processed indicator
 
             mapped_results[timeframe] = mapped_tf_results
 

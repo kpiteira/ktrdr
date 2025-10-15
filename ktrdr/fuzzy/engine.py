@@ -481,24 +481,9 @@ class FuzzyEngine:
                     ]:
                         continue
 
-                    # Try to find matching fuzzy configuration
-                    # First, check if the column name directly matches a fuzzy set (e.g., "rsi_14")
-                    fuzzy_key = None
-                    if indicator_col in processing_engine._membership_functions:
-                        fuzzy_key = indicator_col
-                        logger.debug(f"Direct match: {indicator_col} -> {fuzzy_key}")
-                    else:
-                        # For multi-column indicators like "bbands_20_2_upper", try removing suffix
-                        # Check each fuzzy set key to see if the column starts with it
-                        for key in processing_engine._membership_functions.keys():
-                            if indicator_col.startswith(f"{key}_"):
-                                fuzzy_key = key
-                                logger.debug(
-                                    f"Prefix match: {indicator_col} -> {fuzzy_key}"
-                                )
-                                break
+                    # Find matching fuzzy configuration using systematic feature_id lookup
+                    fuzzy_key = processing_engine._find_fuzzy_key(indicator_col)
 
-                    # Check if this indicator has fuzzy configuration
                     if fuzzy_key:
                         try:
                             # Get indicator values
@@ -581,36 +566,36 @@ class FuzzyEngine:
 
         return results
 
-    def _extract_base_indicator_name(self, indicator_col: str) -> str:
+    def _find_fuzzy_key(self, column_name: str) -> Optional[str]:
         """
-        Extract base indicator name from column name.
+        Find fuzzy configuration key for a column, prioritizing feature_id matching.
 
-        Examples:
-            "rsi_14" -> "rsi"
-            "macd" -> "macd"
-            "sma_20" -> "sma"
+        This method implements systematic feature_id lookup:
+        1. Direct match: column_name exactly matches a fuzzy key (e.g., "rsi_14")
+        2. Prefix match: column_name starts with a fuzzy key + "_" (e.g., "bbands_20_2_upper" matches "bbands_20_2")
 
         Args:
-            indicator_col: Full indicator column name
+            column_name: The column name to find a fuzzy key for
 
         Returns:
-            Base indicator name
+            The matching fuzzy key, or None if no match found
+
+        Examples:
+            >>> engine._find_fuzzy_key("rsi_14")
+            "rsi_14"  # Direct match
+            >>> engine._find_fuzzy_key("bbands_20_2_upper")
+            "bbands_20_2"  # Prefix match (multi-column indicator)
+            >>> engine._find_fuzzy_key("unknown_indicator")
+            None  # No match
         """
-        # Common indicator patterns
-        common_indicators = ["rsi", "macd", "sma", "ema", "bb", "stoch", "cci", "atr"]
+        # Direct match first (most common case)
+        if column_name in self._membership_functions:
+            return column_name
 
-        # Check if the column starts with any known indicator
-        for indicator in common_indicators:
-            if indicator_col.lower().startswith(indicator.lower()):
-                return indicator.lower()
+        # For multi-column indicators, try prefix matching
+        # E.g., "bbands_20_2_upper" should match fuzzy key "bbands_20_2"
+        for fuzzy_key in self._membership_functions.keys():
+            if column_name.startswith(f"{fuzzy_key}_"):
+                return fuzzy_key
 
-        # Fallback: use the part before the first underscore or number
-        base_name = indicator_col.lower()
-
-        # Remove trailing numbers and underscores (e.g., "rsi_14" -> "rsi")
-        for i, char in enumerate(base_name):
-            if char.isdigit() or char == "_":
-                base_name = base_name[:i]
-                break
-
-        return base_name if base_name else indicator_col.lower()
+        return None
