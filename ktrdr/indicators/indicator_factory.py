@@ -275,6 +275,12 @@ class IndicatorFactory:
                 indicator.name = custom_name
                 logger.debug(f"Renamed indicator from {original_name} to {custom_name}")
 
+            # CRITICAL: If feature_id is specified in config, set it on the indicator
+            # This ensures fuzzy_sets and dataframe columns use the stable feature_id
+            if hasattr(config, "feature_id") and config.feature_id:
+                indicator._feature_id = config.feature_id
+                logger.debug(f"Set indicator feature_id: {config.feature_id}")
+
             return indicator
 
         except Exception as e:

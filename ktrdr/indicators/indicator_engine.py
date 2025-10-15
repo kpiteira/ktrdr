@@ -130,9 +130,17 @@ class IndicatorEngine:
                     name = result.name if result.name else indicator_name
                     result_df[name] = result
                 elif isinstance(result, pd.DataFrame):
-                    # Merge the result DataFrame with our result_df
-                    for col in result.columns:
-                        result_df[col] = result[col]
+                    # For multi-column indicators (like BollingerBands), prefix columns with feature_id
+                    # This ensures fuzzy_sets can reference specific outputs like "bbands_20_2_upper"
+                    feature_id = indicator.get_feature_id()
+
+                    # Rename all columns with feature_id prefix
+                    renamed_result = result.rename(
+                        columns={col: f"{feature_id}_{col}" for col in result.columns}
+                    )
+
+                    # Use pd.concat to avoid DataFrame fragmentation (much faster than repeated assignments)
+                    result_df = pd.concat([result_df, renamed_result], axis=1)
 
                 logger.debug(f"Successfully computed {indicator_name}")
 

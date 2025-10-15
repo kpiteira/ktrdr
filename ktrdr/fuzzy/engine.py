@@ -463,6 +463,13 @@ class FuzzyEngine:
                 # Process each indicator column and generate fuzzy memberships
                 timeframe_fuzzy_data = {}
 
+                logger.info(
+                    f"Available columns for {timeframe}: {list(indicators_data.columns)}"
+                )
+                logger.info(
+                    f"Fuzzy membership functions keys: {list(processing_engine._membership_functions.keys())}"
+                )
+
                 for indicator_col in indicators_data.columns:
                     # Skip non-indicator columns (OHLCV data)
                     if indicator_col.lower() in [
@@ -474,18 +481,32 @@ class FuzzyEngine:
                     ]:
                         continue
 
-                    # Extract base indicator name (remove suffix like "_14" from "rsi_14")
-                    base_indicator = self._extract_base_indicator_name(indicator_col)
+                    # Try to find matching fuzzy configuration
+                    # First, check if the column name directly matches a fuzzy set (e.g., "rsi_14")
+                    fuzzy_key = None
+                    if indicator_col in processing_engine._membership_functions:
+                        fuzzy_key = indicator_col
+                        logger.debug(f"Direct match: {indicator_col} -> {fuzzy_key}")
+                    else:
+                        # For multi-column indicators like "bbands_20_2_upper", try removing suffix
+                        # Check each fuzzy set key to see if the column starts with it
+                        for key in processing_engine._membership_functions.keys():
+                            if indicator_col.startswith(f"{key}_"):
+                                fuzzy_key = key
+                                logger.debug(
+                                    f"Prefix match: {indicator_col} -> {fuzzy_key}"
+                                )
+                                break
 
                     # Check if this indicator has fuzzy configuration
-                    if base_indicator in processing_engine._membership_functions:
+                    if fuzzy_key:
                         try:
                             # Get indicator values
                             indicator_values = indicators_data[indicator_col]
 
                             # Generate fuzzy memberships using existing fuzzify method
                             fuzzy_result = processing_engine.fuzzify(
-                                base_indicator, indicator_values
+                                fuzzy_key, indicator_values
                             )
 
                             # Add timeframe prefix to column names and store results
@@ -498,7 +519,7 @@ class FuzzyEngine:
                                     ]
 
                             logger.debug(
-                                f"Generated fuzzy memberships for {base_indicator} in {timeframe}"
+                                f"Generated fuzzy memberships for {fuzzy_key} ({indicator_col}) in {timeframe}"
                             )
 
                         except Exception as e:
@@ -507,9 +528,7 @@ class FuzzyEngine:
                             )
                             continue
                     else:
-                        logger.debug(
-                            f"No fuzzy configuration for indicator {base_indicator}, skipping"
-                        )
+                        logger.debug(f"No fuzzy match for column: {indicator_col}")
 
                 # Create DataFrame with fuzzy membership results
                 if timeframe_fuzzy_data:

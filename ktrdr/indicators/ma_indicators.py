@@ -120,7 +120,7 @@ class SimpleMovingAverage(BaseIndicator):
             sma = df[source].rolling(window=period).mean()
 
             # Set the name for the result Series
-            sma.name = self.get_column_name()
+            sma.name = self.get_feature_id()
 
             logger.debug(f"SMA calculation completed, non-NaN values: {sma.count()}")
             return sma
@@ -300,7 +300,7 @@ class ExponentialMovingAverage(BaseIndicator):
                     ema = ema * pd.Series(bias_vector, index=df.index)
 
             # Set the name for the result Series
-            ema.name = self.get_column_name()
+            ema.name = self.get_feature_id()
 
             logger.debug(f"EMA calculation completed, non-NaN values: {ema.count()}")
             return ema

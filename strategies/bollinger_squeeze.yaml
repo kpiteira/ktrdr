@@ -1,7 +1,7 @@
 # === STRATEGY IDENTITY ===
 name: "bollinger_squeeze"  # Bollinger Band squeeze strategy for volatility breakouts
 description: "Bollinger Band squeeze strategy for volatility breakouts"  # Clear one-line strategy summary
-version: "2.0"  # Clean format version for AI agent compatibility
+version: "2.1"  # Clean format version for AI agent compatibility
 hypothesis: "Bollinger Band squeeze conditions followed by expansion create high-probability
   directional breakout opportunities"                                                                                             # Core strategy belief being tested
 
@@ -52,7 +52,7 @@ indicators:  # Core technical analysis components
 
 # === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:  # Membership functions for indicator interpretation
-  rsi:  # Fuzzy membership functions for RSI interpretation
+  rsi_14:  # Fuzzy membership functions for RSI interpretation
     oversold:  # Extreme low values indicating potential reversal
       type: "triangular"  # Triangular membership for crisp boundaries
       parameters: [0, 20, 35]  # Triangular membership: left=0, peak=20, right=35

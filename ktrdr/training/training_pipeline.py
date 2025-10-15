@@ -304,9 +304,11 @@ class TrainingPipeline:
             if col in indicator_results.columns:
                 mapped_results[col] = indicator_results[col]
 
-        # Map indicator results to original names for fuzzy matching
+        # Map indicator results using feature_id (explicit naming) for fuzzy matching
         for config in indicator_configs:
-            original_name = config["name"]  # e.g., 'rsi'
+            # Use feature_id as the canonical identifier (e.g., 'rsi_14')
+            # Fallback to name for backward compatibility
+            feature_id = config.get("feature_id", config["name"])
             indicator_type = config["name"].upper()  # e.g., 'RSI'
 
             # Find the calculated column that matches this indicator
@@ -316,22 +318,23 @@ class TrainingPipeline:
                     if indicator_type in ["SMA", "EMA"]:
                         # For moving averages, create a ratio (price / moving_average)
                         # This makes the fuzzy sets meaningful (1.0 = at MA, >1.0 = above, <1.0 = below)
-                        mapped_results[original_name] = (
+                        mapped_results[feature_id] = (
                             price_data["close"] / indicator_results[col]
                         )
                     elif indicator_type == "MACD":
                         # For MACD, use the main MACD line (not signal or histogram)
                         # Look for the column that matches the MACD pattern
+                        # With feature_id prefixing, columns are like "macd_12_26_9_MACD_12_26"
                         if (
-                            col.startswith("MACD_")
+                            "_MACD_" in col
                             and "_signal_" not in col
                             and "_hist_" not in col
                         ):
-                            mapped_results[original_name] = indicator_results[col]
+                            mapped_results[feature_id] = indicator_results[col]
                             break
                     else:
                         # For other indicators, use the raw values
-                        mapped_results[original_name] = indicator_results[col]
+                        mapped_results[feature_id] = indicator_results[col]
                         break
 
                     # If we found a non-MACD indicator, break
@@ -395,9 +398,11 @@ class TrainingPipeline:
                 if col in tf_indicators.columns:
                     mapped_tf_results[col] = tf_indicators[col]
 
-            # Map indicator results to original names for fuzzy matching
+            # Map indicator results using feature_id (explicit naming) for fuzzy matching
             for config in indicator_configs:
-                original_name = config["name"]  # e.g., 'rsi'
+                # Use feature_id as the canonical identifier (e.g., 'rsi_14')
+                # Fallback to name for backward compatibility
+                feature_id = config.get("feature_id", config["name"])
                 indicator_type = config["name"].upper()  # e.g., 'RSI'
 
                 # Find the calculated column that matches this indicator
@@ -405,21 +410,22 @@ class TrainingPipeline:
                     if col.upper().startswith(indicator_type):
                         if indicator_type in ["SMA", "EMA"]:
                             # For moving averages, create a ratio (price / moving_average)
-                            mapped_tf_results[original_name] = (
+                            mapped_tf_results[feature_id] = (
                                 tf_price_data["close"] / tf_indicators[col]
                             )
                         elif indicator_type == "MACD":
                             # For MACD, use the main MACD line (not signal or histogram)
+                            # With feature_id prefixing, columns are like "macd_12_26_9_MACD_12_26"
                             if (
-                                col.startswith("MACD_")
+                                "_MACD_" in col
                                 and "_signal_" not in col
                                 and "_hist_" not in col
                             ):
-                                mapped_tf_results[original_name] = tf_indicators[col]
+                                mapped_tf_results[feature_id] = tf_indicators[col]
                                 break
                         else:
                             # For other indicators, use the raw values
-                            mapped_tf_results[original_name] = tf_indicators[col]
+                            mapped_tf_results[feature_id] = tf_indicators[col]
                             break
 
                         # If we found a non-MACD indicator, break

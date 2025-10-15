@@ -66,26 +66,25 @@ class TestIndicatorFactory:
         assert indicators[2].params["period"] == 12
 
     def test_indicator_custom_names(self):
-        """Test creating indicators with custom names."""
+        """Test creating indicators with feature_id as identifier."""
         configs = [
             IndicatorConfig(
-                type="RSI",
+                name="RSI",
                 feature_id="custom_rsi",
-                name="CustomRSI",
                 params={"period": 14},
             )
         ]
         factory = IndicatorFactory(configs)
         indicators = factory.build()
 
-        # Check that the custom name was applied
-        assert indicators[0].name == "CustomRSI"
+        # Check that the indicator was created with RSI type
+        assert isinstance(indicators[0], RSIIndicator)
 
     def test_invalid_indicator_type(self):
         """Test behavior with an invalid indicator type."""
         configs = [
             IndicatorConfig(
-                type="NonExistentIndicator", feature_id="nonexistent", params={}
+                name="NonExistentIndicator", feature_id="nonexistent", params={}
             )
         ]
         factory = IndicatorFactory(configs)
@@ -111,13 +110,13 @@ class TestIndicatorFactory:
         """Test behavior when some indicators fail but others succeed."""
         configs = [
             IndicatorConfig(
-                type="RSI", feature_id="rsi_14", params={"period": 14}
+                name="RSI", feature_id="rsi_14", params={"period": 14}
             ),  # Valid
             IndicatorConfig(
-                type="SMA", feature_id="sma_invalid", params={"period": -5}
+                name="SMA", feature_id="sma_invalid", params={"period": -5}
             ),  # Invalid
             IndicatorConfig(
-                type="EMA", feature_id="ema_12", params={"period": 12}
+                name="EMA", feature_id="ema_12", params={"period": 12}
             ),  # Valid
         ]
         factory = IndicatorFactory(configs)
@@ -135,11 +134,11 @@ class TestIndicatorFactory:
         # Create a temporary YAML file
         yaml_content = """
         indicators:
-          - type: RSI
+          - name: RSI
             feature_id: rsi_14
             params:
               period: 14
-          - type: SMA
+          - name: SMA
             feature_id: sma_10
             params:
               period: 10

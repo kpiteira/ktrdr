@@ -45,10 +45,10 @@ class TestCalculateIndicators:
         assert isinstance(result, dict)
         assert "1D" in result
         assert isinstance(result["1D"], pd.DataFrame)
-        # Should have price data columns + indicators
+        # Should have price data columns + indicators (using feature_ids)
         assert "close" in result["1D"].columns
-        assert "rsi" in result["1D"].columns
-        assert "sma" in result["1D"].columns
+        assert "rsi_14" in result["1D"].columns
+        assert "sma_20" in result["1D"].columns
         # Should not have inf values
         assert not np.isinf(result["1D"].values).any()
 
@@ -112,9 +112,9 @@ class TestCalculateIndicators:
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
 
         # Assert
-        # SMA should be ratio: close / sma_value
+        # SMA should be ratio: close / sma_value (using feature_id)
         # Skip the initial period where SMA hasn't been calculated yet (values will be 0)
-        sma_values = result["1D"]["sma"][20:]  # Skip warmup period
+        sma_values = result["1D"]["sma_5"][20:]  # Skip warmup period
         assert len(sma_values) > 0
         # Ratios should be around 1.0 (close to the MA)
         assert (sma_values > 0.5).all()  # Reasonable ratio range
@@ -148,10 +148,10 @@ class TestCalculateIndicators:
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
 
-        # Assert
-        assert "macd" in result["1D"].columns
+        # Assert (using feature_id)
+        assert "macd_12_26" in result["1D"].columns
         # MACD should have numeric values (not NaN for most rows)
-        assert result["1D"]["macd"].notna().sum() > 50
+        assert result["1D"]["macd_12_26"].notna().sum() > 50
 
     def test_calculate_indicators_no_inf_values(self):
         """Test that infinite values are replaced with 0."""

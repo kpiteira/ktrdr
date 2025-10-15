@@ -1,7 +1,7 @@
 # === STRATEGY IDENTITY ===
 name: "volume_surge_momentum"  # Volume surge strategy capturing explosive moves with institutional activity
 description: "Volume surge strategy capturing explosive moves with institutional activity"  # Clear one-line strategy summary
-version: "2.0"  # Clean format version for AI agent compatibility
+version: "2.1"  # Clean format version for AI agent compatibility
 hypothesis: "Volume surge patterns combined with price breakouts indicate institutional
   accumulation and create high-probability directional moves"                                                                                        # Core strategy belief being tested
 
@@ -52,7 +52,7 @@ indicators:  # Core technical analysis components
 
 # === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:  # Membership functions for indicator interpretation
-  rsi:  # Fuzzy membership functions for RSI interpretation
+  rsi_14:  # Fuzzy membership functions for RSI interpretation
     oversold:  # Extreme low values indicating potential reversal
       type: "triangular"  # Triangular membership for crisp boundaries
       parameters: [0, 20, 35]  # Triangular membership: left=0, peak=20, right=35

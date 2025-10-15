@@ -21,7 +21,7 @@ class TestFeatureIdGeneration:
 
     def test_simple_rsi_generates_correct_feature_id(self):
         """Test RSI with period generates feature_id with period."""
-        indicator_config = {"type": "rsi", "params": {"period": 14}}
+        indicator_config = {"name": "rsi", "params": {"period": 14}}
 
         feature_id = generate_feature_id_from_indicator(indicator_config)
 
@@ -29,7 +29,7 @@ class TestFeatureIdGeneration:
 
     def test_rsi_with_different_period(self):
         """Test RSI with different period generates correct feature_id."""
-        indicator_config = {"type": "rsi", "params": {"period": 21}}
+        indicator_config = {"name": "rsi", "params": {"period": 21}}
 
         feature_id = generate_feature_id_from_indicator(indicator_config)
 
@@ -38,7 +38,7 @@ class TestFeatureIdGeneration:
     def test_ema_generates_correct_feature_id(self):
         """Test EMA generates feature_id (should exclude adjust param)."""
         indicator_config = {
-            "type": "ema",
+            "name": "ema",
             "params": {"period": 20, "adjust": False, "source": "close"},
         }
 
@@ -50,7 +50,7 @@ class TestFeatureIdGeneration:
     def test_macd_generates_correct_feature_id(self):
         """Test MACD with multiple params generates correct feature_id."""
         indicator_config = {
-            "type": "macd",
+            "name": "macd",
             "params": {"fast_period": 12, "slow_period": 26, "signal_period": 9},
         }
 
@@ -61,7 +61,7 @@ class TestFeatureIdGeneration:
 
     def test_sma_generates_correct_feature_id(self):
         """Test SMA generates feature_id with period."""
-        indicator_config = {"type": "sma", "params": {"period": 50}}
+        indicator_config = {"name": "sma", "params": {"period": 50}}
 
         feature_id = generate_feature_id_from_indicator(indicator_config)
 
@@ -69,7 +69,7 @@ class TestFeatureIdGeneration:
 
     def test_indicator_with_no_params_uses_type_only(self):
         """Test indicator with no params uses type name only."""
-        indicator_config = {"type": "obv", "params": {}}
+        indicator_config = {"name": "obv", "params": {}}
 
         feature_id = generate_feature_id_from_indicator(indicator_config)
 
@@ -77,7 +77,7 @@ class TestFeatureIdGeneration:
 
     def test_zigzag_custom_format(self):
         """Test ZigZag indicator with custom column name format."""
-        indicator_config = {"type": "zigzag", "params": {"threshold": 0.05}}
+        indicator_config = {"name": "zigzag", "params": {"threshold": 0.05}}
 
         feature_id = generate_feature_id_from_indicator(indicator_config)
 
@@ -95,7 +95,7 @@ class TestStrategyMigration:
         old_strategy = {
             "name": "Test Strategy",
             "version": "1.0",
-            "indicators": [{"type": "rsi", "params": {"period": 14}}],
+            "indicators": [{"name": "rsi", "params": {"period": 14}}],
             "fuzzy_sets": {
                 "rsi_14": {
                     "oversold": {"type": "triangular", "parameters": [0, 20, 40]},
@@ -137,9 +137,9 @@ class TestStrategyMigration:
             "name": "Multi Indicator Strategy",
             "version": "1.0",
             "indicators": [
-                {"type": "rsi", "params": {"period": 14}},
-                {"type": "rsi", "params": {"period": 21}},
-                {"type": "ema", "params": {"period": 20}},
+                {"name": "rsi", "params": {"period": 14}},
+                {"name": "rsi", "params": {"period": 21}},
+                {"name": "ema", "params": {"period": 20}},
             ],
             "fuzzy_sets": {
                 "rsi_14": {"oversold": {}},
@@ -173,7 +173,7 @@ class TestStrategyMigration:
             "name": "Already Migrated",
             "version": "1.0",
             "indicators": [
-                {"type": "rsi", "feature_id": "rsi_14", "params": {"period": 14}}
+                {"name": "rsi", "feature_id": "rsi_14", "params": {"period": 14}}
             ],
             "fuzzy_sets": {"rsi_14": {}},
             "model": {},
@@ -198,8 +198,8 @@ class TestStrategyMigration:
             "name": "Duplicate Strategy",
             "version": "1.0",
             "indicators": [
-                {"type": "rsi", "params": {"period": 14}},
-                {"type": "rsi", "params": {"period": 14}},  # Duplicate!
+                {"name": "rsi", "params": {"period": 14}},
+                {"name": "rsi", "params": {"period": 14}},  # Duplicate!
             ],
             "fuzzy_sets": {"rsi_14": {}},
             "model": {},
@@ -223,7 +223,7 @@ class TestStrategyMigration:
         old_strategy = {
             "name": "Dry Run Test",
             "version": "1.0",
-            "indicators": [{"type": "rsi", "params": {"period": 14}}],
+            "indicators": [{"name": "rsi", "params": {"period": 14}}],
             "fuzzy_sets": {"rsi_14": {}},
             "model": {},
             "decisions": {},
@@ -257,7 +257,7 @@ class TestStrategyMigration:
         old_strategy = {
             "name": "Backup Test",
             "version": "1.0",
-            "indicators": [{"type": "rsi", "params": {"period": 14}}],
+            "indicators": [{"name": "rsi", "params": {"period": 14}}],
             "fuzzy_sets": {"rsi_14": {}},
             "model": {},
             "decisions": {},
@@ -292,7 +292,7 @@ class TestStrategyMigration:
             "version": "1.0",
             "indicators": [
                 {
-                    "type": "macd",
+                    "name": "macd",
                     "params": {
                         "fast_period": 12,
                         "slow_period": 26,

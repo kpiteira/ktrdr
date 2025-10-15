@@ -33,11 +33,11 @@ deployment:
     mode: single
     timeframe: 1h
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: rsi_14
     params:
       period: 14
-  - type: macd
+  - name: macd
     feature_id: macd_standard
     params:
       fast_period: 12
@@ -87,7 +87,7 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     params:
       period: 14
 fuzzy_sets:
@@ -129,7 +129,7 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: "123_invalid"
     params:
       period: 14
@@ -174,7 +174,7 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: "close"
     params:
       period: 14
@@ -217,11 +217,11 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: rsi_14
     params:
       period: 14
-  - type: rsi
+  - name: rsi
     feature_id: rsi_14
     params:
       period: 21
@@ -270,10 +270,10 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: rsi_14
     params: {period: 14}
-  - type: macd
+  - name: macd
     feature_id: macd_standard
     params: {}
 fuzzy_sets:
@@ -316,10 +316,10 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: rsi_14
     params: {period: 14}
-  - type: macd
+  - name: macd
     feature_id: macd_standard
     params: {}
 fuzzy_sets:
@@ -364,7 +364,7 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: rsi_14
     params: {period: 14}
 fuzzy_sets:
@@ -410,7 +410,7 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: rsi_fast
     params: {period: 7}
 fuzzy_sets: {}  # Empty - missing rsi_fast
@@ -457,7 +457,7 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: my_rsi
     params: {period: 14}
 fuzzy_sets: {}
@@ -498,13 +498,13 @@ deployment:
   target_symbols: {mode: universal}
   target_timeframes: {mode: single, timeframe: 1h}
 indicators:
-  - type: rsi
+  - name: rsi
     feature_id: rsi_14
     params: {period: 14}
-  - type: macd
+  - name: macd
     feature_id: macd_std
     params: {}
-  - type: ema
+  - name: ema
     feature_id: ema_20
     params: {period: 20}
 fuzzy_sets: {}  # All missing

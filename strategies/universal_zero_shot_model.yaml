@@ -3,7 +3,7 @@
 
 name: "universal_zero_shot_model"
 description: "Universal neural model with zero-shot generalization to unseen symbols"
-version: "2.0"
+version: "2.1"
 hypothesis: "Symbol-agnostic features enable universal pattern recognition across
   any asset"
 scope: "universal"  # Key field for universal architecture
@@ -45,7 +45,7 @@ indicators:
 
 # Fuzzy Logic Configuration
 fuzzy_sets:
-  rsi:
+  rsi_14:
     oversold:
       type: "triangular"
       parameters: [0, 20, 35]
@@ -55,7 +55,7 @@ fuzzy_sets:
     overbought:
       type: "triangular"
       parameters: [65, 80, 100]
-  sma:
+  sma_20:
     below:
       type: "triangular"
       parameters: [0.85, 0.95, 1.0]

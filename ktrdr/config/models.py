@@ -77,7 +77,9 @@ class IbHostServiceConfig(BaseModel):
 class IndicatorConfig(BaseModel):
     """Configuration for a technical indicator."""
 
-    name: str = Field(..., description="The name/type of indicator (e.g., 'rsi', 'macd')")
+    name: str = Field(
+        ..., description="The name/type of indicator (e.g., 'rsi', 'macd')"
+    )
     feature_id: str = Field(
         ..., description="Unique identifier for fuzzy sets and features (REQUIRED)"
     )
@@ -99,7 +101,11 @@ class IndicatorConfig(BaseModel):
         """
         # Get all extra fields that aren't part of the model
         known_fields = {"name", "feature_id", "params"}
-        extra_fields = {k: v for k, v in self.__dict__.items() if k not in known_fields and not k.startswith("_")}
+        extra_fields = {
+            k: v
+            for k, v in self.__dict__.items()
+            if k not in known_fields and not k.startswith("_")
+        }
 
         if extra_fields:
             # Move extra fields into params

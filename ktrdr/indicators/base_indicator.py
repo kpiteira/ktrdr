@@ -53,6 +53,7 @@ class BaseIndicator(ABC):
         )
         self.params = self._validate_params(params)
         self.display_as_overlay = display_as_overlay
+        self._feature_id: Optional[str] = None  # Set by IndicatorFactory from config
 
         logger.info(f"Initialized {self.name} indicator with parameters: {self.params}")
 
@@ -188,3 +189,24 @@ class BaseIndicator(ABC):
         suffix_str = f"_{suffix}" if suffix else ""
 
         return f"{base_name}{param_str}{suffix_str}"
+
+    def get_feature_id(self) -> str:
+        """
+        Get the unique feature identifier for this indicator instance.
+
+        The feature_id is the canonical way to identify a specific indicator instance
+        with its parameters. It's used for:
+        - Dataframe column names
+        - Fuzzy set references
+        - Model feature naming
+
+        If a feature_id was explicitly set via config, it's used directly.
+        Otherwise, falls back to get_column_name() for backward compatibility.
+
+        Returns:
+            str: The unique feature identifier for this indicator
+        """
+        if self._feature_id:
+            return self._feature_id
+        # Fallback to column name for backward compatibility
+        return self.get_column_name()

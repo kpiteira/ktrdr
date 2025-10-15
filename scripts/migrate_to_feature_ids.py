@@ -52,15 +52,20 @@ def generate_feature_id_from_indicator(indicator_config: dict[str, Any]) -> str:
         # Get indicator name
         indicator_name = indicator_config.get("name")
 
-        # Params are at the same level as 'name' (flat format)
-        params = {
-            k: v
-            for k, v in indicator_config.items()
-            if k not in ["name", "feature_id"]
-        }
-
         if not indicator_name:
             raise MigrationError("Indicator config missing 'name' field")
+
+        # Handle both flat and nested params formats
+        if "params" in indicator_config and isinstance(indicator_config["params"], dict):
+            # Nested format: {"name": "rsi", "params": {"period": 14}}
+            params = indicator_config["params"]
+        else:
+            # Flat format: {"name": "rsi", "period": 14}
+            params = {
+                k: v
+                for k, v in indicator_config.items()
+                if k not in ["name", "feature_id", "params"]
+            }
 
         # Create a temporary config for instantiation
         # Note: feature_id is required in new schema, but we're generating it
@@ -75,7 +80,7 @@ def generate_feature_id_from_indicator(indicator_config: dict[str, Any]) -> str:
 
         if not indicators:
             raise MigrationError(
-                f"Failed to instantiate indicator of type '{indicator_type}'"
+                f"Failed to instantiate indicator of type '{indicator_name}'"
             )
 
         # Get the column name from the indicator
@@ -198,13 +203,28 @@ def migrate_strategy_file(
             + "\n".join(f"  - {err}" for err in errors)
         )
 
-    # If no changes needed, return early
-    if changes_made == 0:
+    # Increment version from 2.0 to 2.1 (adding feature_id is a schema change)
+    # Do this even if all indicators already have feature_ids, to bump version
+    version_updated = False
+    if "version" in strategy:
+        current_version = str(strategy["version"])
+        if current_version == "2.0":
+            strategy["version"] = "2.1"
+            version_updated = True
+
+    # If no changes needed and version already correct, return early
+    if changes_made == 0 and not version_updated:
         return {"success": True, "changes": 0, "dry_run": dry_run, "errors": []}
 
     # If dry-run, don't write file
     if dry_run:
-        return {"success": True, "changes": changes_made, "dry_run": True, "errors": []}
+        return {
+            "success": True,
+            "changes": changes_made,
+            "version_updated": version_updated,
+            "dry_run": True,
+            "errors": [],
+        }
 
     # Create backup if requested
     if backup:
@@ -223,7 +243,13 @@ def migrate_strategy_file(
             f"Failed to write migrated strategy to '{file_path}': {e}"
         ) from e
 
-    return {"success": True, "changes": changes_made, "dry_run": False, "errors": []}
+    return {
+        "success": True,
+        "changes": changes_made,
+        "version_updated": version_updated,
+        "dry_run": False,
+        "errors": [],
+    }
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -285,6 +311,7 @@ def main():
     successful = 0
     failed = 0
     total_changes = 0
+    version_updates = 0
 
     for idx, file_path in enumerate(args.files, 1):
         print(f"[{idx}/{total_files}] Processing: {file_path}")
@@ -297,7 +324,12 @@ def main():
             if result["changes"] > 0:
                 print(f"  ✅ {result['changes']} indicator(s) updated")
                 total_changes += result["changes"]
-            else:
+
+            if result.get("version_updated", False):
+                print("  ✅ Version updated: 2.0 → 2.1")
+                version_updates += 1
+
+            if result["changes"] == 0 and not result.get("version_updated", False):
                 print("  ℹ️  No changes needed (already migrated)")
 
             successful += 1
@@ -316,6 +348,8 @@ def main():
     print(f"Successful: {successful}")
     print(f"Failed: {failed}")
     print(f"Total changes: {total_changes}")
+    if version_updates > 0:
+        print(f"Version updates: {version_updates}")
 
     if args.dry_run:
         print()
