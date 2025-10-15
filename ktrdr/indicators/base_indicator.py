@@ -206,7 +206,26 @@ class BaseIndicator(ABC):
         Returns:
             str: The unique feature identifier for this indicator
         """
-        if self._feature_id:
+        # DEBUG: Check type WITHOUT triggering ambiguity error
+        import pandas as pd
+
+        # Check if it's a Series (the bug we're looking for)
+        if isinstance(self._feature_id, pd.Series):
+            # Log the bug using logger (not stderr to avoid broken pipe)
+            logger.error(
+                f"[CRITICAL BUG] _feature_id is a pandas Series for indicator {self.name}! "
+                f"Type: {type(self._feature_id).__name__}, "
+                f"This should NEVER happen - feature_id must be a string."
+            )
+            # Log stack trace
+            import traceback
+
+            logger.error(f"Stack trace:\n{''.join(traceback.format_stack())}")
+            # Return fallback to avoid the ambiguity error
+            return self.get_column_name()
+
+        # Normal flow - use 'is not None' to avoid ambiguity with Series
+        if self._feature_id is not None:
             return self._feature_id
         # Fallback to column name for backward compatibility
         return self.get_column_name()

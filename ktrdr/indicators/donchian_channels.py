@@ -127,7 +127,9 @@ class DonchianChannelsIndicator(BaseIndicator):
         lower_channel = data["low"].rolling(window=period, min_periods=period).min()
 
         # Create result DataFrame with original data
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         result[f"DC_Upper_{period}"] = upper_channel
         result[f"DC_Lower_{period}"] = lower_channel
 
@@ -161,41 +163,49 @@ class DonchianChannelsIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         period = self.params.get("period", 20)
         upper_col = f"DC_Upper_{period}"
         lower_col = f"DC_Lower_{period}"
         position_col = f"DC_Position_{period}"
 
+        # If columns not in data, compute them
         if upper_col not in data.columns or lower_col not in data.columns:
-            result = self.compute(data)
+            computed = self.compute(data)
+            # Merge computed columns into data for signal calculations
+            for col in computed.columns:
+                if col not in data.columns:
+                    data = data.copy()
+                    data[col] = computed[col]
 
-        # Breakout signals
+        # Breakout signals - use data (which has 'close') not result
         # Upper breakout: Close above upper channel
-        upper_breakout = result["close"] > result[upper_col]
+        upper_breakout = data["close"] > data[upper_col]
         result[f"DC_Upper_Breakout_{period}"] = upper_breakout
 
         # Lower breakout: Close below lower channel
-        lower_breakout = result["close"] < result[lower_col]
+        lower_breakout = data["close"] < data[lower_col]
         result[f"DC_Lower_Breakout_{period}"] = lower_breakout
 
         # Channel position signals
         # Overbought: Position > 0.8
-        overbought = result[position_col] > 0.8
+        overbought = data[position_col] > 0.8
         result[f"DC_Overbought_{period}"] = overbought
 
         # Oversold: Position < 0.2
-        oversold = result[position_col] < 0.2
+        oversold = data[position_col] < 0.2
         result[f"DC_Oversold_{period}"] = oversold
 
         # Trend signals based on channel position
         # Strong uptrend: Position consistently > 0.7
-        strong_uptrend = result[position_col].rolling(window=3).mean() > 0.7
+        strong_uptrend = data[position_col].rolling(window=3).mean() > 0.7
         result[f"DC_Strong_Uptrend_{period}"] = strong_uptrend
 
         # Strong downtrend: Position consistently < 0.3
-        strong_downtrend = result[position_col].rolling(window=3).mean() < 0.3
+        strong_downtrend = data[position_col].rolling(window=3).mean() < 0.3
         result[f"DC_Strong_Downtrend_{period}"] = strong_downtrend
 
         return result
@@ -216,8 +226,14 @@ class DonchianChannelsIndicator(BaseIndicator):
         width_col = f"DC_Width_{period}"
         position_col = f"DC_Position_{period}"
 
+        # If columns not in data, compute them and merge
         if upper_col not in data.columns:
-            data = self.compute(data)
+            computed = self.compute(data)
+            # Merge computed columns into data
+            for col in computed.columns:
+                if col not in data.columns:
+                    data = data.copy()
+                    data[col] = computed[col]
 
         # Get recent values (last 20 periods)
         recent_data = data.tail(20)

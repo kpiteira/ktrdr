@@ -171,9 +171,11 @@ class FisherTransformIndicator(BaseIndicator):
         # Calculate trigger line (previous Fisher Transform value)
         fisher_trigger = fisher_smooth.shift(1)
 
-        # Create result DataFrame
-        result = data.copy()
+        # Create result DataFrame with ONLY Fisher Transform columns
+        # CRITICAL: Do NOT copy the input data - only return computed columns
+        # The IndicatorEngine will handle merging with the main DataFrame
         suffix = f"{period}_{smoothing}"
+        result = pd.DataFrame(index=data.index)
         result[f"Fisher_{suffix}"] = fisher_smooth
         result[f"Fisher_Trigger_{suffix}"] = fisher_trigger
         result[f"Fisher_Raw_{suffix}"] = fisher_raw

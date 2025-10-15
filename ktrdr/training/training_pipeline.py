@@ -303,6 +303,7 @@ class TrainingPipeline:
         # Initialize indicator engine with configs and use multi-timeframe method
         # IndicatorConfig expects 'name' field (not 'type'), so no transformation needed
         indicator_engine = IndicatorEngine(indicators=indicator_configs)
+
         indicator_results = indicator_engine.apply_multi_timeframe(
             price_data, indicator_configs
         )

@@ -215,7 +215,9 @@ class SuperTrendIndicator(BaseIndicator):
                         trend_direction.iloc[i] = -1
 
         # Create result DataFrame
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         suffix = f"{period}_{multiplier}"
         result[f"SuperTrend_{suffix}"] = supertrend
         result[f"ST_Direction_{suffix}"] = trend_direction
@@ -267,7 +269,9 @@ class SuperTrendIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         period = self.params.get("period", 10)
         multiplier = self.params.get("multiplier", 3.0)

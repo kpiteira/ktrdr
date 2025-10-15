@@ -128,8 +128,12 @@ class SqueezeIntensityIndicator(BaseIndicator):
             period=bb_period, multiplier=bb_multiplier, source=source
         )
         bb_data = bb_indicator.compute(data)
-        bb_upper = bb_data["upper"]
-        bb_lower = bb_data["lower"]
+
+        # Extract bands - use parameterized column names
+        # BollingerBands now returns columns like 'upper_20_2.0', 'lower_20_2.0'
+        bb_suffix = f"{bb_period}_{bb_multiplier}"
+        bb_upper = bb_data[f"upper_{bb_suffix}"]
+        bb_lower = bb_data[f"lower_{bb_suffix}"]
 
         # Calculate Keltner Channels (KeltnerChannels uses close by default)
         # Note: KeltnerChannels uses atr_period=10 by default

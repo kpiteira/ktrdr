@@ -279,7 +279,6 @@ class IndicatorFactory:
             # This ensures fuzzy_sets and dataframe columns use the stable feature_id
             if hasattr(config, "feature_id") and config.feature_id:
                 indicator._feature_id = config.feature_id
-                logger.debug(f"Set indicator feature_id: {config.feature_id}")
 
             return indicator
 

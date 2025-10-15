@@ -18,6 +18,16 @@ from ktrdr.indicators.schemas import BOLLINGER_BANDS_SCHEMA
 class TestBollingerBandsIndicator:
     """Test cases for Bollinger Bands indicator."""
 
+    @staticmethod
+    def _get_column_names(period: int = 20, multiplier: float = 2.0):
+        """Helper to get expected column names for given parameters."""
+        suffix = f"{period}_{multiplier}"
+        return {
+            "upper": f"upper_{suffix}",
+            "middle": f"middle_{suffix}",
+            "lower": f"lower_{suffix}",
+        }
+
     def test_basic_initialization(self):
         """Test basic initialization with default parameters."""
         bb = BollingerBandsIndicator()
@@ -91,23 +101,25 @@ class TestBollingerBandsIndicator:
 
         bb = BollingerBandsIndicator(period=3, multiplier=2.0)
         result = bb.compute(data)
+        # Get expected column names
+        cols = self._get_column_names(period=3, multiplier=2.0)
 
         # Check result structure
         assert isinstance(result, pd.DataFrame)
         assert len(result.columns) == 3
-        assert "upper" in result.columns
-        assert "middle" in result.columns
-        assert "lower" in result.columns
+        assert cols["upper"] in result.columns
+        assert cols["middle"] in result.columns
+        assert cols["lower"] in result.columns
         assert len(result) == len(data)
 
         # Check that first (period-1) values are NaN
-        assert pd.isna(result.iloc[0]["upper"])
-        assert pd.isna(result.iloc[1]["upper"])
+        assert pd.isna(result.iloc[0][cols["upper"]])
+        assert pd.isna(result.iloc[1][cols["upper"]])
 
         # Check that period-th value is not NaN
-        assert not pd.isna(result.iloc[2]["upper"])
-        assert not pd.isna(result.iloc[2]["middle"])
-        assert not pd.isna(result.iloc[2]["lower"])
+        assert not pd.isna(result.iloc[2][cols["upper"]])
+        assert not pd.isna(result.iloc[2][cols["middle"]])
+        assert not pd.isna(result.iloc[2][cols["lower"]])
 
     def test_mathematical_properties(self):
         """Test mathematical properties of Bollinger Bands."""
@@ -124,15 +136,17 @@ class TestBollingerBandsIndicator:
 
         bb = BollingerBandsIndicator(period=20, multiplier=2.0)
         result = bb.compute(data)
+        # Get expected column names
+        cols = self._get_column_names(period=20, multiplier=2.0)
 
         # Remove NaN values for testing
         valid_result = result.dropna()
 
         # Upper band should always be >= middle band
-        assert all(valid_result["upper"] >= valid_result["middle"])
+        assert all(valid_result[cols["upper"]] >= valid_result[cols["middle"]])
 
         # Middle band should always be >= lower band
-        assert all(valid_result["middle"] >= valid_result["lower"])
+        assert all(valid_result[cols["middle"]] >= valid_result[cols["lower"]])
 
         # For trending data, bands should generally widen
         # (though this can vary based on local volatility)
@@ -153,15 +167,17 @@ class TestBollingerBandsIndicator:
 
         bb = BollingerBandsIndicator(period=10, multiplier=2.0)
         result = bb.compute(data)
+        # Get expected column names
+        cols = self._get_column_names(period=10, multiplier=2.0)
 
         # With constant prices, standard deviation should be 0
         # So upper, middle, and lower bands should all equal the constant price
         valid_result = result.dropna()
 
         # All bands should be equal to the constant price
-        assert all(abs(valid_result["upper"] - 100.0) < 1e-10)
-        assert all(abs(valid_result["middle"] - 100.0) < 1e-10)
-        assert all(abs(valid_result["lower"] - 100.0) < 1e-10)
+        assert all(abs(valid_result[cols["upper"]] - 100.0) < 1e-10)
+        assert all(abs(valid_result[cols["middle"]] - 100.0) < 1e-10)
+        assert all(abs(valid_result[cols["lower"]] - 100.0) < 1e-10)
 
     def test_missing_source_column(self):
         """Test error handling when source column is missing."""
@@ -213,8 +229,16 @@ class TestBollingerBandsIndicator:
         bb_low = BollingerBandsIndicator(period=3, source="low")
 
         result_close = bb_close.compute(data)
+        # Get expected column names
+        cols_close = self._get_column_names(period=3, multiplier=2.0)
+
         result_high = bb_high.compute(data)
+        # Get expected column names
+        cols_high = self._get_column_names(period=3, multiplier=2.0)
+
         result_low = bb_low.compute(data)
+        # Get expected column names
+        cols_low = self._get_column_names(period=3, multiplier=2.0)
 
         # Results should be different for different sources
         valid_close = result_close.dropna()
@@ -222,8 +246,14 @@ class TestBollingerBandsIndicator:
         valid_low = result_low.dropna()
 
         # High source should generally produce higher values
-        assert valid_high["middle"].iloc[-1] > valid_close["middle"].iloc[-1]
-        assert valid_close["middle"].iloc[-1] > valid_low["middle"].iloc[-1]
+        assert (
+            valid_high[cols_high["middle"]].iloc[-1]
+            > valid_close[cols_close["middle"]].iloc[-1]
+        )
+        assert (
+            valid_close[cols_close["middle"]].iloc[-1]
+            > valid_low[cols_low["middle"]].iloc[-1]
+        )
 
     def test_different_multipliers(self):
         """Test Bollinger Bands with different standard deviation multipliers."""
@@ -242,8 +272,16 @@ class TestBollingerBandsIndicator:
         bb_3 = BollingerBandsIndicator(period=5, multiplier=3.0)
 
         result_1 = bb_1.compute(data)
+        # Get expected column names
+        cols_1 = self._get_column_names(period=5, multiplier=1.0)
+
         result_2 = bb_2.compute(data)
+        # Get expected column names
+        cols_2 = self._get_column_names(period=5, multiplier=2.0)
+
         result_3 = bb_3.compute(data)
+        # Get expected column names
+        cols_3 = self._get_column_names(period=5, multiplier=3.0)
 
         # Larger multipliers should produce wider bands
         valid_1 = result_1.dropna()
@@ -251,13 +289,13 @@ class TestBollingerBandsIndicator:
         valid_3 = result_3.dropna()
 
         # Middle bands should be identical
-        assert all(abs(valid_1["middle"] - valid_2["middle"]) < 1e-10)
-        assert all(abs(valid_2["middle"] - valid_3["middle"]) < 1e-10)
+        assert all(abs(valid_1[cols_1["middle"]] - valid_2[cols_2["middle"]]) < 1e-10)
+        assert all(abs(valid_2[cols_2["middle"]] - valid_3[cols_3["middle"]]) < 1e-10)
 
         # Band widths should increase with multiplier
-        width_1 = valid_1["upper"] - valid_1["lower"]
-        width_2 = valid_2["upper"] - valid_2["lower"]
-        width_3 = valid_3["upper"] - valid_3["lower"]
+        width_1 = valid_1[cols_1["upper"]] - valid_1[cols_1["lower"]]
+        width_2 = valid_2[cols_2["upper"]] - valid_2[cols_2["lower"]]
+        width_3 = valid_3[cols_3["upper"]] - valid_3[cols_3["lower"]]
 
         assert all(width_2 > width_1)
         assert all(width_3 > width_2)
@@ -327,18 +365,20 @@ class TestBollingerBandsIndicator:
 
         bb = BollingerBandsIndicator(period=20, multiplier=2.0)
         result = bb.compute(data)
+        # Get expected column names
+        cols = self._get_column_names(period=20, multiplier=2.0)
 
         # Check that we get reasonable results
         valid_result = result.dropna()
         assert len(valid_result) > 20  # Should have plenty of valid data
 
         # Bands should be properly ordered
-        assert all(valid_result["upper"] >= valid_result["middle"])
-        assert all(valid_result["middle"] >= valid_result["lower"])
+        assert all(valid_result[cols["upper"]] >= valid_result[cols["middle"]])
+        assert all(valid_result[cols["middle"]] >= valid_result[cols["lower"]])
 
         # Bands should generally contain the prices (though price can break out)
         price_in_bands = (
-            data["close"].iloc[-len(valid_result) :] >= valid_result["lower"]
-        ) & (data["close"].iloc[-len(valid_result) :] <= valid_result["upper"])
+            data["close"].iloc[-len(valid_result) :] >= valid_result[cols["lower"]]
+        ) & (data["close"].iloc[-len(valid_result) :] <= valid_result[cols["upper"]])
         # Most prices should be within bands (Bollinger Bands theory)
         assert price_in_bands.sum() / len(price_in_bands) > 0.8  # 80%+ within bands

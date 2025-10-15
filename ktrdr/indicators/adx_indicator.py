@@ -185,7 +185,9 @@ class ADXIndicator(BaseIndicator):
         adx = self._wilder_smoothing(dx, period)
 
         # Create result DataFrame
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         result[f"ADX_{period}"] = adx
         result[f"DI_Plus_{period}"] = di_plus
         result[f"DI_Minus_{period}"] = di_minus
@@ -219,7 +221,9 @@ class ADXIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         period = self.params.get("period", 14)
         adx_col = f"ADX_{period}"

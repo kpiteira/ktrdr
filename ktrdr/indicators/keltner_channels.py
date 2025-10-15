@@ -171,7 +171,9 @@ class KeltnerChannelsIndicator(BaseIndicator):
         lower_channel = ema - band_width
 
         # Create result DataFrame
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         result[f"KC_Middle_{period}"] = ema
         result[f"KC_Upper_{period}_{atr_period}_{multiplier}"] = upper_channel
         result[f"KC_Lower_{period}_{atr_period}_{multiplier}"] = lower_channel
@@ -208,7 +210,9 @@ class KeltnerChannelsIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         period = self.params.get("period", 20)
         atr_period = self.params.get("atr_period", 10)

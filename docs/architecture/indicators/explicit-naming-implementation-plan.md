@@ -1424,6 +1424,512 @@ All previous phases complete
 
 ---
 
+## Phase 7: Optimize IndicatorEngine Initialization
+
+**Status**: 📋 **PLANNED** - Ready to Design
+
+**Priority**: LOW (Performance Optimization)
+
+**Goal**: Eliminate redundant indicator computation during IndicatorEngine initialization by caching indicator metadata.
+
+### Background
+
+Currently, IndicatorEngine computes each indicator **twice**:
+
+1. **First computation (initialization)**: On sample data (100 rows) to determine:
+   - Whether indicator is multi-output (returns DataFrame vs Series)
+   - Primary output column name for multi-output indicators
+   - Technical column name format
+
+2. **Second computation (apply)**: On real training data (e.g., 518 rows) to get actual indicator values
+
+For a strategy with 36 indicators, this means **72 indicator computations** (36 during init + 36 during apply).
+
+**Performance Impact**:
+- Initialization overhead proportional to number of indicators
+- Noticeable delay with many indicators or complex computations
+- Unnecessary computation on dummy data just for type detection
+
+### Root Cause Analysis
+
+The duplicate computation occurs in:
+
+**File**: `ktrdr/indicators/indicator_engine.py`
+
+**Methods**:
+- `_is_multi_output_indicator()` (lines 138-169): Creates sample data, computes indicator, checks if result is DataFrame
+- `_get_primary_output_column()` (lines 198-238): Creates sample data, computes indicator, extracts first column name
+- `_get_technical_column_name()` (lines 171-196): Creates temp indicator instance to get column name
+
+**Why This Happens**:
+- Need to know column names BEFORE processing to build feature_id_map
+- Need to detect multi-output indicators to handle them correctly
+- No caching mechanism - same computation repeated per instance
+
+### Proposed Solution
+
+**Approach**: Class-level metadata caching with lazy detection
+
+**Key Insight**: Indicator metadata (multi-output status, column naming pattern) is determined by the **indicator class**, not the instance. We can cache this at the class level.
+
+### Tasks
+
+#### Task 7.1: Design Metadata Cache Architecture
+
+**Design Decisions**:
+
+1. **Cache Scope**: Class-level (shared across all instances of same indicator class)
+2. **Cache Key**: Indicator class type (e.g., `BollingerBandsIndicator`, `RSIIndicator`)
+3. **Cached Data**:
+   - `is_multi_output: bool` - Whether indicator returns DataFrame
+   - `column_pattern: str` - Format string for column naming (e.g., `"rsi_{period}"`)
+   - `primary_output_pattern: str` - Pattern for primary column (multi-output only)
+
+4. **Cache Invalidation**: None needed (class metadata doesn't change at runtime)
+
+**Implementation Strategy**:
+
+```python
+# Class-level cache (module-level dict)
+_INDICATOR_METADATA_CACHE: dict[Type[BaseIndicator], dict[str, Any]] = {}
+
+def _get_indicator_metadata(indicator: BaseIndicator) -> dict[str, Any]:
+    """
+    Get cached metadata for indicator class.
+
+    On first call for an indicator class, computes metadata and caches it.
+    Subsequent calls for same class return cached data instantly.
+    """
+    indicator_class = type(indicator)
+
+    if indicator_class not in _INDICATOR_METADATA_CACHE:
+        # First time for this class - compute and cache
+        metadata = _compute_indicator_metadata(indicator)
+        _INDICATOR_METADATA_CACHE[indicator_class] = metadata
+
+    return _INDICATOR_METADATA_CACHE[indicator_class]
+```
+
+**Acceptance Criteria**:
+- [ ] Cache design documented with clear rationale
+- [ ] Cache key strategy defined (class type)
+- [ ] Cache data structure defined
+- [ ] Thread-safety considered (if needed)
+- [ ] Cache invalidation strategy defined (or justification for none)
+
+#### Task 7.2: Implement Metadata Cache
+
+**Files**: `ktrdr/indicators/indicator_engine.py`
+
+**Changes**:
+
+1. Add module-level cache dictionary:
+```python
+# Module-level cache for indicator metadata
+# Maps: indicator class → metadata dict
+_INDICATOR_METADATA_CACHE: dict[Type[BaseIndicator], dict[str, Any]] = {}
+```
+
+2. Add `_get_indicator_metadata()` method:
+```python
+def _get_indicator_metadata(self, indicator: BaseIndicator) -> dict[str, Any]:
+    """
+    Get metadata for indicator (cached at class level).
+
+    Metadata includes:
+    - is_multi_output: Whether indicator returns DataFrame
+    - primary_column: Primary output column name (for multi-output)
+
+    Computes on first call per class, caches for subsequent calls.
+    """
+    indicator_class = type(indicator)
+
+    if indicator_class not in _INDICATOR_METADATA_CACHE:
+        # First call for this class - compute and cache
+        is_multi_output = self._is_multi_output_indicator(indicator)
+
+        metadata = {
+            'is_multi_output': is_multi_output,
+            'primary_column': None  # Will be populated if multi-output
+        }
+
+        if is_multi_output:
+            metadata['primary_column'] = self._get_primary_output_column(indicator)
+
+        _INDICATOR_METADATA_CACHE[indicator_class] = metadata
+
+        logger.debug(
+            f"Cached metadata for {indicator_class.__name__}: "
+            f"multi_output={is_multi_output}"
+        )
+
+    return _INDICATOR_METADATA_CACHE[indicator_class]
+```
+
+3. Update `_build_feature_id_map()` to use cache:
+```python
+def _build_feature_id_map(
+    self, configs: list, indicators: list[BaseIndicator]
+) -> None:
+    """Build feature_id_map using cached metadata (optimized)."""
+    from ..config.models import IndicatorConfig
+
+    for config, indicator in zip(configs, indicators):
+        if not isinstance(config, IndicatorConfig):
+            continue
+
+        feature_id = config.feature_id
+
+        # Use cached metadata (fast!)
+        metadata = self._get_indicator_metadata(indicator)
+        is_multi_output = metadata['is_multi_output']
+
+        if is_multi_output:
+            primary_column = metadata['primary_column']
+            if primary_column:
+                self.feature_id_map[primary_column] = feature_id
+                logger.debug(
+                    f"Mapped multi-output indicator primary column '{primary_column}' "
+                    f"to feature_id '{feature_id}' (indicator: {config.name})"
+                )
+        else:
+            # Single-output indicator
+            column_name = self._get_technical_column_name(config, indicator)
+            self.feature_id_map[column_name] = feature_id
+            logger.debug(
+                f"Mapped column '{column_name}' to feature_id '{feature_id}' "
+                f"(indicator: {config.name})"
+            )
+```
+
+**Performance Improvement**:
+- **Before**: 36 indicators × 2 computations = 72 computations
+- **After**: ~12 unique indicator classes × 1 computation + 36 cache lookups = ~12 computations
+
+**Expected Speedup**:
+- First IndicatorEngine: Same speed (must populate cache)
+- Subsequent engines: **~6x faster initialization** (cache hits)
+- Strategy with repeated indicators (e.g., 3 RSI): **Much faster** (1 computation instead of 3)
+
+**Acceptance Criteria**:
+- [ ] Cache implementation correct (class-level, persistent)
+- [ ] Cache populated on first access per class
+- [ ] Subsequent accesses use cached data (no recomputation)
+- [ ] Logging shows cache hits/misses
+- [ ] Thread-safe (if multi-threaded access possible)
+- [ ] No memory leaks (cache doesn't grow indefinitely)
+
+#### Task 7.3: Add Cache Diagnostics and Monitoring
+
+**Files**: `ktrdr/indicators/indicator_engine.py`
+
+**Changes**:
+
+1. Add cache statistics tracking:
+```python
+def get_cache_stats() -> dict[str, Any]:
+    """Get cache statistics for monitoring."""
+    return {
+        'cached_classes': len(_INDICATOR_METADATA_CACHE),
+        'cached_indicators': list(_INDICATOR_METADATA_CACHE.keys()),
+        'cache_size_bytes': sys.getsizeof(_INDICATOR_METADATA_CACHE)
+    }
+```
+
+2. Add cache clearing utility (for testing):
+```python
+def clear_metadata_cache() -> None:
+    """Clear indicator metadata cache (for testing)."""
+    global _INDICATOR_METADATA_CACHE
+    _INDICATOR_METADATA_CACHE.clear()
+    logger.debug("Cleared indicator metadata cache")
+```
+
+3. Add diagnostic logging:
+```python
+def _get_indicator_metadata(self, indicator: BaseIndicator) -> dict[str, Any]:
+    """..."""
+    indicator_class = type(indicator)
+
+    if indicator_class in _INDICATOR_METADATA_CACHE:
+        logger.debug(f"Cache HIT for {indicator_class.__name__}")
+        return _INDICATOR_METADATA_CACHE[indicator_class]
+
+    logger.debug(f"Cache MISS for {indicator_class.__name__} - computing metadata")
+    # ... compute and cache ...
+```
+
+**Acceptance Criteria**:
+- [ ] Cache statistics available for monitoring
+- [ ] Cache clear utility for testing
+- [ ] Diagnostic logging shows cache hits/misses
+- [ ] Can verify cache behavior in tests
+
+#### Task 7.4: Add Tests for Metadata Cache
+
+**Files**:
+- `tests/unit/indicators/test_indicator_engine_cache.py` (new)
+- `tests/unit/indicators/test_feature_id_map.py` (update)
+
+**New Tests**:
+
+1. **Cache Population**:
+```python
+def test_cache_populated_on_first_use():
+    """Test cache is populated on first indicator engine creation."""
+    clear_metadata_cache()  # Start fresh
+
+    configs = [{'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}}]
+    engine = IndicatorEngine(indicators=configs)
+
+    # Cache should have RSIIndicator metadata
+    stats = get_cache_stats()
+    assert stats['cached_classes'] == 1
+    assert any('RSI' in str(cls) for cls in stats['cached_indicators'])
+```
+
+2. **Cache Reuse**:
+```python
+def test_cache_reused_across_engines():
+    """Test cache is reused when creating multiple engines."""
+    clear_metadata_cache()
+
+    configs = [{'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}}]
+
+    # First engine - populates cache
+    engine1 = IndicatorEngine(indicators=configs)
+
+    # Second engine - uses cache (should be faster)
+    with patch('ktrdr.indicators.indicator_engine._compute_metadata') as mock:
+        engine2 = IndicatorEngine(indicators=configs)
+        mock.assert_not_called()  # Should use cache, not recompute
+```
+
+3. **Cache with Multiple Instances**:
+```python
+def test_cache_with_multiple_indicator_instances():
+    """Test cache works with multiple instances of same class."""
+    clear_metadata_cache()
+
+    configs = [
+        {'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}},
+        {'type': 'rsi', 'feature_id': 'rsi_7', 'params': {'period': 7}},
+        {'type': 'rsi', 'feature_id': 'rsi_21', 'params': {'period': 21}},
+    ]
+
+    engine = IndicatorEngine(indicators=configs)
+
+    # Only 1 cache entry (class-level, not instance-level)
+    stats = get_cache_stats()
+    assert stats['cached_classes'] == 1
+```
+
+4. **Cache Correctness**:
+```python
+def test_cache_produces_correct_metadata():
+    """Test cached metadata matches computed metadata."""
+    clear_metadata_cache()
+
+    configs = [
+        {'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}},
+        {'type': 'macd', 'feature_id': 'macd_std', 'params': {}},
+        {'type': 'bbands', 'feature_id': 'bbands_20', 'params': {'period': 20}},
+    ]
+
+    engine = IndicatorEngine(indicators=configs)
+
+    # Verify metadata correctness
+    # RSI: single-output
+    # MACD: multi-output
+    # BollingerBands: multi-output
+    assert engine.feature_id_map['rsi_14'] == 'rsi_14'  # Single-output
+    assert 'MACD_12_26' in engine.feature_id_map  # Multi-output (primary)
+    assert 'upper_20_2.0' in engine.feature_id_map  # Multi-output (primary)
+```
+
+5. **Performance Test**:
+```python
+def test_cache_improves_performance():
+    """Test cache significantly improves initialization performance."""
+    import time
+
+    clear_metadata_cache()
+
+    configs = [
+        {'type': 'rsi', 'feature_id': f'rsi_{i}', 'params': {'period': 14}}
+        for i in range(10)  # 10 RSI instances
+    ]
+
+    # First engine - populate cache
+    start = time.time()
+    engine1 = IndicatorEngine(indicators=configs)
+    time_first = time.time() - start
+
+    # Second engine - use cache
+    start = time.time()
+    engine2 = IndicatorEngine(indicators=configs)
+    time_second = time.time() - start
+
+    # Second should be significantly faster (at least 2x)
+    assert time_second < time_first / 2
+```
+
+**Acceptance Criteria**:
+- [ ] All cache tests pass
+- [ ] Tests verify cache population
+- [ ] Tests verify cache reuse
+- [ ] Tests verify cache correctness
+- [ ] Performance test shows speedup (at least 2x)
+- [ ] Tests use cache clear utility for isolation
+- [ ] Coverage >90% for cache code
+
+#### Task 7.5: Update Documentation
+
+**Files**:
+- `docs/architecture/indicators/indicator-engine-architecture.md` (update or create)
+- `ktrdr/indicators/indicator_engine.py` (docstrings)
+
+**Documentation Updates**:
+
+1. **Architecture Document**:
+   - Explain metadata caching strategy
+   - Performance characteristics
+   - When cache is populated vs reused
+   - Cache scope (class-level, persistent)
+
+2. **Code Docstrings**:
+   - Document `_get_indicator_metadata()` behavior
+   - Document cache clearing utility
+   - Document cache statistics function
+
+3. **Performance Notes**:
+   - Document expected speedup
+   - Document trade-offs (memory vs speed)
+   - Document when cache is most beneficial (strategies with repeated indicator types)
+
+**Acceptance Criteria**:
+- [ ] Architecture document updated
+- [ ] Code docstrings complete
+- [ ] Performance characteristics documented
+- [ ] Examples show cache behavior
+
+### Validation Updates for Phase 7
+
+**Goal**: Ensure cache optimization works correctly without breaking functionality.
+
+**Critical Validations**:
+1. **Correctness**: Cached metadata matches non-cached metadata
+2. **Performance**: Initialization faster with cache (at least 2x for repeated indicators)
+3. **Compatibility**: All existing tests pass (no behavior changes)
+4. **Memory**: Cache size reasonable (doesn't grow indefinitely)
+
+**Test Strategy**:
+1. Unit tests (cache behavior, correctness)
+2. Performance benchmarks (initialization time)
+3. Integration tests (full IndicatorEngine workflow)
+4. Regression tests (ensure no behavior changes)
+
+### Acceptance Criteria for Phase 7
+
+**ALL MUST PASS**:
+
+- [ ] Cache implementation correct and thread-safe
+- [ ] Cached metadata matches non-cached (correctness verified)
+- [ ] Performance improvement demonstrated (at least 2x for repeated indicators)
+- [ ] All existing tests pass (no regressions)
+- [ ] Cache statistics available for monitoring
+- [ ] Cache clearing utility works (for testing)
+- [ ] Diagnostic logging shows cache hits/misses
+- [ ] Documentation complete with performance notes
+- [ ] Memory usage reasonable (cache doesn't leak)
+- [ ] Performance benchmarks show expected speedup
+- [ ] Integration tests pass (full workflow works)
+
+### Performance Benchmarks
+
+**Baseline (Before Optimization)**:
+- Strategy with 36 indicators: ~XXX ms initialization
+- Strategy with 10 repeated RSI: ~XXX ms initialization
+
+**Target (After Optimization)**:
+- Strategy with 36 indicators, ~12 unique classes: ~50% faster initialization
+- Strategy with 10 repeated RSI: ~80% faster initialization (9 cache hits out of 10)
+
+**Measurement Strategy**:
+1. Benchmark initialization time before changes
+2. Implement cache
+3. Benchmark initialization time after changes
+4. Verify speedup meets targets
+5. Monitor memory usage (should be negligible)
+
+### Estimated Duration
+
+**2 days**
+
+**Breakdown**:
+- Task 7.1 (Design): 0.25 days
+- Task 7.2 (Implementation): 0.5 days
+- Task 7.3 (Diagnostics): 0.25 days
+- Task 7.4 (Testing): 0.75 days
+- Task 7.5 (Documentation): 0.25 days
+
+### Dependencies
+
+- None (can be done anytime after Phase 2 is complete)
+- Ideally after Phase 6 (after system is stable and tested)
+
+### Risk Assessment
+
+**Risk Level**: LOW
+
+**Risks**:
+- Cache introduces bugs (metadata incorrect)
+- Thread-safety issues (if multi-threaded)
+- Memory leak (cache grows too large)
+
+**Mitigations**:
+- Comprehensive correctness tests (cached vs non-cached metadata)
+- Thread-safety analysis (add locks if needed)
+- Cache monitoring (track size, alert if too large)
+- Performance benchmarks (verify speedup, detect regressions)
+
+### Alternative Approaches Considered
+
+1. **Type Hint Inspection**:
+   - Pro: No computation needed
+   - Con: Not all indicators have accurate type hints
+   - Con: Doesn't solve column name discovery
+   - Decision: Rejected - too unreliable
+
+2. **Instance-Level Cache**:
+   - Pro: Simpler implementation
+   - Con: Doesn't help with repeated indicator types
+   - Con: Less memory efficient
+   - Decision: Rejected - class-level cache more effective
+
+3. **On-Demand Metadata Computation**:
+   - Pro: No caching complexity
+   - Con: No performance improvement
+   - Decision: Rejected - doesn't solve problem
+
+### Success Metrics
+
+**Performance**:
+- [ ] Initialization time reduced by at least 50% for strategies with repeated indicator types
+- [ ] Cache hit rate >80% for typical strategies (after first engine creation)
+
+**Quality**:
+- [ ] Zero correctness bugs (cached metadata matches non-cached)
+- [ ] Zero regressions (all existing tests pass)
+- [ ] Cache size <100KB (negligible memory overhead)
+
+**Code Quality**:
+- [ ] Implementation clean and well-documented
+- [ ] Cache behavior clear from code and logs
+- [ ] Easy to understand and maintain
+
+---
+
 ## Rollback Plan
 
 ### If Critical Issues Found
@@ -1476,10 +1982,13 @@ All previous phases complete
 | Phase 4: Fuzzy Engine | 1 day | Phase 3 | Low |
 | Phase 5: Documentation | 1-2 days | Phase 1-4 | Low |
 | Phase 6: System Testing | 2-3 days | Phase 1-4 | Medium |
+| Phase 7: IndicatorEngine Optimization | 2 days | Phase 2+ (ideally after Phase 6) | Low |
 
-**Total Duration**: 17.5-23.5 days (~3.5-4.5 weeks)
+**Total Duration**: 19.5-25.5 days (~4-5 weeks)
 
 **Critical Path**: Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 6
+
+**Note**: Phase 7 is optional performance optimization and can be done anytime after Phase 2 is stable.
 
 ---
 
@@ -1639,6 +2148,3 @@ This implementation plan provides a phased, testable approach with:
 3. Migration tool must work reliably (>95% success rate)
 4. Documentation must be clear and comprehensive
 
----
-
-**END OF IMPLEMENTATION PLAN**

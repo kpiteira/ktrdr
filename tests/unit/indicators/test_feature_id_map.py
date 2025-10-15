@@ -177,10 +177,10 @@ class TestFeatureIdMapMultiOutput:
         engine = IndicatorEngine(indicators=configs)
 
         # Then: Should map first output (upper) to feature_id
-        # BollingerBands produces: upper, middle, lower
-        # Primary output is "upper" (first column)
-        assert "upper" in engine.feature_id_map
-        assert engine.feature_id_map["upper"] == "bbands_20_2"
+        # BollingerBands produces: upper_20_2.0, middle_20_2.0, lower_20_2.0 (parameterized names)
+        # Primary output is "upper_20_2.0" (first column)
+        assert "upper_20_2.0" in engine.feature_id_map
+        assert engine.feature_id_map["upper_20_2.0"] == "bbands_20_2"
 
     def test_stochastic_multi_output(self):
         """Test feature_id_map with Stochastic (2 outputs: %K, %D)."""
