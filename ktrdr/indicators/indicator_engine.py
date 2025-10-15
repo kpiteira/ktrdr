@@ -166,6 +166,49 @@ class IndicatorEngine:
             )
             return indicator.get_column_name()
 
+    def _create_feature_id_aliases(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create feature_id aliases in the DataFrame.
+
+        For each entry in feature_id_map (column_name -> feature_id), creates an alias
+        column with the same values if feature_id differs from column_name.
+
+        Note: Pandas DataFrames don't support true column aliasing at the API level.
+        The alias will be a separate column with identical values. While this creates
+        a copy in memory, it's acceptable because:
+        1. Only one alias per indicator (not multiple copies)
+        2. Memory overhead is minimal compared to total data size
+        3. Benefit of dual naming (technical + user-facing) outweighs cost
+
+        Args:
+            data: DataFrame with indicator columns (technical names)
+
+        Returns:
+            DataFrame with feature_id aliases added
+        """
+        if not self.feature_id_map:
+            # No feature_id_map (e.g., indicators created directly without configs)
+            return data
+
+        for column_name, feature_id in self.feature_id_map.items():
+            # Only create alias if feature_id differs from column name
+            if column_name != feature_id:
+                # Check if technical column exists
+                if column_name in data.columns:
+                    # Create alias column with same values as technical column
+                    # Note: This creates a copy in pandas, but provides the dual naming benefit
+                    data[feature_id] = data[column_name]
+                    logger.debug(
+                        f"Created feature_id alias: '{column_name}' -> '{feature_id}'"
+                    )
+                else:
+                    logger.warning(
+                        f"Cannot create alias for '{feature_id}': "
+                        f"technical column '{column_name}' not found in data"
+                    )
+
+        return data
+
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Apply all configured indicators to the input data.
@@ -213,21 +256,14 @@ class IndicatorEngine:
 
                 # Handle both Series and DataFrame results
                 if isinstance(result, pd.Series):
-                    # If a name is provided, use it; otherwise, use indicator name
-                    name = result.name if result.name else indicator_name
-                    result_df[name] = result
+                    # Single-output indicator: add with technical column name
+                    # Use get_column_name() to get technical name (not feature_id)
+                    column_name = indicator.get_column_name()
+                    result_df[column_name] = result
                 elif isinstance(result, pd.DataFrame):
-                    # For multi-column indicators (like BollingerBands), prefix columns with feature_id
-                    # This ensures fuzzy_sets can reference specific outputs like "bbands_20_2_upper"
-                    feature_id = indicator.get_feature_id()
-
-                    # Rename all columns with feature_id prefix
-                    renamed_result = result.rename(
-                        columns={col: f"{feature_id}_{col}" for col in result.columns}
-                    )
-
+                    # Multi-output indicator: add all columns with their technical names
                     # Use pd.concat to avoid DataFrame fragmentation (much faster than repeated assignments)
-                    result_df = pd.concat([result_df, renamed_result], axis=1)
+                    result_df = pd.concat([result_df, result], axis=1)
 
                 logger.debug(f"Successfully computed {indicator_name}")
 
@@ -240,6 +276,9 @@ class IndicatorEngine:
                     "PROC-IndicatorFailed",
                     {"indicator": indicator.__class__.__name__, "error": str(e)},
                 ) from e
+
+        # Create feature_id aliases after all indicators are computed
+        result_df = self._create_feature_id_aliases(result_df)
 
         logger.debug(f"Successfully applied {len(self.indicators)} indicators to data")
         return result_df
