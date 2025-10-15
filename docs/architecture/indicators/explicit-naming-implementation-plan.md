@@ -440,9 +440,21 @@ None (can start with Phase 1)
 
 ## Phase 2: Implement Feature ID Aliasing in IndicatorEngine
 
+**Status**: ✅ **COMPLETE** (2025-10-15)
+
 **Priority**: HIGH
 
 **Goal**: Make IndicatorEngine produce DataFrames with both column names and feature_id aliases.
+
+**Completion Summary**:
+
+- ✅ Task 2.1: feature_id_map initialization (commit 6b4bc07)
+- ✅ Task 2.2: feature_id aliasing in apply() (commit 6d26491)
+- ✅ Task 2.3: Generic multi-output support for 12 indicators (commit bb5c8a0)
+- ✅ Task 2.4: 22 unit tests, all passing
+- ✅ Quality checks passing (lint, format, type check)
+
+**See**: [PHASE-STATUS-AND-VALIDATION.md](./PHASE-STATUS-AND-VALIDATION.md) for detailed validation
 
 ### Tasks
 
@@ -590,19 +602,139 @@ Phase 1 complete (feature_id in config models)
 
 ## Phase 3: Update Training Pipeline to Use Feature IDs
 
+**Status**: ⏳ **PENDING** - Ready to Start
+
 **Priority**: CRITICAL
 
 **Goal**: Simplify training pipeline by removing complex name mapping logic, using feature_ids directly.
 
 **WARNING**: Highest risk phase. Extensive validation required.
 
+---
+
+## ⚠️ CRITICAL WARNING FOR PHASE 3 IMPLEMENTERS ⚠️
+
+### 🚨 DO NOT ADD CODE - DELETE CODE! 🚨
+
+**The training pipeline ALREADY HAS feature_id aliases from Phase 2!**
+
+Lines 298-346 in `training_pipeline.py` are **LEGACY HACKS** written BEFORE Phase 2 was completed. They manually re-do work that Phase 2 already does automatically.
+
+### What Phase 2 Already Gives You
+
+When `IndicatorEngine.apply()` is called (Line 296), the resulting DataFrame ALREADY contains:
+
+1. ✅ **Technical column names** (e.g., `rsi_7`, `macd_12_26_9`)
+2. ✅ **feature_id aliases** (e.g., `rsi_fast`, `macd_standard`)
+3. ✅ **Multi-output handling** (MACD primary output already mapped)
+4. ✅ **Both columns point to same data** (no duplication)
+
+**You can immediately use `result["rsi_fast"]` - it already exists!**
+
+### The Legacy Hacks (Lines 298-346) - TO BE DELETED
+
+```python
+# Line 296: This ALREADY gives you feature_id aliases!
+indicator_results = indicator_engine.apply(price_data)  # ✅ Has feature_ids!
+
+# Lines 298-340: LEGACY HACKS - DELETE ALL OF THIS! ❌
+for config in indicator_configs:
+    feature_id = config.get("feature_id", config["name"])  # ❌ HACK: Manual extraction
+    indicator_type = config["name"].upper()
+
+    # ❌ HACK: Manual prefix matching (but aliases already exist!)
+    for col in indicator_results.columns:
+        if col.upper().startswith(indicator_type):
+
+            # ❌ HACK: Manual SMA/EMA transformation (should be in fuzzy layer - Phase 3.5)
+            if indicator_type in ["SMA", "EMA"]:
+                mapped_results[feature_id] = price_data["close"] / indicator_results[col]
+                break
+
+            # ❌ HACK: Manual MACD handling (Phase 2.3 already does this!)
+            elif indicator_type == "MACD":
+                if "_MACD_" in col and "_signal_" not in col:
+                    mapped_results[feature_id] = indicator_results[col]
+                    break
+```
+
+### Why These Are Hacks
+
+1. **Manual column matching** (Lines 298-318): Unnecessary! Phase 2 already created the feature_id aliases.
+2. **Manual MACD handling** (Lines 325-335): Unnecessary! Phase 2.3 already maps feature_id → primary output.
+3. **Manual SMA/EMA transformation** (Lines 318-324): Wrong location! Should be in fuzzy layer (Phase 3.5), not training.
+
+### What Phase 3 Should Actually Do
+
+**BEFORE (Current - 70+ lines of hacks)**:
+```python
+# Complex type inference, prefix matching, manual transformations
+mapped_results = {}
+for config in indicator_configs:
+    feature_id = config.get("feature_id", config["name"])
+    indicator_type = config["name"].upper()
+
+    # 40+ lines of manual column matching...
+    for col in indicator_results.columns:
+        if col.upper().startswith(indicator_type):
+            # Manual transformations, MACD handling, etc...
+            mapped_results[feature_id] = ...
+```
+
+**AFTER (Phase 3 - 15 lines, clean and simple)**:
+```python
+# Just combine DataFrames - feature_ids already exist!
+result = price_data.copy()
+for col in indicator_results.columns:
+    if col not in result.columns:
+        result[col] = indicator_results[col]  # feature_ids already here!
+```
+
+### Anti-Patterns to AVOID in Phase 3
+
+❌ **DO NOT** add more column name matching logic
+❌ **DO NOT** add more prefix matching (startswith, contains, etc.)
+❌ **DO NOT** add more indicator type inference
+❌ **DO NOT** keep the SMA/EMA transformations here (move to Phase 3.5)
+❌ **DO NOT** keep the MACD special handling (Phase 2.3 already does it)
+
+✅ **DO** trust the feature_id aliases from Phase 2
+✅ **DO** delete Lines 298-346
+✅ **DO** simplify to ~15 lines
+✅ **DO** verify outputs match old behavior (parallel validation test)
+
+### Before You Start Phase 3
+
+1. ✅ Read [PHASE-STATUS-AND-VALIDATION.md](./PHASE-STATUS-AND-VALIDATION.md) - explains what Phase 2 accomplished
+2. ✅ Read Phase 2 tests (`test_feature_id_map.py`, `test_feature_id_aliasing.py`) - proves aliases work
+3. ✅ Run `IndicatorEngine.apply()` with a strategy config - inspect the DataFrame columns
+4. ✅ Understand: feature_ids ALREADY EXIST in the DataFrame - you just need to USE them!
+
+### Summary
+
+**Phase 3 is a DELETION phase, not an addition phase.**
+
+- **Remove** 70+ lines of hacks (Lines 298-346)
+- **Replace** with ~15 lines trusting Phase 2
+- **Validate** outputs match (parallel validation test)
+- **Trust** the feature_id aliases Phase 2 created
+
+**If you find yourself adding complex logic, STOP. You're doing it wrong.**
+
+---
+
+**See**: [PHASE-STATUS-AND-VALIDATION.md](./PHASE-STATUS-AND-VALIDATION.md) Section "Current Training Pipeline (Still Has Hacks)" for detailed analysis of each hack.
+
 ### Architecture Decision Impact
 
 **Removes**: ~130 lines of complex mapping logic
-- Lines 277-344: Single-timeframe name mapping and transformations
-- Lines 364-424: Multi-timeframe name mapping and transformations
 
-**Adds**: ~20 lines of simple indicator computation
+- Lines 298-340: Manual column name matching (~40 lines)
+- Lines 318-324: SMA/EMA transformation (~10 lines, moves to Phase 3.5)
+- Lines 325-335: MACD special handling (~15 lines)
+- Multi-timeframe duplicate logic (~65 lines)
+
+**Adds**: ~20 lines of simple indicator computation (trust Phase 2 aliases)
 
 **Key Change**: SMA/EMA transformations move to fuzzy `input_transform` (Phase 3.5)
 
@@ -645,12 +777,15 @@ Phase 1 complete (feature_id in config models)
 
 **New**: ~15 lines using IndicatorEngine with feature_ids
 
+**⚠️ CRITICAL REMINDER**: Lines 298-346 are LEGACY HACKS that duplicate work Phase 2 already does. Your job is to DELETE this code and trust the feature_id aliases that `IndicatorEngine.apply()` already provides. If you find yourself writing complex logic, you're doing it wrong!
+
 **Changes**:
-1. Remove type inference logic (lines 277-291)
-2. Remove name mapping logic (lines 298-318)
-3. Use IndicatorEngine directly
-4. Remove SMA/EMA transformation (will use fuzzy input_transform in Phase 3.5)
-5. Preserve MACD primary output handling (already in IndicatorEngine)
+
+1. ❌ **DELETE** type inference logic (lines 277-291) - not needed anymore
+2. ❌ **DELETE** name mapping logic (lines 298-318) - Phase 2 already created aliases
+3. ❌ **DELETE** SMA/EMA transformation (lines 318-324) - will move to fuzzy layer in Phase 3.5
+4. ❌ **DELETE** MACD special handling (lines 325-335) - Phase 2.3 already handles this
+5. ✅ **TRUST** IndicatorEngine.apply() - it already gives you feature_id aliases!
 
 **Simplified Logic**:
 ```python
