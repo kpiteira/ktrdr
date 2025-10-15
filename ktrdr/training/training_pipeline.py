@@ -297,64 +297,40 @@ class TrainingPipeline:
         """
         Calculate indicators for multiple timeframes.
 
+        Phase 3 simplified: Trust feature_id aliases from Phase 2.
+        No manual column matching, no special transformations.
+
         EXTRACTED FROM: StrategyTrainer._calculate_indicators_multi_timeframe()
         (train_strategy.py:714-800)
         """
-        # Initialize indicator engine with configs and use multi-timeframe method
-        # IndicatorConfig expects 'name' field (not 'type'), so no transformation needed
+        # Initialize indicator engine with configs
         indicator_engine = IndicatorEngine(indicators=indicator_configs)
 
+        # Apply indicators to all timeframes
+        # indicator_results already contains feature_id aliases from Phase 2!
         indicator_results = indicator_engine.apply_multi_timeframe(
             price_data, indicator_configs
         )
 
-        # Map results for each timeframe (similar to single timeframe but for each TF)
-        mapped_results = {}
+        # Phase 3 simplified: Just combine price data with indicator results per timeframe
+        # IndicatorEngine already created feature_id aliases, so we just use them
+        combined_results = {}
 
         for timeframe, tf_indicators in indicator_results.items():
             tf_price_data = price_data[timeframe]
-            mapped_tf_results = pd.DataFrame(index=tf_indicators.index)
 
-            # Copy price data columns first
-            for col in tf_price_data.columns:
-                if col in tf_indicators.columns:
-                    mapped_tf_results[col] = tf_indicators[col]
+            # Combine price data with indicators (same logic as single-timeframe)
+            result = tf_price_data.copy()
+            for col in tf_indicators.columns:
+                if col not in result.columns:
+                    result[col] = tf_indicators[col]
 
-            # Map indicator results using feature_id (explicit naming) for fuzzy matching
-            for config in indicator_configs:
-                # Use feature_id as the canonical identifier (e.g., 'rsi_14')
-                # Fallback to name for backward compatibility
-                feature_id = config.get("feature_id", config["name"])
-                indicator_type = config["name"].upper()  # e.g., 'RSI'
+            # Safety check: replace any inf values with NaN, then fill NaN with 0
+            result = result.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
-                # Find the calculated column that matches this indicator
-                for col in tf_indicators.columns:
-                    if col.upper().startswith(indicator_type):
-                        if indicator_type in ["SMA", "EMA"]:
-                            # For moving averages, create a ratio (price / moving_average)
-                            mapped_tf_results[feature_id] = (
-                                tf_price_data["close"] / tf_indicators[col]
-                            )
-                            break  # Found and processed SMA/EMA
-                        elif indicator_type == "MACD":
-                            # For MACD, use the main MACD line (not signal or histogram)
-                            # With feature_id prefixing, columns are like "macd_12_26_9_MACD_12_26"
-                            if (
-                                "_MACD_" in col
-                                and "_signal_" not in col
-                                and "_hist_" not in col
-                            ):
-                                mapped_tf_results[feature_id] = tf_indicators[col]
-                                break  # Found MACD main line
-                            # Continue loop to find MACD main line
-                        else:
-                            # For other indicators, use the raw values
-                            mapped_tf_results[feature_id] = tf_indicators[col]
-                            break  # Found and processed indicator
+            combined_results[timeframe] = result
 
-            mapped_results[timeframe] = mapped_tf_results
-
-        return mapped_results
+        return combined_results
 
     @staticmethod
     def generate_fuzzy_memberships(
