@@ -1504,13 +1504,13 @@ All previous phases complete
 
 ---
 
-## Phase 7: Optimize IndicatorEngine Initialization
+## Phase 7: Eliminate Sample Data Computation in IndicatorEngine Init
 
-**Status**: ✅ **COMPLETED** (2025-10-16)
+**Status**: 🔄 **IN PROGRESS** - Redesigning approach
 
 **Priority**: LOW (Performance Optimization)
 
-**Goal**: Eliminate redundant indicator computation during IndicatorEngine initialization by caching indicator metadata.
+**Goal**: Eliminate **ALL** indicator computation on sample data during IndicatorEngine initialization.
 
 ### Background
 
@@ -1533,132 +1533,203 @@ For a strategy with 36 indicators, this means **72 indicator computations** (36 
 
 ### Root Cause Analysis
 
-The duplicate computation occurs in:
+The unnecessary computation on sample data occurs in:
 
 **File**: `ktrdr/indicators/indicator_engine.py`
 
-**Methods**:
+**Methods that MUST be eliminated**:
 
-- `_is_multi_output_indicator()` (lines 138-169): Creates sample data, computes indicator, checks if result is DataFrame
-- `_get_primary_output_column()` (lines 198-238): Creates sample data, computes indicator, extracts first column name
-- `_get_technical_column_name()` (lines 171-196): Creates temp indicator instance to get column name
+1. `_is_multi_output_indicator()` (lines ~218-249):
+   - Creates 100-row sample DataFrame
+   - Calls `indicator.compute(sample_data)`
+   - Checks if result is DataFrame
+   - **Completely unnecessary** - indicators should declare this!
+
+2. `_get_primary_output_column()` (lines ~251-291):
+   - Creates 100-row sample DataFrame
+   - Calls `indicator.compute(sample_data)`
+   - Extracts first column name
+   - **Completely unnecessary** - can derive from indicator.get_column_name()!
+
+3. `_get_technical_column_name()` (lines ~293-318):
+   - Creates temp indicator instance
+   - Calls `get_column_name()`
+   - **This one is OK** - doesn't compute, just builds string
 
 **Why This Happens**:
 
-- Need to know column names BEFORE processing to build feature_id_map
-- Need to detect multi-output indicators to handle them correctly
-- No caching mechanism - same computation repeated per instance
+- Need to know if indicator is multi-output to handle correctly
+- Need to know column names to build feature_id_map
+- Current approach: "let's just compute it and see what we get"
+- **Better approach**: Indicators should be self-describing!
 
 ### Proposed Solution
 
-**Approach**: Class-level metadata caching with lazy detection
+**Approach**: Self-describing indicators with declarative metadata
 
-**Key Insight**: Indicator metadata (multi-output status, column naming pattern) is determined by the **indicator class**, not the instance. We can cache this at the class level.
+**Key Insight**: Indicators know their own structure! They should declare:
+
+1. Whether they produce single or multiple outputs (class property)
+2. How to construct their column names (method that doesn't compute)
+
+**NO CACHE NEEDED** - This is just proper OOP design, not caching!
 
 ### Tasks
 
-#### Task 7.1: Design Metadata Cache Architecture
+#### Task 7.1: Add Self-Describing Methods to BaseIndicator
 
-**Design Decisions**:
+**File**: `ktrdr/indicators/base_indicator.py`
 
-1. **Cache Scope**: Class-level (shared across all instances of same indicator class)
-2. **Cache Key**: Indicator class type (e.g., `BollingerBandsIndicator`, `RSIIndicator`)
-3. **Cached Data**:
-   - `is_multi_output: bool` - Whether indicator returns DataFrame
-   - `column_pattern: str` - Format string for column naming (e.g., `"rsi_{period}"`)
-   - `primary_output_pattern: str` - Pattern for primary column (multi-output only)
+**Changes**:
 
-4. **Cache Invalidation**: None needed (class metadata doesn't change at runtime)
-
-**Implementation Strategy**:
+1. Add `is_multi_output()` class method (returns False by default):
 
 ```python
-# Class-level cache (module-level dict)
-_INDICATOR_METADATA_CACHE: dict[Type[BaseIndicator], dict[str, Any]] = {}
-
-def _get_indicator_metadata(indicator: BaseIndicator) -> dict[str, Any]:
+@classmethod
+def is_multi_output(cls) -> bool:
     """
-    Get cached metadata for indicator class.
+    Declare whether this indicator produces multiple output columns.
 
-    On first call for an indicator class, computes metadata and caches it.
-    Subsequent calls for same class return cached data instantly.
+    Returns:
+        bool: True if indicator returns DataFrame (multiple columns),
+              False if indicator returns Series (single column).
+
+    Note:
+        Multi-output indicators MUST override this to return True.
+        This method should NOT compute anything - it's a declaration!
     """
-    indicator_class = type(indicator)
+    return False
+```
 
-    if indicator_class not in _INDICATOR_METADATA_CACHE:
-        # First time for this class - compute and cache
-        metadata = _compute_indicator_metadata(indicator)
-        _INDICATOR_METADATA_CACHE[indicator_class] = metadata
+2. Add `get_primary_output_suffix()` class method (returns None by default):
 
-    return _INDICATOR_METADATA_CACHE[indicator_class]
+```python
+@classmethod
+def get_primary_output_suffix(cls) -> Optional[str]:
+    """
+    Get suffix for primary output column of multi-output indicators.
+
+    For multi-output indicators, defines which column is "primary".
+    Returns None if primary output has no suffix (just base name + params).
+
+    Returns:
+        Optional[str]: Suffix for primary column, or None
+
+    Examples:
+        - MACD: returns None (primary is "MACD_12_26", no suffix)
+        - BollingerBands: returns "upper" (primary is "upper_20_2.0")
+        - Stochastic: returns "k" (primary is "k_14_3")
+    """
+    return None
+```
+
+**Why This Works**:
+
+- No computation needed - just returns a constant
+- Fast - direct method call, no sample data creation
+- Clear - indicator declares its own behavior
+- Maintainable - each indicator documents its structure
+
+**Acceptance Criteria**:
+
+- [ ] Methods added to BaseIndicator
+- [ ] Clear docstrings explain purpose
+- [ ] Default implementations provided (False, None)
+- [ ] No computation in these methods (just return constants)
+
+#### Task 7.2: Update Multi-Output Indicators
+
+**Files**:
+- `ktrdr/indicators/macd_indicator.py`
+- `ktrdr/indicators/bollinger_bands_indicator.py`
+- `ktrdr/indicators/stochastic_indicator.py`
+- `ktrdr/indicators/adx_indicator.py`
+- `ktrdr/indicators/ichimoku_indicator.py`
+- Any other multi-output indicators
+
+**Changes**: Override the class methods for each multi-output indicator
+
+**Example 1: MACD**:
+
+```python
+class MACDIndicator(BaseIndicator):
+    """MACD indicator (multi-output: MACD line, signal, histogram)."""
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """MACD produces multiple outputs."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> None:
+        """Primary output is MACD line with no suffix (e.g., 'MACD_12_26')."""
+        return None
+```
+
+**Example 2: BollingerBands**:
+
+```python
+class BollingerBandsIndicator(BaseIndicator):
+    """Bollinger Bands (multi-output: upper, middle, lower)."""
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Bollinger Bands produces multiple outputs."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is upper band."""
+        return "upper"
+```
+
+**Example 3: Stochastic**:
+
+```python
+class StochasticIndicator(BaseIndicator):
+    """Stochastic oscillator (multi-output: %K, %D)."""
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Stochastic produces multiple outputs."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is %K line."""
+        return "k"
 ```
 
 **Acceptance Criteria**:
 
-- [x] Cache design documented with clear rationale
-- [x] Cache key strategy defined (class type)
-- [x] Cache data structure defined
-- [x] Thread-safety considered (if needed)
-- [x] Cache invalidation strategy defined (or justification for none)
+- [ ] All multi-output indicators identified
+- [ ] Each overrides `is_multi_output()` to return True
+- [ ] Each overrides `get_primary_output_suffix()` appropriately
+- [ ] Docstrings explain which column is primary and why
+- [ ] No computation in these methods
 
-#### Task 7.2: Implement Metadata Cache
+#### Task 7.3: Simplify `_build_feature_id_map()` in IndicatorEngine
 
-**Files**: `ktrdr/indicators/indicator_engine.py`
+**File**: `ktrdr/indicators/indicator_engine.py`
 
-**Changes**:
+**Current Code** (lines ~166-215): Creates sample data, computes indicators
 
-1. Add module-level cache dictionary:
-
-```python
-# Module-level cache for indicator metadata
-# Maps: indicator class → metadata dict
-_INDICATOR_METADATA_CACHE: dict[Type[BaseIndicator], dict[str, Any]] = {}
-```
-
-2. Add `_get_indicator_metadata()` method:
-
-```python
-def _get_indicator_metadata(self, indicator: BaseIndicator) -> dict[str, Any]:
-    """
-    Get metadata for indicator (cached at class level).
-
-    Metadata includes:
-    - is_multi_output: Whether indicator returns DataFrame
-    - primary_column: Primary output column name (for multi-output)
-
-    Computes on first call per class, caches for subsequent calls.
-    """
-    indicator_class = type(indicator)
-
-    if indicator_class not in _INDICATOR_METADATA_CACHE:
-        # First call for this class - compute and cache
-        is_multi_output = self._is_multi_output_indicator(indicator)
-
-        metadata = {
-            'is_multi_output': is_multi_output,
-            'primary_column': None  # Will be populated if multi-output
-        }
-
-        if is_multi_output:
-            metadata['primary_column'] = self._get_primary_output_column(indicator)
-
-        _INDICATOR_METADATA_CACHE[indicator_class] = metadata
-
-        logger.debug(
-            f"Cached metadata for {indicator_class.__name__}: "
-            f"multi_output={is_multi_output}"
-        )
-
-    return _INDICATOR_METADATA_CACHE[indicator_class]
-```
-
-3. Update `_build_feature_id_map()` to use cache:
+**New Code** (NO sample data computation!):
 
 ```python
 def _build_feature_id_map(
     self, configs: list, indicators: list[BaseIndicator]
 ) -> None:
-    """Build feature_id_map using cached metadata (optimized)."""
+    """
+    Build feature_id_map mapping technical column names to feature_ids.
+
+    Uses indicator metadata (is_multi_output, get_column_name) to determine
+    column names WITHOUT computing indicators on sample data.
+
+    Args:
+        configs: List of IndicatorConfig objects
+        indicators: List of indicator instances (parallel to configs)
+    """
     from ..config.models import IndicatorConfig
 
     for config, indicator in zip(configs, indicators):
@@ -1666,321 +1737,252 @@ def _build_feature_id_map(
             continue
 
         feature_id = config.feature_id
+        indicator_class = type(indicator)
 
-        # Use cached metadata (fast!)
-        metadata = self._get_indicator_metadata(indicator)
-        is_multi_output = metadata['is_multi_output']
+        # Use class method - NO COMPUTATION!
+        if indicator_class.is_multi_output():
+            # Multi-output: get primary column name using suffix
+            suffix = indicator_class.get_primary_output_suffix()
+            if suffix:
+                # Column like "upper_20_2.0" for BollingerBands
+                column_name = indicator.get_column_name(suffix=suffix)
+            else:
+                # Column like "MACD_12_26" for MACD (no suffix)
+                column_name = indicator.get_column_name()
 
-        if is_multi_output:
-            primary_column = metadata['primary_column']
-            if primary_column:
-                self.feature_id_map[primary_column] = feature_id
-                logger.debug(
-                    f"Mapped multi-output indicator primary column '{primary_column}' "
-                    f"to feature_id '{feature_id}' (indicator: {config.name})"
-                )
-        else:
-            # Single-output indicator
-            column_name = self._get_technical_column_name(config, indicator)
             self.feature_id_map[column_name] = feature_id
             logger.debug(
-                f"Mapped column '{column_name}' to feature_id '{feature_id}' "
-                f"(indicator: {config.name})"
+                f"Mapped multi-output indicator primary column '{column_name}' "
+                f"to feature_id '{feature_id}'"
+            )
+        else:
+            # Single-output: column name is just the base name + params
+            column_name = indicator.get_column_name()
+            self.feature_id_map[column_name] = feature_id
+            logger.debug(
+                f"Mapped column '{column_name}' to feature_id '{feature_id}'"
             )
 ```
 
-**Performance Improvement**:
+**What Changed**:
 
-- **Before**: 36 indicators × 2 computations = 72 computations
-- **After**: ~12 unique indicator classes × 1 computation + 36 cache lookups = ~12 computations
-
-**Expected Speedup**:
-
-- First IndicatorEngine: Same speed (must populate cache)
-- Subsequent engines: **~6x faster initialization** (cache hits)
-- Strategy with repeated indicators (e.g., 3 RSI): **Much faster** (1 computation instead of 3)
+- ❌ **REMOVED**: `_is_multi_output_indicator()` call (computed on sample data)
+- ❌ **REMOVED**: `_get_primary_output_column()` call (computed on sample data)
+- ✅ **ADDED**: `indicator_class.is_multi_output()` (instant, no computation)
+- ✅ **ADDED**: `indicator_class.get_primary_output_suffix()` (instant, no computation)
+- ✅ **KEPT**: `indicator.get_column_name()` (already fast, just builds string)
 
 **Acceptance Criteria**:
 
-- [x] Cache implementation correct (class-level, persistent)
-- [x] Cache populated on first access per class
-- [x] Subsequent accesses use cached data (no recomputation)
-- [x] Logging shows cache hits/misses
-- [x] Thread-safe (if multi-threaded access possible)
-- [x] No memory leaks (cache doesn't grow indefinitely)
+- [ ] No sample data creation in `_build_feature_id_map()`
+- [ ] Uses `is_multi_output()` class method
+- [ ] Uses `get_primary_output_suffix()` class method
+- [ ] Uses `get_column_name()` for actual column construction
+- [ ] Produces same feature_id_map as before (correctness)
+- [ ] Much faster (no indicator computation)
 
-#### Task 7.3: Add Cache Diagnostics and Monitoring
+#### Task 7.4: Delete Obsolete Methods
 
-**Files**: `ktrdr/indicators/indicator_engine.py`
+**File**: `ktrdr/indicators/indicator_engine.py`
 
-**Changes**:
+**Methods to DELETE** (they compute on sample data - no longer needed!):
 
-1. Add cache statistics tracking:
+1. `_is_multi_output_indicator()` (lines ~218-249)
+   - Creates 100-row DataFrame
+   - Calls `indicator.compute()`
+   - **Delete entire method** - replaced by `indicator_class.is_multi_output()`
 
-```python
-def get_cache_stats() -> dict[str, Any]:
-    """Get cache statistics for monitoring."""
-    return {
-        'cached_classes': len(_INDICATOR_METADATA_CACHE),
-        'cached_indicators': list(_INDICATOR_METADATA_CACHE.keys()),
-        'cache_size_bytes': sys.getsizeof(_INDICATOR_METADATA_CACHE)
-    }
-```
+2. `_get_primary_output_column()` (lines ~251-291)
+   - Creates 100-row DataFrame
+   - Calls `indicator.compute()`
+   - **Delete entire method** - replaced by `indicator.get_column_name(suffix=...)`
 
-2. Add cache clearing utility (for testing):
+**Method to KEEP**:
 
-```python
-def clear_metadata_cache() -> None:
-    """Clear indicator metadata cache (for testing)."""
-    global _INDICATOR_METADATA_CACHE
-    _INDICATOR_METADATA_CACHE.clear()
-    logger.debug("Cleared indicator metadata cache")
-```
-
-3. Add diagnostic logging:
-
-```python
-def _get_indicator_metadata(self, indicator: BaseIndicator) -> dict[str, Any]:
-    """..."""
-    indicator_class = type(indicator)
-
-    if indicator_class in _INDICATOR_METADATA_CACHE:
-        logger.debug(f"Cache HIT for {indicator_class.__name__}")
-        return _INDICATOR_METADATA_CACHE[indicator_class]
-
-    logger.debug(f"Cache MISS for {indicator_class.__name__} - computing metadata")
-    # ... compute and cache ...
-```
+- `_get_technical_column_name()` - This is OK, doesn't compute, just builds string
 
 **Acceptance Criteria**:
 
-- [x] Cache statistics available for monitoring
-- [x] Cache clear utility for testing
-- [x] Diagnostic logging shows cache hits/misses
-- [x] Can verify cache behavior in tests
+- [ ] `_is_multi_output_indicator()` deleted
+- [ ] `_get_primary_output_column()` deleted
+- [ ] No other code references these deleted methods
+- [ ] All tests still pass
 
-#### Task 7.4: Add Tests for Metadata Cache
+#### Task 7.5: Add Tests for Self-Describing Indicators
 
 **Files**:
 
-- `tests/unit/indicators/test_indicator_engine_cache.py` (new)
-- `tests/unit/indicators/test_feature_id_map.py` (update)
+- `tests/unit/indicators/test_indicator_metadata.py` (new)
+- `tests/unit/indicators/test_feature_id_map.py` (update to verify no computation)
 
 **New Tests**:
 
-1. **Cache Population**:
+1. **Test class methods don't compute**:
 
 ```python
-def test_cache_populated_on_first_use():
-    """Test cache is populated on first indicator engine creation."""
-    clear_metadata_cache()  # Start fresh
+def test_is_multi_output_does_not_compute():
+    """Verify is_multi_output() doesn't call compute()."""
+    # Mock compute to detect if called
+    with patch.object(RSIIndicator, 'compute') as mock_compute:
+        result = RSIIndicator.is_multi_output()
+        assert result is False
+        mock_compute.assert_not_called()  # Should NOT compute!
 
-    configs = [{'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}}]
-    engine = IndicatorEngine(indicators=configs)
+def test_multi_output_indicators_declare_correctly():
+    """Test multi-output indicators return True."""
+    assert MACDIndicator.is_multi_output() is True
+    assert BollingerBandsIndicator.is_multi_output() is True
+    assert StochasticIndicator.is_multi_output() is True
 
-    # Cache should have RSIIndicator metadata
-    stats = get_cache_stats()
-    assert stats['cached_classes'] == 1
-    assert any('RSI' in str(cls) for cls in stats['cached_indicators'])
+def test_single_output_indicators_declare_correctly():
+    """Test single-output indicators return False."""
+    assert RSIIndicator.is_multi_output() is False
+    assert SMAIndicator.is_multi_output() is False
+    assert EMAIndicator.is_multi_output() is False
 ```
 
-2. **Cache Reuse**:
+2. **Test primary output suffixes**:
 
 ```python
-def test_cache_reused_across_engines():
-    """Test cache is reused when creating multiple engines."""
-    clear_metadata_cache()
+def test_primary_output_suffixes():
+    """Test multi-output indicators declare correct suffixes."""
+    # MACD: no suffix (primary is "MACD_12_26")
+    assert MACDIndicator.get_primary_output_suffix() is None
 
-    configs = [{'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}}]
+    # BollingerBands: "upper" suffix
+    assert BollingerBandsIndicator.get_primary_output_suffix() == "upper"
 
-    # First engine - populates cache
-    engine1 = IndicatorEngine(indicators=configs)
-
-    # Second engine - uses cache (should be faster)
-    with patch('ktrdr.indicators.indicator_engine._compute_metadata') as mock:
-        engine2 = IndicatorEngine(indicators=configs)
-        mock.assert_not_called()  # Should use cache, not recompute
+    # Stochastic: "k" suffix
+    assert StochasticIndicator.get_primary_output_suffix() == "k"
 ```
 
-3. **Cache with Multiple Instances**:
+3. **Test initialization performance**:
 
 ```python
-def test_cache_with_multiple_indicator_instances():
-    """Test cache works with multiple instances of same class."""
-    clear_metadata_cache()
-
+def test_initialization_faster_without_sample_computation():
+    """Test IndicatorEngine init doesn't compute on sample data."""
     configs = [
-        {'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}},
-        {'type': 'rsi', 'feature_id': 'rsi_7', 'params': {'period': 7}},
-        {'type': 'rsi', 'feature_id': 'rsi_21', 'params': {'period': 21}},
+        {'name': 'rsi', 'feature_id': 'rsi_14', 'period': 14},
+        {'name': 'macd', 'feature_id': 'macd_std'},
+    ]
+
+    # Mock compute to detect if called during init
+    with patch.object(RSIIndicator, 'compute') as mock_rsi, \
+         patch.object(MACDIndicator, 'compute') as mock_macd:
+
+        engine = IndicatorEngine(indicators=configs)
+
+        # Should NOT be called during init!
+        mock_rsi.assert_not_called()
+        mock_macd.assert_not_called()
+
+    # Verify feature_id_map was still built correctly
+    assert 'rsi_14' in engine.feature_id_map
+    assert any('MACD' in col for col in engine.feature_id_map)
+```
+
+4. **Test correctness**:
+
+```python
+def test_feature_id_map_correctness():
+    """Test feature_id_map is correct without sample computation."""
+    configs = [
+        {'name': 'rsi', 'feature_id': 'my_rsi', 'period': 14},
+        {'name': 'macd', 'feature_id': 'my_macd'},
+        {'name': 'bbands', 'feature_id': 'my_bbands', 'period': 20},
     ]
 
     engine = IndicatorEngine(indicators=configs)
 
-    # Only 1 cache entry (class-level, not instance-level)
-    stats = get_cache_stats()
-    assert stats['cached_classes'] == 1
-```
+    # RSI: single-output, column = feature_id
+    assert 'rsi_14' in engine.feature_id_map
+    assert engine.feature_id_map['rsi_14'] == 'my_rsi'
 
-4. **Cache Correctness**:
+    # MACD: multi-output, primary column maps to feature_id
+    macd_col = [c for c in engine.feature_id_map if 'MACD' in c][0]
+    assert engine.feature_id_map[macd_col] == 'my_macd'
 
-```python
-def test_cache_produces_correct_metadata():
-    """Test cached metadata matches computed metadata."""
-    clear_metadata_cache()
-
-    configs = [
-        {'type': 'rsi', 'feature_id': 'rsi_14', 'params': {'period': 14}},
-        {'type': 'macd', 'feature_id': 'macd_std', 'params': {}},
-        {'type': 'bbands', 'feature_id': 'bbands_20', 'params': {'period': 20}},
-    ]
-
-    engine = IndicatorEngine(indicators=configs)
-
-    # Verify metadata correctness
-    # RSI: single-output
-    # MACD: multi-output
-    # BollingerBands: multi-output
-    assert engine.feature_id_map['rsi_14'] == 'rsi_14'  # Single-output
-    assert 'MACD_12_26' in engine.feature_id_map  # Multi-output (primary)
-    assert 'upper_20_2.0' in engine.feature_id_map  # Multi-output (primary)
-```
-
-5. **Performance Test**:
-
-```python
-def test_cache_improves_performance():
-    """Test cache significantly improves initialization performance."""
-    import time
-
-    clear_metadata_cache()
-
-    configs = [
-        {'type': 'rsi', 'feature_id': f'rsi_{i}', 'params': {'period': 14}}
-        for i in range(10)  # 10 RSI instances
-    ]
-
-    # First engine - populate cache
-    start = time.time()
-    engine1 = IndicatorEngine(indicators=configs)
-    time_first = time.time() - start
-
-    # Second engine - use cache
-    start = time.time()
-    engine2 = IndicatorEngine(indicators=configs)
-    time_second = time.time() - start
-
-    # Second should be significantly faster (at least 2x)
-    assert time_second < time_first / 2
+    # BollingerBands: multi-output, primary = upper band
+    assert 'upper_20_2.0' in engine.feature_id_map
+    assert engine.feature_id_map['upper_20_2.0'] == 'my_bbands'
 ```
 
 **Acceptance Criteria**:
 
-- [ ] All cache tests pass
-- [x] Tests verify cache population
-- [x] Tests verify cache reuse
-- [x] Tests verify cache correctness
-- [x] Performance test shows speedup (at least 2x)
-- [x] Tests use cache clear utility for isolation
-- [x] Coverage >90% for cache code
+- [ ] Tests verify indicators are self-describing (class methods work)
+- [ ] Tests verify NO computation during init (mock compute, assert not called)
+- [ ] Tests verify feature_id_map correctness
+- [ ] Tests verify multi-output and single-output indicators
+- [ ] All existing tests still pass
 
-#### Task 7.5: Update Documentation
+### Validation for Phase 7
 
-**Files**:
-
-- `docs/architecture/indicators/indicator-engine-architecture.md` (update or create)
-- `ktrdr/indicators/indicator_engine.py` (docstrings)
-
-**Documentation Updates**:
-
-1. **Architecture Document**:
-   - Explain metadata caching strategy
-   - Performance characteristics
-   - When cache is populated vs reused
-   - Cache scope (class-level, persistent)
-
-2. **Code Docstrings**:
-   - Document `_get_indicator_metadata()` behavior
-   - Document cache clearing utility
-   - Document cache statistics function
-
-3. **Performance Notes**:
-   - Document expected speedup
-   - Document trade-offs (memory vs speed)
-   - Document when cache is most beneficial (strategies with repeated indicator types)
-
-**Acceptance Criteria**:
-
-- [x] Architecture document updated (in commit message and code comments)
-- [x] Code docstrings complete
-- [x] Performance characteristics documented
-- [x] Examples show cache behavior (in tests)
-
-### Validation Updates for Phase 7
-
-**Goal**: Ensure cache optimization works correctly without breaking functionality.
+**Goal**: Ensure NO computation on sample data during IndicatorEngine initialization
 
 **Critical Validations**:
 
-1. **Correctness**: Cached metadata matches non-cached metadata
-2. **Performance**: Initialization faster with cache (at least 2x for repeated indicators)
-3. **Compatibility**: All existing tests pass (no behavior changes)
-4. **Memory**: Cache size reasonable (doesn't grow indefinitely)
+1. **No Computation**: Mock `indicator.compute()` and verify NOT called during init
+2. **Correctness**: feature_id_map matches previous behavior
+3. **Performance**: Init faster (no 100-row DataFrame creation)
+4. **Compatibility**: All existing tests pass (no behavior changes)
 
 **Test Strategy**:
 
-1. Unit tests (cache behavior, correctness)
-2. Performance benchmarks (initialization time)
-3. Integration tests (full IndicatorEngine workflow)
-4. Regression tests (ensure no behavior changes)
+1. Mock tests: Verify `compute()` never called during init
+2. Correctness tests: Verify feature_id_map correct for all indicator types
+3. Performance tests: Measure init time improvement
+4. Regression tests: All existing tests must pass
 
-### Acceptance Criteria for Phase 7
+### Overall Acceptance Criteria for Phase 7
 
 **ALL MUST PASS**:
 
-- [x] Cache implementation correct and thread-safe
-- [x] Cached metadata matches non-cached (correctness verified)
-- [x] Performance improvement demonstrated (at least 2x for repeated indicators)
-- [x] All existing tests pass (no regressions)
-- [x] Cache statistics available for monitoring
-- [x] Cache clearing utility works (for testing)
-- [x] Diagnostic logging shows cache hits/misses
-- [x] Documentation complete with performance notes
-- [x] Memory usage reasonable (cache doesn't leak)
-- [x] Performance benchmarks show expected speedup
-- [x] Integration tests pass (full workflow works)
+- [ ] BaseIndicator has `is_multi_output()` and `get_primary_output_suffix()` class methods
+- [ ] All multi-output indicators override these methods correctly
+- [ ] `_build_feature_id_map()` uses class methods, NOT sample computation
+- [ ] `_is_multi_output_indicator()` method DELETED (computed on sample data)
+- [ ] `_get_primary_output_column()` method DELETED (computed on sample data)
+- [ ] Tests verify NO `compute()` calls during init (mocking)
+- [ ] Tests verify feature_id_map correctness
+- [ ] All existing tests pass (no regressions)
+- [ ] Init significantly faster (no sample data computation)
+- [ ] Documentation updated
 
-### Performance Benchmarks
+### Performance Impact
 
-**Baseline (Before Optimization)**:
+**Before Optimization**:
 
-- Strategy with 36 indicators: ~XXX ms initialization
-- Strategy with 10 repeated RSI: ~XXX ms initialization
+- IndicatorEngine.__init__() creates 100-row DataFrames for each unique indicator class
+- Calls `indicator.compute(sample_data)` to detect multi-output and get column names
+- For 36 indicators with 12 unique classes: **12 unnecessary computations**
 
-**Target (After Optimization)**:
+**After Optimization**:
 
-- Strategy with 36 indicators, ~12 unique classes: ~50% faster initialization
-- Strategy with 10 repeated RSI: ~80% faster initialization (9 cache hits out of 10)
+- IndicatorEngine.__init__() calls `is_multi_output()` (instant, no computation)
+- Calls `get_column_name()` with optional suffix (just string building)
+- For 36 indicators with 12 unique classes: **0 computations**
 
-**Measurement Strategy**:
+**Expected Speedup**:
 
-1. Benchmark initialization time before changes
-2. Implement cache
-3. Benchmark initialization time after changes
-4. Verify speedup meets targets
-5. Monitor memory usage (should be negligible)
+- Init time reduced by time taken to compute 12 indicators on 100-row data
+- Particularly beneficial for expensive indicators (MACD, Bollinger Bands, etc.)
+- Also faster for strategies with repeated indicator types
+
+**Measurement**:
+
+Use mocking to verify `compute()` is never called during init
 
 ### Estimated Duration
 
-**2 days**
+**1-2 days**
 
 **Breakdown**:
 
-- Task 7.1 (Design): 0.25 days
-- Task 7.2 (Implementation): 0.5 days
-- Task 7.3 (Diagnostics): 0.25 days
-- Task 7.4 (Testing): 0.75 days
-- Task 7.5 (Documentation): 0.25 days
+- Task 7.1 (Add class methods to BaseIndicator): 1 hour
+- Task 7.2 (Update multi-output indicators): 2 hours
+- Task 7.3 (Simplify `_build_feature_id_map()`): 2 hours
+- Task 7.4 (Delete obsolete methods): 30 minutes
+- Task 7.5 (Add tests and verification): 3 hours
 
 ### Dependencies
 
