@@ -368,9 +368,10 @@ class TrainingPipeline:
             fuzzy_results: dict[str, Any] = {}
             for indicator_name, indicator_data in tf_indicators.items():
                 if indicator_name in fuzzy_configs:
-                    # Fuzzify the indicator
+                    # Fuzzify the indicator with context_data for transforms
+                    # tf_indicators contains both price data AND indicators from combine_indicators()
                     membership_values = fuzzy_engine.fuzzify(
-                        str(indicator_name), indicator_data
+                        str(indicator_name), indicator_data, context_data=tf_indicators
                     )
                     fuzzy_results.update(membership_values)
 
