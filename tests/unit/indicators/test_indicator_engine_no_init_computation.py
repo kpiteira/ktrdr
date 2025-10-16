@@ -5,7 +5,7 @@ This module tests that Phase 7 eliminates ALL computation on sample data during
 IndicatorEngine initialization by using class methods instead.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -21,7 +21,9 @@ class TestNoInitComputation:
         configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
 
         # Mock compute to track if it's called
-        with patch("ktrdr.indicators.rsi_indicator.RSIIndicator.compute") as mock_compute:
+        with patch(
+            "ktrdr.indicators.rsi_indicator.RSIIndicator.compute"
+        ) as mock_compute:
             _engine = IndicatorEngine(indicators=configs)
 
             # compute() should NEVER be called during __init__
@@ -31,7 +33,9 @@ class TestNoInitComputation:
         """Test multi-output indicator (MACD) - NO compute() during init."""
         configs = [{"name": "macd", "feature_id": "macd_std"}]
 
-        with patch("ktrdr.indicators.macd_indicator.MACDIndicator.compute") as mock_compute:
+        with patch(
+            "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
+        ) as mock_compute:
             _engine = IndicatorEngine(indicators=configs)
 
             # compute() should NEVER be called during __init__
@@ -47,13 +51,16 @@ class TestNoInitComputation:
         ]
 
         # Mock all indicator compute methods
-        with patch("ktrdr.indicators.rsi_indicator.RSIIndicator.compute") as mock_rsi, patch(
-            "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
-        ) as mock_macd, patch(
-            "ktrdr.indicators.ma_indicators.SimpleMovingAverage.compute"
-        ) as mock_sma, patch(
-            "ktrdr.indicators.ma_indicators.ExponentialMovingAverage.compute"
-        ) as mock_ema:
+        with (
+            patch("ktrdr.indicators.rsi_indicator.RSIIndicator.compute") as mock_rsi,
+            patch("ktrdr.indicators.macd_indicator.MACDIndicator.compute") as mock_macd,
+            patch(
+                "ktrdr.indicators.ma_indicators.SimpleMovingAverage.compute"
+            ) as mock_sma,
+            patch(
+                "ktrdr.indicators.ma_indicators.ExponentialMovingAverage.compute"
+            ) as mock_ema,
+        ):
             _engine = IndicatorEngine(indicators=configs)
 
             # NONE of the compute() methods should be called
@@ -70,7 +77,9 @@ class TestNoInitComputation:
         ]
 
         # Mock compute to ensure it's not called
-        with patch("ktrdr.indicators.base_indicator.BaseIndicator.compute") as mock_compute:
+        with patch(
+            "ktrdr.indicators.base_indicator.BaseIndicator.compute"
+        ) as mock_compute:
             engine = IndicatorEngine(indicators=configs)
 
             # Verify feature_id_map is correctly built
@@ -91,14 +100,15 @@ class TestNoInitComputation:
         configs = [{"name": "macd", "feature_id": "macd_std"}]
 
         # Mock the class methods to track calls
-        with patch(
-            "ktrdr.indicators.macd_indicator.MACDIndicator.is_multi_output", return_value=True
-        ) as mock_is_multi, patch(
-            "ktrdr.indicators.macd_indicator.MACDIndicator.get_primary_output_suffix",
-            return_value=None,
-        ) as mock_get_suffix, patch(
-            "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
-        ) as mock_compute:
+        with (
+            patch(
+                "ktrdr.indicators.macd_indicator.MACDIndicator.is_multi_output",
+                return_value=True,
+            ) as mock_is_multi,
+            patch(
+                "ktrdr.indicators.macd_indicator.MACDIndicator.compute"
+            ) as mock_compute,
+        ):
             engine = IndicatorEngine(indicators=configs)
 
             # Class methods SHOULD be called
@@ -128,7 +138,9 @@ class TestNoInitComputation:
         # Without computation, init should be very fast (< 0.1s even on slow systems)
         # This is a reasonable threshold - creating 10 indicator instances
         # and building feature_id_map should be near-instantaneous
-        assert elapsed < 0.1, f"Initialization took {elapsed:.3f}s - too slow, likely computing!"
+        assert (
+            elapsed < 0.1
+        ), f"Initialization took {elapsed:.3f}s - too slow, likely computing!"
 
     def test_no_sample_dataframe_creation(self):
         """Test that NO sample DataFrames are created during init."""
@@ -151,13 +163,16 @@ class TestNoInitComputation:
 
             # Check that no 100-row sample DataFrames were created
             # (the old code created DataFrames with 100 rows of sample data)
-            for args, kwargs in dataframe_calls:
+            for args, _kwargs in dataframe_calls:
                 if args and isinstance(args[0], dict):
                     # Check if this looks like sample OHLCV data
                     data_dict = args[0]
                     if "open" in data_dict and "close" in data_dict:
                         # Check if it's a 100-row sample (old behavior)
-                        if isinstance(data_dict["open"], list) and len(data_dict["open"]) == 100:
+                        if (
+                            isinstance(data_dict["open"], list)
+                            and len(data_dict["open"]) == 100
+                        ):
                             pytest.fail(
                                 "Found 100-row sample DataFrame creation during init! "
                                 "This indicates computation is still happening."
@@ -184,7 +199,9 @@ class TestComputeStillWorks:
         engine = IndicatorEngine(indicators=configs)
 
         # Mock compute to track if it's called during apply()
-        with patch("ktrdr.indicators.rsi_indicator.RSIIndicator.compute") as mock_compute:
+        with patch(
+            "ktrdr.indicators.rsi_indicator.RSIIndicator.compute"
+        ) as mock_compute:
             # Set up mock to return valid Series
             mock_compute.return_value = pd.Series([50.0] * 100, name="rsi_14")
 
@@ -226,7 +243,5 @@ class TestComputeStillWorks:
 
         # Verify the alias has the same values as the technical column
         pd.testing.assert_series_equal(
-            result["MACD_12_26"],
-            result["macd_std"],
-            check_names=False
+            result["MACD_12_26"], result["macd_std"], check_names=False
         )
