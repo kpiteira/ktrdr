@@ -108,14 +108,7 @@ class FeatureCache:
                 # Find matching columns (same logic as orchestrator)
                 for col in self.indicators_df.columns:
                     if col.upper().startswith(indicator_type):
-                        if indicator_type in ["SMA", "EMA"]:
-                            # Use price ratio for moving averages
-                            # This matches real-time: current_price / indicator_value
-                            current_bar_indicators[original_name] = (
-                                historical_data["close"].iloc[idx]
-                                / self.indicators_df[col].iloc[idx]
-                            )
-                        elif indicator_type == "MACD":
+                        if indicator_type == "MACD":
                             # Use main MACD line
                             if (
                                 col.startswith("MACD_")
@@ -127,7 +120,8 @@ class FeatureCache:
                                 )
                                 break
                         else:
-                            # Use raw values for other indicators
+                            # Use raw values for all indicators (including SMA/EMA)
+                            # Fuzzy engine handles transformations via input_transform
                             current_bar_indicators[original_name] = self.indicators_df[
                                 col
                             ].iloc[idx]
@@ -148,15 +142,22 @@ class FeatureCache:
             current_bar_fuzzy = {}
             current_indicators = self.mapped_indicators_df.iloc[idx]
 
+            # Get corresponding price data for this bar (needed for input_transform)
+            current_price_data = historical_data.iloc[
+                50 + idx
+            ]  # offset by 50 bars skipped
+
             for indicator_name, indicator_value in current_indicators.items():
                 if indicator_name in self.strategy_config["fuzzy_sets"]:
                     # Skip NaN values
                     if pd.isna(indicator_value):
                         continue
 
-                    # Fuzzify this indicator
+                    # Fuzzify this indicator with context_data for transforms
+                    # Pass price data as DataFrame for fuzzy engine's input_transform
+                    context_df = pd.DataFrame([current_price_data])
                     membership_result = self.fuzzy_engine.fuzzify(
-                        indicator_name, indicator_value
+                        indicator_name, indicator_value, context_data=context_df
                     )
                     current_bar_fuzzy.update(membership_result)
 
