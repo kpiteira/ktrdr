@@ -543,8 +543,12 @@ def _validate_strategy_config(
                     )
                     continue
 
-                # Validate each membership function
+                # Validate each membership function (skip input_transform - it's not a membership function)
                 for member_name, member_config in fuzzy_config.items():
+                    # Skip input_transform - it's a special configuration field, not a membership function
+                    if member_name == "input_transform":
+                        continue
+
                     if not isinstance(member_config, dict):
                         issues.append(
                             ValidationIssue(
