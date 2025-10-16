@@ -162,13 +162,39 @@ class FuzzyEngine:
         # Check if the indicator exists in the configuration
         if indicator not in self._membership_functions:
             logger.error(f"Unknown indicator: {indicator}")
+
+            # Get list of available indicators
+            available_indicators = list(self._membership_functions.keys())
+
+            # Try to find a close match (typo detection)
+            suggestion = self._find_close_match(indicator, available_indicators)
+
+            # Build error message with suggestion
+            error_msg = f"Feature ID '{indicator}' not found in fuzzy configuration"
+
+            # Build suggestion text
+            suggestion_text = (
+                f"Available feature IDs: {', '.join(available_indicators[:10])}"
+            )
+            if len(available_indicators) > 10:
+                suggestion_text += f" (and {len(available_indicators) - 10} more)"
+
+            if suggestion:
+                suggestion_text += f"\n\nDid you mean '{suggestion}'?"
+
+            # Build details dict with suggestion
+            error_details = {
+                "indicator": indicator,
+                "available_indicators": available_indicators,
+            }
+            if suggestion:
+                error_details["suggestion"] = suggestion
+
             raise ProcessingError(
-                message=f"Unknown indicator: {indicator}",
+                message=error_msg,
                 error_code="ENGINE-UnknownIndicator",
-                details={
-                    "indicator": indicator,
-                    "available_indicators": list(self._membership_functions.keys()),
-                },
+                details=error_details,
+                suggestion=suggestion_text,
             )
 
         # Get the membership functions for this indicator
@@ -716,3 +742,98 @@ class FuzzyEngine:
                 return fuzzy_key
 
         return None
+
+    def _find_close_match(
+        self, target: str, candidates: list[str], max_distance: int = 3
+    ) -> Optional[str]:
+        """
+        Find a close match for typo detection using Levenshtein distance.
+
+        This method helps users identify typos by suggesting feature_ids that
+        are similar to what they typed. Uses Levenshtein distance to measure
+        similarity.
+
+        Args:
+            target: The feature_id that wasn't found (potential typo)
+            candidates: List of valid feature_ids to compare against
+            max_distance: Maximum edit distance to consider (default: 3)
+
+        Returns:
+            The closest matching feature_id, or None if no close match found
+
+        Examples:
+            >>> engine._find_close_match("rsi_1", ["rsi_14", "rsi_21", "macd"])
+            "rsi_14"  # Close match (distance: 1)
+            >>> engine._find_close_match("xyz", ["rsi_14", "macd"])
+            None  # Too different
+        """
+        if not candidates:
+            return None
+
+        # Calculate Levenshtein distance for each candidate
+        distances = []
+        for candidate in candidates:
+            distance = self._levenshtein_distance(target.lower(), candidate.lower())
+            distances.append((distance, candidate))
+
+        # Sort by distance (closest first)
+        distances.sort(key=lambda x: x[0])
+
+        # Return closest match if within threshold
+        closest_distance, closest_match = distances[0]
+        if closest_distance <= max_distance:
+            return closest_match
+
+        return None
+
+    def _levenshtein_distance(self, s1: str, s2: str) -> int:
+        """
+        Calculate Levenshtein distance between two strings.
+
+        The Levenshtein distance is the minimum number of single-character edits
+        (insertions, deletions, or substitutions) required to change one string
+        into another.
+
+        Args:
+            s1: First string
+            s2: Second string
+
+        Returns:
+            Edit distance between the strings
+
+        Examples:
+            >>> engine._levenshtein_distance("rsi_1", "rsi_14")
+            1  # One character difference
+            >>> engine._levenshtein_distance("rsi", "macd")
+            4  # Four edits required
+        """
+        # Handle edge cases
+        if len(s1) == 0:
+            return len(s2)
+        if len(s2) == 0:
+            return len(s1)
+
+        # Create distance matrix
+        matrix = [[0] * (len(s2) + 1) for _ in range(len(s1) + 1)]
+
+        # Initialize first column and row
+        for i in range(len(s1) + 1):
+            matrix[i][0] = i
+        for j in range(len(s2) + 1):
+            matrix[0][j] = j
+
+        # Fill matrix
+        for i in range(1, len(s1) + 1):
+            for j in range(1, len(s2) + 1):
+                if s1[i - 1] == s2[j - 1]:
+                    cost = 0
+                else:
+                    cost = 1
+
+                matrix[i][j] = min(
+                    matrix[i - 1][j] + 1,  # deletion
+                    matrix[i][j - 1] + 1,  # insertion
+                    matrix[i - 1][j - 1] + cost,  # substitution
+                )
+
+        return matrix[len(s1)][len(s2)]

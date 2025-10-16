@@ -22,6 +22,7 @@ class KtrdrError(Exception):
         message: Human-readable error message
         error_code: Optional error code for reference and documentation
         details: Optional dictionary with additional error details
+        suggestion: Optional suggestion text for how to fix the error
     """
 
     def __init__(
@@ -29,6 +30,7 @@ class KtrdrError(Exception):
         message: str,
         error_code: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
+        suggestion: Optional[str] = None,
     ) -> None:
         """
         Initialize a new KtrdrError.
@@ -37,10 +39,12 @@ class KtrdrError(Exception):
             message: Human-readable error message
             error_code: Optional error code for reference and documentation
             details: Optional dictionary with additional error details
+            suggestion: Optional suggestion text for how to fix the error
         """
         self.message = message
         self.error_code = error_code
         self.details = details or {}
+        self.suggestion = suggestion
         super().__init__(message)
 
 
