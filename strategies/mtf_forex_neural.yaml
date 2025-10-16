@@ -432,6 +432,9 @@ fuzzy_sets:
       parameters: [1.00, 1.06, 1.15]
   # MOVING AVERAGE FUZZY SETS - Price position relative to MA
   sma_20:  # 5 zones for short-term MA
+    input_transform:  # Transform SMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     far_below:
       type: "triangular"
       parameters: [0.80, 0.90, 0.97]  # Price 10-20% below MA = extreme oversold
@@ -448,6 +451,9 @@ fuzzy_sets:
       type: "triangular"
       parameters: [1.03, 1.10, 1.20]  # Price 10-20% above MA = extreme overbought
   sma_50:  # 3 zones for intermediate MA
+    input_transform:  # Transform SMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     below:
       type: "triangular"
       parameters: [0.85, 0.93, 1.00]
@@ -458,6 +464,9 @@ fuzzy_sets:
       type: "triangular"
       parameters: [1.00, 1.07, 1.15]
   sma_200:  # 3 zones for major trend MA (bull vs bear)
+    input_transform:  # Transform SMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     below:
       type: "triangular"
       parameters: [0.80, 0.90, 1.00]  # Below 200 SMA = bear market
@@ -469,6 +478,9 @@ fuzzy_sets:
       parameters: [1.00, 1.10, 1.25]  # Above 200 SMA = bull market
   # EMA FUZZY SETS - Similar to SMA but more responsive
   ema_9:  # Fast EMA
+    input_transform:  # Transform EMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     below:
       type: "triangular"
       parameters: [0.90, 0.96, 1.00]
@@ -479,6 +491,9 @@ fuzzy_sets:
       type: "triangular"
       parameters: [1.00, 1.04, 1.10]
   ema_21:  # Swing EMA
+    input_transform:  # Transform EMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     below:
       type: "triangular"
       parameters: [0.88, 0.95, 1.00]
@@ -489,6 +504,9 @@ fuzzy_sets:
       type: "triangular"
       parameters: [1.00, 1.05, 1.12]
   ema_55:  # Intermediate EMA
+    input_transform:  # Transform EMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     below:
       type: "triangular"
       parameters: [0.85, 0.93, 1.00]

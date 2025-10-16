@@ -56,6 +56,9 @@ fuzzy_sets:
       type: "triangular"
       parameters: [65, 80, 100]
   sma_20:
+    input_transform:  # Transform SMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     below:
       type: "triangular"
       parameters: [0.85, 0.95, 1.0]
