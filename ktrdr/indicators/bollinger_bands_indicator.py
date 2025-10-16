@@ -10,7 +10,7 @@ The indicator is commonly used to identify overbought/oversold conditions
 and potential breakout points.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import pandas as pd
 
@@ -60,6 +60,30 @@ class BollingerBandsIndicator(BaseIndicator):
     def get_primary_output_suffix(cls) -> str:
         """Primary output is the upper band."""
         return "upper"
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        Bollinger Bands uses lowercase and specific parameter formatting:
+        - Upper: "upper_{period}_{multiplier}"
+        - Middle: "middle_{period}_{multiplier}"
+        - Lower: "lower_{period}_{multiplier}"
+
+        Args:
+            suffix: Optional suffix ("upper", "middle", "lower", or None for upper)
+
+        Returns:
+            Column name matching compute() output format
+        """
+        period = self.params.get("period", 20)
+        multiplier = self.params.get("multiplier", 2.0)
+
+        # Default to upper if no suffix specified
+        if suffix is None:
+            suffix = "upper"
+
+        return f"{suffix}_{period}_{multiplier}"
 
     def __init__(
         self, period: int = 20, multiplier: float = 2.0, source: str = "close"
