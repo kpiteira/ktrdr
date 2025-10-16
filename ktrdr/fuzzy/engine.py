@@ -131,7 +131,10 @@ class FuzzyEngine:
                     ) from e
 
     def fuzzify(
-        self, indicator: str, values: Union[float, pd.Series, np.ndarray]
+        self,
+        indicator: str,
+        values: Union[float, pd.Series, np.ndarray],
+        context_data: Optional[pd.DataFrame] = None,
     ) -> Union[dict[str, Union[float, pd.Series, np.ndarray]], pd.DataFrame]:
         """
         Fuzzify indicator values using the configured membership functions.
@@ -142,13 +145,16 @@ class FuzzyEngine:
         Args:
             indicator: Name of the indicator (e.g., "rsi", "macd")
             values: Indicator values to fuzzify (scalar, pandas Series, or numpy array)
+            context_data: Optional DataFrame containing price data (open, high, low, close)
+                         required for price_ratio transforms
 
         Returns:
             For scalar input: A dictionary mapping fuzzy set names to membership degrees
             For Series/array input: A DataFrame with columns for each fuzzy set
 
         Raises:
-            ProcessingError: If the indicator is not in the configuration
+            ProcessingError: If the indicator is not in the configuration or if
+                           required context_data is missing
             TypeError: If the input type is not supported
         """
         logger.debug(f"Fuzzifying values for indicator: {indicator}")
@@ -168,33 +174,144 @@ class FuzzyEngine:
         # Get the membership functions for this indicator
         membership_functions = self._membership_functions[indicator]
 
+        # Apply input transform if configured
+        transformed_values = self._apply_transform(indicator, values, context_data)
+
         # Handle scalar input
-        if isinstance(values, (int, float)):
-            logger.debug(f"Fuzzifying scalar value {values} for indicator {indicator}")
-            return self._fuzzify_scalar(indicator, values, membership_functions)  # type: ignore[return-value]
+        if isinstance(transformed_values, (int, float)):
+            logger.debug(
+                f"Fuzzifying scalar value {transformed_values} for indicator {indicator}"
+            )
+            return self._fuzzify_scalar(indicator, transformed_values, membership_functions)  # type: ignore[return-value]
 
         # Handle pandas Series input
-        elif isinstance(values, pd.Series):
+        elif isinstance(transformed_values, pd.Series):
             logger.debug(
-                f"Fuzzifying pandas Series of length {len(values)} for indicator {indicator}"
+                f"Fuzzifying pandas Series of length {len(transformed_values)} for indicator {indicator}"
             )
-            return self._fuzzify_series(indicator, values, membership_functions)
+            return self._fuzzify_series(
+                indicator, transformed_values, membership_functions
+            )
 
         # Handle numpy array input
-        elif isinstance(values, np.ndarray):
+        elif isinstance(transformed_values, np.ndarray):
             logger.debug(
-                f"Fuzzifying numpy array of shape {values.shape} for indicator {indicator}"
+                f"Fuzzifying numpy array of shape {transformed_values.shape} for indicator {indicator}"
             )
             # Convert numpy array to pandas Series for consistent handling
-            series = pd.Series(values)
+            series = pd.Series(transformed_values)
             return self._fuzzify_series(indicator, series, membership_functions)
 
         # Handle unsupported input types
         else:
-            logger.error(f"Unsupported input type for fuzzification: {type(values)}")
-            raise TypeError(
-                f"Unsupported input type: {type(values)}. Expected float, pd.Series, or np.ndarray."
+            logger.error(
+                f"Unsupported input type for fuzzification: {type(transformed_values)}"
             )
+            raise TypeError(
+                f"Unsupported input type: {type(transformed_values)}. Expected float, pd.Series, or np.ndarray."
+            )
+
+    def _apply_transform(
+        self,
+        indicator: str,
+        values: Union[float, pd.Series, np.ndarray],
+        context_data: Optional[pd.DataFrame] = None,
+    ) -> Union[float, pd.Series, np.ndarray]:
+        """
+        Apply input transform to indicator values before fuzzification.
+
+        Args:
+            indicator: Name of the indicator
+            values: Indicator values to transform
+            context_data: Optional DataFrame containing price data for transforms
+
+        Returns:
+            Transformed values (same type as input)
+
+        Raises:
+            ProcessingError: If required context_data is missing or invalid
+        """
+        # Get the fuzzy set config for this indicator
+        fuzzy_set_config = self._config.root[indicator]
+
+        # Get the input transform (may be None)
+        input_transform = fuzzy_set_config.input_transform
+
+        # If no transform or identity transform, return values unchanged
+        if input_transform is None or input_transform.type == "identity":
+            logger.debug(f"No transform or identity transform for {indicator}")
+            return values
+
+        # Handle price_ratio transform
+        if input_transform.type == "price_ratio":
+            logger.debug(
+                f"Applying price_ratio transform for {indicator} with reference '{input_transform.reference}'"
+            )
+
+            # Validate context_data is provided
+            if context_data is None:
+                logger.error(
+                    f"context_data is required for price_ratio transform for {indicator}"
+                )
+                raise ProcessingError(
+                    message=f"context_data is required for price_ratio transform for indicator '{indicator}'. Pass context_data DataFrame with price columns (open, high, low, close)",
+                    error_code="ENGINE-MissingContextData",
+                    details={
+                        "indicator": indicator,
+                        "transform_type": "price_ratio",
+                        "reference": input_transform.reference,
+                    },
+                )
+
+            # Validate reference column exists in context_data
+            if input_transform.reference not in context_data.columns:
+                logger.error(
+                    f"Reference column '{input_transform.reference}' not found in context_data"
+                )
+                raise ProcessingError(
+                    message=f"Reference column '{input_transform.reference}' not found in context_data. Ensure context_data contains '{input_transform.reference}' column",
+                    error_code="ENGINE-MissingReferenceColumn",
+                    details={
+                        "indicator": indicator,
+                        "reference": input_transform.reference,
+                        "available_columns": list(context_data.columns),
+                    },
+                )
+
+            # Get reference values
+            reference_values = context_data[input_transform.reference]
+
+            # Apply price ratio transformation: reference / indicator
+            if isinstance(values, (int, float)):
+                # Scalar case
+                transformed_scalar = float(reference_values.iloc[0]) / float(values)
+                logger.debug(
+                    f"Transformed scalar {values} -> {transformed_scalar} (ratio with {input_transform.reference})"
+                )
+                return transformed_scalar
+            elif isinstance(values, pd.Series):
+                # Series case
+                transformed_series = reference_values / values
+                logger.debug(
+                    f"Transformed series (length {len(values)}) with price_ratio transform"
+                )
+                return transformed_series
+            else:  # numpy array
+                # Convert to series, transform, convert back
+                series = pd.Series(values)
+                transformed_series_arr = reference_values / series
+                logger.debug(
+                    f"Transformed numpy array (shape {values.shape}) with price_ratio transform"
+                )
+                return np.array(transformed_series_arr.values)
+
+        # Unknown transform type (should never happen due to discriminator)
+        logger.error(f"Unknown transform type: {input_transform.type}")
+        raise ProcessingError(
+            message=f"Unknown transform type: {input_transform.type}",
+            error_code="ENGINE-UnknownTransformType",
+            details={"indicator": indicator, "transform_type": input_transform.type},
+        )
 
     def _fuzzify_scalar(
         self,
