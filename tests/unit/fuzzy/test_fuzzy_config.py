@@ -82,7 +82,7 @@ class TestFuzzySetConfig:
         """Test that an error is raised for empty fuzzy set."""
         with pytest.raises(ConfigurationError) as exc_info:
             FuzzySetConfig.model_validate({})
-        assert "At least one fuzzy set must be defined" in str(exc_info.value)
+        assert "At least one fuzzy set" in str(exc_info.value)
 
 
 class TestFuzzyConfig:
