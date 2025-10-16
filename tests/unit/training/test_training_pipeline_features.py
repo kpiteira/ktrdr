@@ -207,10 +207,11 @@ class TestGenerateFuzzyMemberships:
         assert isinstance(result, dict)
         assert "1D" in result
         assert isinstance(result["1D"], pd.DataFrame)
-        # Should have fuzzy membership columns
-        assert "rsi_low" in result["1D"].columns
-        assert "rsi_medium" in result["1D"].columns
-        assert "rsi_high" in result["1D"].columns
+        # Should have fuzzy membership columns with timeframe prefix
+        # (unified approach always adds timeframe prefix, even for single-TF)
+        assert "1D_rsi_low" in result["1D"].columns
+        assert "1D_rsi_medium" in result["1D"].columns
+        assert "1D_rsi_high" in result["1D"].columns
 
     def test_generate_fuzzy_memberships_multi_timeframe(self):
         """Test fuzzy membership generation for multiple timeframes."""

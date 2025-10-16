@@ -53,24 +53,26 @@ class TestTrainingPipelineTransforms:
         assert "1d" in result
         assert isinstance(result["1d"], pd.DataFrame)
 
-        # Check that fuzzy membership columns exist
+        # Check that fuzzy membership columns exist (with timeframe prefix)
+        # Unified approach always adds timeframe prefix, even for single-TF
         result_df = result["1d"]
-        assert "sma_20_below" in result_df.columns
-        assert "sma_20_at_ma" in result_df.columns
-        assert "sma_20_above" in result_df.columns
-        assert "rsi_14_oversold" in result_df.columns
-        assert "rsi_14_neutral" in result_df.columns
-        assert "rsi_14_overbought" in result_df.columns
+        assert "1d_sma_20_below" in result_df.columns
+        assert "1d_sma_20_at_ma" in result_df.columns
+        assert "1d_sma_20_above" in result_df.columns
+        assert "1d_rsi_14_oversold" in result_df.columns
+        assert "1d_rsi_14_neutral" in result_df.columns
+        assert "1d_rsi_14_overbought" in result_df.columns
 
         # Verify SMA transformed correctly (close/sma ratios)
         # Row 0: close=101, sma=100 -> ratio=1.01 -> should be "at_ma" or "above"
         # Row 1: close=102, sma=101 -> ratio=1.0099 -> should be "at_ma"
         # Row 2: close=103, sma=102 -> ratio=1.0098 -> should be "at_ma"
         assert (
-            result_df.loc[0, "sma_20_at_ma"] > 0 or result_df.loc[0, "sma_20_above"] > 0
+            result_df.loc[0, "1d_sma_20_at_ma"] > 0
+            or result_df.loc[0, "1d_sma_20_above"] > 0
         )
-        assert result_df.loc[1, "sma_20_at_ma"] > 0
-        assert result_df.loc[2, "sma_20_at_ma"] > 0
+        assert result_df.loc[1, "1d_sma_20_at_ma"] > 0
+        assert result_df.loc[2, "1d_sma_20_at_ma"] > 0
 
     def test_generate_fuzzy_memberships_with_multi_timeframe(self):
         """Test fuzzy membership generation with multiple timeframes."""
@@ -135,13 +137,14 @@ class TestTrainingPipelineTransforms:
         result_df = result["1d"]
 
         # Verify RSI processed correctly (no transformation)
-        assert "rsi_14_oversold" in result_df.columns
-        assert "rsi_14_neutral" in result_df.columns
-        assert "rsi_14_overbought" in result_df.columns
+        # Unified approach adds timeframe prefix even for single-TF
+        assert "1d_rsi_14_oversold" in result_df.columns
+        assert "1d_rsi_14_neutral" in result_df.columns
+        assert "1d_rsi_14_overbought" in result_df.columns
 
         # Row 0: RSI=30 -> oversold region
-        assert result_df.loc[0, "rsi_14_oversold"] > 0
+        assert result_df.loc[0, "1d_rsi_14_oversold"] > 0
         # Row 1: RSI=50 -> neutral region (peak)
-        assert result_df.loc[1, "rsi_14_neutral"] == 1.0
+        assert result_df.loc[1, "1d_rsi_14_neutral"] == 1.0
         # Row 2: RSI=70 -> overbought region
-        assert result_df.loc[2, "rsi_14_overbought"] > 0
+        assert result_df.loc[2, "1d_rsi_14_overbought"] > 0

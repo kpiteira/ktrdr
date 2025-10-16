@@ -231,9 +231,13 @@ class TrainingPipeline:
         price_data: dict[str, pd.DataFrame], indicator_configs: list[dict[str, Any]]
     ) -> dict[str, pd.DataFrame]:
         """
-        Calculate technical indicators with multi-timeframe support.
+        Calculate technical indicators (unified single/multi-timeframe approach).
 
-        EXTRACTED FROM: StrategyTrainer._calculate_indicators() (train_strategy.py:596-800)
+        Single-timeframe is just multi-timeframe with one key. This eliminates
+        code duplication and ensures consistent behavior.
+
+        ROOT CAUSE FIX: Creates IndicatorEngine ONCE and uses apply_multi_timeframe()
+        without passing indicator_configs parameter, preventing duplicate engine creation.
 
         Args:
             price_data: Dictionary mapping timeframes to OHLCV DataFrames
@@ -247,79 +251,20 @@ class TrainingPipeline:
             f"with {len(indicator_configs)} indicator(s)"
         )
 
-        # Handle single timeframe case (backward compatibility)
-        if len(price_data) == 1:
-            timeframe, tf_price_data = next(iter(price_data.items()))
-            indicators = TrainingPipeline._calculate_indicators_single_timeframe(
-                tf_price_data, indicator_configs
-            )
-            return {timeframe: indicators}
-
-        # Multi-timeframe case
-        return TrainingPipeline._calculate_indicators_multi_timeframe(
-            price_data, indicator_configs
-        )
-
-    @staticmethod
-    def _calculate_indicators_single_timeframe(
-        price_data: pd.DataFrame, indicator_configs: list[dict[str, Any]]
-    ) -> pd.DataFrame:
-        """
-        Calculate indicators for a single timeframe.
-
-        EXTRACTED FROM: StrategyTrainer._calculate_indicators_single_timeframe()
-        (train_strategy.py:625-712)
-        """
-        # Initialize indicator engine with configs
-        # IndicatorConfig expects 'name' field (not 'type'), so no transformation needed
-        indicator_engine = IndicatorEngine(indicators=indicator_configs)
-        # Apply indicators to price data
-        # indicator_results already contains feature_id aliases from Phase 2!
-        indicator_results = indicator_engine.apply(price_data)
-
-        # Phase 2 simplified: Just combine price data with indicator results
-        # IndicatorEngine already created feature_id aliases, so we just use them
-        result = price_data.copy()
-        for col in indicator_results.columns:
-            if col not in result.columns:
-                result[col] = indicator_results[col]
-
-        # Safety check: replace any inf values with NaN, then fill NaN with 0
-        result = result.replace([np.inf, -np.inf], np.nan).fillna(0.0)
-
-        return result
-
-    @staticmethod
-    def _calculate_indicators_multi_timeframe(
-        price_data: dict[str, pd.DataFrame],
-        indicator_configs: list[dict[str, Any]],
-    ) -> dict[str, pd.DataFrame]:
-        """
-        Calculate indicators for multiple timeframes.
-
-        Phase 3 simplified: Trust feature_id aliases from Phase 2.
-        No manual column matching, no special transformations.
-
-        EXTRACTED FROM: StrategyTrainer._calculate_indicators_multi_timeframe()
-        (train_strategy.py:714-800)
-        """
-        # Initialize indicator engine with configs
+        # Create indicator engine ONCE - No computation on sample data (Phase 7)!
         indicator_engine = IndicatorEngine(indicators=indicator_configs)
 
-        # Apply indicators to all timeframes
-        # indicator_results already contains feature_id aliases from Phase 2!
-        indicator_results = indicator_engine.apply_multi_timeframe(
-            price_data, indicator_configs
-        )
+        # Apply to all timeframes (single-timeframe is just a 1-item dict)
+        # CRITICAL: Don't pass indicator_configs to prevent duplicate engine creation!
+        indicator_results = indicator_engine.apply_multi_timeframe(price_data)
 
-        # Phase 3 simplified: Just combine price data with indicator results per timeframe
-        # IndicatorEngine already created feature_id aliases, so we just use them
+        # Combine price data with indicator results per timeframe
         combined_results = {}
 
         for timeframe, tf_indicators in indicator_results.items():
             tf_price_data = price_data[timeframe]
 
-            # Combine price data with indicators (same logic as single-timeframe)
+            # Phase 3 simplified: Just combine - feature_id aliases already exist!
             result = tf_price_data.copy()
             for col in tf_indicators.columns:
                 if col not in result.columns:
@@ -337,10 +282,13 @@ class TrainingPipeline:
         indicators: dict[str, pd.DataFrame], fuzzy_configs: dict[str, Any]
     ) -> dict[str, pd.DataFrame]:
         """
-        Generate fuzzy membership values with multi-timeframe support.
+        Generate fuzzy membership values (unified single/multi-timeframe approach).
 
-        EXTRACTED FROM: StrategyTrainer._generate_fuzzy_memberships()
-        (train_strategy.py:802-847)
+        Single-timeframe is just multi-timeframe with one key. This eliminates
+        code duplication and ensures consistent behavior.
+
+        ROOT CAUSE FIX: Multi-timeframe method now passes context_data to fuzzify(),
+        fixing price_ratio transform errors.
 
         Args:
             indicators: Dictionary mapping timeframes to technical indicators DataFrames
@@ -358,26 +306,8 @@ class TrainingPipeline:
         fuzzy_config = FuzzyConfigLoader.load_from_dict(fuzzy_configs)
         fuzzy_engine = FuzzyEngine(fuzzy_config)
 
-        # Handle single timeframe case (backward compatibility)
-        if len(indicators) == 1 and isinstance(
-            list(indicators.values())[0], pd.DataFrame
-        ):
-            timeframe, tf_indicators = next(iter(indicators.items()))
-
-            # Process each indicator (original single-timeframe logic)
-            fuzzy_results: dict[str, Any] = {}
-            for indicator_name, indicator_data in tf_indicators.items():
-                if indicator_name in fuzzy_configs:
-                    # Fuzzify the indicator with context_data for transforms
-                    # tf_indicators contains both price data AND indicators from combine_indicators()
-                    membership_values = fuzzy_engine.fuzzify(
-                        str(indicator_name), indicator_data, context_data=tf_indicators
-                    )
-                    fuzzy_results.update(membership_values)
-
-            return {timeframe: pd.DataFrame(fuzzy_results, index=tf_indicators.index)}
-
-        # Multi-timeframe case - use the new multi-timeframe method
+        # Always use multi-timeframe method (single-timeframe is just a 1-item dict)
+        # The fuzzy engine now passes context_data in multi-timeframe path!
         return fuzzy_engine.generate_multi_timeframe_memberships(
             indicators, fuzzy_configs
         )

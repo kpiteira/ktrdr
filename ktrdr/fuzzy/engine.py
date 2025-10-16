@@ -633,8 +633,11 @@ class FuzzyEngine:
                             indicator_values = indicators_data[indicator_col]
 
                             # Generate fuzzy memberships using existing fuzzify method
+                            # ROOT CAUSE FIX: Pass context_data for price_ratio transforms!
                             fuzzy_result = processing_engine.fuzzify(
-                                fuzzy_key, indicator_values
+                                fuzzy_key,
+                                indicator_values,
+                                context_data=indicators_data,
                             )
 
                             # Add timeframe prefix to column names and store results
