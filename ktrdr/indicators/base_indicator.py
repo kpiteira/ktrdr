@@ -75,6 +75,42 @@ class BaseIndicator(ABC):
         """
         return params
 
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """
+        Indicate whether this indicator produces multiple output columns.
+
+        Returns:
+            bool: True if indicator returns DataFrame (multiple columns),
+                  False if indicator returns Series (single column).
+
+        Note:
+            Multi-output indicators should override this method to return True.
+            Single-output indicators can use the default False return value.
+        """
+        return False
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> Optional[str]:
+        """
+        Get the suffix for the primary output column of multi-output indicators.
+
+        For multi-output indicators, this defines which column is considered
+        the "primary" output for feature_id mapping. Returns None for
+        single-output indicators or if primary output is the base name.
+
+        Returns:
+            Optional[str]: Suffix for primary output column, or None if N/A
+
+        Example:
+            For MACD which produces "MACD_12_26", "MACD_signal_12_26_9", "MACD_hist_12_26_9",
+            the primary output is "MACD_12_26" (no suffix, just params), so return None.
+
+            For BollingerBands which produces "upper_20_2.0", "middle_20_2.0", "lower_20_2.0",
+            the primary output is "upper_20_2.0", so return "upper".
+        """
+        return None
+
     @abstractmethod
     def compute(self, df: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
         """

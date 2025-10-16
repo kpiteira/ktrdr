@@ -28,6 +28,11 @@ class BollingerBandsIndicator(BaseIndicator):
     increases and decreases. The bands automatically widen when volatility
     increases and narrow when volatility decreases.
 
+    This is a multi-output indicator that produces three columns:
+    - upper: Upper Bollinger Band (primary output)
+    - middle: Middle Band (SMA)
+    - lower: Lower Bollinger Band
+
     **Interpretation:**
     - Price touching upper band may indicate overbought condition
     - Price touching lower band may indicate oversold condition
@@ -45,6 +50,16 @@ class BollingerBandsIndicator(BaseIndicator):
     - middle: Middle Band (SMA)
     - lower: Lower Bollinger Band
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Bollinger Bands produces multiple outputs (upper, middle, lower)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is the upper band."""
+        return "upper"
 
     def __init__(
         self, period: int = 20, multiplier: float = 2.0, source: str = "close"

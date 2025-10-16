@@ -5,7 +5,8 @@ This module provides the IndicatorEngine class, which is responsible for
 applying indicators to OHLCV data based on configuration.
 """
 
-from typing import Optional, Union, cast
+import sys
+from typing import Any, Optional, Union, cast
 
 import pandas as pd
 
@@ -18,6 +19,39 @@ from ktrdr.indicators.rsi_indicator import RSIIndicator
 
 # Create module-level logger
 logger = get_logger(__name__)
+
+# Module-level cache for indicator metadata
+# Maps: indicator class → metadata dict
+_INDICATOR_METADATA_CACHE: dict[type[BaseIndicator], dict[str, Any]] = {}
+
+
+def get_cache_stats() -> dict[str, Any]:
+    """
+    Get cache statistics for monitoring.
+
+    Returns:
+        Dictionary with cache statistics:
+        - cached_classes: Number of cached indicator classes
+        - cached_indicators: List of cached indicator class types
+        - cache_size_bytes: Approximate memory size of cache
+    """
+    return {
+        "cached_classes": len(_INDICATOR_METADATA_CACHE),
+        "cached_indicators": list(_INDICATOR_METADATA_CACHE.keys()),
+        "cache_size_bytes": sys.getsizeof(_INDICATOR_METADATA_CACHE),
+    }
+
+
+def clear_metadata_cache() -> None:
+    """
+    Clear indicator metadata cache.
+
+    This is primarily useful for testing to ensure clean state.
+    In production, the cache persists for the lifetime of the process.
+    """
+    global _INDICATOR_METADATA_CACHE
+    _INDICATOR_METADATA_CACHE.clear()
+    logger.debug("Cleared indicator metadata cache")
 
 
 class IndicatorEngine:
@@ -83,6 +117,53 @@ class IndicatorEngine:
             f"Initialized IndicatorEngine with {len(self.indicators)} indicators"
         )
 
+    def _get_indicator_metadata(self, indicator: BaseIndicator) -> dict[str, Any]:
+        """
+        Get metadata for indicator (cached at class level).
+
+        Metadata includes:
+        - is_multi_output: Whether indicator returns DataFrame
+        - primary_column: Primary output column name (for multi-output)
+
+        Uses class-level cache to avoid redundant computation across instances.
+        First call per indicator class computes and caches, subsequent calls use cache.
+
+        Args:
+            indicator: The indicator instance
+
+        Returns:
+            Dictionary with metadata fields
+        """
+        indicator_class = type(indicator)
+
+        if indicator_class in _INDICATOR_METADATA_CACHE:
+            logger.debug(f"Cache HIT for {indicator_class.__name__}")
+            return _INDICATOR_METADATA_CACHE[indicator_class]
+
+        logger.debug(f"Cache MISS for {indicator_class.__name__} - computing metadata")
+
+        # Use class method instead of computation
+        is_multi_output = indicator_class.is_multi_output()
+
+        primary_column: Optional[str] = None
+        if is_multi_output:
+            # For multi-output, compute once to get actual column name
+            primary_column = self._get_primary_output_column(indicator)
+
+        metadata: dict[str, Any] = {
+            "is_multi_output": is_multi_output,
+            "primary_column": primary_column,
+        }
+
+        _INDICATOR_METADATA_CACHE[indicator_class] = metadata
+
+        logger.debug(
+            f"Cached metadata for {indicator_class.__name__}: "
+            f"multi_output={is_multi_output}"
+        )
+
+        return metadata
+
     def _build_feature_id_map(
         self, configs: list, indicators: list[BaseIndicator]
     ) -> None:
@@ -93,8 +174,7 @@ class IndicatorEngine:
         indicator output) and user-facing feature_ids (from config).
 
         For multi-output indicators, only the primary output (first column) is mapped.
-        We detect multi-output by checking the indicator's type annotation or by
-        testing with sample data.
+        Uses cached metadata to avoid redundant indicator computations.
 
         Args:
             configs: List of IndicatorConfig objects
@@ -109,17 +189,19 @@ class IndicatorEngine:
 
             feature_id = config.feature_id
 
-            # Check if indicator returns DataFrame (multi-output) or Series (single-output)
-            # Approach: Try computing with sample data and check result type
-            # This is more reliable than type annotations which may be Union types
-            is_multi_output = self._is_multi_output_indicator(indicator)
+            # Use cached metadata (fast!)
+            metadata = self._get_indicator_metadata(indicator)
+            is_multi_output = metadata["is_multi_output"]
 
             if is_multi_output:
-                # Multi-output indicator: need to get actual column names
-                # Create minimal sample data to discover column names
-                primary_column = self._get_primary_output_column(indicator)
+                # Multi-output indicator: use cached primary column
+                primary_column = metadata["primary_column"]
                 if primary_column:
                     self.feature_id_map[primary_column] = feature_id
+                    logger.debug(
+                        f"Mapped multi-output indicator primary column '{primary_column}' "
+                        f"to feature_id '{feature_id}' (indicator: {config.name})"
+                    )
                 else:
                     logger.warning(
                         f"Could not determine primary output for multi-output indicator: {config.name}"
@@ -128,6 +210,10 @@ class IndicatorEngine:
                 # Single-output indicator: map column_name directly to feature_id
                 column_name = self._get_technical_column_name(config, indicator)
                 self.feature_id_map[column_name] = feature_id
+                logger.debug(
+                    f"Mapped column '{column_name}' to feature_id '{feature_id}' "
+                    f"(indicator: {config.name})"
+                )
 
     def _is_multi_output_indicator(self, indicator: BaseIndicator) -> bool:
         """
