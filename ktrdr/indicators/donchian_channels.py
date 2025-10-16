@@ -8,7 +8,7 @@ volatility, support/resistance levels, and potential breakout points.
 Author: KTRDR
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -44,6 +44,41 @@ class DonchianChannelsIndicator(BaseIndicator):
     - Use shorter periods for more sensitive signals
     - Use longer periods for smoother, more reliable signals
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Donchian Channels produces multiple outputs (Upper, Lower, and optionally Middle)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is the Upper channel."""
+        return "Upper"
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        Donchian Channels format:
+        - Upper: "DC_Upper_{period}"
+        - Lower: "DC_Lower_{period}"
+        - Middle: "DC_Middle_{period}"
+
+        Args:
+            suffix: Optional suffix ("Upper", "Lower", "Middle", or None for Upper)
+
+        Returns:
+            Column name matching compute() output format
+        """
+        period = self.params.get("period", 20)
+
+        if suffix == "Lower":
+            return f"DC_Lower_{period}"
+        elif suffix == "Middle":
+            return f"DC_Middle_{period}"
+        else:
+            # Default to Upper (primary)
+            return f"DC_Upper_{period}"
 
     def __init__(self, period: int = 20, include_middle: bool = True):
         """

@@ -8,7 +8,7 @@ identify trend direction and potential reversal points.
 Author: KTRDR
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -50,6 +50,40 @@ class SuperTrendIndicator(BaseIndicator):
     - period: 10 (ATR period)
     - multiplier: 3.0 (ATR multiplier for band calculation)
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """SuperTrend produces multiple outputs (SuperTrend and ST_Direction)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> None:
+        """Primary output is SuperTrend with no suffix."""
+        return None
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        SuperTrend format:
+        - SuperTrend: "SuperTrend_{period}_{multiplier}"
+        - ST_Direction: "ST_Direction_{period}_{multiplier}"
+
+        Args:
+            suffix: Optional suffix (None for SuperTrend, "Direction" for ST_Direction)
+
+        Returns:
+            Column name matching compute() output format
+        """
+        period = self.params.get("period", 10)
+        multiplier = self.params.get("multiplier", 3.0)
+        suffix_str = f"{period}_{multiplier}"
+
+        if suffix == "Direction":
+            return f"ST_Direction_{suffix_str}"
+        else:
+            # Default to SuperTrend (primary)
+            return f"SuperTrend_{suffix_str}"
 
     def __init__(self, period: int = 10, multiplier: float = 3.0):
         """
