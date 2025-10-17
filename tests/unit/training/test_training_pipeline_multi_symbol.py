@@ -386,6 +386,7 @@ class TestTrainStrategyHighLevel:
         """Test that cancellation_token is passed through to train_model()."""
         # Arrange
         mock_token = MagicMock()
+        mock_token.is_cancelled.return_value = False  # Not cancelled during preprocessing
         mock_storage = MagicMock()
 
         # Setup minimal mocks

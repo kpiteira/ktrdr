@@ -336,8 +336,24 @@ class TrainingProgressBridge:
 
         message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
 
-        # Simple percentage: pre-training is 0-5%
-        symbols_progress = (symbol_index - 1) / total_symbols
+        # Pre-training is 0-5% of total progress
+        # We have 5 steps per symbol: loading, indicators, fuzzy, features, labels
+        # Map step name to step number (0-4)
+        step_map = {
+            "loading_data": 0,
+            "computing_indicators": 1,
+            "generating_fuzzy": 2,
+            "creating_features": 3,
+            "generating_labels": 4,
+        }
+        step_number = step_map.get(step, 0)
+        steps_per_symbol = 5
+
+        # Calculate progress within pre-training phase (0-5%)
+        # Progress = (completed symbols + current step fraction) / total symbols * 5%
+        completed_symbols = symbol_index - 1
+        step_fraction = step_number / steps_per_symbol
+        symbols_progress = (completed_symbols + step_fraction) / total_symbols
         percentage = symbols_progress * 5.0
 
         payload_context = {

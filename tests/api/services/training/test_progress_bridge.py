@@ -230,7 +230,7 @@ class TestTrainingProgressBridge:
             progress_manager=manager,
         )
 
-        # Test processing first symbol
+        # Test processing first symbol - loading data (step 0/5)
         bridge.on_symbol_processing(
             symbol="AAPL",
             symbol_index=1,
@@ -245,10 +245,11 @@ class TestTrainingProgressBridge:
         assert first_state.context["symbol_index"] == 1
         assert first_state.context["total_symbols"] == 5
         assert first_state.context["preprocessing_step"] == "loading_data"
-        assert first_state.percentage == pytest.approx(0.0)  # First symbol, 0% of 5%
+        # First symbol (0 completed), step 0/5 -> (0 + 0/5) / 5 * 5% = 0%
+        assert first_state.percentage == pytest.approx(0.0)
         assert first_state.items_processed == 1
 
-        # Test processing second symbol with different step
+        # Test processing second symbol - computing indicators (step 1/5)
         bridge.on_symbol_processing(
             symbol="TSLA",
             symbol_index=2,
@@ -260,9 +261,10 @@ class TestTrainingProgressBridge:
         assert second_state.message == "Processing TSLA (2/5) - Computing Indicators"
         assert second_state.context["symbol"] == "TSLA"
         assert second_state.context["preprocessing_step"] == "computing_indicators"
-        assert second_state.percentage == pytest.approx(1.0)  # 1/5 * 5% = 1%
+        # Second symbol (1 completed), step 1/5 -> (1 + 1/5) / 5 * 5% = 1.2%
+        assert second_state.percentage == pytest.approx(1.2)
 
-        # Test processing last symbol
+        # Test processing last symbol - generating labels (step 4/5)
         bridge.on_symbol_processing(
             symbol="MSFT",
             symbol_index=5,
@@ -272,7 +274,8 @@ class TestTrainingProgressBridge:
 
         last_state = states[-1]
         assert last_state.message == "Processing MSFT (5/5) - Generating Labels"
-        assert last_state.percentage == pytest.approx(4.0)  # 4/5 * 5% = 4%
+        # Fifth symbol (4 completed), step 4/5 -> (4 + 4/5) / 5 * 5% = 4.8%
+        assert last_state.percentage == pytest.approx(4.8)
 
     def test_on_symbol_processing_with_additional_context(self):
         """Test symbol processing includes additional context."""

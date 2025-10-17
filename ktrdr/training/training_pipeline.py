@@ -793,6 +793,12 @@ class TrainingPipeline:
         for symbol_idx, symbol in enumerate(symbols, start=1):
             logger.info(f"📊 Processing symbol: {symbol}")
 
+            # Check cancellation before processing each symbol
+            if cancellation_token and cancellation_token.is_cancelled():
+                from ktrdr.async_infrastructure.cancellation import CancellationError
+
+                raise CancellationError("Training cancelled during preprocessing")
+
             # REPORT: Loading data
             if progress_callback:
                 progress_callback(
