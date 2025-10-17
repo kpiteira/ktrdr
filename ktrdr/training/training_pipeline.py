@@ -228,7 +228,12 @@ class TrainingPipeline:
 
     @staticmethod
     def calculate_indicators(
-        price_data: dict[str, pd.DataFrame], indicator_configs: list[dict[str, Any]]
+        price_data: dict[str, pd.DataFrame],
+        indicator_configs: list[dict[str, Any]],
+        progress_callback=None,
+        symbol: str | None = None,
+        symbol_index: int | None = None,
+        total_symbols: int | None = None,
     ) -> dict[str, pd.DataFrame]:
         """
         Calculate technical indicators (unified single/multi-timeframe approach).
@@ -242,6 +247,10 @@ class TrainingPipeline:
         Args:
             price_data: Dictionary mapping timeframes to OHLCV DataFrames
             indicator_configs: List of indicator configurations
+            progress_callback: Optional callback for progress reporting
+            symbol: Optional symbol being processed (for progress reporting)
+            symbol_index: Optional symbol index (for progress reporting)
+            total_symbols: Optional total symbols count (for progress reporting)
 
         Returns:
             Dictionary mapping timeframes to DataFrames with indicators
@@ -256,7 +265,13 @@ class TrainingPipeline:
 
         # Apply to all timeframes (single-timeframe is just a 1-item dict)
         # CRITICAL: Don't pass indicator_configs to prevent duplicate engine creation!
-        indicator_results = indicator_engine.apply_multi_timeframe(price_data)
+        indicator_results = indicator_engine.apply_multi_timeframe(
+            price_data,
+            progress_callback=progress_callback,
+            symbol=symbol,
+            symbol_index=symbol_index,
+            total_symbols=total_symbols,
+        )
 
         # Combine price data with indicator results per timeframe
         combined_results = {}
@@ -840,7 +855,12 @@ class TrainingPipeline:
 
             # Step 2: Calculate indicators
             indicators_data = TrainingPipeline.calculate_indicators(
-                price_data, strategy_config["indicators"]
+                price_data,
+                strategy_config["indicators"],
+                progress_callback=progress_callback,
+                symbol=symbol,
+                symbol_index=symbol_idx,
+                total_symbols=len(symbols),
             )
 
             # REPORT: Generating fuzzy sets
