@@ -856,21 +856,42 @@ class TrainingPipeline:
                 price_data, strategy_config["indicators"]
             )
 
-            # REPORT: Generating fuzzy sets
+            # Step 3: Generate fuzzy memberships
+            # REPORT: Per-fuzzy-set progress (Phase 3 granularity)
             if progress_callback:
-                progress_callback(
-                    0,
-                    0,
-                    {
-                        "progress_type": "preprocessing",
-                        "symbol": symbol,
-                        "symbol_index": symbol_idx,
-                        "total_symbols": len(symbols),
-                        "step": "generating_fuzzy",
-                    },
+                fuzzy_configs = strategy_config["fuzzy_sets"]
+                # Count total fuzzy sets across all indicators
+                total_fuzzy_sets = sum(
+                    len(fuzzy_config.get("sets", []))
+                    for fuzzy_config in fuzzy_configs.values()
                 )
 
-            # Step 3: Generate fuzzy memberships
+                # Report progress for each fuzzy set being computed
+                fuzzy_idx = 0
+                for indicator_name, fuzzy_config in fuzzy_configs.items():
+                    fuzzy_sets = fuzzy_config.get("sets", [])
+                    for fuzzy_set in fuzzy_sets:
+                        fuzzy_idx += 1
+                        fuzzy_set_name = fuzzy_set.get("name", "unknown")
+
+                        # Report for each timeframe (fuzzy sets are computed per timeframe)
+                        for timeframe in strategy_config.get("timeframes", ["unknown"]):
+                            progress_callback(
+                                0,
+                                0,
+                                {
+                                    "progress_type": "fuzzy_generation",
+                                    "symbol": symbol,
+                                    "symbol_index": symbol_idx,
+                                    "total_symbols": len(symbols),
+                                    "timeframe": timeframe,
+                                    "fuzzy_set_name": fuzzy_set_name,
+                                    "fuzzy_index": fuzzy_idx,
+                                    "total_fuzzy_sets": total_fuzzy_sets,
+                                },
+                            )
+
+            # Now actually compute all fuzzy memberships (unchanged computation logic)
             fuzzy_data = TrainingPipeline.generate_fuzzy_memberships(
                 indicators_data, strategy_config["fuzzy_sets"]
             )
