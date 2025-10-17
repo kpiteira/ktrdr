@@ -281,6 +281,35 @@ class HostTrainingOrchestrator:
                     },
                 )
 
+            elif progress_type == "fuzzy_generation":
+                # Per-fuzzy-set generation progress - update for granular visibility
+                symbol = metrics.get("symbol", "Unknown")
+                symbol_index = metrics.get("symbol_index", 1)
+                total_symbols = metrics.get("total_symbols", 1)
+                timeframe = metrics.get("timeframe", "unknown")
+                fuzzy_set_name = metrics.get("fuzzy_set_name", "unknown")
+                fuzzy_index = metrics.get("fuzzy_index", 1)
+                total_fuzzy_sets = metrics.get("total_fuzzy_sets", 1)
+
+                # Format message for session progress
+                message = (
+                    f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+                    f"Fuzzifying {fuzzy_set_name} ({fuzzy_index}/{total_fuzzy_sets})"
+                )
+
+                logger.info(
+                    f"Session {self._session.session_id}: {message}"
+                )
+
+                self._session.update_progress(
+                    epoch=0,  # Pre-training phase
+                    batch=symbol_index,
+                    metrics={
+                        **metrics,
+                        "message": message,
+                    },
+                )
+
             elif progress_type == "preprocessing":
                 # Symbol-level preprocessing progress - always update for visibility
                 symbol = metrics.get("symbol", "Unknown")
