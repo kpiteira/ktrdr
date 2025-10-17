@@ -347,8 +347,7 @@ class TestTrainingProgressBridge:
 
         first_state = states[-1]
         assert (
-            first_state.message
-            == "Processing AAPL (1/5) [1h] - Computing RSI (1/40)"
+            first_state.message == "Processing AAPL (1/5) [1h] - Computing RSI (1/40)"
         )
         assert first_state.context["phase"] == "preprocessing"
         assert first_state.context["preprocessing_step"] == "computing_indicator"
@@ -398,8 +397,7 @@ class TestTrainingProgressBridge:
 
         last_state = states[-1]
         assert (
-            last_state.message
-            == "Processing MSFT (5/5) [1d] - Computing EMA (40/40)"
+            last_state.message == "Processing MSFT (5/5) [1d] - Computing EMA (40/40)"
         )
         # Last symbol (4 completed), last indicator (40/40=1.0) -> (4 + 1.0) / 5 * 5% = 5.0%
         assert last_state.percentage == pytest.approx(5.0, abs=0.01)
@@ -419,13 +417,37 @@ class TestTrainingProgressBridge:
         # Test various progress points
         test_cases = [
             # (symbol_idx, total_symbols, indicator_idx, total_indicators, expected_percentage)
-            (1, 5, 1, 40, 0.025),  # First symbol, first indicator: (0 + 1/40) / 5 * 5% = 0.025%
-            (1, 5, 40, 40, 1.0),  # First symbol, last indicator: (0 + 1) / 5 * 5% = 1.0%
-            (3, 5, 20, 40, 2.5),  # Middle symbol, middle indicator: (2 + 20/40) / 5 * 5% = 2.5%
+            (
+                1,
+                5,
+                1,
+                40,
+                0.025,
+            ),  # First symbol, first indicator: (0 + 1/40) / 5 * 5% = 0.025%
+            (
+                1,
+                5,
+                40,
+                40,
+                1.0,
+            ),  # First symbol, last indicator: (0 + 1) / 5 * 5% = 1.0%
+            (
+                3,
+                5,
+                20,
+                40,
+                2.5,
+            ),  # Middle symbol, middle indicator: (2 + 20/40) / 5 * 5% = 2.5%
             (5, 5, 40, 40, 5.0),  # Last symbol, last indicator: (4 + 1) / 5 * 5% = 5.0%
         ]
 
-        for symbol_idx, total_symbols, ind_idx, total_indicators, expected_pct in test_cases:
+        for (
+            symbol_idx,
+            total_symbols,
+            ind_idx,
+            total_indicators,
+            expected_pct,
+        ) in test_cases:
             bridge.on_indicator_computation(
                 symbol=f"SYM{symbol_idx}",
                 symbol_index=symbol_idx,

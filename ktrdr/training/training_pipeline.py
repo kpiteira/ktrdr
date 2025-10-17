@@ -853,8 +853,7 @@ class TrainingPipeline:
                 # Count total fuzzy sets across all indicators
                 # Structure: {indicator_name: {fuzzy_set_name: {...}, ...}, ...}
                 total_fuzzy_sets = sum(
-                    len(fuzzy_sets_dict)
-                    for fuzzy_sets_dict in fuzzy_configs.values()
+                    len(fuzzy_sets_dict) for fuzzy_sets_dict in fuzzy_configs.values()
                 )
                 progress_callback(
                     0,
@@ -919,6 +918,19 @@ class TrainingPipeline:
 
         # Step 6: Combine multi-symbol data (or pass through for single symbol)
         logger.info(f"🔗 Combining data from {len(symbols)} symbol(s)")
+
+        # REPORT: Combining data
+        if progress_callback:
+            progress_callback(
+                0,
+                0,
+                {
+                    "progress_type": "preparation",
+                    "phase": "combining_data",
+                    "total_symbols": len(symbols),
+                },
+            )
+
         combined_features, combined_labels = TrainingPipeline.combine_multi_symbol_data(
             all_symbols_features, all_symbols_labels, symbols
         )
@@ -947,9 +959,34 @@ class TrainingPipeline:
             f"📊 Data splits - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}"
         )
 
+        # REPORT: Splitting data
+        if progress_callback:
+            progress_callback(
+                0,
+                0,
+                {
+                    "progress_type": "preparation",
+                    "phase": "splitting_data",
+                    "total_samples": total_samples,
+                },
+            )
+
         # Step 8: Create model (symbol-agnostic)
         input_dim = combined_features.shape[1]
         output_dim = 3  # Buy (0), Hold (1), Sell (2)
+
+        # REPORT: Creating model
+        if progress_callback:
+            progress_callback(
+                0,
+                0,
+                {
+                    "progress_type": "preparation",
+                    "phase": "creating_model",
+                    "input_dim": input_dim,
+                },
+            )
+
         model = TrainingPipeline.create_model(
             input_dim=input_dim,
             output_dim=output_dim,

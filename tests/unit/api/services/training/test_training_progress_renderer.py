@@ -507,8 +507,8 @@ class TestTrainingProgressRenderer:
 
         message = renderer.render_message(state)
 
-        # Should render the preprocessing message as-is
-        assert message == "Processing AAPL (2/5) - Computing Indicators"
+        # Should render the preprocessing message with emoji
+        assert message == "📈 Processing AAPL (2/5) - Computing Indicators"
 
         # Test another preprocessing step
         state2 = GenericProgressState(
@@ -527,4 +527,4 @@ class TestTrainingProgressRenderer:
         )
 
         message2 = renderer.render_message(state2)
-        assert message2 == "Processing AAPL (1/5) - Generating Fuzzy"
+        assert message2 == "🔀 Processing AAPL (1/5) - Generating Fuzzy"
