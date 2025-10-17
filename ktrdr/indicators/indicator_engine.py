@@ -329,10 +329,6 @@ class IndicatorEngine:
         self,
         multi_timeframe_ohlcv: dict[str, pd.DataFrame],
         indicator_configs: Optional[list[dict]] = None,
-        progress_callback=None,
-        symbol: str | None = None,
-        symbol_index: int | None = None,
-        total_symbols: int | None = None,
     ) -> dict[str, pd.DataFrame]:
         """
         Apply indicators across multiple timeframes using the same configuration.
@@ -346,10 +342,6 @@ class IndicatorEngine:
                                  Format: {timeframe: ohlcv_dataframe}
             indicator_configs: Optional list of indicator configurations. If None,
                              uses the indicators configured in this engine instance.
-            progress_callback: Optional callback for progress reporting
-            symbol: Optional symbol being processed (for progress reporting)
-            symbol_index: Optional symbol index (for progress reporting)
-            total_symbols: Optional total symbols count (for progress reporting)
 
         Returns:
             Dictionary mapping timeframes to DataFrames with computed indicators
@@ -417,42 +409,8 @@ class IndicatorEngine:
                     processing_errors[timeframe] = "Empty OHLCV data"
                     continue
 
-                # If progress callback provided, process indicators one by one and report progress
-                if progress_callback and symbol:
-                    # Initialize result dataframe
-                    timeframe_result = pd.DataFrame(index=ohlcv_data.index)
-
-                    # Process each indicator individually with progress reporting
-                    for ind_idx, indicator in enumerate(processing_engine.indicators, start=1):
-                        # Get indicator name for progress reporting
-                        indicator_name = getattr(indicator, 'name', indicator.__class__.__name__)
-
-                        # Report progress
-                        progress_callback(
-                            0,
-                            0,
-                            {
-                                "progress_type": "indicator_computation",
-                                "symbol": symbol,
-                                "symbol_index": symbol_index or 1,
-                                "total_symbols": total_symbols or 1,
-                                "timeframe": timeframe,
-                                "indicator_name": indicator_name,
-                                "indicator_index": ind_idx,
-                                "total_indicators": len(processing_engine.indicators),
-                            },
-                        )
-
-                        # Apply single indicator
-                        indicator_result = indicator.apply(ohlcv_data)
-
-                        # Merge into timeframe results
-                        for col in indicator_result.columns:
-                            if col not in timeframe_result.columns:
-                                timeframe_result[col] = indicator_result[col]
-                else:
-                    # No progress reporting - use existing batch apply() method
-                    timeframe_result = processing_engine.apply(ohlcv_data)
+                # Apply indicators using existing apply() method
+                timeframe_result = processing_engine.apply(ohlcv_data)
 
                 results[timeframe] = timeframe_result
 
