@@ -355,8 +355,9 @@ Epoch 1/100 · Batch 20/500
 **Rationale**:
 
 - Current computation flow (per-symbol, per-timeframe) is correct - don't change it
-- Just need to insert progress callbacks at the right points in existing loops
-- `IndicatorEngine` and `FuzzyEngine` already iterate internally - hook into those iterations
+- Progress callbacks happen in TrainingPipeline BEFORE calling engines
+- Iterate through indicator/fuzzy configs we already have in the pipeline
+- Engines stay pure computation - no progress knowledge
 - Minimal code changes, preserves existing architecture
 - No performance impact, no risk of breaking existing computation logic
 
@@ -394,8 +395,8 @@ Epoch 1/100 · Batch 20/500
 
 ┌────────────────────────────────────────────────────────────┐
 │ IndicatorEngine / FuzzyEngine                              │
-│  ADD: Progress callback parameter to existing methods      │
-│  ADD: Progress reporting within existing iteration loops   │
+│  NO CHANGES - Remain pure computation                      │
+│  Progress reporting happens in TrainingPipeline            │
 └────────────────────────────────────────────────────────────┘
 ```
 

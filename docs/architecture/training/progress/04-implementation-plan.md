@@ -458,10 +458,10 @@ ktrdr models train --strategy config/strategies/complex.yaml
 
 ### Acceptance Criteria
 
-- [ ] Bridge method `on_indicator_computation()` implemented
-- [ ] Orchestrators route `"indicator_computation"` type
-- [ ] IndicatorEngine reports per-indicator progress
-- [ ] CLI shows granular indicator progress with timeframe
+- [x] Bridge method `on_indicator_computation()` implemented
+- [x] Orchestrators route `"indicator_computation"` type
+- [x] TrainingPipeline reports per-indicator progress (IndicatorEngine unchanged)
+- [ ] CLI shows granular indicator progress with timeframe (needs E2E testing)
 - [ ] Integration test passes
 
 ---
@@ -496,7 +496,7 @@ Follow same pattern as Phase 2:
 
 - [ ] Bridge method `on_fuzzy_generation()` implemented
 - [ ] Orchestrators route `"fuzzy_generation"` type
-- [ ] FuzzyEngine reports per-fuzzy-set progress
+- [ ] TrainingPipeline reports per-fuzzy-set progress (FuzzyEngine unchanged)
 - [ ] CLI shows granular fuzzy progress with timeframe
 - [ ] Integration test passes
 

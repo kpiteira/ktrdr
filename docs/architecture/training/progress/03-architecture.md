@@ -618,7 +618,7 @@ This architecture provides comprehensive progress reporting by:
 2. **Instrumenting TrainingPipeline** with progress callbacks at ~15 checkpoints
 3. **Routing in both orchestrators** to handle new progress types
 4. **Enhancing renderer** to format preprocessing messages
-5. **Minimal changes** to IndicatorEngine/FuzzyEngine (just callback invocations)
+5. **ZERO changes** to IndicatorEngine/FuzzyEngine (they stay pure computation)
 
 **Key Benefits**:
 - Leverages existing infrastructure (no new systems)
