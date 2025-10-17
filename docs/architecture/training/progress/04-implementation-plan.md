@@ -626,17 +626,21 @@ ktrdr models train --strategy config/strategies/complex.yaml
 
 ## Phase 5: Enhanced Rendering & Polish
 
-**Goal**: Messages look great, timeframe info clear, all context formatted nicely
+**Goal**: Polish message formatting, add visual indicators, improve readability
 
 **Duration**: 0.5 day
+
+**Note**: Phase 2/3 were simplified to symbol-level progress (not per-indicator/fuzzy).
+This phase focuses on polishing what we actually have, not the original granular design.
 
 ### What Gets Built
 
 **Enhanced TrainingProgressRenderer**:
-1. Check `preprocessing_step` in context
-2. Format granular messages nicely
-3. Add timeframe visibility
-4. Polish message formatting
+
+1. Polish preprocessing message formatting
+2. Add visual indicators (emojis/symbols) for different phases
+3. Improve preparation phase message clarity
+4. Ensure consistent formatting across all phases
 
 ### Implementation Tasks
 
@@ -644,63 +648,45 @@ ktrdr models train --strategy config/strategies/complex.yaml
 
 **File**: `ktrdr/api/services/training/training_progress_renderer.py`
 
-**Update `render_message()`**:
+**Update `render_message()` to polish existing messages**:
 ```python
 def render_message(self, state: GenericProgressState) -> str:
-    """Render training-specific progress message."""
+    """Render training-specific progress message with polish."""
 
     phase = state.context.get("phase")
     preprocessing_step = state.context.get("preprocessing_step")
 
-    # Granular per-indicator progress
-    if preprocessing_step == "computing_indicator":
-        symbol = state.context.get("symbol", "")
-        symbol_index = state.context.get("symbol_index", 0)
-        total_symbols = state.context.get("total_symbols", 0)
-        timeframe = state.context.get("timeframe", "")
-        indicator_name = state.context.get("indicator_name", "")
-        indicator_index = state.context.get("indicator_index", 0)
-        total_indicators = state.context.get("total_indicators", 0)
+    # Preprocessing phase - add visual indicators
+    if phase == "preprocessing":
+        message = state.message  # Already formatted by bridge
 
-        return (
-            f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
-            f"Computing {indicator_name} ({indicator_index}/{total_indicators})"
-        )
+        # Add phase-specific emoji/icon for visual clarity
+        if preprocessing_step == "loading_data":
+            return f"📊 {message}"
+        elif preprocessing_step == "computing_indicators":
+            return f"📈 {message}"
+        elif preprocessing_step == "generating_fuzzy":
+            return f"🔀 {message}"
+        elif preprocessing_step == "creating_features":
+            return f"🔧 {message}"
+        elif preprocessing_step == "generating_labels":
+            return f"🏷️  {message}"
+        else:
+            return message
 
-    # Granular per-fuzzy-set progress
-    elif preprocessing_step == "generating_fuzzy":
-        symbol = state.context.get("symbol", "")
-        symbol_index = state.context.get("symbol_index", 0)
-        total_symbols = state.context.get("total_symbols", 0)
-        timeframe = state.context.get("timeframe", "")
-        fuzzy_set_name = state.context.get("fuzzy_set_name", "")
-        fuzzy_index = state.context.get("fuzzy_index", 0)
-        total_fuzzy_sets = state.context.get("total_fuzzy_sets", 0)
-
-        return (
-            f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
-            f"Fuzzifying {fuzzy_set_name} ({fuzzy_index}/{total_fuzzy_sets})"
-        )
-
-    # General preprocessing (loading data, creating features, etc.)
-    elif phase == "preprocessing":
-        # Use message from bridge (already formatted)
-        return state.message
-
-    # Preparation phase
+    # Preparation phase - add visual indicator
     elif phase == "preparation":
-        return state.message  # Already formatted in bridge
+        return f"⚙️  {state.message}"
 
-    # Training phase - EXISTING LOGIC
+    # Training phase - EXISTING LOGIC (unchanged)
     else:
-        # Existing epoch/batch rendering (UNCHANGED)
         epoch_index = state.context.get("epoch_index", 0)
         total_epochs = state.context.get("total_epochs", 0)
         batch_number = state.context.get("batch_number")
         batch_total = state.context.get("batch_total_per_epoch")
 
         if epoch_index > 0 and total_epochs > 0:
-            message = f"Epoch {epoch_index}/{total_epochs}"
+            message = f"🎯 Epoch {epoch_index}/{total_epochs}"
 
             if batch_number is not None and batch_total is not None:
                 message += f" · Batch {batch_number}/{batch_total}"
@@ -710,12 +696,19 @@ def render_message(self, state: GenericProgressState) -> str:
             if isinstance(resource_usage, dict) and resource_usage.get("gpu_used"):
                 gpu_util = resource_usage.get("gpu_utilization_percent")
                 if gpu_util is not None:
-                    message += f" 🖥️ GPU: {gpu_util:.0f}%"
+                    message += f" · GPU {gpu_util:.0f}%"
 
             return message
         else:
             return state.message
 ```
+
+**Key Changes from Original Design**:
+
+- ❌ Removed per-indicator/fuzzy-set rendering (not implemented in Phase 2/3)
+- ✅ Added emoji/icons for visual phase distinction
+- ✅ Polished existing symbol-level messages
+- ✅ Kept training phase rendering clean and informative
 
 ### Testing Phase 5
 
