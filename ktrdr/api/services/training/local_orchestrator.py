@@ -210,6 +210,17 @@ class LocalTrainingOrchestrator:
                     indicator_index=metrics.get("indicator_index", 1),
                     total_indicators=metrics.get("total_indicators", 1),
                 )
+            elif progress_type == "fuzzy_generation":
+                # Per-fuzzy-set generation progress
+                self._bridge.on_fuzzy_generation(
+                    symbol=metrics.get("symbol", "Unknown"),
+                    symbol_index=metrics.get("symbol_index", 1),
+                    total_symbols=metrics.get("total_symbols", 1),
+                    timeframe=metrics.get("timeframe", "unknown"),
+                    fuzzy_set_name=metrics.get("fuzzy_set_name", "unknown"),
+                    fuzzy_index=metrics.get("fuzzy_index", 1),
+                    total_fuzzy_sets=metrics.get("total_fuzzy_sets", 1),
+                )
             elif progress_type == "preprocessing":
                 # Symbol-level preprocessing progress
                 symbol = metrics.get("symbol", "Unknown")
