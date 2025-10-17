@@ -832,7 +832,7 @@ class TrainingPipeline:
 
                 # Report progress for each indicator being computed
                 for ind_idx, indicator_config in enumerate(indicator_configs, start=1):
-                    indicator_name = indicator_config.get("indicator", "unknown")
+                    indicator_name = indicator_config.get("name", "unknown")
 
                     # Report for each timeframe (indicators are computed per timeframe)
                     for timeframe in strategy_config.get("timeframes", ["unknown"]):
