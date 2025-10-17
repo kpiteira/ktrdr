@@ -334,7 +334,17 @@ class TrainingProgressBridge:
         """Report per-symbol preprocessing steps."""
         self._check_cancelled()
 
-        message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
+        # Build message with optional counts
+        base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
+
+        # Add total counts to message if available in context
+        if context:
+            if step == "computing_indicators" and "total_indicators" in context:
+                base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Indicators ({context['total_indicators']})"
+            elif step == "generating_fuzzy" and "total_fuzzy_sets" in context:
+                base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Fuzzy Memberships ({context['total_fuzzy_sets']})"
+
+        message = base_message
 
         # Pre-training is 0-5% of total progress
         # We have 5 steps per symbol: loading, indicators, fuzzy, features, labels

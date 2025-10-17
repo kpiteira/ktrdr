@@ -231,6 +231,10 @@ class LocalTrainingOrchestrator:
                 context = {}
                 if "timeframes" in metrics:
                     context["timeframes"] = metrics["timeframes"]
+                if "total_indicators" in metrics:
+                    context["total_indicators"] = metrics["total_indicators"]
+                if "total_fuzzy_sets" in metrics:
+                    context["total_fuzzy_sets"] = metrics["total_fuzzy_sets"]
 
                 self._bridge.on_symbol_processing(
                     symbol=symbol,

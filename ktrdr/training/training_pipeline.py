@@ -825,73 +825,51 @@ class TrainingPipeline:
             )
 
             # Step 2: Calculate indicators
-            # REPORT: Per-indicator progress (Phase 2 granularity)
+            # REPORT: Computing indicators with total count
             if progress_callback:
-                indicator_configs = strategy_config["indicators"]
-                total_indicators = len(indicator_configs)
+                total_indicators = len(strategy_config["indicators"])
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "computing_indicators",
+                        "total_indicators": total_indicators,
+                    },
+                )
 
-                # Report progress for each indicator being computed
-                for ind_idx, indicator_config in enumerate(indicator_configs, start=1):
-                    indicator_name = indicator_config.get("name", "unknown")
-
-                    # Report for each timeframe (indicators are computed per timeframe)
-                    for timeframe in strategy_config.get("timeframes", ["unknown"]):
-                        progress_callback(
-                            0,
-                            0,
-                            {
-                                "progress_type": "indicator_computation",
-                                "symbol": symbol,
-                                "symbol_index": symbol_idx,
-                                "total_symbols": len(symbols),
-                                "timeframe": timeframe,
-                                "indicator_name": indicator_name,
-                                "indicator_index": ind_idx,
-                                "total_indicators": total_indicators,
-                            },
-                        )
-
-            # Now actually compute all indicators (unchanged computation logic)
+            # Compute all indicators (engine handles all timeframes and indicators in one call)
             indicators_data = TrainingPipeline.calculate_indicators(
                 price_data, strategy_config["indicators"]
             )
 
             # Step 3: Generate fuzzy memberships
-            # REPORT: Per-fuzzy-set progress (Phase 3 granularity)
+            # REPORT: Computing fuzzy memberships with total count
             if progress_callback:
                 fuzzy_configs = strategy_config["fuzzy_sets"]
                 # Count total fuzzy sets across all indicators
+                # Structure: {indicator_name: {fuzzy_set_name: {...}, ...}, ...}
                 total_fuzzy_sets = sum(
-                    len(fuzzy_config.get("sets", []))
-                    for fuzzy_config in fuzzy_configs.values()
+                    len(fuzzy_sets_dict)
+                    for fuzzy_sets_dict in fuzzy_configs.values()
+                )
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "generating_fuzzy",
+                        "total_fuzzy_sets": total_fuzzy_sets,
+                    },
                 )
 
-                # Report progress for each fuzzy set being computed
-                fuzzy_idx = 0
-                for indicator_name, fuzzy_config in fuzzy_configs.items():
-                    fuzzy_sets = fuzzy_config.get("sets", [])
-                    for fuzzy_set in fuzzy_sets:
-                        fuzzy_idx += 1
-                        fuzzy_set_name = fuzzy_set.get("name", "unknown")
-
-                        # Report for each timeframe (fuzzy sets are computed per timeframe)
-                        for timeframe in strategy_config.get("timeframes", ["unknown"]):
-                            progress_callback(
-                                0,
-                                0,
-                                {
-                                    "progress_type": "fuzzy_generation",
-                                    "symbol": symbol,
-                                    "symbol_index": symbol_idx,
-                                    "total_symbols": len(symbols),
-                                    "timeframe": timeframe,
-                                    "fuzzy_set_name": fuzzy_set_name,
-                                    "fuzzy_index": fuzzy_idx,
-                                    "total_fuzzy_sets": total_fuzzy_sets,
-                                },
-                            )
-
-            # Now actually compute all fuzzy memberships (unchanged computation logic)
+            # Compute all fuzzy memberships (engine handles all timeframes and fuzzy sets in one call)
             fuzzy_data = TrainingPipeline.generate_fuzzy_memberships(
                 indicators_data, strategy_config["fuzzy_sets"]
             )

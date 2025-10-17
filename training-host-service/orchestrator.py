@@ -317,8 +317,16 @@ class HostTrainingOrchestrator:
                 total_symbols = metrics.get("total_symbols", 1)
                 step = metrics.get("step", "processing")
 
-                # Format message for session progress
-                message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
+                # Format message for session progress with optional counts
+                base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
+
+                # Add total counts to message if available
+                if step == "computing_indicators" and "total_indicators" in metrics:
+                    message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Indicators ({metrics['total_indicators']})"
+                elif step == "generating_fuzzy" and "total_fuzzy_sets" in metrics:
+                    message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Fuzzy Memberships ({metrics['total_fuzzy_sets']})"
+                else:
+                    message = base_message
 
                 logger.info(
                     f"Session {self._session.session_id}: {message}"
