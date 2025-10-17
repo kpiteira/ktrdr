@@ -41,9 +41,10 @@ class TrainingProgressRenderer(ProgressRenderer):
 
         This method extracts structured data from state.context and formats it into
         a rich progress message like:
-        - "Epoch 5/10"
-        - "Epoch 5/10 · Batch 120/500"
-        - "Epoch 5/10 · Batch 120/500 🖥️ GPU: 85%"
+        - "Processing AAPL (1/5) - Loading Data" (preprocessing)
+        - "Epoch 5/10" (training)
+        - "Epoch 5/10 · Batch 120/500" (training with batch)
+        - "Epoch 5/10 · Batch 120/500 🖥️ GPU: 85%" (training with GPU)
 
         Args:
             state: Current progress state with training context
@@ -51,7 +52,13 @@ class TrainingProgressRenderer(ProgressRenderer):
         Returns:
             Formatted message string with training details
         """
-        # Extract training context
+        # Check if this is a preprocessing phase message
+        phase = state.context.get("phase", "")
+        if phase == "preprocessing":
+            # During preprocessing, use the message as-is (it's already formatted)
+            return state.message
+
+        # Extract training context for epoch/batch rendering
         epoch_index = state.context.get("epoch_index", 0)
         total_epochs = state.context.get("total_epochs", 0)
         batch_number = state.context.get("batch_number")

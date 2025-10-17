@@ -118,28 +118,35 @@ class TrainingSession:
             pass
 
         # Build message for display (legacy field)
-        message_parts = []
-        epoch_val = self._last_progress_data.get("epoch")
-        total_epochs_val = self._last_progress_data.get("total_epochs")
-        batch_val = self._last_progress_data.get("batch")
-        total_batches_per_epoch_val = self._last_progress_data.get(
-            "total_batches_per_epoch"
-        )
-
-        if epoch_val and total_epochs_val:
-            message_parts.append(f"Epoch {epoch_val}/{total_epochs_val}")
-        elif epoch_val:
-            message_parts.append(f"Epoch {epoch_val}")
-
-        if batch_val and total_batches_per_epoch_val:
-            message_parts.append(f"Batch {batch_val}/{total_batches_per_epoch_val}")
-
-        if message_parts:
-            self.message = " · ".join(message_parts)
-            self.current_item = message_parts[-1]
+        # Check if orchestrator provided a custom message (e.g., preprocessing)
+        custom_message = metrics.get("message")
+        if custom_message:
+            self.message = custom_message
+            self.current_item = custom_message
         else:
-            self.message = "Training in progress"
-            self.current_item = self.message
+            # Build message from epoch/batch data
+            message_parts = []
+            epoch_val = self._last_progress_data.get("epoch")
+            total_epochs_val = self._last_progress_data.get("total_epochs")
+            batch_val = self._last_progress_data.get("batch")
+            total_batches_per_epoch_val = self._last_progress_data.get(
+                "total_batches_per_epoch"
+            )
+
+            if epoch_val and total_epochs_val:
+                message_parts.append(f"Epoch {epoch_val}/{total_epochs_val}")
+            elif epoch_val:
+                message_parts.append(f"Epoch {epoch_val}")
+
+            if batch_val and total_batches_per_epoch_val:
+                message_parts.append(f"Batch {batch_val}/{total_batches_per_epoch_val}")
+
+            if message_parts:
+                self.message = " · ".join(message_parts)
+                self.current_item = message_parts[-1]
+            else:
+                self.message = "Training in progress"
+                self.current_item = self.message
 
         # Update metrics tracking
         for key, value in metrics.items():
