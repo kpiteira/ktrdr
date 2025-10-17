@@ -252,7 +252,36 @@ class HostTrainingOrchestrator:
             """
             progress_type = metrics.get("progress_type")
 
-            if progress_type == "preprocessing":
+            if progress_type == "indicator_computation":
+                # Per-indicator computation progress - update for granular visibility
+                symbol = metrics.get("symbol", "Unknown")
+                symbol_index = metrics.get("symbol_index", 1)
+                total_symbols = metrics.get("total_symbols", 1)
+                timeframe = metrics.get("timeframe", "unknown")
+                indicator_name = metrics.get("indicator_name", "unknown")
+                indicator_index = metrics.get("indicator_index", 1)
+                total_indicators = metrics.get("total_indicators", 1)
+
+                # Format message for session progress
+                message = (
+                    f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+                    f"Computing {indicator_name} ({indicator_index}/{total_indicators})"
+                )
+
+                logger.info(
+                    f"Session {self._session.session_id}: {message}"
+                )
+
+                self._session.update_progress(
+                    epoch=0,  # Pre-training phase
+                    batch=symbol_index,
+                    metrics={
+                        **metrics,
+                        "message": message,
+                    },
+                )
+
+            elif progress_type == "preprocessing":
                 # Symbol-level preprocessing progress - always update for visibility
                 symbol = metrics.get("symbol", "Unknown")
                 symbol_index = metrics.get("symbol_index", 1)

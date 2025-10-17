@@ -199,7 +199,18 @@ class LocalTrainingOrchestrator:
             metrics = metrics or {}
             progress_type = metrics.get("progress_type")
 
-            if progress_type == "preprocessing":
+            if progress_type == "indicator_computation":
+                # Per-indicator computation progress
+                self._bridge.on_indicator_computation(
+                    symbol=metrics.get("symbol", "Unknown"),
+                    symbol_index=metrics.get("symbol_index", 1),
+                    total_symbols=metrics.get("total_symbols", 1),
+                    timeframe=metrics.get("timeframe", "unknown"),
+                    indicator_name=metrics.get("indicator_name", "unknown"),
+                    indicator_index=metrics.get("indicator_index", 1),
+                    total_indicators=metrics.get("total_indicators", 1),
+                )
+            elif progress_type == "preprocessing":
                 # Symbol-level preprocessing progress
                 symbol = metrics.get("symbol", "Unknown")
                 symbol_index = metrics.get("symbol_index", 1)
