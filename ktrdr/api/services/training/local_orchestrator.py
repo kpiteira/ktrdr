@@ -199,7 +199,25 @@ class LocalTrainingOrchestrator:
             metrics = metrics or {}
             progress_type = metrics.get("progress_type")
 
-            if progress_type == "batch":
+            if progress_type == "preprocessing":
+                # Symbol-level preprocessing progress
+                symbol = metrics.get("symbol", "Unknown")
+                symbol_index = metrics.get("symbol_index", 1)
+                total_symbols = metrics.get("total_symbols", 1)
+                step = metrics.get("step", "processing")
+
+                context = {}
+                if "timeframes" in metrics:
+                    context["timeframes"] = metrics["timeframes"]
+
+                self._bridge.on_symbol_processing(
+                    symbol=symbol,
+                    symbol_index=symbol_index,
+                    total_symbols=total_symbols,
+                    step=step,
+                    context=context,
+                )
+            elif progress_type == "batch":
                 # Batch-level progress
                 self._bridge.on_batch(
                     epoch=epoch,

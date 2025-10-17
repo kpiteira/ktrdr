@@ -790,8 +790,22 @@ class TrainingPipeline:
         all_symbols_labels = {}
         all_symbols_feature_names = {}
 
-        for symbol in symbols:
+        for symbol_idx, symbol in enumerate(symbols, start=1):
             logger.info(f"📊 Processing symbol: {symbol}")
+
+            # REPORT: Loading data
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "loading_data",
+                    },
+                )
 
             # Step 1: Load market data
             price_data = TrainingPipeline.load_market_data(
@@ -804,20 +818,76 @@ class TrainingPipeline:
                 multi_timeframe_coordinator=multi_timeframe_coordinator,
             )
 
+            # REPORT: Computing indicators
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "computing_indicators",
+                    },
+                )
+
             # Step 2: Calculate indicators
             indicators_data = TrainingPipeline.calculate_indicators(
                 price_data, strategy_config["indicators"]
             )
+
+            # REPORT: Generating fuzzy sets
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "generating_fuzzy",
+                    },
+                )
 
             # Step 3: Generate fuzzy memberships
             fuzzy_data = TrainingPipeline.generate_fuzzy_memberships(
                 indicators_data, strategy_config["fuzzy_sets"]
             )
 
+            # REPORT: Creating features
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "creating_features",
+                    },
+                )
+
             # Step 4: Engineer features
             features, feature_names = TrainingPipeline.create_features(
                 fuzzy_data, strategy_config.get("model", {}).get("features", {})
             )
+
+            # REPORT: Generating labels
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "generating_labels",
+                    },
+                )
 
             # Step 5: Generate labels
             labels = TrainingPipeline.create_labels(

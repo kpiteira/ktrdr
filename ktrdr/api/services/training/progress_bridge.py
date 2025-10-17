@@ -323,6 +323,42 @@ class TrainingProgressBridge:
             context=context_payload,
         )
 
+    def on_symbol_processing(
+        self,
+        symbol: str,
+        symbol_index: int,
+        total_symbols: int,
+        step: str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """Report per-symbol preprocessing steps."""
+        self._check_cancelled()
+
+        message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
+
+        # Simple percentage: pre-training is 0-5%
+        symbols_progress = (symbol_index - 1) / total_symbols
+        percentage = symbols_progress * 5.0
+
+        payload_context = {
+            "phase": "preprocessing",
+            "symbol": symbol,
+            "symbol_index": symbol_index,
+            "total_symbols": total_symbols,
+            "preprocessing_step": step,
+        }
+        if context:
+            payload_context.update(context)
+
+        self._emit(
+            current_step=0,
+            percentage=percentage,
+            message=message,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            context=payload_context,
+        )
+
     def on_complete(self, message: str = "Training complete") -> None:
         """Mark progress as complete with a terminal update."""
         self._check_cancelled()

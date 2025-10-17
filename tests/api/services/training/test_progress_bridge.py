@@ -217,3 +217,104 @@ class TestTrainingProgressBridge:
         assert last_state.context.get("phase_name") == "cancelled"
         assert last_state.context.get("host_session_id") == "sess-555"
         assert last_state.message == "Cancelled by user"
+
+    def test_on_symbol_processing_emits_preprocessing_progress(self):
+        """Test symbol-level preprocessing progress reporting."""
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        # Test processing first symbol
+        bridge.on_symbol_processing(
+            symbol="AAPL",
+            symbol_index=1,
+            total_symbols=5,
+            step="loading_data",
+        )
+
+        first_state = states[-1]
+        assert first_state.message == "Processing AAPL (1/5) - Loading Data"
+        assert first_state.context["phase"] == "preprocessing"
+        assert first_state.context["symbol"] == "AAPL"
+        assert first_state.context["symbol_index"] == 1
+        assert first_state.context["total_symbols"] == 5
+        assert first_state.context["preprocessing_step"] == "loading_data"
+        assert first_state.percentage == pytest.approx(0.0)  # First symbol, 0% of 5%
+        assert first_state.items_processed == 1
+
+        # Test processing second symbol with different step
+        bridge.on_symbol_processing(
+            symbol="TSLA",
+            symbol_index=2,
+            total_symbols=5,
+            step="computing_indicators",
+        )
+
+        second_state = states[-1]
+        assert second_state.message == "Processing TSLA (2/5) - Computing Indicators"
+        assert second_state.context["symbol"] == "TSLA"
+        assert second_state.context["preprocessing_step"] == "computing_indicators"
+        assert second_state.percentage == pytest.approx(1.0)  # 1/5 * 5% = 1%
+
+        # Test processing last symbol
+        bridge.on_symbol_processing(
+            symbol="MSFT",
+            symbol_index=5,
+            total_symbols=5,
+            step="generating_labels",
+        )
+
+        last_state = states[-1]
+        assert last_state.message == "Processing MSFT (5/5) - Generating Labels"
+        assert last_state.percentage == pytest.approx(4.0)  # 4/5 * 5% = 4%
+
+    def test_on_symbol_processing_with_additional_context(self):
+        """Test symbol processing includes additional context."""
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        bridge.on_symbol_processing(
+            symbol="AAPL",
+            symbol_index=1,
+            total_symbols=3,
+            step="loading_data",
+            context={"timeframes": ["1h", "4h", "1d"]},
+        )
+
+        state = states[-1]
+        assert state.context["timeframes"] == ["1h", "4h", "1d"]
+        assert state.context["preprocessing_step"] == "loading_data"
+
+    def test_on_symbol_processing_cancellation_check(self):
+        """Test symbol processing respects cancellation token."""
+        token = _DummyToken(cancelled=True)
+        manager = GenericProgressManager(callback=lambda _: None)
+        manager.start_operation("training", total_steps=2)
+
+        context = _make_context(total_epochs=2, total_batches=20)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+            cancellation_token=token,
+        )
+
+        with pytest.raises(CancellationError):
+            bridge.on_symbol_processing(
+                symbol="AAPL",
+                symbol_index=1,
+                total_symbols=5,
+                step="loading_data",
+            )
