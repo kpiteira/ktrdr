@@ -363,85 +363,54 @@ if progress_type == "indicator_computation":
     )
 ```
 
-#### 2.3: Pass Callback to `calculate_indicators()`
+#### 2.3: Report Progress in TrainingPipeline (BEFORE indicator computation)
 
 **File**: `ktrdr/training/training_pipeline.py`
 
-**Update signature**:
+**CRITICAL**: Do NOT modify `calculate_indicators()` signature or IndicatorEngine!
+
+**Add progress reporting BEFORE the existing `calculate_indicators()` call**:
+
 ```python
-@staticmethod
-def calculate_indicators(
-    price_data: dict[str, pd.DataFrame],
-    indicator_configs: list[dict[str, Any]],
-    progress_callback=None,  # NEW
-    symbol: str | None = None,  # NEW
-    symbol_index: int | None = None,  # NEW
-    total_symbols: int | None = None,  # NEW
-) -> dict[str, pd.DataFrame]:
-```
+# Step 2: Calculate indicators
+# REPORT: Per-indicator progress (Phase 2 granularity)
+if progress_callback:
+    indicator_configs = strategy_config["indicators"]
+    total_indicators = len(indicator_configs)
 
-**Update call in `train_strategy()`**:
-```python
-indicators_data = TrainingPipeline.calculate_indicators(
-    price_data,
-    strategy_config["indicators"],
-    progress_callback=progress_callback,  # NEW
-    symbol=symbol,
-    symbol_index=symbol_idx,
-    total_symbols=len(symbols),
-)
-```
+    # Report progress for each indicator being computed
+    for ind_idx, indicator_config in enumerate(indicator_configs, start=1):
+        indicator_name = indicator_config.get("indicator", "unknown")
 
-#### 2.4: Report Progress in IndicatorEngine
-
-**File**: `ktrdr/indicators/indicator_engine.py`
-
-**Update `apply_multi_timeframe()`**:
-```python
-def apply_multi_timeframe(
-    self,
-    price_data: dict[str, pd.DataFrame],
-    progress_callback=None,  # NEW
-    symbol: str | None = None,  # NEW
-    symbol_index: int | None = None,  # NEW
-    total_symbols: int | None = None,  # NEW
-) -> dict[str, pd.DataFrame]:
-    """Apply indicators to multiple timeframes with progress reporting."""
-
-    results = {}
-
-    for timeframe, tf_price_data in price_data.items():
-        # Compute each indicator with progress
-        tf_results = pd.DataFrame(index=tf_price_data.index)
-
-        for ind_idx, indicator_config in enumerate(self.indicators, start=1):
-            indicator_name = indicator_config.get("indicator", "unknown")
-
-            # REPORT progress
-            if progress_callback and symbol:
-                progress_callback(0, 0, {
+        # Report for each timeframe (indicators are computed per timeframe)
+        for timeframe in strategy_config.get("timeframes", ["unknown"]):
+            progress_callback(
+                0,
+                0,
+                {
                     "progress_type": "indicator_computation",
                     "symbol": symbol,
-                    "symbol_index": symbol_index or 1,
-                    "total_symbols": total_symbols or 1,
+                    "symbol_index": symbol_idx,
+                    "total_symbols": len(symbols),
                     "timeframe": timeframe,
                     "indicator_name": indicator_name,
                     "indicator_index": ind_idx,
-                    "total_indicators": len(self.indicators),
-                })
+                    "total_indicators": total_indicators,
+                },
+            )
 
-            # Compute indicator (existing logic)
-            indicator_result = self._compute_single_indicator(tf_price_data, indicator_config)
-
-            # Merge results
-            for col in indicator_result.columns:
-                if col not in tf_results.columns:
-                    tf_results[col] = indicator_result[col]
-
-        results[timeframe] = tf_results
-
-    return results
+# Now actually compute all indicators (unchanged computation logic)
+indicators_data = TrainingPipeline.calculate_indicators(
+    price_data, strategy_config["indicators"]
+)
 ```
+
+**Key Points**:
+- Progress reporting happens BEFORE computation
+- We iterate through the indicator configs we have available
+- Report for each indicator × timeframe combination
+- Then call the existing `calculate_indicators()` unchanged
+- IndicatorEngine knows NOTHING about progress - stays pure computation
 
 ### Testing Phase 2
 
@@ -508,20 +477,20 @@ ktrdr models train --strategy config/strategies/complex.yaml
 **End-to-end flow for fuzzy-level progress** (same pattern as Phase 2):
 1. TrainingProgressBridge gets `on_fuzzy_generation()` method
 2. Both orchestrators route `"fuzzy_generation"` type
-3. TrainingPipeline passes callback to `generate_fuzzy_memberships()`
-4. FuzzyEngine reports per-fuzzy-set progress
+3. TrainingPipeline reports progress BEFORE calling `generate_fuzzy_memberships()`
+4. FuzzyEngine remains UNCHANGED (pure computation)
 5. User sees granular fuzzy progress in CLI
 
 ### Implementation Tasks
 
 Follow same pattern as Phase 2:
-1. Add `on_fuzzy_generation()` to bridge
-2. Route in both orchestrators
-3. Update `generate_fuzzy_memberships()` signature
-4. Report progress in FuzzyEngine loop
+1. Add `on_fuzzy_generation()` to bridge (same as Phase 2 indicator method)
+2. Route in both orchestrators (same routing pattern)
+3. **Add progress loop BEFORE `generate_fuzzy_memberships()` call** in TrainingPipeline
+4. **DO NOT modify FuzzyEngine** - it stays pure computation
 5. Test end-to-end
 
-**Details omitted** - exactly mirrors Phase 2 structure.
+**Key Point**: Progress reporting happens in TrainingPipeline by iterating through fuzzy_set configs BEFORE calling FuzzyEngine, exactly like Phase 2 with indicators.
 
 ### Acceptance Criteria
 

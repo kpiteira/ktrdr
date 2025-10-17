@@ -98,6 +98,22 @@ TrainingPipeline.train_strategy(progress_callback)
 - ServiceOrchestrator patterns
 - Cancellation token support
 
+### ⚠️ CRITICAL DESIGN PRINCIPLE
+
+**Progress Reporting ≠ Computation**
+
+Progress reporting happens **OUTSIDE** the computation engines:
+- ✅ TrainingPipeline reports progress BEFORE calling engines
+- ✅ Engines (IndicatorEngine, FuzzyEngine) remain pure computation
+- ❌ Do NOT add progress callbacks to engine signatures
+- ❌ Do NOT modify engine internals for progress
+
+**Why**:
+- Separation of concerns (orchestration vs computation)
+- Engines stay reusable without progress dependencies
+- Simpler implementation - iterate configs in pipeline, not engine internals
+- Testability - engines remain pure functions
+
 ### Complete Progress Flow (After Implementation)
 
 ```
@@ -381,7 +397,7 @@ TrainingPipeline.train_strategy()
 - For pre-training: pass `0, 0` for epoch/total_epochs, put data in metrics dict
 - For training: existing behavior continues unchanged
 
-### 4. IndicatorEngine and FuzzyEngine (Instrumented)
+### 4. IndicatorEngine and FuzzyEngine (UNCHANGED)
 
 **Locations**:
 - `ktrdr/indicators/indicator_engine.py`
@@ -391,36 +407,20 @@ TrainingPipeline.train_strategy()
 - Batch-compute all indicators/fuzzy sets
 - No progress reporting
 
-**Changes Required**:
+**Changes Required**: **NONE**
 
-```
-IndicatorEngine
-│
-└─ apply_multi_timeframe(price_data, progress_callback=None)
-    │
-    └─ For each timeframe:
-        └─ For each indicator:
-            ├─ Call progress_callback if provided
-            └─ Compute indicator
-```
+**Critical Design Decision**:
+- IndicatorEngine and FuzzyEngine remain PURE COMPUTATION
+- They know NOTHING about progress reporting
+- Progress reporting happens in TrainingPipeline BEFORE calling these engines
+- This keeps concerns separated: engines compute, pipeline orchestrates and reports
 
-```
-FuzzyEngine
-│
-└─ generate_multi_timeframe_memberships(indicators, fuzzy_configs,
-                                        progress_callback=None)
-    │
-    └─ For each timeframe:
-        └─ For each fuzzy_set:
-            ├─ Call progress_callback if provided
-            └─ Generate memberships
-```
-
-**Implementation Strategy**:
-- Add optional `progress_callback` parameter
-- No refactoring of computation logic (stays per-symbol, per-timeframe)
-- Just add callback invocations within existing loops
-- Engines don't need to know about TrainingProgressBridge - just invoke callback with context
+**Why this is better**:
+- No changes to indicator/fuzzy computation logic
+- No new parameters to thread through
+- Engines remain testable in isolation
+- Progress reporting is TrainingPipeline's responsibility (where it belongs)
+- If engines are used elsewhere (non-training), they don't drag progress dependencies
 
 ### 5. TrainingProgressRenderer (Enhanced)
 

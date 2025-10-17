@@ -824,21 +824,34 @@ class TrainingPipeline:
                 multi_timeframe_coordinator=multi_timeframe_coordinator,
             )
 
-            # REPORT: Computing indicators
-            if progress_callback:
-                progress_callback(
-                    0,
-                    0,
-                    {
-                        "progress_type": "preprocessing",
-                        "symbol": symbol,
-                        "symbol_index": symbol_idx,
-                        "total_symbols": len(symbols),
-                        "step": "computing_indicators",
-                    },
-                )
-
             # Step 2: Calculate indicators
+            # REPORT: Per-indicator progress (Phase 2 granularity)
+            if progress_callback:
+                indicator_configs = strategy_config["indicators"]
+                total_indicators = len(indicator_configs)
+
+                # Report progress for each indicator being computed
+                for ind_idx, indicator_config in enumerate(indicator_configs, start=1):
+                    indicator_name = indicator_config.get("indicator", "unknown")
+
+                    # Report for each timeframe (indicators are computed per timeframe)
+                    for timeframe in strategy_config.get("timeframes", ["unknown"]):
+                        progress_callback(
+                            0,
+                            0,
+                            {
+                                "progress_type": "indicator_computation",
+                                "symbol": symbol,
+                                "symbol_index": symbol_idx,
+                                "total_symbols": len(symbols),
+                                "timeframe": timeframe,
+                                "indicator_name": indicator_name,
+                                "indicator_index": ind_idx,
+                                "total_indicators": total_indicators,
+                            },
+                        )
+
+            # Now actually compute all indicators (unchanged computation logic)
             indicators_data = TrainingPipeline.calculate_indicators(
                 price_data, strategy_config["indicators"]
             )
