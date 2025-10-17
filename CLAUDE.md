@@ -388,6 +388,7 @@ ktrdr ib check-status
 - **Make frequent, focused commits** - Each commit should represent one logical change
 - **Always run tests before committing** - Use `make test-unit` to catch regressions
 - **Always run linting before committing** - Use `make quality` for all quality checks
+- **Use merge commits for PRs, NOT squash** - Preserves commit history for debugging
 
 ### Testing Discipline  
 
