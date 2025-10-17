@@ -22,15 +22,17 @@ class TestIndicatorFactory:
         """Test initialization with different config types."""
         # Test with IndicatorsConfig
         config = IndicatorsConfig(
-            indicators=[IndicatorConfig(type="RSI", params={"period": 14})]
+            indicators=[
+                IndicatorConfig(name="RSI", feature_id="rsi_14", params={"period": 14})
+            ]
         )
         factory = IndicatorFactory(config)
         assert len(factory.indicators_config.indicators) == 1
 
         # Test with list of IndicatorConfig
         configs = [
-            IndicatorConfig(type="RSI", params={"period": 14}),
-            IndicatorConfig(type="SMA", params={"period": 20}),
+            IndicatorConfig(name="RSI", feature_id="rsi_14", params={"period": 14}),
+            IndicatorConfig(name="SMA", feature_id="sma_20", params={"period": 20}),
         ]
         factory = IndicatorFactory(configs)
         assert len(factory.indicators_config.indicators) == 2
@@ -43,9 +45,9 @@ class TestIndicatorFactory:
     def test_build_basic_indicators(self):
         """Test building basic indicators."""
         configs = [
-            IndicatorConfig(type="RSI", params={"period": 14}),
-            IndicatorConfig(type="SMA", params={"period": 20}),
-            IndicatorConfig(type="EMA", params={"period": 12}),
+            IndicatorConfig(name="RSI", feature_id="rsi_14", params={"period": 14}),
+            IndicatorConfig(name="SMA", feature_id="sma_20", params={"period": 20}),
+            IndicatorConfig(name="EMA", feature_id="ema_12", params={"period": 12}),
         ]
         factory = IndicatorFactory(configs)
         indicators = factory.build()
@@ -64,17 +66,27 @@ class TestIndicatorFactory:
         assert indicators[2].params["period"] == 12
 
     def test_indicator_custom_names(self):
-        """Test creating indicators with custom names."""
-        configs = [IndicatorConfig(type="RSI", name="CustomRSI", params={"period": 14})]
+        """Test creating indicators with feature_id as identifier."""
+        configs = [
+            IndicatorConfig(
+                name="RSI",
+                feature_id="custom_rsi",
+                params={"period": 14},
+            )
+        ]
         factory = IndicatorFactory(configs)
         indicators = factory.build()
 
-        # Check that the custom name was applied
-        assert indicators[0].name == "CustomRSI"
+        # Check that the indicator was created with RSI type
+        assert isinstance(indicators[0], RSIIndicator)
 
     def test_invalid_indicator_type(self):
         """Test behavior with an invalid indicator type."""
-        configs = [IndicatorConfig(type="NonExistentIndicator", params={})]
+        configs = [
+            IndicatorConfig(
+                name="NonExistentIndicator", feature_id="nonexistent", params={}
+            )
+        ]
         factory = IndicatorFactory(configs)
 
         # This should raise an error
@@ -84,7 +96,9 @@ class TestIndicatorFactory:
 
     def test_invalid_parameters(self):
         """Test behavior with invalid indicator parameters."""
-        configs = [IndicatorConfig(type="RSI", params={"period": -5})]  # Invalid period
+        configs = [
+            IndicatorConfig(name="RSI", feature_id="rsi_invalid", params={"period": -5})
+        ]  # Invalid period
         factory = IndicatorFactory(configs)
 
         # This should fail during indicator initialization
@@ -95,9 +109,15 @@ class TestIndicatorFactory:
     def test_partial_failures(self):
         """Test behavior when some indicators fail but others succeed."""
         configs = [
-            IndicatorConfig(type="RSI", params={"period": 14}),  # Valid
-            IndicatorConfig(type="SMA", params={"period": -5}),  # Invalid
-            IndicatorConfig(type="EMA", params={"period": 12}),  # Valid
+            IndicatorConfig(
+                name="RSI", feature_id="rsi_14", params={"period": 14}
+            ),  # Valid
+            IndicatorConfig(
+                name="SMA", feature_id="sma_invalid", params={"period": -5}
+            ),  # Invalid
+            IndicatorConfig(
+                name="EMA", feature_id="ema_12", params={"period": 12}
+            ),  # Valid
         ]
         factory = IndicatorFactory(configs)
 
@@ -114,10 +134,12 @@ class TestIndicatorFactory:
         # Create a temporary YAML file
         yaml_content = """
         indicators:
-          - type: RSI
+          - name: RSI
+            feature_id: rsi_14
             params:
               period: 14
-          - type: SMA
+          - name: SMA
+            feature_id: sma_10
             params:
               period: 10
         """

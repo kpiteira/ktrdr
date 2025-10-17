@@ -3,6 +3,62 @@ Training endpoints for the KTRDR API.
 
 This module implements the API endpoints for neural network model training,
 using the existing CLI training functionality as the foundation.
+
+HTTP Status Code Mapping
+------------------------
+The endpoints in this module follow these status code conventions:
+
+200 OK:
+    - Training job successfully started
+    - Training status successfully retrieved
+    - Training results successfully retrieved
+
+400 Bad Request (ConfigurationError):
+    - Strategy configuration is invalid (validation errors)
+    - Strategy file has incorrect format
+    - Feature IDs missing or invalid
+    - Fuzzy sets configuration errors
+    Fix: Correct the strategy YAML configuration file
+
+422 Unprocessable Entity (ValidationError):
+    - Invalid request parameters (invalid strategy name, bad date format)
+    - Training configuration parameters out of valid range
+    - Request body doesn't match expected schema
+    Fix: Correct the API request body/parameters
+
+404 Not Found:
+    - Strategy file doesn't exist
+    - Training job ID not found
+    Fix: Check strategy name or training job ID
+
+503 Service Unavailable (DataError):
+    - Data source unavailable (IB Gateway not connected)
+    - Insufficient historical data available
+    - Data loading/validation failures
+    Fix: Check data source connection, verify symbol/timeframe availability
+
+500 Internal Server Error:
+    - Model training crashes or fails
+    - GPU/memory errors during training
+    - Unexpected Python exceptions
+    Fix: Check server logs for stack trace, verify GPU availability
+
+Error Response Format
+--------------------
+All errors return JSON with this structure:
+    {
+        "message": "Human-readable error description",
+        "error_code": "CATEGORY-ErrorName",
+        "context": {"strategy_name": "...", "symbol": "...", ...},
+        "details": {...},
+        "suggestion": "How to fix this error"
+    }
+
+Training Flow
+-------------
+1. POST /trainings/start → Returns operation_id
+2. GET /operations/{operation_id} → Check status
+3. Results available in response when status = "completed"
 """
 
 from typing import Any, Optional
@@ -12,7 +68,7 @@ from pydantic import BaseModel, field_validator
 
 from ktrdr import get_logger
 from ktrdr.api.services.training_service import TrainingService
-from ktrdr.errors import DataError, ValidationError
+from ktrdr.errors import ConfigurationError, DataError, ValidationError
 
 logger = get_logger(__name__)
 
@@ -202,6 +258,11 @@ async def start_training(
             estimated_duration_minutes=result.get("estimated_duration_minutes"),
         )
 
+    except ConfigurationError as e:
+        # Log error with full context before responding
+        logger.error(f"Configuration error: {e.format_user_message()}")
+        # Return structured error response with all details
+        raise HTTPException(status_code=400, detail=e.to_dict()) from e
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except DataError as e:

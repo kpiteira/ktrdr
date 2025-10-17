@@ -15,7 +15,7 @@ The RVI oscillates around zero, with values above zero indicating bullish moment
 and values below zero indicating bearish momentum.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -37,6 +37,39 @@ class RVIIndicator(BaseIndicator):
         period: Period for the RVI calculation (default: 10)
         signal_period: Period for the signal line calculation (default: 4)
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """RVI produces multiple outputs (RVI and Signal)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is the RVI line."""
+        return "RVI"
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        RVI format:
+        - RVI: "RVI_{period}_{signal_period}_RVI"
+        - Signal: "RVI_{period}_{signal_period}_Signal"
+
+        Args:
+            suffix: Optional suffix ("RVI", "Signal", or None for RVI)
+
+        Returns:
+            Column name matching compute() output format
+        """
+        period = self.params.get("period", 10)
+        signal_period = self.params.get("signal_period", 4)
+
+        if suffix == "Signal":
+            return f"RVI_{period}_{signal_period}_Signal"
+        else:
+            # Default to RVI (primary)
+            return f"RVI_{period}_{signal_period}_RVI"
 
     def __init__(self, period: int = 10, signal_period: int = 4):
         """

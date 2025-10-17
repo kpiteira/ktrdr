@@ -150,7 +150,9 @@ class CMFIndicator(BaseIndicator):
         cmf[~valid_volume] = 0
 
         # Create result DataFrame
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         result[f"CMF_{period}"] = cmf
         result[f"CMF_MF_Multiplier_{period}"] = money_flow_multiplier
         result[f"CMF_MF_Volume_{period}"] = money_flow_volume
@@ -188,7 +190,9 @@ class CMFIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         period = self.params.get("period", 21)
         cmf_col = f"CMF_{period}"

@@ -1,7 +1,7 @@
 # === STRATEGY IDENTITY ===
 name: "universal_generalization_model"
 description: "Universal model trained for cross-symbol generalization testing"
-version: "2.0"
+version: "2.1"
 hypothesis: "Universal technical patterns can generalize across forex symbols"
 
 # === STRATEGY SCOPE ===
@@ -13,7 +13,7 @@ training_data:
     mode: "multi_symbol"
     list: ["EURUSD", "GBPUSD"]  # Train on European forex pairs
   timeframes:
-    mode: "single" 
+    mode: "single"
     timeframe: "1h"
   history_required: 200
 
@@ -28,24 +28,28 @@ deployment:
 # === TECHNICAL INDICATORS ===
 indicators:
 - name: "rsi"
+  feature_id: rsi_14
   period: 14
   source: "close"
 - name: "macd"
+  feature_id: macd_12_26_9
   fast_period: 12
   slow_period: 26
   signal_period: 9
   source: "close"
 - name: "sma"
+  feature_id: sma_20
   period: 20
   source: "close"
-- name: "BollingerBands"
+- name: "bbands"
+  feature_id: bbands_20_2_0
   period: 20
   multiplier: 2.0
   source: "close"
 
 # === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:
-  rsi:
+  rsi_14:
     oversold:
       type: "triangular"
       parameters: [0, 20, 35]
@@ -55,7 +59,10 @@ fuzzy_sets:
     overbought:
       type: "triangular"
       parameters: [65, 80, 100]
-  sma:
+  sma_20:
+    input_transform:  # Transform SMA to price ratio for fuzzification
+      type: "price_ratio"
+      reference: "close"
     below:
       type: "triangular"
       parameters: [0.85, 0.95, 1.0]
@@ -65,7 +72,7 @@ fuzzy_sets:
     above:
       type: "triangular"
       parameters: [1.0, 1.05, 1.15]
-  BollingerBands:
+  bbands_20_2_0:
     below_lower:
       type: "triangular"
       parameters: [0.85, 0.95, 1.0]

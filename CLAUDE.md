@@ -17,6 +17,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🚫 ANTI-PATTERNS TO AVOID
 
+### Critical: NEVER Kill the API Server
+
+⛔ **NEVER EVER**: Run `lsof -ti:8000 | xargs kill` or similar commands to kill the API server
+⛔ **REASON**: The API runs in Docker. Killing it destroys the entire Docker container system
+✅ **DO**: If you need to test API changes, ask the user to restart Docker or just test with curl
+
 ### The "Quick Fix" Trap
 
 ❌ **DON'T**: Add try/except blocks to suppress errors
@@ -382,6 +388,7 @@ ktrdr ib check-status
 - **Make frequent, focused commits** - Each commit should represent one logical change
 - **Always run tests before committing** - Use `make test-unit` to catch regressions
 - **Always run linting before committing** - Use `make quality` for all quality checks
+- **Use merge commits for PRs, NOT squash** - Preserves commit history for debugging
 
 ### Testing Discipline  
 

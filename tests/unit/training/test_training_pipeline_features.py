@@ -34,8 +34,8 @@ class TestCalculateIndicators:
         }
 
         indicator_configs = [
-            {"name": "rsi", "period": 14},
-            {"name": "sma", "period": 20},
+            {"name": "rsi", "feature_id": "rsi_14", "period": 14},
+            {"name": "sma", "feature_id": "sma_20", "period": 20},
         ]
 
         # Act
@@ -45,10 +45,10 @@ class TestCalculateIndicators:
         assert isinstance(result, dict)
         assert "1D" in result
         assert isinstance(result["1D"], pd.DataFrame)
-        # Should have price data columns + indicators
+        # Should have price data columns + indicators (using feature_ids)
         assert "close" in result["1D"].columns
-        assert "rsi" in result["1D"].columns
-        assert "sma" in result["1D"].columns
+        assert "rsi_14" in result["1D"].columns
+        assert "sma_20" in result["1D"].columns
         # Should not have inf values
         assert not np.isinf(result["1D"].values).any()
 
@@ -76,7 +76,7 @@ class TestCalculateIndicators:
             ),
         }
 
-        indicator_configs = [{"name": "rsi", "period": 14}]
+        indicator_configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -88,7 +88,11 @@ class TestCalculateIndicators:
         assert all(isinstance(df, pd.DataFrame) for df in result.values())
 
     def test_calculate_indicators_handles_sma_ema_ratios(self):
-        """Test that SMA/EMA indicators are converted to ratios (price/MA)."""
+        """Test that SMA/EMA indicators return raw values (Phase 2).
+
+        Note: SMA/EMA ratio transformation (price/MA) will be handled in Phase 3.5
+        via fuzzy layer input_transform, not in the training pipeline.
+        """
         # Arrange
         price_data = {
             "1D": pd.DataFrame(
@@ -102,19 +106,19 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"name": "sma", "period": 5}]
+        indicator_configs = [{"name": "sma", "feature_id": "sma_5", "period": 5}]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
 
         # Assert
-        # SMA should be ratio: close / sma_value
+        # Phase 2: SMA should return raw values (not ratios)
         # Skip the initial period where SMA hasn't been calculated yet (values will be 0)
-        sma_values = result["1D"]["sma"][20:]  # Skip warmup period
+        sma_values = result["1D"]["sma_5"][20:]  # Skip warmup period
         assert len(sma_values) > 0
-        # Ratios should be around 1.0 (close to the MA)
-        assert (sma_values > 0.5).all()  # Reasonable ratio range
-        assert (sma_values < 2.0).all()
+        # Raw SMA values should be close to the price range (100-108)
+        assert (sma_values > 90).all()  # Reasonable price range
+        assert (sma_values < 120).all()
 
     def test_calculate_indicators_handles_macd(self):
         """Test MACD indicator returns main line (not signal or histogram)."""
@@ -131,15 +135,22 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"name": "macd", "fast_period": 12, "slow_period": 26}]
+        indicator_configs = [
+            {
+                "name": "macd",
+                "feature_id": "macd_12_26",
+                "fast_period": 12,
+                "slow_period": 26,
+            }
+        ]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
 
-        # Assert
-        assert "macd" in result["1D"].columns
+        # Assert (using feature_id)
+        assert "macd_12_26" in result["1D"].columns
         # MACD should have numeric values (not NaN for most rows)
-        assert result["1D"]["macd"].notna().sum() > 50
+        assert result["1D"]["macd_12_26"].notna().sum() > 50
 
     def test_calculate_indicators_no_inf_values(self):
         """Test that infinite values are replaced with 0."""
@@ -157,7 +168,7 @@ class TestCalculateIndicators:
             )
         }
 
-        indicator_configs = [{"name": "rsi", "period": 14}]
+        indicator_configs = [{"name": "rsi", "feature_id": "rsi_14", "period": 14}]
 
         # Act
         result = TrainingPipeline.calculate_indicators(price_data, indicator_configs)
@@ -196,10 +207,11 @@ class TestGenerateFuzzyMemberships:
         assert isinstance(result, dict)
         assert "1D" in result
         assert isinstance(result["1D"], pd.DataFrame)
-        # Should have fuzzy membership columns
-        assert "rsi_low" in result["1D"].columns
-        assert "rsi_medium" in result["1D"].columns
-        assert "rsi_high" in result["1D"].columns
+        # Should have fuzzy membership columns with timeframe prefix
+        # (unified approach always adds timeframe prefix, even for single-TF)
+        assert "1D_rsi_low" in result["1D"].columns
+        assert "1D_rsi_medium" in result["1D"].columns
+        assert "1D_rsi_high" in result["1D"].columns
 
     def test_generate_fuzzy_memberships_multi_timeframe(self):
         """Test fuzzy membership generation for multiple timeframes."""

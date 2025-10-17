@@ -45,6 +45,7 @@ class IndicatorEngine:
                 provided, they will be used directly.
         """
         self.indicators: list[BaseIndicator] = []
+        self.feature_id_map: dict[str, str] = {}  # Maps column_name -> feature_id
 
         if indicators:
             if isinstance(indicators[0], dict):
@@ -64,6 +65,9 @@ class IndicatorEngine:
                 # Create factory with configs and build all indicators
                 factory = IndicatorFactory(indicator_configs)
                 self.indicators = factory.build()
+
+                # Build feature_id_map from configs and indicators
+                self._build_feature_id_map(indicator_configs, self.indicators)
             elif isinstance(indicators[0], BaseIndicator):
                 # Use provided indicator instances directly
                 # Type narrowing: if first element is BaseIndicator, assume all are
@@ -78,6 +82,137 @@ class IndicatorEngine:
         logger.info(
             f"Initialized IndicatorEngine with {len(self.indicators)} indicators"
         )
+
+    def _build_feature_id_map(
+        self, configs: list, indicators: list[BaseIndicator]
+    ) -> None:
+        """
+        Build the feature_id_map mapping column names to feature_ids.
+
+        This method creates the mapping between technical column names (from
+        indicator output) and user-facing feature_ids (from config).
+
+        For multi-output indicators, only the primary output (first column) is mapped.
+        Uses class methods to determine indicator behavior - NO computation needed.
+
+        Args:
+            configs: List of IndicatorConfig objects
+            indicators: List of instantiated indicator instances (parallel to configs)
+        """
+        from ..config.models import IndicatorConfig
+
+        for config, indicator in zip(configs, indicators):
+            # Ensure config is IndicatorConfig
+            if not isinstance(config, IndicatorConfig):
+                continue
+
+            feature_id = config.feature_id
+            indicator_class = type(indicator)
+
+            # Use class method - NO COMPUTATION!
+            if indicator_class.is_multi_output():
+                # Multi-output: get primary column name using suffix
+                suffix = indicator_class.get_primary_output_suffix()
+                if suffix:
+                    column_name = indicator.get_column_name(suffix=suffix)
+                else:
+                    column_name = indicator.get_column_name()
+
+                self.feature_id_map[column_name] = feature_id
+                logger.debug(
+                    f"Mapped multi-output indicator primary column '{column_name}' "
+                    f"to feature_id '{feature_id}' (indicator: {config.name})"
+                )
+            else:
+                # Single-output indicator: map column_name directly to feature_id
+                column_name = self._get_technical_column_name(config, indicator)
+                self.feature_id_map[column_name] = feature_id
+                logger.debug(
+                    f"Mapped column '{column_name}' to feature_id '{feature_id}' "
+                    f"(indicator: {config.name})"
+                )
+
+    def _get_technical_column_name(self, config, indicator: BaseIndicator) -> str:
+        """
+        Get the technical column name that an indicator will produce.
+
+        This creates a temporary clean indicator instance to get the column name,
+        avoiding any name modifications from IndicatorFactory.
+
+        Args:
+            config: IndicatorConfig with the indicator parameters
+            indicator: The indicator instance (used for class reference)
+
+        Returns:
+            The technical column name (e.g., "rsi_14", "ema_20")
+        """
+        # Create a fresh instance with just the params to get clean column name
+        indicator_class = type(indicator)
+
+        try:
+            temp_indicator = indicator_class(**config.params)
+            return temp_indicator.get_column_name()
+        except Exception as e:
+            # Fallback to using the existing indicator's column name
+            logger.warning(
+                f"Failed to create temp indicator for column name, using existing: {e}"
+            )
+            return indicator.get_column_name()
+
+    def _create_feature_id_aliases(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create feature_id aliases in the DataFrame.
+
+        For each entry in feature_id_map (column_name -> feature_id), creates an alias
+        column with the same values if feature_id differs from column_name.
+
+        Note: Pandas DataFrames don't support true column aliasing at the API level.
+        The alias will be a separate column with identical values. While this creates
+        a copy in memory, it's acceptable because:
+        1. Only one alias per indicator (not multiple copies)
+        2. Memory overhead is minimal compared to total data size
+        3. Benefit of dual naming (technical + user-facing) outweighs cost
+
+        Args:
+            data: DataFrame with indicator columns (technical names)
+
+        Returns:
+            DataFrame with feature_id aliases added
+        """
+        if not self.feature_id_map:
+            # No feature_id_map (e.g., indicators created directly without configs)
+            return data
+
+        for column_name, feature_id in self.feature_id_map.items():
+            # Only create alias if feature_id differs from column name
+            if column_name != feature_id:
+                # Check if technical column exists
+                if column_name in data.columns:
+                    selected = data[column_name]
+
+                    # Check for duplicate columns causing DataFrame selection
+                    if isinstance(selected, pd.DataFrame):
+                        logger.error(
+                            f"[CRITICAL BUG] data['{column_name}'] returned DataFrame instead of Series! "
+                            f"This means there are duplicate columns named '{column_name}'. "
+                            f"Columns in DataFrame: {list(selected.columns)}"
+                        )
+                        # Take first column as workaround
+                        selected = selected.iloc[:, 0]
+
+                    # Create alias column with same values as technical column
+                    # Note: This creates a copy in pandas, but provides the dual naming benefit
+                    data[feature_id] = selected
+                    logger.debug(
+                        f"Created feature_id alias: '{column_name}' -> '{feature_id}'"
+                    )
+                else:
+                    logger.warning(
+                        f"Cannot create alias for '{feature_id}': "
+                        f"technical column '{column_name}' not found in data"
+                    )
+
+        return data
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -109,32 +244,70 @@ class IndicatorEngine:
                 {"missing_columns": missing_cols},
             )
 
+        # Check for duplicate column names in input
+        duplicate_cols = [
+            col for col in data.columns if list(data.columns).count(col) > 1
+        ]
+        if duplicate_cols:
+            logger.error(
+                f"[CRITICAL BUG] Input DataFrame has DUPLICATE column names: {set(duplicate_cols)}"
+            )
+
         # Create a copy of the input data to avoid modifying original
         result_df = data.copy()
 
         # Apply each indicator
         for indicator in self.indicators:
             try:
-                # Get indicator name for better logging
-                indicator_name = getattr(
-                    indicator, "name", str(indicator.__class__.__name__)
-                )
-                logger.debug(f"Computing indicator: {indicator_name}")
-
                 # Compute indicator and add to result DataFrame
                 result = indicator.compute(result_df)
 
                 # Handle both Series and DataFrame results
                 if isinstance(result, pd.Series):
-                    # If a name is provided, use it; otherwise, use indicator name
-                    name = result.name if result.name else indicator_name
-                    result_df[name] = result
-                elif isinstance(result, pd.DataFrame):
-                    # Merge the result DataFrame with our result_df
-                    for col in result.columns:
-                        result_df[col] = result[col]
+                    # Single-output indicator: add with technical column name
+                    # Use get_column_name() to get technical name (not feature_id)
+                    column_name = indicator.get_column_name()
 
-                logger.debug(f"Successfully computed {indicator_name}")
+                    # Check if column already exists (would create duplicate)
+                    if column_name in result_df.columns:
+                        logger.error(
+                            f"[CRITICAL BUG] Column '{column_name}' already exists in result_df! This will create a duplicate."
+                        )
+                        logger.error(
+                            f"[CRITICAL BUG]   Existing columns: {list(result_df.columns)}"
+                        )
+                        continue
+
+                    result_df[column_name] = result
+                elif isinstance(result, pd.DataFrame):
+                    # Multi-output indicator: add all columns with their technical names
+                    # Use pd.concat to avoid DataFrame fragmentation (much faster than repeated assignments)
+
+                    # Check for columns that already exist (would create duplicates)
+                    existing_overlap = [
+                        col for col in result.columns if col in result_df.columns
+                    ]
+                    if existing_overlap:
+                        logger.error(
+                            f"[CRITICAL BUG] These columns already exist and pd.concat will create duplicates: {existing_overlap}"
+                        )
+                        logger.error(
+                            f"[CRITICAL BUG]   result_df columns count before concat: {len(result_df.columns)}"
+                        )
+
+                        # TEMPORARY FIX: Filter out overlapping columns to prevent duplicates
+                        # This is a workaround - the root cause is that indicators are being computed twice
+                        non_overlapping_cols = [
+                            col
+                            for col in result.columns
+                            if col not in result_df.columns
+                        ]
+                        if non_overlapping_cols:
+                            result = result[non_overlapping_cols]
+                        else:
+                            continue
+
+                    result_df = pd.concat([result_df, result], axis=1)
 
             except Exception as e:
                 logger.error(
@@ -145,6 +318,9 @@ class IndicatorEngine:
                     "PROC-IndicatorFailed",
                     {"indicator": indicator.__class__.__name__, "error": str(e)},
                 ) from e
+
+        # Create feature_id aliases after all indicators are computed
+        result_df = self._create_feature_id_aliases(result_df)
 
         logger.debug(f"Successfully applied {len(self.indicators)} indicators to data")
         return result_df

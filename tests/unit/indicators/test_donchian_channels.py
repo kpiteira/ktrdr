@@ -173,14 +173,16 @@ class TestDonchianChannelsIndicator:
         position = result["DC_Position_5"]
 
         # For close=90 (at low), position should be 0
-        low_close_indices = result[result["close"] == 90].index
+        # FIXED: Use original data DataFrame, not result (result no longer includes input columns)
+        low_close_indices = data[data["close"] == 90].index
         if len(low_close_indices) > 0:
             idx = low_close_indices[-1]
             if not pd.isna(position.loc[idx]):
                 assert abs(position.loc[idx] - 0.0) < 0.01
 
         # For close=110 (at high), position should be 1
-        high_close_indices = result[result["close"] == 110].index
+        # FIXED: Use original data DataFrame, not result (result no longer includes input columns)
+        high_close_indices = data[data["close"] == 110].index
         if len(high_close_indices) > 0:
             idx = high_close_indices[-1]
             if not pd.isna(position.loc[idx]):

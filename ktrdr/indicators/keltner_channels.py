@@ -8,7 +8,7 @@ They help identify volatility, trend direction, and potential reversal points.
 Author: KTRDR
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -45,6 +45,43 @@ class KeltnerChannelsIndicator(BaseIndicator):
     - atr_period: 10 (ATR calculation period)
     - multiplier: 2.0 (ATR multiplier for band width)
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Keltner Channels produces multiple outputs (Middle, Upper, Lower)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is the Middle line (EMA)."""
+        return "Middle"
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        Keltner Channels format:
+        - Middle: "KC_Middle_{period}"
+        - Upper: "KC_Upper_{period}_{atr_period}_{multiplier}"
+        - Lower: "KC_Lower_{period}_{atr_period}_{multiplier}"
+
+        Args:
+            suffix: Optional suffix ("Middle", "Upper", "Lower", or None for Middle)
+
+        Returns:
+            Column name matching compute() output format
+        """
+        period = self.params.get("period", 20)
+        atr_period = self.params.get("atr_period", 10)
+        multiplier = self.params.get("multiplier", 2.0)
+
+        if suffix == "Upper":
+            return f"KC_Upper_{period}_{atr_period}_{multiplier}"
+        elif suffix == "Lower":
+            return f"KC_Lower_{period}_{atr_period}_{multiplier}"
+        else:
+            # Default to Middle (primary)
+            return f"KC_Middle_{period}"
 
     def __init__(self, period: int = 20, atr_period: int = 10, multiplier: float = 2.0):
         """
@@ -171,7 +208,9 @@ class KeltnerChannelsIndicator(BaseIndicator):
         lower_channel = ema - band_width
 
         # Create result DataFrame
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         result[f"KC_Middle_{period}"] = ema
         result[f"KC_Upper_{period}_{atr_period}_{multiplier}"] = upper_channel
         result[f"KC_Lower_{period}_{atr_period}_{multiplier}"] = lower_channel
@@ -208,7 +247,9 @@ class KeltnerChannelsIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         period = self.params.get("period", 20)
         atr_period = self.params.get("atr_period", 10)

@@ -6,6 +6,7 @@ exception hierarchy, centralized error handling, user-friendly error messages,
 retry mechanisms, and graceful degradation support.
 """
 
+from ktrdr.errors.error_codes import ErrorCodes
 from ktrdr.errors.exceptions import (
     ConfigurationError,
     ConfigurationFileError,
@@ -46,6 +47,8 @@ from ktrdr.errors.retry import (
 )
 
 __all__ = [
+    # Error codes registry
+    "ErrorCodes",
     # Base exception
     "KtrdrError",
     # Exception hierarchy

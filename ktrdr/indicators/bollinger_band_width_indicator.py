@@ -109,10 +109,12 @@ class BollingerBandWidthIndicator(BaseIndicator):
         # Calculate Bollinger Bands
         bb_data = bb_indicator.compute(data)
 
-        # Extract bands
-        upper_band = bb_data["upper"]
-        middle_band = bb_data["middle"]
-        lower_band = bb_data["lower"]
+        # Extract bands - use parameterized column names
+        # BollingerBands now returns columns like 'upper_20_2.0', 'middle_20_2.0', 'lower_20_2.0'
+        suffix = f"{period}_{multiplier}"
+        upper_band = bb_data[f"upper_{suffix}"]
+        middle_band = bb_data[f"middle_{suffix}"]
+        lower_band = bb_data[f"lower_{suffix}"]
 
         # Calculate width using safe division (same logic as training pipeline)
         bb_width = np.where(

@@ -11,6 +11,7 @@
 This document outlines the phased implementation of the feature_id architecture.
 
 **Key Architecture Decisions**:
+
 - feature_id is **MANDATORY** and **UNIQUE** (no defaults)
 - **BREAKING CHANGE** with migration tool
 - SMA/EMA transformation → `input_transform` in fuzzy config (proper architecture)
@@ -47,6 +48,7 @@ Cannot debug issues without clear error reporting. v1 failed partially because v
 **Files**: `ktrdr/config/strategy_validator.py`
 
 **Changes**:
+
 1. Review current validation logic
 2. Add comprehensive logging (error level with full context)
 3. Format Pydantic ValidationError into user-friendly messages
@@ -55,6 +57,7 @@ Cannot debug issues without clear error reporting. v1 failed partially because v
 6. Include actionable suggestions in error messages
 
 **Acceptance Criteria**:
+
 - [ ] Validator logs all errors before raising exceptions
 - [ ] Validation errors include: message, code, context, details, suggestions
 - [ ] Pydantic errors converted to readable format with field paths
@@ -66,6 +69,7 @@ Cannot debug issues without clear error reporting. v1 failed partially because v
 **Files**: `ktrdr/api/endpoints/strategies.py`, `ktrdr/api/endpoints/training.py`
 
 **Changes**:
+
 1. Re-enable validation in endpoints
 2. Catch ConfigurationError and format for HTTP response
 3. Return structured error detail (not empty body)
@@ -73,6 +77,7 @@ Cannot debug issues without clear error reporting. v1 failed partially because v
 5. Include error code in response for client handling
 
 **Acceptance Criteria**:
+
 - [ ] API returns 400 with structured error body (never empty)
 - [ ] Error body includes: error message, code, details, suggestion
 - [ ] Server logs show full error context before response
@@ -84,6 +89,7 @@ Cannot debug issues without clear error reporting. v1 failed partially because v
 **Files**: `ktrdr/errors.py`
 
 **Changes**:
+
 1. Ensure ConfigurationError supports all required fields:
    - message (str): Human-readable error
    - error_code (str): Machine-readable code (e.g., STRATEGY-MissingFeatureId)
@@ -94,6 +100,7 @@ Cannot debug issues without clear error reporting. v1 failed partially because v
 3. Add `format_user_message()` for display
 
 **Example**:
+
 ```python
 raise ConfigurationError(
     message="Indicator missing required field 'feature_id'",
@@ -110,6 +117,7 @@ raise ConfigurationError(
 ```
 
 **Acceptance Criteria**:
+
 - [ ] ConfigurationError captures all required fields
 - [ ] Can serialize to dict for API responses
 - [ ] Can format user-friendly message with context
@@ -121,6 +129,7 @@ raise ConfigurationError(
 **Files**: `tests/unit/config/test_validation_errors.py`
 
 **Tests**:
+
 1. Schema validation errors (invalid types, missing fields)
 2. Semantic validation errors (duplicates, missing references)
 3. Error formatting (Pydantic → ConfigurationError)
@@ -129,6 +138,7 @@ raise ConfigurationError(
 6. Error message quality (includes all required fields)
 
 **Acceptance Criteria**:
+
 - [ ] All test scenarios pass
 - [ ] Coverage > 90% for validation code
 - [ ] Test errors include expected message patterns
@@ -139,11 +149,13 @@ raise ConfigurationError(
 **Goal**: Ensure existing validation works correctly with improved error reporting.
 
 **Changes**:
+
 - No changes to validation logic
 - Only improve error reporting and logging
 - Ensure all existing validations have clear error messages with context
 
 **Test Strategy**:
+
 1. Create invalid strategies covering all validation rules
 2. Verify each produces clear, actionable error with all fields
 3. Verify errors are logged with full context
@@ -186,6 +198,7 @@ None (foundational)
 **Files**: `ktrdr/config/models.py`
 
 **Changes**:
+
 1. Add `feature_id` **REQUIRED** field (not optional!)
 2. Add `get_feature_id()` method (returns feature_id)
 3. Add field validator for feature_id format
@@ -197,6 +210,7 @@ None (foundational)
 5. Remove backward compatibility for `name` field (breaking change)
 
 **Example Config**:
+
 ```python
 class IndicatorConfig(BaseModel):
     type: str = Field(..., description="Indicator type (rsi, ema, macd)")
@@ -217,6 +231,7 @@ class IndicatorConfig(BaseModel):
 ```
 
 **Acceptance Criteria**:
+
 - [ ] IndicatorConfig REQUIRES `feature_id` field
 - [ ] `get_feature_id()` returns feature_id
 - [ ] Invalid feature_id format raises clear error with examples
@@ -229,12 +244,14 @@ class IndicatorConfig(BaseModel):
 **Files**: `ktrdr/config/models.py` (StrategyConfigurationV2)
 
 **Changes**:
+
 1. Add `model_validator` to check feature_id uniqueness
 2. Collect all feature_ids from indicators
 3. Detect duplicates
 4. Raise clear error with list of duplicates and affected indicators
 
 **Acceptance Criteria**:
+
 - [ ] Duplicate feature_ids rejected with clear error
 - [ ] Error message lists all duplicates with context (which indicators)
 - [ ] Validation happens at config load (early failure)
@@ -245,6 +262,7 @@ class IndicatorConfig(BaseModel):
 **Files**: `ktrdr/config/strategy_validator.py`
 
 **Changes**:
+
 1. Update `_validate_indicator_definitions()`:
    - Check feature_id presence (should be caught by Pydantic but double-check)
    - Check feature_id format
@@ -261,6 +279,7 @@ class IndicatorConfig(BaseModel):
    - Include migration tool command for old configs
 
 **Key Simplification**:
+
 ```python
 # NEW: Simple, direct validation
 feature_ids = {ind.feature_id for ind in indicators}
@@ -271,6 +290,7 @@ orphans = fuzzy_keys - feature_ids  # WARNING: might be derived features
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Validation checks feature_ids match fuzzy_set keys (direct comparison)
 - [ ] Missing fuzzy sets reported as errors (STRICT) with feature_id
 - [ ] Orphaned fuzzy sets reported as warnings (not errors)
@@ -283,6 +303,7 @@ orphans = fuzzy_keys - feature_ids  # WARNING: might be derived features
 **Files**: `tests/unit/config/test_feature_ids.py`
 
 **Tests**:
+
 1. `test_feature_id_required()` - Missing feature_id rejected
 2. `test_feature_id_format_valid()` - Valid formats accepted
 3. `test_feature_id_format_invalid()` - Invalid formats rejected
@@ -293,6 +314,7 @@ orphans = fuzzy_keys - feature_ids  # WARNING: might be derived features
 8. `test_old_format_rejected()` - Old configs raise clear error with migration command
 
 **Acceptance Criteria**:
+
 - [ ] All tests pass
 - [ ] Coverage > 95% for new code
 - [ ] Test invalid inputs produce expected errors with correct error codes
@@ -303,6 +325,7 @@ orphans = fuzzy_keys - feature_ids  # WARNING: might be derived features
 **Goal**: Validate feature_id configuration correctness.
 
 **New Validations**:
+
 1. feature_id presence (REQUIRED by Pydantic)
 2. feature_id format validation (field validator)
 3. feature_id uniqueness validation (model validator)
@@ -310,6 +333,7 @@ orphans = fuzzy_keys - feature_ids  # WARNING: might be derived features
 5. feature_id to fuzzy_set matching (strategy validator - STRICT)
 
 **Test Strategy**:
+
 1. Valid configs: various feature_id formats (params, semantic, mixed)
 2. Invalid configs: missing, duplicate, invalid format, reserved words
 3. Fuzzy set matching: complete, missing (error), orphaned (warning)
@@ -351,6 +375,7 @@ Phase 0 complete (error reporting works)
 **Files**: `scripts/migrate_to_feature_ids.py`
 
 **Functionality**:
+
 1. Read strategy YAML file
 2. For each indicator:
    - If has `feature_id`: skip (already migrated)
@@ -365,6 +390,7 @@ Phase 0 complete (error reporting works)
 5. Write migrated strategy (or dry-run to preview)
 
 **CLI Interface**:
+
 ```bash
 # Dry run (preview)
 python scripts/migrate_to_feature_ids.py strategy.yaml --dry-run
@@ -380,6 +406,7 @@ python scripts/migrate_to_feature_ids.py strategies/*.yaml
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Tool reads strategy YAML correctly
 - [ ] Detects old vs new format
 - [ ] Generates feature_ids from column names (preserves fuzzy keys)
@@ -395,6 +422,7 @@ python scripts/migrate_to_feature_ids.py strategies/*.yaml
 **Files**: `tests/unit/scripts/test_migrate_to_feature_ids.py`
 
 **Tests**:
+
 1. Migrate simple strategy (single indicator)
 2. Migrate multi-indicator strategy (multiple RSIs)
 3. Migrate with EMA (handles adjust parameter exclusion)
@@ -405,6 +433,7 @@ python scripts/migrate_to_feature_ids.py strategies/*.yaml
 8. Backup mode (creates .bak)
 
 **Acceptance Criteria**:
+
 - [ ] All migration scenarios tested
 - [ ] Migration preserves functionality (fuzzy sets still match)
 - [ ] Collision detection works
@@ -415,6 +444,7 @@ python scripts/migrate_to_feature_ids.py strategies/*.yaml
 **Files**: `docs/migration/feature-ids-migration-guide.md`
 
 **Content**:
+
 1. Why migration needed (breaking change rationale)
 2. What changed (feature_id now required)
 3. How to migrate (step-by-step with examples)
@@ -423,6 +453,7 @@ python scripts/migrate_to_feature_ids.py strategies/*.yaml
 6. FAQ
 
 **Acceptance Criteria**:
+
 - [ ] Documentation clear and complete
 - [ ] Examples show before/after
 - [ ] Troubleshooting section covers common issues
@@ -440,9 +471,21 @@ None (can start with Phase 1)
 
 ## Phase 2: Implement Feature ID Aliasing in IndicatorEngine
 
+**Status**: ✅ **COMPLETE** (2025-10-15)
+
 **Priority**: HIGH
 
 **Goal**: Make IndicatorEngine produce DataFrames with both column names and feature_id aliases.
+
+**Completion Summary**:
+
+- ✅ Task 2.1: feature_id_map initialization (commit 6b4bc07)
+- ✅ Task 2.2: feature_id aliasing in apply() (commit 6d26491)
+- ✅ Task 2.3: Generic multi-output support for 12 indicators (commit bb5c8a0)
+- ✅ Task 2.4: 22 unit tests, all passing
+- ✅ Quality checks passing (lint, format, type check)
+
+**See**: [PHASE-STATUS-AND-VALIDATION.md](./PHASE-STATUS-AND-VALIDATION.md) for detailed validation
 
 ### Tasks
 
@@ -451,6 +494,7 @@ None (can start with Phase 1)
 **Files**: `ktrdr/indicators/indicator_engine.py`
 
 **Changes**:
+
 1. Add `feature_id_map: dict[str, str]` attribute
    - Maps: column_name → feature_id
    - Built during initialization
@@ -465,6 +509,7 @@ None (can start with Phase 1)
 **Key Insight**: Build mapping during init, use during apply.
 
 **Acceptance Criteria**:
+
 - [ ] IndicatorEngine tracks feature_id_map
 - [ ] Map populated during initialization from configs
 - [ ] Map keys are actual column names (from get_column_name())
@@ -476,6 +521,7 @@ None (can start with Phase 1)
 **Files**: `ktrdr/indicators/indicator_engine.py`
 
 **Changes**:
+
 1. Compute indicators (existing logic unchanged)
 2. Add computed columns to result DataFrame
 3. For each computed column:
@@ -484,6 +530,7 @@ None (can start with Phase 1)
    - Alias references same data (not copied!)
 
 **Implementation Note**:
+
 ```python
 # Both columns point to same data (not copied)
 result[column_name] = indicator_result  # Technical name
@@ -494,6 +541,7 @@ if column_name in feature_id_map:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] DataFrame contains original column names
 - [ ] DataFrame contains feature_id aliases (if different from column name)
 - [ ] Aliases reference same data (verified: not copied, same object)
@@ -509,6 +557,7 @@ if column_name in feature_id_map:
 **Change Needed**: Designate primary output for feature_id mapping.
 
 **Options**:
+
 1. Add `get_primary_output_name()` method to multi-output indicators
 2. Use first column as primary (convention)
 3. Document primary output in indicator docstring
@@ -516,6 +565,7 @@ if column_name in feature_id_map:
 **Recommendation**: Use naming convention (column without "_signal_" or "_hist_" suffix is primary)
 
 **Acceptance Criteria**:
+
 - [ ] MACD primary output identified (main line)
 - [ ] feature_id maps to primary output only
 - [ ] Secondary outputs (signal, hist) still accessible via column names
@@ -527,6 +577,7 @@ if column_name in feature_id_map:
 **Files**: `tests/integration/indicators/test_feature_id_aliasing.py`
 
 **Tests**:
+
 1. Single indicator with explicit feature_id (different from column name)
 2. Single indicator with feature_id == column name (no duplicate)
 3. Multiple indicators with different feature_ids
@@ -535,6 +586,7 @@ if column_name in feature_id_map:
 6. Verify data identity (alias is reference, not copy)
 
 **For each test**:
+
 - Create config with feature_id
 - Build IndicatorEngine
 - Apply to sample data
@@ -543,6 +595,7 @@ if column_name in feature_id_map:
 - Verify values match between column name and feature_id
 
 **Acceptance Criteria**:
+
 - [ ] All integration tests pass
 - [ ] DataFrame structure verified (has both technical and user-facing columns)
 - [ ] Data identity verified (aliases reference same data)
@@ -554,12 +607,14 @@ if column_name in feature_id_map:
 **Goal**: Ensure IndicatorEngine produces correct DataFrame structure.
 
 **New Validations**:
+
 1. feature_id_map correctness (keys=column names, values=feature_ids)
 2. DataFrame structure (has expected columns)
 3. Alias data identity (not duplicated)
 4. No duplicate columns when feature_id == column name
 
 **Test Strategy**:
+
 1. Unit test feature_id_map building
 2. Integration test DataFrame structure
 3. Integration test data identity (memory address comparison)
@@ -590,19 +645,141 @@ Phase 1 complete (feature_id in config models)
 
 ## Phase 3: Update Training Pipeline to Use Feature IDs
 
+**Status**: ⏳ **PENDING** - Ready to Start
+
 **Priority**: CRITICAL
 
 **Goal**: Simplify training pipeline by removing complex name mapping logic, using feature_ids directly.
 
 **WARNING**: Highest risk phase. Extensive validation required.
 
+---
+
+## ⚠️ CRITICAL WARNING FOR PHASE 3 IMPLEMENTERS ⚠️
+
+### 🚨 DO NOT ADD CODE - DELETE CODE! 🚨
+
+**The training pipeline ALREADY HAS feature_id aliases from Phase 2!**
+
+Lines 298-346 in `training_pipeline.py` are **LEGACY HACKS** written BEFORE Phase 2 was completed. They manually re-do work that Phase 2 already does automatically.
+
+### What Phase 2 Already Gives You
+
+When `IndicatorEngine.apply()` is called (Line 296), the resulting DataFrame ALREADY contains:
+
+1. ✅ **Technical column names** (e.g., `rsi_7`, `macd_12_26_9`)
+2. ✅ **feature_id aliases** (e.g., `rsi_fast`, `macd_standard`)
+3. ✅ **Multi-output handling** (MACD primary output already mapped)
+4. ✅ **Both columns point to same data** (no duplication)
+
+**You can immediately use `result["rsi_fast"]` - it already exists!**
+
+### The Legacy Hacks (Lines 298-346) - TO BE DELETED
+
+```python
+# Line 296: This ALREADY gives you feature_id aliases!
+indicator_results = indicator_engine.apply(price_data)  # ✅ Has feature_ids!
+
+# Lines 298-340: LEGACY HACKS - DELETE ALL OF THIS! ❌
+for config in indicator_configs:
+    feature_id = config.get("feature_id", config["name"])  # ❌ HACK: Manual extraction
+    indicator_type = config["name"].upper()
+
+    # ❌ HACK: Manual prefix matching (but aliases already exist!)
+    for col in indicator_results.columns:
+        if col.upper().startswith(indicator_type):
+
+            # ❌ HACK: Manual SMA/EMA transformation (should be in fuzzy layer - Phase 3.5)
+            if indicator_type in ["SMA", "EMA"]:
+                mapped_results[feature_id] = price_data["close"] / indicator_results[col]
+                break
+
+            # ❌ HACK: Manual MACD handling (Phase 2.3 already does this!)
+            elif indicator_type == "MACD":
+                if "_MACD_" in col and "_signal_" not in col:
+                    mapped_results[feature_id] = indicator_results[col]
+                    break
+```
+
+### Why These Are Hacks
+
+1. **Manual column matching** (Lines 298-318): Unnecessary! Phase 2 already created the feature_id aliases.
+2. **Manual MACD handling** (Lines 325-335): Unnecessary! Phase 2.3 already maps feature_id → primary output.
+3. **Manual SMA/EMA transformation** (Lines 318-324): Wrong location! Should be in fuzzy layer (Phase 3.5), not training.
+
+### What Phase 3 Should Actually Do
+
+**BEFORE (Current - 70+ lines of hacks)**:
+
+```python
+# Complex type inference, prefix matching, manual transformations
+mapped_results = {}
+for config in indicator_configs:
+    feature_id = config.get("feature_id", config["name"])
+    indicator_type = config["name"].upper()
+
+    # 40+ lines of manual column matching...
+    for col in indicator_results.columns:
+        if col.upper().startswith(indicator_type):
+            # Manual transformations, MACD handling, etc...
+            mapped_results[feature_id] = ...
+```
+
+**AFTER (Phase 3 - 15 lines, clean and simple)**:
+
+```python
+# Just combine DataFrames - feature_ids already exist!
+result = price_data.copy()
+for col in indicator_results.columns:
+    if col not in result.columns:
+        result[col] = indicator_results[col]  # feature_ids already here!
+```
+
+### Anti-Patterns to AVOID in Phase 3
+
+❌ **DO NOT** add more column name matching logic
+❌ **DO NOT** add more prefix matching (startswith, contains, etc.)
+❌ **DO NOT** add more indicator type inference
+❌ **DO NOT** keep the SMA/EMA transformations here (move to Phase 3.5)
+❌ **DO NOT** keep the MACD special handling (Phase 2.3 already does it)
+
+✅ **DO** trust the feature_id aliases from Phase 2
+✅ **DO** delete Lines 298-346
+✅ **DO** simplify to ~15 lines
+✅ **DO** verify outputs match old behavior (parallel validation test)
+
+### Before You Start Phase 3
+
+1. ✅ Read [PHASE-STATUS-AND-VALIDATION.md](./PHASE-STATUS-AND-VALIDATION.md) - explains what Phase 2 accomplished
+2. ✅ Read Phase 2 tests (`test_feature_id_map.py`, `test_feature_id_aliasing.py`) - proves aliases work
+3. ✅ Run `IndicatorEngine.apply()` with a strategy config - inspect the DataFrame columns
+4. ✅ Understand: feature_ids ALREADY EXIST in the DataFrame - you just need to USE them!
+
+### Summary
+
+**Phase 3 is a DELETION phase, not an addition phase.**
+
+- **Remove** 70+ lines of hacks (Lines 298-346)
+- **Replace** with ~15 lines trusting Phase 2
+- **Validate** outputs match (parallel validation test)
+- **Trust** the feature_id aliases Phase 2 created
+
+**If you find yourself adding complex logic, STOP. You're doing it wrong.**
+
+---
+
+**See**: [PHASE-STATUS-AND-VALIDATION.md](./PHASE-STATUS-AND-VALIDATION.md) Section "Current Training Pipeline (Still Has Hacks)" for detailed analysis of each hack.
+
 ### Architecture Decision Impact
 
 **Removes**: ~130 lines of complex mapping logic
-- Lines 277-344: Single-timeframe name mapping and transformations
-- Lines 364-424: Multi-timeframe name mapping and transformations
 
-**Adds**: ~20 lines of simple indicator computation
+- Lines 298-340: Manual column name matching (~40 lines)
+- Lines 318-324: SMA/EMA transformation (~10 lines, moves to Phase 3.5)
+- Lines 325-335: MACD special handling (~15 lines)
+- Multi-timeframe duplicate logic (~65 lines)
+
+**Adds**: ~20 lines of simple indicator computation (trust Phase 2 aliases)
 
 **Key Change**: SMA/EMA transformations move to fuzzy `input_transform` (Phase 3.5)
 
@@ -615,6 +792,7 @@ Phase 1 complete (feature_id in config models)
 **Purpose**: Validate new training path produces same results as old path.
 
 **Test Strategy**:
+
 1. Select 2-3 existing strategies (include SMA/EMA, MACD, multi-timeframe)
 2. Migrate strategies to new format (with feature_ids)
 3. Capture old training outputs:
@@ -631,6 +809,7 @@ Phase 1 complete (feature_id in config models)
    - Model inputs match
 
 **Acceptance Criteria**:
+
 - [ ] Test framework runs old vs new training automatically
 - [ ] Can capture and compare intermediate outputs at each stage
 - [ ] Test identifies any differences with clear reporting
@@ -645,14 +824,18 @@ Phase 1 complete (feature_id in config models)
 
 **New**: ~15 lines using IndicatorEngine with feature_ids
 
+**⚠️ CRITICAL REMINDER**: Lines 298-346 are LEGACY HACKS that duplicate work Phase 2 already does. Your job is to DELETE this code and trust the feature_id aliases that `IndicatorEngine.apply()` already provides. If you find yourself writing complex logic, you're doing it wrong!
+
 **Changes**:
-1. Remove type inference logic (lines 277-291)
-2. Remove name mapping logic (lines 298-318)
-3. Use IndicatorEngine directly
-4. Remove SMA/EMA transformation (will use fuzzy input_transform in Phase 3.5)
-5. Preserve MACD primary output handling (already in IndicatorEngine)
+
+1. ❌ **DELETE** type inference logic (lines 277-291) - not needed anymore
+2. ❌ **DELETE** name mapping logic (lines 298-318) - Phase 2 already created aliases
+3. ❌ **DELETE** SMA/EMA transformation (lines 318-324) - will move to fuzzy layer in Phase 3.5
+4. ❌ **DELETE** MACD special handling (lines 325-335) - Phase 2.3 already handles this
+5. ✅ **TRUST** IndicatorEngine.apply() - it already gives you feature_id aliases!
 
 **Simplified Logic**:
+
 ```python
 def _calculate_indicators_single_timeframe(
     price_data: pd.DataFrame,
@@ -679,6 +862,7 @@ def _calculate_indicators_single_timeframe(
 ```
 
 **Acceptance Criteria**:
+
 - [ ] New logic produces same output as old logic (validated by Task 3.1)
 - [ ] Code reduced from ~70 lines to ~15 lines
 - [ ] No complex prefix matching or type inference
@@ -697,6 +881,7 @@ def _calculate_indicators_single_timeframe(
 **Changes**: Similar to Task 3.2 but applied per timeframe
 
 **Acceptance Criteria**:
+
 - [ ] New logic produces same output as old logic (validated by Task 3.1)
 - [ ] Code reduced from ~75 lines to ~20 lines
 - [ ] Logic shared with single-timeframe where possible
@@ -708,12 +893,14 @@ def _calculate_indicators_single_timeframe(
 **Files**: `tests/unit/training/test_training_pipeline.py`
 
 **Updates**:
+
 1. Update test fixtures to use feature_ids
 2. Update assertions to check for feature_id columns
 3. Update expected outputs (column names are feature_ids)
 4. Add tests for feature_id presence in outputs
 
 **Acceptance Criteria**:
+
 - [ ] All training tests updated for feature_ids
 - [ ] All tests pass
 - [ ] Coverage maintained >85%
@@ -724,6 +911,7 @@ def _calculate_indicators_single_timeframe(
 **Goal**: Ensure training produces correct outputs with feature_ids.
 
 **CRITICAL Validations**:
+
 1. **Output Equivalence**: New path produces same results as old path (Task 3.1)
 2. **Feature Presence**: feature_ids present in indicator results
 3. **Fuzzy Compatibility**: Fuzzy engine can find feature_ids
@@ -731,6 +919,7 @@ def _calculate_indicators_single_timeframe(
 5. **Model Features**: Trained model uses correct feature_ids
 
 **Test Strategy**:
+
 1. Parallel validation (old vs new) - AUTOMATED, REQUIRED
 2. Integration tests (full training flow) - AUTOMATED
 3. Manual validation (train model, inspect features) - MANUAL
@@ -772,6 +961,7 @@ Phase 2 complete (IndicatorEngine produces aliases)
 ### Why Fuzzy Layer?
 
 Transformation is about **how to fuzzify** a moving average, not about:
+
 - Indicator computation (indicator computes MA correctly)
 - Training logic (needs to work in backtesting/live trading too)
 
@@ -784,12 +974,14 @@ Transformation is about **how to fuzzify** a moving average, not about:
 **Files**: `ktrdr/fuzzy/config.py`
 
 **Changes**:
+
 1. Add `PriceRatioTransformConfig` model
 2. Add `IdentityTransformConfig` model (default)
 3. Create `InputTransformConfig` union type
 4. Add `input_transform` optional field to `FuzzySetConfigModel`
 
 **Models**:
+
 ```python
 class PriceRatioTransformConfig(BaseModel):
     """Transform indicator to price ratio."""
@@ -807,6 +999,7 @@ InputTransformConfig = Annotated[
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Transform config models validate correctly
 - [ ] Reference field validates (must be valid price column)
 - [ ] Union discriminator works (can parse from YAML)
@@ -817,11 +1010,13 @@ InputTransformConfig = Annotated[
 **Files**: `ktrdr/fuzzy/engine.py`
 
 **Changes**:
+
 1. Update `fuzzify()` signature: add `context_data` parameter
 2. Add `_apply_input_transform()` method
 3. Apply transform before fuzzification if configured
 
 **Implementation**:
+
 ```python
 def fuzzify(
     self,
@@ -870,6 +1065,7 @@ def _apply_input_transform(
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Transform applied before fuzzification
 - [ ] Price ratio computed correctly (reference / indicator)
 - [ ] Identity transform returns values unchanged
@@ -882,10 +1078,12 @@ def _apply_input_transform(
 **Files**: `ktrdr/training/training_pipeline.py`
 
 **Changes**:
+
 1. Remove SMA/EMA transformation logic (delete ~30 lines)
 2. Pass combined DataFrame (with price columns) to fuzzy engine
 
 **Before**:
+
 ```python
 # OLD: Training does transformation
 if indicator_type in ["SMA", "EMA"]:
@@ -893,6 +1091,7 @@ if indicator_type in ["SMA", "EMA"]:
 ```
 
 **After**:
+
 ```python
 # NEW: Pass context data, fuzzy engine handles it
 fuzzy_engine.fuzzify(
@@ -903,6 +1102,7 @@ fuzzy_engine.fuzzify(
 ```
 
 **Acceptance Criteria**:
+
 - [ ] SMA/EMA transformation logic removed from training
 - [ ] Context data (price + indicators) passed to fuzzy engine
 - [ ] Parallel validation test passes (outputs match old behavior)
@@ -913,10 +1113,12 @@ fuzzy_engine.fuzzify(
 **Files**: `scripts/migrate_to_feature_ids.py`
 
 **Changes**:
+
 1. Detect SMA/EMA indicators
 2. Add `input_transform` to their fuzzy_sets
 
 **Logic**:
+
 ```python
 for ind in strategy['indicators']:
     if ind['type'] in ['sma', 'ema']:
@@ -931,6 +1133,7 @@ for ind in strategy['indicators']:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Migration tool detects SMA/EMA
 - [ ] Adds input_transform to their fuzzy_sets
 - [ ] Preserves existing fuzzy set definitions
@@ -940,10 +1143,12 @@ for ind in strategy['indicators']:
 #### Task 3.5.5: Add Tests for Input Transforms
 
 **Files**:
+
 - `tests/unit/fuzzy/test_input_transforms.py` (new)
 - `tests/integration/fuzzy/test_transform_integration.py` (new)
 
 **Unit Tests**:
+
 1. Test PriceRatioTransform config validation
 2. Test IdentityTransform config validation
 3. Test price ratio computation (scalar, Series, array)
@@ -952,6 +1157,7 @@ for ind in strategy['indicators']:
 6. Test identity transform (no change)
 
 **Integration Tests**:
+
 1. Test SMA with price_ratio in full pipeline
 2. Test EMA with price_ratio in full pipeline
 3. Test RSI without transform (identity)
@@ -959,6 +1165,7 @@ for ind in strategy['indicators']:
 5. Test migration tool adds transforms correctly
 
 **Acceptance Criteria**:
+
 - [ ] All unit tests pass (>95% coverage)
 - [ ] All integration tests pass
 - [ ] Tests verify numerical correctness (matches old transformation)
@@ -969,6 +1176,7 @@ for ind in strategy['indicators']:
 **Goal**: Ensure input transforms work correctly.
 
 **Validations**:
+
 1. Transform config validates correctly
 2. Transform computation numerically correct
 3. Fuzzy engine applies transforms before fuzzification
@@ -976,6 +1184,7 @@ for ind in strategy['indicators']:
 5. Migration tool adds transforms correctly
 
 **Test Strategy**:
+
 1. Unit tests (transform logic)
 2. Integration tests (full fuzzy pipeline)
 3. Parallel validation (old vs new outputs match)
@@ -1001,6 +1210,7 @@ for ind in strategy['indicators']:
 **3.5 days**
 
 **Breakdown**:
+
 - Task 3.5.1 (Config models): 0.5 days
 - Task 3.5.2 (Fuzzy engine): 1 day
 - Task 3.5.3 (Training pipeline): 0.5 days
@@ -1026,6 +1236,7 @@ Phase 3 complete (training pipeline simplified)
 **Files**: `ktrdr/fuzzy/fuzzy_engine.py`
 
 **Changes**:
+
 1. Update `generate_memberships()` to expect feature_ids
 2. Improve error when feature_id not found:
    - List available feature_ids
@@ -1034,6 +1245,7 @@ Phase 3 complete (training pipeline simplified)
 3. Add validation that all referenced feature_ids exist
 
 **Error Example**:
+
 ```python
 if feature_id not in data.columns:
     available = [col for col in data.columns if not col.startswith("_")]
@@ -1057,6 +1269,7 @@ if feature_id not in data.columns:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Error messages include available feature_ids
 - [ ] Error messages suggest close matches (typo detection)
 - [ ] Error includes structured details for API responses
@@ -1067,12 +1280,14 @@ if feature_id not in data.columns:
 **Files**: `tests/unit/fuzzy/test_fuzzy_engine.py`
 
 **New Tests**:
+
 1. `test_fuzzy_with_feature_ids()` - Normal operation
 2. `test_fuzzy_missing_feature_id()` - Error with suggestions
 3. `test_fuzzy_typo_detection()` - Suggests close match (rsi_1 → rsi_14)
 4. `test_fuzzy_error_structure()` - Verify error has all required fields
 
 **Acceptance Criteria**:
+
 - [ ] All tests pass
 - [ ] Coverage >90% for error paths
 - [ ] Error messages validated (include suggestions)
@@ -1082,11 +1297,13 @@ if feature_id not in data.columns:
 **Goal**: Ensure fuzzy engine works correctly with feature_ids.
 
 **Validations**:
+
 1. feature_id lookup works
 2. Error messages helpful with suggestions
 3. All fuzzy sets reference valid feature_ids
 
 **Test Strategy**:
+
 1. Unit tests (error cases, typo detection)
 2. Integration tests (full fuzzy processing)
 3. Manual test (trigger error, verify message quality)
@@ -1122,30 +1339,19 @@ Phase 3 complete (training uses feature_ids)
 **Files**: `docs/strategies/indicator-configuration.md`
 
 **Updates**:
+
 1. Document indicator configuration with feature_ids
 2. Show before/after migration examples
 3. Explain when to use params vs semantic naming
 4. Explain feature_id requirements (mandatory, unique)
 5. Document input transforms (price_ratio for SMA/EMA fuzzification)
 
-#### Task 5.2: Create Migration Guide
-
-**Files**: `docs/migration/feature-ids-migration-guide.md`
-
-**Content**:
-1. Why migration needed (breaking change, ambiguity problem)
-2. What changed (feature_id now required)
-3. How to migrate (step-by-step with examples)
-4. Migration tool usage (all commands, examples, common issues)
-5. Validation after migration (how to verify)
-6. Common issues and solutions (FAQ)
-7. Support resources (where to get help)
-
 #### Task 5.3: Update Example Strategies
 
 **Files**: `strategies/*.yaml`
 
 **Updates**:
+
 1. Migrate all example strategies using migration tool
 2. Add comments explaining feature_id usage
 3. Show variety of naming patterns (params, semantic, mixed)
@@ -1154,6 +1360,7 @@ Phase 3 complete (training uses feature_ids)
 #### Task 5.4: Create Video Tutorial (Optional)
 
 **Content**:
+
 1. Screen recording of migration process
 2. Explanation of feature_id concept
 3. Common pitfalls and solutions
@@ -1188,6 +1395,7 @@ Phases 1-4 complete
 #### Task 6.1: End-to-End Training Tests
 
 **Tests** (all automated):
+
 1. Train model with explicit feature_ids (new format)
 2. Train model with params naming (rsi_14, macd_12_26_9)
 3. Train model with semantic naming (rsi_fast, macd_trend)
@@ -1198,6 +1406,7 @@ Phases 1-4 complete
 8. Train multi-symbol model with feature_ids
 
 **For each test**:
+
 - Training completes successfully without errors
 - No warnings (except expected)
 - Model produces predictions
@@ -1205,6 +1414,7 @@ Phases 1-4 complete
 - Performance metrics reasonable
 
 **Acceptance Criteria**:
+
 - [ ] All E2E tests pass
 - [ ] Training completes without errors for all formats
 - [ ] Model features match configuration exactly
@@ -1218,6 +1428,7 @@ Phases 1-4 complete
 **Purpose**: Ensure new system produces equivalent results to old system.
 
 **Method**:
+
 1. Select 3-5 existing strategies (variety: simple, complex, multi-timeframe)
 2. Train models with OLD code (pre-feature_id, from git)
 3. Migrate strategies
@@ -1229,6 +1440,7 @@ Phases 1-4 complete
    - Model performance metrics (should match within tolerance)
 
 **Acceptance Criteria**:
+
 - [ ] New models perform equivalent to old models (within 1% metrics)
 - [ ] Feature differences explainable (feature_id naming)
 - [ ] No unexplained performance degradation
@@ -1239,12 +1451,14 @@ Phases 1-4 complete
 **Purpose**: Ensure feature_id aliasing doesn't degrade performance.
 
 **Tests**:
+
 1. Benchmark indicator computation (with aliasing)
 2. Benchmark training pipeline (new vs old)
 3. Benchmark memory usage (aliases shouldn't duplicate data)
 4. Benchmark validation time (should be faster - early validation)
 
 **Acceptance Criteria**:
+
 - [ ] Performance within 5% of baseline (training time)
 - [ ] Memory usage not increased (aliases are references)
 - [ ] No performance regressions in production-critical paths
@@ -1255,6 +1469,7 @@ Phases 1-4 complete
 **Purpose**: Human verification of system behavior.
 
 **Checklist**:
+
 - [ ] Upload strategy with feature_ids → validates correctly
 - [ ] Upload strategy without feature_ids → clear error with migration command
 - [ ] Upload invalid strategy → error message clear and helpful
@@ -1289,16 +1504,560 @@ All previous phases complete
 
 ---
 
+## Phase 7: Eliminate Sample Data Computation in IndicatorEngine Init
+
+**Status**: 🔄 **IN PROGRESS** - Redesigning approach
+
+**Priority**: LOW (Performance Optimization)
+
+**Goal**: Eliminate **ALL** indicator computation on sample data during IndicatorEngine initialization.
+
+### Background
+
+Currently, IndicatorEngine computes each indicator **twice**:
+
+1. **First computation (initialization)**: On sample data (100 rows) to determine:
+   - Whether indicator is multi-output (returns DataFrame vs Series)
+   - Primary output column name for multi-output indicators
+   - Technical column name format
+
+2. **Second computation (apply)**: On real training data (e.g., 518 rows) to get actual indicator values
+
+For a strategy with 36 indicators, this means **72 indicator computations** (36 during init + 36 during apply).
+
+**Performance Impact**:
+
+- Initialization overhead proportional to number of indicators
+- Noticeable delay with many indicators or complex computations
+- Unnecessary computation on dummy data just for type detection
+
+### Root Cause Analysis
+
+The unnecessary computation on sample data occurs in:
+
+**File**: `ktrdr/indicators/indicator_engine.py`
+
+**Methods that MUST be eliminated**:
+
+1. `_is_multi_output_indicator()` (lines ~218-249):
+   - Creates 100-row sample DataFrame
+   - Calls `indicator.compute(sample_data)`
+   - Checks if result is DataFrame
+   - **Completely unnecessary** - indicators should declare this!
+
+2. `_get_primary_output_column()` (lines ~251-291):
+   - Creates 100-row sample DataFrame
+   - Calls `indicator.compute(sample_data)`
+   - Extracts first column name
+   - **Completely unnecessary** - can derive from indicator.get_column_name()!
+
+3. `_get_technical_column_name()` (lines ~293-318):
+   - Creates temp indicator instance
+   - Calls `get_column_name()`
+   - **This one is OK** - doesn't compute, just builds string
+
+**Why This Happens**:
+
+- Need to know if indicator is multi-output to handle correctly
+- Need to know column names to build feature_id_map
+- Current approach: "let's just compute it and see what we get"
+- **Better approach**: Indicators should be self-describing!
+
+### Proposed Solution
+
+**Approach**: Self-describing indicators with declarative metadata
+
+**Key Insight**: Indicators know their own structure! They should declare:
+
+1. Whether they produce single or multiple outputs (class property)
+2. How to construct their column names (method that doesn't compute)
+
+**NO CACHE NEEDED** - This is just proper OOP design, not caching!
+
+### Tasks
+
+#### Task 7.1: Add Self-Describing Methods to BaseIndicator
+
+**File**: `ktrdr/indicators/base_indicator.py`
+
+**Changes**:
+
+1. Add `is_multi_output()` class method (returns False by default):
+
+```python
+@classmethod
+def is_multi_output(cls) -> bool:
+    """
+    Declare whether this indicator produces multiple output columns.
+
+    Returns:
+        bool: True if indicator returns DataFrame (multiple columns),
+              False if indicator returns Series (single column).
+
+    Note:
+        Multi-output indicators MUST override this to return True.
+        This method should NOT compute anything - it's a declaration!
+    """
+    return False
+```
+
+2. Add `get_primary_output_suffix()` class method (returns None by default):
+
+```python
+@classmethod
+def get_primary_output_suffix(cls) -> Optional[str]:
+    """
+    Get suffix for primary output column of multi-output indicators.
+
+    For multi-output indicators, defines which column is "primary".
+    Returns None if primary output has no suffix (just base name + params).
+
+    Returns:
+        Optional[str]: Suffix for primary column, or None
+
+    Examples:
+        - MACD: returns None (primary is "MACD_12_26", no suffix)
+        - BollingerBands: returns "upper" (primary is "upper_20_2.0")
+        - Stochastic: returns "k" (primary is "k_14_3")
+    """
+    return None
+```
+
+**Why This Works**:
+
+- No computation needed - just returns a constant
+- Fast - direct method call, no sample data creation
+- Clear - indicator declares its own behavior
+- Maintainable - each indicator documents its structure
+
+**Acceptance Criteria**:
+
+- [ ] Methods added to BaseIndicator
+- [ ] Clear docstrings explain purpose
+- [ ] Default implementations provided (False, None)
+- [ ] No computation in these methods (just return constants)
+
+#### Task 7.2: Update Multi-Output Indicators
+
+**Files**:
+- `ktrdr/indicators/macd_indicator.py`
+- `ktrdr/indicators/bollinger_bands_indicator.py`
+- `ktrdr/indicators/stochastic_indicator.py`
+- `ktrdr/indicators/adx_indicator.py`
+- `ktrdr/indicators/ichimoku_indicator.py`
+- Any other multi-output indicators
+
+**Changes**: Override the class methods for each multi-output indicator
+
+**Example 1: MACD**:
+
+```python
+class MACDIndicator(BaseIndicator):
+    """MACD indicator (multi-output: MACD line, signal, histogram)."""
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """MACD produces multiple outputs."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> None:
+        """Primary output is MACD line with no suffix (e.g., 'MACD_12_26')."""
+        return None
+```
+
+**Example 2: BollingerBands**:
+
+```python
+class BollingerBandsIndicator(BaseIndicator):
+    """Bollinger Bands (multi-output: upper, middle, lower)."""
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Bollinger Bands produces multiple outputs."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is upper band."""
+        return "upper"
+```
+
+**Example 3: Stochastic**:
+
+```python
+class StochasticIndicator(BaseIndicator):
+    """Stochastic oscillator (multi-output: %K, %D)."""
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Stochastic produces multiple outputs."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is %K line."""
+        return "k"
+```
+
+**Acceptance Criteria**:
+
+- [ ] All multi-output indicators identified
+- [ ] Each overrides `is_multi_output()` to return True
+- [ ] Each overrides `get_primary_output_suffix()` appropriately
+- [ ] Docstrings explain which column is primary and why
+- [ ] No computation in these methods
+
+#### Task 7.3: Simplify `_build_feature_id_map()` in IndicatorEngine
+
+**File**: `ktrdr/indicators/indicator_engine.py`
+
+**Current Code** (lines ~166-215): Creates sample data, computes indicators
+
+**New Code** (NO sample data computation!):
+
+```python
+def _build_feature_id_map(
+    self, configs: list, indicators: list[BaseIndicator]
+) -> None:
+    """
+    Build feature_id_map mapping technical column names to feature_ids.
+
+    Uses indicator metadata (is_multi_output, get_column_name) to determine
+    column names WITHOUT computing indicators on sample data.
+
+    Args:
+        configs: List of IndicatorConfig objects
+        indicators: List of indicator instances (parallel to configs)
+    """
+    from ..config.models import IndicatorConfig
+
+    for config, indicator in zip(configs, indicators):
+        if not isinstance(config, IndicatorConfig):
+            continue
+
+        feature_id = config.feature_id
+        indicator_class = type(indicator)
+
+        # Use class method - NO COMPUTATION!
+        if indicator_class.is_multi_output():
+            # Multi-output: get primary column name using suffix
+            suffix = indicator_class.get_primary_output_suffix()
+            if suffix:
+                # Column like "upper_20_2.0" for BollingerBands
+                column_name = indicator.get_column_name(suffix=suffix)
+            else:
+                # Column like "MACD_12_26" for MACD (no suffix)
+                column_name = indicator.get_column_name()
+
+            self.feature_id_map[column_name] = feature_id
+            logger.debug(
+                f"Mapped multi-output indicator primary column '{column_name}' "
+                f"to feature_id '{feature_id}'"
+            )
+        else:
+            # Single-output: column name is just the base name + params
+            column_name = indicator.get_column_name()
+            self.feature_id_map[column_name] = feature_id
+            logger.debug(
+                f"Mapped column '{column_name}' to feature_id '{feature_id}'"
+            )
+```
+
+**What Changed**:
+
+- ❌ **REMOVED**: `_is_multi_output_indicator()` call (computed on sample data)
+- ❌ **REMOVED**: `_get_primary_output_column()` call (computed on sample data)
+- ✅ **ADDED**: `indicator_class.is_multi_output()` (instant, no computation)
+- ✅ **ADDED**: `indicator_class.get_primary_output_suffix()` (instant, no computation)
+- ✅ **KEPT**: `indicator.get_column_name()` (already fast, just builds string)
+
+**Acceptance Criteria**:
+
+- [ ] No sample data creation in `_build_feature_id_map()`
+- [ ] Uses `is_multi_output()` class method
+- [ ] Uses `get_primary_output_suffix()` class method
+- [ ] Uses `get_column_name()` for actual column construction
+- [ ] Produces same feature_id_map as before (correctness)
+- [ ] Much faster (no indicator computation)
+
+#### Task 7.4: Delete Obsolete Methods
+
+**File**: `ktrdr/indicators/indicator_engine.py`
+
+**Methods to DELETE** (they compute on sample data - no longer needed!):
+
+1. `_is_multi_output_indicator()` (lines ~218-249)
+   - Creates 100-row DataFrame
+   - Calls `indicator.compute()`
+   - **Delete entire method** - replaced by `indicator_class.is_multi_output()`
+
+2. `_get_primary_output_column()` (lines ~251-291)
+   - Creates 100-row DataFrame
+   - Calls `indicator.compute()`
+   - **Delete entire method** - replaced by `indicator.get_column_name(suffix=...)`
+
+**Method to KEEP**:
+
+- `_get_technical_column_name()` - This is OK, doesn't compute, just builds string
+
+**Acceptance Criteria**:
+
+- [ ] `_is_multi_output_indicator()` deleted
+- [ ] `_get_primary_output_column()` deleted
+- [ ] No other code references these deleted methods
+- [ ] All tests still pass
+
+#### Task 7.5: Add Tests for Self-Describing Indicators
+
+**Files**:
+
+- `tests/unit/indicators/test_indicator_metadata.py` (new)
+- `tests/unit/indicators/test_feature_id_map.py` (update to verify no computation)
+
+**New Tests**:
+
+1. **Test class methods don't compute**:
+
+```python
+def test_is_multi_output_does_not_compute():
+    """Verify is_multi_output() doesn't call compute()."""
+    # Mock compute to detect if called
+    with patch.object(RSIIndicator, 'compute') as mock_compute:
+        result = RSIIndicator.is_multi_output()
+        assert result is False
+        mock_compute.assert_not_called()  # Should NOT compute!
+
+def test_multi_output_indicators_declare_correctly():
+    """Test multi-output indicators return True."""
+    assert MACDIndicator.is_multi_output() is True
+    assert BollingerBandsIndicator.is_multi_output() is True
+    assert StochasticIndicator.is_multi_output() is True
+
+def test_single_output_indicators_declare_correctly():
+    """Test single-output indicators return False."""
+    assert RSIIndicator.is_multi_output() is False
+    assert SMAIndicator.is_multi_output() is False
+    assert EMAIndicator.is_multi_output() is False
+```
+
+2. **Test primary output suffixes**:
+
+```python
+def test_primary_output_suffixes():
+    """Test multi-output indicators declare correct suffixes."""
+    # MACD: no suffix (primary is "MACD_12_26")
+    assert MACDIndicator.get_primary_output_suffix() is None
+
+    # BollingerBands: "upper" suffix
+    assert BollingerBandsIndicator.get_primary_output_suffix() == "upper"
+
+    # Stochastic: "k" suffix
+    assert StochasticIndicator.get_primary_output_suffix() == "k"
+```
+
+3. **Test initialization performance**:
+
+```python
+def test_initialization_faster_without_sample_computation():
+    """Test IndicatorEngine init doesn't compute on sample data."""
+    configs = [
+        {'name': 'rsi', 'feature_id': 'rsi_14', 'period': 14},
+        {'name': 'macd', 'feature_id': 'macd_std'},
+    ]
+
+    # Mock compute to detect if called during init
+    with patch.object(RSIIndicator, 'compute') as mock_rsi, \
+         patch.object(MACDIndicator, 'compute') as mock_macd:
+
+        engine = IndicatorEngine(indicators=configs)
+
+        # Should NOT be called during init!
+        mock_rsi.assert_not_called()
+        mock_macd.assert_not_called()
+
+    # Verify feature_id_map was still built correctly
+    assert 'rsi_14' in engine.feature_id_map
+    assert any('MACD' in col for col in engine.feature_id_map)
+```
+
+4. **Test correctness**:
+
+```python
+def test_feature_id_map_correctness():
+    """Test feature_id_map is correct without sample computation."""
+    configs = [
+        {'name': 'rsi', 'feature_id': 'my_rsi', 'period': 14},
+        {'name': 'macd', 'feature_id': 'my_macd'},
+        {'name': 'bbands', 'feature_id': 'my_bbands', 'period': 20},
+    ]
+
+    engine = IndicatorEngine(indicators=configs)
+
+    # RSI: single-output, column = feature_id
+    assert 'rsi_14' in engine.feature_id_map
+    assert engine.feature_id_map['rsi_14'] == 'my_rsi'
+
+    # MACD: multi-output, primary column maps to feature_id
+    macd_col = [c for c in engine.feature_id_map if 'MACD' in c][0]
+    assert engine.feature_id_map[macd_col] == 'my_macd'
+
+    # BollingerBands: multi-output, primary = upper band
+    assert 'upper_20_2.0' in engine.feature_id_map
+    assert engine.feature_id_map['upper_20_2.0'] == 'my_bbands'
+```
+
+**Acceptance Criteria**:
+
+- [ ] Tests verify indicators are self-describing (class methods work)
+- [ ] Tests verify NO computation during init (mock compute, assert not called)
+- [ ] Tests verify feature_id_map correctness
+- [ ] Tests verify multi-output and single-output indicators
+- [ ] All existing tests still pass
+
+### Validation for Phase 7
+
+**Goal**: Ensure NO computation on sample data during IndicatorEngine initialization
+
+**Critical Validations**:
+
+1. **No Computation**: Mock `indicator.compute()` and verify NOT called during init
+2. **Correctness**: feature_id_map matches previous behavior
+3. **Performance**: Init faster (no 100-row DataFrame creation)
+4. **Compatibility**: All existing tests pass (no behavior changes)
+
+**Test Strategy**:
+
+1. Mock tests: Verify `compute()` never called during init
+2. Correctness tests: Verify feature_id_map correct for all indicator types
+3. Performance tests: Measure init time improvement
+4. Regression tests: All existing tests must pass
+
+### Overall Acceptance Criteria for Phase 7
+
+**ALL MUST PASS**:
+
+- [ ] BaseIndicator has `is_multi_output()` and `get_primary_output_suffix()` class methods
+- [ ] All multi-output indicators override these methods correctly
+- [ ] `_build_feature_id_map()` uses class methods, NOT sample computation
+- [ ] `_is_multi_output_indicator()` method DELETED (computed on sample data)
+- [ ] `_get_primary_output_column()` method DELETED (computed on sample data)
+- [ ] Tests verify NO `compute()` calls during init (mocking)
+- [ ] Tests verify feature_id_map correctness
+- [ ] All existing tests pass (no regressions)
+- [ ] Init significantly faster (no sample data computation)
+- [ ] Documentation updated
+
+### Performance Impact
+
+**Before Optimization**:
+
+- IndicatorEngine.__init__() creates 100-row DataFrames for each unique indicator class
+- Calls `indicator.compute(sample_data)` to detect multi-output and get column names
+- For 36 indicators with 12 unique classes: **12 unnecessary computations**
+
+**After Optimization**:
+
+- IndicatorEngine.__init__() calls `is_multi_output()` (instant, no computation)
+- Calls `get_column_name()` with optional suffix (just string building)
+- For 36 indicators with 12 unique classes: **0 computations**
+
+**Expected Speedup**:
+
+- Init time reduced by time taken to compute 12 indicators on 100-row data
+- Particularly beneficial for expensive indicators (MACD, Bollinger Bands, etc.)
+- Also faster for strategies with repeated indicator types
+
+**Measurement**:
+
+Use mocking to verify `compute()` is never called during init
+
+### Estimated Duration
+
+**1-2 days**
+
+**Breakdown**:
+
+- Task 7.1 (Add class methods to BaseIndicator): 1 hour
+- Task 7.2 (Update multi-output indicators): 2 hours
+- Task 7.3 (Simplify `_build_feature_id_map()`): 2 hours
+- Task 7.4 (Delete obsolete methods): 30 minutes
+- Task 7.5 (Add tests and verification): 3 hours
+
+### Dependencies
+
+- None (can be done anytime after Phase 2 is complete)
+- Ideally after Phase 6 (after system is stable and tested)
+
+### Risk Assessment
+
+**Risk Level**: LOW
+
+**Risks**:
+
+- Cache introduces bugs (metadata incorrect)
+- Thread-safety issues (if multi-threaded)
+- Memory leak (cache grows too large)
+
+**Mitigations**:
+
+- Comprehensive correctness tests (cached vs non-cached metadata)
+- Thread-safety analysis (add locks if needed)
+- Cache monitoring (track size, alert if too large)
+- Performance benchmarks (verify speedup, detect regressions)
+
+### Alternative Approaches Considered
+
+1. **Type Hint Inspection**:
+   - Pro: No computation needed
+   - Con: Not all indicators have accurate type hints
+   - Con: Doesn't solve column name discovery
+   - Decision: Rejected - too unreliable
+
+2. **Instance-Level Cache**:
+   - Pro: Simpler implementation
+   - Con: Doesn't help with repeated indicator types
+   - Con: Less memory efficient
+   - Decision: Rejected - class-level cache more effective
+
+3. **On-Demand Metadata Computation**:
+   - Pro: No caching complexity
+   - Con: No performance improvement
+   - Decision: Rejected - doesn't solve problem
+
+### Success Metrics
+
+**Performance**:
+
+- [ ] Initialization time reduced by at least 50% for strategies with repeated indicator types
+- [ ] Cache hit rate >80% for typical strategies (after first engine creation)
+
+**Quality**:
+
+- [ ] Zero correctness bugs (cached metadata matches non-cached)
+- [ ] Zero regressions (all existing tests pass)
+- [ ] Cache size <100KB (negligible memory overhead)
+
+**Code Quality**:
+
+- [ ] Implementation clean and well-documented
+- [ ] Cache behavior clear from code and logs
+- [ ] Easy to understand and maintain
+
+---
+
 ## Rollback Plan
 
 ### If Critical Issues Found
 
 **Before Phase 3 (Training Changes)**:
+
 - Rollback is simple: revert config model changes
 - No training impact
 - Users see "old format not supported" errors
 
 **After Phase 3 (Training Changes)**:
+
 - More complex: training pipeline changed
 - Rollback procedure:
   1. Revert training_pipeline.py changes
@@ -1318,6 +2077,7 @@ All previous phases complete
 ### Rollback Testing
 
 **Before each major phase**, verify rollback procedure:
+
 1. Apply phase changes
 2. Run tests (should pass)
 3. Create rollback branch
@@ -1341,10 +2101,13 @@ All previous phases complete
 | Phase 4: Fuzzy Engine | 1 day | Phase 3 | Low |
 | Phase 5: Documentation | 1-2 days | Phase 1-4 | Low |
 | Phase 6: System Testing | 2-3 days | Phase 1-4 | Medium |
+| Phase 7: IndicatorEngine Optimization | 2 days | Phase 2+ (ideally after Phase 6) | Low |
 
-**Total Duration**: 17.5-23.5 days (~3.5-4.5 weeks)
+**Total Duration**: 19.5-25.5 days (~4-5 weeks)
 
 **Critical Path**: Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 6
+
+**Note**: Phase 7 is optional performance optimization and can be done anytime after Phase 2 is stable.
 
 ---
 
@@ -1353,12 +2116,14 @@ All previous phases complete
 ### HIGH Risk: Phase 3 (Training Pipeline)
 
 **Risks**:
+
 - Training produces different results (breaks models)
 - Performance degrades significantly
 - Edge cases not handled (multi-timeframe, multi-symbol)
 - Transformation logic breaks (SMA/EMA ratios)
 
 **Mitigations**:
+
 - **Parallel validation test (REQUIRED)** - old vs new outputs must match
 - Extensive regression testing with multiple strategies
 - Performance benchmarks before/after
@@ -1368,11 +2133,13 @@ All previous phases complete
 ### Medium Risk: Phase 2 (IndicatorEngine)
 
 **Risks**:
+
 - Aliasing creates data duplication (memory issue)
 - Multi-output indicators not handled correctly
 - Performance impact from additional columns
 
 **Mitigations**:
+
 - Reference same data (don't copy) - verified in tests
 - Explicit primary output designation for multi-output
 - Performance benchmarks
@@ -1381,11 +2148,13 @@ All previous phases complete
 ### Medium Risk: Phase 3.5 (Input Transform in Fuzzy System)
 
 **Risks**:
+
 - Input transform doesn't match old transformation logic exactly
 - Numerical differences affect training
 - Migration tool doesn't handle correctly
 
 **Mitigations**:
+
 - Unit tests verify exact numerical match
 - Integration tests with old strategies
 - Parallel training comparison
@@ -1393,6 +2162,7 @@ All previous phases complete
 ### Low Risk: Phases 0, 1, 4, 5
 
 These phases are relatively low risk:
+
 - Don't change core training logic (Phase 0, 1, 4, 5)
 - Fix existing issues (Phase 0)
 - Well-isolated (Phase 4, 5)
@@ -1467,6 +2237,7 @@ These phases are relatively low risk:
 **Question**: What if migration creates duplicate feature_ids?
 
 **Options**:
+
 - A) Fail with error, require manual fix (CHOSEN)
 - B) Auto-rename with suffix (rsi_14, rsi_14_2)
 - C) Prompt user interactively
@@ -1478,6 +2249,7 @@ These phases are relatively low risk:
 **Question**: When should feature_id uniqueness be validated?
 
 **Options**:
+
 - A) Config load (Pydantic validator) (CHOSEN)
 - B) Strategy validator (after config load)
 - C) Both (redundant but safe)
@@ -1499,11 +2271,8 @@ This implementation plan provides a phased, testable approach with:
 **Total duration**: 3-4 weeks with appropriate testing.
 
 **Critical success factors**:
+
 1. Phase 0 must establish solid error reporting
 2. Phase 3 parallel validation MUST pass (training equivalence)
 3. Migration tool must work reliably (>95% success rate)
 4. Documentation must be clear and comprehensive
-
----
-
-**END OF IMPLEMENTATION PLAN**

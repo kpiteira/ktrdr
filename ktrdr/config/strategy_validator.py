@@ -6,9 +6,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+from pydantic import ValidationError as PydanticValidationError
 
+from ktrdr import get_logger
 from ktrdr.config.models import LegacyStrategyConfiguration, StrategyConfigurationV2
 from ktrdr.config.strategy_loader import strategy_loader
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -130,6 +134,51 @@ class StrategyValidator:
         },
     }
 
+    def _format_pydantic_error(
+        self, error: PydanticValidationError
+    ) -> tuple[list[str], list[str]]:
+        """
+        Format Pydantic validation errors into user-friendly messages.
+
+        Args:
+            error: Pydantic ValidationError
+
+        Returns:
+            Tuple of (error_messages, missing_sections)
+        """
+        error_messages = []
+        missing_sections = []
+
+        for err in error.errors():
+            # Extract field location (e.g., ['indicators'] or ['model', 'architecture'])
+            field_path: tuple[Any, ...] = err.get("loc", ())
+            field_name = (
+                ".".join(str(f) for f in field_path) if field_path else "unknown"
+            )
+
+            # Extract error type and message
+            error_type = err.get("type", "unknown")
+            error_msg = err.get("msg", "Validation failed")
+
+            # Format error message based on type
+            if error_type == "missing":
+                # Track missing sections
+                if field_path and len(field_path) == 1:
+                    missing_sections.append(str(field_path[0]))
+                error_messages.append(f"Missing required field: {field_name}")
+            elif error_type.startswith("type_error"):
+                expected_type = err.get("ctx", {}).get("expected", "correct type")
+                error_messages.append(
+                    f"Field '{field_name}' has incorrect type (expected {expected_type})"
+                )
+            else:
+                # Generic error message
+                error_messages.append(
+                    f"Validation error in '{field_name}': {error_msg}"
+                )
+
+        return error_messages, missing_sections
+
     def validate_strategy(self, config_path: str) -> ValidationResult:
         """Validate a strategy configuration file (supports both v1 and v2 formats).
 
@@ -145,9 +194,39 @@ class StrategyValidator:
             # Use strategy_loader to handle both v1 and v2 formats
             config, is_v2 = strategy_loader.load_strategy_config(config_path)
         except Exception as e:
-            result.is_valid = False
-            result.errors.append(f"Failed to load strategy configuration: {e}")
-            return result
+            # Check if this is a wrapped Pydantic ValidationError
+            pydantic_error = None
+            if hasattr(e, "__cause__") and isinstance(
+                e.__cause__, PydanticValidationError
+            ):
+                pydantic_error = e.__cause__
+            elif isinstance(e, PydanticValidationError):
+                pydantic_error = e
+
+            if pydantic_error:
+                # Format Pydantic validation errors
+                logger.error(f"Pydantic validation failed for {config_path}")
+                result.is_valid = False
+
+                error_messages, missing_sections = self._format_pydantic_error(
+                    pydantic_error
+                )
+                result.errors.extend(error_messages)
+                result.missing_sections.extend(missing_sections)
+
+                # Log each error
+                for error_msg in error_messages:
+                    logger.error(f"Validation error: {error_msg}")
+
+                return result
+            else:
+                # Non-Pydantic error (file not found, YAML parse error, etc.)
+                logger.error(
+                    f"Failed to load strategy configuration {config_path}: {e}"
+                )
+                result.is_valid = False
+                result.errors.append(f"Failed to load strategy configuration: {e}")
+                return result
 
         if is_v2:
             # Type checked - config is StrategyConfigurationV2 when is_v2 is True
@@ -216,6 +295,17 @@ class StrategyValidator:
             fuzzy_dict = config.fuzzy_sets
             self._check_legacy_format({"fuzzy_sets": fuzzy_dict}, result)
 
+        # Validate indicator definitions (feature_id format, etc.)
+        if config.indicators:
+            self._validate_indicator_definitions(config.indicators, result)
+
+        # Validate indicator-fuzzy matching (STRICT validation)
+        # Run validation if indicators exist, even if fuzzy_sets is empty dict
+        if config.indicators and config.fuzzy_sets is not None:
+            self._validate_indicator_fuzzy_matching(
+                config.indicators, config.fuzzy_sets, result
+            )
+
         # V2-specific suggestions
         result.suggestions.append(
             "Strategy is in v2 format - ready for multi-scope training"
@@ -245,12 +335,16 @@ class StrategyValidator:
             if section not in config_dict or config_dict[section] is None:
                 result.is_valid = False
                 result.missing_sections.append(section)
-                result.errors.append(f"Missing required section: {section}")
+                error_msg = f"Missing required section: {section}"
+                result.errors.append(error_msg)
+                logger.error(error_msg)
             elif not isinstance(config_dict[section], expected_type):
                 result.is_valid = False
-                result.errors.append(
+                error_msg = (
                     f"Section '{section}' must be of type {expected_type.__name__}"
                 )
+                result.errors.append(error_msg)
+                logger.error(error_msg)
 
         # Validate neural model configuration
         if config_dict.get("model"):
@@ -484,3 +578,126 @@ class StrategyValidator:
                             and len(set_config["parameters"]) == 3
                         ):
                             sets[set_name] = set_config["parameters"]
+
+    def _validate_indicator_definitions(
+        self, indicators: list[dict[str, Any]], result: ValidationResult
+    ) -> None:
+        """
+        Validate indicator definitions by parsing each as IndicatorConfig.
+
+        Since indicators are stored as list[dict] in v2 config, Pydantic doesn't
+        validate them at load time. This method explicitly validates each indicator
+        by attempting to parse it as an IndicatorConfig.
+
+        This validates:
+        - feature_id presence (REQUIRED)
+        - feature_id format (must start with letter, alphanumeric/underscore/dash)
+        - feature_id reserved words (open, high, low, close, volume)
+        - type field presence
+
+        Args:
+            indicators: List of indicator configuration dictionaries
+            result: ValidationResult to update with errors
+        """
+        from ktrdr.config.models import IndicatorConfig
+
+        for idx, indicator_dict in enumerate(indicators):
+            try:
+                # Attempt to parse as IndicatorConfig - will raise ValidationError if invalid
+                IndicatorConfig(**indicator_dict)
+            except PydanticValidationError as e:
+                # Extract meaningful error messages
+                result.is_valid = False
+
+                for error in e.errors():
+                    field = ".".join(str(loc) for loc in error["loc"])
+                    error_type = error["type"]
+                    msg = error["msg"]
+
+                    # Format user-friendly error message
+                    if field == "feature_id" and error_type == "missing":
+                        error_msg = (
+                            f"Indicator at index {idx} (type: {indicator_dict.get('type', 'unknown')}) "
+                            f"is missing required field 'feature_id'. "
+                            f"All indicators must have a unique feature_id."
+                        )
+                    elif "feature_id" in field:
+                        # Format or reserved word validation error
+                        error_msg = (
+                            f"Indicator at index {idx} has invalid feature_id: {msg}"
+                        )
+                    else:
+                        error_msg = f"Indicator at index {idx}: {field} - {msg}"
+
+                    result.errors.append(error_msg)
+                    logger.error(f"Indicator validation failed: {error_msg}")
+
+    def _validate_indicator_fuzzy_matching(
+        self,
+        indicators: list[dict[str, Any]],
+        fuzzy_sets: dict[str, Any],
+        result: ValidationResult,
+    ) -> None:
+        """
+        Validate that all indicators have corresponding fuzzy_sets (STRICT).
+
+        This implements the simplified validation logic from Phase 1:
+        - Use feature_ids directly (no column name guessing)
+        - Simple set comparison: feature_ids vs fuzzy_keys
+        - STRICT validation: all feature_ids MUST have fuzzy_sets
+        - Warn about orphaned fuzzy sets (might be derived features)
+
+        Args:
+            indicators: List of indicator configuration dictionaries
+            fuzzy_sets: Fuzzy sets configuration dictionary
+            result: ValidationResult to update with errors/warnings
+        """
+        # Extract feature_ids from indicators
+        feature_ids = set()
+        for indicator in indicators:
+            feature_id = indicator.get("feature_id")
+            if feature_id:  # Should always have feature_id due to Pydantic validation
+                feature_ids.add(feature_id)
+
+        # Get fuzzy_set keys
+        fuzzy_keys = set(fuzzy_sets.keys())
+
+        # Check for missing fuzzy_sets (STRICT - this is an ERROR)
+        missing = feature_ids - fuzzy_keys
+        if missing:
+            result.is_valid = False
+            missing_list = sorted(missing)
+
+            error_msg = (
+                f"Missing fuzzy_sets for indicators: {', '.join(missing_list)}. "
+                "All indicators must have corresponding fuzzy_sets defined."
+            )
+            result.errors.append(error_msg)
+            logger.error(f"Indicator-fuzzy validation failed: {error_msg}")
+
+            # Add helpful suggestion with example structure
+            example_feature_id = missing_list[0]
+            suggestion = f"""
+Add fuzzy_sets for missing indicators. Example for '{example_feature_id}':
+
+fuzzy_sets:
+  {example_feature_id}:
+    low: {{type: trapezoid, parameters: [min, min, low_mid, mid]}}
+    medium: {{type: triangle, parameters: [low_mid, mid, high_mid]}}
+    high: {{type: trapezoid, parameters: [mid, high_mid, max, max]}}
+
+Missing feature_ids: {', '.join(missing_list)}
+"""
+            result.suggestions.append(suggestion.strip())
+
+        # Check for orphaned fuzzy_sets (WARNING only - might be derived features)
+        orphans = fuzzy_keys - feature_ids
+        if orphans:
+            orphans_list = sorted(orphans)
+            warning_msg = (
+                f"Fuzzy sets defined without corresponding indicators: {', '.join(orphans_list)}. "
+                "These might be derived features or intentional. "
+                "If unintentional, remove from fuzzy_sets or add corresponding indicators."
+            )
+            result.warnings.append(warning_msg)
+            logger.warning(f"Orphaned fuzzy_sets detected: {warning_msg}")

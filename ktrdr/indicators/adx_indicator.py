@@ -10,7 +10,7 @@ of a trend without regard to its direction. It consists of three lines:
 Author: KTRDR
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -50,6 +50,50 @@ class ADXIndicator(BaseIndicator):
     Typical Parameters:
     - period: 14 (most common), 21, 28
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """ADX produces multiple outputs (ADX, DI_Plus, DI_Minus, DX, TR, ADX_Slope)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> None:
+        """Primary output is ADX with no suffix."""
+        return None
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        ADX format:
+        - ADX: "ADX_{period}"
+        - DI_Plus: "DI_Plus_{period}"
+        - DI_Minus: "DI_Minus_{period}"
+        - DX: "DX_{period}"
+        - TR: "TR_{period}"
+        - ADX_Slope: "ADX_Slope_{period}"
+
+        Args:
+            suffix: Optional suffix (None, "DI_Plus", "DI_Minus", "DX", "TR", "ADX_Slope")
+
+        Returns:
+            Column name matching compute() output format
+        """
+        period = self.params.get("period", 14)
+
+        if suffix == "DI_Plus":
+            return f"DI_Plus_{period}"
+        elif suffix == "DI_Minus":
+            return f"DI_Minus_{period}"
+        elif suffix == "DX":
+            return f"DX_{period}"
+        elif suffix == "TR":
+            return f"TR_{period}"
+        elif suffix == "ADX_Slope":
+            return f"ADX_Slope_{period}"
+        else:
+            # Default to ADX (primary)
+            return f"ADX_{period}"
 
     def __init__(self, period: int = 14):
         """
@@ -185,7 +229,9 @@ class ADXIndicator(BaseIndicator):
         adx = self._wilder_smoothing(dx, period)
 
         # Create result DataFrame
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         result[f"ADX_{period}"] = adx
         result[f"DI_Plus_{period}"] = di_plus
         result[f"DI_Minus_{period}"] = di_minus
@@ -219,7 +265,9 @@ class ADXIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         period = self.params.get("period", 14)
         adx_col = f"ADX_{period}"

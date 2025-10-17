@@ -161,7 +161,9 @@ class ADLineIndicator(BaseIndicator):
         ad_line = money_flow_volume.cumsum()
 
         # Create result DataFrame
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
         result["AD_Line"] = ad_line
         result["AD_MF_Multiplier"] = money_flow_multiplier
         result["AD_MF_Volume"] = money_flow_volume
@@ -200,7 +202,9 @@ class ADLineIndicator(BaseIndicator):
         Returns:
             DataFrame with signal columns added
         """
-        result = data.copy()
+        result = pd.DataFrame(
+            index=data.index
+        )  # CRITICAL FIX: Only return computed columns
 
         use_sma_smoothing = self.params.get("use_sma_smoothing", False)
         smoothing_period = self.params.get("smoothing_period", 21)

@@ -2,6 +2,48 @@
 Strategies endpoints for the KTRDR API.
 
 This module implements the API endpoints for listing and managing trading strategies.
+
+HTTP Status Code Mapping
+------------------------
+The endpoints in this module follow these status code conventions:
+
+200 OK:
+    - Successful retrieval of strategy list
+    - Successful retrieval of strategy details
+    - Successful retrieval of available indicators
+
+400 Bad Request (ConfigurationError):
+    - Strategy file has invalid format or structure
+    - Strategy validation fails (missing fields, invalid values)
+    - Fuzzy sets reference invalid indicators
+    - Feature IDs are missing, duplicate, or invalid format
+    Fix: Edit the strategy YAML file to correct the configuration
+
+422 Unprocessable Entity (ValidationError):
+    - Request parameters are invalid (e.g., invalid strategy name format)
+    - Query parameters don't match expected schema
+    Fix: Correct the API request parameters
+
+404 Not Found:
+    - Strategy file doesn't exist at specified path
+    - Requested strategy name doesn't match any known strategy
+    Fix: Check strategy name or create the strategy file
+
+500 Internal Server Error:
+    - Unexpected errors during file system operations
+    - Python exceptions not caught by specific handlers
+    Fix: Check server logs for stack trace
+
+Error Response Format
+--------------------
+All errors return JSON with this structure:
+    {
+        "message": "Human-readable error description",
+        "error_code": "CATEGORY-ErrorName",
+        "context": {"file": "path/to/file.yaml", ...},
+        "details": {...},
+        "suggestion": "How to fix this error"
+    }
 """
 
 from pathlib import Path
@@ -12,6 +54,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ktrdr import get_logger
+from ktrdr.errors import ConfigurationError
 from ktrdr.indicators.indicator_factory import BUILT_IN_INDICATORS
 from ktrdr.training.model_storage import ModelStorage
 
@@ -428,39 +471,49 @@ def _validate_strategy_config(
                     ):
                         expected_derived.add("squeeze_intensity")
 
-            # TEMPORARILY DISABLED: This validation is too strict and doesn't account for
-            # auto-generated indicator names (e.g., stoch → stochastic_14_3_3, bbands → bollingerbands_20_2.0)
-            # TODO: Re-enable once explicit indicator naming is implemented (see docs/architecture/indicators/explicit-naming-design.md)
-            #
+            # Build set of all possible valid targets for fuzzy sets
+            # Includes: indicator names, derived metrics, and price data columns
+            all_possible_targets = (
+                set(indicator_names)
+                | expected_derived
+                | {
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                }
+            )
+
             # Check if fuzzy sets reference valid indicators/metrics
             # Note: Fuzzy set names may have suffixes like _14, _standard, _fast to distinguish
             # between multiple instances of the same indicator with different parameters.
             # Extract the base indicator name by splitting on _ and taking the first part.
-            # invalid_fuzzy_refs = []
-            # for fuzzy_name in fuzzy_configs.keys():
-            #     # Extract base indicator name (e.g., "rsi_14" -> "rsi", "macd_standard" -> "macd")
-            #     base_name = fuzzy_name.split("_")[0]
-            #     # Check both the full name and the base name
-            #     if (
-            #         fuzzy_name not in all_possible_targets
-            #         and base_name not in all_possible_targets
-            #     ):
-            #         invalid_fuzzy_refs.append(fuzzy_name)
+            invalid_fuzzy_refs = []
+            for fuzzy_name in fuzzy_configs.keys():
+                # Extract base indicator name (e.g., "rsi_14" -> "rsi", "macd_standard" -> "macd")
+                base_name = fuzzy_name.split("_")[0]
+                # Check both the full name and the base name
+                if (
+                    fuzzy_name not in all_possible_targets
+                    and base_name not in all_possible_targets
+                ):
+                    invalid_fuzzy_refs.append(fuzzy_name)
 
-            # if invalid_fuzzy_refs:
-            #     issues.append(
-            #         ValidationIssue(
-            #             severity="error",
-            #             category="fuzzy_sets",
-            #             message=f"Fuzzy sets reference invalid indicators/metrics: {', '.join(invalid_fuzzy_refs)}. Valid targets are: {', '.join(sorted(all_possible_targets))}",
-            #             details={
-            #                 "invalid_references": invalid_fuzzy_refs,
-            #                 "valid_targets": sorted(all_possible_targets),
-            #                 "strategy_indicators": indicator_names,
-            #                 "derived_metrics": sorted(expected_derived),
-            #             },
-            #         )
-            #     )
+            if invalid_fuzzy_refs:
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        category="fuzzy_sets",
+                        message=f"Fuzzy sets reference invalid indicators/metrics: {', '.join(invalid_fuzzy_refs)}. Valid targets are: {', '.join(sorted(all_possible_targets))}",
+                        details={
+                            "invalid_references": invalid_fuzzy_refs,
+                            "valid_targets": sorted(all_possible_targets),
+                            "strategy_indicators": indicator_names,
+                            "derived_metrics": sorted(expected_derived),
+                        },
+                    )
+                )
 
             # Validate fuzzy set structure
             for fuzzy_name, fuzzy_config in fuzzy_configs.items():
@@ -490,8 +543,12 @@ def _validate_strategy_config(
                     )
                     continue
 
-                # Validate each membership function
+                # Validate each membership function (skip input_transform - it's not a membership function)
                 for member_name, member_config in fuzzy_config.items():
+                    # Skip input_transform - it's a special configuration field, not a membership function
+                    if member_name == "input_transform":
+                        continue
+
                     if not isinstance(member_config, dict):
                         issues.append(
                             ValidationIssue(
@@ -600,6 +657,11 @@ async def validate_strategy(strategy_name: str) -> StrategyValidationResponse:
 
     except HTTPException:
         raise
+    except ConfigurationError as e:
+        # Log error with full context before responding
+        logger.error(f"Configuration error: {e.format_user_message()}")
+        # Return structured error response with all details
+        raise HTTPException(status_code=400, detail=e.to_dict()) from e
     except Exception as e:
         logger.error(f"Error validating strategy {strategy_name}: {e}")
         return StrategyValidationResponse(

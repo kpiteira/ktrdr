@@ -353,6 +353,47 @@ class AsyncOperationExecutor:
                 # Start the operation
                 try:
                     operation_id = await self._start_operation(adapter, http_client)
+                except httpx.HTTPStatusError as e:
+                    # Try to parse structured error from response
+                    try:
+                        response_json = e.response.json()
+                        # FastAPI HTTPException puts the detail in "detail" field
+                        error_detail = response_json.get("detail", response_json)
+
+                        if (
+                            isinstance(error_detail, dict)
+                            and "error_code" in error_detail
+                        ):
+                            # Structured ConfigurationError response
+                            console.print("[red bold]Configuration Error:[/red bold]")
+                            console.print(
+                                f"  [red]{error_detail.get('message', 'Validation failed')}[/red]"
+                            )
+
+                            if error_detail.get("error_code"):
+                                console.print(f"  Code: {error_detail['error_code']}")
+
+                            if error_detail.get("context"):
+                                context = error_detail["context"]
+                                console.print("  Context:")
+                                for key, value in context.items():
+                                    console.print(f"    {key}: {value}")
+
+                            if error_detail.get("suggestion"):
+                                console.print("\n[yellow]Suggestion:[/yellow]")
+                                console.print(f"  {error_detail['suggestion']}")
+                        else:
+                            # Not a structured error, show generic message
+                            console.print(
+                                f"[red]Failed to start operation: {e}[/red]",
+                                style="bold",
+                            )
+                    except Exception:
+                        # Fallback to simple error message
+                        console.print(
+                            f"[red]Failed to start operation: {e}[/red]", style="bold"
+                        )
+                    return False
                 except httpx.HTTPError as e:
                     console.print(
                         f"[red]Failed to start operation: {e}[/red]", style="bold"

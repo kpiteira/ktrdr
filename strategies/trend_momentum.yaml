@@ -1,8 +1,10 @@
 # === STRATEGY IDENTITY ===
 name: "trend_momentum"  # Trend-following strategy capturing sustained moves
-description: "A strategy combining trend and momentum indicators with customized fuzzy sets"  # Clear one-line strategy summary
-version: "2.0"  # Clean format version for AI agent compatibility
-hypothesis: "Strong momentum signals combined with trend confirmation create sustainable directional moves with favorable risk-reward ratios"  # Core strategy belief being tested
+description: "A strategy combining trend and momentum indicators with customized fuzzy
+  sets"                                                                                       # Clear one-line strategy summary
+version: "2.1"  # Clean format version for AI agent compatibility
+hypothesis: "Strong momentum signals combined with trend confirmation create sustainable
+  directional moves with favorable risk-reward ratios"                                                                                         # Core strategy belief being tested
 
 # === STRATEGY SCOPE ===
 scope: "symbol_specific"  # Symbol-specific model optimized for single asset characteristics
@@ -28,28 +30,31 @@ deployment:  # Target configuration for live trading
 # === TECHNICAL INDICATORS ===
 indicators:  # Core technical analysis components
 - name: "rsi"  # Relative Strength Index for momentum and reversal signals
+  feature_id: rsi_14
   period: 14  # Lookback period balancing responsiveness vs stability
   source: "close"  # Price source for calculation consistency
 - name: "macd"  # MACD for trend direction and momentum confirmation
+  feature_id: macd_12_26_9
   fast_period: 12  # Fast EMA period for responsive signal generation
   slow_period: 26  # Slow EMA period for trend stability
   signal_period: 9  # Signal line period for entry/exit timing
   source: "close"  # Price source for calculation consistency
 - name: "stoch"  # Stochastic oscillator for overbought/oversold conditions
+  feature_id: stoch_14_3_3
   k_period: 14  # K percent period for stochastic calculation
   d_period: 3  # D smoothing period for stochastic signal
-  source: "close"  # Price source for calculation consistency
+  smooth_k: 3  # K line smoothing period
 - name: "adx"  # Average Directional Index for trend strength measurement
+  feature_id: adx_14
   period: 14  # Lookback period balancing responsiveness vs stability
-  source: "close"  # Price source for calculation consistency
 - name: "bbands"  # Bollinger Bands for volatility and mean reversion
+  feature_id: bbands_20_2
   period: 20  # Lookback period balancing responsiveness vs stability
-  source: "close"  # Price source for calculation consistency
-  std_dev: 2  # Standard deviation multiplier for band width
+  multiplier: 2  # Standard deviation multiplier for band width
 
 # === FUZZY LOGIC CONFIGURATION ===
 fuzzy_sets:  # Membership functions for indicator interpretation
-  adx:  # Fuzzy membership functions for ADX interpretation
+  adx_14:  # Fuzzy membership functions for ADX interpretation
     weak:  # Low intensity values indicating uncertainty
       type: "triangular"  # Triangular membership for crisp boundaries
       parameters: [0, 15, 30]  # Triangular membership: left=0, peak=15, right=30
@@ -59,7 +64,7 @@ fuzzy_sets:  # Membership functions for indicator interpretation
     strong:  # High intensity values indicating conviction
       type: "triangular"  # Triangular membership for crisp boundaries
       parameters: [40, 60, 100]  # Triangular membership: left=40, peak=60, right=100
-  rsi:  # Fuzzy membership functions for RSI interpretation
+  rsi_14:  # Fuzzy membership functions for RSI interpretation
     oversold:  # Extreme low values indicating potential reversal
       type: "triangular"  # Triangular membership for crisp boundaries
       parameters: [0, 20, 35]  # Triangular membership: left=0, peak=20, right=35

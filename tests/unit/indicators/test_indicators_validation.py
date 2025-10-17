@@ -417,11 +417,11 @@ class TestAllIndicatorsValidation:
         from ktrdr.config.models import IndicatorConfig
         from ktrdr.indicators import IndicatorFactory
 
-        # Create indicator configs
+        # Create indicator configs (name is the indicator type)
         configs = [
-            IndicatorConfig(type="SMA", name="MySMA", params={"period": 5}),
-            IndicatorConfig(type="EMA", name="MyEMA", params={"period": 5}),
-            IndicatorConfig(type="RSI", name="MyRSI", params={"period": 14}),
+            IndicatorConfig(name="SMA", feature_id="my_sma_5", params={"period": 5}),
+            IndicatorConfig(name="EMA", feature_id="my_ema_5", params={"period": 5}),
+            IndicatorConfig(name="RSI", feature_id="my_rsi_14", params={"period": 14}),
         ]
 
         # Create indicators with factory
@@ -431,10 +431,10 @@ class TestAllIndicatorsValidation:
         # Ensure we got all the indicators
         assert len(indicators) == 3
 
-        # Ensure indicators have custom names
-        assert indicators[0].name == "MySMA"
-        assert indicators[1].name == "MyEMA"
-        assert indicators[2].name == "MyRSI"
+        # Ensure indicators were created with correct types
+        assert isinstance(indicators[0], SimpleMovingAverage)
+        assert isinstance(indicators[1], ExponentialMovingAverage)
+        assert isinstance(indicators[2], RSIIndicator)
 
         # Test all indicators on a dataset
         data = create_reference_dataset_1()

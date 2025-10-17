@@ -116,7 +116,10 @@ class TestFuzzyEngine:
             fuzzy_engine.fuzzify("unknown", 50.0)
 
         # Check both message and error code
-        assert "Unknown indicator" in str(excinfo.value)
+        # Updated error message uses "Feature ID" terminology (Phase 4)
+        assert "Unknown indicator" in str(excinfo.value) or "Feature ID" in str(
+            excinfo.value
+        )
         assert excinfo.value.error_code == "ENGINE-UnknownIndicator"
 
     def test_fuzzify_invalid_input_type(self, fuzzy_engine):

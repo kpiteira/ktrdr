@@ -110,15 +110,44 @@ class WilliamsRIndicator(BaseIndicator):
                 },
             )
 
+        # Check for duplicate columns and extract as Series
+        duplicate_cols = [
+            col for col in ["high", "low", "close"] if list(data.columns).count(col) > 1
+        ]
+        if duplicate_cols:
+            logger.error(
+                f"[CRITICAL BUG] WilliamsR found duplicate columns: {duplicate_cols}"
+            )
+
+        # Extract high/low/close, ensuring they are Series not DataFrames
+        high_data = data["high"]
+        if isinstance(high_data, pd.DataFrame):
+            logger.error(
+                f"[CRITICAL BUG] data['high'] returned DataFrame with {len(high_data.columns)} columns!"
+            )
+            high_data = high_data.iloc[:, 0]
+
+        low_data = data["low"]
+        if isinstance(low_data, pd.DataFrame):
+            logger.error(
+                f"[CRITICAL BUG] data['low'] returned DataFrame with {len(low_data.columns)} columns!"
+            )
+            low_data = low_data.iloc[:, 0]
+
+        close_data = data["close"]
+        if isinstance(close_data, pd.DataFrame):
+            logger.error(
+                f"[CRITICAL BUG] data['close'] returned DataFrame with {len(close_data.columns)} columns!"
+            )
+            close_data = close_data.iloc[:, 0]
+
         # Calculate rolling highest high and lowest low over period
-        highest_high = data["high"].rolling(window=period, min_periods=period).max()
-        lowest_low = data["low"].rolling(window=period, min_periods=period).min()
+        highest_high = high_data.rolling(window=period, min_periods=period).max()
+        lowest_low = low_data.rolling(window=period, min_periods=period).min()
 
         # Calculate Williams %R
         # %R = ((Highest High - Close) / (Highest High - Lowest Low)) × -100
-        williams_r = (
-            (highest_high - data["close"]) / (highest_high - lowest_low)
-        ) * -100
+        williams_r = ((highest_high - close_data) / (highest_high - lowest_low)) * -100
 
         # Handle division by zero (when high == low)
         # In this case, price is at the midpoint, so use -50.0 (neutral)

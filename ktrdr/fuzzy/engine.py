@@ -131,7 +131,10 @@ class FuzzyEngine:
                     ) from e
 
     def fuzzify(
-        self, indicator: str, values: Union[float, pd.Series, np.ndarray]
+        self,
+        indicator: str,
+        values: Union[float, pd.Series, np.ndarray],
+        context_data: Optional[pd.DataFrame] = None,
     ) -> Union[dict[str, Union[float, pd.Series, np.ndarray]], pd.DataFrame]:
         """
         Fuzzify indicator values using the configured membership functions.
@@ -142,13 +145,16 @@ class FuzzyEngine:
         Args:
             indicator: Name of the indicator (e.g., "rsi", "macd")
             values: Indicator values to fuzzify (scalar, pandas Series, or numpy array)
+            context_data: Optional DataFrame containing price data (open, high, low, close)
+                         required for price_ratio transforms
 
         Returns:
             For scalar input: A dictionary mapping fuzzy set names to membership degrees
             For Series/array input: A DataFrame with columns for each fuzzy set
 
         Raises:
-            ProcessingError: If the indicator is not in the configuration
+            ProcessingError: If the indicator is not in the configuration or if
+                           required context_data is missing
             TypeError: If the input type is not supported
         """
         logger.debug(f"Fuzzifying values for indicator: {indicator}")
@@ -156,45 +162,182 @@ class FuzzyEngine:
         # Check if the indicator exists in the configuration
         if indicator not in self._membership_functions:
             logger.error(f"Unknown indicator: {indicator}")
+
+            # Get list of available indicators
+            available_indicators = list(self._membership_functions.keys())
+
+            # Try to find a close match (typo detection)
+            suggestion = self._find_close_match(indicator, available_indicators)
+
+            # Build error message with suggestion
+            error_msg = f"Feature ID '{indicator}' not found in fuzzy configuration"
+
+            # Build suggestion text
+            suggestion_text = (
+                f"Available feature IDs: {', '.join(available_indicators[:10])}"
+            )
+            if len(available_indicators) > 10:
+                suggestion_text += f" (and {len(available_indicators) - 10} more)"
+
+            if suggestion:
+                suggestion_text += f"\n\nDid you mean '{suggestion}'?"
+
+            # Build details dict with suggestion
+            error_details = {
+                "indicator": indicator,
+                "available_indicators": available_indicators,
+            }
+            if suggestion:
+                error_details["suggestion"] = suggestion
+
             raise ProcessingError(
-                message=f"Unknown indicator: {indicator}",
+                message=error_msg,
                 error_code="ENGINE-UnknownIndicator",
-                details={
-                    "indicator": indicator,
-                    "available_indicators": list(self._membership_functions.keys()),
-                },
+                details=error_details,
+                suggestion=suggestion_text,
             )
 
         # Get the membership functions for this indicator
         membership_functions = self._membership_functions[indicator]
 
+        # Apply input transform if configured
+        transformed_values = self._apply_transform(indicator, values, context_data)
+
         # Handle scalar input
-        if isinstance(values, (int, float)):
-            logger.debug(f"Fuzzifying scalar value {values} for indicator {indicator}")
-            return self._fuzzify_scalar(indicator, values, membership_functions)  # type: ignore[return-value]
+        if isinstance(transformed_values, (int, float)):
+            logger.debug(
+                f"Fuzzifying scalar value {transformed_values} for indicator {indicator}"
+            )
+            return self._fuzzify_scalar(indicator, transformed_values, membership_functions)  # type: ignore[return-value]
 
         # Handle pandas Series input
-        elif isinstance(values, pd.Series):
+        elif isinstance(transformed_values, pd.Series):
             logger.debug(
-                f"Fuzzifying pandas Series of length {len(values)} for indicator {indicator}"
+                f"Fuzzifying pandas Series of length {len(transformed_values)} for indicator {indicator}"
             )
-            return self._fuzzify_series(indicator, values, membership_functions)
+            return self._fuzzify_series(
+                indicator, transformed_values, membership_functions
+            )
 
         # Handle numpy array input
-        elif isinstance(values, np.ndarray):
+        elif isinstance(transformed_values, np.ndarray):
             logger.debug(
-                f"Fuzzifying numpy array of shape {values.shape} for indicator {indicator}"
+                f"Fuzzifying numpy array of shape {transformed_values.shape} for indicator {indicator}"
             )
             # Convert numpy array to pandas Series for consistent handling
-            series = pd.Series(values)
+            series = pd.Series(transformed_values)
             return self._fuzzify_series(indicator, series, membership_functions)
 
         # Handle unsupported input types
         else:
-            logger.error(f"Unsupported input type for fuzzification: {type(values)}")
-            raise TypeError(
-                f"Unsupported input type: {type(values)}. Expected float, pd.Series, or np.ndarray."
+            logger.error(
+                f"Unsupported input type for fuzzification: {type(transformed_values)}"
             )
+            raise TypeError(
+                f"Unsupported input type: {type(transformed_values)}. Expected float, pd.Series, or np.ndarray."
+            )
+
+    def _apply_transform(
+        self,
+        indicator: str,
+        values: Union[float, pd.Series, np.ndarray],
+        context_data: Optional[pd.DataFrame] = None,
+    ) -> Union[float, pd.Series, np.ndarray]:
+        """
+        Apply input transform to indicator values before fuzzification.
+
+        Args:
+            indicator: Name of the indicator
+            values: Indicator values to transform
+            context_data: Optional DataFrame containing price data for transforms
+
+        Returns:
+            Transformed values (same type as input)
+
+        Raises:
+            ProcessingError: If required context_data is missing or invalid
+        """
+        # Get the fuzzy set config for this indicator
+        fuzzy_set_config = self._config.root[indicator]
+
+        # Get the input transform (may be None)
+        input_transform = fuzzy_set_config.input_transform
+
+        # If no transform or identity transform, return values unchanged
+        if input_transform is None or input_transform.type == "identity":
+            logger.debug(f"No transform or identity transform for {indicator}")
+            return values
+
+        # Handle price_ratio transform
+        if input_transform.type == "price_ratio":
+            logger.debug(
+                f"Applying price_ratio transform for {indicator} with reference '{input_transform.reference}'"
+            )
+
+            # Validate context_data is provided
+            if context_data is None:
+                logger.error(
+                    f"context_data is required for price_ratio transform for {indicator}"
+                )
+                raise ProcessingError(
+                    message=f"context_data is required for price_ratio transform for indicator '{indicator}'. Pass context_data DataFrame with price columns (open, high, low, close)",
+                    error_code="ENGINE-MissingContextData",
+                    details={
+                        "indicator": indicator,
+                        "transform_type": "price_ratio",
+                        "reference": input_transform.reference,
+                    },
+                )
+
+            # Validate reference column exists in context_data
+            if input_transform.reference not in context_data.columns:
+                logger.error(
+                    f"Reference column '{input_transform.reference}' not found in context_data"
+                )
+                raise ProcessingError(
+                    message=f"Reference column '{input_transform.reference}' not found in context_data. Ensure context_data contains '{input_transform.reference}' column",
+                    error_code="ENGINE-MissingReferenceColumn",
+                    details={
+                        "indicator": indicator,
+                        "reference": input_transform.reference,
+                        "available_columns": list(context_data.columns),
+                    },
+                )
+
+            # Get reference values
+            reference_values = context_data[input_transform.reference]
+
+            # Apply price ratio transformation: reference / indicator
+            if isinstance(values, (int, float)):
+                # Scalar case
+                transformed_scalar = float(reference_values.iloc[0]) / float(values)
+                logger.debug(
+                    f"Transformed scalar {values} -> {transformed_scalar} (ratio with {input_transform.reference})"
+                )
+                return transformed_scalar
+            elif isinstance(values, pd.Series):
+                # Series case
+                transformed_series = reference_values / values
+                logger.debug(
+                    f"Transformed series (length {len(values)}) with price_ratio transform"
+                )
+                return transformed_series
+            else:  # numpy array
+                # Convert to series, transform, convert back
+                series = pd.Series(values)
+                transformed_series_arr = reference_values / series
+                logger.debug(
+                    f"Transformed numpy array (shape {values.shape}) with price_ratio transform"
+                )
+                return np.array(transformed_series_arr.values)
+
+        # Unknown transform type (should never happen due to discriminator)
+        logger.error(f"Unknown transform type: {input_transform.type}")
+        raise ProcessingError(
+            message=f"Unknown transform type: {input_transform.type}",
+            error_code="ENGINE-UnknownTransformType",
+            details={"indicator": indicator, "transform_type": input_transform.type},
+        )
 
     def _fuzzify_scalar(
         self,
@@ -463,6 +606,13 @@ class FuzzyEngine:
                 # Process each indicator column and generate fuzzy memberships
                 timeframe_fuzzy_data = {}
 
+                logger.info(
+                    f"Available columns for {timeframe}: {list(indicators_data.columns)}"
+                )
+                logger.info(
+                    f"Fuzzy membership functions keys: {list(processing_engine._membership_functions.keys())}"
+                )
+
                 for indicator_col in indicators_data.columns:
                     # Skip non-indicator columns (OHLCV data)
                     if indicator_col.lower() in [
@@ -474,18 +624,20 @@ class FuzzyEngine:
                     ]:
                         continue
 
-                    # Extract base indicator name (remove suffix like "_14" from "rsi_14")
-                    base_indicator = self._extract_base_indicator_name(indicator_col)
+                    # Find matching fuzzy configuration using systematic feature_id lookup
+                    fuzzy_key = processing_engine._find_fuzzy_key(indicator_col)
 
-                    # Check if this indicator has fuzzy configuration
-                    if base_indicator in processing_engine._membership_functions:
+                    if fuzzy_key:
                         try:
                             # Get indicator values
                             indicator_values = indicators_data[indicator_col]
 
                             # Generate fuzzy memberships using existing fuzzify method
+                            # ROOT CAUSE FIX: Pass context_data for price_ratio transforms!
                             fuzzy_result = processing_engine.fuzzify(
-                                base_indicator, indicator_values
+                                fuzzy_key,
+                                indicator_values,
+                                context_data=indicators_data,
                             )
 
                             # Add timeframe prefix to column names and store results
@@ -498,7 +650,7 @@ class FuzzyEngine:
                                     ]
 
                             logger.debug(
-                                f"Generated fuzzy memberships for {base_indicator} in {timeframe}"
+                                f"Generated fuzzy memberships for {fuzzy_key} ({indicator_col}) in {timeframe}"
                             )
 
                         except Exception as e:
@@ -507,9 +659,7 @@ class FuzzyEngine:
                             )
                             continue
                     else:
-                        logger.debug(
-                            f"No fuzzy configuration for indicator {base_indicator}, skipping"
-                        )
+                        logger.debug(f"No fuzzy match for column: {indicator_col}")
 
                 # Create DataFrame with fuzzy membership results
                 if timeframe_fuzzy_data:
@@ -562,36 +712,131 @@ class FuzzyEngine:
 
         return results
 
-    def _extract_base_indicator_name(self, indicator_col: str) -> str:
+    def _find_fuzzy_key(self, column_name: str) -> Optional[str]:
         """
-        Extract base indicator name from column name.
+        Find fuzzy configuration key for a column, prioritizing feature_id matching.
 
-        Examples:
-            "rsi_14" -> "rsi"
-            "macd" -> "macd"
-            "sma_20" -> "sma"
+        This method implements systematic feature_id lookup:
+        1. Direct match: column_name exactly matches a fuzzy key (e.g., "rsi_14")
+        2. Prefix match: column_name starts with a fuzzy key + "_" (e.g., "bbands_20_2_upper" matches "bbands_20_2")
 
         Args:
-            indicator_col: Full indicator column name
+            column_name: The column name to find a fuzzy key for
 
         Returns:
-            Base indicator name
+            The matching fuzzy key, or None if no match found
+
+        Examples:
+            >>> engine._find_fuzzy_key("rsi_14")
+            "rsi_14"  # Direct match
+            >>> engine._find_fuzzy_key("bbands_20_2_upper")
+            "bbands_20_2"  # Prefix match (multi-column indicator)
+            >>> engine._find_fuzzy_key("unknown_indicator")
+            None  # No match
         """
-        # Common indicator patterns
-        common_indicators = ["rsi", "macd", "sma", "ema", "bb", "stoch", "cci", "atr"]
+        # Direct match first (most common case)
+        if column_name in self._membership_functions:
+            return column_name
 
-        # Check if the column starts with any known indicator
-        for indicator in common_indicators:
-            if indicator_col.lower().startswith(indicator.lower()):
-                return indicator.lower()
+        # For multi-column indicators, try prefix matching
+        # E.g., "bbands_20_2_upper" should match fuzzy key "bbands_20_2"
+        for fuzzy_key in self._membership_functions.keys():
+            if column_name.startswith(f"{fuzzy_key}_"):
+                return fuzzy_key
 
-        # Fallback: use the part before the first underscore or number
-        base_name = indicator_col.lower()
+        return None
 
-        # Remove trailing numbers and underscores (e.g., "rsi_14" -> "rsi")
-        for i, char in enumerate(base_name):
-            if char.isdigit() or char == "_":
-                base_name = base_name[:i]
-                break
+    def _find_close_match(
+        self, target: str, candidates: list[str], max_distance: int = 3
+    ) -> Optional[str]:
+        """
+        Find a close match for typo detection using Levenshtein distance.
 
-        return base_name if base_name else indicator_col.lower()
+        This method helps users identify typos by suggesting feature_ids that
+        are similar to what they typed. Uses Levenshtein distance to measure
+        similarity.
+
+        Args:
+            target: The feature_id that wasn't found (potential typo)
+            candidates: List of valid feature_ids to compare against
+            max_distance: Maximum edit distance to consider (default: 3)
+
+        Returns:
+            The closest matching feature_id, or None if no close match found
+
+        Examples:
+            >>> engine._find_close_match("rsi_1", ["rsi_14", "rsi_21", "macd"])
+            "rsi_14"  # Close match (distance: 1)
+            >>> engine._find_close_match("xyz", ["rsi_14", "macd"])
+            None  # Too different
+        """
+        if not candidates:
+            return None
+
+        # Calculate Levenshtein distance for each candidate
+        distances = []
+        for candidate in candidates:
+            distance = self._levenshtein_distance(target.lower(), candidate.lower())
+            distances.append((distance, candidate))
+
+        # Sort by distance (closest first)
+        distances.sort(key=lambda x: x[0])
+
+        # Return closest match if within threshold
+        closest_distance, closest_match = distances[0]
+        if closest_distance <= max_distance:
+            return closest_match
+
+        return None
+
+    def _levenshtein_distance(self, s1: str, s2: str) -> int:
+        """
+        Calculate Levenshtein distance between two strings.
+
+        The Levenshtein distance is the minimum number of single-character edits
+        (insertions, deletions, or substitutions) required to change one string
+        into another.
+
+        Args:
+            s1: First string
+            s2: Second string
+
+        Returns:
+            Edit distance between the strings
+
+        Examples:
+            >>> engine._levenshtein_distance("rsi_1", "rsi_14")
+            1  # One character difference
+            >>> engine._levenshtein_distance("rsi", "macd")
+            4  # Four edits required
+        """
+        # Handle edge cases
+        if len(s1) == 0:
+            return len(s2)
+        if len(s2) == 0:
+            return len(s1)
+
+        # Create distance matrix
+        matrix = [[0] * (len(s2) + 1) for _ in range(len(s1) + 1)]
+
+        # Initialize first column and row
+        for i in range(len(s1) + 1):
+            matrix[i][0] = i
+        for j in range(len(s2) + 1):
+            matrix[0][j] = j
+
+        # Fill matrix
+        for i in range(1, len(s1) + 1):
+            for j in range(1, len(s2) + 1):
+                if s1[i - 1] == s2[j - 1]:
+                    cost = 0
+                else:
+                    cost = 1
+
+                matrix[i][j] = min(
+                    matrix[i - 1][j] + 1,  # deletion
+                    matrix[i][j - 1] + 1,  # insertion
+                    matrix[i - 1][j - 1] + cost,  # substitution
+                )
+
+        return matrix[len(s1)][len(s2)]

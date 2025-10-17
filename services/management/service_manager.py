@@ -177,8 +177,14 @@ class ServiceManager:
         except Exception:
             return False
 
-    def start_service(self, service_name: str, wait: bool = True) -> bool:
-        """Start a specific service."""
+    def start_service(self, service_name: str, wait: bool = True, skip_dependencies: bool = False) -> bool:
+        """Start a specific service.
+
+        Args:
+            service_name: Name of the service to start
+            wait: Wait for service to start and verify health
+            skip_dependencies: Skip checking/starting dependencies (useful for restart)
+        """
         if service_name not in self.services:
             logger.error(f"Unknown service: {service_name}")
             return False
@@ -190,14 +196,15 @@ class ServiceManager:
             logger.info(f"{config.display_name} is already running")
             return True
 
-        # Check dependencies
-        dependencies = config.dependencies or []
-        for dep in dependencies:
-            if self.get_service_status(dep) != ServiceStatus.RUNNING:
-                logger.info(f"Starting dependency {dep} for {service_name}")
-                if not self.start_service(dep, wait=True):
-                    logger.error(f"Failed to start dependency {dep}")
-                    return False
+        # Check dependencies (unless skipped)
+        if not skip_dependencies:
+            dependencies = config.dependencies or []
+            for dep in dependencies:
+                if self.get_service_status(dep) != ServiceStatus.RUNNING:
+                    logger.info(f"Starting dependency {dep} for {service_name}")
+                    if not self.start_service(dep, wait=True):
+                        logger.error(f"Failed to start dependency {dep}")
+                        return False
 
         logger.info(f"Starting {config.display_name}...")
 
@@ -312,8 +319,13 @@ class ServiceManager:
             logger.error(f"Error stopping {config.display_name}: {e}")
             return False
 
-    def restart_service(self, service_name: str) -> bool:
-        """Restart a specific service."""
+    def restart_service(self, service_name: str, skip_dependencies: bool = False) -> bool:
+        """Restart a specific service.
+
+        Args:
+            service_name: Name of the service to restart
+            skip_dependencies: Skip checking/starting dependencies (just restart this service)
+        """
         logger.info(f"Restarting {service_name}...")
 
         # Stop first
@@ -324,8 +336,8 @@ class ServiceManager:
         # Wait a moment
         time.sleep(2)
 
-        # Start again
-        return self.start_service(service_name, wait=True)
+        # Start again (optionally skipping dependencies)
+        return self.start_service(service_name, wait=True, skip_dependencies=skip_dependencies)
 
     def start_all_services(self) -> bool:
         """Start all services in dependency order."""
@@ -472,6 +484,11 @@ def main():
     parser.add_argument("--service", help="Specific service to manage (optional)")
     parser.add_argument("--all", action="store_true", help="Apply to all services")
     parser.add_argument(
+        "--skip-dependencies",
+        action="store_true",
+        help="Skip dependency checks when starting/restarting",
+    )
+    parser.add_argument(
         "--interval", type=int, default=30, help="Monitoring interval in seconds"
     )
 
@@ -481,7 +498,9 @@ def main():
 
     if args.command == "start":
         if args.service:
-            success = manager.start_service(args.service)
+            success = manager.start_service(
+                args.service, skip_dependencies=args.skip_dependencies
+            )
         else:
             success = manager.start_all_services()
         sys.exit(0 if success else 1)
@@ -495,7 +514,9 @@ def main():
 
     elif args.command == "restart":
         if args.service:
-            success = manager.restart_service(args.service)
+            success = manager.restart_service(
+                args.service, skip_dependencies=args.skip_dependencies
+            )
         else:
             success = manager.stop_all_services() and manager.start_all_services()
         sys.exit(0 if success else 1)

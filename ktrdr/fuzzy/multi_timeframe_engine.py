@@ -232,7 +232,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
                             },
                         )
 
-                    fuzzy_sets[key] = FuzzySetConfig(root={set_name: mf_instance})
+                    fuzzy_sets[key] = FuzzySetConfig(**{set_name: mf_instance})  # type: ignore[arg-type]
 
             configs[tf_name] = TimeframeConfig(
                 timeframe=tf_name,
@@ -271,7 +271,7 @@ class MultiTimeframeFuzzyEngine(FuzzyEngine):
 
                 if indicator_fuzzy_sets:
                     merged_indicators[tf_indicator] = FuzzySetConfig(
-                        root=indicator_fuzzy_sets
+                        **indicator_fuzzy_sets  # type: ignore[arg-type]
                     )
 
         return FuzzyConfig(root=merged_indicators)

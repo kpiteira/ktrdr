@@ -5,6 +5,8 @@ This module provides the MACDIndicator class for calculating the Moving Average 
 Divergence (MACD) indicator.
 """
 
+from typing import Optional
+
 import pandas as pd
 
 from ktrdr import get_logger
@@ -23,6 +25,11 @@ class MACDIndicator(BaseIndicator):
     The MACD indicator calculates the difference between two exponential moving
     averages and provides a signal line, which is an EMA of the MACD line.
 
+    This is a multi-output indicator that produces three columns:
+    - MACD line (primary output)
+    - Signal line
+    - Histogram
+
     Default parameters:
         - fast_period: 12 (12-day EMA)
         - slow_period: 26 (26-day EMA)
@@ -35,6 +42,48 @@ class MACDIndicator(BaseIndicator):
         signal_period (int): The signal line's EMA period
         source (str): The data column to use for calculations
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """MACD produces multiple outputs (MACD line, signal, histogram)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> None:
+        """
+        Primary output is the MACD line with no suffix.
+
+        Returns None because the primary column name is just "MACD_12_26"
+        (no suffix like "signal" or "hist").
+        """
+        return None
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        MACD uses uppercase and specific parameter formatting:
+        - Primary: "MACD_{fast}_{slow}"
+        - Signal: "MACD_signal_{fast}_{slow}_{signal}"
+        - Histogram: "MACD_hist_{fast}_{slow}_{signal}"
+
+        Args:
+            suffix: Optional suffix ("signal", "hist", or None for primary)
+
+        Returns:
+            Column name matching compute() output format
+        """
+        fast = self.params.get("fast_period", 12)
+        slow = self.params.get("slow_period", 26)
+        signal = self.params.get("signal_period", 9)
+
+        if suffix == "signal":
+            return f"MACD_signal_{fast}_{slow}_{signal}"
+        elif suffix == "hist":
+            return f"MACD_hist_{fast}_{slow}_{signal}"
+        else:
+            # Primary output (no suffix)
+            return f"MACD_{fast}_{slow}"
 
     def __init__(
         self,

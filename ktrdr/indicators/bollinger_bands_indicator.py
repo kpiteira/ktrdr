@@ -10,7 +10,7 @@ The indicator is commonly used to identify overbought/oversold conditions
 and potential breakout points.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import pandas as pd
 
@@ -27,6 +27,11 @@ class BollingerBandsIndicator(BaseIndicator):
     Volatility is based on the standard deviation, which changes as volatility
     increases and decreases. The bands automatically widen when volatility
     increases and narrow when volatility decreases.
+
+    This is a multi-output indicator that produces three columns:
+    - upper: Upper Bollinger Band (primary output)
+    - middle: Middle Band (SMA)
+    - lower: Lower Bollinger Band
 
     **Interpretation:**
     - Price touching upper band may indicate overbought condition
@@ -45,6 +50,40 @@ class BollingerBandsIndicator(BaseIndicator):
     - middle: Middle Band (SMA)
     - lower: Lower Bollinger Band
     """
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """Bollinger Bands produces multiple outputs (upper, middle, lower)."""
+        return True
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> str:
+        """Primary output is the upper band."""
+        return "upper"
+
+    def get_column_name(self, suffix: Optional[str] = None) -> str:
+        """
+        Generate column name matching what compute() actually produces.
+
+        Bollinger Bands uses lowercase and specific parameter formatting:
+        - Upper: "upper_{period}_{multiplier}"
+        - Middle: "middle_{period}_{multiplier}"
+        - Lower: "lower_{period}_{multiplier}"
+
+        Args:
+            suffix: Optional suffix ("upper", "middle", "lower", or None for upper)
+
+        Returns:
+            Column name matching compute() output format
+        """
+        period = self.params.get("period", 20)
+        multiplier = self.params.get("multiplier", 2.0)
+
+        # Default to upper if no suffix specified
+        if suffix is None:
+            suffix = "upper"
+
+        return f"{suffix}_{period}_{multiplier}"
 
     def __init__(
         self, period: int = 20, multiplier: float = 2.0, source: str = "close"
@@ -115,9 +154,15 @@ class BollingerBandsIndicator(BaseIndicator):
         upper_band = middle_band + (multiplier * rolling_std)
         lower_band = middle_band - (multiplier * rolling_std)
 
-        # Create result DataFrame
+        # Create result DataFrame with unique column names based on parameters
+        # This prevents collisions when multiple BollingerBands with different params are used
+        suffix = f"{period}_{multiplier}"
         result = pd.DataFrame(
-            {"upper": upper_band, "middle": middle_band, "lower": lower_band},
+            {
+                f"upper_{suffix}": upper_band,
+                f"middle_{suffix}": middle_band,
+                f"lower_{suffix}": lower_band,
+            },
             index=data.index,
         )
 

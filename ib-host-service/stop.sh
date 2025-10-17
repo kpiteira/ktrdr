@@ -11,15 +11,22 @@ echo "Stopping IB Connector Host Service..."
 # Change to service directory
 cd "$(dirname "$0")"
 
-# Find the process running main.py
-PID=$(ps aux | grep "python.*main.py" | grep -v grep | awk '{print $2}')
+# Find the process using port 5001 (IB Host Service port)
+PID=$(lsof -ti :5001 2>/dev/null)
 
 if [ -z "$PID" ]; then
-    echo "❌ IB Connector Host Service is not running"
+    echo "❌ IB Connector Host Service is not running (port 5001 not in use)"
     exit 1
 fi
 
 echo "Found service running with PID: $PID"
+
+# Verify it's running from the correct directory
+PROCESS_DIR=$(lsof -p $PID 2>/dev/null | grep cwd | awk '{print $NF}')
+if [[ "$PROCESS_DIR" != *"ib-host-service"* ]]; then
+    echo "⚠️  Warning: Process on port 5001 is not from ib-host-service directory"
+    echo "Process directory: $PROCESS_DIR"
+fi
 
 # Stop the service
 kill $PID

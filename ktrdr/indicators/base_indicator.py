@@ -53,6 +53,7 @@ class BaseIndicator(ABC):
         )
         self.params = self._validate_params(params)
         self.display_as_overlay = display_as_overlay
+        self._feature_id: Optional[str] = None  # Set by IndicatorFactory from config
 
         logger.info(f"Initialized {self.name} indicator with parameters: {self.params}")
 
@@ -73,6 +74,42 @@ class BaseIndicator(ABC):
             DataError: If any parameter validation fails
         """
         return params
+
+    @classmethod
+    def is_multi_output(cls) -> bool:
+        """
+        Indicate whether this indicator produces multiple output columns.
+
+        Returns:
+            bool: True if indicator returns DataFrame (multiple columns),
+                  False if indicator returns Series (single column).
+
+        Note:
+            Multi-output indicators should override this method to return True.
+            Single-output indicators can use the default False return value.
+        """
+        return False
+
+    @classmethod
+    def get_primary_output_suffix(cls) -> Optional[str]:
+        """
+        Get the suffix for the primary output column of multi-output indicators.
+
+        For multi-output indicators, this defines which column is considered
+        the "primary" output for feature_id mapping. Returns None for
+        single-output indicators or if primary output is the base name.
+
+        Returns:
+            Optional[str]: Suffix for primary output column, or None if N/A
+
+        Example:
+            For MACD which produces "MACD_12_26", "MACD_signal_12_26_9", "MACD_hist_12_26_9",
+            the primary output is "MACD_12_26" (no suffix, just params), so return None.
+
+            For BollingerBands which produces "upper_20_2.0", "middle_20_2.0", "lower_20_2.0",
+            the primary output is "upper_20_2.0", so return "upper".
+        """
+        return None
 
     @abstractmethod
     def compute(self, df: pd.DataFrame) -> Union[pd.Series, pd.DataFrame]:
@@ -188,3 +225,43 @@ class BaseIndicator(ABC):
         suffix_str = f"_{suffix}" if suffix else ""
 
         return f"{base_name}{param_str}{suffix_str}"
+
+    def get_feature_id(self) -> str:
+        """
+        Get the unique feature identifier for this indicator instance.
+
+        The feature_id is the canonical way to identify a specific indicator instance
+        with its parameters. It's used for:
+        - Dataframe column names
+        - Fuzzy set references
+        - Model feature naming
+
+        If a feature_id was explicitly set via config, it's used directly.
+        Otherwise, falls back to get_column_name() for backward compatibility.
+
+        Returns:
+            str: The unique feature identifier for this indicator
+        """
+        # DEBUG: Check type WITHOUT triggering ambiguity error
+        import pandas as pd
+
+        # Check if it's a Series (the bug we're looking for)
+        if isinstance(self._feature_id, pd.Series):
+            # Log the bug using logger (not stderr to avoid broken pipe)
+            logger.error(
+                f"[CRITICAL BUG] _feature_id is a pandas Series for indicator {self.name}! "
+                f"Type: {type(self._feature_id).__name__}, "
+                f"This should NEVER happen - feature_id must be a string."
+            )
+            # Log stack trace
+            import traceback
+
+            logger.error(f"Stack trace:\n{''.join(traceback.format_stack())}")
+            # Return fallback to avoid the ambiguity error
+            return self.get_column_name()
+
+        # Normal flow - use 'is not None' to avoid ambiguity with Series
+        if self._feature_id is not None:
+            return self._feature_id
+        # Fallback to column name for backward compatibility
+        return self.get_column_name()

@@ -375,13 +375,7 @@ class DecisionOrchestrator:
             # Find matching columns
             for col in indicators_df.columns:
                 if col.upper().startswith(indicator_type):
-                    if indicator_type in ["SMA", "EMA"]:
-                        # Use price ratio for moving averages
-                        mapped_indicators[original_name] = (
-                            historical_data["close"].iloc[-1]
-                            / indicators_df[col].iloc[-1]
-                        )
-                    elif indicator_type == "MACD":
+                    if indicator_type == "MACD":
                         # Use main MACD line
                         if (
                             col.startswith("MACD_")
@@ -393,7 +387,8 @@ class DecisionOrchestrator:
                             ]
                             break
                     else:
-                        # Use raw values for other indicators
+                        # Use raw values for all indicators (including SMA/EMA)
+                        # Fuzzy engine handles transformations via input_transform
                         mapped_indicators[original_name] = indicators_df[col].iloc[-1]
                         break
 
@@ -403,11 +398,14 @@ class DecisionOrchestrator:
             f"🔀 [{cast(pd.Timestamp, current_bar.name).strftime('%Y-%m-%d %H:%M') if hasattr(current_bar, 'name') else 'Unknown'}] Generating fuzzy memberships for {len(mapped_indicators)} indicators"
         )
 
+        # Get current bar price data for input_transform
+        current_price_data = historical_data.iloc[[-1]]  # Last row as DataFrame
+
         for indicator_name, indicator_value in mapped_indicators.items():
             if indicator_name in self.strategy_config["fuzzy_sets"]:
-                # Fuzzify this indicator
+                # Fuzzify this indicator with context_data for transforms
                 membership_result = self.fuzzy_engine.fuzzify(
-                    indicator_name, indicator_value
+                    indicator_name, indicator_value, context_data=current_price_data
                 )
                 fuzzy_values.update(membership_result)
                 logger.debug(

@@ -208,41 +208,177 @@ MembershipFunctionConfig = Annotated[
 ]
 
 
-class FuzzySetConfigModel(RootModel[dict[str, MembershipFunctionConfig]]):
+class PriceRatioTransformConfig(BaseModel):
     """
-    Configuration for a fuzzy set, which contains named membership functions.
+    Configuration for price ratio input transformation.
+
+    Transforms indicator values to price ratios for fuzzification.
+    Formula: reference_price / indicator_value
+
+    Used for moving averages (SMA/EMA) to normalize unbounded price values
+    for fuzzification as relative positions (e.g., 1.0 = at MA, 1.05 = 5% above).
+    """
+
+    type: Literal["price_ratio"] = "price_ratio"
+    reference: str = Field(
+        ..., description="Price column to use as reference (open, high, low, close)"
+    )
+
+    @field_validator("reference")
+    @classmethod
+    def validate_reference(cls, reference: str) -> str:
+        """
+        Validate reference column name.
+
+        Args:
+            reference: Reference column name
+
+        Returns:
+            Validated reference column name
+
+        Raises:
+            ConfigurationError: If reference is not a valid price column
+        """
+        valid_references = ["open", "high", "low", "close"]
+        if reference.lower() not in valid_references:
+            raise ConfigurationError(
+                message=f"Invalid reference column '{reference}' for price_ratio transform",
+                error_code="CONFIG-InvalidPriceRatioReference",
+                details={"reference": reference, "valid_references": valid_references},
+                suggestion=f"Use one of: {', '.join(valid_references)}",
+            )
+
+        logger.debug(f"Validated price ratio reference: {reference}")
+        return reference.lower()
+
+
+class IdentityTransformConfig(BaseModel):
+    """
+    Configuration for identity input transformation (no transformation).
+
+    Returns indicator values unchanged. This is the default when no
+    input_transform is specified.
+    """
+
+    type: Literal["identity"] = "identity"
+
+
+# Union type for all input transform configurations with discriminator
+InputTransformConfig = Annotated[
+    Union[PriceRatioTransformConfig, IdentityTransformConfig],
+    Field(discriminator="type"),
+]
+
+
+class FuzzySetConfigModel(BaseModel):
+    """
+    Configuration for a fuzzy set, which contains named membership functions
+    and an optional input transformation.
 
     For example, an RSI indicator might have "low", "medium", and "high" fuzzy sets,
     each defined by a membership function.
+
+    Optionally, an input_transform can be specified to transform indicator values
+    before fuzzification (e.g., converting moving averages to price ratios).
+
+    The structure allows arbitrary fuzzy set names as dynamic fields, while
+    reserving 'input_transform' as a special optional field.
     """
 
-    # The key is the fuzzy set name (e.g., "low", "neutral", "high")
-    # The value is the membership function configuration
+    # Optional input transformation (applied before fuzzification)
+    input_transform: Optional[InputTransformConfig] = Field(
+        default=None,
+        description="Optional transformation to apply to indicator values before fuzzification",
+    )
+
+    # Allow extra fields for fuzzy set names (oversold, neutral, overbought, etc.)
+    model_config = {"extra": "allow"}
 
     @model_validator(mode="after")
-    def validate_set_names(self) -> "FuzzySetConfigModel":
+    def validate_and_parse_membership_functions(self) -> "FuzzySetConfigModel":
         """
-        Validate that fuzzy set names are valid.
-
-        Currently, just checks that there is at least one set defined.
-        Future versions may have more specific naming requirements.
+        Validate that at least one membership function is defined and parse them.
 
         Returns:
             Self reference for chaining
 
         Raises:
-            ConfigurationError: If validation fails
+            ConfigurationError: If no membership functions defined or parsing fails
         """
-        if not self.root:
+        # Collect membership function fields from __pydantic_extra__
+        # This is where Pydantic stores extra fields when extra="allow"
+        extra_fields = getattr(self, "__pydantic_extra__", {}) or {}
+
+        if not extra_fields:
             raise ConfigurationError(
-                message="At least one fuzzy set must be defined",
+                message="At least one fuzzy set (membership function) must be defined",
                 error_code="CONFIG-EmptyFuzzySet",
                 details={},
             )
 
+        # Validate and parse each membership function
+        for name, value in extra_fields.items():
+            if isinstance(value, dict):
+                try:
+                    # Parse based on discriminator (type field)
+                    mf_type = value.get("type")
+                    if mf_type == "triangular":
+                        extra_fields[name] = TriangularMFConfig(**value)
+                    elif mf_type == "trapezoidal":
+                        extra_fields[name] = TrapezoidalMFConfig(**value)
+                    elif mf_type == "gaussian":
+                        extra_fields[name] = GaussianMFConfig(**value)
+                    else:
+                        raise ConfigurationError(
+                            message=f"Unknown membership function type '{mf_type}' for fuzzy set '{name}'",
+                            error_code="CONFIG-UnknownMembershipType",
+                            details={"fuzzy_set": name, "type": mf_type},
+                        )
+                except ConfigurationError:
+                    raise
+                except Exception as e:
+                    raise ConfigurationError(
+                        message=f"Failed to parse membership function '{name}'",
+                        error_code="CONFIG-InvalidMembershipFunction",
+                        details={"fuzzy_set": name, "error": str(e)},
+                    ) from e
+
         # Log the fuzzy set names
-        logger.debug(f"Validated fuzzy sets: {list(self.root.keys())}")
+        fuzzy_set_names = list(extra_fields.keys())
+        logger.debug(f"Validated fuzzy sets: {fuzzy_set_names}")
+        if self.input_transform:
+            logger.debug(f"Input transform configured: {self.input_transform.type}")
+
         return self
+
+    def get_membership_functions(self) -> dict[str, MembershipFunctionConfig]:
+        """
+        Get all membership function configurations, excluding input_transform.
+
+        Returns:
+            Dictionary mapping fuzzy set names to membership function configs
+        """
+        # Get membership functions from __pydantic_extra__
+        extra_fields = getattr(self, "__pydantic_extra__", {}) or {}
+
+        result = {}
+        for key, value in extra_fields.items():
+            if isinstance(
+                value, (TriangularMFConfig, TrapezoidalMFConfig, GaussianMFConfig)
+            ):
+                result[key] = value
+
+        return result
+
+    @property
+    def root(self) -> dict[str, MembershipFunctionConfig]:
+        """
+        Backward compatibility property for code expecting RootModel interface.
+
+        Returns:
+            Dictionary mapping fuzzy set names to membership function configs
+        """
+        return self.get_membership_functions()
 
 
 class FuzzyConfigModel(RootModel[dict[str, FuzzySetConfigModel]]):

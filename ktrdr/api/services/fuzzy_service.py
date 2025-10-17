@@ -106,7 +106,7 @@ class FuzzyService(BaseService):
                         self.config = FuzzyConfig(
                             {
                                 "rsi": FuzzySetConfig(
-                                    {
+                                    **{  # type: ignore[arg-type]
                                         "default": TriangularMFConfig(
                                             type="triangular", parameters=[0, 50, 100]
                                         )
@@ -127,7 +127,7 @@ class FuzzyService(BaseService):
             self.config = FuzzyConfig(
                 {
                     "rsi": FuzzySetConfig(
-                        {
+                        **{  # type: ignore[arg-type]
                             "default": TriangularMFConfig(
                                 type="triangular", parameters=[0, 50, 100]
                             )
