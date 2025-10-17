@@ -546,3 +546,88 @@ class TestTrainingProgressBridge:
                 fuzzy_index=1,
                 total_fuzzy_sets=40,
             )
+
+    def test_on_preparation_phase_emits_preparation_progress(self):
+        """Test preparation phase progress reporting."""
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        # Test combining data phase
+        bridge.on_preparation_phase(
+            phase="combining_data",
+            message="Combining data from 5 symbols",
+        )
+
+        first_state = states[-1]
+        assert first_state.message == "Combining data from 5 symbols"
+        assert first_state.context["phase"] == "preparation"
+        assert first_state.context["preparation_phase"] == "combining_data"
+        assert first_state.percentage == pytest.approx(5.0)  # After preprocessing
+        assert first_state.items_processed == 0
+
+        # Test splitting data phase
+        bridge.on_preparation_phase(
+            phase="splitting_data",
+            message="Splitting 15847 samples (train/val/test)",
+        )
+
+        second_state = states[-1]
+        assert second_state.message == "Splitting 15847 samples (train/val/test)"
+        assert second_state.context["preparation_phase"] == "splitting_data"
+        assert second_state.percentage == pytest.approx(5.0)
+
+        # Test creating model phase
+        bridge.on_preparation_phase(
+            phase="creating_model",
+            message="Creating model (input_dim=256)",
+        )
+
+        third_state = states[-1]
+        assert third_state.message == "Creating model (input_dim=256)"
+        assert third_state.context["preparation_phase"] == "creating_model"
+        assert third_state.percentage == pytest.approx(5.0)
+
+    def test_on_preparation_phase_without_message(self):
+        """Test preparation phase uses phase name when no message provided."""
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        # Test without explicit message - should format phase name
+        bridge.on_preparation_phase(phase="combining_data")
+
+        state = states[-1]
+        assert state.message == "Combining Data"  # Formatted from phase name
+        assert state.context["preparation_phase"] == "combining_data"
+
+    def test_on_preparation_phase_cancellation_check(self):
+        """Test preparation phase respects cancellation token."""
+        token = _DummyToken(cancelled=True)
+        manager = GenericProgressManager(callback=lambda _: None)
+        manager.start_operation("training", total_steps=2)
+
+        context = _make_context(total_epochs=2, total_batches=20)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+            cancellation_token=token,
+        )
+
+        with pytest.raises(CancellationError):
+            bridge.on_preparation_phase(
+                phase="combining_data",
+                message="Combining data from 5 symbols",
+            )

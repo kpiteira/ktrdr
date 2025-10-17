@@ -243,6 +243,22 @@ class LocalTrainingOrchestrator:
                     step=step,
                     context=context,
                 )
+            elif progress_type == "preparation":
+                # Preparation phase progress (combining data, splitting, creating model)
+                phase = metrics.get("phase", "preparing")
+                message = None
+
+                if phase == "combining_data":
+                    total_symbols = metrics.get("total_symbols", 0)
+                    message = f"Combining data from {total_symbols} symbol(s)"
+                elif phase == "splitting_data":
+                    total_samples = metrics.get("total_samples", 0)
+                    message = f"Splitting {total_samples} samples (train/val/test)"
+                elif phase == "creating_model":
+                    input_dim = metrics.get("input_dim", 0)
+                    message = f"Creating model (input_dim={input_dim})"
+
+                self._bridge.on_preparation_phase(phase=phase, message=message)
             elif progress_type == "batch":
                 # Batch-level progress
                 self._bridge.on_batch(

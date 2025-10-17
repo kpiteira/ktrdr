@@ -476,6 +476,34 @@ class TrainingProgressBridge:
             context=payload_context,
         )
 
+    def on_preparation_phase(self, phase: str, message: str | None = None) -> None:
+        """Report pre-training preparation phases.
+
+        Args:
+            phase: Preparation phase name (e.g., 'combining_data', 'splitting_data', 'creating_model')
+            message: Optional custom message. If None, phase name will be formatted.
+        """
+        self._check_cancelled()
+
+        display_message = message or phase.replace("_", " ").title()
+
+        # Preparation phase happens after preprocessing (0-5%), before training (5-95%)
+        percentage = 5.0
+
+        payload_context = {
+            "phase": "preparation",
+            "preparation_phase": phase,
+        }
+
+        self._emit(
+            current_step=0,
+            percentage=percentage,
+            message=display_message,
+            items_processed=0,
+            phase="preparation",
+            context=payload_context,
+        )
+
     def on_complete(self, message: str = "Training complete") -> None:
         """Mark progress as complete with a terminal update."""
         self._check_cancelled()
