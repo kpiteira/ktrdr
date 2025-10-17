@@ -375,6 +375,53 @@ class TrainingProgressBridge:
             context=payload_context,
         )
 
+    def on_indicator_computation(
+        self,
+        symbol: str,
+        symbol_index: int,
+        total_symbols: int,
+        timeframe: str,
+        indicator_name: str,
+        indicator_index: int,
+        total_indicators: int,
+    ) -> None:
+        """Report per-indicator computation with timeframe."""
+        self._check_cancelled()
+
+        message = (
+            f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+            f"Computing {indicator_name} ({indicator_index}/{total_indicators})"
+        )
+
+        # Fine-grained percentage within 0-5% range
+        # Formula: (completed_symbols + indicator_progress) / total_symbols * 5%
+        # Each symbol contributes 5% / total_symbols
+        # Each indicator contributes (5% / total_symbols) / total_indicators
+        completed_symbols = symbol_index - 1
+        indicator_progress = indicator_index / max(total_indicators, 1)
+        percentage = (completed_symbols + indicator_progress) / total_symbols * 5.0
+
+        payload_context = {
+            "phase": "preprocessing",
+            "preprocessing_step": "computing_indicator",
+            "symbol": symbol,
+            "symbol_index": symbol_index,
+            "total_symbols": total_symbols,
+            "timeframe": timeframe,
+            "indicator_name": indicator_name,
+            "indicator_index": indicator_index,
+            "total_indicators": total_indicators,
+        }
+
+        self._emit(
+            current_step=0,
+            percentage=min(percentage, 5.0),
+            message=message,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            context=payload_context,
+        )
+
     def on_complete(self, message: str = "Training complete") -> None:
         """Mark progress as complete with a terminal update."""
         self._check_cancelled()

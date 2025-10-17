@@ -321,3 +321,147 @@ class TestTrainingProgressBridge:
                 total_symbols=5,
                 step="loading_data",
             )
+
+    def test_on_indicator_computation_emits_granular_progress(self):
+        """Test per-indicator computation progress reporting."""
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        # Test first indicator on first symbol
+        bridge.on_indicator_computation(
+            symbol="AAPL",
+            symbol_index=1,
+            total_symbols=5,
+            timeframe="1h",
+            indicator_name="RSI",
+            indicator_index=1,
+            total_indicators=40,
+        )
+
+        first_state = states[-1]
+        assert (
+            first_state.message
+            == "Processing AAPL (1/5) [1h] - Computing RSI (1/40)"
+        )
+        assert first_state.context["phase"] == "preprocessing"
+        assert first_state.context["preprocessing_step"] == "computing_indicator"
+        assert first_state.context["symbol"] == "AAPL"
+        assert first_state.context["symbol_index"] == 1
+        assert first_state.context["total_symbols"] == 5
+        assert first_state.context["timeframe"] == "1h"
+        assert first_state.context["indicator_name"] == "RSI"
+        assert first_state.context["indicator_index"] == 1
+        assert first_state.context["total_indicators"] == 40
+        # First symbol (0 completed), first indicator (1/40) -> (0 + 1/40) / 5 * 5% = 0.025%
+        assert first_state.percentage == pytest.approx(0.025, abs=0.01)
+        assert first_state.items_processed == 1
+
+        # Test middle indicator on second symbol
+        bridge.on_indicator_computation(
+            symbol="TSLA",
+            symbol_index=2,
+            total_symbols=5,
+            timeframe="4h",
+            indicator_name="MACD",
+            indicator_index=20,
+            total_indicators=40,
+        )
+
+        second_state = states[-1]
+        assert (
+            second_state.message
+            == "Processing TSLA (2/5) [4h] - Computing MACD (20/40)"
+        )
+        assert second_state.context["timeframe"] == "4h"
+        assert second_state.context["indicator_name"] == "MACD"
+        assert second_state.context["indicator_index"] == 20
+        # Second symbol (1 completed), 20th indicator (20/40=0.5) -> (1 + 0.5) / 5 * 5% = 1.5%
+        assert second_state.percentage == pytest.approx(1.5, abs=0.01)
+
+        # Test last indicator on last symbol
+        bridge.on_indicator_computation(
+            symbol="MSFT",
+            symbol_index=5,
+            total_symbols=5,
+            timeframe="1d",
+            indicator_name="EMA",
+            indicator_index=40,
+            total_indicators=40,
+        )
+
+        last_state = states[-1]
+        assert (
+            last_state.message
+            == "Processing MSFT (5/5) [1d] - Computing EMA (40/40)"
+        )
+        # Last symbol (4 completed), last indicator (40/40=1.0) -> (4 + 1.0) / 5 * 5% = 5.0%
+        assert last_state.percentage == pytest.approx(5.0, abs=0.01)
+
+    def test_on_indicator_computation_percentage_calculation(self):
+        """Test indicator computation calculates percentages correctly within 0-5% range."""
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        # Test various progress points
+        test_cases = [
+            # (symbol_idx, total_symbols, indicator_idx, total_indicators, expected_percentage)
+            (1, 5, 1, 40, 0.025),  # First symbol, first indicator: (0 + 1/40) / 5 * 5% = 0.025%
+            (1, 5, 40, 40, 1.0),  # First symbol, last indicator: (0 + 1) / 5 * 5% = 1.0%
+            (3, 5, 20, 40, 2.5),  # Middle symbol, middle indicator: (2 + 20/40) / 5 * 5% = 2.5%
+            (5, 5, 40, 40, 5.0),  # Last symbol, last indicator: (4 + 1) / 5 * 5% = 5.0%
+        ]
+
+        for symbol_idx, total_symbols, ind_idx, total_indicators, expected_pct in test_cases:
+            bridge.on_indicator_computation(
+                symbol=f"SYM{symbol_idx}",
+                symbol_index=symbol_idx,
+                total_symbols=total_symbols,
+                timeframe="1h",
+                indicator_name=f"IND{ind_idx}",
+                indicator_index=ind_idx,
+                total_indicators=total_indicators,
+            )
+
+            state = states[-1]
+            assert state.percentage == pytest.approx(expected_pct, abs=0.01), (
+                f"Symbol {symbol_idx}/{total_symbols}, Indicator {ind_idx}/{total_indicators} "
+                f"should be {expected_pct}%, got {state.percentage}%"
+            )
+
+    def test_on_indicator_computation_cancellation_check(self):
+        """Test indicator computation respects cancellation token."""
+        token = _DummyToken(cancelled=True)
+        manager = GenericProgressManager(callback=lambda _: None)
+        manager.start_operation("training", total_steps=2)
+
+        context = _make_context(total_epochs=2, total_batches=20)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+            cancellation_token=token,
+        )
+
+        with pytest.raises(CancellationError):
+            bridge.on_indicator_computation(
+                symbol="AAPL",
+                symbol_index=1,
+                total_symbols=5,
+                timeframe="1h",
+                indicator_name="RSI",
+                indicator_index=1,
+                total_indicators=40,
+            )
