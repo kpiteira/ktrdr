@@ -422,6 +422,50 @@ class TrainingProgressBridge:
             context=payload_context,
         )
 
+    def on_fuzzy_generation(
+        self,
+        symbol: str,
+        symbol_index: int,
+        total_symbols: int,
+        timeframe: str,
+        fuzzy_set_name: str,
+        fuzzy_index: int,
+        total_fuzzy_sets: int,
+    ) -> None:
+        """Report per-fuzzy-set generation with timeframe."""
+        self._check_cancelled()
+
+        message = (
+            f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+            f"Fuzzifying {fuzzy_set_name} ({fuzzy_index}/{total_fuzzy_sets})"
+        )
+
+        # Same formula as indicators: (completed_symbols + fuzzy_progress) / total_symbols * 5%
+        completed_symbols = symbol_index - 1
+        fuzzy_progress = fuzzy_index / max(total_fuzzy_sets, 1)
+        percentage = (completed_symbols + fuzzy_progress) / total_symbols * 5.0
+
+        payload_context = {
+            "phase": "preprocessing",
+            "preprocessing_step": "generating_fuzzy",
+            "symbol": symbol,
+            "symbol_index": symbol_index,
+            "total_symbols": total_symbols,
+            "timeframe": timeframe,
+            "fuzzy_set_name": fuzzy_set_name,
+            "fuzzy_index": fuzzy_index,
+            "total_fuzzy_sets": total_fuzzy_sets,
+        }
+
+        self._emit(
+            current_step=0,
+            percentage=min(percentage, 5.0),
+            message=message,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            context=payload_context,
+        )
+
     def on_complete(self, message: str = "Training complete") -> None:
         """Mark progress as complete with a terminal update."""
         self._check_cancelled()

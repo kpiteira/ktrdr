@@ -465,3 +465,84 @@ class TestTrainingProgressBridge:
                 indicator_index=1,
                 total_indicators=40,
             )
+
+    def test_on_fuzzy_generation_emits_granular_progress(self):
+        """Test per-fuzzy-set generation progress reporting."""
+        states = deque()
+        manager = GenericProgressManager(callback=states.append)
+        manager.start_operation("training", total_steps=5)
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+        )
+
+        # Test first fuzzy set on first symbol
+        bridge.on_fuzzy_generation(
+            symbol="AAPL",
+            symbol_index=1,
+            total_symbols=5,
+            timeframe="1h",
+            fuzzy_set_name="rsi_14",
+            fuzzy_index=1,
+            total_fuzzy_sets=40,
+        )
+
+        first_state = states[-1]
+        assert (
+            first_state.message
+            == "Processing AAPL (1/5) [1h] - Fuzzifying rsi_14 (1/40)"
+        )
+        assert first_state.context["phase"] == "preprocessing"
+        assert first_state.context["preprocessing_step"] == "generating_fuzzy"
+        assert first_state.context["symbol"] == "AAPL"
+        assert first_state.context["timeframe"] == "1h"
+        assert first_state.context["fuzzy_set_name"] == "rsi_14"
+        assert first_state.context["fuzzy_index"] == 1
+        assert first_state.context["total_fuzzy_sets"] == 40
+        # Same formula as indicators: (0 + 1/40) / 5 * 5% = 0.025%
+        assert first_state.percentage == pytest.approx(0.025, abs=0.01)
+
+        # Test middle fuzzy set
+        bridge.on_fuzzy_generation(
+            symbol="TSLA",
+            symbol_index=2,
+            total_symbols=5,
+            timeframe="4h",
+            fuzzy_set_name="macd_standard",
+            fuzzy_index=20,
+            total_fuzzy_sets=40,
+        )
+
+        second_state = states[-1]
+        assert (
+            second_state.message
+            == "Processing TSLA (2/5) [4h] - Fuzzifying macd_standard (20/40)"
+        )
+        # (1 + 20/40) / 5 * 5% = 1.5%
+        assert second_state.percentage == pytest.approx(1.5, abs=0.01)
+
+    def test_on_fuzzy_generation_cancellation_check(self):
+        """Test fuzzy generation respects cancellation token."""
+        token = _DummyToken(cancelled=True)
+        manager = GenericProgressManager(callback=lambda _: None)
+        manager.start_operation("training", total_steps=2)
+
+        context = _make_context(total_epochs=2, total_batches=20)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=manager,
+            cancellation_token=token,
+        )
+
+        with pytest.raises(CancellationError):
+            bridge.on_fuzzy_generation(
+                symbol="AAPL",
+                symbol_index=1,
+                total_symbols=5,
+                timeframe="1h",
+                fuzzy_set_name="rsi_14",
+                fuzzy_index=1,
+                total_fuzzy_sets=40,
+            )
