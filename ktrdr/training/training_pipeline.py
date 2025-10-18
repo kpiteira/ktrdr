@@ -265,10 +265,14 @@ class TrainingPipeline:
             tf_price_data = price_data[timeframe]
 
             # Phase 3 simplified: Just combine - feature_id aliases already exist!
-            result = tf_price_data.copy()
-            for col in tf_indicators.columns:
-                if col not in result.columns:
-                    result[col] = tf_indicators[col]
+            # Use pd.concat to avoid DataFrame fragmentation (more efficient than iterative assignment)
+            new_cols = [
+                col for col in tf_indicators.columns if col not in tf_price_data.columns
+            ]
+            if new_cols:
+                result = pd.concat([tf_price_data, tf_indicators[new_cols]], axis=1)
+            else:
+                result = tf_price_data.copy()
 
             # Safety check: replace any inf values with NaN, then fill NaN with 0
             result = result.replace([np.inf, -np.inf], np.nan).fillna(0.0)
