@@ -265,10 +265,14 @@ class TrainingPipeline:
             tf_price_data = price_data[timeframe]
 
             # Phase 3 simplified: Just combine - feature_id aliases already exist!
-            result = tf_price_data.copy()
-            for col in tf_indicators.columns:
-                if col not in result.columns:
-                    result[col] = tf_indicators[col]
+            # Use pd.concat to avoid DataFrame fragmentation (more efficient than iterative assignment)
+            new_cols = [
+                col for col in tf_indicators.columns if col not in tf_price_data.columns
+            ]
+            if new_cols:
+                result = pd.concat([tf_price_data, tf_indicators[new_cols]], axis=1)
+            else:
+                result = tf_price_data.copy()
 
             # Safety check: replace any inf values with NaN, then fill NaN with 0
             result = result.replace([np.inf, -np.inf], np.nan).fillna(0.0)
@@ -790,8 +794,28 @@ class TrainingPipeline:
         all_symbols_labels = {}
         all_symbols_feature_names = {}
 
-        for symbol in symbols:
+        for symbol_idx, symbol in enumerate(symbols, start=1):
             logger.info(f"📊 Processing symbol: {symbol}")
+
+            # Check cancellation before processing each symbol
+            if cancellation_token and cancellation_token.is_cancelled():
+                from ktrdr.async_infrastructure.cancellation import CancellationError
+
+                raise CancellationError("Training cancelled during preprocessing")
+
+            # REPORT: Loading data
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "loading_data",
+                    },
+                )
 
             # Step 1: Load market data
             price_data = TrainingPipeline.load_market_data(
@@ -805,19 +829,86 @@ class TrainingPipeline:
             )
 
             # Step 2: Calculate indicators
+            # REPORT: Computing indicators with total count
+            if progress_callback:
+                total_indicators = len(strategy_config["indicators"])
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "computing_indicators",
+                        "total_indicators": total_indicators,
+                    },
+                )
+
+            # Compute all indicators (engine handles all timeframes and indicators in one call)
             indicators_data = TrainingPipeline.calculate_indicators(
                 price_data, strategy_config["indicators"]
             )
 
             # Step 3: Generate fuzzy memberships
+            # REPORT: Computing fuzzy memberships with total count
+            if progress_callback:
+                fuzzy_configs = strategy_config["fuzzy_sets"]
+                # Count total fuzzy sets across all indicators
+                # Structure: {indicator_name: {fuzzy_set_name: {...}, ...}, ...}
+                total_fuzzy_sets = sum(
+                    len(fuzzy_sets_dict) for fuzzy_sets_dict in fuzzy_configs.values()
+                )
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "generating_fuzzy",
+                        "total_fuzzy_sets": total_fuzzy_sets,
+                    },
+                )
+
+            # Compute all fuzzy memberships (engine handles all timeframes and fuzzy sets in one call)
             fuzzy_data = TrainingPipeline.generate_fuzzy_memberships(
                 indicators_data, strategy_config["fuzzy_sets"]
             )
+
+            # REPORT: Creating features
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "creating_features",
+                    },
+                )
 
             # Step 4: Engineer features
             features, feature_names = TrainingPipeline.create_features(
                 fuzzy_data, strategy_config.get("model", {}).get("features", {})
             )
+
+            # REPORT: Generating labels
+            if progress_callback:
+                progress_callback(
+                    0,
+                    0,
+                    {
+                        "progress_type": "preprocessing",
+                        "symbol": symbol,
+                        "symbol_index": symbol_idx,
+                        "total_symbols": len(symbols),
+                        "step": "generating_labels",
+                    },
+                )
 
             # Step 5: Generate labels
             labels = TrainingPipeline.create_labels(
@@ -831,6 +922,19 @@ class TrainingPipeline:
 
         # Step 6: Combine multi-symbol data (or pass through for single symbol)
         logger.info(f"🔗 Combining data from {len(symbols)} symbol(s)")
+
+        # REPORT: Combining data
+        if progress_callback:
+            progress_callback(
+                0,
+                0,
+                {
+                    "progress_type": "preparation",
+                    "phase": "combining_data",
+                    "total_symbols": len(symbols),
+                },
+            )
+
         combined_features, combined_labels = TrainingPipeline.combine_multi_symbol_data(
             all_symbols_features, all_symbols_labels, symbols
         )
@@ -859,9 +963,34 @@ class TrainingPipeline:
             f"📊 Data splits - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}"
         )
 
+        # REPORT: Splitting data
+        if progress_callback:
+            progress_callback(
+                0,
+                0,
+                {
+                    "progress_type": "preparation",
+                    "phase": "splitting_data",
+                    "total_samples": total_samples,
+                },
+            )
+
         # Step 8: Create model (symbol-agnostic)
         input_dim = combined_features.shape[1]
         output_dim = 3  # Buy (0), Hold (1), Sell (2)
+
+        # REPORT: Creating model
+        if progress_callback:
+            progress_callback(
+                0,
+                0,
+                {
+                    "progress_type": "preparation",
+                    "phase": "creating_model",
+                    "input_dim": input_dim,
+                },
+            )
+
         model = TrainingPipeline.create_model(
             input_dim=input_dim,
             output_dim=output_dim,

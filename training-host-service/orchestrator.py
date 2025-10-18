@@ -252,7 +252,139 @@ class HostTrainingOrchestrator:
             """
             progress_type = metrics.get("progress_type")
 
-            if progress_type == "batch":
+            if progress_type == "indicator_computation":
+                # Per-indicator computation progress - update for granular visibility
+                symbol = metrics.get("symbol", "Unknown")
+                symbol_index = metrics.get("symbol_index", 1)
+                total_symbols = metrics.get("total_symbols", 1)
+                timeframe = metrics.get("timeframe", "unknown")
+                indicator_name = metrics.get("indicator_name", "unknown")
+                indicator_index = metrics.get("indicator_index", 1)
+                total_indicators = metrics.get("total_indicators", 1)
+
+                # Format message for session progress with visual indicator
+                message = (
+                    f"📈 Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+                    f"Computing {indicator_name} ({indicator_index}/{total_indicators})"
+                )
+
+                logger.info(
+                    f"Session {self._session.session_id}: {message}"
+                )
+
+                self._session.update_progress(
+                    epoch=0,  # Pre-training phase
+                    batch=symbol_index,
+                    metrics={
+                        **metrics,
+                        "message": message,
+                    },
+                )
+
+            elif progress_type == "fuzzy_generation":
+                # Per-fuzzy-set generation progress - update for granular visibility
+                symbol = metrics.get("symbol", "Unknown")
+                symbol_index = metrics.get("symbol_index", 1)
+                total_symbols = metrics.get("total_symbols", 1)
+                timeframe = metrics.get("timeframe", "unknown")
+                fuzzy_set_name = metrics.get("fuzzy_set_name", "unknown")
+                fuzzy_index = metrics.get("fuzzy_index", 1)
+                total_fuzzy_sets = metrics.get("total_fuzzy_sets", 1)
+
+                # Format message for session progress with visual indicator
+                message = (
+                    f"🔀 Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+                    f"Fuzzifying {fuzzy_set_name} ({fuzzy_index}/{total_fuzzy_sets})"
+                )
+
+                logger.info(
+                    f"Session {self._session.session_id}: {message}"
+                )
+
+                self._session.update_progress(
+                    epoch=0,  # Pre-training phase
+                    batch=symbol_index,
+                    metrics={
+                        **metrics,
+                        "message": message,
+                    },
+                )
+
+            elif progress_type == "preprocessing":
+                # Symbol-level preprocessing progress - always update for visibility
+                symbol = metrics.get("symbol", "Unknown")
+                symbol_index = metrics.get("symbol_index", 1)
+                total_symbols = metrics.get("total_symbols", 1)
+                step = metrics.get("step", "processing")
+
+                # Format message with visual indicators matching TrainingProgressRenderer
+                step_emoji = "📊"  # Default
+                if step == "loading_data":
+                    step_emoji = "📊"
+                elif step == "computing_indicators" or step == "computing_indicator":
+                    step_emoji = "📈"
+                elif step == "generating_fuzzy":
+                    step_emoji = "🔀"
+                elif step == "creating_features":
+                    step_emoji = "🔧"
+                elif step == "generating_labels":
+                    step_emoji = "🏷️"
+
+                # Format base message
+                step_name = step.replace('_', ' ').title()
+                base_message = f"{step_emoji} Processing {symbol} ({symbol_index}/{total_symbols}) - {step_name}"
+
+                # Add total counts to message if available
+                if step == "computing_indicators" and "total_indicators" in metrics:
+                    message = f"📈 Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Indicators ({metrics['total_indicators']})"
+                elif step == "generating_fuzzy" and "total_fuzzy_sets" in metrics:
+                    message = f"🔀 Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Fuzzy Memberships ({metrics['total_fuzzy_sets']})"
+                else:
+                    message = base_message
+
+                logger.info(
+                    f"Session {self._session.session_id}: {message}"
+                )
+
+                self._session.update_progress(
+                    epoch=0,  # Pre-training phase
+                    batch=symbol_index,
+                    metrics={
+                        **metrics,
+                        "message": message,
+                    },
+                )
+
+            elif progress_type == "preparation":
+                # Preparation phase progress (combining data, splitting, creating model)
+                phase = metrics.get("phase", "preparing")
+
+                if phase == "combining_data":
+                    total_symbols = metrics.get("total_symbols", 0)
+                    message = f"⚙️ Combining data from {total_symbols} symbol(s)"
+                elif phase == "splitting_data":
+                    total_samples = metrics.get("total_samples", 0)
+                    message = f"⚙️ Splitting {total_samples} samples (train/val/test)"
+                elif phase == "creating_model":
+                    input_dim = metrics.get("input_dim", 0)
+                    message = f"⚙️ Creating model (input_dim={input_dim})"
+                else:
+                    message = f"⚙️ {phase.replace('_', ' ').title()}"
+
+                logger.info(
+                    f"Session {self._session.session_id}: {message}"
+                )
+
+                self._session.update_progress(
+                    epoch=0,  # Pre-training phase
+                    batch=0,
+                    metrics={
+                        **metrics,
+                        "message": message,
+                    },
+                )
+
+            elif progress_type == "batch":
                 batch = metrics.get("batch", 0)
 
                 # Throttle: only update every N batches

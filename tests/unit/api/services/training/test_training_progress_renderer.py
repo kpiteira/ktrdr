@@ -484,3 +484,47 @@ class TestTrainingProgressRenderer:
 
         # Should handle remote snapshot context
         assert "Epoch 7/10" in message or "78" in message
+
+    def test_preprocessing_message_rendering(self):
+        """Test that preprocessing messages are rendered correctly."""
+        renderer = self.TrainingProgressRenderer()
+
+        # Simulate preprocessing progress from TrainingProgressBridge.on_symbol_processing()
+        state = GenericProgressState(
+            operation_id="train_model",
+            current_step=0,
+            total_steps=5,
+            percentage=1.2,
+            message="Processing AAPL (2/5) - Computing Indicators",
+            context={
+                "phase": "preprocessing",
+                "symbol": "AAPL",
+                "symbol_index": 2,
+                "total_symbols": 5,
+                "preprocessing_step": "computing_indicators",
+            },
+        )
+
+        message = renderer.render_message(state)
+
+        # Should render the preprocessing message with emoji
+        assert message == "📈 Processing AAPL (2/5) - Computing Indicators"
+
+        # Test another preprocessing step
+        state2 = GenericProgressState(
+            operation_id="train_model",
+            current_step=0,
+            total_steps=5,
+            percentage=0.4,
+            message="Processing AAPL (1/5) - Generating Fuzzy",
+            context={
+                "phase": "preprocessing",
+                "symbol": "AAPL",
+                "symbol_index": 1,
+                "total_symbols": 5,
+                "preprocessing_step": "generating_fuzzy",
+            },
+        )
+
+        message2 = renderer.render_message(state2)
+        assert message2 == "🔀 Processing AAPL (1/5) - Generating Fuzzy"

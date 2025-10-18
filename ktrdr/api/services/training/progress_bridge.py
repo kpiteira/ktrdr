@@ -323,6 +323,187 @@ class TrainingProgressBridge:
             context=context_payload,
         )
 
+    def on_symbol_processing(
+        self,
+        symbol: str,
+        symbol_index: int,
+        total_symbols: int,
+        step: str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """Report per-symbol preprocessing steps."""
+        self._check_cancelled()
+
+        # Build message with optional counts
+        base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
+
+        # Add total counts to message if available in context
+        if context:
+            if step == "computing_indicators" and "total_indicators" in context:
+                base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Indicators ({context['total_indicators']})"
+            elif step == "generating_fuzzy" and "total_fuzzy_sets" in context:
+                base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Fuzzy Memberships ({context['total_fuzzy_sets']})"
+
+        message = base_message
+
+        # Pre-training is 0-5% of total progress
+        # We have 5 steps per symbol: loading, indicators, fuzzy, features, labels
+        # Map step name to step number (0-4)
+        step_map = {
+            "loading_data": 0,
+            "computing_indicators": 1,
+            "generating_fuzzy": 2,
+            "creating_features": 3,
+            "generating_labels": 4,
+        }
+        step_number = step_map.get(step, 0)
+        steps_per_symbol = 5
+
+        # Calculate progress within pre-training phase (0-5%)
+        # Progress = (completed symbols + current step fraction) / total symbols * 5%
+        completed_symbols = symbol_index - 1
+        step_fraction = step_number / steps_per_symbol
+        symbols_progress = (completed_symbols + step_fraction) / total_symbols
+        percentage = symbols_progress * 5.0
+
+        payload_context = {
+            "phase": "preprocessing",
+            "symbol": symbol,
+            "symbol_index": symbol_index,
+            "total_symbols": total_symbols,
+            "preprocessing_step": step,
+        }
+        if context:
+            payload_context.update(context)
+
+        self._emit(
+            current_step=0,
+            percentage=percentage,
+            message=message,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            context=payload_context,
+        )
+
+    def on_indicator_computation(
+        self,
+        symbol: str,
+        symbol_index: int,
+        total_symbols: int,
+        timeframe: str,
+        indicator_name: str,
+        indicator_index: int,
+        total_indicators: int,
+    ) -> None:
+        """Report per-indicator computation with timeframe."""
+        self._check_cancelled()
+
+        message = (
+            f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+            f"Computing {indicator_name} ({indicator_index}/{total_indicators})"
+        )
+
+        # Fine-grained percentage within 0-5% range
+        # Formula: (completed_symbols + indicator_progress) / total_symbols * 5%
+        # Each symbol contributes 5% / total_symbols
+        # Each indicator contributes (5% / total_symbols) / total_indicators
+        completed_symbols = symbol_index - 1
+        indicator_progress = indicator_index / max(total_indicators, 1)
+        percentage = (completed_symbols + indicator_progress) / total_symbols * 5.0
+
+        payload_context = {
+            "phase": "preprocessing",
+            "preprocessing_step": "computing_indicator",
+            "symbol": symbol,
+            "symbol_index": symbol_index,
+            "total_symbols": total_symbols,
+            "timeframe": timeframe,
+            "indicator_name": indicator_name,
+            "indicator_index": indicator_index,
+            "total_indicators": total_indicators,
+        }
+
+        self._emit(
+            current_step=0,
+            percentage=min(percentage, 5.0),
+            message=message,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            context=payload_context,
+        )
+
+    def on_fuzzy_generation(
+        self,
+        symbol: str,
+        symbol_index: int,
+        total_symbols: int,
+        timeframe: str,
+        fuzzy_set_name: str,
+        fuzzy_index: int,
+        total_fuzzy_sets: int,
+    ) -> None:
+        """Report per-fuzzy-set generation with timeframe."""
+        self._check_cancelled()
+
+        message = (
+            f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+            f"Fuzzifying {fuzzy_set_name} ({fuzzy_index}/{total_fuzzy_sets})"
+        )
+
+        # Same formula as indicators: (completed_symbols + fuzzy_progress) / total_symbols * 5%
+        completed_symbols = symbol_index - 1
+        fuzzy_progress = fuzzy_index / max(total_fuzzy_sets, 1)
+        percentage = (completed_symbols + fuzzy_progress) / total_symbols * 5.0
+
+        payload_context = {
+            "phase": "preprocessing",
+            "preprocessing_step": "generating_fuzzy",
+            "symbol": symbol,
+            "symbol_index": symbol_index,
+            "total_symbols": total_symbols,
+            "timeframe": timeframe,
+            "fuzzy_set_name": fuzzy_set_name,
+            "fuzzy_index": fuzzy_index,
+            "total_fuzzy_sets": total_fuzzy_sets,
+        }
+
+        self._emit(
+            current_step=0,
+            percentage=min(percentage, 5.0),
+            message=message,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            context=payload_context,
+        )
+
+    def on_preparation_phase(self, phase: str, message: str | None = None) -> None:
+        """Report pre-training preparation phases.
+
+        Args:
+            phase: Preparation phase name (e.g., 'combining_data', 'splitting_data', 'creating_model')
+            message: Optional custom message. If None, phase name will be formatted.
+        """
+        self._check_cancelled()
+
+        display_message = message or phase.replace("_", " ").title()
+
+        # Preparation phase happens after preprocessing (0-5%), before training (5-95%)
+        percentage = 5.0
+
+        payload_context = {
+            "phase": "preparation",
+            "preparation_phase": phase,
+        }
+
+        self._emit(
+            current_step=0,
+            percentage=percentage,
+            message=display_message,
+            items_processed=0,
+            phase="preparation",
+            context=payload_context,
+        )
+
     def on_complete(self, message: str = "Training complete") -> None:
         """Mark progress as complete with a terminal update."""
         self._check_cancelled()

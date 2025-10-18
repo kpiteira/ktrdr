@@ -199,7 +199,67 @@ class LocalTrainingOrchestrator:
             metrics = metrics or {}
             progress_type = metrics.get("progress_type")
 
-            if progress_type == "batch":
+            if progress_type == "indicator_computation":
+                # Per-indicator computation progress
+                self._bridge.on_indicator_computation(
+                    symbol=metrics.get("symbol", "Unknown"),
+                    symbol_index=metrics.get("symbol_index", 1),
+                    total_symbols=metrics.get("total_symbols", 1),
+                    timeframe=metrics.get("timeframe", "unknown"),
+                    indicator_name=metrics.get("indicator_name", "unknown"),
+                    indicator_index=metrics.get("indicator_index", 1),
+                    total_indicators=metrics.get("total_indicators", 1),
+                )
+            elif progress_type == "fuzzy_generation":
+                # Per-fuzzy-set generation progress
+                self._bridge.on_fuzzy_generation(
+                    symbol=metrics.get("symbol", "Unknown"),
+                    symbol_index=metrics.get("symbol_index", 1),
+                    total_symbols=metrics.get("total_symbols", 1),
+                    timeframe=metrics.get("timeframe", "unknown"),
+                    fuzzy_set_name=metrics.get("fuzzy_set_name", "unknown"),
+                    fuzzy_index=metrics.get("fuzzy_index", 1),
+                    total_fuzzy_sets=metrics.get("total_fuzzy_sets", 1),
+                )
+            elif progress_type == "preprocessing":
+                # Symbol-level preprocessing progress
+                symbol = metrics.get("symbol", "Unknown")
+                symbol_index = metrics.get("symbol_index", 1)
+                total_symbols = metrics.get("total_symbols", 1)
+                step = metrics.get("step", "processing")
+
+                context = {}
+                if "timeframes" in metrics:
+                    context["timeframes"] = metrics["timeframes"]
+                if "total_indicators" in metrics:
+                    context["total_indicators"] = metrics["total_indicators"]
+                if "total_fuzzy_sets" in metrics:
+                    context["total_fuzzy_sets"] = metrics["total_fuzzy_sets"]
+
+                self._bridge.on_symbol_processing(
+                    symbol=symbol,
+                    symbol_index=symbol_index,
+                    total_symbols=total_symbols,
+                    step=step,
+                    context=context,
+                )
+            elif progress_type == "preparation":
+                # Preparation phase progress (combining data, splitting, creating model)
+                phase = metrics.get("phase", "preparing")
+                message = None
+
+                if phase == "combining_data":
+                    total_symbols = metrics.get("total_symbols", 0)
+                    message = f"Combining data from {total_symbols} symbol(s)"
+                elif phase == "splitting_data":
+                    total_samples = metrics.get("total_samples", 0)
+                    message = f"Splitting {total_samples} samples (train/val/test)"
+                elif phase == "creating_model":
+                    input_dim = metrics.get("input_dim", 0)
+                    message = f"Creating model (input_dim={input_dim})"
+
+                self._bridge.on_preparation_phase(phase=phase, message=message)
+            elif progress_type == "batch":
                 # Batch-level progress
                 self._bridge.on_batch(
                     epoch=epoch,
