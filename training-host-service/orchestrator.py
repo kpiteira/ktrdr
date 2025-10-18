@@ -262,9 +262,9 @@ class HostTrainingOrchestrator:
                 indicator_index = metrics.get("indicator_index", 1)
                 total_indicators = metrics.get("total_indicators", 1)
 
-                # Format message for session progress
+                # Format message for session progress with visual indicator
                 message = (
-                    f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+                    f"📈 Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
                     f"Computing {indicator_name} ({indicator_index}/{total_indicators})"
                 )
 
@@ -291,9 +291,9 @@ class HostTrainingOrchestrator:
                 fuzzy_index = metrics.get("fuzzy_index", 1)
                 total_fuzzy_sets = metrics.get("total_fuzzy_sets", 1)
 
-                # Format message for session progress
+                # Format message for session progress with visual indicator
                 message = (
-                    f"Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
+                    f"🔀 Processing {symbol} ({symbol_index}/{total_symbols}) [{timeframe}] - "
                     f"Fuzzifying {fuzzy_set_name} ({fuzzy_index}/{total_fuzzy_sets})"
                 )
 
@@ -317,14 +317,28 @@ class HostTrainingOrchestrator:
                 total_symbols = metrics.get("total_symbols", 1)
                 step = metrics.get("step", "processing")
 
-                # Format message for session progress with optional counts
-                base_message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - {step.replace('_', ' ').title()}"
+                # Format message with visual indicators matching TrainingProgressRenderer
+                step_emoji = "📊"  # Default
+                if step == "loading_data":
+                    step_emoji = "📊"
+                elif step == "computing_indicators" or step == "computing_indicator":
+                    step_emoji = "📈"
+                elif step == "generating_fuzzy":
+                    step_emoji = "🔀"
+                elif step == "creating_features":
+                    step_emoji = "🔧"
+                elif step == "generating_labels":
+                    step_emoji = "🏷️"
+
+                # Format base message
+                step_name = step.replace('_', ' ').title()
+                base_message = f"{step_emoji} Processing {symbol} ({symbol_index}/{total_symbols}) - {step_name}"
 
                 # Add total counts to message if available
                 if step == "computing_indicators" and "total_indicators" in metrics:
-                    message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Indicators ({metrics['total_indicators']})"
+                    message = f"📈 Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Indicators ({metrics['total_indicators']})"
                 elif step == "generating_fuzzy" and "total_fuzzy_sets" in metrics:
-                    message = f"Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Fuzzy Memberships ({metrics['total_fuzzy_sets']})"
+                    message = f"🔀 Processing {symbol} ({symbol_index}/{total_symbols}) - Computing Fuzzy Memberships ({metrics['total_fuzzy_sets']})"
                 else:
                     message = base_message
 
@@ -347,15 +361,15 @@ class HostTrainingOrchestrator:
 
                 if phase == "combining_data":
                     total_symbols = metrics.get("total_symbols", 0)
-                    message = f"Combining data from {total_symbols} symbol(s)"
+                    message = f"⚙️ Combining data from {total_symbols} symbol(s)"
                 elif phase == "splitting_data":
                     total_samples = metrics.get("total_samples", 0)
-                    message = f"Splitting {total_samples} samples (train/val/test)"
+                    message = f"⚙️ Splitting {total_samples} samples (train/val/test)"
                 elif phase == "creating_model":
                     input_dim = metrics.get("input_dim", 0)
-                    message = f"Creating model (input_dim={input_dim})"
+                    message = f"⚙️ Creating model (input_dim={input_dim})"
                 else:
-                    message = phase.replace("_", " ").title()
+                    message = f"⚙️ {phase.replace('_', ' ').title()}"
 
                 logger.info(
                     f"Session {self._session.session_id}: {message}"
