@@ -112,6 +112,7 @@ class OperationsService:
                 completed_at=None,
                 error_message=None,
                 result_summary=None,
+                metrics=None,  # NEW: M1 - initialize as None
             )
 
             # Add to registry
@@ -505,6 +506,7 @@ class OperationsService:
                 completed_at=None,
                 error_message=None,
                 result_summary=None,
+                metrics=None,  # NEW: M1 - initialize as None
             )
 
             # Add to registry
@@ -744,6 +746,65 @@ class OperationsService:
 
         # Create or get existing token from coordinator
         return self._cancellation_coordinator.create_token(operation_id)
+
+    async def get_operation_metrics(
+        self, operation_id: str
+    ) -> Optional[dict[str, Any]]:
+        """
+        Get domain-specific metrics for an operation (M1: API Contract).
+
+        In M1, this returns empty structure. In M2, will return populated metrics.
+
+        Args:
+            operation_id: Operation identifier
+
+        Returns:
+            dict containing metrics, or None if operation doesn't exist
+
+        Raises:
+            KeyError: If operation not found
+        """
+        operation = await self.get_operation(operation_id)
+
+        if not operation:
+            raise KeyError(f"Operation not found: {operation_id}")
+
+        # M1: Return empty metrics (will be populated in M2)
+        return operation.metrics if operation.metrics is not None else {}
+
+    async def add_operation_metrics(
+        self, operation_id: str, metrics_data: dict[str, Any]
+    ) -> None:
+        """
+        Add domain-specific metrics to an operation (M1: validates but doesn't store).
+
+        In M1, this validates the payload structure but doesn't persist.
+        In M2, this will actually store metrics.
+
+        Args:
+            operation_id: Operation identifier
+            metrics_data: Metrics payload to validate/store
+
+        Raises:
+            KeyError: If operation not found
+        """
+        async with self._lock:
+            if operation_id not in self._operations:
+                raise KeyError(f"Operation not found: {operation_id}")
+
+            # M1: Validate that metrics_data is a dict (basic validation)
+            if not isinstance(metrics_data, dict):
+                raise ValueError("metrics_data must be a dictionary")
+
+            # M1: Log but don't store (will store in M2)
+            logger.info(
+                f"[M1] Metrics received for {operation_id} (not stored yet): "
+                f"{len(metrics_data)} fields"
+            )
+
+            # M2 will add: operation.metrics = ...
+            # M2 will add: trend analysis computation
+            # M2 will add: persistence
 
 
 # Global operations service instance
