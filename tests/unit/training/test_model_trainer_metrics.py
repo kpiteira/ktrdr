@@ -47,37 +47,34 @@ class TestModelTrainerMetricsEmission:
 
         trainer.train(model, X_train, y_train, X_val, y_val)
 
-        # Then epoch-level callbacks should include full_metrics
+        # Then epoch-level callbacks should include metrics fields
         epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
         assert len(epoch_callbacks) == 2  # 2 epochs
 
-        for epoch_metrics in epoch_callbacks:
-            assert "full_metrics" in epoch_metrics
-            full = epoch_metrics["full_metrics"]
-
+        for metrics in epoch_callbacks:
             # Verify all required fields are present
-            assert "epoch" in full
-            assert "train_loss" in full
-            assert "train_accuracy" in full
-            assert "val_loss" in full
-            assert "val_accuracy" in full
-            assert "learning_rate" in full
-            assert "duration" in full
-            assert "timestamp" in full
+            assert "epoch" in metrics
+            assert "train_loss" in metrics
+            assert "train_accuracy" in metrics
+            assert "val_loss" in metrics
+            assert "val_accuracy" in metrics
+            assert "learning_rate" in metrics
+            assert "duration" in metrics
+            assert "timestamp" in metrics
 
             # Verify types
-            assert isinstance(full["epoch"], int)
-            assert isinstance(full["train_loss"], float)
-            assert isinstance(full["train_accuracy"], float)
-            assert isinstance(full["duration"], float)
-            assert isinstance(full["timestamp"], str)
+            assert isinstance(metrics["epoch"], int)
+            assert isinstance(metrics["train_loss"], float)
+            assert isinstance(metrics["train_accuracy"], float)
+            assert isinstance(metrics["duration"], float)
+            assert isinstance(metrics["timestamp"], str)
 
             # Verify None handling for val metrics
-            assert full["val_loss"] is None or isinstance(full["val_loss"], float)
-            assert full["val_accuracy"] is None or isinstance(full["val_accuracy"], float)
+            assert metrics["val_loss"] is None or isinstance(metrics["val_loss"], float)
+            assert metrics["val_accuracy"] is None or isinstance(metrics["val_accuracy"], float)
 
     def test_full_metrics_contains_timestamp(self):
-        """Test that full_metrics includes ISO format timestamp."""
+        """Test that metrics include ISO format timestamp."""
         # Given a model trainer
         captured_metrics = []
 
@@ -106,13 +103,13 @@ class TestModelTrainerMetricsEmission:
         epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
         assert len(epoch_callbacks) >= 1
 
-        timestamp = epoch_callbacks[0]["full_metrics"]["timestamp"]
+        timestamp = epoch_callbacks[0]["timestamp"]
         # Basic ISO format check (YYYY-MM-DDTHH:MM:SSZ or similar)
         assert "T" in timestamp
         assert len(timestamp) >= 19  # Minimum ISO format length
 
     def test_full_metrics_with_validation_data(self):
-        """Test that full_metrics includes validation metrics when available."""
+        """Test that metrics include validation metrics when available."""
         # Given a model trainer with validation data
         captured_metrics = []
 
@@ -139,17 +136,17 @@ class TestModelTrainerMetricsEmission:
 
         trainer.train(model, X_train, y_train, X_val, y_val)
 
-        # Then full_metrics should include val_loss and val_accuracy
+        # Then metrics should include val_loss and val_accuracy
         epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
-        full = epoch_callbacks[0]["full_metrics"]
+        metrics = epoch_callbacks[0]
 
-        assert full["val_loss"] is not None
-        assert full["val_accuracy"] is not None
-        assert isinstance(full["val_loss"], float)
-        assert isinstance(full["val_accuracy"], float)
+        assert metrics["val_loss"] is not None
+        assert metrics["val_accuracy"] is not None
+        assert isinstance(metrics["val_loss"], float)
+        assert isinstance(metrics["val_accuracy"], float)
 
     def test_full_metrics_without_validation_data(self):
-        """Test that full_metrics handles missing validation data."""
+        """Test that metrics handle missing validation data."""
         # Given a model trainer without validation data
         captured_metrics = []
 
@@ -174,15 +171,15 @@ class TestModelTrainerMetricsEmission:
 
         trainer.train(model, X_train, y_train)
 
-        # Then full_metrics should have None for val metrics
+        # Then metrics should have None for val metrics
         epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
-        full = epoch_callbacks[0]["full_metrics"]
+        metrics = epoch_callbacks[0]
 
-        assert full["val_loss"] is None
-        assert full["val_accuracy"] is None
+        assert metrics["val_loss"] is None
+        assert metrics["val_accuracy"] is None
 
     def test_full_metrics_learning_rate_matches_optimizer(self):
-        """Test that full_metrics learning_rate matches optimizer."""
+        """Test that metrics learning_rate matches optimizer."""
         # Given a model trainer with specific learning rate
         captured_metrics = []
 
@@ -208,8 +205,8 @@ class TestModelTrainerMetricsEmission:
 
         trainer.train(model, X_train, y_train)
 
-        # Then full_metrics learning_rate should match config
+        # Then metrics learning_rate should match config
         epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
-        full = epoch_callbacks[0]["full_metrics"]
+        metrics = epoch_callbacks[0]
 
-        assert full["learning_rate"] == learning_rate
+        assert metrics["learning_rate"] == learning_rate
