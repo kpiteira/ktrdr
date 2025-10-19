@@ -44,21 +44,46 @@ Build the complete API contract and client integration BEFORE implementing any m
 
 **Data Layer**:
 - Add `metrics: Optional[dict]` field to Operation model
-- Database migration to add metrics column
+- Database migration to add metrics column (nullable)
 - Field remains null/empty until M2
 
 **API Layer**:
-- GET `/operations/{id}/metrics` - returns `{metrics: {}}`
-- POST `/operations/{id}/metrics` - accepts payload, logs it, doesn't store yet
-- Both endpoints fully functional with proper error handling
+
+- GET `/operations/{id}/metrics` - returns empty metrics structure:
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "operation_id": "op-123",
+      "operation_type": "training",
+      "metrics": {}
+    }
+  }
+  ```
+
+- POST `/operations/{id}/metrics` - accepts payload, validates structure, logs but doesn't store
+- Both endpoints have proper error handling (404 for missing operation, etc.)
 
 **Client Layer**:
-- MCP client method `get_operation_metrics(operation_id)`
-- Calls GET endpoint, parses response
+
+- MCP client method `get_operation_metrics(operation_id)` that:
+  - Makes GET request to `/operations/{id}/metrics`
+  - Parses and returns response
+  - Handles errors (connection, 404, etc.)
 
 **Agent Layer**:
-- `examples/agents/training_monitor.py` - monitors training, handles empty data gracefully
-- `examples/agents/loss_analyzer.py` - analyzes trends, handles empty data gracefully
+
+- `examples/agents/training_monitor.py` - Real-time monitoring agent that:
+  - Polls metrics API every 30 seconds
+  - Displays epoch progress, detects issues (overfitting, plateaus)
+  - Handles empty metrics gracefully (shows "waiting for data")
+
+- `examples/agents/loss_analyzer.py` - Trend analysis agent that:
+  - Fetches complete metrics history
+  - Analyzes loss trajectories, identifies best epoch
+  - Provides recommendations (continue, stop, use checkpoint)
+  - Handles insufficient data gracefully
 
 **Testing**:
 - Unit tests for all endpoints and client methods
@@ -85,15 +110,16 @@ Establishes the complete interface contract. Once this works, M2 and M3 just "fi
 - [ ] No breaking changes to existing operations
 
 **User Validation**:
-```bash
-# Start a training operation
-uv run ktrdr models train --strategy config/strategies/example.yaml --epochs 5 &
 
-# Run monitoring agent (M1: shows "no metrics yet")
-python examples/agents/training_monitor.py {operation_id}
+Start any training operation and capture its operation ID. Then:
 
-# Expected: Agent runs, handles empty gracefully, shows valid structure
-```
+1. **Test API directly**: Use cURL or Swagger UI to query `GET /operations/{id}/metrics`. Should return 200 with empty metrics structure.
+
+2. **Test MCP client**: Write a simple Python script that imports the MCP client and calls `get_operation_metrics()`. Should return the same structure as the API.
+
+3. **Run agent scripts**: Execute the monitoring and analyzer agent scripts with the operation ID. They should run without crashing, display a message indicating no metrics are available yet, and show the response structure they received.
+
+All three layers (API, MCP, agents) should work end-to-end even with empty data.
 
 ### Risks & Decisions
 
@@ -135,21 +161,42 @@ Make the API return REAL metrics when training locally. The agent scripts you ra
 ### What Gets Built
 
 **Metrics Collection**:
+
 - ModelTrainer emits full epoch metrics in progress callback
-- Includes: train/val loss, accuracy, learning_rate, duration, timestamp
+- Each epoch includes: train_loss, val_loss, train_accuracy, val_accuracy, learning_rate, duration, timestamp
+- Added to existing progress callback payload as `"full_metrics"` key (backward compatible)
 
 **Metrics Storage**:
-- OperationsService gains `add_metrics()` method
-- Stores metrics in Operation.metrics field
-- Computes trend indicators: best_epoch, is_overfitting, is_plateaued
+
+- OperationsService gains `add_metrics(operation_id, metrics_data)` method that:
+  - Validates operation exists
+  - Routes by operation type (training vs others)
+  - Stores epoch data in Operation.metrics field
+  - Computes trend indicators: best_epoch, is_overfitting, is_plateaued
+  - Persists to database asynchronously (non-blocking)
 
 **Metrics Flow**:
-- TrainingProgressBridge forwards metrics to OperationsService
-- LocalTrainingOrchestrator wires callback between bridge and service
+
+- TrainingProgressBridge receives progress callback with metrics
+- Extracts `"full_metrics"` and forwards to OperationsService via callback
+- LocalTrainingOrchestrator creates and wires the callback
 
 **API Changes**:
-- POST `/operations/{id}/metrics` now actually stores data (was no-op in M1)
-- GET `/operations/{id}/metrics` returns real data from database
+
+- POST `/operations/{id}/metrics` now stores data (was validation-only in M1)
+- GET `/operations/{id}/metrics` returns populated data structure:
+
+  ```json
+  {
+    "metrics": {
+      "epochs": [{...}, {...}],
+      "best_epoch": 7,
+      "best_val_loss": 0.4123,
+      "is_overfitting": false,
+      "is_plateaued": false
+    }
+  }
+  ```
 
 **Testing**:
 - Unit tests for metrics emission, storage, trend analysis
@@ -177,26 +224,20 @@ Local training is simpler (no HTTP layer), easier to debug. Validates core metri
 - [ ] Metrics storage < 50KB for 100 epochs
 
 **User Validation**:
-```bash
-# Train locally (same command as M1)
-export USE_TRAINING_HOST_SERVICE=false
-uv run ktrdr models train --strategy config/strategies/example.yaml --epochs 10
 
-# Run THE SAME agent from M1
-python examples/agents/training_monitor.py {operation_id}
+Train locally for 10 epochs (set `USE_TRAINING_HOST_SERVICE=false`). During and after training:
 
-# M1 output: "⏳ No metrics yet"
-# M2 output: "✅ Epoch 0: train_loss=0.8234, val_loss=0.8912"
-#            "✅ Epoch 1: train_loss=0.7123, val_loss=0.7456"
-#            ... continues for all 10 epochs
+1. **Verify metrics collection**: Query `GET /operations/{id}/metrics` - should now return populated metrics with 10 epochs, each containing train_loss, val_loss, accuracy, learning_rate, duration, timestamp.
 
-# Run analyzer
-python examples/agents/loss_analyzer.py {operation_id}
+2. **Verify trend analysis**: Check that computed fields exist: `best_epoch`, `epochs_since_improvement`, `is_overfitting`, `is_plateaued`.
 
-# Expected: Real analysis with recommendations
-# "📈 Loss Trend Analysis: improving, -15.3% change"
-# "💡 Recommendation: CONTINUE TRAINING"
-```
+3. **Run monitoring agent**: Execute the same agent script from M1. Should now display real-time epoch progress instead of "no metrics yet". Watch it update as training progresses.
+
+4. **Run analyzer agent**: Execute the analyzer. Should now provide actual trend analysis (improving/worsening) and recommendations (continue/stop/use checkpoint).
+
+5. **Validate synthetic cases**: Create unit tests with synthetic loss data to verify overfitting detection (train↓, val↑) and plateau detection (no improvement for N epochs) work correctly.
+
+The key validation is that the **same agent scripts from M1 now show real data** without code changes.
 
 ### Risks & Decisions
 
@@ -277,29 +318,20 @@ Host service adds HTTP complexity. Core logic validated in M2, now just extendin
 - [ ] No performance impact vs M2
 
 **User Validation**:
-```bash
-# Start training host service
-cd training-host-service && ./start.sh
 
-# Train with GPU (same command structure as M1/M2)
-export USE_TRAINING_HOST_SERVICE=true
-uv run ktrdr models train --strategy config/strategies/example.yaml --epochs 10
+Start training host service, then train with GPU for 10 epochs (set `USE_TRAINING_HOST_SERVICE=true`). Validate:
 
-# Run THE SAME agents (work with no changes!)
-python examples/agents/training_monitor.py {operation_id}
+1. **Verify HTTP flow**: Monitor logs in both training-host-service and Docker container. Should see metrics forwarding messages in host service logs and receipt confirmation in Docker logs.
 
-# Expected: Same output as M2, but training ran on GPU
-```
+2. **Verify metrics appear**: Query `GET /operations/{id}/metrics` - should return same populated structure as M2 (10 epochs with all fields).
 
-**Validation - HTTP Flow**:
-```bash
-# Watch logs during training
-tail -f training-host-service/logs/training-host-service.log
-# Should see: "Forwarding metrics for session {id}"
+3. **Run same agent scripts**: Execute the monitoring and analyzer agents from M1/M2. Should work identically to M2 - agents don't know or care that training happened on GPU.
 
-docker logs ktrdr-backend -f
-# Should see: "Received metrics for operation {id}"
-```
+4. **Test error handling**: Temporarily stop training host service mid-training, verify graceful degradation (training continues, metrics just aren't collected).
+
+5. **Performance check**: Compare training time to M2. HTTP calls are async and should not add noticeable overhead.
+
+The validation proves that **location of training (Docker vs host) is transparent to agents**.
 
 ### Risks & Decisions
 
@@ -381,21 +413,18 @@ Documentation, performance validation, and final polish. Make it production-read
 - [ ] All edge cases tested
 
 **Final Validation**:
-```bash
-# End-to-end test with all modes
-# 1. Local training
-export USE_TRAINING_HOST_SERVICE=false
-uv run ktrdr models train --strategy config/strategies/example.yaml --epochs 50
-python examples/agents/loss_analyzer.py {operation_id}
 
-# 2. GPU training
-export USE_TRAINING_HOST_SERVICE=true
-uv run ktrdr models train --strategy config/strategies/example.yaml --epochs 50
-python examples/agents/loss_analyzer.py {operation_id}
+Comprehensive end-to-end testing:
 
-# 3. Multiple concurrent trainings
-# Start 3 trainings in parallel, verify all work correctly
-```
+1. **Local training test**: Run 50-epoch training locally, use analyzer agent to verify complete metrics history and accurate recommendations.
+
+2. **GPU training test**: Run 50-epoch training with host service, verify identical behavior to local mode.
+
+3. **Concurrency test**: Start 3 training operations simultaneously (mix of local and GPU), verify all collect metrics correctly without interference.
+
+4. **Performance validation**: Compare training times to baseline (pre-metrics), verify < 2% difference. Measure database query response times, verify < 100ms. Check metrics storage size for 100-epoch training, verify < 50KB.
+
+5. **Agent scenario validation**: Run agents in realistic scenarios (long training, early stopping needed, overfitting detection) and verify recommendations are sensible.
 
 ### Commit Message
 
