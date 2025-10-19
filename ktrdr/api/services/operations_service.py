@@ -776,35 +776,160 @@ class OperationsService:
         self, operation_id: str, metrics_data: dict[str, Any]
     ) -> None:
         """
-        Add domain-specific metrics to an operation (M1: validates but doesn't store).
+        Add domain-specific metrics to an operation.
 
-        In M1, this validates the payload structure but doesn't persist.
-        In M2, this will actually store metrics.
+        For training operations: stores epoch metrics and computes trend analysis.
+        For other operation types: stores metrics as-is.
 
         Args:
             operation_id: Operation identifier
-            metrics_data: Metrics payload to validate/store
+            metrics_data: Metrics payload (structure varies by operation type)
 
         Raises:
             KeyError: If operation not found
+            ValueError: If metrics_data is invalid
         """
         async with self._lock:
             if operation_id not in self._operations:
                 raise KeyError(f"Operation not found: {operation_id}")
 
-            # M1: Validate that metrics_data is a dict (basic validation)
+            operation = self._operations[operation_id]
+
+            # Validate that metrics_data is a dict
             if not isinstance(metrics_data, dict):
                 raise ValueError("metrics_data must be a dictionary")
 
-            # M1: Log but don't store (will store in M2)
-            logger.info(
-                f"[M1] Metrics received for {operation_id} (not stored yet): "
-                f"{len(metrics_data)} fields"
+            # Initialize metrics dict if needed
+            if operation.metrics is None:
+                operation.metrics = {}
+
+            # Handle training-specific metrics
+            if operation.operation_type == OperationType.TRAINING:
+                await self._add_training_epoch_metrics(operation, metrics_data)
+            else:
+                # For other operation types, store as-is
+                operation.metrics.update(metrics_data)
+
+            logger.debug(
+                f"Metrics added for operation {operation_id} "
+                f"(type={operation.operation_type}, total_fields={len(operation.metrics)})"
             )
 
-            # M2 will add: operation.metrics = ...
-            # M2 will add: trend analysis computation
-            # M2 will add: persistence
+    async def _add_training_epoch_metrics(
+        self, operation: OperationInfo, epoch_metrics: dict[str, Any]
+    ) -> None:
+        """
+        Add epoch metrics to training operation and update trend analysis.
+
+        Args:
+            operation: The training operation
+            epoch_metrics: Epoch metrics to add
+        """
+        # Initialize training metrics structure if needed
+        if "epochs" not in operation.metrics:
+            operation.metrics["epochs"] = []
+            operation.metrics["total_epochs_planned"] = 0
+            operation.metrics["total_epochs_completed"] = 0
+
+        # Add epoch metrics
+        operation.metrics["epochs"].append(epoch_metrics)
+        operation.metrics["total_epochs_completed"] = len(operation.metrics["epochs"])
+
+        # Update trend analysis
+        self._update_training_metrics_analysis(operation.metrics)
+
+    def _update_training_metrics_analysis(self, metrics: dict[str, Any]) -> None:
+        """
+        Compute trend indicators from epoch history.
+
+        Updates:
+        - best_epoch: Index of epoch with lowest validation loss
+        - best_val_loss: Lowest validation loss achieved
+        - epochs_since_improvement: Epochs since last improvement
+        - is_overfitting: Whether training shows overfitting pattern
+        - is_plateaued: Whether training has plateaued (no improvement for 10+ epochs)
+
+        Args:
+            metrics: Training metrics dict to update
+        """
+        epochs = metrics.get("epochs", [])
+        if not epochs:
+            return
+
+        # Find best epoch (lowest validation loss)
+        val_losses = [
+            (i, e["val_loss"])
+            for i, e in enumerate(epochs)
+            if e.get("val_loss") is not None
+        ]
+
+        if val_losses:
+            best_idx, best_loss = min(val_losses, key=lambda x: x[1])
+            metrics["best_epoch"] = best_idx
+            metrics["best_val_loss"] = best_loss
+            metrics["epochs_since_improvement"] = len(epochs) - 1 - best_idx
+        else:
+            # No validation data available
+            metrics["best_epoch"] = None
+            metrics["best_val_loss"] = None
+            metrics["epochs_since_improvement"] = 0
+
+        # Detect overfitting (train loss ↓ while val loss ↑)
+        if len(epochs) >= 10:
+            recent = epochs[-10:]
+            train_losses = [e["train_loss"] for e in recent]
+            val_losses_recent = [
+                e.get("val_loss") for e in recent if e.get("val_loss") is not None
+            ]
+
+            if len(val_losses_recent) >= 10:
+                # Simple linear trend: last < first means decreasing
+                train_decreasing = train_losses[-1] < train_losses[0]
+                val_increasing = val_losses_recent[-1] > val_losses_recent[0]
+
+                # Additional check: significant divergence
+                train_improvement = (
+                    (train_losses[0] - train_losses[-1]) / train_losses[0]
+                    if train_losses[0] > 0
+                    else 0
+                )
+                val_degradation = (
+                    (val_losses_recent[-1] - val_losses_recent[0])
+                    / val_losses_recent[0]
+                    if val_losses_recent[0] > 0
+                    else 0
+                )
+
+                # Overfitting if train improving >5% while val degrading >5%
+                metrics["is_overfitting"] = (
+                    train_decreasing
+                    and val_increasing
+                    and train_improvement > 0.05
+                    and val_degradation > 0.05
+                )
+            else:
+                metrics["is_overfitting"] = False
+        else:
+            metrics["is_overfitting"] = False
+
+        # Detect plateau (no improvement for 10+ epochs)
+        metrics["is_plateaued"] = metrics.get("epochs_since_improvement", 0) >= 10
+
+    async def add_metrics(
+        self, operation_id: str, metrics_data: dict[str, Any]
+    ) -> None:
+        """
+        Alias for add_operation_metrics for backwards compatibility.
+
+        Args:
+            operation_id: Operation identifier
+            metrics_data: Metrics payload
+
+        Raises:
+            KeyError: If operation not found
+            ValueError: If metrics_data is invalid
+        """
+        await self.add_operation_metrics(operation_id, metrics_data)
 
 
 # Global operations service instance

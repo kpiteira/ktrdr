@@ -554,6 +554,17 @@ class ModelTrainer:
                         "val_loss": val_loss,
                         "val_accuracy": val_accuracy,
                         "progress_type": "epoch",
+                        # M2: Add full metrics for storage in operations service
+                        "full_metrics": {
+                            "epoch": epoch,
+                            "train_loss": float(avg_train_loss),
+                            "train_accuracy": float(train_accuracy),
+                            "val_loss": float(val_loss) if val_loss is not None else None,
+                            "val_accuracy": float(val_accuracy) if val_accuracy is not None else None,
+                            "learning_rate": optimizer.param_groups[0]["lr"],
+                            "duration": duration,
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        },
                     }
                     self.progress_callback(epoch, epochs, epoch_metrics)
                 except Exception as e:
