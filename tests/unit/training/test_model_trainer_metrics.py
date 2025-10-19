@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+
 from ktrdr.training.model_trainer import ModelTrainer
 
 
@@ -48,7 +49,9 @@ class TestModelTrainerMetricsEmission:
         trainer.train(model, X_train, y_train, X_val, y_val)
 
         # Then epoch-level callbacks should include metrics fields
-        epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
+        epoch_callbacks = [
+            m for m in captured_metrics if m.get("progress_type") == "epoch"
+        ]
         assert len(epoch_callbacks) == 2  # 2 epochs
 
         for metrics in epoch_callbacks:
@@ -71,7 +74,9 @@ class TestModelTrainerMetricsEmission:
 
             # Verify None handling for val metrics
             assert metrics["val_loss"] is None or isinstance(metrics["val_loss"], float)
-            assert metrics["val_accuracy"] is None or isinstance(metrics["val_accuracy"], float)
+            assert metrics["val_accuracy"] is None or isinstance(
+                metrics["val_accuracy"], float
+            )
 
     def test_full_metrics_contains_timestamp(self):
         """Test that metrics include ISO format timestamp."""
@@ -100,7 +105,9 @@ class TestModelTrainerMetricsEmission:
         trainer.train(model, X_train, y_train)
 
         # Then timestamp should be in ISO format
-        epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
+        epoch_callbacks = [
+            m for m in captured_metrics if m.get("progress_type") == "epoch"
+        ]
         assert len(epoch_callbacks) >= 1
 
         timestamp = epoch_callbacks[0]["timestamp"]
@@ -137,7 +144,9 @@ class TestModelTrainerMetricsEmission:
         trainer.train(model, X_train, y_train, X_val, y_val)
 
         # Then metrics should include val_loss and val_accuracy
-        epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
+        epoch_callbacks = [
+            m for m in captured_metrics if m.get("progress_type") == "epoch"
+        ]
         metrics = epoch_callbacks[0]
 
         assert metrics["val_loss"] is not None
@@ -172,7 +181,9 @@ class TestModelTrainerMetricsEmission:
         trainer.train(model, X_train, y_train)
 
         # Then metrics should have None for val metrics
-        epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
+        epoch_callbacks = [
+            m for m in captured_metrics if m.get("progress_type") == "epoch"
+        ]
         metrics = epoch_callbacks[0]
 
         assert metrics["val_loss"] is None
@@ -206,7 +217,9 @@ class TestModelTrainerMetricsEmission:
         trainer.train(model, X_train, y_train)
 
         # Then metrics learning_rate should match config
-        epoch_callbacks = [m for m in captured_metrics if m.get("progress_type") == "epoch"]
+        epoch_callbacks = [
+            m for m in captured_metrics if m.get("progress_type") == "epoch"
+        ]
         metrics = epoch_callbacks[0]
 
         assert metrics["learning_rate"] == learning_rate

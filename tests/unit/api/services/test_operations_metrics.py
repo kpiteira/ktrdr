@@ -2,7 +2,8 @@
 
 import pytest
 import pytest_asyncio
-from ktrdr.api.models.operations import OperationType, OperationMetadata
+
+from ktrdr.api.models.operations import OperationMetadata, OperationType
 from ktrdr.api.services.operations_service import OperationsService
 
 # Mark all tests in this module as async
@@ -19,13 +20,10 @@ async def operations_service():
 async def training_operation(operations_service):
     """Create a training operation for testing."""
     metadata = OperationMetadata(
-        description="Test training operation",
-        user="test",
-        tags=["test"]
+        description="Test training operation", user="test", tags=["test"]
     )
     operation = await operations_service.create_operation(
-        operation_type=OperationType.TRAINING,
-        metadata=metadata
+        operation_type=OperationType.TRAINING, metadata=metadata
     )
     return operation
 
@@ -49,7 +47,7 @@ class TestAddMetrics:
             "val_accuracy": 0.58,
             "learning_rate": 0.001,
             "duration": 12.5,
-            "timestamp": "2025-01-17T10:00:00Z"
+            "timestamp": "2025-01-17T10:00:00Z",
         }
         await operations_service.add_metrics(operation_id, epoch_metrics)
 
@@ -78,7 +76,7 @@ class TestAddMetrics:
                 "val_accuracy": 0.55 + (epoch * 0.04),
                 "learning_rate": 0.001,
                 "duration": 12.0,
-                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z"
+                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z",
             }
             await operations_service.add_metrics(operation_id, epoch_metrics)
 
@@ -105,7 +103,7 @@ class TestAddMetrics:
                 "val_accuracy": 0.55,
                 "learning_rate": 0.001,
                 "duration": 12.0,
-                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z"
+                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z",
             }
             await operations_service.add_metrics(operation_id, epoch_metrics)
 
@@ -147,7 +145,7 @@ class TestTrainingMetricsTrendAnalysis:
                 "val_accuracy": 0.65,
                 "learning_rate": 0.001,
                 "duration": 12.0,
-                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z"
+                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z",
             }
             await operations_service.add_metrics(operation_id, epoch_metrics)
 
@@ -172,7 +170,7 @@ class TestTrainingMetricsTrendAnalysis:
                 "val_accuracy": 0.65 - (epoch * 0.01),
                 "learning_rate": 0.001,
                 "duration": 12.0,
-                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z"
+                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z",
             }
             await operations_service.add_metrics(operation_id, epoch_metrics)
 
@@ -197,7 +195,7 @@ class TestTrainingMetricsTrendAnalysis:
                 "val_accuracy": 0.55 + (epoch * 0.02),
                 "learning_rate": 0.001,
                 "duration": 12.0,
-                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z"
+                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z",
             }
             await operations_service.add_metrics(operation_id, epoch_metrics)
 
@@ -221,7 +219,7 @@ class TestTrainingMetricsTrendAnalysis:
                 "val_accuracy": 0.65,
                 "learning_rate": 0.001,
                 "duration": 12.0,
-                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z"
+                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z",
             }
             await operations_service.add_metrics(operation_id, epoch_metrics)
 
@@ -248,7 +246,7 @@ class TestTrainingMetricsTrendAnalysis:
                 "val_accuracy": 0.65,
                 "learning_rate": 0.001,
                 "duration": 12.0,
-                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z"
+                "timestamp": f"2025-01-17T10:{epoch:02d}:00Z",
             }
             await operations_service.add_metrics(operation_id, epoch_metrics)
 

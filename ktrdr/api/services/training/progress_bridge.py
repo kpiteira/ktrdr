@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 from ktrdr import get_logger
@@ -25,6 +26,9 @@ class TrainingProgressBridge:
         update_progress_callback: Callable[..., None] | None = None,
         cancellation_token: CancellationToken | None = None,
         batch_update_stride: int | None = None,
+        metrics_callback: (
+            Callable[[dict[str, Any]], Coroutine[Any, Any, None]] | None
+        ) = None,
     ) -> None:
         if progress_manager is None and update_progress_callback is None:
             raise ValueError(
@@ -35,6 +39,7 @@ class TrainingProgressBridge:
         self._progress_manager = progress_manager
         self._update_callback = update_progress_callback
         self._cancellation_token = cancellation_token
+        self._metrics_callback = metrics_callback
         self._total_epochs = max(context.total_epochs, 1)
         self._total_batches: int | None = context.total_batches
 
@@ -138,6 +143,25 @@ class TrainingProgressBridge:
             phase="epoch",
             context=context,
         )
+
+        # M2: Forward epoch metrics to operations service for storage
+        if self._metrics_callback and metrics.get("progress_type") == "epoch":
+            try:
+                # Extract only the metrics fields needed for storage
+                epoch_metrics_to_store = {
+                    "epoch": metrics.get("epoch"),
+                    "train_loss": metrics.get("train_loss"),
+                    "train_accuracy": metrics.get("train_accuracy"),
+                    "val_loss": metrics.get("val_loss"),
+                    "val_accuracy": metrics.get("val_accuracy"),
+                    "learning_rate": metrics.get("learning_rate"),
+                    "duration": metrics.get("duration"),
+                    "timestamp": metrics.get("timestamp"),
+                }
+                # Schedule async callback without blocking
+                asyncio.create_task(self._metrics_callback(epoch_metrics_to_store))
+            except Exception as e:
+                logger.warning(f"Failed to forward epoch metrics: {e}", exc_info=True)
 
     def on_batch(
         self,

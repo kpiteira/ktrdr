@@ -202,10 +202,24 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         if progress_manager is None:
             raise RuntimeError("Progress manager not available for training operation")
 
+        # M2: Create metrics callback to forward epoch metrics to operations service
+        async def metrics_callback(epoch_metrics: dict[str, Any]) -> None:
+            """Forward epoch metrics to operations service for storage."""
+            if context.operation_id:
+                try:
+                    await self.operations_service.add_metrics(
+                        context.operation_id, epoch_metrics
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to store metrics for operation {context.operation_id}: {e}"
+                    )
+
         bridge = TrainingProgressBridge(
             context=context,
             progress_manager=progress_manager,
             cancellation_token=self._current_cancellation_token,
+            metrics_callback=metrics_callback,
         )
 
         orchestrator = LocalTrainingOrchestrator(
@@ -225,10 +239,24 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         if progress_manager is None:
             raise RuntimeError("Progress manager not available for training operation")
 
+        # M2: Create metrics callback to forward epoch metrics to operations service
+        async def metrics_callback(epoch_metrics: dict[str, Any]) -> None:
+            """Forward epoch metrics to operations service for storage."""
+            if context.operation_id:
+                try:
+                    await self.operations_service.add_metrics(
+                        context.operation_id, epoch_metrics
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to store metrics for operation {context.operation_id}: {e}"
+                    )
+
         bridge = TrainingProgressBridge(
             context=context,
             progress_manager=progress_manager,
             cancellation_token=self._current_cancellation_token,
+            metrics_callback=metrics_callback,
         )
 
         # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode

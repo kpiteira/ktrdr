@@ -33,7 +33,6 @@ def get_config(key: str, default=None):
 def setup_logging():
     """Configure logging - JSON to stderr (for MCP), human-readable to file"""
     import logging
-    import sys
 
     # Ensure logs directory exists
     log_dir = Path("/app/logs")

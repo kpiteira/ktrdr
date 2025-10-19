@@ -825,6 +825,9 @@ class OperationsService:
             operation: The training operation
             epoch_metrics: Epoch metrics to add
         """
+        # Ensure operation.metrics is initialized (should be from add_operation_metrics)
+        assert operation.metrics is not None, "Metrics should be initialized"
+
         # Initialize training metrics structure if needed
         if "epochs" not in operation.metrics:
             operation.metrics["epochs"] = []
