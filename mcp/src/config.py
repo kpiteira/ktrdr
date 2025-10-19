@@ -31,7 +31,33 @@ def get_config(key: str, default=None):
 
 
 def setup_logging():
-    """Configure structured logging"""
+    """Configure logging - JSON to stderr (for MCP), human-readable to file"""
+    import logging
+    import sys
+
+    # Ensure logs directory exists
+    log_dir = Path("/app/logs")
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "mcp.log"
+
+    # Human-readable format for file logs
+    log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    # Set up root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, LOG_LEVEL))
+
+    # Clear existing handlers
+    root_logger.handlers.clear()
+
+    # File handler (human-readable for debugging)
+    file_handler = logging.FileHandler(log_file, mode='a')
+    file_handler.setLevel(getattr(logging, LOG_LEVEL))
+    file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+    root_logger.addHandler(file_handler)
+
+    # Configure structlog for JSON output to stderr (MCP protocol)
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -42,7 +68,7 @@ def setup_logging():
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer(),
+            structlog.processors.JSONRenderer(),  # JSON for MCP protocol
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
