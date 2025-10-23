@@ -56,27 +56,96 @@ ktrdr data load AAPL 1d --start-date 2023-01-01 --end-date 2023-12-31
 
 ### 3. Test Strategy Configuration
 
-**Create a simple test strategy:**
-```bash
-# File: config/strategies/test_e2e.yaml
-name: E2E Test Strategy
-description: Fast training for E2E validation
+**Create a simple test strategy for fast E2E testing:**
 
-training:
-  epochs: 10  # Small number for quick testing
-  batch_size: 32
-  validation_split: 0.2
+Create file: `strategies/test_e2e_local_pull.yaml`
 
-model:
-  type: lstm
-  layers: 2
-  hidden_size: 64
+```yaml
+# === STRATEGY IDENTITY ===
+name: "test_e2e_local_pull"
+description: "Minimal strategy for E2E testing of pull-based operations"
+version: "1.0"
+hypothesis: "Simple RSI strategy for fast testing"
 
+# === STRATEGY SCOPE ===
+scope: "symbol_specific"
+
+# === TRAINING APPROACH ===
+training_data:
+  symbols:
+    mode: "single"
+    symbol: "AAPL"  # Single symbol for fast testing
+  timeframes:
+    mode: "single"
+    timeframe: "1h"  # Single timeframe for fast testing
+  history_required: 100  # Minimal history for quick data loading
+
+# === DEPLOYMENT TARGETS ===
+deployment:
+  target_symbols:
+    mode: "training_only"
+  target_timeframes:
+    mode: "single"
+    timeframe: "1h"
+
+# === TECHNICAL INDICATORS ===
 indicators:
-  - name: sma
-    period: 20
-  - name: rsi
-    period: 14
+- name: "rsi"
+  feature_id: rsi_14
+  period: 14
+  source: "close"
+
+# === FUZZY LOGIC CONFIGURATION ===
+fuzzy_sets:
+  rsi_14:
+    oversold:
+      type: "triangular"
+      parameters: [0, 20, 35]
+    neutral:
+      type: "triangular"
+      parameters: [30, 50, 70]
+    overbought:
+      type: "triangular"
+      parameters: [65, 80, 100]
+
+# === NEURAL NETWORK MODEL ===
+model:
+  type: "mlp"
+  architecture:
+    hidden_layers: [25, 15]  # Smaller network for fast training
+    activation: "relu"
+    output_activation: "softmax"
+    dropout: 0.1
+  features:
+    include_price_context: false
+    lookback_periods: 2
+    scale_features: true
+  training:
+    learning_rate: 0.001
+    batch_size: 32
+    epochs: 10  # SMALL for fast testing!
+    optimizer: "adam"
+
+# === DECISION LOGIC ===
+decisions:
+  output_format: "classification"
+  confidence_threshold: 0.6
+  position_awareness: true
+  filters:
+    min_signal_separation: 4
+    volume_filter: false
+
+# === TRAINING CONFIGURATION ===
+training:
+  method: "supervised"
+  labels:
+    source: "zigzag"
+    zigzag_threshold: 0.03
+    label_lookahead: 20
+  data_split:
+    train: 0.7
+    validation: 0.15
+    test: 0.15
 ```
 
 ---
@@ -89,18 +158,14 @@ indicators:
 
 #### Setup
 - Backend API running
-- Test strategy file exists (`config/strategies/test_e2e.yaml`)
+- Test strategy file exists (`strategies/test_e2e_local_pull.yaml`)
 - Terminal open for commands
 
 #### Actions
 
 1. **Start training:**
    ```bash
-   ktrdr models train --strategy config/strategies/test_e2e.yaml \
-                       --symbols AAPL \
-                       --timeframes 1d \
-                       --start-date 2023-01-01 \
-                       --end-date 2023-06-30
+   ktrdr models train --strategy strategies/test_e2e_local_pull.yaml
    ```
 
 2. **Note the operation_id from response:**
@@ -566,9 +631,7 @@ docker logs ktrdr-backend | grep "Refreshed operation.*op_training_20250123_abc1
 
 2. **Start training:**
    ```bash
-   ktrdr models train --strategy config/strategies/test_e2e.yaml \
-                       --symbols AAPL \
-                       --timeframes 1d
+   ktrdr models train --strategy strategies/test_e2e_local_pull.yaml
    ```
 
 3. **Immediately check logs:**
