@@ -210,6 +210,13 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             cancellation_token=self._current_cancellation_token,
         )
 
+        # TASK 1.3: Register bridge with OperationsService for pull-based refresh
+        if context.operation_id:
+            self.operations_service.register_local_bridge(context.operation_id, bridge)
+            logger.info(
+                f"Registered local training bridge for operation {context.operation_id}"
+            )
+
         orchestrator = LocalTrainingOrchestrator(
             context=context,
             progress_bridge=bridge,
@@ -234,6 +241,13 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             progress_manager=progress_manager,
             cancellation_token=self._current_cancellation_token,
         )
+
+        # TASK 1.3: Register bridge with OperationsService for pull-based refresh
+        if context.operation_id:
+            self.operations_service.register_local_bridge(context.operation_id, bridge)
+            logger.info(
+                f"Registered host training bridge for operation {context.operation_id}"
+            )
 
         # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
         assert (

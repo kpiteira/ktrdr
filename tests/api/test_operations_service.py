@@ -290,6 +290,206 @@ class TestOperationsService:
             assert stored_operation.status == OperationStatus.PENDING
 
 
+class TestOperationsServiceBridgeRegistry:
+    """Test bridge registry and pull-based refresh functionality (Task 1.3)."""
+
+    @pytest.mark.asyncio
+    async def test_register_local_bridge(self, operations_service, sample_metadata):
+        """Test registering a local bridge for pull-based progress."""
+        # Create operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+
+        # Create mock bridge
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # Verify bridge registered
+        assert operation.operation_id in operations_service._local_bridges
+        assert operations_service._local_bridges[operation.operation_id] is bridge
+
+        # Verify cursor initialized to 0
+        assert operation.operation_id in operations_service._metrics_cursors
+        assert operations_service._metrics_cursors[operation.operation_id] == 0
+
+    @pytest.mark.asyncio
+    async def test_refresh_from_bridge_updates_operation(
+        self, operations_service, sample_metadata
+    ):
+        """Test that _refresh_from_bridge() updates operation with bridge data."""
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create bridge with state
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(
+            percentage=55.0,
+            message="Epoch 55/100",
+            current_step=55,
+            items_processed=5500,
+            epoch_index=55,
+            total_epochs=100,
+        )
+
+        # Add some metrics
+        bridge._append_metric(
+            {
+                "epoch": 54,
+                "train_loss": 1.5,
+                "val_loss": 1.7,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # Refresh from bridge
+        operations_service._refresh_from_bridge(operation.operation_id)
+
+        # Verify operation updated
+        updated_op = await operations_service.get_operation(operation.operation_id)
+        assert updated_op.progress.percentage == 55.0
+        assert (
+            updated_op.progress.current_step == "Epoch 55/100"
+        )  # message goes to current_step
+        assert (
+            updated_op.progress.steps_completed == 55
+        )  # numeric step goes to steps_completed
+        assert updated_op.progress.items_processed == 5500
+
+    @pytest.mark.asyncio
+    async def test_get_operation_pulls_from_bridge_when_running(
+        self, operations_service, sample_metadata
+    ):
+        """Test that get_operation() refreshes from bridge when operation is RUNNING."""
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create bridge with state
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(
+            percentage=75.0,
+            message="Epoch 75/100",
+            current_step=75,
+            items_processed=7500,
+        )
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # Get operation should trigger refresh
+        updated_op = await operations_service.get_operation(operation.operation_id)
+
+        # Verify operation was refreshed from bridge
+        assert updated_op.progress.percentage == 75.0
+        assert updated_op.progress.current_step == "Epoch 75/100"
+
+    @pytest.mark.asyncio
+    async def test_immutable_operations_never_refresh(
+        self, operations_service, sample_metadata
+    ):
+        """Test that completed/failed/cancelled operations never refresh."""
+        # Create operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+
+        # Create bridge
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(percentage=50.0, message="Epoch 50/100", current_step=50)
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # Complete operation
+        await operations_service.complete_operation(
+            operation.operation_id, {"final_result": "success"}
+        )
+
+        # Update bridge with new state (should NOT be reflected)
+        bridge._update_state(
+            percentage=99.0, message="Should not appear", current_step=99
+        )
+
+        # Get operation - should NOT refresh from bridge
+        final_op = await operations_service.get_operation(operation.operation_id)
+
+        # Progress should remain at 100% (from complete), not 99% (from bridge)
+        assert final_op.status == OperationStatus.COMPLETED
+        assert final_op.progress.percentage == 100.0
+        assert final_op.progress.current_step != "Should not appear"
+
+    @pytest.mark.asyncio
+    async def test_metrics_cursor_increments(self, operations_service, sample_metadata):
+        """Test that metrics cursor increments correctly with multiple pulls."""
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create bridge
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+
+        # Add initial metrics
+        bridge._append_metric({"epoch": 0, "loss": 2.5})
+        bridge._append_metric({"epoch": 1, "loss": 2.3})
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # First refresh - should get 2 metrics
+        operations_service._refresh_from_bridge(operation.operation_id)
+        assert operations_service._metrics_cursors[operation.operation_id] == 2
+
+        # Add more metrics
+        bridge._append_metric({"epoch": 2, "loss": 2.1})
+
+        # Second refresh - should get only 1 new metric
+        operations_service._refresh_from_bridge(operation.operation_id)
+        assert operations_service._metrics_cursors[operation.operation_id] == 3
+
+    @pytest.mark.asyncio
+    async def test_refresh_with_no_bridge_registered(
+        self, operations_service, sample_metadata
+    ):
+        """Test that refresh handles missing bridge gracefully."""
+        # Create operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+
+        # Try to refresh without registering bridge (should not crash)
+        operations_service._refresh_from_bridge(operation.operation_id)
+
+        # Operation should still exist
+        op = await operations_service.get_operation(operation.operation_id)
+        assert op is not None
+
+
 class TestOperationsServiceCancellationEvents:
     """Test dynamic cancellation events attribute functionality."""
 

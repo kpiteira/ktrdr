@@ -49,6 +49,15 @@ class OperationsService:
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
 
+        # TASK 1.3: Bridge registry for pull-based progress updates (M1)
+        self._local_bridges: dict[str, Any] = {}  # operation_id → ProgressBridge
+        self._metrics_cursors: dict[str, int] = (
+            {}
+        )  # operation_id → cursor for incremental metrics
+        self._remote_proxies: dict[str, Any] = (
+            {}
+        )  # operation_id → OperationServiceProxy (M2)
+
         logger.info("Operations service initialized with unified cancellation system")
 
     def generate_operation_id(
@@ -356,7 +365,9 @@ class OperationsService:
 
     async def get_operation(self, operation_id: str) -> Optional[OperationInfo]:
         """
-        Get operation information with live status updates for training operations.
+        Get operation information with live status updates.
+
+        TASK 1.3: Now includes pull-based refresh from local bridges.
 
         Args:
             operation_id: Operation identifier
@@ -369,7 +380,16 @@ class OperationsService:
             if not operation:
                 return None
 
+            # TASK 1.3: Pull from local bridge if registered and operation still running
+            if (
+                operation.status == OperationStatus.RUNNING
+                and operation_id in self._local_bridges
+            ):
+                # Refresh from bridge (synchronous, fast)
+                self._refresh_from_bridge(operation_id)
+
             # For training operations, query host service for live status
+            # (This legacy code remains for backward compatibility, will be removed in M3)
             if (
                 operation.operation_type == OperationType.TRAINING
                 and operation.status == OperationStatus.RUNNING
@@ -557,6 +577,73 @@ class OperationsService:
                 logger.info(f"Cleaned up {len(operations_to_remove)} old operations")
 
             return len(operations_to_remove)
+
+    def register_local_bridge(self, operation_id: str, bridge: Any) -> None:
+        """
+        Register a local bridge for pull-based progress updates (TASK 1.3).
+
+        Args:
+            operation_id: Operation identifier
+            bridge: ProgressBridge instance for this operation
+        """
+        self._local_bridges[operation_id] = bridge
+        self._metrics_cursors[operation_id] = 0  # Start cursor at 0
+        logger.info(f"Registered local bridge for operation {operation_id}")
+
+    def _refresh_from_bridge(self, operation_id: str) -> None:
+        """
+        Pull state and metrics from registered bridge and update operation (TASK 1.3).
+
+        This method synchronously reads from the bridge (fast, local memory access)
+        and updates the operation's progress and metrics.
+
+        Args:
+            operation_id: Operation identifier
+        """
+        bridge = self._local_bridges.get(operation_id)
+        if not bridge:
+            return
+
+        # Pull current state from bridge
+        state = bridge.get_status()
+
+        # Pull incremental metrics from bridge
+        cursor = self._metrics_cursors.get(operation_id, 0)
+        new_metrics, new_cursor = bridge.get_metrics(cursor)
+
+        # Update operation with fresh data
+        operation = self._operations.get(operation_id)
+        if operation:
+            # Update progress from state
+            operation.progress = OperationProgress(
+                percentage=state.get("percentage", 0.0),
+                current_step=state.get(
+                    "message", ""
+                ),  # message is the string description
+                steps_completed=state.get("current_step", 0),  # numeric step counter
+                steps_total=state.get("total_epochs", 0),  # total number of steps/epochs
+                items_processed=state.get("items_processed", 0),
+                items_total=state.get("items_total"),
+                current_item=state.get("current_item"),
+            )
+
+            # Append new metrics to operation (if any)
+            if new_metrics:
+                if operation.metrics is None:
+                    operation.metrics = {}
+                # For training operations, append to epochs list
+                if operation.operation_type == OperationType.TRAINING:
+                    if "epochs" not in operation.metrics:
+                        operation.metrics["epochs"] = []
+                    operation.metrics["epochs"].extend(new_metrics)
+
+            # Update cursor for next incremental read
+            self._metrics_cursors[operation_id] = new_cursor
+
+            logger.debug(
+                f"Refreshed operation {operation_id} from bridge "
+                f"(cursor {cursor} → {new_cursor}, {len(new_metrics)} new metrics)"
+            )
 
     async def _update_training_operation_from_host_service(
         self, operation: OperationInfo
