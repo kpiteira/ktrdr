@@ -442,6 +442,8 @@ class TestOperationsServiceBridgeRegistry:
     @pytest.mark.asyncio
     async def test_metrics_cursor_increments(self, operations_service, sample_metadata):
         """Test that metrics cursor increments correctly with multiple pulls."""
+        import time
+
         # Create and start operation
         operation = await operations_service.create_operation(
             operation_type=OperationType.TRAINING, metadata=sample_metadata
@@ -467,6 +469,9 @@ class TestOperationsServiceBridgeRegistry:
 
         # Add more metrics
         bridge._append_metric({"epoch": 2, "loss": 2.1})
+
+        # TASK 1.4: Wait for cache to expire before second refresh (TTL=1s)
+        time.sleep(1.1)
 
         # Second refresh - should get only 1 new metric
         operations_service._refresh_from_bridge(operation.operation_id)
@@ -613,3 +618,269 @@ class TestOperationsServiceCancellationEvents:
         assert operations_service._cancellation_events[target_op_id].is_set()
         assert not operations_service._cancellation_events["multi-op-0"].is_set()
         assert not operations_service._cancellation_events["multi-op-2"].is_set()
+
+
+class TestOperationsServiceCache:
+    """Test TTL cache functionality for preventing redundant bridge refreshes (Task 1.4)."""
+
+    @pytest.mark.asyncio
+    async def test_cache_prevents_redundant_refresh(
+        self, operations_service, sample_metadata
+    ):
+        """Test that multiple clients polling within TTL window only trigger one bridge read."""
+        import time
+
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create bridge and track how many times get_status() is called
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(
+            percentage=50.0,
+            message="Epoch 50/100",
+            current_step=50,
+        )
+
+        # Track get_status calls
+        original_get_status = bridge.get_status
+        call_count = {"count": 0}
+
+        def tracked_get_status():
+            call_count["count"] += 1
+            return original_get_status()
+
+        bridge.get_status = tracked_get_status
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # First query - should trigger refresh (cache miss)
+        op1 = await operations_service.get_operation(operation.operation_id)
+        assert op1.progress.percentage == 50.0
+        first_call_count = call_count["count"]
+        assert first_call_count == 1  # Should have called get_status once
+
+        # Second query immediately (within TTL=1s) - should NOT trigger refresh (cache hit)
+        time.sleep(0.1)  # Wait 100ms
+        op2 = await operations_service.get_operation(operation.operation_id)
+        assert op2.progress.percentage == 50.0
+        assert (
+            call_count["count"] == first_call_count
+        )  # No additional calls (cache hit)
+
+        # Third query still within TTL - should NOT trigger refresh (cache hit)
+        time.sleep(0.3)  # Total elapsed: 400ms
+        op3 = await operations_service.get_operation(operation.operation_id)
+        assert op3.progress.percentage == 50.0
+        assert call_count["count"] == first_call_count  # Still no additional calls
+
+    @pytest.mark.asyncio
+    async def test_force_refresh_bypasses_cache(
+        self, operations_service, sample_metadata
+    ):
+        """Test that force_refresh=True parameter bypasses cache."""
+        import time
+
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create bridge
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(percentage=30.0, message="Epoch 30/100", current_step=30)
+
+        # Track get_status calls
+        original_get_status = bridge.get_status
+        call_count = {"count": 0}
+
+        def tracked_get_status():
+            call_count["count"] += 1
+            return original_get_status()
+
+        bridge.get_status = tracked_get_status
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # First query - should trigger refresh
+        op1 = await operations_service.get_operation(operation.operation_id)
+        assert op1.progress.percentage == 30.0
+        assert call_count["count"] == 1
+
+        # Update bridge state
+        bridge._update_state(percentage=35.0, message="Epoch 35/100", current_step=35)
+
+        # Second query with force_refresh=True (should bypass cache even within TTL)
+        time.sleep(0.2)  # Within TTL
+        op2 = await operations_service.get_operation(
+            operation.operation_id, force_refresh=True
+        )
+        assert op2.progress.percentage == 35.0  # Should see updated state
+        assert call_count["count"] == 2  # Should have called get_status again
+
+    @pytest.mark.asyncio
+    async def test_cache_respects_ttl(self, operations_service, sample_metadata):
+        """Test that cache becomes stale after TTL expires."""
+        import time
+
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create bridge
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(percentage=20.0, message="Epoch 20/100", current_step=20)
+
+        # Track get_status calls
+        original_get_status = bridge.get_status
+        call_count = {"count": 0}
+
+        def tracked_get_status():
+            call_count["count"] += 1
+            return original_get_status()
+
+        bridge.get_status = tracked_get_status
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # First query - should trigger refresh
+        op1 = await operations_service.get_operation(operation.operation_id)
+        assert op1.progress.percentage == 20.0
+        assert call_count["count"] == 1
+
+        # Update bridge state
+        bridge._update_state(percentage=25.0, message="Epoch 25/100", current_step=25)
+
+        # Wait for TTL to expire (default is 1.0 seconds)
+        # Sleep slightly more than TTL to ensure cache is stale
+        time.sleep(1.1)
+
+        # Query again - cache should be stale, should trigger refresh
+        op2 = await operations_service.get_operation(operation.operation_id)
+        assert op2.progress.percentage == 25.0  # Should see updated state
+        assert (
+            call_count["count"] == 2
+        )  # Should have called get_status again (cache miss)
+
+    @pytest.mark.asyncio
+    async def test_cache_initialization(self, operations_service):
+        """Test that cache infrastructure is properly initialized."""
+        # Verify cache tracking attributes exist
+        assert hasattr(operations_service, "_last_refresh")
+        assert isinstance(operations_service._last_refresh, dict)
+        assert operations_service._last_refresh == {}
+
+        # Verify cache TTL is configured
+        assert hasattr(operations_service, "_cache_ttl")
+        assert isinstance(operations_service._cache_ttl, float)
+        assert operations_service._cache_ttl > 0  # Should be positive
+
+    @pytest.mark.asyncio
+    async def test_cache_only_for_running_operations(
+        self, operations_service, sample_metadata
+    ):
+        """Test that completed/failed operations never use cache (always return stored state)."""
+        import time
+
+        # Create operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+
+        # Create bridge
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(percentage=80.0, message="Epoch 80/100", current_step=80)
+
+        # Track get_status calls
+        original_get_status = bridge.get_status
+        call_count = {"count": 0}
+
+        def tracked_get_status():
+            call_count["count"] += 1
+            return original_get_status()
+
+        bridge.get_status = tracked_get_status
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # Complete operation
+        await operations_service.complete_operation(
+            operation.operation_id, {"result": "success"}
+        )
+
+        # Update bridge (should be ignored)
+        bridge._update_state(
+            percentage=90.0, message="Should not appear", current_step=90
+        )
+
+        # Query completed operation multiple times
+        op1 = await operations_service.get_operation(operation.operation_id)
+        time.sleep(0.1)
+        op2 = await operations_service.get_operation(operation.operation_id)
+
+        # Should NEVER call get_status for completed operations
+        assert call_count["count"] == 0
+        assert op1.progress.percentage == 100.0  # From complete_operation
+        assert op2.progress.percentage == 100.0  # Same
+        assert op1.status == OperationStatus.COMPLETED
+        assert op2.status == OperationStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_cache_updated_on_refresh(self, operations_service, sample_metadata):
+        """Test that _last_refresh timestamp is updated after successful refresh."""
+        import time
+
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create bridge
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        bridge = ProgressBridge()
+        bridge._update_state(percentage=40.0, message="Epoch 40/100", current_step=40)
+
+        # Register bridge
+        operations_service.register_local_bridge(operation.operation_id, bridge)
+
+        # Verify no cache entry initially
+        assert operation.operation_id not in operations_service._last_refresh
+
+        # First query - should create cache entry
+        await operations_service.get_operation(operation.operation_id)
+
+        # Verify cache entry created with recent timestamp
+        assert operation.operation_id in operations_service._last_refresh
+        first_timestamp = operations_service._last_refresh[operation.operation_id]
+        assert first_timestamp > 0
+
+        # Wait and trigger refresh
+        time.sleep(1.1)  # Exceed TTL
+        await operations_service.get_operation(operation.operation_id)
+
+        # Verify timestamp updated
+        second_timestamp = operations_service._last_refresh[operation.operation_id]
+        assert second_timestamp > first_timestamp  # Should be newer

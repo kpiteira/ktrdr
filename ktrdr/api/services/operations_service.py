@@ -6,6 +6,8 @@ async operations across the KTRDR system.
 """
 
 import asyncio
+import os
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -57,6 +59,12 @@ class OperationsService:
         self._remote_proxies: dict[str, Any] = (
             {}
         )  # operation_id → OperationServiceProxy (M2)
+
+        # TASK 1.4: Cache infrastructure for preventing redundant bridge reads (M1)
+        self._last_refresh: dict[str, float] = {}  # operation_id → timestamp
+        self._cache_ttl: float = float(
+            os.getenv("OPERATIONS_CACHE_TTL", "1.0")
+        )  # Default: 1 second
 
         logger.info("Operations service initialized with unified cancellation system")
 
@@ -363,14 +371,18 @@ class OperationsService:
                 "training_session_cancelled": training_session_cancelled,
             }
 
-    async def get_operation(self, operation_id: str) -> Optional[OperationInfo]:
+    async def get_operation(
+        self, operation_id: str, force_refresh: bool = False
+    ) -> Optional[OperationInfo]:
         """
         Get operation information with live status updates.
 
         TASK 1.3: Now includes pull-based refresh from local bridges.
+        TASK 1.4: Added cache awareness and force_refresh parameter.
 
         Args:
             operation_id: Operation identifier
+            force_refresh: If True, bypass cache and force refresh from bridge
 
         Returns:
             Operation info or None if not found
@@ -380,12 +392,20 @@ class OperationsService:
             if not operation:
                 return None
 
-            # TASK 1.3: Pull from local bridge if registered and operation still running
+            # TASK 1.3/1.4: Pull from local bridge if registered and operation still running
             if (
                 operation.status == OperationStatus.RUNNING
                 and operation_id in self._local_bridges
             ):
-                # Refresh from bridge (synchronous, fast)
+                # TASK 1.4: Force refresh bypasses cache
+                if force_refresh:
+                    # Invalidate cache to force refresh
+                    self._last_refresh[operation_id] = 0
+                    logger.debug(
+                        f"Force refresh requested for operation {operation_id}"
+                    )
+
+                # Refresh from bridge (synchronous, fast, cache-aware)
                 self._refresh_from_bridge(operation_id)
 
             # For training operations, query host service for live status
@@ -592,10 +612,10 @@ class OperationsService:
 
     def _refresh_from_bridge(self, operation_id: str) -> None:
         """
-        Pull state and metrics from registered bridge and update operation (TASK 1.3).
+        Pull state and metrics from registered bridge with cache awareness (TASK 1.4).
 
-        This method synchronously reads from the bridge (fast, local memory access)
-        and updates the operation's progress and metrics.
+        This method checks cache freshness before reading from the bridge to prevent
+        redundant reads when multiple clients poll within the TTL window.
 
         Args:
             operation_id: Operation identifier
@@ -603,6 +623,22 @@ class OperationsService:
         bridge = self._local_bridges.get(operation_id)
         if not bridge:
             return
+
+        # TASK 1.4: Check cache freshness
+        last_refresh = self._last_refresh.get(operation_id, 0)
+        age = time.time() - last_refresh
+
+        if age < self._cache_ttl:
+            # Cache is fresh - skip refresh
+            logger.debug(
+                f"Cache hit for operation {operation_id} (age={age:.3f}s, TTL={self._cache_ttl}s)"
+            )
+            return
+
+        # Cache miss or stale - pull from bridge
+        logger.debug(
+            f"Cache miss for operation {operation_id} (age={age:.3f}s > TTL={self._cache_ttl}s) - refreshing"
+        )
 
         # Pull current state from bridge
         state = bridge.get_status()
@@ -621,7 +657,9 @@ class OperationsService:
                     "message", ""
                 ),  # message is the string description
                 steps_completed=state.get("current_step", 0),  # numeric step counter
-                steps_total=state.get("total_epochs", 0),  # total number of steps/epochs
+                steps_total=state.get(
+                    "total_epochs", 0
+                ),  # total number of steps/epochs
                 items_processed=state.get("items_processed", 0),
                 items_total=state.get("items_total"),
                 current_item=state.get("current_item"),
@@ -639,6 +677,9 @@ class OperationsService:
 
             # Update cursor for next incremental read
             self._metrics_cursors[operation_id] = new_cursor
+
+            # TASK 1.4: Update cache timestamp
+            self._last_refresh[operation_id] = time.time()
 
             logger.debug(
                 f"Refreshed operation {operation_id} from bridge "
