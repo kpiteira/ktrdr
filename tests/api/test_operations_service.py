@@ -884,3 +884,272 @@ class TestOperationsServiceCache:
         # Verify timestamp updated
         second_timestamp = operations_service._last_refresh[operation.operation_id]
         assert second_timestamp > first_timestamp  # Should be newer
+
+
+class TestRemoteProxyRefresh:
+    """Test _refresh_from_remote_proxy functionality (M2 Task 2.5)."""
+
+    @pytest.mark.asyncio
+    async def test_refresh_from_remote_proxy_updates_operation(
+        self, operations_service, sample_metadata
+    ):
+        """Test that remote refresh updates operation from host service data."""
+        from unittest.mock import AsyncMock
+
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create mock proxy
+        mock_proxy = AsyncMock()
+        mock_proxy.get_operation = AsyncMock(
+            return_value={
+                "status": "running",
+                "progress": {
+                    "percentage": 75.0,
+                    "current_step": "Epoch 75/100",
+                    "steps_completed": 75,
+                    "steps_total": 100,
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        mock_proxy.get_metrics = AsyncMock(
+            return_value=(
+                [
+                    {"epoch": 74, "train_loss": 0.15, "val_loss": 0.18},
+                    {"epoch": 75, "train_loss": 0.14, "val_loss": 0.17},
+                ],
+                2,  # new_cursor
+            )
+        )
+
+        # Register proxy
+        host_op_id = "host_op_123"
+        operations_service._remote_proxies[operation.operation_id] = (
+            mock_proxy,
+            host_op_id,
+        )
+        operations_service._metrics_cursors[operation.operation_id] = 0
+
+        # Call refresh
+        await operations_service._refresh_from_remote_proxy(operation.operation_id)
+
+        # Verify operation updated
+        updated_op = await operations_service.get_operation(
+            operation.operation_id, force_refresh=False
+        )
+        assert updated_op.progress.percentage == 75.0
+        assert updated_op.progress.current_step == "Epoch 75/100"
+
+        # Verify proxy was called with correct args
+        mock_proxy.get_operation.assert_called_once_with(host_op_id)
+        mock_proxy.get_metrics.assert_called_once_with(host_op_id, 0)
+
+    @pytest.mark.asyncio
+    async def test_refresh_from_remote_proxy_appends_metrics(
+        self, operations_service, sample_metadata
+    ):
+        """Test that metrics from host service are appended correctly."""
+        from unittest.mock import AsyncMock
+
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Create mock proxy with metrics
+        mock_proxy = AsyncMock()
+        mock_proxy.get_operation = AsyncMock(
+            return_value={
+                "status": "running",
+                "progress": {"percentage": 50.0},
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        mock_proxy.get_metrics = AsyncMock(
+            return_value=(
+                [
+                    {"epoch": 0, "train_loss": 2.5, "val_loss": 2.7},
+                    {"epoch": 1, "train_loss": 2.3, "val_loss": 2.5},
+                ],
+                2,
+            )
+        )
+
+        # Register proxy
+        host_op_id = "host_op_456"
+        operations_service._remote_proxies[operation.operation_id] = (
+            mock_proxy,
+            host_op_id,
+        )
+        operations_service._metrics_cursors[operation.operation_id] = 0
+
+        # Refresh
+        await operations_service._refresh_from_remote_proxy(operation.operation_id)
+
+        # Verify metrics appended
+        updated_op = await operations_service.get_operation(
+            operation.operation_id, force_refresh=False
+        )
+        assert updated_op.metrics is not None
+        assert "epochs" in updated_op.metrics
+        assert len(updated_op.metrics["epochs"]) == 2
+        assert updated_op.metrics["epochs"][0]["epoch"] == 0
+        assert updated_op.metrics["epochs"][1]["epoch"] == 1
+
+    @pytest.mark.asyncio
+    async def test_refresh_from_remote_proxy_updates_cursor(
+        self, operations_service, sample_metadata
+    ):
+        """Test that cursor is updated after fetching metrics."""
+        from unittest.mock import AsyncMock
+
+        # Create operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Mock proxy
+        mock_proxy = AsyncMock()
+        mock_proxy.get_operation = AsyncMock(
+            return_value={
+                "status": "running",
+                "progress": {"percentage": 60.0},
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        mock_proxy.get_metrics = AsyncMock(
+            return_value=([{"epoch": 5, "train_loss": 1.8}], 6)  # new_cursor = 6
+        )
+
+        # Register proxy with cursor=5
+        operations_service._remote_proxies[operation.operation_id] = (
+            mock_proxy,
+            "host_op_789",
+        )
+        operations_service._metrics_cursors[operation.operation_id] = 5
+
+        # Refresh
+        await operations_service._refresh_from_remote_proxy(operation.operation_id)
+
+        # Verify cursor updated from 5 to 6
+        assert operations_service._metrics_cursors[operation.operation_id] == 6
+
+        # Verify proxy called with cursor=5
+        mock_proxy.get_metrics.assert_called_once_with("host_op_789", 5)
+
+    @pytest.mark.asyncio
+    async def test_refresh_from_remote_proxy_respects_cache(
+        self, operations_service, sample_metadata
+    ):
+        """Test that remote refresh respects cache TTL."""
+        import time
+        from unittest.mock import AsyncMock
+
+        # Set short TTL for testing
+        operations_service._cache_ttl = 1.0
+
+        # Create operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Mock proxy
+        mock_proxy = AsyncMock()
+        mock_proxy.get_operation = AsyncMock(
+            return_value={
+                "status": "running",
+                "progress": {"percentage": 80.0},
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        mock_proxy.get_metrics = AsyncMock(return_value=([], 0))
+
+        # Register proxy
+        operations_service._remote_proxies[operation.operation_id] = (
+            mock_proxy,
+            "host_op_cache",
+        )
+
+        # First refresh
+        await operations_service._refresh_from_remote_proxy(operation.operation_id)
+        assert mock_proxy.get_operation.call_count == 1
+
+        # Second refresh immediately (should use cache)
+        await operations_service._refresh_from_remote_proxy(operation.operation_id)
+        assert mock_proxy.get_operation.call_count == 1  # No new call
+
+        # Third refresh after TTL expires
+        time.sleep(1.1)
+        await operations_service._refresh_from_remote_proxy(operation.operation_id)
+        assert mock_proxy.get_operation.call_count == 2  # New call
+
+    @pytest.mark.asyncio
+    async def test_refresh_from_remote_proxy_no_proxy_registered(
+        self, operations_service, sample_metadata
+    ):
+        """Test that refresh does nothing if no proxy is registered."""
+        # Create operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Don't register any proxy
+
+        # Call refresh - should not raise
+        await operations_service._refresh_from_remote_proxy(operation.operation_id)
+
+        # Operation should be unchanged
+        updated_op = await operations_service.get_operation(operation.operation_id)
+        assert updated_op.progress.percentage == 0.0
+
+    @pytest.mark.asyncio
+    async def test_get_operation_calls_remote_refresh(
+        self, operations_service, sample_metadata
+    ):
+        """Test that get_operation calls remote refresh for running operations with proxy."""
+        from unittest.mock import AsyncMock
+
+        # Create and start operation
+        operation = await operations_service.create_operation(
+            operation_type=OperationType.TRAINING, metadata=sample_metadata
+        )
+        mock_task = AsyncMock()
+        await operations_service.start_operation(operation.operation_id, mock_task)
+
+        # Mock proxy
+        mock_proxy = AsyncMock()
+        mock_proxy.get_operation = AsyncMock(
+            return_value={
+                "status": "running",
+                "progress": {"percentage": 90.0, "current_step": "Almost done"},
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        mock_proxy.get_metrics = AsyncMock(return_value=([], 0))
+
+        # Register proxy
+        operations_service._remote_proxies[operation.operation_id] = (
+            mock_proxy,
+            "host_op_get",
+        )
+
+        # Get operation - should trigger remote refresh
+        result = await operations_service.get_operation(operation.operation_id)
+
+        # Verify proxy was called
+        assert mock_proxy.get_operation.called
+        assert result.progress.percentage == 90.0
+        assert result.progress.current_step == "Almost done"

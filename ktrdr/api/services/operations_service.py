@@ -408,6 +408,22 @@ class OperationsService:
                 # Refresh from bridge (synchronous, fast, cache-aware)
                 self._refresh_from_bridge(operation_id)
 
+            # TASK 2.5: Pull from remote proxy if registered and operation still running
+            if (
+                operation.status == OperationStatus.RUNNING
+                and operation_id in self._remote_proxies
+            ):
+                # Force refresh bypasses cache
+                if force_refresh:
+                    # Invalidate cache to force refresh
+                    self._last_refresh[operation_id] = 0
+                    logger.debug(
+                        f"Force refresh requested for remote operation {operation_id}"
+                    )
+
+                # Refresh from remote host service (async, cache-aware)
+                await self._refresh_from_remote_proxy(operation_id)
+
             # For training operations, query host service for live status
             # (This legacy code remains for backward compatibility, will be removed in M3)
             if (
@@ -685,6 +701,110 @@ class OperationsService:
                 f"Refreshed operation {operation_id} from bridge "
                 f"(cursor {cursor} → {new_cursor}, {len(new_metrics)} new metrics)"
             )
+
+    async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
+        """
+        Pull state and metrics from host service via proxy with cache awareness (TASK 2.5).
+
+        This method queries the host service for operation state and incremental metrics,
+        updating the backend operation accordingly. Similar to _refresh_from_bridge() but
+        for remote host services instead of local bridges.
+
+        Architecture:
+        - Backend tracks cursor per operation
+        - Backend passes cursor to host when querying metrics
+        - Host returns delta (metrics since cursor)
+        - Backend updates cursor with new value
+        - Two-level caching: backend cache → host service cache → bridge
+
+        Args:
+            operation_id: Backend operation identifier
+        """
+        # Check if proxy registered
+        if operation_id not in self._remote_proxies:
+            return
+
+        proxy, host_operation_id = self._remote_proxies[operation_id]
+
+        # Check cache freshness (same pattern as local bridges)
+        last_refresh = self._last_refresh.get(operation_id, 0)
+        age = time.time() - last_refresh
+
+        if age < self._cache_ttl:
+            # Cache is fresh - skip refresh
+            logger.debug(
+                f"Cache hit for remote operation {operation_id} "
+                f"(age={age:.3f}s, TTL={self._cache_ttl}s)"
+            )
+            return
+
+        # Cache miss or stale - pull from host service
+        logger.debug(
+            f"Cache miss for remote operation {operation_id} "
+            f"(age={age:.3f}s > TTL={self._cache_ttl}s) - querying host service"
+        )
+
+        try:
+            # (1) Query host service for operation state
+            host_data = await proxy.get_operation(host_operation_id)
+
+            # (2) Update backend operation with host's data
+            operation = self._operations.get(operation_id)
+            if not operation:
+                logger.warning(
+                    f"Operation {operation_id} not found in backend registry"
+                )
+                return
+
+            # Update status
+            operation.status = OperationStatus(host_data["status"])
+
+            # Update progress from host data
+            if "progress" in host_data:
+                host_progress = host_data["progress"]
+                operation.progress = OperationProgress(
+                    percentage=host_progress.get("percentage", 0.0),
+                    current_step=host_progress.get("current_step", ""),
+                    steps_completed=host_progress.get("steps_completed", 0),
+                    steps_total=host_progress.get("steps_total", 0),
+                    items_processed=host_progress.get("items_processed", 0),
+                    items_total=host_progress.get("items_total"),
+                    current_item=host_progress.get("current_item"),
+                )
+
+            # (3) Get incremental metrics from host (backend tracks cursor)
+            cursor = self._metrics_cursors.get(operation_id, 0)
+            metrics_data = await proxy.get_metrics(host_operation_id, cursor)
+            new_metrics, new_cursor = metrics_data
+
+            # (4) Append new metrics to operation
+            if new_metrics:
+                if operation.metrics is None:
+                    operation.metrics = {}
+
+                # For training operations, append to epochs list
+                if operation.operation_type == OperationType.TRAINING:
+                    if "epochs" not in operation.metrics:
+                        operation.metrics["epochs"] = []
+                    operation.metrics["epochs"].extend(new_metrics)
+
+            # (5) Update cursor to new value (always update, even if no new metrics)
+            self._metrics_cursors[operation_id] = new_cursor
+
+            # (6) Update cache timestamp
+            self._last_refresh[operation_id] = time.time()
+
+            logger.debug(
+                f"Refreshed operation {operation_id} from host {host_operation_id} "
+                f"(cursor {cursor} → {new_cursor}, {len(new_metrics)} new metrics)"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to refresh operation {operation_id} from host service: {e}"
+            )
+            # Don't raise - allow operation to continue with stale data
+            # Client will retry on next query
 
     async def _update_training_operation_from_host_service(
         self, operation: OperationInfo
