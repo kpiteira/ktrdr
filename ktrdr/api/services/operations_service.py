@@ -626,6 +626,37 @@ class OperationsService:
         self._metrics_cursors[operation_id] = 0  # Start cursor at 0
         logger.info(f"Registered local bridge for operation {operation_id}")
 
+    def register_remote_proxy(
+        self,
+        backend_operation_id: str,
+        proxy: Any,
+        host_operation_id: str,
+    ) -> None:
+        """
+        Register a remote proxy for pull-based progress updates from host service (TASK 3.1).
+
+        This enables backend to act as transparent proxy for operations running on host
+        services. Backend stores mapping between its operation ID and the host's operation ID,
+        allowing clients to query using backend ID while backend translates to host ID.
+
+        Architecture Pattern:
+        - Backend creates operation with its own ID (e.g., "op_training_20250120_abc123")
+        - Host service creates operation with its ID (e.g., "host_training_session_xyz789")
+        - Backend stores mapping: backend_id → (proxy, host_id)
+        - When clients query backend, backend uses proxy to query host with host_id
+
+        Args:
+            backend_operation_id: Operation ID in backend (client-facing)
+            proxy: OperationServiceProxy instance for querying host service
+            host_operation_id: Operation ID on host service
+        """
+        self._remote_proxies[backend_operation_id] = (proxy, host_operation_id)
+        self._metrics_cursors[backend_operation_id] = 0  # Start cursor at 0
+        logger.info(
+            f"Registered remote proxy for operation {backend_operation_id} → "
+            f"host {host_operation_id}"
+        )
+
     def _refresh_from_bridge(self, operation_id: str) -> None:
         """
         Pull state and metrics from registered bridge with cache awareness (TASK 1.4).
