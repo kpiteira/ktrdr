@@ -111,6 +111,15 @@ async def startup_event():
     logger.info(
         f"Service will listen on http://{service_config.host_service.host}:{service_config.host_service.port}"
     )
+
+    # Initialize OperationsService (TASK 2.1: M2)
+    from services.operations import get_operations_service
+
+    ops_service = get_operations_service()
+    logger.info(
+        f"✅ OperationsService initialized (cache_ttl={ops_service._cache_ttl}s)"
+    )
+
     logger.info("Available endpoints:")
     logger.info("  GET  /                     - Service info")
     logger.info("  GET  /health               - Basic health check")
