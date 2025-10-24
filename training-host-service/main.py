@@ -33,6 +33,7 @@ try:
     from endpoints.health import router as health_router
 
     # Import endpoints
+    from endpoints.operations import router as operations_router
     from endpoints.training import router as training_router
 
     # Import configuration
@@ -100,6 +101,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(operations_router)  # Task 2.2: Operations API
 app.include_router(training_router)
 app.include_router(health_router)
 
@@ -121,13 +123,16 @@ async def startup_event():
     )
 
     logger.info("Available endpoints:")
-    logger.info("  GET  /                     - Service info")
-    logger.info("  GET  /health               - Basic health check")
-    logger.info("  GET  /health/detailed      - Detailed health check")
-    logger.info("  POST /training/start       - Start training session")
-    logger.info("  POST /training/stop        - Stop training session")
-    logger.info("  GET  /training/status      - Get training status")
-    logger.info("  POST /training/evaluate    - Evaluate model")
+    logger.info("  GET  /                           - Service info")
+    logger.info("  GET  /health                     - Basic health check")
+    logger.info("  GET  /health/detailed            - Detailed health check")
+    logger.info("  GET  /api/v1/operations          - List operations (Task 2.2)")
+    logger.info("  GET  /api/v1/operations/{id}     - Get operation status (Task 2.2)")
+    logger.info("  GET  /api/v1/operations/{id}/metrics - Get operation metrics (Task 2.2)")
+    logger.info("  POST /training/start             - Start training session")
+    logger.info("  POST /training/stop              - Stop training session")
+    logger.info("  GET  /training/status            - Get training status")
+    logger.info("  POST /training/evaluate          - Evaluate model")
 
 
 @app.on_event("shutdown")
