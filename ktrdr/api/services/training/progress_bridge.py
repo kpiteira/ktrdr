@@ -59,6 +59,21 @@ class TrainingProgressBridge(ProgressBridge):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+    def __call__(self, epoch: int, batch: int, metrics: dict[str, Any]) -> None:
+        """
+        Make bridge callable for use as progress_callback.
+
+        This allows TrainingPipeline to call the bridge directly:
+        progress_callback(epoch, batch, metrics)
+
+        Args:
+            epoch: Current epoch number
+            batch: Current batch number
+            metrics: Training metrics dictionary
+        """
+        # Delegate to on_batch which handles batch-level progress updates
+        self.on_batch(epoch=epoch, batch=batch, metrics=metrics)
+
     def on_phase(self, phase_name: str, *, message: str | None = None) -> None:
         """Emit a coarse progress update for a high-level phase."""
         self._check_cancelled()
