@@ -12,7 +12,6 @@ from ktrdr import get_logger
 from ktrdr.api.models.operations import OperationType
 from ktrdr.api.services.operations_service import get_operations_service
 from ktrdr.api.services.training import (
-    HostSessionManager,
     TrainingOperationContext,
     TrainingProgressBridge,
     build_training_context,
@@ -229,42 +228,102 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
     async def _run_host_training(
         self, *, context: TrainingOperationContext
     ) -> dict[str, Any]:
-        """Run host-service backed training with orchestrator components."""
-        progress_manager = self._current_operation_progress
-        if progress_manager is None:
-            raise RuntimeError("Progress manager not available for training operation")
+        """
+        Run host-service backed training using proxy pattern (TASK 3.1).
 
-        # TASK 1.2: Pull-based metrics - OperationsService will pull via bridge.get_metrics()
-        # Metrics callback removed - replaced with pull-based architecture
-        bridge = TrainingProgressBridge(
-            context=context,
-            progress_manager=progress_manager,
-            cancellation_token=self._current_cancellation_token,
-        )
+        Backend acts as pure proxy:
+        1. Starts training on host service
+        2. Registers OperationServiceProxy for client queries
+        3. Returns immediately (no waiting, no polling)
 
-        # TASK 1.3: Register bridge with OperationsService for pull-based refresh
-        if context.operation_id:
-            self.operations_service.register_local_bridge(context.operation_id, bridge)
-            logger.info(
-                f"Registered host training bridge for operation {context.operation_id}"
-            )
+        Progress tracking happens via client-driven queries:
+        - Client queries backend (GET /api/v1/operations/{backend_op_id})
+        - Backend pulls from host via proxy (cached with TTL)
+        - Completion discovered when client queries, not through background polling
 
+        Architecture:
+        - NO bridge creation (bridge lives on host service)
+        - NO HostSessionManager (no backend polling)
+        - Backend operation ID != Host operation ID (mapped via proxy)
+        """
         # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
         assert (
             self.adapter is not None
         ), "Adapter should not be None in host service mode"
 
-        manager = HostSessionManager(
-            adapter=self.adapter,
-            context=context,
-            progress_bridge=bridge,
-            cancellation_token=self._current_cancellation_token,
-            poll_interval=0.3,  # Poll every 300ms for responsive progress updates
-            backoff_factor=1.0,  # No backoff - keep constant polling frequency
+        # Get backend operation ID
+        backend_operation_id = context.operation_id
+        if not backend_operation_id:
+            raise RuntimeError("Operation ID required for host training")
+
+        # (1) Start training on host service
+        from datetime import UTC, datetime
+
+        start_date = context.start_date or "2020-01-01"
+        end_date = context.end_date or datetime.now(UTC).strftime("%Y-%m-%d")
+
+        logger.info(
+            "Starting host training for strategy=%s symbols=%s timeframes=%s",
+            context.strategy_name,
+            context.symbols,
+            context.timeframes,
         )
 
-        # Returns aggregated result from from_host_run
-        return await manager.run()
+        response = await self.adapter.train_multi_symbol_strategy(
+            strategy_config_path=str(context.strategy_path),
+            symbols=context.symbols,
+            timeframes=context.timeframes,
+            start_date=start_date,
+            end_date=end_date,
+            validation_split=context.training_config.get("validation_split", 0.2),
+            data_mode=context.training_config.get("data_mode", "local"),
+            cancellation_token=self._current_cancellation_token,
+            training_config=context.training_config,
+        )
+
+        # (2) Get host operation ID (session_id)
+        host_operation_id = (
+            response.get("session_id") if isinstance(response, dict) else None
+        )
+        if not host_operation_id:
+            raise RuntimeError("Host service did not return a session_id")
+
+        logger.info(
+            f"Host training started: backend_op={backend_operation_id}, "
+            f"host_op={host_operation_id}"
+        )
+
+        # (3) Create OperationServiceProxy for this host service
+        import os
+
+        from ktrdr.api.services.adapters.operation_service_proxy import (
+            OperationServiceProxy,
+        )
+
+        host_service_url = os.getenv(
+            "TRAINING_HOST_SERVICE_URL", "http://localhost:5002"
+        )
+        proxy = OperationServiceProxy(base_url=host_service_url)
+
+        # (4) Register proxy with OperationsService
+        self.operations_service.register_remote_proxy(
+            backend_operation_id=backend_operation_id,
+            proxy=proxy,
+            host_operation_id=host_operation_id,
+        )
+
+        logger.info(
+            f"Registered remote proxy: {backend_operation_id} → {host_operation_id}"
+        )
+
+        # (5) Return immediately (no waiting, no polling)
+        # Backend doesn't know completion status - client discovers it via queries
+        return {
+            "session_id": host_operation_id,
+            "backend_operation_id": backend_operation_id,
+            "status": "started",
+            "message": f"Training started on host service (session: {host_operation_id})",
+        }
 
     async def cancel_training_session(
         self, session_id: str, reason: Optional[str] = None

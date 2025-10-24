@@ -12,12 +12,13 @@ Key Test Scenarios:
 5. Operation ID mapping works correctly
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from ktrdr.api.models.operations import OperationStatus, OperationType
-from ktrdr.api.services.operations_service import OperationsService
 from ktrdr.api.services.adapters.operation_service_proxy import OperationServiceProxy
+from ktrdr.api.services.operations_service import OperationsService
 
 
 @pytest.fixture
@@ -38,9 +39,7 @@ def mock_proxy():
 class TestRegisterRemoteProxy:
     """Test OperationsService.register_remote_proxy() method."""
 
-    def test_register_remote_proxy_stores_mapping(
-        self, operations_service, mock_proxy
-    ):
+    def test_register_remote_proxy_stores_mapping(self, operations_service, mock_proxy):
         """Test that register_remote_proxy() stores operation ID mapping."""
         backend_op_id = "op_training_20250120_abc123"
         host_op_id = "host_training_xyz789"
