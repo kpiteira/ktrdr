@@ -149,8 +149,9 @@ class HostTrainingOrchestrator:
             # Create DataManager instance
             data_manager = DataManager()
 
-            # Create throttled progress callback
-            progress_callback = self._create_throttled_progress_callback()
+            # Task 2.3: Use progress bridge from session instead of callback
+            # The bridge provides pull-based operations tracking via OperationsService
+            progress_bridge = self._session.progress_bridge
 
             # Create session-based cancellation token
             cancellation_token = SessionCancellationToken(self._session)
@@ -180,7 +181,7 @@ class HostTrainingOrchestrator:
                     end_date=end_date_str,
                     model_storage=self._model_storage,
                     data_mode="local",
-                    progress_callback=progress_callback,
+                    progress_callback=progress_bridge,  # Task 2.3: Pass bridge instead of callback
                     cancellation_token=cancellation_token,
                     data_manager=data_manager,
                 ),

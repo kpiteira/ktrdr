@@ -10,6 +10,11 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
+# Task 2.3: Import operations service and progress bridge for pull-based operations
+from ktrdr.api.models.operations import OperationMetadata, OperationType
+from ktrdr.api.services.training.context import TrainingOperationContext
+from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
+from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
 from ktrdr.logging import get_logger
 from ktrdr.training.data_optimization import DataConfig, DataLoadingOptimizer
 from ktrdr.training.device_manager import DeviceManager
@@ -18,6 +23,7 @@ from ktrdr.training.device_manager import DeviceManager
 from ktrdr.training.gpu_memory_manager import GPUMemoryConfig, GPUMemoryManager
 from ktrdr.training.memory_manager import MemoryBudget, MemoryManager
 from ktrdr.training.performance_optimizer import PerformanceConfig, PerformanceOptimizer
+from services.operations import get_operations_service
 
 logger = get_logger(__name__)
 
@@ -31,6 +37,10 @@ class TrainingSession:
         self.status = "initializing"
         self.start_time = datetime.utcnow()
         self.last_updated = datetime.utcnow()
+
+        # Task 2.3: Pull-based operations tracking
+        self.operation_id: Optional[str] = None
+        self.progress_bridge: Optional[ProgressBridge] = None
 
         # Progress tracking - store complete data from ModelTrainer (source of truth)
         self._last_progress_data: Optional[dict[str, Any]] = None
@@ -382,6 +392,9 @@ class TrainingService:
             # Initialize session resources
             await self._initialize_session_resources(session)
 
+            # Task 2.3: Create operation and register bridge BEFORE training starts
+            await self._create_operation_and_bridge(session)
+
             # Add to sessions
             self.sessions[session_id] = session
 
@@ -454,8 +467,142 @@ class TrainingService:
             session.status = "failed"
             raise
 
+    async def _create_operation_and_bridge(self, session: TrainingSession):
+        """
+        Create operation and register progress bridge for pull-based operations.
+
+        Task 2.3: This method implements the operation creation and bridge registration
+        required for pull-based operations API integration.
+
+        Args:
+            session: Training session to create operation for
+
+        Raises:
+            Exception: If operation creation or bridge registration fails
+        """
+        try:
+            # Get operations service singleton
+            ops_service = get_operations_service()
+
+            # Generate operation ID with consistent naming: host_training_{session_id}
+            operation_id = f"host_training_{session.session_id}"
+            session.operation_id = operation_id
+
+            # Create operation in OperationsService
+            await ops_service.create_operation(
+                operation_id=operation_id,
+                operation_type=OperationType.TRAINING,
+                metadata=OperationMetadata(
+                    symbol=session.config.get("symbols", ["unknown"])[0]
+                    if isinstance(session.config.get("symbols"), list)
+                    else session.config.get("symbols", "unknown"),
+                    timeframe="multiple"
+                    if isinstance(session.config.get("timeframes"), list)
+                    and len(session.config.get("timeframes", [])) > 1
+                    else (
+                        session.config.get("timeframes", ["1d"])[0]
+                        if isinstance(session.config.get("timeframes"), list)
+                        else session.config.get("timeframes", "1d")
+                    ),
+                    description=f"Host training session {session.session_id}",
+                ),
+            )
+
+            logger.info(
+                f"✅ Operation created: {operation_id} for session {session.session_id}"
+            )
+
+            # Create TrainingProgressBridge
+            # Parse training config to get total epochs
+            import yaml
+
+            strategy_yaml = session.config.get("strategy_yaml", "")
+            training_config = {}
+            strategy_dict = {}
+            if strategy_yaml:
+                try:
+                    strategy_dict = yaml.safe_load(strategy_yaml)
+                    training_config = strategy_dict.get("training_config", {})
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to parse strategy YAML for epochs: {e}, using default"
+                    )
+
+            total_epochs = training_config.get("epochs", session.total_epochs)
+
+            # Extract symbols and timeframes from config
+            symbols = session.config.get("symbols", ["unknown"])
+            if not isinstance(symbols, list):
+                symbols = [symbols]
+
+            timeframes = session.config.get("timeframes", ["1d"])
+            if not isinstance(timeframes, list):
+                timeframes = [timeframes]
+
+            start_date = session.config.get("start_date")
+            end_date = session.config.get("end_date")
+
+            # Create operation metadata
+            from pathlib import Path
+
+            metadata = OperationMetadata(
+                symbol=symbols[0] if symbols else "unknown",
+                timeframe="multiple" if len(timeframes) > 1 else timeframes[0],
+                description=f"Host training session {session.session_id}",
+            )
+
+            # Create operation context (provide all required fields)
+            context = TrainingOperationContext(
+                operation_id=operation_id,
+                strategy_name="host_training",  # Host service doesn't use named strategies
+                strategy_path=Path(""),  # No file path for inline YAML
+                strategy_config=strategy_dict if strategy_yaml else {},
+                symbols=symbols,
+                timeframes=timeframes,
+                start_date=start_date,
+                end_date=end_date,
+                training_config=training_config,
+                analytics_enabled=False,  # Host service uses basic analytics
+                use_host_service=True,  # This IS the host service
+                training_mode="host",
+                total_epochs=total_epochs,
+                total_batches=None,  # Will be determined during training
+                metadata=metadata,
+                session_id=session.session_id,
+            )
+
+            # Create bridge (will be used by orchestrator instead of callback)
+            # Host service uses pull-based model, so provide no-op callback
+            # The bridge's state will be pulled via get_status()/get_metrics()
+            def no_op_callback(*args, **kwargs):
+                """No-op callback for pull-based progress tracking."""
+                pass
+
+            bridge = TrainingProgressBridge(
+                context=context,
+                update_progress_callback=no_op_callback,
+            )
+
+            session.progress_bridge = bridge
+
+            # Register bridge with operations service
+            ops_service.register_local_bridge(operation_id, bridge)
+
+            logger.info(
+                f"✅ Progress bridge registered for operation {operation_id}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to create operation and bridge for session {session.session_id}: {e}"
+            )
+            raise
+
     async def _run_training_session(self, session: TrainingSession):
         """Run the actual training for a session."""
+        # Get operations service for completion/failure updates
+        ops_service = get_operations_service()
+
         try:
             session.status = "running"
             session.last_updated = datetime.utcnow()
@@ -475,12 +622,19 @@ class TrainingService:
             #     session.memory_manager.start_monitoring()
 
             # Real GPU training implementation
-            await self._run_real_training(session)
+            result = await self._run_real_training(session)
 
             # Training completed successfully
             if not session.stop_requested:
                 session.status = "completed"
                 logger.info(f"Training completed for session {session.session_id}")
+
+                # Task 2.3: Mark operation as complete
+                if session.operation_id:
+                    await ops_service.complete_operation(session.operation_id, result)
+                    logger.info(
+                        f"✅ Operation {session.operation_id} marked as completed"
+                    )
             else:
                 session.status = "stopped"
                 logger.info(f"Training stopped for session {session.session_id}")
@@ -489,6 +643,20 @@ class TrainingService:
             session.error = str(e)
             session.status = "failed"
             logger.error(f"Training failed for session {session.session_id}: {str(e)}")
+
+            # Task 2.3: Mark operation as failed
+            if session.operation_id:
+                try:
+                    await ops_service.fail_operation(
+                        session.operation_id, f"Training failed: {str(e)}"
+                    )
+                    logger.info(
+                        f"❌ Operation {session.operation_id} marked as failed"
+                    )
+                except Exception as fail_error:
+                    logger.error(
+                        f"Failed to mark operation as failed: {fail_error}"
+                    )
 
         finally:
             # Stop monitoring
