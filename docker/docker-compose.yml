@@ -112,6 +112,8 @@ services:
     container_name: ktrdr-mcp
     restart: "no"  # MCP servers run on-demand when clients connect, not as persistent services
     volumes:
+      # Mount source code for hot-reloading (DEV MODE)
+      - ../mcp/src:/app/src:rw
       # Read-only access to market data
       - ../data:/data:ro
       # Write access to research areas

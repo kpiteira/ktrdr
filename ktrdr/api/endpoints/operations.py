@@ -18,6 +18,7 @@ from ktrdr.api.models.operations import (
     CancelOperationRequest,
     OperationCancelResponse,
     OperationListResponse,
+    OperationMetricsResponse,
     OperationStatus,
     OperationStatusResponse,
     OperationSummary,
@@ -496,5 +497,180 @@ async def get_operation_results(
         raise DataError(
             message=f"Failed to get results for operation {operation_id}",
             error_code="OPERATIONS-ResultsError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@router.get(
+    "/operations/{operation_id}/metrics",
+    response_model=OperationMetricsResponse,
+    tags=["Operations"],
+    summary="Get operation metrics (M1: API Contract)",
+    description="""
+    Get domain-specific metrics for an operation.
+
+    **M1: API Contract** - Returns empty metrics structure. Will be populated in M2.
+
+    **Features:**
+    - Training operations: epoch history, best epoch, overfitting indicators
+    - Data operations: segment stats, cache info
+    - Backtesting: trade stats, performance metrics
+
+    **Perfect for:** Agent monitoring, trend analysis, decision making
+    """,
+)
+async def get_operation_metrics(
+    operation_id: str = Path(..., description="Unique operation identifier"),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> OperationMetricsResponse:
+    """
+    Get domain-specific metrics for an operation.
+
+    In M1, returns empty structure. In M2, will return populated metrics.
+
+    Args:
+        operation_id: Unique identifier for the operation
+
+    Returns:
+        OperationMetricsResponse: Operation metrics data
+
+    Raises:
+        404: Operation not found
+
+    Example:
+        GET /api/v1/operations/op_training_20250117_120000/metrics
+    """
+    try:
+        logger.info(f"Getting metrics for operation: {operation_id}")
+
+        # Get operation from service
+        operation = await operations_service.get_operation(operation_id)
+
+        if not operation:
+            logger.warning(f"Operation not found: {operation_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Operation not found: {operation_id}",
+            )
+
+        # Get metrics (empty in M1)
+        metrics = await operations_service.get_operation_metrics(operation_id)
+
+        logger.info(f"Retrieved metrics for operation: {operation_id}")
+        return OperationMetricsResponse(
+            success=True,
+            data={
+                "operation_id": operation_id,
+                "operation_type": operation.operation_type.value,
+                "metrics": metrics or {},
+            },
+        )
+
+    except HTTPException:
+        raise
+    except KeyError as e:
+        # Operation not found
+        logger.warning(f"Operation not found: {operation_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Operation not found: {operation_id}",
+        ) from e
+    except Exception as e:
+        logger.error(f"Error getting operation metrics: {str(e)}")
+        raise DataError(
+            message=f"Failed to get metrics for operation {operation_id}",
+            error_code="OPERATIONS-MetricsError",
+            details={"operation_id": operation_id, "error": str(e)},
+        ) from e
+
+
+@router.post(
+    "/operations/{operation_id}/metrics",
+    tags=["Operations"],
+    summary="Add metrics to operation (M1: validates only)",
+    description="""
+    Add domain-specific metrics to an operation.
+
+    **M1: API Contract** - Validates payload but doesn't store. Will store in M2.
+
+    Called by:
+    - Local training orchestrator (direct call)
+    - Training host service (via HTTP from host machine)
+
+    **Perfect for:** Metrics collection pipeline testing
+    """,
+)
+async def add_operation_metrics(
+    operation_id: str,
+    metrics: dict,
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> dict:
+    """
+    Add metrics to an operation.
+
+    In M1, validates payload but doesn't store. In M2, will persist metrics.
+
+    Args:
+        operation_id: Unique identifier for the operation
+        metrics: Metrics payload (structure varies by operation type)
+
+    Returns:
+        dict: Success response
+
+    Raises:
+        404: Operation not found
+        400: Invalid metrics payload
+
+    Example:
+        POST /api/v1/operations/op_training_20250117_120000/metrics
+        {
+            "epoch": 0,
+            "train_loss": 0.8234,
+            "val_loss": 0.8912
+        }
+    """
+    try:
+        logger.info(
+            f"Adding metrics to operation: {operation_id} ({len(metrics)} fields)"
+        )
+
+        # Validate operation exists
+        operation = await operations_service.get_operation(operation_id)
+
+        if not operation:
+            logger.warning(f"Operation not found: {operation_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Operation not found: {operation_id}",
+            )
+
+        # Add metrics (validates in M1, will store in M2)
+        await operations_service.add_operation_metrics(operation_id, metrics)
+
+        logger.info(f"[M1] Metrics validated for operation: {operation_id}")
+        return {
+            "success": True,
+            "message": "[M1] Metrics validated successfully (not stored yet)",
+            "operation_id": operation_id,
+        }
+
+    except HTTPException:
+        raise
+    except KeyError as e:
+        logger.warning(f"Operation not found: {operation_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Operation not found: {operation_id}",
+        ) from e
+    except ValueError as e:
+        logger.warning(f"Invalid metrics payload: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid metrics payload: {str(e)}"
+        ) from e
+    except Exception as e:
+        logger.error(f"Error adding operation metrics: {str(e)}")
+        raise DataError(
+            message=f"Failed to add metrics for operation {operation_id}",
+            error_code="OPERATIONS-AddMetricsError",
             details={"operation_id": operation_id, "error": str(e)},
         ) from e

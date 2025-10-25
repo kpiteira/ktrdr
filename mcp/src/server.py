@@ -813,6 +813,91 @@ async def get_operation_results(operation_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_operation_metrics(operation_id: str) -> dict[str, Any]:
+    """
+    Get detailed training metrics for an operation (M1: API Contract).
+
+    Retrieve real-time training metrics including epoch history, loss curves,
+    overfitting indicators, and training health metrics. Useful for monitoring
+    training progress and making intelligent decisions about early stopping.
+
+    Args:
+        operation_id: Unique operation identifier for training operation
+
+    Returns:
+        Dict with structure:
+        {
+            "success": bool,
+            "data": {
+                "operation_id": str,
+                "operation_type": str,
+                "metrics": {
+                    "epochs": [              # Epoch-by-epoch history
+                        {
+                            "epoch": int,
+                            "train_loss": float,
+                            "train_accuracy": float,
+                            "val_loss": float,
+                            "val_accuracy": float,
+                            "learning_rate": float,
+                            "duration": float,
+                            "timestamp": str
+                        },
+                        ...
+                    ],
+                    "best_epoch": int,               # Epoch with best val_loss
+                    "best_val_loss": float,
+                    "epochs_since_improvement": int,
+                    "is_overfitting": bool,          # Train↓ Val↑ detected
+                    "is_plateaued": bool,            # No improvement in N epochs
+                    "total_epochs_planned": int,
+                    "total_epochs_completed": int
+                }
+            }
+        }
+
+    Raises:
+        KTRDRAPIError: If operation not found or not a training operation
+
+    Examples:
+        # Monitor training progress
+        metrics = await get_operation_metrics("op_training_123")
+        if metrics["data"]["metrics"]["is_overfitting"]:
+            print("⚠️ Overfitting detected!")
+            await cancel_operation("op_training_123", "Overfitting detected")
+
+        # Check training health
+        metrics = await get_operation_metrics("op_training_123")
+        epochs = metrics["data"]["metrics"]["epochs"]
+        if len(epochs) > 0:
+            latest = epochs[-1]
+            print(f"Epoch {latest['epoch']}: "
+                  f"train_loss={latest['train_loss']:.4f}, "
+                  f"val_loss={latest['val_loss']:.4f}")
+
+    See Also:
+        - get_operation_status(): Get overall progress percentage
+        - start_training(): Start training operations
+        - cancel_operation(): Stop training if issues detected
+
+    Notes:
+        - M1: Returns empty metrics (interface only)
+        - M2: Will return populated metrics with real-time updates
+        - Only available for training operations
+        - Metrics update after each epoch completes
+        - Use for intelligent early stopping decisions
+    """
+    try:
+        async with get_api_client() as client:
+            result = await client.operations.get_operation_metrics(operation_id)
+            logger.info("Got operation metrics", operation_id=operation_id)
+            return result
+    except Exception as e:
+        logger.error("Failed to get operation metrics", error=str(e))
+        raise
+
+
+@mcp.tool()
 async def trigger_data_loading(
     symbol: str,
     timeframe: str = "1h",

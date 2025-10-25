@@ -135,6 +135,14 @@ class OperationInfo(BaseModel):
     result_summary: Optional[dict[str, Any]] = Field(
         None, description="Summary of results"
     )
+    # NEW: Domain-specific metrics (M1: API Contract)
+    metrics: Optional[dict[str, Any]] = Field(
+        None,
+        description="Domain-specific metrics (structure varies by operation type). "
+        "For training operations: epoch history, best epoch, overfitting indicators. "
+        "For data operations: segment stats, cache info. "
+        "For backtesting: trade stats, performance metrics.",
+    )
 
     @property
     def duration_seconds(self) -> Optional[float]:
@@ -317,6 +325,46 @@ class OperationStartResponse(BaseModel):
                     "status": "started",
                     "estimated_duration_seconds": 180,
                     "can_be_cancelled": True,
+                },
+            }
+        }
+    )
+
+
+class OperationMetricsResponse(BaseModel):
+    """Response for operation metrics (M1: API Contract)."""
+
+    success: bool = Field(True, description="Whether the request was successful")
+    data: dict[str, Any] = Field(..., description="Operation metrics data")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "data": {
+                    "operation_id": "op_training_20250117_120000",
+                    "operation_type": "training",
+                    "metrics": {
+                        "epochs": [
+                            {
+                                "epoch": 0,
+                                "train_loss": 0.8234,
+                                "train_accuracy": 0.65,
+                                "val_loss": 0.8912,
+                                "val_accuracy": 0.58,
+                                "learning_rate": 0.001,
+                                "duration": 12.5,
+                                "timestamp": "2025-01-17T10:00:00Z",
+                            }
+                        ],
+                        "best_epoch": 0,
+                        "best_val_loss": 0.8912,
+                        "epochs_since_improvement": 0,
+                        "is_overfitting": False,
+                        "is_plateaued": False,
+                        "total_epochs_planned": 100,
+                        "total_epochs_completed": 1,
+                    },
                 },
             }
         }

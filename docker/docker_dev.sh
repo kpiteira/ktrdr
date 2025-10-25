@@ -30,6 +30,7 @@ function print_help() {
     echo -e "  ${GREEN}logs${NC}         View logs from running containers"
     echo -e "  ${GREEN}logs-backend${NC} View logs from backend container"
     echo -e "  ${GREEN}logs-frontend${NC} View logs from frontend container"
+    echo -e "  ${GREEN}logs-mcp${NC}     View logs from MCP server (application logs)"
     echo -e "  ${GREEN}logs-clear-frontend${NC} Clear logs and restart frontend container"
     echo -e "  ${GREEN}shell-backend${NC} Open a shell in the backend container"
     echo -e "  ${GREEN}shell-frontend${NC} Open a shell in the frontend container"
@@ -103,6 +104,14 @@ function view_frontend_logs() {
     echo -e "${BLUE}Showing logs from frontend container...${NC}"
     echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
     docker-compose logs -f frontend
+}
+
+function view_mcp_logs() {
+    echo -e "${BLUE}Showing logs from MCP server...${NC}"
+    echo -e "${YELLOW}Note: MCP runs on-demand when Claude Desktop connects${NC}"
+    echo -e "Press ${YELLOW}Ctrl+C${NC} to exit logs view."
+    # Use file logs for persistent history (MCP runs on-demand, not continuously)
+    docker-compose exec mcp tail -f /app/logs/mcp.log
 }
 
 function clear_frontend_logs() {
@@ -436,6 +445,9 @@ case "$1" in
         ;;
     logs-frontend)
         view_frontend_logs
+        ;;
+    logs-mcp)
+        view_mcp_logs
         ;;
     logs-clear-frontend)
         clear_frontend_logs

@@ -44,3 +44,25 @@ class OperationsAPIClient(BaseAPIClient):
     async def get_operation_results(self, operation_id: str) -> dict[str, Any]:
         """Get operation results (summary)"""
         return await self._request("GET", f"/operations/{operation_id}/results")
+
+    async def get_operation_metrics(self, operation_id: str) -> dict[str, Any]:
+        """
+        Get domain-specific metrics for an operation (M1: API Contract).
+
+        For training operations: returns epoch history, best epoch, overfitting indicators
+        For other operations: returns operation-specific metrics
+
+        In M1, returns empty structure. In M2, will return populated metrics.
+
+        Args:
+            operation_id: Operation ID
+
+        Returns:
+            dict: Response with metrics data
+
+        Example:
+            metrics = await client.get_operation_metrics("op-training-123")
+            if metrics["data"]["metrics"].get("is_overfitting"):
+                print("Overfitting detected!")
+        """
+        return await self._request("GET", f"/operations/{operation_id}/metrics")

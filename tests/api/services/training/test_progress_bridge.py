@@ -653,3 +653,286 @@ class TestTrainingProgressBridge:
                 phase="combining_data",
                 message="Combining data from 5 symbols",
             )
+
+
+# ============================================================================
+# NEW TESTS FOR TASK 1.2: Pull-Based Architecture
+# ============================================================================
+
+
+class TestTrainingProgressBridgeInheritance:
+    """Test TrainingProgressBridge inherits from ProgressBridge (Task 1.2)."""
+
+    def test_inherits_from_progress_bridge(self):
+        """TrainingProgressBridge inherits from ProgressBridge base class."""
+        from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
+
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Should be instance of both
+        assert isinstance(bridge, TrainingProgressBridge)
+        assert isinstance(bridge, ProgressBridge)
+
+    def test_has_get_status_method(self):
+        """TrainingProgressBridge has get_status() method from base class."""
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Should have get_status method
+        assert hasattr(bridge, "get_status")
+        assert callable(bridge.get_status)
+
+    def test_has_get_metrics_method(self):
+        """TrainingProgressBridge has get_metrics() method from base class."""
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Should have get_metrics method
+        assert hasattr(bridge, "get_metrics")
+        assert callable(bridge.get_metrics)
+
+
+class TestTrainingProgressBridgeNoMetricsCallback:
+    """Test metrics_callback parameter removed (Task 1.2)."""
+
+    def test_init_without_metrics_callback_parameter(self):
+        """__init__ should not accept metrics_callback parameter."""
+        import inspect
+
+        sig = inspect.signature(TrainingProgressBridge.__init__)
+
+        # metrics_callback should NOT be a parameter
+        assert "metrics_callback" not in sig.parameters
+
+    def test_no_metrics_callback_field(self):
+        """TrainingProgressBridge should not have _metrics_callback field."""
+        context = _make_context(total_epochs=5, total_batches=50)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Should NOT have _metrics_callback field
+        assert not hasattr(bridge, "_metrics_callback")
+
+
+class TestTrainingProgressBridgeOnEpochPullBased:
+    """Test on_epoch() uses pull-based mechanism (Task 1.2)."""
+
+    def test_on_epoch_updates_state(self):
+        """on_epoch() updates state via _update_state() (pull-based)."""
+        context = _make_context(total_epochs=100, total_batches=1000)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Call on_epoch with complete metrics (including completed_batches for percentage calc)
+        epoch_metrics = {
+            "progress_type": "epoch",
+            "epoch": 5,
+            "total_batches": 1000,
+            "completed_batches": 60,  # Need this for percentage calculation
+            "total_batches_per_epoch": 10,
+            "train_loss": 1.5,
+            "val_loss": 1.7,
+            "train_accuracy": 0.65,
+            "val_accuracy": 0.63,
+        }
+        bridge.on_epoch(epoch=5, total_epochs=100, metrics=epoch_metrics)
+
+        # Pull state via get_status()
+        status = bridge.get_status()
+
+        # Should have updated state
+        assert "percentage" in status
+        assert "message" in status
+        assert "timestamp" in status
+        assert status["percentage"] > 0  # Should be ~6% (60/1000 * 100)
+
+    def test_on_epoch_appends_metric(self):
+        """on_epoch() appends metric via _append_metric() when progress_type=epoch."""
+        context = _make_context(total_epochs=100, total_batches=1000)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Call on_epoch with epoch-level metrics
+        epoch_metrics = {
+            "progress_type": "epoch",
+            "epoch": 5,
+            "train_loss": 1.5,
+            "val_loss": 1.7,
+            "train_accuracy": 0.65,
+            "val_accuracy": 0.63,
+            "learning_rate": 0.001,
+            "duration": 12.5,
+            "timestamp": "2025-01-20T10:00:00Z",
+        }
+        bridge.on_epoch(epoch=5, total_epochs=100, metrics=epoch_metrics)
+
+        # Pull metrics via get_metrics()
+        metrics, cursor = bridge.get_metrics(cursor=0)
+
+        # Should have appended metric
+        assert len(metrics) == 1
+        assert metrics[0]["epoch"] == 5
+        assert metrics[0]["train_loss"] == 1.5
+        assert metrics[0]["val_loss"] == 1.7
+        assert cursor == 1
+
+    def test_on_epoch_multiple_calls_accumulate_metrics(self):
+        """Multiple on_epoch() calls accumulate metrics."""
+        context = _make_context(total_epochs=100, total_batches=1000)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Call on_epoch multiple times
+        for epoch in range(5):
+            epoch_metrics = {
+                "progress_type": "epoch",
+                "epoch": epoch,
+                "train_loss": 2.5 - (epoch * 0.1),
+                "val_loss": 2.7 - (epoch * 0.1),
+            }
+            bridge.on_epoch(epoch=epoch, total_epochs=100, metrics=epoch_metrics)
+
+        # Pull all metrics
+        metrics, cursor = bridge.get_metrics(cursor=0)
+
+        # Should have all 5 epochs
+        assert len(metrics) == 5
+        assert cursor == 5
+        assert metrics[0]["epoch"] == 0
+        assert metrics[4]["epoch"] == 4
+
+    def test_get_status_returns_current_progress(self):
+        """get_status() returns current progress state."""
+        context = _make_context(total_epochs=100, total_batches=1000)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Simulate progress with complete metrics
+        for epoch in [5, 25, 55]:
+            completed_batches = (epoch + 1) * 10  # Simulate batch completion
+            bridge.on_epoch(
+                epoch=epoch,
+                total_epochs=100,
+                metrics={
+                    "progress_type": "epoch",
+                    "epoch": epoch,
+                    "total_batches": 1000,
+                    "completed_batches": completed_batches,
+                    "total_batches_per_epoch": 10,
+                },
+            )
+
+        # get_status should return latest state
+        status = bridge.get_status()
+
+        # Should reflect epoch 55 (latest) - 560 batches / 1000 = 56%
+        assert status["percentage"] == pytest.approx(56.0, abs=1.0)
+        assert "Epoch 56" in status["message"]
+
+    def test_get_metrics_returns_epoch_metrics(self):
+        """get_metrics() returns epoch-level metrics."""
+        context = _make_context(total_epochs=100, total_batches=1000)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # Add some epoch metrics
+        for epoch in range(10):
+            bridge.on_epoch(
+                epoch=epoch,
+                total_epochs=100,
+                metrics={
+                    "progress_type": "epoch",
+                    "epoch": epoch,
+                    "train_loss": 2.0 - (epoch * 0.1),
+                },
+            )
+
+        # Get all metrics
+        metrics, cursor = bridge.get_metrics(cursor=0)
+
+        # Should return all epoch metrics
+        assert len(metrics) == 10
+        assert all("epoch" in m for m in metrics)
+        assert all("train_loss" in m for m in metrics)
+
+    def test_on_epoch_is_synchronous(self):
+        """on_epoch() is synchronous (no async/await)."""
+        import inspect
+
+        context = _make_context(total_epochs=100, total_batches=1000)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        # on_epoch should NOT be a coroutine function
+        assert not inspect.iscoroutinefunction(bridge.on_epoch)
+
+        # Should be callable synchronously
+        result = bridge.on_epoch(
+            epoch=5,
+            total_epochs=100,
+            metrics={"progress_type": "epoch", "epoch": 5},
+        )
+
+        # Should return None, not a coroutine
+        assert result is None
+
+
+class TestTrainingProgressBridgePerformance:
+    """Test on_epoch() performance (Task 1.2)."""
+
+    def test_on_epoch_performance_reasonable(self):
+        """on_epoch() completes in reasonable time (<10μs with dual mechanism)."""
+        import time
+
+        context = _make_context(total_epochs=100, total_batches=1000)
+        bridge = TrainingProgressBridge(
+            context=context,
+            progress_manager=GenericProgressManager(callback=lambda _: None),
+        )
+
+        iterations = 10000
+        epoch_metrics = {
+            "progress_type": "epoch",
+            "epoch": 5,
+            "train_loss": 1.5,
+            "total_batches": 1000,
+            "completed_batches": 50,
+        }
+
+        # Measure time
+        start = time.perf_counter()
+        for i in range(iterations):
+            bridge.on_epoch(epoch=i % 100, total_epochs=100, metrics=epoch_metrics)
+        end = time.perf_counter()
+
+        avg_time = (end - start) / iterations
+
+        # Should be <10μs (dual mechanism: push to GenericProgressManager + pull to ProgressBridge)
+        # This is reasonable given we're running BOTH mechanisms during M1 transition
+        assert (
+            avg_time < 0.00001
+        ), f"Average time {avg_time*1e6:.2f}μs exceeds 10μs target"

@@ -112,3 +112,4 @@ ib-host-service/data/symbol_discovery_cache.json
 .serena/
 *.iws
 .agent-os/
+.obsidian/

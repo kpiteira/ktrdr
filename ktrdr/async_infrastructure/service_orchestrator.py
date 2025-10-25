@@ -1083,7 +1083,17 @@ class ServiceOrchestrator(ABC, Generic[T]):
                     f"✅ OPERATION EXECUTION COMPLETED: Thread {threading.current_thread().ident}, Operation {operation_id}"
                 )
 
-                # Complete the operation
+                # TASK 3.1: Check if operation is remote and still running
+                # Remote operations (host training) return immediately with status="started"
+                # They should NOT be auto-completed - completion detected when client queries
+                if isinstance(result, dict) and result.get("status") == "started":
+                    logger.info(
+                        f"🔄 Operation {operation_id} started remotely - not auto-completing "
+                        f"(backend operation stays RUNNING, completion detected via client queries)"
+                    )
+                    return result  # Don't complete, operation is still running remotely
+
+                # Complete the operation (for local/blocking operations)
                 operation_progress.complete_operation()
 
                 def complete_in_main_loop():
