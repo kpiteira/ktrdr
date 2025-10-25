@@ -11,7 +11,11 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 # Task 2.3: Import operations service and progress bridge for pull-based operations
-from ktrdr.api.models.operations import OperationMetadata, OperationType
+from ktrdr.api.models.operations import (
+    OperationMetadata,
+    OperationStatus,
+    OperationType,
+)
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.api.services.training.progress_bridge import TrainingProgressBridge
 from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
@@ -571,16 +575,17 @@ class TrainingService:
                 session_id=session.session_id,
             )
 
-            # Create bridge (will be used by orchestrator instead of callback)
-            # Host service uses pull-based model, so provide no-op callback
-            # The bridge's state will be pulled via get_status()/get_metrics()
-            def no_op_callback(*args, **kwargs):
-                """No-op callback for pull-based progress tracking."""
-                pass
+            # Create progress manager for pull-based state tracking (just like backend)
+            from ktrdr.async_infrastructure.progress import GenericProgressManager
 
+            # Create progress manager (no callback needed, just for state tracking)
+            progress_manager = GenericProgressManager()
+
+            # Create bridge with progress manager (enables pull-based queries)
             bridge = TrainingProgressBridge(
                 context=context,
-                update_progress_callback=no_op_callback,
+                progress_manager=progress_manager,
+                cancellation_token=None,  # Cancellation handled via session.stop_requested
             )
 
             session.progress_bridge = bridge
@@ -608,6 +613,16 @@ class TrainingService:
             session.last_updated = datetime.utcnow()
 
             logger.info(f"Starting training for session {session.session_id}")
+
+            # TASK 3.1: Update operation status to RUNNING
+            if session.operation_id:
+                operation = await ops_service.get_operation(session.operation_id)
+                if operation:
+                    from datetime import timezone
+
+                    operation.status = OperationStatus.RUNNING
+                    operation.started_at = datetime.now(timezone.utc)
+                    logger.info(f"✅ Operation {session.operation_id} status updated to RUNNING")
 
             # Start resource monitoring
             if session.gpu_manager:

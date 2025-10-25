@@ -220,6 +220,15 @@ class OperationsService:
                 return
 
             operation = self._operations[operation_id]
+
+            # CRITICAL: Pull final metrics from bridge before marking complete
+            # This ensures all metrics captured during training are persisted
+            if operation_id in self._local_bridges:
+                logger.debug(f"Pulling final metrics from bridge for {operation_id}")
+                # Force cache invalidation to ensure fresh metrics
+                self._last_refresh[operation_id] = 0
+                self._refresh_from_bridge(operation_id)
+
             operation.status = OperationStatus.COMPLETED
             operation.completed_at = datetime.now(timezone.utc)
             operation.result_summary = result_summary
@@ -1027,29 +1036,47 @@ class OperationsService:
         return self._cancellation_coordinator.create_token(operation_id)
 
     async def get_operation_metrics(
-        self, operation_id: str
-    ) -> Optional[dict[str, Any]]:
+        self, operation_id: str, cursor: int = 0
+    ) -> tuple[list[dict[str, Any]], int]:
         """
-        Get domain-specific metrics for an operation (M1: API Contract).
+        Get incremental metrics for an operation with cursor support (M2/M3).
 
-        In M1, this returns empty structure. In M2, will return populated metrics.
+        Supports cursor-based retrieval for efficient incremental reads.
+        If operation has local bridge, pulls directly from bridge.
+        Otherwise returns stored metrics with cursor slicing.
 
         Args:
             operation_id: Operation identifier
+            cursor: Cursor for incremental metrics (0 = from beginning)
 
         Returns:
-            dict containing metrics, or None if operation doesn't exist
+            tuple: (new_metrics, new_cursor)
+                - new_metrics: List of metric dicts since cursor
+                - new_cursor: New cursor position for next incremental read
 
         Raises:
             KeyError: If operation not found
         """
+        # Trigger refresh from bridge/proxy if operation is running
         operation = await self.get_operation(operation_id)
 
         if not operation:
             raise KeyError(f"Operation not found: {operation_id}")
 
-        # M1: Return empty metrics (will be populated in M2)
-        return operation.metrics if operation.metrics is not None else {}
+        # M2/M3: Pull directly from bridge if registered (enables incremental reads)
+        if operation_id in self._local_bridges:
+            bridge = self._local_bridges[operation_id]
+            return bridge.get_metrics(cursor)
+
+        # For operations without bridge (completed, or remote), return stored metrics
+        if operation.metrics and "epochs" in operation.metrics:
+            all_epochs = operation.metrics["epochs"]
+            new_epochs = all_epochs[cursor:]
+            new_cursor = len(all_epochs)
+            return new_epochs, new_cursor
+
+        # No metrics available
+        return [], cursor
 
     async def add_operation_metrics(
         self, operation_id: str, metrics_data: dict[str, Any]
