@@ -136,7 +136,12 @@ class OperationServiceProxy:
             # Raise for other HTTP errors
             response.raise_for_status()
 
-            return response.json()
+            # TASK 3.1: Unwrap response - host service returns {success, data}
+            # but backend expects just the operation object
+            response_data = response.json()
+            if isinstance(response_data, dict) and "data" in response_data:
+                return response_data["data"]
+            return response_data  # Fallback for non-wrapped responses
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error querying operation {operation_id}: {e}")
@@ -185,7 +190,13 @@ class OperationServiceProxy:
             # Raise for other HTTP errors
             response.raise_for_status()
 
-            data = response.json()
+            # TASK 3.1: Unwrap response - host service returns {success, data}
+            response_json = response.json()
+            if isinstance(response_json, dict) and "data" in response_json:
+                data = response_json["data"]
+            else:
+                data = response_json
+
             metrics = data.get("metrics", [])
             new_cursor = data.get("new_cursor", cursor)
 

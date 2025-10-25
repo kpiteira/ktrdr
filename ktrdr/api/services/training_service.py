@@ -281,16 +281,18 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             training_config=context.training_config,
         )
 
-        # (2) Get host operation ID (session_id)
-        host_operation_id = (
-            response.get("session_id") if isinstance(response, dict) else None
-        )
-        if not host_operation_id:
+        # (2) Get host operation ID from session_id
+        # Host service returns session_id, but operation ID is host_training_{session_id}
+        session_id = response.get("session_id") if isinstance(response, dict) else None
+        if not session_id:
             raise RuntimeError("Host service did not return a session_id")
+
+        # TASK 3.1: Construct full operation ID matching host service convention
+        host_operation_id = f"host_training_{session_id}"
 
         logger.info(
             f"Host training started: backend_op={backend_operation_id}, "
-            f"host_op={host_operation_id}"
+            f"host_op={host_operation_id}, session_id={session_id}"
         )
 
         # (3) Create OperationServiceProxy for this host service
@@ -319,10 +321,11 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
         # (5) Return immediately (no waiting, no polling)
         # Backend doesn't know completion status - client discovers it via queries
         return {
-            "session_id": host_operation_id,
+            "session_id": session_id,  # Raw session ID for backward compatibility
+            "host_operation_id": host_operation_id,  # Full operation ID
             "backend_operation_id": backend_operation_id,
             "status": "started",
-            "message": f"Training started on host service (session: {host_operation_id})",
+            "message": f"Training started on host service (session: {session_id})",
         }
 
     async def cancel_training_session(

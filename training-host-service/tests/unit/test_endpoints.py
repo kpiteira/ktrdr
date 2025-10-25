@@ -151,8 +151,13 @@ class TestTrainingEndpoints:
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
             assert "Session not found" in response.json()["detail"]
 
-    def test_get_training_status_success(self, client, mock_training_service):
+    def test_get_training_status_success(
+        self, client, mock_training_service, mock_training_session
+    ):
         """Test successful training status retrieval."""
+        # Add session to mock service
+        mock_training_service.sessions = {"test-session-123": mock_training_session}
+
         with patch(
             "endpoints.training.get_service",
             return_value=mock_training_service,
@@ -167,19 +172,20 @@ class TestTrainingEndpoints:
             assert data["progress"]["items_total"] == 100
             assert "metrics" in data
             assert "gpu_usage" in data
+            # TASK 3.2: Verify deprecation fields present
+            assert data["deprecated"] is True
+            assert "use_instead" in data
 
     def test_get_training_status_not_found(self, client):
         """Test training status for non-existent session."""
-        with patch(
-            "services.training_service.get_training_service"
-        ) as mock_get_service:
+        with patch("endpoints.training.get_service") as mock_get_service:
             mock_service = Mock()
-            mock_service.get_session_status.side_effect = Exception("Session not found")
+            mock_service.sessions = {}  # Empty sessions dict
             mock_get_service.return_value = mock_service
 
             response = client.get("/training/status/nonexistent-session")
 
-            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_list_training_sessions(self, client, mock_training_service):
         """Test listing training sessions."""
