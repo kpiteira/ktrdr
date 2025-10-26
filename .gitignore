@@ -110,8 +110,8 @@ ib-host-service/data/symbol_discovery_cache.json
 .bmad*/
 .claude/
 .serena/
-./specify/scripts/
-./specify/templates/
+.specify/scripts/
+.specify/templates/
 *.iws
 .agent-os/
 .obsidian/
