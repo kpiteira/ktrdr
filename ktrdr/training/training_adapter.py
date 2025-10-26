@@ -290,7 +290,39 @@ class TrainingAdapter(AsyncServiceAdapter):
             ) from e
 
     async def get_training_status(self, session_id: str) -> dict[str, Any]:
-        """Get status of a training session (host service only)."""
+        """
+        Get status of a training session (host service only).
+
+        .. deprecated::
+            This method is deprecated and will be removed in a future version.
+            Use OperationServiceProxy.get_operation() instead to query training
+            operations via the standard /operations/* API.
+
+        Migration Guide:
+            Instead of:
+                status = await adapter.get_training_status(session_id)
+
+            Use:
+                from ktrdr.api.services.adapters.operation_service_proxy import OperationServiceProxy
+                proxy = OperationServiceProxy(training_host_url)
+                operation = await proxy.get_operation(f"host_training_{session_id}")
+
+        Args:
+            session_id: The training session ID
+
+        Returns:
+            dict: Training status information (for backward compatibility)
+        """
+        import warnings
+
+        warnings.warn(
+            "TrainingAdapter.get_training_status() is deprecated. "
+            "Use OperationServiceProxy.get_operation() instead to query "
+            "training operations via the standard /operations/* API.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         if not self.use_host_service:
             raise TrainingProviderError(
                 "Status checking only available for host service mode"
