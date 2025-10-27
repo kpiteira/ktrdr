@@ -474,9 +474,7 @@ class TrainingProgressBridge(ProgressBridge):
             payload_context.update(context)
 
         # Update API state so preprocessing steps are visible to consumers
-        state_update = {
-            "percentage": percentage,
-            "message": message,
+        state_kwargs = {
             "current_step": 0,
             "items_processed": symbol_index,
             "phase": "preprocessing",
@@ -486,8 +484,8 @@ class TrainingProgressBridge(ProgressBridge):
             "preprocessing_step": step,
         }
         if context:
-            state_update.update(context)
-        self._update_state(**state_update)
+            state_kwargs.update(context)
+        self._update_state(percentage=percentage, message=message, **state_kwargs)
 
         self._emit(
             current_step=0,
