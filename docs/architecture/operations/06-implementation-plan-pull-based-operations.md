@@ -1,6 +1,7 @@
 # Implementation Plan: Pull-Based Operations Architecture
 
 ## Document Information
+
 - **Date**: 2025-01-20
 - **Status**: APPROVED
 - **Timeline**: 4-5 weeks
@@ -17,6 +18,7 @@
 This plan sequences the work required to implement the pull-based operations architecture, transitioning from the current broken push-based model where sync workers try to call async callbacks.
 
 **Sequencing Strategy**: Local Training → Host Training → Data Loading
+
 - **Local first**: Proves the pattern, fixes M2 metrics bug immediately
 - **Host second**: Extends to distributed operations, removes internal polling
 - **Data third**: Generalizes the pattern to other operation types
@@ -56,19 +58,23 @@ This plan sequences the work required to implement the pull-based operations arc
 ## M1: Local Training Pull Architecture (5-6 days)
 
 ### Goal
+
 Implement pull-based operations for local training, fixing the broken metrics callback pattern (lines 148-164 in `progress_bridge.py`).
 
 ### Context
+
 **Current Problem**: Worker thread calls `asyncio.create_task(self._metrics_callback(...))` which fails with "no running event loop" because it's running in `asyncio.to_thread()` context.
 
 **Solution**: Workers write to bridge synchronously (<1μs). OperationsService pulls from bridge on-demand (client-driven).
 
 **Why This First**:
+
 - Fixes critical M2 metrics bug immediately
 - Proves pull pattern works before extending to host services
 - Simpler (same process, no HTTP) so easier to validate
 
 **Strategy**:
+
 - Implement pull-only architecture from the start (no dual push/pull mechanisms)
 - Defer caching optimization to future milestone (focus on MVP)
 - Registry is essential infrastructure (not optional)
@@ -80,6 +86,7 @@ Implement pull-based operations for local training, fixing the broken metrics ca
 **Objective**: Create fully-implemented, scenario-independent progress bridge with pull interface.
 
 **Scope**:
+
 - Create **concrete class** (not abstract) with complete implementation
 - Provide generic state storage (percentage, message, timestamp, etc.)
 - Provide generic metrics storage (append-only list with cursor-based retrieval)
@@ -87,9 +94,11 @@ Implement pull-based operations for local training, fixing the broken metrics ca
 - Protected helpers for subclasses to update state and append metrics
 
 **Files Created**:
+
 - `ktrdr/async_infrastructure/progress_bridge.py`
 
 **Implementation**:
+
 ```python
 class ProgressBridge:
     """Concrete pull-based progress bridge - scenario-independent."""
@@ -130,6 +139,7 @@ class ProgressBridge:
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Concrete class (not abstract) - fully implemented
 - [ ] `get_status()` returns snapshot of current state
 - [ ] `get_metrics(cursor)` returns incremental metrics + new cursor
@@ -150,6 +160,7 @@ class ProgressBridge:
 **Objective**: Make TrainingProgressBridge inherit from ProgressBridge and use pull-only mechanism (remove push).
 
 **Scope**:
+
 - Inherit from ProgressBridge (concrete class from 1.1)
 - Update all `on_*()` methods to call `self._update_state()` instead of push callbacks
 - Update `on_epoch()` to call `self._append_metric()` for epoch metrics
@@ -157,9 +168,11 @@ class ProgressBridge:
 - All methods remain synchronous (no async/await)
 
 **Files Modified**:
+
 - `ktrdr/api/services/training/progress_bridge.py`
 
 **Existing Code to Remove**:
+
 - Lines 29-31: `metrics_callback` parameter from `__init__`
 - Line 42: `self._metrics_callback = metrics_callback`
 - Lines 148-164: Entire `asyncio.create_task(self._metrics_callback(...))` block and try/except wrapper
@@ -169,6 +182,7 @@ class ProgressBridge:
 1. **Inheritance**: Change from standalone class to inherit from ProgressBridge
 2. **Constructor**: Remove `metrics_callback` parameter
 3. **Update `on_epoch()`**:
+
    ```python
    def on_epoch(self, epoch, total_epochs, metrics):
        # Calculate percentage, message, etc. (existing logic)
@@ -203,6 +217,7 @@ class ProgressBridge:
 4. **Update `on_batch()`, `on_phase()`, etc.**: Similar pattern - call `self._update_state()` with appropriate fields
 
 **Acceptance Criteria**:
+
 - [ ] Bridge inherits from ProgressBridge (concrete class)
 - [ ] `__init__` no longer accepts `metrics_callback` parameter
 - [ ] All `on_*()` methods call `self._update_state()` to update progress
@@ -228,31 +243,37 @@ class ProgressBridge:
 **Scope**:
 
 **Part A - Add Bridge Registry to OperationsService**:
+
 - Add bridge registry (dict mapping operation_id to bridge)
 - Add cursor tracking for incremental metrics pull
 - Add registration method
 - Add refresh method that pulls from bridge
 
 **Part B - Modify get_operation() to Pull from Bridge**:
+
 - Check if bridge registered for operation
 - If yes and operation still running, refresh from bridge
 - If completed/failed/cancelled, skip refresh (immutable state)
 
 **Part C - Register Bridge in TrainingService**:
+
 - Remove metrics_callback creation in `_run_local_training()`
 - Create bridge without callback parameter
 - Register bridge with operations service
 
 **Files Modified**:
+
 - `ktrdr/api/services/operations_service.py` (Parts A & B)
 - `ktrdr/api/services/training_service.py` (Part C)
 
 **New State to Add (OperationsService)**:
+
 - `self._local_bridges: dict[str, ProgressBridge] = {}` (operation_id → bridge)
 - `self._metrics_cursors: dict[str, int] = {}` (operation_id → cursor for incremental metrics)
 - `self._remote_proxies: dict[str, OperationServiceProxy] = {}` (empty until M2, for symmetry)
 
 **New Methods to Add (OperationsService)**:
+
 ```python
 def register_local_bridge(self, operation_id: str, bridge: ProgressBridge) -> None:
     """Register a local bridge for pull-based progress updates."""
@@ -297,6 +318,7 @@ def _refresh_from_bridge(self, operation_id: str) -> None:
 ```
 
 **Modify Existing Method (OperationsService)**:
+
 ```python
 async def get_operation(self, operation_id: str) -> OperationInfo:
     """Get operation, refreshing from bridge if registered."""
@@ -314,11 +336,14 @@ async def get_operation(self, operation_id: str) -> OperationInfo:
 **Changes to TrainingService**:
 
 **Remove**:
+
 - Lines 208-220: Entire `metrics_callback` async function definition
 - Line 223: `metrics_callback=metrics_callback` parameter to bridge
 
 **Add**:
+
 - After bridge creation (around line 225):
+
   ```python
   # Register bridge for pull-based progress
   self.operations_service.register_local_bridge(context.operation_id, bridge)
@@ -328,6 +353,7 @@ async def get_operation(self, operation_id: str) -> OperationInfo:
 **Acceptance Criteria**:
 
 **Part A - Registry**:
+
 - [ ] `_local_bridges` dict added to OperationsService
 - [ ] `_metrics_cursors` dict added to OperationsService
 - [ ] `register_local_bridge()` stores bridge reference and initializes cursor=0
@@ -336,18 +362,21 @@ async def get_operation(self, operation_id: str) -> OperationInfo:
 - [ ] Cursor increments after each successful metrics pull
 
 **Part B - Wiring**:
+
 - [ ] `get_operation()` checks if bridge registered
 - [ ] `get_operation()` calls `_refresh_from_bridge()` if operation is running
 - [ ] Completed/Failed/Cancelled operations never refresh (immutable state)
 - [ ] No cache logic yet (direct pull every time)
 
 **Part C - Registration**:
+
 - [ ] TrainingService no longer creates `metrics_callback` function
 - [ ] Bridge created without `metrics_callback` parameter
 - [ ] Bridge registered with operations service before training starts
 - [ ] Operation ID matches between bridge and operations service
 
 **Testing**:
+
 - [ ] Unit tests: `test_register_local_bridge()`
 - [ ] Unit tests: `test_refresh_from_bridge_updates_operation()`
 - [ ] Unit tests: `test_get_operation_pulls_from_bridge()`
@@ -365,19 +394,23 @@ async def get_operation(self, operation_id: str) -> OperationInfo:
 **Objective**: Add minimal cache infrastructure to prevent redundant bridge reads when multiple clients poll the same operation.
 
 **Context**:
+
 - **Level 1 Cache**: ProgressBridge holds state in memory (fast, <1μs writes)
 - **Level 2 Cache**: Backend TTL cache prevents redundant bridge reads (avoids unnecessary `get_status()` calls)
 
 **Scope**:
+
 - Add cache timestamp tracking (`_last_refresh`)
 - Add configurable TTL (default 1 second)
 - Implement cache freshness check in `_refresh_from_bridge()`
 - Support `force_refresh` parameter to bypass cache
 
 **Files Modified**:
+
 - `ktrdr/api/services/operations_service.py`
 
 **New State to Add**:
+
 ```python
 class OperationsService:
     def __init__(self):
@@ -394,6 +427,7 @@ class OperationsService:
 ```
 
 **Implementation**:
+
 ```python
 def _refresh_from_bridge(self, operation_id: str) -> None:
     """Pull state and metrics from registered bridge with cache awareness."""
@@ -446,6 +480,7 @@ def _refresh_from_bridge(self, operation_id: str) -> None:
 ```
 
 **Update `get_operation()` to support force_refresh**:
+
 ```python
 async def get_operation(self, operation_id: str, force_refresh: bool = False) -> OperationInfo:
     """Get operation, refreshing from bridge if registered and cache stale."""
@@ -466,6 +501,7 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 ```
 
 **Acceptance Criteria**:
+
 - [ ] `_last_refresh` dict tracks refresh timestamps per operation
 - [ ] `_cache_ttl` defaults to 1.0 seconds and is configurable via env var `OPERATIONS_CACHE_TTL`
 - [ ] `_refresh_from_bridge()` checks cache age before pulling from bridge
@@ -492,15 +528,18 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 **Objective**: Document test scenarios and expected outcomes for human to validate complete local training flow with pull-based operations.
 
 **Scope**:
+
 - Document **scenarios** to test (not specific code implementation)
 - Document **expected outcomes** (what should happen)
 - Document **how to verify** outcomes (check logs, API responses, etc.)
 - Document **troubleshooting steps** (if X fails, check Y)
 
 **Files Created**:
+
 - `docs/testing/e2e-local-training-pull.md` (test guide for human)
 
 **Example Scenario Format**:
+
 ```markdown
 ## Scenario: Progress Updates During Training
 
@@ -574,22 +613,26 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 **Troubleshooting Section**:
 
 **Problem**: Progress not updating
+
 - Check: Is bridge registered? (search logs)
 - Check: Is `get_operation()` calling `_refresh_from_bridge()`? (debug logs)
 - Check: Is bridge `get_status()` returning data? (add logging)
 
 **Problem**: Metrics not stored
+
 - Check: Is `on_epoch()` being called? (training logs)
 - Check: Is `_append_metric()` being called? (add logging)
 - Check: Is cursor incrementing? (operations service logs)
 
 **Problem**: "No running event loop" error
+
 - This should NOT happen in pull architecture
 - If it appears, push mechanism not fully removed
 - Check: No `asyncio.create_task()` in TrainingProgressBridge
 - Check: No `metrics_callback` parameter
 
 **Acceptance Criteria**:
+
 - [ ] Test guide document created with scenarios (not code)
 - [ ] Each scenario describes **what to do** and **what to expect**
 - [ ] Verification steps explain **how to check** outcomes
@@ -605,17 +648,20 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 ### M1 Key Architectural Decisions
 
 **✅ What We're Doing**:
+
 1. **Concrete ProgressBridge** - Fully implemented base class (not abstract), scenario-independent
 2. **Pull-Only from Start** - No dual push/pull mechanisms, clean cutover
 3. **Registry is Essential** - Not optional, needed for concurrent operations
 4. **Simple TTL Cache** - In-memory cache with 1s TTL to prevent redundant bridge reads
 
 **❌ What We're NOT Doing**:
+
 1. **No Dual Mechanisms** - Push code removed in Task 1.2, not kept alongside pull
 2. **No Abstract Base** - ProgressBridge is concrete with protected helpers for subclasses
 3. **No Complex Caching** - No distributed cache, no persistence, simple TTL only
 
 **Why This Approach**:
+
 - **Faster to MVP**: Simple cache (~50 LOC), essential for performance
 - **Cleaner Architecture**: One data flow path (pull-only), no ambiguity
 - **Better Testing**: Can't have conflicts between push and pull
@@ -628,6 +674,7 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 **✅ MILESTONE COMPLETED: 2025-01-23**
 
 **Code Deliverables**:
+
 - [x] ProgressBridge concrete class created (scenario-independent)
 - [x] TrainingProgressBridge inherits from ProgressBridge
 - [x] TrainingProgressBridge uses pull-only mechanism (no push)
@@ -641,6 +688,7 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 - [x] TrainingService registers bridges (not callbacks)
 
 **Testing**:
+
 - [x] All unit tests passing (>80% coverage on new code)
 - [x] Integration tests passing (start training → query operation → verify progress)
 - [x] Performance benchmark: `on_epoch()` < 1μs average (10k iterations)
@@ -648,12 +696,14 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 - [x] **HUMAN has executed E2E test and confirmed all scenarios pass**
 
 **Quality Gates**:
+
 - [x] No "no running event loop" errors in logs
 - [x] M2 metrics bug FIXED (metrics stored during training via pull)
 - [x] Cache hit rate >80% with multiple concurrent clients (measured in integration tests)
 - [x] Code review approved for all tasks
 
 **Success Indicators**:
+
 - ✅ Pull-based architecture working end-to-end for local training
 - ✅ Metrics visible via `GET /operations/{id}`
 - ✅ No async callback failures
@@ -661,6 +711,7 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 - ✅ Foundation ready for M2 (host services)
 
 **E2E Test Results** (Executed: 2025-01-23):
+
 - **Test Dataset**: EURUSD 1h (2006-2024), 106,732 samples
 - **Training Duration**: 49.5 seconds (10 epochs)
 - **Final Accuracy**: Train 59.05%, Val 56.07%, Test 56.20%
@@ -673,6 +724,7 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 - **Scenario 7 (Error-Free Execution)**: ✅ PASS - **ZERO "no running event loop" errors**
 
 **Key Validation**:
+
 - ✅ NO async/sync boundary violations detected
 - ✅ Metrics successfully stored during training (M2 bug confirmed fixed)
 - ✅ Bridge registration confirmed in logs before training starts
@@ -680,6 +732,7 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 - ✅ Training completed successfully with full metrics history
 
 **Commits**:
+
 - `7527d0c` - Task 1.1: ProgressBridge base class
 - `510d95b` - Task 1.2: TrainingProgressBridge integration
 - `11cd512` - Task 1.3: OperationsService wiring
@@ -692,14 +745,17 @@ async def get_operation(self, operation_id: str, force_refresh: bool = False) ->
 ## M2: Host Service Operations API (3-4 days)
 
 ### Goal
+
 Deploy OperationsService to host services and expose standard `/operations/*` endpoints, enabling backend to query operations via HTTP.
 
 ### Context
+
 **Current**: Host services have custom endpoints (`/training/status/{session_id}`) and custom session management.
 
 **New**: Host services expose standard `/operations/*` API matching backend API, with same OperationsService code.
 
 **Why This Now**:
+
 - Enables M3 (host training pull pattern)
 - Proves OperationsService is reusable across services
 - Establishes standard operations API contract
@@ -711,18 +767,22 @@ Deploy OperationsService to host services and expose standard `/operations/*` en
 **Objective**: Deploy OperationsService singleton in training host service.
 
 **Scope**:
+
 - Import and initialize OperationsService in host service
 - Ensure host service can create operations and register bridges
 - Verify no conflicts with existing session management
 
 **Files Modified**:
+
 - `training-host-service/main.py`
 - `training-host-service/training/session_manager.py`
 
 **Files Created**:
+
 - `training-host-service/services/operations.py` (wrapper importing from ktrdr)
 
 **New Imports**:
+
 ```python
 from ktrdr.api.services.operations_service import (
     OperationsService,
@@ -731,6 +791,7 @@ from ktrdr.api.services.operations_service import (
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Training host service has singleton OperationsService instance
 - [ ] `get_operations_service()` returns same instance across calls
 - [ ] Host service can import without errors
@@ -745,6 +806,7 @@ from ktrdr.api.services.operations_service import (
 **Objective**: Expose operations API in training host service matching backend API contract.
 
 **Scope**:
+
 - Create FastAPI router with operations endpoints
 - Implement: GET /operations/{operation_id}
 - Implement: GET /operations/{operation_id}/metrics
@@ -752,12 +814,15 @@ from ktrdr.api.services.operations_service import (
 - Register router in host service app
 
 **Files Created**:
+
 - `training-host-service/endpoints/operations.py`
 
 **Files Modified**:
+
 - `training-host-service/main.py` (register router)
 
 **Endpoints to Implement**:
+
 1. `GET /api/v1/operations/{operation_id}?force_refresh=false`
    - Returns: OperationInfo (same format as backend)
    - Calls: `ops_service.get_operation(operation_id, force_refresh)`
@@ -772,6 +837,7 @@ from ktrdr.api.services.operations_service import (
    - Calls: `ops_service.list_operations(...)`
 
 **Acceptance Criteria**:
+
 - [ ] All three endpoints respond successfully
 - [ ] Endpoints return same data format as backend operations API
 - [ ] `GET /operations/{id}` respects force_refresh parameter
@@ -789,15 +855,18 @@ from ktrdr.api.services.operations_service import (
 **Objective**: Modify training host service worker to create operation and register bridge when training starts.
 
 **Scope**:
+
 - When `POST /training/start` is called, create operation in host's OperationsService
 - Create ProgressBridge for the training session
 - Register bridge with host's OperationsService
 - Pass bridge to training worker for progress updates
 
 **Files Modified**:
+
 - `training-host-service/training/session_manager.py`
 
 **Workflow Changes**:
+
 1. **Start training** (`POST /training/start`):
    - Generate session_id
    - Create operation with ID = `f"host_training_{session_id}"`
@@ -813,6 +882,7 @@ from ktrdr.api.services.operations_service import (
    - On failure: Call `ops_service.fail_operation(operation_id, error)`
 
 **Acceptance Criteria**:
+
 - [ ] Training start creates operation in host's OperationsService
 - [ ] Operation ID format: `host_training_{session_id}` (consistent naming)
 - [ ] Bridge created and registered before worker starts
@@ -829,15 +899,18 @@ from ktrdr.api.services.operations_service import (
 **Objective**: Create HTTP client for querying OperationsService on host services from backend.
 
 **Scope**:
+
 - Create proxy class wrapping httpx client
 - Implement methods matching operations API endpoints
 - Handle errors (404, timeouts, connection failures)
 - Ensure proxy can be shared across adapters (training, data, etc.)
 
 **Files Created**:
+
 - `ktrdr/api/services/adapters/operation_service_proxy.py`
 
 **Methods to Implement**:
+
 - `__init__(base_url: str)` - Initialize with host service URL
 - `async def get_operation(operation_id: str, force_refresh: bool = False) -> dict`
 - `async def get_metrics(operation_id: str, cursor: int = 0) -> tuple[list[dict], int]`
@@ -845,12 +918,14 @@ from ktrdr.api.services.operations_service import (
 - `async def close()` - Cleanup HTTP client
 
 **Error Handling**:
+
 - 404 → Raise KeyError (operation not found)
 - Connection errors → Log and raise
 - Timeouts → Log and raise
 - Invalid JSON → Log and raise
 
 **Acceptance Criteria**:
+
 - [ ] Proxy uses httpx.AsyncClient for HTTP requests
 - [ ] Proxy constructs correct URLs: `{base_url}/api/v1/operations/...`
 - [ ] `get_operation()` includes force_refresh query param
@@ -870,23 +945,27 @@ from ktrdr.api.services.operations_service import (
 **Objective**: Enable backend OperationsService to refresh operations from host services via proxy.
 
 **Scope**:
+
 - Implement `_refresh_from_remote_proxy()` method (stub in M1)
 - Query host service for operation state
 - Query host service for incremental metrics
 - Update backend operation with remote data
 
 **Files Modified**:
+
 - `ktrdr/api/services/operations_service.py`
 
 **Method Implementation**:
 
 **Cursor Management**:
+
 - Backend (consumer) tracks cursor per operation
 - Backend passes cursor to host when querying metrics
 - Host/bridge returns delta (metrics since cursor)
 - Backend updates cursor with new value from response
 
 `_refresh_from_remote_proxy(operation_id: str)`:
+
 ```python
 async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
     """Pull state from host service via proxy."""
@@ -930,6 +1009,7 @@ async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
 **Key Point**: Backend maintains cursor and passes it to host. Host service queries bridge with cursor and returns delta.
 
 **Acceptance Criteria**:
+
 - [ ] Method calls proxy to fetch operation state
 - [ ] Method calls proxy to fetch incremental metrics
 - [ ] Operation status and progress updated from remote data
@@ -950,14 +1030,17 @@ async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
 **Scope**: Same as 2.1-2.3 but for IB host service instead of training host service.
 
 **Files Created**:
+
 - `ib-host-service/endpoints/operations.py`
 - `ib-host-service/services/operations.py`
 
 **Files Modified**:
+
 - `ib-host-service/main.py`
 - `ib-host-service/data/session_manager.py` (or equivalent)
 
 **Acceptance Criteria**:
+
 - [ ] IB host service exposes `/operations/*` endpoints
 - [ ] IB host service creates operations for data loading
 - [ ] IB host service registers bridges
@@ -967,6 +1050,7 @@ async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
 ---
 
 ### M2 Exit Criteria
+
 - [ ] Training host service exposes `/operations/*` endpoints
 - [ ] IB host service exposes `/operations/*` endpoints
 - [ ] Both host services create operations and register bridges
@@ -982,15 +1066,19 @@ async def _refresh_from_remote_proxy(self, operation_id: str) -> None:
 ## M3: Host Training Pull Architecture - Convergence (4-6 days)
 
 ### Goal
+
 Achieve **code convergence**: Make host training use the SAME orchestrator as local training. Eliminate all internal polling.
 
 ### Context
+
 **Current Problem**:
+
 - `HostSessionManager.poll_session()` has internal `while True` loop (line 130-192 in `host_session.py`) that polls every 2-10 seconds
 - Different orchestration code for local vs host training
 - Backend tries to orchestrate remote training (architectural smell)
 
 **Solution**:
+
 - Host service runs **same TrainingOrchestrator** as local training (convergence!)
 - Backend registers OperationServiceProxy for client-driven queries
 - Completion discovered when clients query (no background monitor)
@@ -1006,12 +1094,14 @@ Achieve **code convergence**: Make host training use the SAME orchestrator as lo
 **Objective**: Make host training use the SAME TrainingOrchestrator as local training, running in host service. Backend simply registers proxy for client-driven progress queries.
 
 **Key Architectural Change**:
+
 - **Before**: Different orchestration for local vs host (HostSessionManager polling)
 - **After**: SAME orchestrator code runs in both places (local: backend process, host: host service process)
 
 **Scope**:
 
 **Part A - Host Service Uses TrainingOrchestrator**:
+
 - Host service already has TrainingOrchestrator available (shared code)
 - When `POST /training/start` is called on host service:
   - Create operation in host's OperationsService
@@ -1026,6 +1116,7 @@ Achieve **code convergence**: Make host training use the SAME orchestrator as lo
 **Key Principle**: When in host training mode, backend is a **transparent proxy** - it creates a local operation record but all state lives on the host.
 
 **Backend Operation Creation**:
+
 ```python
 async def _run_host_training(self, *, context: TrainingOperationContext) -> dict[str, Any]:
     """
@@ -1073,6 +1164,7 @@ async def _run_host_training(self, *, context: TrainingOperationContext) -> dict
 ```
 
 **Backend Query Flow**:
+
 ```python
 # When client queries backend:
 GET /operations/op_training_20250120_abc123
@@ -1133,6 +1225,7 @@ class OperationsService:
 ```
 
 **Part C - Client-Driven Completion Discovery**:
+
 - Clients (CLI, Web UI) query: `GET /operations/{backend_op_id}`
 - Backend's `get_operation()` calls `proxy.get_operation(host_op_id)` → HTTP to host
 - Host returns operation with current status
@@ -1143,6 +1236,7 @@ class OperationsService:
 - No polling task needed!
 
 **Explicit Lifecycle Acceptance Criteria**:
+
 - [ ] Host service DOES NOT push completion notification to backend
 - [ ] Host service DOES NOT poll backend to notify completion
 - [ ] Backend DOES NOT poll host service for completion
@@ -1155,6 +1249,7 @@ class OperationsService:
 - [ ] Integration test: Complete training on host, query backend once, verify operation marked COMPLETED
 
 **Part D - HealthService (DEFERRED TO POST-M5)**:
+
 - HealthService implementation deferred
 - Stuck/timeout operations may remain RUNNING indefinitely
 - Acceptable for M1-M5 scope
@@ -1164,6 +1259,7 @@ class OperationsService:
 Backend's initialization differs based on local vs host training:
 
 **Local Training Path**:
+
 ```python
 # Backend runs orchestrator in-process
 operation_id = ops_service.create_operation(...)
@@ -1176,6 +1272,7 @@ return operation_id
 ```
 
 **Host Training Path**:
+
 ```python
 # Backend proxies requests to host service
 operation_id = ops_service.create_operation(...)
@@ -1192,27 +1289,32 @@ return operation_id  # Returns immediately (no orchestrator!)
 ```
 
 **Key Difference**:
+
 - **Local**: Backend creates orchestrator, bridge, runs training
 - **Host**: Backend proxies (1) training start AND (2) operations queries
 - **Host orchestrator runs on host service**, not backend
 
 **Files Modified**:
+
 - `ktrdr/api/services/training_service.py` (backend - add routing logic)
 - `training-host-service/training/session_manager.py` (host service)
 
 **Existing Code to Remove**:
+
 - Backend: Lines 233-276: Entire HostSessionManager flow
 - Backend: Bridge creation for host training (lines 246-257)
 
 **Acceptance Criteria**:
 
 **Part A - Host Service**:
+
 - [ ] Host service uses TrainingOrchestrator (same as local)
 - [ ] Host service creates ProgressBridge and registers with host's OperationsService
 - [ ] Host worker calls `bridge.on_epoch()`, `bridge.on_batch()` (same as local)
 - [ ] Host orchestrator calls `host_ops_service.complete_operation()` on finish
 
 **Part B - Backend**:
+
 - [ ] `_run_host_training()` no longer creates HostSessionManager
 - [ ] `_run_host_training()` no longer creates TrainingProgressBridge
 - [ ] `_run_host_training()` no longer creates orchestrator
@@ -1225,12 +1327,14 @@ return operation_id  # Returns immediately (no orchestrator!)
 - [ ] Logging shows mapping: "backend_op → host_op"
 
 **Part C - Completion Discovery**:
+
 - [ ] Backend `get_operation()` pulls from host via proxy
 - [ ] When host operation completed, backend detects and marks complete
 - [ ] Backend fetches results from host
 - [ ] No background polling task exists
 
 **Part E - Backend Routing**:
+
 - [ ] Backend has routing logic to decide local vs host
 - [ ] Local path: Creates orchestrator, bridge, runs in-process
 - [ ] Host path: Proxies training start (HTTP), registers proxy (no orchestrator)
@@ -1239,6 +1343,7 @@ return operation_id  # Returns immediately (no orchestrator!)
 - [ ] Routing decision based on environment variable or config
 
 **Part F - Testing**:
+
 - [ ] Integration test: Local training uses orchestrator in backend
 - [ ] Integration test: Host training proxies to host service (no backend orchestrator)
 - [ ] Integration test: Start host training, verify orchestrator runs on HOST
@@ -1257,22 +1362,26 @@ return operation_id  # Returns immediately (no orchestrator!)
 **Objective**: Mark `/training/status/{session_id}` as deprecated, redirect to `/operations/*`.
 
 **Scope**:
+
 - Keep endpoint functional but add deprecation warning
 - Internally query OperationsService instead of custom logic
 - Return response in old format for compatibility
 - Add `deprecated: true` flag and migration guidance in response
 
 **Files Modified**:
+
 - `training-host-service/endpoints/training.py`
 
 **Endpoint Changes**:
 `GET /training/status/{session_id}`:
+
 - Map session_id to operation_id: `f"host_training_{session_id}"`
 - Query: `ops_service.get_operation(operation_id)`
 - Convert OperationInfo to old status format
 - Add fields: `"deprecated": true`, `"use_instead": "/operations/{operation_id}"`
 
 **Response Format** (backward compatible):
+
 ```json
 {
   "session_id": "abc123",
@@ -1284,6 +1393,7 @@ return operation_id  # Returns immediately (no orchestrator!)
 ```
 
 **Acceptance Criteria**:
+
 - [ ] Endpoint still functional (no breaking changes)
 - [ ] Endpoint queries OperationsService internally
 - [ ] Response includes deprecation warning
@@ -1299,19 +1409,23 @@ return operation_id  # Returns immediately (no orchestrator!)
 **Objective**: Mark method as deprecated since custom status endpoint is being phased out.
 
 **Scope**:
+
 - Add deprecation warning to method
 - Update docstring with migration guidance
 - Method still works (calls old endpoint) for compatibility
 
 **Files Modified**:
+
 - `ktrdr/training/training_adapter.py`
 
 **Changes**:
+
 - Add decorator: `@deprecated("Use OperationServiceProxy.get_operation() instead")`
 - Update docstring explaining migration
 - Keep implementation (still calls `/training/status/{session_id}`)
 
 **Acceptance Criteria**:
+
 - [ ] Method has deprecation warning
 - [ ] Method still functional (no breaking changes)
 - [ ] Deprecation warning appears in logs when called
@@ -1327,15 +1441,18 @@ return operation_id  # Returns immediately (no orchestrator!)
 **Objective**: Provide test guide for human to validate host training with pull-based architecture.
 
 **Scope**:
+
 - Document test scenarios for human to execute manually
 - Document what to verify at each step
 - Document how to verify two-level caching
 - Document how to verify no internal polling
 
 **Files Created**:
+
 - `docs/testing/e2e-host-training-pull.md` (test guide for human)
 
 **Test Scenarios to Document**:
+
 1. **Start Host Training**:
    - Ensure training host service is running
    - Command: `ktrdr models train --strategy test_strategy.yaml --symbols AAPL --timeframes 1d`
@@ -1391,6 +1508,7 @@ return operation_id  # Returns immediately (no orchestrator!)
    - Verify: Response includes migration guidance
 
 **Acceptance Criteria**:
+
 - [ ] Test guide document created with all scenarios
 - [ ] Each scenario has clear commands and log checks
 - [ ] Document explains two-level caching flow
@@ -1404,6 +1522,7 @@ return operation_id  # Returns immediately (no orchestrator!)
 ### M3 Exit Criteria
 
 **Code Convergence**:
+
 - [ ] Host service uses **same TrainingOrchestrator** as local training
 - [ ] Host service uses **same ProgressBridge** as local training
 - [ ] Host service uses **same worker code** (calls bridge.on_epoch(), etc.)
@@ -1411,6 +1530,7 @@ return operation_id  # Returns immediately (no orchestrator!)
 - [ ] Local and host differ ONLY in location (backend process vs host service process)
 
 **Backend Changes**:
+
 - [ ] HostSessionManager no longer used (deleted)
 - [ ] `_run_host_training()` registers OperationServiceProxy (not orchestrator)
 - [ ] `_run_host_training()` returns immediately (no waiting, no monitoring)
@@ -1418,16 +1538,19 @@ return operation_id  # Returns immediately (no orchestrator!)
 - [ ] Backend has NO completion monitor (client-driven discovery)
 
 **Completion Flow**:
+
 - [ ] Client queries trigger completion discovery (no background polling)
 - [ ] Backend detects completion when pulling from host via proxy
 - [ ] Backend fetches results from host when complete
 - [ ] HealthService is ONLY background task (external monitoring, 60s interval)
 
 **Deprecation**:
+
 - [ ] Custom `/training/status/{session_id}` deprecated but functional
 - [ ] `TrainingAdapter.get_training_status()` deprecated but functional
 
 **Quality Gates**:
+
 - [ ] No internal polling loops anywhere (verified via async task inspection)
 - [ ] Backend queries host service via OperationServiceProxy
 - [ ] Two-level caching working (backend → host → bridge)
@@ -1436,6 +1559,7 @@ return operation_id  # Returns immediately (no orchestrator!)
 - [ ] **HUMAN has executed E2E test and confirmed all scenarios pass**
 
 **Success Indicators**:
+
 - Same code, different location (convergence achieved)
 - Client-driven progress and completion (no polling)
 - Clean separation: host runs orchestrator, backend registers proxy
@@ -1445,9 +1569,11 @@ return operation_id  # Returns immediately (no orchestrator!)
 ## M4: Data Loading Progress (3-4 days)
 
 ### Goal
+
 Extend pull-based pattern to data loading operations (generalize the architecture).
 
 ### Context
+
 **Current**: Data loading may not have consistent progress reporting.
 
 **New**: Apply same pull-based pattern using DataLoadingProgressBridge.
@@ -1463,30 +1589,36 @@ Extend pull-based pattern to data loading operations (generalize the architectur
 **Objective**: Create progress bridge for data loading domain using same pull interface.
 
 **Scope**:
+
 - Create bridge implementing ProgressBridgeBase
 - Define data loading specific progress events (symbol_progress, rows_loaded, etc.)
 - Store state and metrics for data loading
 
 **Files Created**:
+
 - `ktrdr/data/data_loading_progress_bridge.py`
 
 **Progress Events to Support**:
+
 - `on_symbol_started(symbol, symbol_index, total_symbols)`
 - `on_symbol_progress(symbol, rows_loaded, total_rows_estimate)`
 - `on_symbol_completed(symbol, rows_loaded, duration)`
 - `on_validation(step, message)` (e.g., "Validating symbol format")
 
 **State Fields**:
+
 - percentage (based on symbols completed / total symbols)
 - current_step (e.g., "Loading AAPL (2/5)")
 - rows_loaded (cumulative)
 - current_symbol
 
 **Metrics to Store**:
+
 - Per-symbol metrics: symbol, rows_loaded, duration, validation_time
 - Aggregate metrics: total_rows_loaded, symbols_completed
 
 **Acceptance Criteria**:
+
 - [ ] Bridge inherits from ProgressBridgeBase
 - [ ] `get_state()` returns current data loading state
 - [ ] `get_metrics(cursor)` returns per-symbol metrics incrementally
@@ -1503,6 +1635,7 @@ Extend pull-based pattern to data loading operations (generalize the architectur
 **Objective**: Modify data loading flow to create operation and register bridge.
 
 **Scope**:
+
 - When data loading starts, create operation
 - Create DataLoadingProgressBridge
 - Register bridge with OperationsService
@@ -1510,10 +1643,12 @@ Extend pull-based pattern to data loading operations (generalize the architectur
 - Mark operation complete/failed when done
 
 **Files Modified**:
+
 - `ktrdr/data/data_manager.py`
 - `ktrdr/data/data_loader.py` (or wherever loading logic lives)
 
 **Workflow**:
+
 1. `load_historical_data()` called
 2. Create operation (type=DATA_LOADING)
 3. Create DataLoadingProgressBridge
@@ -1523,6 +1658,7 @@ Extend pull-based pattern to data loading operations (generalize the architectur
 7. Mark operation complete with result summary (rows loaded, duration, etc.)
 
 **Acceptance Criteria**:
+
 - [ ] Data loading creates operation before starting
 - [ ] Bridge created and registered with operations service
 - [ ] Worker receives bridge reference (not callback)
@@ -1542,14 +1678,17 @@ Extend pull-based pattern to data loading operations (generalize the architectur
 **Objective**: Provide test guide for human to validate data loading with pull-based progress.
 
 **Scope**:
+
 - Document test scenarios for human to execute manually
 - Document what to verify for data loading progress
 - Document metrics verification
 
 **Files Created**:
+
 - `docs/testing/e2e-data-loading-pull.md` (test guide for human)
 
 **Test Scenarios to Document**:
+
 1. **Start Data Loading**:
    - Command: `ktrdr data load AAPL 1d --start-date 2024-01-01 --end-date 2024-12-31`
    - Verify: Operation created, operation_id returned, status=running
@@ -1584,6 +1723,7 @@ Extend pull-based pattern to data loading operations (generalize the architectur
    - Verify bridge overhead is low (worker performance)
 
 **Acceptance Criteria**:
+
 - [ ] Test guide document created with all scenarios
 - [ ] Each scenario has clear commands
 - [ ] Document explains data loading specific progress fields
@@ -1594,6 +1734,7 @@ Extend pull-based pattern to data loading operations (generalize the architectur
 ---
 
 ### M4 Exit Criteria
+
 - [ ] DataLoadingProgressBridge created
 - [ ] DataManager creates operations and registers bridges
 - [ ] Data loading progress visible to clients
@@ -1608,10 +1749,13 @@ Extend pull-based pattern to data loading operations (generalize the architectur
 ## M5: Production Readiness (2-3 days)
 
 ### Goal
+
 Optimize, clean up, document, and prepare for production deployment.
 
 ### Context
+
 All functionality working. Now focus on:
+
 - Performance optimization
 - Code cleanup (remove deprecated code)
 - Documentation
@@ -1624,6 +1768,7 @@ All functionality working. Now focus on:
 **Objective**: Validate performance targets and optimize if needed.
 
 **Scope**:
+
 - Benchmark worker overhead (on_epoch, on_batch, etc.)
 - Benchmark cache hit latency
 - Benchmark cache miss latency (local and remote)
@@ -1631,6 +1776,7 @@ All functionality working. Now focus on:
 - Optimize hot paths if needed
 
 **Performance Targets**:
+
 - Worker callback overhead: <1μs average
 - Cache hit query: <1ms
 - Cache miss local query: <10ms
@@ -1638,10 +1784,12 @@ All functionality working. Now focus on:
 - Cache hit rate: >90% (measure with real workload)
 
 **Files Created**:
+
 - `tests/performance/test_bridge_overhead.py`
 - `tests/performance/test_cache_performance.py`
 
 **Acceptance Criteria**:
+
 - [ ] Benchmark tests written and passing
 - [ ] Worker overhead measured: <1μs confirmed
 - [ ] Cache hit latency measured: <1ms confirmed
@@ -1658,24 +1806,30 @@ All functionality working. Now focus on:
 **Objective**: Remove old polling code and deprecated endpoints.
 
 **Scope**:
+
 - Remove HostSessionManager class (replaced by proxy pattern)
 - Remove broken metrics_callback code
 - Remove custom host service polling logic
-- Keep deprecated endpoints for now (full removal later)
+- Remove deprecated endpoints
 
 **Files to Delete**:
+
 - `ktrdr/api/services/training/host_session.py`
 
 **Files to Modify** (remove sections):
+
 - `ktrdr/api/services/operations_service.py`:
   - Remove `_update_training_operation_from_host_service()` (lines 561-723)
   - Remove any custom polling logic
+  - Remove deprecated endpoints
 
 **Files to Verify Clean**:
+
 - `ktrdr/api/services/training/progress_bridge.py` - no metrics_callback references
 - `ktrdr/api/services/training_service.py` - no HostSessionManager imports
 
 **Acceptance Criteria**:
+
 - [ ] HostSessionManager file deleted
 - [ ] No imports of HostSessionManager anywhere
 - [ ] No references to `_update_training_operation_from_host_service`
@@ -1690,6 +1844,7 @@ All functionality working. Now focus on:
 **Objective**: Document the new architecture for developers and operators.
 
 **Scope**:
+
 - Update CLAUDE.md with pull-based architecture
 - Create architecture diagrams
 - Document operations API
@@ -1720,6 +1875,7 @@ All functionality working. Now focus on:
    - How to add progress tracking to existing operations
 
 **Acceptance Criteria**:
+
 - [ ] CLAUDE.md updated with pull-based architecture
 - [ ] Architecture diagrams created
 - [ ] API documentation complete
@@ -1734,12 +1890,14 @@ All functionality working. Now focus on:
 **Objective**: Add monitoring for operations service health and performance.
 
 **Scope**:
+
 - Add metrics collection to OperationsService
 - Add logging for cache behavior
 - Add performance warnings for slow queries
 - Create monitoring dashboard (optional)
 
 **Metrics to Collect**:
+
 - Cache hits / cache misses (per operation type)
 - Cache hit rate percentage
 - Refresh duration (local vs remote)
@@ -1748,14 +1906,17 @@ All functionality working. Now focus on:
 - Metrics pull size (bytes per cursor increment)
 
 **Logging to Add**:
+
 - Cache refresh events (debug level)
 - Slow queries (>100ms - warning level)
 - Proxy errors (error level)
 
 **Files Modified**:
+
 - `ktrdr/api/services/operations_service.py`
 
 **Acceptance Criteria**:
+
 - [ ] Metrics class created with counters
 - [ ] OperationsService updates metrics on each operation
 - [ ] Cache hit rate calculation available
@@ -1769,6 +1930,7 @@ All functionality working. Now focus on:
 ### M5 Exit Criteria
 
 **Code Quality**:
+
 - [ ] Performance benchmarks passing
 - [ ] Deprecated code removed
 - [ ] Documentation complete and reviewed
@@ -1779,12 +1941,14 @@ All functionality working. Now focus on:
 - [ ] Ready for production rollout
 
 **Known Limitations** (Post-M5 Roadmap):
+
 - [ ] No automatic timeout detection - operations may stay RUNNING indefinitely if not queried
 - [ ] No stuck detection - Doctor service will handle this later
 - [ ] No alerting - monitoring is observability only (logs, metrics)
 - [ ] NO polling tasks exist anywhere in backend (verified)
 
 **Acceptance**:
+
 - [ ] Team acknowledges operations can stay RUNNING forever without client queries
 - [ ] Doctor service implementation planned for post-M5 milestone
 - [ ] HealthService deferred to post-M5
@@ -1794,6 +1958,7 @@ All functionality working. Now focus on:
 ## Dependencies & Risks
 
 ### Critical Path
+
 ```
 M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
        ↓
@@ -1801,66 +1966,82 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 ```
 
 **Parallel Work**:
+
 - M4 can start after M1 completes (doesn't need M2/M3)
 - M2 tasks 2.1-2.3 (training) and 2.6 (IB) can be done in parallel
 
 ### Dependencies
 
 **M1 depends on**:
+
 - None (starting point)
 
 **M2 depends on**:
+
 - M1 complete (ProgressBridgeBase and pull pattern proven)
 
 **M3 depends on**:
+
 - M2 complete (/operations/* API available on host services)
 
 **M4 depends on**:
+
 - M1 complete (pull pattern proven)
 - Does NOT depend on M2/M3 (can run in parallel)
 
 **M5 depends on**:
+
 - M3 complete (host training working)
 - M4 complete (data loading working)
 
 ### Risks
 
 #### Risk 1: Performance Regression
+
 **Impact**: High
 **Probability**: Medium
 **Mitigation**:
+
 - Benchmark in M1 before proceeding
 - Performance tests in M5
 - Rollback plan ready
 
 #### Risk 2: Unexpected Code Differences
+
 **Impact**: Medium
 **Probability**: Medium
 **Mitigation**:
+
 - M0 analysis identifies actual code structure
 - Developer has flexibility in HOW to implement
 - Acceptance criteria focus on outcomes, not implementation
 
 #### Risk 3: Host Service Downtime During Deployment
+
 **Impact**: Medium
 **Probability**: Low
 **Mitigation**:
+
 - M2 adds new endpoints without removing old ones
 - Gradual cutover in M3
 - Deprecated endpoints kept functional temporarily
 
 #### Risk 4: Cache Bugs
+
 **Impact**: High (stale data)
 **Probability**: Low
 **Mitigation**:
+
 - Extensive unit tests for cache logic (M1)
 - TTL configurable
 - Force refresh available for debugging
 
 #### Risk 5: Two-Level Cache Complexity
+
 **Impact**: Medium (debugging difficulty)
 **Probability**: Medium
 **Mitigation**:
+
 - Clear logging at both levels
 - Monitoring metrics for cache behavior
 - Documentation with troubleshooting guide
@@ -1870,6 +2051,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 ## Success Criteria
 
 ### Functional Success
+
 - [ ] No "no running event loop" errors in logs
 - [ ] Metrics stored correctly during training (M2 bug fixed)
 - [ ] Local and host training have same client experience
@@ -1877,6 +2059,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 - [ ] All operations queryable via standard /operations/* API
 
 ### Architectural Success
+
 - [ ] NO internal polling loops anywhere
 - [ ] NO async callbacks from worker threads
 - [ ] NO custom status endpoints (all use /operations/*)
@@ -1884,6 +2067,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 - [ ] ProgressBridgeBase pattern reusable for all operation types
 
 ### Performance Success
+
 - [ ] Worker overhead <1μs per callback
 - [ ] Cache hit queries <1ms
 - [ ] Cache miss local <10ms
@@ -1891,6 +2075,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 - [ ] Cache hit rate >90%
 
 ### Operational Success
+
 - [ ] All tests passing (100% pass rate)
 - [ ] No regression in existing functionality
 - [ ] Monitoring and alerting in place
@@ -1907,6 +2092,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 **Version 8.0 Changes (Consistency + Completeness)**:
 
 **M1 Revisions**:
+
 - **NEW Task 1.4**: Added simple TTL cache implementation (was deferred, now included in M1)
 - Task renumbering: E2E test guide moved from 1.4 to 1.5
 - M1 Key Decisions: Updated to reflect cache inclusion
@@ -1914,6 +2100,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 - Rationale: Cache is essential for performance with multiple clients, simple to implement (~50 LOC)
 
 **Architecture Alignment**:
+
 - Design Doc §4.1: Removed thread safety implementation details (moved to Architecture)
 - Architecture Doc §4.1: Updated ProgressBridge from abstract to concrete class
 - Architecture Doc §4.1: Updated thread safety model to use RLock (explicit locking)
@@ -1921,10 +2108,12 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 - Architecture Doc §5.4: Added two-level caching explanation (bridge=L1, TTL=L2)
 
 **M2 Revisions**:
+
 - Task 2.5: Added cursor management implementation details
 - Clarified: Backend tracks cursor, passes to host/bridge for delta queries
 
 **M3 Revisions**:
+
 - **Task 3.1 Part B**: Complete rewrite with operation ID mapping details
 - Added: Backend stores BOTH operation IDs (backend + host)
 - Added: `register_remote_proxy()` signature with three parameters
@@ -1935,6 +2124,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 - **Part F**: Added integration tests for ID mapping
 
 **M5 Revisions**:
+
 - Added "Known Limitations" section to exit criteria
 - Documented: No timeout detection, no stuck detection (deferred to Doctor service)
 - Acceptance: Team acknowledges operations may stay RUNNING indefinitely
@@ -1942,6 +2132,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 **Version 7.0 Changes (M1 + M3 Revisions)**:
 
 **M1 Revisions**:
+
 - Task 1.1: Changed from abstract ProgressBridgeBase to concrete ProgressBridge class (scenario-independent)
 - Task 1.2: Removed push mechanism immediately (no dual push/pull), pull-only from start
 - Task 1.3: Combined old tasks 1.3 (cache) + 1.4 (registration) into single task focused on registry + wiring
@@ -1951,6 +2142,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 - Strategy: Pull-only architecture from day one, cleaner implementation, faster to MVP
 
 **M3 Revisions**:
+
 - **DELETED Task 3.2**: Removed completion monitor (violated "no polling" principle)
 - **Task 3.1 Rewritten**: Focus on convergence - host uses SAME orchestrator as local
 - **Completion Discovery**: Client-driven (no background polling), backend discovers when pulling from host
@@ -1966,6 +2158,7 @@ M1 (Local Pull) → M2 (Host API) → M3 (Host Pull) → M5 (Production)
 ## Important Notes
 
 ### E2E Testing Responsibility
+
 **⚠️ HUMAN EXECUTES ALL E2E TESTS**
 
 This plan includes E2E test guide tasks where the AI creates documentation for the human to execute tests manually. The AI does NOT write or execute E2E tests. Each E2E test guide task is clearly marked with:
@@ -1975,6 +2168,7 @@ This plan includes E2E test guide tasks where the AI creates documentation for t
 ```
 
 The AI's responsibility is to:
+
 1. Create test guide documentation (`docs/testing/e2e-*.md`)
 2. Document test scenarios with clear commands
 3. Document verification steps
@@ -1982,6 +2176,7 @@ The AI's responsibility is to:
 5. Document troubleshooting
 
 The human's responsibility is to:
+
 1. Read the test guide
 2. Execute the test scenarios
 3. Verify outcomes match expectations

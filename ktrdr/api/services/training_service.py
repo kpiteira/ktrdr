@@ -243,7 +243,7 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
 
         Architecture:
         - NO bridge creation (bridge lives on host service)
-        - NO HostSessionManager (no backend polling)
+        - NO backend polling (client-driven pull architecture)
         - Backend operation ID != Host operation ID (mapped via proxy)
         """
         # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
@@ -327,27 +327,6 @@ class TrainingService(ServiceOrchestrator[TrainingAdapter | None]):
             "status": "started",
             "message": f"Training started on host service (session: {session_id})",
         }
-
-    async def cancel_training_session(
-        self, session_id: str, reason: Optional[str] = None
-    ) -> dict[str, Any]:
-        """Cancel a training session via TrainingManager."""
-        if not self.is_using_host_service():
-            raise ValidationError("Host training service is not enabled")
-
-        # Type assertion: adapter is guaranteed to be TrainingAdapter in host service mode
-        assert (
-            self.adapter is not None
-        ), "Adapter should not be None in host service mode"
-
-        try:
-            logger.info(f"Cancelling training session {session_id} (reason: {reason})")
-            result = await self.adapter.stop_training(session_id)
-            logger.info(f"Training session {session_id} cancelled successfully")
-            return result
-        except Exception as e:
-            logger.error(f"Failed to cancel training session {session_id}: {str(e)}")
-            raise
 
     async def get_model_performance(self, task_id: str) -> dict[str, Any]:
         """Get detailed performance metrics for completed training."""

@@ -51,15 +51,6 @@ class TrainingStartRequest(BaseModel):
     )
 
 
-class TrainingStopRequest(BaseModel):
-    """Request to stop a training session."""
-
-    session_id: str = Field(description="Session ID to stop")
-    save_checkpoint: bool = Field(
-        default=True, description="Whether to save final checkpoint"
-    )
-
-
 class TrainingStatusResponse(BaseModel):
     """Training session status response."""
 
@@ -172,116 +163,6 @@ async def start_training(request: TrainingStartRequest):
             raise HTTPException(
                 status_code=500, detail=f"Failed to start training: {str(e)}"
             ) from e
-
-
-@router.post("/stop")
-async def stop_training(request: TrainingStopRequest):
-    """
-    Stop a running training session.
-
-    Gracefully stops the training session, optionally saves a checkpoint,
-    and releases GPU resources.
-    """
-    try:
-        service = get_service()
-
-        # Stop the training session
-        await service.stop_session(request.session_id, request.save_checkpoint)
-
-        logger.info(f"Training session {request.session_id} stopped successfully")
-
-        return {
-            "session_id": request.session_id,
-            "status": "stopped",
-            "message": f"Training session {request.session_id} stopped successfully",
-            "checkpoint_saved": request.save_checkpoint,
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to stop training session {request.session_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to stop training: {str(e)}"
-        ) from e
-
-
-@router.get("/status/{session_id}")
-async def get_training_status(session_id: str):
-    """
-    Get the status of a training session.
-
-    **DEPRECATED**: This endpoint is deprecated. Use `/api/v1/operations/{operation_id}`
-    instead for standardized operations API.
-
-    Returns detailed information about the training progress,
-    metrics, and resource usage for ALL session states (initializing,
-    running, completed, failed).
-
-    TASK 3.2: This endpoint is deprecated but remains functional for backward compatibility.
-    It internally queries OperationsService and converts the response to the legacy format.
-
-    TASK 3.3: This endpoint always returns status/progress format.
-    Use GET /result/{session_id} to retrieve final training results.
-
-    Args:
-        session_id: Training session ID
-
-    Returns:
-        dict: Status response in legacy format with deprecation warnings
-
-    Raises:
-        404: Session not found
-        500: Internal server error
-    """
-    try:
-        from services.operations import get_operations_service
-
-        service = get_service()
-
-        # Get session directly (bypassing get_session_status to avoid result format)
-        session = service.sessions.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-
-        # TASK 3.2: Map session_id to operation_id (consistent naming convention)
-        operation_id = f"host_training_{session_id}"
-
-        # TASK 3.2: Query OperationsService for validation/integration
-        # (In future, we could use this to sync state, for now just verify it exists)
-        try:
-            ops_service = get_operations_service()
-            # Verify operation exists (don't fail if it doesn't for backward compat)
-            await ops_service.get_operation(operation_id)
-        except Exception as e:
-            # Log warning but don't fail - maintain backward compatibility
-            logger.warning(
-                f"Could not query OperationsService for operation {operation_id}: {e}"
-            )
-
-        # Build response in legacy format (backward compatibility)
-        response_data = {
-            "session_id": session_id,
-            "status": session.status,
-            "progress": session.get_progress_dict(),
-            "metrics": {"current": session.metrics, "best": session.best_metrics},
-            "gpu_usage": session.get_resource_usage(),
-            "start_time": session.start_time.isoformat(),
-            "last_updated": session.last_updated.isoformat(),
-            "error": session.error,
-            # TASK 3.2: Add deprecation warning
-            "deprecated": True,
-            # TASK 3.2: Add migration guidance
-            "use_instead": f"/api/v1/operations/{operation_id}",
-        }
-
-        return response_data
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get status for session {session_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get training status: {str(e)}"
-        ) from e
 
 
 @router.get("/result/{session_id}")

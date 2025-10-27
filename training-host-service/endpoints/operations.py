@@ -279,3 +279,95 @@ async def list_operations(
             status_code=500,
             detail=f"Failed to list operations: {str(e)}",
         ) from e
+
+
+@router.delete(
+    "/operations/{operation_id}/cancel",
+    summary="Cancel operation",
+    description="""
+    Cancel a running operation.
+
+    This endpoint cancels an operation and stops any associated background tasks.
+    For training operations, this also stops the training session.
+    """,
+)
+async def cancel_operation(
+    operation_id: str = Path(..., description="Unique operation identifier"),
+    reason: Optional[str] = Query(None, description="Cancellation reason"),
+    operations_service: OperationsService = Depends(get_operations_service),
+) -> dict:
+    """
+    Cancel a running operation.
+
+    For training operations (operation_id starts with "host_training_"),
+    this extracts the session_id and calls training_service.stop_session()
+    to actually stop the training, then cancels the operation.
+
+    Args:
+        operation_id: Unique identifier for the operation
+        reason: Optional reason for cancellation
+
+    Returns:
+        dict: Cancellation result
+
+    Raises:
+        404: Operation not found
+        500: Cancellation failed
+    """
+    try:
+        logger.info(
+            f"Cancelling operation: {operation_id}, reason: {reason or 'No reason provided'}"
+        )
+
+        # For training operations, stop the training session first
+        if operation_id.startswith("host_training_"):
+            # Extract session_id from operation_id
+            # Format: "host_training_{session_id}"
+            session_id = operation_id.replace("host_training_", "", 1)
+
+            logger.info(
+                f"Training operation detected - stopping training session: {session_id}"
+            )
+
+            try:
+                # Get training service and stop the session
+                from services.training_service import get_training_service
+
+                training_service = get_training_service()
+                await training_service.stop_session(
+                    session_id, save_checkpoint=False  # Don't save checkpoint on cancel
+                )
+
+                logger.info(
+                    f"Successfully stopped training session: {session_id}"
+                )
+            except Exception as e:
+                # Log but don't fail - still cancel the operation
+                logger.warning(
+                    f"Failed to stop training session {session_id}: {e}"
+                )
+
+        # Cancel the operation
+        result = await operations_service.cancel_operation(operation_id, reason)
+
+        logger.info(f"Successfully cancelled operation: {operation_id}")
+
+        return {
+            "success": True,
+            "data": result,
+        }
+
+    except KeyError as e:
+        logger.warning(f"Operation not found: {operation_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Operation not found: {operation_id}",
+        ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling operation: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel operation: {str(e)}",
+        ) from e

@@ -51,6 +51,7 @@ class OperationServiceProxy:
     Endpoints:
     - GET /api/v1/operations/{operation_id}?force_refresh=bool
     - GET /api/v1/operations/{operation_id}/metrics?cursor=int
+    - DELETE /api/v1/operations/{operation_id}/cancel
     """
 
     def __init__(
@@ -209,6 +210,63 @@ class OperationServiceProxy:
             raise
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             logger.error(f"Connection error querying metrics for {operation_id}: {e}")
+            raise
+
+    async def cancel_operation(
+        self,
+        operation_id: str,
+        reason: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Cancel an operation on the host service.
+
+        Args:
+            operation_id: Operation identifier on host service
+            reason: Optional cancellation reason
+
+        Returns:
+            dict: Cancellation result from host service
+
+        Raises:
+            KeyError: If operation not found (HTTP 404)
+            httpx.ConnectError: If connection to host service fails
+            httpx.TimeoutException: If request times out
+        """
+        url = f"{self.base_url}/api/v1/operations/{operation_id}/cancel"
+
+        logger.debug(f"DELETE operation: operation_id={operation_id}, reason={reason}")
+
+        client = self._get_client()
+
+        try:
+            # httpx DELETE doesn't support json= parameter, but we can pass reason as query param
+            # or use content= with manual JSON serialization if body is needed
+            # For now, pass reason as query parameter
+            params = {}
+            if reason:
+                params["reason"] = reason
+
+            response = await client.delete(url, params=params)
+
+            # Handle 404 -> KeyError
+            if response.status_code == 404:
+                logger.warning(f"Operation not found: {operation_id}")
+                raise KeyError(f"Operation not found: {operation_id}")
+
+            # Raise for other HTTP errors
+            response.raise_for_status()
+
+            # Unwrap response
+            response_data = response.json()
+            if isinstance(response_data, dict) and "data" in response_data:
+                return response_data["data"]
+            return response_data
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error cancelling operation {operation_id}: {e}")
+            raise
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            logger.error(f"Connection error cancelling operation {operation_id}: {e}")
             raise
 
     async def close(self) -> None:

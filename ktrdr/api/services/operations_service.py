@@ -320,45 +320,27 @@ class OperationsService:
                     cancelled_task = True
                 del self._operation_tasks[operation_id]
 
-            # For training operations, also cancel the host service session
-            training_session_cancelled = False
-            if operation.operation_type == OperationType.TRAINING:
-                logger.info(
-                    f"Training cancellation requested for operation {operation_id} - reason: {reason or 'No reason provided'}"
-                )
+            # M3: For operations with remote proxies, cancel via proxy (same pattern as refresh)
+            remote_cancelled = False
+            remote_proxy_info = self._get_remote_proxy(operation_id)
+            if remote_proxy_info:
+                try:
+                    proxy, host_operation_id = remote_proxy_info
 
-                session_id = None
-                if (
-                    hasattr(operation.metadata, "parameters")
-                    and operation.metadata.parameters
-                ):
-                    session_id = operation.metadata.parameters.get("session_id")
+                    logger.info(
+                        f"Cancelling remote operation via proxy: {host_operation_id} (backend: {operation_id})"
+                    )
 
-                if session_id:
-                    try:
-                        logger.info(
-                            f"Sending cancellation request to training host service for session {session_id}"
-                        )
-                        # Get training service to cancel the session
-                        from ktrdr.api.services.training_service import (
-                            get_training_service,
-                        )
+                    # Cancel on host service using the same proxy we use for get_operation
+                    await proxy.cancel_operation(host_operation_id, reason)
+                    remote_cancelled = True
 
-                        training_service = get_training_service()
-                        await training_service.cancel_training_session(
-                            session_id, reason
-                        )
-                        training_session_cancelled = True
-                        logger.info(
-                            f"Successfully sent cancellation to training host service for session {session_id}"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to cancel training session {session_id}: {e}"
-                        )
-                else:
-                    logger.warning(
-                        f"No session_id found for training operation {operation_id} - cannot cancel host service"
+                    logger.info(
+                        f"Successfully cancelled remote operation: {host_operation_id}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to cancel remote operation {host_operation_id}: {e}"
                     )
 
             # Update operation status
@@ -367,7 +349,7 @@ class OperationsService:
             operation.error_message = reason or "Operation cancelled by user"
 
             logger.info(
-                f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, training_session_cancelled: {training_session_cancelled})"
+                f"Cancelled operation: {operation_id} (task_cancelled: {cancelled_task}, remote_cancelled: {remote_cancelled})"
             )
 
             return {
@@ -377,7 +359,7 @@ class OperationsService:
                 "cancelled_at": operation.completed_at.isoformat(),
                 "cancellation_reason": reason,
                 "task_cancelled": cancelled_task,
-                "training_session_cancelled": training_session_cancelled,
+                "remote_cancelled": remote_cancelled,
             }
 
     async def get_operation(
@@ -418,10 +400,7 @@ class OperationsService:
                 self._refresh_from_bridge(operation_id)
 
             # TASK 2.5: Pull from remote proxy if registered and operation still running
-            if (
-                operation.status == OperationStatus.RUNNING
-                and operation_id in self._remote_proxies
-            ):
+            if operation.status == OperationStatus.RUNNING and self._get_remote_proxy(operation_id):
                 # Force refresh bypasses cache
                 if force_refresh:
                     # Invalidate cache to force refresh
@@ -432,29 +411,6 @@ class OperationsService:
 
                 # Refresh from remote host service (async, cache-aware)
                 await self._refresh_from_remote_proxy(operation_id)
-
-            # For training operations, query host service for live status
-            # (This legacy code remains for backward compatibility, will be removed in M3)
-            if (
-                operation.operation_type == OperationType.TRAINING
-                and operation.status == OperationStatus.RUNNING
-            ):
-                try:
-                    # Get training host service status
-                    updated_operation = (
-                        await self._update_training_operation_from_host_service(
-                            operation
-                        )
-                    )
-                    if updated_operation:
-                        # Update the stored operation with live data
-                        self._operations[operation_id] = updated_operation
-                        return updated_operation
-                except Exception as e:
-                    logger.debug(
-                        f"Failed to get live training status for {operation_id}: {e}"
-                    )
-                    # Fall through to return stored operation
 
             return operation
 
@@ -666,6 +622,25 @@ class OperationsService:
             f"host {host_operation_id}"
         )
 
+    def _get_remote_proxy(
+        self, operation_id: str
+    ) -> Optional[tuple[Any, str]]:
+        """
+        Get proxy and host operation ID for a remote operation.
+
+        This helper centralizes the mapping lookup logic to avoid duplication
+        across cancel, refresh, and other remote operation methods.
+
+        Args:
+            operation_id: Backend operation identifier
+
+        Returns:
+            tuple: (proxy, host_operation_id) if found, None otherwise
+        """
+        if operation_id not in self._remote_proxies:
+            return None
+        return self._remote_proxies[operation_id]
+
     def _refresh_from_bridge(self, operation_id: str) -> None:
         """
         Pull state and metrics from registered bridge with cache awareness (TASK 1.4).
@@ -761,10 +736,11 @@ class OperationsService:
             operation_id: Backend operation identifier
         """
         # Check if proxy registered
-        if operation_id not in self._remote_proxies:
+        remote_proxy_info = self._get_remote_proxy(operation_id)
+        if not remote_proxy_info:
             return
 
-        proxy, host_operation_id = self._remote_proxies[operation_id]
+        proxy, host_operation_id = remote_proxy_info
 
         # Check cache freshness (same pattern as local bridges)
         last_refresh = self._last_refresh.get(operation_id, 0)
@@ -845,170 +821,6 @@ class OperationsService:
             )
             # Don't raise - allow operation to continue with stale data
             # Client will retry on next query
-
-    async def _update_training_operation_from_host_service(
-        self, operation: OperationInfo
-    ) -> Optional[OperationInfo]:
-        """
-        Update training operation with live status from host service.
-
-        Args:
-            operation: Current operation info
-
-        Returns:
-            Updated operation info or None if update failed
-        """
-        try:
-            # Extract session ID from operation metadata or results
-            session_id = None
-            if (
-                hasattr(operation.metadata, "parameters")
-                and operation.metadata.parameters
-            ):
-                session_id = operation.metadata.parameters.get("session_id")
-
-            if (
-                not session_id
-                and hasattr(operation, "result_summary")
-                and operation.result_summary
-            ):
-                session_id = operation.result_summary.get("session_id")
-
-            if not session_id:
-                logger.debug(
-                    f"No session_id found for training operation {operation.operation_id}"
-                )
-                return None
-
-            # Get training adapter from TrainingService (singleton, already configured)
-            from ktrdr.api.services.training_service import get_training_service
-
-            training_service = get_training_service()
-            adapter = training_service.adapter
-
-            # Verify we're in host service mode
-            if adapter is None or not adapter.use_host_service:
-                logger.warning(
-                    f"Training operation {operation.operation_id} expected host service but not in host service mode"
-                )
-                return None
-
-            # Query host service status
-            status_data = await adapter.get_training_status(session_id)
-
-            host_status = status_data.get("status", "unknown")
-            host_progress = status_data.get("progress", {})
-            host_metrics = status_data.get("metrics", {})
-
-            logger.debug(
-                f"Training operation {operation.operation_id}: host_status={host_status}, progress={host_progress}"
-            )
-
-            # Convert host service status to operation format
-            if host_status == "running":
-                # Extract progress information
-                current_epoch = host_progress.get("epoch", 0)
-                total_epochs = host_progress.get("total_epochs", 100)
-                current_batch = host_progress.get("batch", 0)
-                total_batches = host_progress.get("total_batches", 0)
-
-                # Calculate percentage (20% to 90% range for training phase)
-                if total_epochs > 0:
-                    epoch_progress = current_epoch / total_epochs
-                    if total_batches > 0 and current_batch > 0:
-                        # Add batch-level granularity within the epoch
-                        batch_progress = (current_batch / total_batches) / total_epochs
-                        epoch_progress += batch_progress
-
-                    percentage = 20.0 + (epoch_progress * 70.0)  # 20% to 90%
-                else:
-                    percentage = host_progress.get("progress_percent", 0.0)
-
-                percentage = min(percentage, 90.0)  # Cap at 90%
-
-                # Format current step with epoch and batch info
-                current_step = f"Epoch: {current_epoch}"
-                if total_epochs > 0:
-                    current_step += f"/{total_epochs}"
-                if total_batches > 0:
-                    current_step += f", Batch: {current_batch}/{total_batches}"
-
-                # Add metrics if available
-                if host_metrics and host_metrics.get("current"):
-                    metrics = host_metrics["current"]
-                    if isinstance(metrics, dict):
-                        accuracy = metrics.get("accuracy", 0)
-                        loss = metrics.get("loss", 0)
-                        if accuracy and len(str(accuracy)) > 0:
-                            current_step += f" (Acc: {accuracy:.3f})"
-                        if loss and len(str(loss)) > 0:
-                            current_step += f" (Loss: {loss:.4f})"
-
-                # Update operation progress
-                updated_operation = operation
-                updated_operation.progress = OperationProgress(
-                    percentage=percentage,
-                    current_step=current_step,
-                    steps_completed=current_epoch,
-                    steps_total=total_epochs,
-                    items_processed=current_epoch,
-                    items_total=total_epochs,
-                    current_item=None,
-                )
-
-                return updated_operation
-
-            elif host_status == "completed":
-                # Training completed - mark operation as completed
-                from datetime import datetime, timezone
-
-                updated_operation = operation
-                updated_operation.status = OperationStatus.COMPLETED
-                updated_operation.completed_at = datetime.now(timezone.utc)
-                updated_operation.progress = OperationProgress(
-                    percentage=100.0,
-                    current_step="Training completed successfully",
-                    steps_completed=100,
-                    steps_total=100,
-                    items_processed=100,
-                    items_total=100,
-                    current_item=None,
-                )
-                # Store host metrics in result summary
-                if not updated_operation.result_summary:
-                    updated_operation.result_summary = {}
-                updated_operation.result_summary.update(
-                    {
-                        "session_id": session_id,
-                        "host_metrics": host_metrics,
-                        "training_completed": True,
-                        "host_service_used": True,
-                    }
-                )
-
-                return updated_operation
-
-            elif host_status == "failed":
-                # Training failed - mark operation as failed
-                from datetime import datetime, timezone
-
-                error_msg = status_data.get("error", "Training failed on host service")
-
-                updated_operation = operation
-                updated_operation.status = OperationStatus.FAILED
-                updated_operation.completed_at = datetime.now(timezone.utc)
-                updated_operation.error_message = error_msg
-
-                return updated_operation
-
-            # For other statuses (stopped, etc.), return original operation
-            return None
-
-        except Exception as e:
-            logger.warning(
-                f"Failed to update training operation from host service: {e}"
-            )
-            return None
 
     def get_cancellation_token(
         self, operation_id: str
