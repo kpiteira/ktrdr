@@ -149,11 +149,20 @@ class HostTrainingOrchestrator:
             # Create DataManager instance
             data_manager = DataManager()
 
-            # Create throttled progress callback
-            progress_callback = self._create_throttled_progress_callback()
-
             # Create session-based cancellation token
             cancellation_token = SessionCancellationToken(self._session)
+
+            # Create bridge-based progress callback that updates BOTH:
+            # 1. Bridge's internal state (for OperationsService to pull from)
+            # 2. Session progress (for /training/status endpoint)
+            # The bridge is callable and receives (epoch, batch, metrics) from TrainingPipeline
+            progress_bridge = self._session.progress_bridge
+            if progress_bridge is None:
+                raise RuntimeError(f"No progress bridge registered for session {self._session.session_id}")
+
+            # Create adapter callback that receives TrainingPipeline callbacks
+            # and translates them to bridge method calls
+            progress_callback = self._create_bridge_adapter_callback(progress_bridge)
 
             # Update session status
             self._session.status = "running"
@@ -229,6 +238,98 @@ class HostTrainingOrchestrator:
                 f"Host training failed for session {self._session.session_id}: {str(e)}"
             )
             raise
+
+    def _create_bridge_adapter_callback(self, bridge):
+        """
+        Create callback that updates both bridge state and session progress.
+
+        This adapter receives TrainingPipeline callbacks and:
+        1. Calls appropriate bridge methods (updates bridge's internal state for OperationsService)
+        2. Updates session progress directly (for /training/status endpoint)
+
+        Args:
+            bridge: TrainingProgressBridge instance
+
+        Returns:
+            Callback function compatible with TrainingPipeline
+        """
+
+        def callback(epoch: int, total_epochs: int, metrics: dict[str, Any]):
+            """Handle progress update from TrainingPipeline."""
+            progress_type = metrics.get("progress_type")
+
+            # Call bridge method based on progress type
+            # Bridge updates its internal state (for OperationsService queries)
+            try:
+                if progress_type == "indicator_computation":
+                    bridge.on_indicator_computation(
+                        symbol=metrics.get("symbol", "Unknown"),
+                        symbol_index=metrics.get("symbol_index", 1),
+                        total_symbols=metrics.get("total_symbols", 1),
+                        timeframe=metrics.get("timeframe", "unknown"),
+                        indicator_name=metrics.get("indicator_name", "unknown"),
+                        indicator_index=metrics.get("indicator_index", 1),
+                        total_indicators=metrics.get("total_indicators", 1),
+                    )
+                elif progress_type == "fuzzy_generation":
+                    bridge.on_fuzzy_generation(
+                        symbol=metrics.get("symbol", "Unknown"),
+                        symbol_index=metrics.get("symbol_index", 1),
+                        total_symbols=metrics.get("total_symbols", 1),
+                        timeframe=metrics.get("timeframe", "unknown"),
+                        fuzzy_set_name=metrics.get("fuzzy_set_name", "unknown"),
+                        fuzzy_index=metrics.get("fuzzy_index", 1),
+                        total_fuzzy_sets=metrics.get("total_fuzzy_sets", 1),
+                    )
+                elif progress_type == "preprocessing":
+                    bridge.on_symbol_processing(
+                        symbol=metrics.get("symbol", "Unknown"),
+                        symbol_index=metrics.get("symbol_index", 1),
+                        total_symbols=metrics.get("total_symbols", 1),
+                        step=metrics.get("step", "processing"),
+                        context={
+                            k: v
+                            for k, v in metrics.items()
+                            if k in ("timeframes", "total_indicators", "total_fuzzy_sets")
+                        },
+                    )
+                elif progress_type == "preparation":
+                    phase = metrics.get("phase", "preparing")
+                    message = None
+                    if phase == "combining_data":
+                        total_symbols = metrics.get("total_symbols", 0)
+                        message = f"Combining data from {total_symbols} symbol(s)"
+                    elif phase == "splitting_data":
+                        total_samples = metrics.get("total_samples", 0)
+                        message = f"Splitting {total_samples} samples (train/val/test)"
+                    elif phase == "creating_model":
+                        input_dim = metrics.get("input_dim", 0)
+                        message = f"Creating model (input_dim={input_dim})"
+                    bridge.on_preparation_phase(phase=phase, message=message)
+                elif progress_type == "batch":
+                    # Let bridge handle throttling via _should_emit_batch()
+                    # Always call on_batch() so state updates happen for every batch
+                    # (state updates are fast <1μs, bridge decides what to emit)
+                    bridge.on_batch(
+                        epoch=epoch,
+                        batch=metrics.get("batch", 0),
+                        total_batches=metrics.get("total_batches_per_epoch"),
+                        metrics=metrics,
+                    )
+                elif progress_type == "epoch":
+                    bridge.on_epoch(epoch=epoch, total_epochs=total_epochs, metrics=metrics)
+                else:
+                    # Phase change or general update
+                    message = metrics.get("message") or "Training update"
+                    bridge.on_phase(progress_type or "update", message=message)
+            except Exception as e:
+                logger.warning(f"Error updating bridge: {e}")
+
+            # Also update session directly (for /training/status endpoint)
+            # This ensures backward compatibility
+            self._session.update_progress(epoch=epoch, batch=metrics.get("batch", 0), metrics=metrics)
+
+        return callback
 
     def _create_throttled_progress_callback(self):
         """
@@ -385,16 +486,14 @@ class HostTrainingOrchestrator:
                 )
 
             elif progress_type == "batch":
+                # Update session for every batch (backward compatibility)
+                # Session has its own state management, no need to throttle
                 batch = metrics.get("batch", 0)
-
-                # Throttle: only update every N batches
-                if batch % self.PROGRESS_UPDATE_FREQUENCY == 0:
-                    self._session.update_progress(
-                        epoch=epoch,
-                        batch=batch,
-                        metrics=metrics,
-                    )
-                # NO SLEEP! Throttling by skipping, not sleeping
+                self._session.update_progress(
+                    epoch=epoch,
+                    batch=batch,
+                    metrics=metrics,
+                )
 
             elif progress_type == "epoch":
                 # Always update on epoch completion

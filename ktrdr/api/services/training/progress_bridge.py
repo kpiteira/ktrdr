@@ -10,11 +10,12 @@ from ktrdr import get_logger
 from ktrdr.api.services.training.context import TrainingOperationContext
 from ktrdr.async_infrastructure.cancellation import CancellationError, CancellationToken
 from ktrdr.async_infrastructure.progress import GenericProgressManager
+from ktrdr.async_infrastructure.progress_bridge import ProgressBridge
 
 logger = get_logger(__name__)
 
 
-class TrainingProgressBridge:
+class TrainingProgressBridge(ProgressBridge):
     """Translate training callbacks into generic orchestrator progress updates."""
 
     def __init__(
@@ -26,6 +27,9 @@ class TrainingProgressBridge:
         cancellation_token: CancellationToken | None = None,
         batch_update_stride: int | None = None,
     ) -> None:
+        # Initialize base class (ProgressBridge)
+        super().__init__()
+
         if progress_manager is None and update_progress_callback is None:
             raise ValueError(
                 "progress_manager or update_progress_callback must be provided"
@@ -55,6 +59,21 @@ class TrainingProgressBridge:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+    def __call__(self, epoch: int, batch: int, metrics: dict[str, Any]) -> None:
+        """
+        Make bridge callable for use as progress_callback.
+
+        This allows TrainingPipeline to call the bridge directly:
+        progress_callback(epoch, batch, metrics)
+
+        Args:
+            epoch: Current epoch number
+            batch: Current batch number
+            metrics: Training metrics dictionary
+        """
+        # Delegate to on_batch which handles batch-level progress updates
+        self.on_batch(epoch=epoch, batch=batch, metrics=metrics)
+
     def on_phase(self, phase_name: str, *, message: str | None = None) -> None:
         """Emit a coarse progress update for a high-level phase."""
         self._check_cancelled()
@@ -63,6 +82,17 @@ class TrainingProgressBridge:
         context = {"phase_name": phase_name}
         if self._context.session_id:
             context["host_session_id"] = self._context.session_id
+
+        # Update API state so phase changes are visible to consumers
+        self._update_state(
+            percentage=self._last_percentage,
+            message=phase_message,
+            current_step=self._last_epoch_step,
+            items_processed=self._last_items_processed,
+            phase="phase",
+            phase_name=phase_name,
+        )
+
         self._emit(
             current_step=self._last_epoch_step,
             percentage=self._last_percentage,
@@ -139,6 +169,31 @@ class TrainingProgressBridge:
             context=context,
         )
 
+        # TASK 1.2: Pull-based progress updates via ProgressBridge base class
+        # Update state for pull-based consumers (OperationsService)
+        self._update_state(
+            percentage=percentage,
+            message=message,
+            current_step=epoch_index,
+            items_processed=items_processed,
+            epoch_index=epoch_index,
+            total_epochs=self._total_epochs,
+        )
+
+        # Append epoch-level metrics if this is an epoch update (not batch)
+        if metrics.get("progress_type") == "epoch":
+            epoch_metric = {
+                "epoch": metrics.get("epoch"),
+                "train_loss": metrics.get("train_loss"),
+                "train_accuracy": metrics.get("train_accuracy"),
+                "val_loss": metrics.get("val_loss"),
+                "val_accuracy": metrics.get("val_accuracy"),
+                "learning_rate": metrics.get("learning_rate"),
+                "duration": metrics.get("duration"),
+                "timestamp": metrics.get("timestamp"),
+            }
+            self._append_metric(epoch_metric)
+
     def on_batch(
         self,
         epoch: int,
@@ -195,6 +250,29 @@ class TrainingProgressBridge:
             "current_item": f"Epoch {epoch_index} · Batch {batch_number}/{total_display}",
             "batch_metrics": metrics or {},
         }
+
+        # Pull-based progress updates for API consumers (OperationsService)
+        # ALWAYS update state (even if emission is throttled) so API queries
+        # always return current batch-level progress. This is critical for
+        # exposing real-time progress to CLI and web UI consumers.
+        self._update_state(
+            percentage=percentage,
+            message=message,
+            current_step=self._estimate_step(items_processed),
+            items_processed=items_processed,
+            epoch_index=epoch_index,
+            total_epochs=self._total_epochs,
+            batch_number=batch_number,
+            batch_total_per_epoch=batches_per_epoch,
+            phase="batch",
+        )
+
+        # Throttle only the event emission (callbacks/logging), not state updates
+        # State updates are lightweight (<1μs), emission can be expensive
+        if not self._should_emit_batch(
+            items_processed, batch_number, batches_per_epoch, total_batches_overall
+        ):
+            return
 
         self._emit(
             current_step=self._estimate_step(items_processed),
@@ -323,6 +401,25 @@ class TrainingProgressBridge:
             context=context_payload,
         )
 
+        # Pull-based progress updates for API consumers (OperationsService)
+        # Update state so host training progress is visible in API responses
+        # with same detail level as local training (batch-level granularity)
+        state_update: dict[str, Any] = {
+            "percentage": percentage_float,
+            "message": message,
+            "current_step": max(0, min(epoch_index, self._total_epochs)),
+            "items_processed": clamped_items_processed,
+            "phase": "remote_snapshot",
+        }
+        if epoch_index:
+            state_update["epoch_index"] = epoch_index
+            state_update["total_epochs"] = self._total_epochs
+        if batch_number and batch_total_per_epoch:
+            state_update["batch_number"] = batch_number
+            state_update["batch_total_per_epoch"] = batch_total_per_epoch
+
+        self._update_state(**state_update)
+
     def on_symbol_processing(
         self,
         symbol: str,
@@ -376,6 +473,20 @@ class TrainingProgressBridge:
         if context:
             payload_context.update(context)
 
+        # Update API state so preprocessing steps are visible to consumers
+        state_kwargs = {
+            "current_step": 0,
+            "items_processed": symbol_index,
+            "phase": "preprocessing",
+            "symbol": symbol,
+            "symbol_index": symbol_index,
+            "total_symbols": total_symbols,
+            "preprocessing_step": step,
+        }
+        if context:
+            state_kwargs.update(context)
+        self._update_state(percentage=percentage, message=message, **state_kwargs)
+
         self._emit(
             current_step=0,
             percentage=percentage,
@@ -423,6 +534,23 @@ class TrainingProgressBridge:
             "total_indicators": total_indicators,
         }
 
+        # Update API state so indicator computation progress is visible
+        self._update_state(
+            percentage=min(percentage, 5.0),
+            message=message,
+            current_step=0,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            preprocessing_step="computing_indicator",
+            symbol=symbol,
+            symbol_index=symbol_index,
+            total_symbols=total_symbols,
+            timeframe=timeframe,
+            indicator_name=indicator_name,
+            indicator_index=indicator_index,
+            total_indicators=total_indicators,
+        )
+
         self._emit(
             current_step=0,
             percentage=min(percentage, 5.0),
@@ -467,6 +595,23 @@ class TrainingProgressBridge:
             "total_fuzzy_sets": total_fuzzy_sets,
         }
 
+        # Update API state so fuzzy generation progress is visible
+        self._update_state(
+            percentage=min(percentage, 5.0),
+            message=message,
+            current_step=0,
+            items_processed=symbol_index,
+            phase="preprocessing",
+            preprocessing_step="generating_fuzzy",
+            symbol=symbol,
+            symbol_index=symbol_index,
+            total_symbols=total_symbols,
+            timeframe=timeframe,
+            fuzzy_set_name=fuzzy_set_name,
+            fuzzy_index=fuzzy_index,
+            total_fuzzy_sets=total_fuzzy_sets,
+        )
+
         self._emit(
             current_step=0,
             percentage=min(percentage, 5.0),
@@ -494,6 +639,17 @@ class TrainingProgressBridge:
             "phase": "preparation",
             "preparation_phase": phase,
         }
+
+        # Update API state so preparation phases are visible to consumers
+        # (loading data, calculating indicators, computing fuzzy sets, etc.)
+        self._update_state(
+            percentage=percentage,
+            message=display_message,
+            current_step=0,
+            items_processed=0,
+            phase="preparation",
+            preparation_phase=phase,
+        )
 
         self._emit(
             current_step=0,

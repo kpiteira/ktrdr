@@ -289,15 +289,6 @@ class TrainingAdapter(AsyncServiceAdapter):
                 f"Training failed: {str(e)}", provider="Training"
             ) from e
 
-    async def get_training_status(self, session_id: str) -> dict[str, Any]:
-        """Get status of a training session (host service only)."""
-        if not self.use_host_service:
-            raise TrainingProviderError(
-                "Status checking only available for host service mode"
-            )
-
-        return await self._call_host_service_get(f"/training/status/{session_id}")
-
     async def get_training_result(self, session_id: str) -> dict[str, Any]:
         """
         Get final training result (host service only).
@@ -320,17 +311,6 @@ class TrainingAdapter(AsyncServiceAdapter):
             )
 
         return await self._call_host_service_get(f"/training/result/{session_id}")
-
-    async def stop_training(self, session_id: str) -> dict[str, Any]:
-        """Stop a training session (host service only)."""
-        if not self.use_host_service:
-            raise TrainingProviderError(
-                "Training stopping only available for host service mode"
-            )
-
-        return await self._call_host_service_post(
-            "/training/stop", {"session_id": session_id, "save_checkpoint": True}
-        )
 
     def get_statistics(self) -> dict[str, Any]:
         """Get adapter usage statistics."""

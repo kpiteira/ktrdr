@@ -5,42 +5,49 @@ KTRDR is an advanced automated trading system built around a neuro-fuzzy decisio
 ## ✨ Key Features
 
 ### 🔄 Data Management
+
 - **Multi-source data integration** with Interactive Brokers
 - **Gap analysis and filling** for data quality
 - **Multi-timeframe data synchronization**
 - **Local data caching and storage**
 
 ### 📊 Technical Analysis
+
 - **70+ technical indicators** (RSI, MACD, Bollinger Bands, etc.)
 - **Multi-timeframe indicator calculations**
 - **Custom indicator development framework**
 - **Performance-optimized batch processing**
 
 ### 🧠 Fuzzy Logic Engine
+
 - **Configurable membership functions** (triangular, trapezoidal, gaussian)
 - **Multi-timeframe fuzzy analysis**
 - **Custom fuzzy rule systems**
 - **Real-time fuzzy evaluation**
 
 ### 🤖 Neural Networks
+
 - **PyTorch-based models** for trading decisions
 - **Multi-symbol training capabilities**
 - **GPU memory management**
 - **Model versioning and storage**
 
 ### 📈 Strategy Development
+
 - **Strategy configuration and validation**
 - **Comprehensive backtesting engine**
 - **Performance metrics and analytics**
 - **Strategy comparison tools**
 
 ### 🌐 API & Web Interface
+
 - **RESTful API** with FastAPI
 - **React frontend** for visualization
 - **Real-time data streaming**
 - **Interactive charts with TradingView**
 
 ### 🔌 Interactive Brokers Integration
+
 - **Connection management and health monitoring**
 - **Real-time market data**
 - **Historical data fetching**
@@ -49,6 +56,7 @@ KTRDR is an advanced automated trading system built around a neuro-fuzzy decisio
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.9+
 - Docker and Docker Compose
 - [UV](https://github.com/astral-sh/uv) package manager
@@ -68,16 +76,20 @@ chmod +x setup_dev.sh
 ### Launching KTRDR
 
 #### Option 1: Complete System (Recommended)
+
 ```bash
 # Start both IB Host Service and Docker backend
 ./start_ktrdr.sh
 ```
+
 This will start:
+
 - IB Host Service on port 5001
-- API server on http://localhost:8000
-- Frontend on http://localhost:3000
+- API server on <http://localhost:8000>
+- Frontend on <http://localhost:3000>
 
 #### Option 2: Docker Development Environment
+
 ```bash
 # Start development containers
 ./docker_dev.sh start
@@ -90,6 +102,7 @@ This will start:
 ```
 
 #### Option 3: API Server Only
+
 ```bash
 # Using UV (recommended)
 uv run python scripts/run_api_server.py
@@ -101,43 +114,51 @@ python scripts/run_api_server.py --host 0.0.0.0 --port 8000
 ## 📚 API Documentation
 
 Once the server is running, visit:
-- **Swagger UI**: http://localhost:8000/api/v1/docs
-- **ReDoc**: http://localhost:8000/api/v1/redoc
+
+- **Swagger UI**: <http://localhost:8000/api/v1/docs>
+- **ReDoc**: <http://localhost:8000/api/v1/redoc>
 
 ### Key API Endpoints
 
 #### Data Management
+
 - `GET /api/v1/data/info` - Get data directory information
 - `GET /api/v1/data/symbols` - List available symbols
 - `POST /api/v1/data/load` - Load market data
 - `GET /api/v1/data/range` - Get data range information
 
 #### Technical Indicators
+
 - `GET /api/v1/indicators` - List available indicators
 - `POST /api/v1/indicators/calculate` - Calculate indicators
 - `GET /api/v1/indicators/categories` - Get indicator categories
 
 #### Fuzzy Logic
+
 - `GET /api/v1/fuzzy/indicators` - List fuzzy indicators
 - `POST /api/v1/fuzzy/fuzzify` - Fuzzify data values
 - `GET /api/v1/fuzzy/sets` - Get fuzzy set definitions
 
 #### Trading Models
+
 - `GET /api/v1/models` - List trained models
 - `POST /api/v1/models/train` - Start model training
 - `POST /api/v1/models/predict` - Make predictions
 
 #### Strategy Management
+
 - `GET /api/v1/strategies` - List available strategies
 - `POST /api/v1/strategies/validate` - Validate strategy configuration
 - `POST /api/v1/backtesting/start` - Start backtest
 
 #### Interactive Brokers
+
 - `GET /api/v1/ib/status` - Check IB connection status
 - `GET /api/v1/ib/health` - Health check
 - `POST /api/v1/ib/cleanup` - Clean up connections
 
 #### System Operations
+
 - `GET /api/v1/operations` - List running operations
 - `GET /api/v1/system/status` - System health status
 
@@ -233,6 +254,7 @@ tests/                     # Test suites
 ## 🔧 Development
 
 ### Prerequisites
+
 - **CRITICAL**: This project uses `uv` for dependency management
 - Never run `python` directly - always use `uv run python`
 - Docker for containerized development
@@ -262,6 +284,12 @@ uv run mypy ktrdr
 # View logs
 ./docker_dev.sh logs-backend
 ./docker_dev.sh logs-frontend
+
+# Switch to LOCAL training mode (CPU in Docker)
+./scripts/switch-training-mode.sh local
+
+# Switch to HOST SERVICE training mode (GPU if available)
+./scripts/switch-training-mode.sh host
 ```
 
 ### Environment Variables
@@ -289,6 +317,7 @@ OPENAI_API_KEY=your_api_key_here
 ## 📊 Configuration
 
 ### Strategy Configuration
+
 Strategies are defined in YAML files in `config/strategies/`:
 
 ```yaml
@@ -321,6 +350,7 @@ neural:
 ```
 
 ### Indicator Configuration
+
 Configure custom indicators in `config/indicators/`:
 
 ```yaml
@@ -336,6 +366,7 @@ indicators:
 ## 🧪 Testing
 
 ### Running Tests
+
 ```bash
 # All tests
 uv run pytest
@@ -350,6 +381,7 @@ uv run pytest --cov=ktrdr --cov-report=html
 ```
 
 ### Test Categories
+
 - **Unit tests**: Individual component testing
 - **Integration tests**: Multi-component interaction
 - **E2E tests**: Full system workflow testing
@@ -360,6 +392,7 @@ uv run pytest --cov=ktrdr --cov-report=html
 ### Common Issues
 
 #### IB Connection Problems
+
 ```bash
 # Check IB Gateway status
 ktrdr ib check-status
@@ -372,6 +405,7 @@ ktrdr ib cleanup-connections
 ```
 
 #### Docker Issues
+
 ```bash
 # Rebuild containers
 ./docker_dev.sh rebuild
@@ -384,6 +418,7 @@ ktrdr ib cleanup-connections
 ```
 
 #### Data Issues
+
 ```bash
 # Check data availability
 ktrdr data get-range AAPL 1d
@@ -393,6 +428,7 @@ ktrdr gap-analysis analyze AAPL 1d --start-date 2024-01-01
 ```
 
 ### Log Locations
+
 - **IB Host Service**: `ib-host-service/logs/ib-host-service.log`
 - **Backend**: `docker logs ktrdr-backend`
 - **Frontend**: `docker logs ktrdr-frontend`
@@ -409,6 +445,7 @@ ktrdr gap-analysis analyze AAPL 1d --start-date 2024-01-01
 8. Open a Pull Request
 
 ### Development Guidelines
+
 - Follow the patterns documented in `CLAUDE.md`
 - Use type hints for all functions
 - Write comprehensive docstrings

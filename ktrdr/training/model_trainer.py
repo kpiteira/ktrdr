@@ -538,6 +538,7 @@ class ModelTrainer:
                     progress_percent = max(0.0, min(progress_percent, 100.0))
 
                     # Epoch-level metrics (complete epoch with validation)
+                    # M2: Added learning_rate, duration, timestamp for metrics storage
                     epoch_metrics = {
                         "epoch": epoch,
                         "total_epochs": epochs,
@@ -553,6 +554,9 @@ class ModelTrainer:
                         "train_accuracy": train_accuracy,
                         "val_loss": val_loss,
                         "val_accuracy": val_accuracy,
+                        "learning_rate": optimizer.param_groups[0]["lr"],
+                        "duration": duration,
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         "progress_type": "epoch",
                     }
                     self.progress_callback(epoch, epochs, epoch_metrics)

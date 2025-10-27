@@ -119,68 +119,6 @@ class TestTrainingEndpoints:
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
             assert "GPU allocation failed" in response.json()["detail"]
 
-    def test_stop_training_success(self, client, mock_training_service):
-        """Test successful training stop."""
-        request_data = {"session_id": "test-session-123", "save_checkpoint": True}
-
-        with patch(
-            "endpoints.training.get_service",
-            return_value=mock_training_service,
-        ):
-            response = client.post("/training/stop", json=request_data)
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["session_id"] == "test-session-123"
-            assert data["status"] == "stopped"
-            assert data["checkpoint_saved"] is True
-
-    def test_stop_training_service_error(self, client):
-        """Test training stop with service error."""
-        with patch("endpoints.training.get_service") as mock_get_service:
-            mock_service = Mock()
-            mock_service.stop_session.side_effect = Exception("Session not found")
-            mock_get_service.return_value = mock_service
-
-            request_data = {
-                "session_id": "nonexistent-session",
-                "save_checkpoint": False,
-            }
-            response = client.post("/training/stop", json=request_data)
-
-            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-            assert "Session not found" in response.json()["detail"]
-
-    def test_get_training_status_success(self, client, mock_training_service):
-        """Test successful training status retrieval."""
-        with patch(
-            "endpoints.training.get_service",
-            return_value=mock_training_service,
-        ):
-            response = client.get("/training/status/test-session-123")
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["session_id"] == "test-session-123"
-            assert data["status"] == "running"
-            assert data["progress"]["items_processed"] == 50
-            assert data["progress"]["items_total"] == 100
-            assert "metrics" in data
-            assert "gpu_usage" in data
-
-    def test_get_training_status_not_found(self, client):
-        """Test training status for non-existent session."""
-        with patch(
-            "services.training_service.get_training_service"
-        ) as mock_get_service:
-            mock_service = Mock()
-            mock_service.get_session_status.side_effect = Exception("Session not found")
-            mock_get_service.return_value = mock_service
-
-            response = client.get("/training/status/nonexistent-session")
-
-            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-
     def test_list_training_sessions(self, client, mock_training_service):
         """Test listing training sessions."""
         with patch(
