@@ -307,15 +307,15 @@ class HostTrainingOrchestrator:
                         message = f"Creating model (input_dim={input_dim})"
                     bridge.on_preparation_phase(phase=phase, message=message)
                 elif progress_type == "batch":
-                    # Throttle batch updates
-                    batch = metrics.get("batch", 0)
-                    if batch % self.PROGRESS_UPDATE_FREQUENCY == 0:
-                        bridge.on_batch(
-                            epoch=epoch,
-                            batch=batch,
-                            total_batches=metrics.get("total_batches_per_epoch"),
-                            metrics=metrics,
-                        )
+                    # Let bridge handle throttling via _should_emit_batch()
+                    # Always call on_batch() so state updates happen for every batch
+                    # (state updates are fast <1μs, bridge decides what to emit)
+                    bridge.on_batch(
+                        epoch=epoch,
+                        batch=metrics.get("batch", 0),
+                        total_batches=metrics.get("total_batches_per_epoch"),
+                        metrics=metrics,
+                    )
                 elif progress_type == "epoch":
                     bridge.on_epoch(epoch=epoch, total_epochs=total_epochs, metrics=metrics)
                 else:
@@ -486,16 +486,14 @@ class HostTrainingOrchestrator:
                 )
 
             elif progress_type == "batch":
+                # Update session for every batch (backward compatibility)
+                # Session has its own state management, no need to throttle
                 batch = metrics.get("batch", 0)
-
-                # Throttle: only update every N batches
-                if batch % self.PROGRESS_UPDATE_FREQUENCY == 0:
-                    self._session.update_progress(
-                        epoch=epoch,
-                        batch=batch,
-                        metrics=metrics,
-                    )
-                # NO SLEEP! Throttling by skipping, not sleeping
+                self._session.update_progress(
+                    epoch=epoch,
+                    batch=batch,
+                    metrics=metrics,
+                )
 
             elif progress_type == "epoch":
                 # Always update on epoch completion
