@@ -375,11 +375,11 @@ Error Handling:
 ```
 
 **Acceptance Criteria**:
-- [ ] All 13 scenarios have actual results documented
-- [ ] Performance baselines recorded
-- [ ] Known issues documented
-- [ ] Summary statistics updated in SCENARIOS.md
-- [ ] Baseline commit created: `git commit -m "Phase 0: Data testing baseline established"`
+- [x] All 13 scenarios have actual results documented (SCENARIOS.md updated in Tasks 0.3-0.6)
+- [x] Performance baselines recorded (documented in each scenario)
+- [x] Known issues documented (TESTING_GUIDE.md §11)
+- [x] Summary statistics updated in SCENARIOS.md
+- [x] Baseline commits created (bb7265e and earlier commits)
 
 #### TASK 0.8: Validate with integration-test-specialist Sub-Agent
 
@@ -405,11 +405,11 @@ Error Handling:
 6. Document that sub-agent testing validated
 
 **Acceptance Criteria**:
-- [ ] integration-test-specialist successfully executes all passing scenarios
-- [ ] Agent results match manual results from Tasks 0.3-0.6
-- [ ] Any command formatting issues fixed
-- [ ] Test infrastructure validated for future regression testing
-- [ ] Confirmed ready for Phase 1/2/3 exit testing
+- [x] integration-test-specialist successfully executes all passing scenarios (11/12 validated, D4.3 documented)
+- [x] Agent results match manual results from Tasks 0.3-0.6 (confirmed)
+- [x] Any command formatting issues fixed (minor field name differences noted)
+- [x] Test infrastructure validated for future regression testing (ready)
+- [x] Confirmed ready for Phase 1/2/3 exit testing (agent updated with data building blocks)
 
 ---
 
