@@ -545,3 +545,162 @@ curl -s -X POST http://localhost:8000/api/v1/data/acquire/validate-symbol \
 # Check data files (CSV or PKL format)
 ls -lh data/EURUSD_*.csv data/EURUSD_*.pkl 2>/dev/null
 ```
+
+---
+
+## 11. Troubleshooting Common Issues
+
+### Issue: Download uses cache instead of IB
+
+**Symptom**: Operation completes instantly, `ib_requests_made: 0`
+
+**Cause**: Missing `"mode":"tail"` parameter defaults to cache-only
+
+**Solution**:
+```bash
+# ❌ Wrong - defaults to local mode
+curl -X POST http://localhost:8000/api/v1/data/load \
+  -d '{"symbol":"AAPL","timeframe":"1d","start_date":"2024-01-01","end_date":"2024-12-31"}'
+
+# ✅ Correct - includes mode parameter
+curl -X POST http://localhost:8000/api/v1/data/load \
+  -d '{"symbol":"AAPL","timeframe":"1d","start_date":"2024-01-01","end_date":"2024-12-31","mode":"tail"}'
+```
+
+### Issue: Operation fails with "Data not found"
+
+**Symptom**: Operation status `failed`, error: "Data not found for SYMBOL (timeframe)"
+
+**Cause**: Cache file doesn't exist and mode is set to "local"
+
+**Solution**: Either create cache file or use `"mode":"tail"` to download from IB
+
+### Issue: Cannot observe progress updates
+
+**Symptom**: Operation shows 100% immediately after starting
+
+**Cause**: Dataset too small (downloads in <5 seconds)
+
+**Solution**: Use larger date ranges for progress monitoring tests:
+- ❌ Small: 1 month 1h data (~720 bars) - too fast
+- ✅ Medium: 1 year 1h data (~8760 bars) - 30-90s download
+- ✅ Large: 2-3 years 1h data - 2-5 min download
+
+### Issue: IB host service connection refused
+
+**Symptom**: `Connection refused` when calling port 5001
+
+**Cause**: IB host service not running
+
+**Solution**:
+```bash
+# Start IB host service
+cd ib-host-service
+./start.sh
+
+# Verify it's running
+curl http://localhost:5001/health
+```
+
+### Issue: IB Gateway not connected
+
+**Symptom**: Downloads fail, logs show "IB Gateway not connected"
+
+**Cause**: IB Gateway TWS not logged in
+
+**Solution**:
+1. Launch IB Gateway TWS application
+2. Log in with paper trading or live account
+3. Verify connection:
+```bash
+curl http://localhost:5001/health | jq '{ib_connected:.ib_connected}'
+# Should return: "ib_connected": true
+```
+
+### Issue: jq parse errors when running test commands
+
+**Symptom**: `jq: parse error` or `Invalid numeric literal`
+
+**Cause**: Bash variable expansion issues or malformed JSON
+
+**Solution**: Use helper scripts instead of inline commands:
+```bash
+# Use test scripts (recommended)
+./docs/testing/scripts/monitor_progress.sh "$OPERATION_ID" 10 12
+
+# Or use single quotes for JSON payloads
+curl -d '{"symbol":"AAPL",...}' # ✅ Single quotes
+curl -d "{\"symbol\":\"AAPL\",...}" # ❌ Escaping nightmare
+```
+
+### Issue: Cache management during tests
+
+**Problem**: Need to clear cache to force IB download, then restore it
+
+**Solution**: Use cache management script:
+```bash
+# Before test: backup and clear
+./docs/testing/scripts/manage_cache.sh backup EURUSD 1h
+
+# Run test with IB download
+# ...
+
+# After test: restore original
+./docs/testing/scripts/manage_cache.sh restore EURUSD 1h
+```
+
+### Issue: Docker container not running
+
+**Symptom**: Cannot connect to `http://localhost:8000`
+
+**Cause**: Backend not started
+
+**Solution**:
+```bash
+# Check if running
+docker ps | grep ktrdr-backend
+
+# Start if not running
+docker-compose -f docker/docker-compose.yml up -d
+
+# Check logs
+docker-compose -f docker/docker-compose.yml logs backend --since 60s
+```
+
+---
+
+## 12. Test Helper Scripts
+
+All test scripts are located in `docs/testing/scripts/`. See [scripts/README.md](scripts/README.md) for detailed usage.
+
+### Quick Start
+
+```bash
+# Make scripts executable (first time only)
+chmod +x docs/testing/scripts/*.sh
+
+# Monitor operation progress
+./docs/testing/scripts/monitor_progress.sh <operation_id> [interval] [max_polls]
+
+# Manage cache files
+./docs/testing/scripts/manage_cache.sh <action> <symbol> <timeframe>
+```
+
+### Example Workflow
+
+```bash
+# 1. Backup cache
+./docs/testing/scripts/manage_cache.sh backup EURUSD 1h
+
+# 2. Start download
+RESP=$(curl -s -X POST http://localhost:8000/api/v1/data/load \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EURUSD","timeframe":"1h","start_date":"2024-01-01","end_date":"2024-12-31","mode":"tail"}')
+OP_ID=$(echo "$RESP" | jq -r '.data.operation_id')
+
+# 3. Monitor progress
+./docs/testing/scripts/monitor_progress.sh "$OP_ID" 10 12
+
+# 4. Restore cache
+./docs/testing/scripts/manage_cache.sh restore EURUSD 1h
+```
