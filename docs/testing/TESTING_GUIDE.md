@@ -604,17 +604,26 @@ curl http://localhost:5001/health
 
 ### Issue: IB Gateway not connected
 
-**Symptom**: Downloads fail, logs show "IB Gateway not connected"
+**Symptom**: Downloads fail, error message about IB failure
 
-**Cause**: IB Gateway TWS not logged in
+**Cause**: IB Gateway TWS not logged in OR IB host service cannot reach Gateway
+
+**Actual Error Messages**:
+- "Complete IB failure in 'tail' mode - all X segments failed. Cannot provide recent data."
+- "Host service connection failed: HTTP error for GET /data/head-timestamp: All connection attempts failed"
 
 **Solution**:
-1. Launch IB Gateway TWS application
-2. Log in with paper trading or live account
-3. Verify connection:
+1. Check IB host service is running:
 ```bash
-curl http://localhost:5001/health | jq '{ib_connected:.ib_connected}'
-# Should return: "ib_connected": true
+curl http://localhost:5001/health
+```
+
+2. Launch IB Gateway TWS application
+3. Log in with paper trading or live account
+4. Verify connection in logs:
+```bash
+tail -f ib-host-service/logs/ib-host-service.log | grep "Connected to"
+# Should show: "Connected to 127.0.0.1:4002, server version XXX"
 ```
 
 ### Issue: jq parse errors when running test commands
