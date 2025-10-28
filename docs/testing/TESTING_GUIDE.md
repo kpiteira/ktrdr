@@ -32,9 +32,13 @@ This guide provides all the building blocks needed to create and execute test sc
 ### Data - Cache Operations (Fast)
 - **Get Cached Data**: `GET /api/v1/data/{symbol}/{timeframe}`
   ```bash
-  curl "http://localhost:8000/api/v1/data/EURUSD/1h" | jq '.data[0]'
+  # Get bar count
+  curl "http://localhost:8000/api/v1/data/EURUSD/1h" | jq '.data.dates | length'
+
+  # Get first OHLCV bar
+  curl "http://localhost:8000/api/v1/data/EURUSD/1h" | jq '{date: .data.dates[0], ohlcv: .data.ohlcv[0]}'
   ```
-  Response: Array of OHLCV data
+  Response format: `{success, data: {dates: [...], ohlcv: [[o,h,l,c,v], ...], metadata, points}}`
 
 - **Get Data Range**: `POST /api/v1/data/range`
   ```json
@@ -43,7 +47,7 @@ This guide provides all the building blocks needed to create and execute test sc
     "timeframe": "1h"
   }
   ```
-  Response: `{start_date, end_date, row_count, file_exists}`
+  Response: `{success, data: {symbol, timeframe, start_date, end_date, point_count}}`
 
 - **Get Data Info**: `GET /api/v1/data/info`
   Response: Available symbols and timeframes
@@ -209,20 +213,21 @@ docker-compose -f docker/docker-compose.yml logs backend --since 60s | \
 ## 5. Test Data Parameters
 
 ### Available Data (EURUSD)
-- **Location**: `data/EURUSD_*.pkl` or `data/EURUSD_*.csv`
-- **Daily**: 2007-2025 (~18.5 years, 4,763 rows)
-- **Hourly**: 2005-2025 (~20.5 years, 115,148 rows)
-- **5-minute**: 2005-2025 (~20.5 years, 1,508,613 rows)
+- **Location**: `data/EURUSD_*.csv` (may also be `.pkl`)
+- **Daily (1d)**: 2007-2025 (~18.5 years, ~4,762 bars) - 272K CSV
+- **Hourly (1h)**: 2005-2025 (~20.5 years, ~115,147 bars) - 6.0M CSV
+- **5-minute (5m)**: 2005-2025 (~20.5 years, large dataset) - 84M CSV
+- **Other**: 15m, 30m timeframes also available
 
 **Check Availability**:
 ```bash
-# List available data files
-ls -lh data/EURUSD_*.pkl data/EURUSD_*.csv 2>/dev/null | awk '{print $9, $5}'
+# List available data files (both formats)
+ls -lh data/EURUSD_*.csv data/EURUSD_*.pkl 2>/dev/null
 
-# Quick check for specific timeframes
-test -f data/EURUSD_1d.pkl && echo "1d available" || echo "1d missing"
-test -f data/EURUSD_1h.pkl && echo "1h available" || echo "1h missing"
-test -f data/EURUSD_5m.pkl && echo "5m available" || echo "5m missing"
+# Quick check for specific timeframes (either format)
+for tf in 1d 1h 5m; do
+  test -f "data/EURUSD_${tf}.csv" -o -f "data/EURUSD_${tf}.pkl" && echo "$tf available" || echo "$tf missing"
+done
 ```
 
 ### Calibrated Test Durations
@@ -371,14 +376,14 @@ test -f data/EURUSD_5m.pkl && echo "5m available" || echo "5m missing"
   "data": {
     "symbol": "EURUSD",
     "timeframe": "1h",
-    "start_date": "2005-01-03T00:00:00",
-    "end_date": "2025-01-27T23:00:00",
-    "row_count": 115148,
-    "file_exists": true,
-    "file_size_mb": 15.2
+    "start_date": "2005-03-14T00:00:00Z",
+    "end_date": "2025-09-12T09:00:00Z",
+    "point_count": 179697
   }
 }
 ```
+
+**Note**: Response does not include `file_exists` or `file_size_mb` fields. Use `point_count` instead of `row_count`.
 
 ---
 
@@ -508,10 +513,10 @@ docker-compose -f docker/docker-compose.yml logs backend --since 60s | grep "Reg
 # Check IB service health
 curl -s http://localhost:5001/health | jq '{status:.status, ib_connected:.ib_connected}'
 
-# Load from cache (fast)
-curl "http://localhost:8000/api/v1/data/EURUSD/1h" | jq '.data | length'
+# Load from cache (fast) - get bar count
+curl "http://localhost:8000/api/v1/data/EURUSD/1h" | jq '.data.dates | length'
 
-# Get data range
+# Get data range (metadata only, very fast)
 curl -s -X POST http://localhost:8000/api/v1/data/range \
   -H "Content-Type: application/json" \
   -d '{"symbol":"EURUSD","timeframe":"1h"}' | jq '.data'
@@ -526,6 +531,6 @@ curl -s -X POST http://localhost:8000/api/v1/data/acquire/validate-symbol \
   -H "Content-Type: application/json" \
   -d '{"symbol":"AAPL"}' | jq
 
-# Check data files
-ls -lh data/EURUSD_*.pkl
+# Check data files (CSV or PKL format)
+ls -lh data/EURUSD_*.csv data/EURUSD_*.pkl 2>/dev/null
 ```

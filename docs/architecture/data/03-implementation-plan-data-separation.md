@@ -139,11 +139,13 @@ ls -lh data/EURUSD_*.pkl data/EURUSD_*.csv 2>/dev/null
 ```
 
 **Acceptance Criteria**:
-- [ ] Backend running and healthy
-- [ ] IB host service running
-- [ ] IB Gateway connection status documented (connected or not)
-- [ ] EURUSD data availability documented
-- [ ] Missing prerequisites documented for user action
+- [x] Backend running and healthy
+- [x] IB host service running
+- [x] IB Gateway connection status documented (connected or not)
+- [x] EURUSD data availability documented
+- [x] Missing prerequisites documented for user action
+
+**Status**: ✅ COMPLETED (2025-10-28)
 
 ---
 
@@ -173,12 +175,30 @@ ls -lh data/EURUSD_*.pkl data/EURUSD_*.csv 2>/dev/null
 5. Update TESTING_GUIDE.md if common patterns discovered
 
 **Acceptance Criteria**:
-- [ ] All 4 scenarios executed manually
-- [ ] Commands corrected and working
-- [ ] TESTING_GUIDE.md updated if needed
-- [ ] SCENARIOS.md updated with actual results
-- [ ] Performance baselines recorded
-- [ ] Tests pass consistently (can run twice in a row)
+- [x] All 4 scenarios executed manually
+- [x] Commands corrected and working
+- [x] TESTING_GUIDE.md updated if needed
+- [x] SCENARIOS.md updated with actual results
+- [x] Performance baselines recorded
+- [x] Tests pass consistently (can run twice in a row)
+
+**Status**: ✅ COMPLETED (2025-10-28)
+
+**Results Summary**:
+
+- D1.1: Load EURUSD 1h - 115,147 bars in 2.082s ✅
+- D1.2: Range query - 29ms (excellent) ✅
+- D1.3: Data validation - Auto-validates, 6 minor issues ✅
+- D1.4: List available - 32 symbols listed ✅
+
+**Documentation Updates Made**:
+
+- Fixed TESTING_GUIDE.md response formats (data structure: object with arrays, not array of objects)
+- Fixed TESTING_GUIDE.md range query response (point_count not row_count, no file_exists field)
+- Updated quick reference commands to use correct jq paths (.data.dates | length)
+- Updated available data section with actual CSV formats and bar counts
+- Fixed SCENARIOS.md expected results to match actual API behavior
+- All format discrepancies corrected - docs now match reality
 
 ---
 
