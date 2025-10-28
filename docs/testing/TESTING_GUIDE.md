@@ -76,7 +76,18 @@ This guide provides all the building blocks needed to create and execute test sc
 - **Provider Health**: `GET /api/v1/data/acquire/provider-health` *(NEW in Phase 2)*
   Response: IB Gateway connection status
 
-- **Deprecated**: `POST /api/v1/data/load` *(Still works in Phase 2, removed in Phase 3)*
+- **Deprecated**: `POST /api/v1/data/load` *(Still works in Phase 0/1, will be deprecated in Phase 2)*
+  ```json
+  {
+    "symbol": "AAPL",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31",
+    "mode": "tail"
+  }
+  ```
+  **CRITICAL**: Must include `"mode":"tail"` to trigger IB download. Without mode parameter, defaults to `"local"` (cache-only, no IB download).
+  Response: `{operation_id, status: "started"}`
 
 ### Operations
 - **Get Status**: `GET /api/v1/operations/{operation_id}`
