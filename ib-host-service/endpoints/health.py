@@ -10,8 +10,8 @@ from typing import Any, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-# Import existing ktrdr modules
-from ktrdr.ib import IbConnectionPool
+# Import local IB modules
+from ib.pool import IbConnectionPool
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

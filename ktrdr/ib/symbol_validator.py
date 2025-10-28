@@ -33,9 +33,9 @@ from typing import Optional
 
 from ib_insync import Contract, Forex, Future, Stock
 
-from ib.pace_manager import IbPaceManager
-from ib.pool_manager import get_shared_ib_pool
-from ib.trading_hours_parser import IBTradingHoursParser
+from ktrdr.ib.pace_manager import IbPaceManager
+from ktrdr.ib.pool_manager import get_shared_ib_pool
+from ktrdr.ib.trading_hours_parser import IBTradingHoursParser
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

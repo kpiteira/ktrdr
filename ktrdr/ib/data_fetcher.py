@@ -19,7 +19,7 @@ from datetime import datetime
 import pandas as pd
 from ib_insync import Contract, Forex, Stock
 
-from ib.pool_manager import get_shared_ib_pool
+from ktrdr.ib.pool_manager import get_shared_ib_pool
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)

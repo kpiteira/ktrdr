@@ -11,8 +11,9 @@ from typing import Any, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-# Import existing ktrdr modules
-from ktrdr.ib import IbDataFetcher, IbSymbolValidator
+# Import local IB modules
+from ib.data_fetcher import IbDataFetcher
+from ib.symbol_validator import IbSymbolValidator
 from ktrdr.logging import get_logger
 
 logger = get_logger(__name__)
