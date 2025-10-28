@@ -26,9 +26,9 @@
 | D1.2 | Data Cache - Range Query | Backend | <100ms | ✅ |
 | D1.3 | Data Cache - Validate Data | Backend | <1s | ✅ |
 | D1.4 | Data Info - List Available | Backend | <500ms | ✅ |
-| D2.1 | IB Host - Health Check | IB Host | <1s | ⏳ |
-| D2.2 | IB Host - Direct Download | IB Host | 30-90s | ⏳ |
-| D2.3 | IB Host - Symbol Validation | IB Host | <5s | ⏳ |
+| D2.1 | IB Host - Health Check | IB Host | <1s | ✅ |
+| D2.2 | IB Host - Direct Download | IB Host | 30-90s | ✅ |
+| D2.3 | IB Host - Symbol Validation | IB Host | <5s | ✅ |
 | D3.1 | Data Download - Small (via API) | Integration | 10-30s | ⏳ |
 | D3.2 | Data Download - Progress Monitoring | Integration | 30-90s | ⏳ |
 | D3.3 | Data Download - Completion & Cache | Integration | 30-90s | ⏳ |
@@ -920,8 +920,26 @@ tail -20 ib-host-service/logs/ib-host-service.log | grep -E "health|connected|ga
 - Service not running → Connection refused
 - IB Gateway not connected → `ib_connected: false`
 
-### Actual Results
-⏳ **NOT YET TESTED**
+### Actual Results (2025-10-28)
+✅ **PASSED** (with format note)
+
+**Response**:
+```json
+{
+  "healthy": true,
+  "service": "ib-connector",
+  "timestamp": "2025-10-28T01:12:53.219144",
+  "status": "operational"
+}
+```
+
+**Key Validation**:
+- ✅ HTTP 200 OK
+- ✅ Service healthy and operational
+- ✅ IB Gateway connected (confirmed via logs: "Connected to 127.0.0.1:4002, server version 176")
+- ⚠️ **Format Note**: Response does NOT include `ib_connected` or `gateway_version` fields (both null)
+
+**Recommendation**: Use logs to verify IB Gateway connection status, not health endpoint fields.
 
 ---
 
@@ -974,8 +992,48 @@ tail -30 ib-host-service/logs/ib-host-service.log | grep -E "historical|download
 - All bars have OHLCV data
 - Duration: 30-90 seconds (varies with IB)
 
-### Actual Results
-⏳ **NOT YET TESTED**
+### Actual Results (2025-10-28)
+✅ **PASSED** (after bug fix)
+
+**Initial Test**: ⚠️ Found bug (dtype comparison error)
+**Fix Applied**: ✅ 2025-10-28
+**Retest**: ✅ PASSED
+
+**Test Results After Fix**:
+```json
+{
+  "success": true,
+  "rows": 454,
+  "error": null
+}
+```
+
+**Data Sample**:
+```json
+{
+  "2024-12-03T22:15:00.000Z": {
+    "open": 1.05035,
+    "high": 1.05087,
+    "low": 1.0503,
+    "close": 1.05082,
+    "volume": -1.0
+  }
+}
+```
+
+**Bug Found & Fixed**:
+- **Issue**: `TypeError: Invalid comparison between dtype=datetime64[ns, UTC] and datetime`
+- **Location**: `ktrdr/ib/data_fetcher.py:211`
+- **Root Cause**: Type mismatch (pandas DatetimeIndex vs Python datetime)
+- **Fix**: Convert datetime to `pd.Timestamp()` before comparison + normalize naive datetimes to UTC
+- **Details**: See [BUG_ANALYSIS_D2.2.md](BUG_ANALYSIS_D2.2.md)
+
+**Key Validation**:
+- ✅ Endpoint: `POST /data/historical` with fields `start`/`end`
+- ✅ IB Gateway responds (454 bars for Dec 2024 EURUSD 1h)
+- ✅ Data successfully converted to DataFrame
+- ✅ UTC timestamps in ISO format
+- ✅ All OHLCV columns present
 
 ---
 
@@ -1013,8 +1071,42 @@ curl -s -X POST http://localhost:5001/data/validate \
 - AAPL: `{valid: true, instrument_type: "STK", exchange: "SMART", ...}`
 - INVALID123XYZ: `{valid: false, error: "..."}`
 
-### Actual Results
-⏳ **NOT YET TESTED**
+### Actual Results (2025-10-28)
+✅ **PASSED** (all 3 validation cases)
+
+**EURUSD Validation**:
+```json
+{
+  "valid": true,
+  "symbol": "EUR",
+  "asset_type": "CASH",
+  "exchange": "IDEALPRO"
+}
+```
+
+**AAPL Validation**:
+```json
+{
+  "valid": true,
+  "symbol": "AAPL",
+  "asset_type": "STK",
+  "exchange": "NASDAQ"
+}
+```
+
+**INVALID123XYZ Validation**:
+```json
+{
+  "valid": false,
+  "error": "Symbol INVALID123XYZ not found"
+}
+```
+
+**Key Validation**:
+- ✅ Valid symbols correctly identified (EURUSD as CASH, AAPL as STK)
+- ✅ Invalid symbols correctly rejected with clear error
+- ✅ Exchange information included (IDEALPRO for forex, NASDAQ for stocks)
+- ✅ Performance: <2 seconds per validation
 
 ---
 
@@ -1304,13 +1396,13 @@ curl -i -s -X POST http://localhost:8000/api/v1/data/load \
 
 ### Data Scenarios
 - **Total**: 13
-- **Tested**: 4 (31%)
-- **Passed**: 4 ✅
+- **Tested**: 7 (54%)
+- **Passed**: 7 ✅ (1 bug found and fixed)
 - **Failed**: 0
 
 **Test Coverage by Category**:
 - Backend Isolated (Cache): 4/4 ✅ **COMPLETE**
-- IB Host Service Isolated: 0/3 ⏳
+- IB Host Service Isolated: 3/3 ✅ **COMPLETE** (D2.2 bug fixed)
 - Integration (Backend + IB Host): 0/3 ⏳
 - Error Handling: 0/3 ⏳
 
@@ -1338,8 +1430,10 @@ Data (Phase 0+):
   - Range query: 29ms ✅
   - Data validation: Auto-runs, 6 minor issues detected ✅
   - Data info: 32 symbols listed ✅
-- ⏳ IB host service health and connectivity (D2.1-D2.3)
-- ⏳ Direct IB downloads
+- ✅ **IB host service tests (D2.1-D2.3): COMPLETE** (2025-10-28)
+  - Health check: Service operational ✅
+  - Direct download: ✅ Bug found & fixed (datetime type conversion)
+  - Symbol validation: All 3 cases passed ✅
 - ⏳ Backend → IB host integration (D3.1-D3.3)
 - ⏳ Progress tracking for downloads
 - ⏳ Cache save after download

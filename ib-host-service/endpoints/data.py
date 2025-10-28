@@ -107,6 +107,17 @@ async def get_historical_data(request: HistoricalDataRequest):
     from IB Gateway, bypassing Docker networking issues.
     """
     try:
+        # Ensure timezone-aware datetimes for consistent processing
+        from datetime import timezone
+
+        if request.start.tzinfo is None:
+            request.start = request.start.replace(tzinfo=timezone.utc)
+            logger.warning("start datetime was naive, assuming UTC")
+
+        if request.end.tzinfo is None:
+            request.end = request.end.replace(tzinfo=timezone.utc)
+            logger.warning("end datetime was naive, assuming UTC")
+
         logger.info(
             f"Fetching historical data: {request.symbol} {request.timeframe} "
             f"{request.start} to {request.end}"

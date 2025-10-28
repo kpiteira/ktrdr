@@ -227,13 +227,38 @@ ls -lh data/EURUSD_*.pkl data/EURUSD_*.csv 2>/dev/null
 5. Update documentation with actual endpoint paths and response formats
 
 **Acceptance Criteria**:
-- [ ] D2.1 executed manually (pass or documented why not)
-- [ ] IB Gateway status documented
-- [ ] If IB connected: D2.2, D2.3 executed and working
-- [ ] Commands corrected and working
-- [ ] TESTING_GUIDE.md updated if endpoint paths wrong
-- [ ] SCENARIOS.md updated with actual results
-- [ ] Download timing baseline recorded (if applicable)
+- [x] D2.1 executed manually (pass or documented why not)
+- [x] IB Gateway status documented
+- [x] If IB connected: D2.2, D2.3 executed and working
+- [x] Commands corrected and working
+- [x] TESTING_GUIDE.md updated if endpoint paths wrong
+- [x] SCENARIOS.md updated with actual results
+- [x] Download timing baseline recorded (if applicable)
+
+**Status**: ✅ COMPLETED (2025-10-28)
+
+**Results Summary**:
+
+- D2.1: Health check - Service operational ✅
+- D2.2: Direct download - ⚠️ Bug found (endpoint works, IB responds, DataFrame conversion fails)
+- D2.3: Symbol validation - All 3 cases passed ✅
+
+**Bug Discovered & Fixed**:
+
+**D2.2 Bug**: Datetime type mismatch in data_fetcher.py
+- **Symptom**: `TypeError: Invalid comparison between dtype=datetime64[ns, UTC] and datetime`
+- **Location**: ktrdr/ib/data_fetcher.py:211 (DataFrame filtering)
+- **Root Cause**: Pandas DatetimeIndex cannot compare directly with Python datetime objects
+- **Impact**: IB Gateway responded successfully (454 bars), but DataFrame filtering failed
+- **Fix Applied**: Convert datetime to pd.Timestamp() + normalize naive datetimes to UTC
+- **Test Result**: ✅ PASSED - 454 bars returned successfully
+- **Status**: ✅ RESOLVED (2025-10-28)
+
+**Documentation Updates**:
+
+- Corrected field names in TESTING_GUIDE.md (`start`/`end` not `start_date`/`end_date`)
+- Updated health endpoint response format (missing `ib_connected`/`gateway_version` fields)
+- All test results documented in SCENARIOS.md
 
 ---
 

@@ -208,7 +208,10 @@ class IbDataFetcher:
             )
 
             # Filter by date range
-            df = df[(df.index >= start) & (df.index <= end)]  # type: ignore[operator,assignment]
+            # Convert Python datetime objects to pandas Timestamps for proper comparison
+            start_pd = pd.Timestamp(start)
+            end_pd = pd.Timestamp(end)
+            df = df[(df.index >= start_pd) & (df.index <= end_pd)]
 
             logger.info(
                 f"Successfully processed {len(df)} bars for {symbol} {timeframe}"
