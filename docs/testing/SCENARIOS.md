@@ -2,6 +2,8 @@
 
 ## Scenario Index
 
+### Training Scenarios
+
 | ID | Name | Category | Duration | Status |
 |----|------|----------|----------|--------|
 | 1.1 | Local Training - Smoke Test | Backend | ~2s | ✅ |
@@ -16,7 +18,27 @@
 | 4.1 | Error - Invalid Strategy | Error | ~1s | ✅ |
 | 4.2 | Error - Operation Not Found | Error | ~1s | ✅ |
 
+### Data Scenarios (Phase 0+)
+
+| ID | Name | Category | Duration | Status |
+|----|------|----------|----------|--------|
+| D1.1 | Data Cache - Load EURUSD 1h | Backend | <1s | ⏳ |
+| D1.2 | Data Cache - Range Query | Backend | <100ms | ⏳ |
+| D1.3 | Data Cache - Validate Data | Backend | <1s | ⏳ |
+| D1.4 | Data Info - List Available | Backend | <500ms | ⏳ |
+| D2.1 | IB Host - Health Check | IB Host | <1s | ⏳ |
+| D2.2 | IB Host - Direct Download | IB Host | 30-90s | ⏳ |
+| D2.3 | IB Host - Symbol Validation | IB Host | <5s | ⏳ |
+| D3.1 | Data Download - Small (via API) | Integration | 10-30s | ⏳ |
+| D3.2 | Data Download - Progress Monitoring | Integration | 30-90s | ⏳ |
+| D3.3 | Data Download - Completion & Cache | Integration | 30-90s | ⏳ |
+| D4.1 | Error - Invalid Symbol | Error | <1s | ⏳ |
+| D4.2 | Error - IB Service Not Running | Error | <1s | ⏳ |
+| D4.3 | Error - IB Gateway Disconnected | Error | <1s | ⏳ |
+
 **Legend**: ✅ Tested & Passed | ❌ Failed | ⏳ Not Yet Tested
+
+**Note**: Data scenarios require Phase 0 baseline test execution first
 
 ---
 
@@ -600,9 +622,572 @@ curl -i -s "http://localhost:8000/api/v1/operations/nonexistent_operation_id_123
 
 ---
 
+# DATA SCENARIOS (Phase 0+)
+
+## D1.1: Data Cache - Load EURUSD 1h
+
+**Category**: Backend Isolated
+**Duration**: <1 second
+**Purpose**: Validate cache loading performance and correctness
+
+### Prerequisites
+- Backend running
+- EURUSD 1h data cached (check with D1.2 first)
+
+### Commands
+
+**1. Check Data Available**
+```bash
+test -f data/EURUSD_1h.pkl && echo "✅ Data available" || echo "❌ Data missing - run download first"
+```
+
+**2. Load from Cache**
+```bash
+RESPONSE=$(curl -s "http://localhost:8000/api/v1/data/EURUSD/1h")
+ROWS=$(echo "$RESPONSE" | jq '.data | length')
+echo "Loaded $ROWS bars"
+```
+
+**3. Verify Data Structure**
+```bash
+echo "$RESPONSE" | jq '.data[0] | keys'
+# Should have: open, high, low, close, volume, timestamp
+```
+
+**4. Check Performance**
+```bash
+time curl -s "http://localhost:8000/api/v1/data/EURUSD/1h" > /dev/null
+# Should be < 1 second
+```
+
+### Expected Results
+- HTTP 200 OK
+- Response contains array of OHLCV data
+- All bars have required columns
+- Load time < 1 second
+- EURUSD 1h: ~115,000 bars
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D1.2: Data Cache - Range Query
+
+**Category**: Backend Isolated
+**Duration**: <100ms
+**Purpose**: Validate metadata queries (no data loading)
+
+### Commands
+
+**1. Query Range**
+```bash
+curl -s -X POST http://localhost:8000/api/v1/data/range \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EURUSD","timeframe":"1h"}' | jq
+```
+
+**2. Verify Response**
+```bash
+curl -s -X POST http://localhost:8000/api/v1/data/range \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EURUSD","timeframe":"1h"}' | \
+  jq '{exists:.data.file_exists, start:.data.start_date, end:.data.end_date, rows:.data.row_count}'
+```
+
+**3. Check Performance**
+```bash
+time curl -s -X POST http://localhost:8000/api/v1/data/range \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EURUSD","timeframe":"1h"}' > /dev/null
+```
+
+### Expected Results
+- HTTP 200 OK
+- Returns metadata without loading full data
+- Response time < 100ms
+- Contains: start_date, end_date, row_count, file_exists
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D1.3: Data Cache - Validate Data
+
+**Category**: Backend Isolated
+**Duration**: <1 second
+**Purpose**: Verify data validation logic works
+
+### Commands
+
+**1. Load with Validation (implicit)**
+```bash
+curl -s "http://localhost:8000/api/v1/data/EURUSD/1d" | \
+  jq '{bars: (.data | length), first: .data[0], last: .data[-1]}'
+```
+
+**2. Check for Quality Issues in Logs**
+```bash
+docker-compose -f docker/docker-compose.yml logs backend --since 30s | \
+  grep -E "validation|data quality|gap detected"
+```
+
+### Expected Results
+- Data loads successfully
+- No validation errors logged
+- All OHLCV columns present
+- No NaN or null values
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D1.4: Data Info - List Available
+
+**Category**: Backend Isolated
+**Duration**: <500ms
+**Purpose**: Validate data inventory API
+
+### Commands
+
+**1. Get Data Info**
+```bash
+curl -s "http://localhost:8000/api/v1/data/info" | jq
+```
+
+**2. Check Available Symbols**
+```bash
+curl -s "http://localhost:8000/api/v1/data/info" | jq '.symbols | length'
+```
+
+**3. Check EURUSD Timeframes**
+```bash
+curl -s "http://localhost:8000/api/v1/data/info" | \
+  jq '.symbols[] | select(.symbol=="EURUSD") | .timeframes'
+```
+
+### Expected Results
+- HTTP 200 OK
+- Lists all cached symbols
+- Shows available timeframes per symbol
+- EURUSD should have: 1d, 1h, 5m (likely)
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D2.1: IB Host - Health Check
+
+**Category**: IB Host Service Isolated
+**Duration**: <1 second
+**Purpose**: Validate IB host service and Gateway connectivity
+
+### Prerequisites
+- IB host service running (port 5001)
+- IB Gateway running and logged in
+
+### Commands
+
+**1. Check Service Health**
+```bash
+curl -s http://localhost:5001/health | jq
+```
+
+**2. Verify IB Connection**
+```bash
+curl -s http://localhost:5001/health | jq '{service:.status, ib_connected:.ib_connected, gateway:.gateway_version}'
+```
+
+**3. Check Service Logs**
+```bash
+tail -20 ib-host-service/logs/ib-host-service.log | grep -E "health|connected|gateway"
+```
+
+### Expected Results
+- HTTP 200 OK
+- `status: "healthy"`
+- `ib_connected: true`
+- `gateway_version` present (e.g., "10.19")
+
+### Error Cases
+- Service not running → Connection refused
+- IB Gateway not connected → `ib_connected: false`
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D2.2: IB Host - Direct Download
+
+**Category**: IB Host Service Isolated
+**Duration**: 30-90 seconds
+**Purpose**: Validate direct IB download (bypass backend)
+
+### Prerequisites
+- IB host service running
+- IB Gateway connected (D2.1 passed)
+
+### Test Data
+- Symbol: EURUSD
+- Timeframe: 1h
+- Range: Dec 2024 (~720 bars)
+
+### Commands
+
+**1. Download Directly from Host**
+```bash
+RESPONSE=$(curl -s -X POST http://localhost:5001/data/historical \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "EURUSD",
+    "timeframe": "1h",
+    "start_date": "2024-12-01T00:00:00",
+    "end_date": "2024-12-31T23:59:59"
+  }')
+
+BARS=$(echo "$RESPONSE" | jq '.bars_count')
+echo "Downloaded $BARS bars"
+```
+
+**2. Verify Data Structure**
+```bash
+echo "$RESPONSE" | jq '.data[0] | keys'
+# Should have OHLCV fields
+```
+
+**3. Check Logs**
+```bash
+tail -30 ib-host-service/logs/ib-host-service.log | grep -E "historical|download|bars"
+```
+
+### Expected Results
+- HTTP 200 OK
+- ~720 bars returned (31 days * ~24 hours)
+- All bars have OHLCV data
+- Duration: 30-90 seconds (varies with IB)
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D2.3: IB Host - Symbol Validation
+
+**Category**: IB Host Service Isolated
+**Duration**: <5 seconds
+**Purpose**: Validate symbol validation with IB
+
+### Commands
+
+**1. Validate Valid Symbol (EURUSD)**
+```bash
+curl -s -X POST http://localhost:5001/data/validate \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EURUSD"}' | jq
+```
+
+**2. Validate Valid Symbol (AAPL)**
+```bash
+curl -s -X POST http://localhost:5001/data/validate \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"AAPL"}' | jq
+```
+
+**3. Validate Invalid Symbol**
+```bash
+curl -s -X POST http://localhost:5001/data/validate \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"INVALID123XYZ"}' | jq
+```
+
+### Expected Results
+- EURUSD: `{valid: true, instrument_type: "FOREX", ...}`
+- AAPL: `{valid: true, instrument_type: "STK", exchange: "SMART", ...}`
+- INVALID123XYZ: `{valid: false, error: "..."}`
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D3.1: Data Download - Small (via API)
+
+**Category**: Integration (Backend + IB Host)
+**Duration**: 10-30 seconds
+**Purpose**: Validate end-to-end download via backend API
+
+**⚠️ NOTE**: This scenario uses **DEPRECATED endpoint** `/api/v1/data/load` until Phase 2 implements `/api/v1/data/acquire/download`
+
+### Prerequisites
+- Backend running
+- IB host service running (port 5001)
+- IB Gateway connected (D2.1 passed)
+
+### Test Data
+- Symbol: AAPL (less data than EURUSD, faster test)
+- Timeframe: 1d
+- Range: 2024 (~250 bars)
+
+### Commands
+
+**1. Start Download (Current Endpoint - Phase 0/1)**
+```bash
+# Using current endpoint (will be deprecated in Phase 2)
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/load \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "AAPL",
+    "timeframe": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31"
+  }')
+
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id // .task_id // empty')
+echo "Operation ID: $OPERATION_ID"
+```
+
+**2. Monitor Progress**
+```bash
+for i in {1..6}; do
+  sleep 5
+  curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+    jq '{poll:'"$i"', status:.data.status, percentage:.data.progress.percentage}'
+done
+```
+
+**3. Check Completion**
+```bash
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+  jq '{status:.data.status, bars:.data.result_summary.bars_downloaded, duration:.data.result_summary.download_time}'
+```
+
+**4. Verify Cached**
+```bash
+test -f data/AAPL_1d.pkl && echo "✅ Saved to cache" || echo "❌ Not cached"
+```
+
+**5. Check Backend Logs**
+```bash
+docker-compose -f docker/docker-compose.yml logs backend --since 60s | \
+  grep -E "data download|operation.*$OPERATION_ID|Saved.*AAPL"
+```
+
+### Expected Results
+- Download starts successfully
+- Operation ID returned
+- Progress updates show percentage increasing
+- Final status: `completed`
+- ~250 bars downloaded
+- Data saved to cache
+- Duration: 10-30 seconds
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D3.2: Data Download - Progress Monitoring
+
+**Category**: Integration (Backend + IB Host)
+**Duration**: 30-90 seconds
+**Purpose**: Validate progress tracking during download
+
+### Test Data
+- Symbol: EURUSD
+- Timeframe: 1h
+- Range: Dec 2024 (~720 bars)
+
+### Commands
+
+**Similar to D3.1 but with more frequent polling**
+
+```bash
+# Start download
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/data/load \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "EURUSD",
+    "timeframe": "1h",
+    "start_date": "2024-12-01",
+    "end_date": "2024-12-31"
+  }')
+
+OPERATION_ID=$(echo "$RESPONSE" | jq -r '.operation_id // .task_id // empty')
+
+# Poll every 10 seconds
+for i in {1..10}; do
+  sleep 10
+  curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+    jq '{time:'"$i"'0, status:.data.status, pct:.data.progress.percentage, step:.data.progress.current_step, items:.data.progress.items_processed}'
+done
+```
+
+### Expected Results
+- Progress percentage increases: 0% → 25% → 50% → 75% → 100%
+- `current_step` shows segment info: "Downloading segment X/Y"
+- `items_processed` shows bars downloaded so far
+- No stalls or errors
+- Smooth progress updates
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D3.3: Data Download - Completion & Cache
+
+**Category**: Integration (Backend + IB Host)
+**Duration**: 30-90 seconds
+**Purpose**: Validate full workflow including cache save
+
+### Commands
+
+**Use D3.2 setup, add verification steps**
+
+```bash
+# After download completes...
+
+# 1. Verify operation completed
+curl -s "http://localhost:8000/api/v1/operations/$OPERATION_ID" | \
+  jq '{status:.data.status, bars:.data.result_summary.bars_downloaded, cached:.data.result_summary.cached}'
+
+# 2. Verify file saved
+ls -lh data/EURUSD_1h.pkl
+
+# 3. Load from cache (should be fast now)
+time curl -s "http://localhost:8000/api/v1/data/EURUSD/1h" | jq '.data | length'
+
+# 4. Check logs for save confirmation
+docker-compose -f docker/docker-compose.yml logs backend --since 60s | \
+  grep "Saved.*EURUSD_1h"
+```
+
+### Expected Results
+- Status: `completed`
+- `bars_downloaded`: ~720
+- `cached: true`
+- File exists in data/
+- Subsequent load from cache < 1s
+- Logs confirm save
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D4.1: Error - Invalid Symbol
+
+**Category**: Error Handling
+**Duration**: <1 second
+**Purpose**: Validate error handling for invalid symbol
+
+### Commands
+
+```bash
+curl -i -s -X POST http://localhost:8000/api/v1/data/load \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "INVALID_SYMBOL_XYZ123",
+    "timeframe": "1h",
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31"
+  }'
+```
+
+### Expected Results
+- HTTP 400 Bad Request (or starts operation which fails during validation)
+- Error message: "Invalid symbol" or "Symbol not found"
+- Clear indication of what went wrong
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D4.2: Error - IB Service Not Running
+
+**Category**: Error Handling
+**Duration**: <1 second
+**Purpose**: Validate error when IB host service unavailable
+
+### Setup
+
+**Stop IB host service temporarily**
+
+### Commands
+
+```bash
+# Verify service down
+curl -s http://localhost:5001/health
+# Should get: Connection refused
+
+# Attempt download
+curl -i -s -X POST http://localhost:8000/api/v1/data/load \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "EURUSD",
+    "timeframe": "1h",
+    "start_date": "2024-12-01",
+    "end_date": "2024-12-31"
+  }'
+```
+
+### Expected Results
+- HTTP 503 Service Unavailable (or operation fails quickly)
+- Error message: "IB service not available" or "Connection refused"
+- User-friendly error (not raw exception)
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
+## D4.3: Error - IB Gateway Disconnected
+
+**Category**: Error Handling
+**Duration**: <1 second
+**Purpose**: Validate error when IB Gateway not connected
+
+### Setup
+
+**IB host service running, but IB Gateway logged out**
+
+### Commands
+
+```bash
+# Check health (should show disconnected)
+curl -s http://localhost:5001/health | jq '{ib_connected:.ib_connected}'
+# Should return: ib_connected: false
+
+# Attempt download
+curl -i -s -X POST http://localhost:8000/api/v1/data/load \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "EURUSD",
+    "timeframe": "1h",
+    "start_date": "2024-12-01",
+    "end_date": "2024-12-31"
+  }'
+```
+
+### Expected Results
+- HTTP 503 Service Unavailable (or operation fails during execution)
+- Error message: "IB Gateway not connected" or "Please log in to IB Gateway"
+- Clear guidance for user
+
+### Actual Results
+⏳ **NOT YET TESTED**
+
+---
+
 ## Summary Statistics
 
-- **Total Scenarios**: 11
+### Training Scenarios
+- **Total**: 11
 - **Tested**: 11 (100%) ✅
 - **Passed**: 11 (100%) ✅
 - **Failed**: 0
@@ -613,12 +1198,26 @@ curl -i -s "http://localhost:8000/api/v1/operations/nonexistent_operation_id_123
 - Integration (Backend + Host): 3/3 ✅
 - Error Handling: 2/2 ✅
 
+### Data Scenarios
+- **Total**: 13
+- **Tested**: 0 (0%) ⏳
+- **Passed**: 0
+- **Failed**: 0
+
+**Test Coverage by Category**:
+- Backend Isolated (Cache): 0/4 ⏳
+- IB Host Service Isolated: 0/3 ⏳
+- Integration (Backend + IB Host): 0/3 ⏳
+- Error Handling: 0/3 ⏳
+
 **Test Data Calibration**:
-- Quick smoke test: 1y daily (~2s)
-- Progress monitoring: 2y 5m (~62s)
-- Strategy: `test_e2e_local_pull`
+- Training: Quick smoke test (1y daily ~2s), Progress monitoring (2y 5m ~62s)
+- Data Cache: Fast (<1s), Range queries (<100ms)
+- Data Download: Small (10-30s), Medium (30-90s), Large (5-15min)
 
 **Key Validations**:
+
+Training:
 - ✅ M1 Pull Architecture working (zero event loop errors)
 - ✅ Local training (in backend container)
 - ✅ Host service standalone operation
@@ -629,4 +1228,15 @@ curl -i -s "http://localhost:8000/api/v1/operations/nonexistent_operation_id_123
 - ✅ Metrics collection and retrieval
 - ✅ Error handling
 
-**Test Execution Date**: 2025-10-25
+Data (Phase 0+):
+- ⏳ Cache operations (load, range query, validation)
+- ⏳ IB host service health and connectivity
+- ⏳ Direct IB downloads
+- ⏳ Backend → IB host integration
+- ⏳ Progress tracking for downloads
+- ⏳ Cache save after download
+- ⏳ Error handling (invalid symbol, service down, gateway disconnected)
+
+**Test Execution Dates**:
+- Training: 2025-10-25 ✅
+- Data: Not yet tested ⏳
