@@ -592,136 +592,50 @@ from ktrdr.logging import get_logger  # Shared import (via sys.path)
 
 ---
 
-#### TASK 1.6: Delete ktrdr/ib/ Directory (After Verification)
+#### ~~TASK 1.6: Delete ktrdr/ib/ Directory~~ → **MOVED TO PHASE 2 (Task 2.4)**
 
-**Objective**: Remove now-unused IB code from backend codebase.
+**Reason for Move**: Backend still imports from `ktrdr/ib` (e.g., `IbDataAdapter`, `ib_service.py`, `gap_commands.py`). These imports are removed in Phase 2 Task 2.3 when `IbDataAdapter` is refactored to `IbDataProvider`. Deletion of `ktrdr/ib/` must happen AFTER those imports are removed, not before.
 
-**Scope**:
-- **ONLY after Tasks 1.1-1.5 complete and verified**
-- Delete entire `ktrdr/ib/` directory
-- Verify backend doesn't import from `ktrdr/ib` anywhere
-
-**Verification Steps**:
-```bash
-# Search for IB imports in backend
-grep -r "from ktrdr.ib" ktrdr/
-grep -r "import ktrdr.ib" ktrdr/
-
-# Should find ZERO results (except maybe in old tests)
-```
-
-**Files Deleted**:
-- `ktrdr/ib/` directory (entire)
-
-**Acceptance Criteria**:
-- [ ] `ktrdr/ib/` directory deleted
-- [ ] No imports from `ktrdr/ib` in backend code (verified via grep)
-- [ ] Backend Docker image rebuilt (will fail if IB imports remain)
-- [ ] Backend starts successfully (in Docker)
-- [ ] Host service still works
-- [ ] IB operations still functional via host service
-
----
-
-#### TASK 1.7: Rebuild Backend Docker & Validate
-
-**Objective**: Ensure backend works without ktrdr/ib/ code.
-
-**Scope**:
-- Rebuild backend Docker image (critical: will fail if IB imports remain)
-- Start backend container
-- Verify no import errors during startup
-- Run basic health checks
-
-**Commands**:
-```bash
-# Rebuild backend Docker image
-docker-compose -f docker/docker-compose.yml build backend
-
-# Restart backend
-docker-compose -f docker/docker-compose.yml restart backend
-
-# Check logs for import errors
-docker-compose -f docker/docker-compose.yml logs backend --since 30s | grep -i "importerror\|modulenotfounderror"
-# Should be empty
-
-# Health check
-curl -s http://localhost:8000/health | jq
-```
-
-**Acceptance Criteria**:
-- [ ] Docker build succeeds (no import errors during build)
-- [ ] Backend container starts successfully
-- [ ] No import errors in logs
-- [ ] Health endpoint responds
-- [ ] Backend can serve requests
-
----
-
-#### TASK 1.8: Run Phase 1 End-to-End Tests
-
-**Objective**: Validate data operations still work after IB code moved.
-
-**Scope**:
-- Re-run subset of Phase 0 scenarios to detect regressions
-- Focus on scenarios that passed in Phase 0
-- Use integration-test-specialist agent if Task 0.8 succeeded
-- Document any regressions
-
-**Scenarios to Re-Run**:
-- **D1.1-D1.4**: Backend cache tests (must still pass)
-- **D2.1**: IB host health check (must still pass)
-- **D2.2 or D2.3**: One IB host download test (if IB available)
-- **D3.1**: Integration test (backend → IB host, if IB available)
-
-**Acceptance Criteria**:
-- [ ] Cache tests (D1.1-D1.4) still pass (no regression)
-- [ ] IB host service still healthy (D2.1)
-- [ ] If IB available: At least one download test passes (D2.2 or D3.1)
-- [ ] No regressions from Phase 0 baseline
-- [ ] Results documented in SCENARIOS.md
-
-**If Regressions Found**:
-- Debug and fix before proceeding
-- Update code or tests as needed
-- Re-run until tests pass
+**See**: Phase 2 Tasks 2.4-2.6 for deletion, rebuild, and testing.
 
 ---
 
 ### Phase 1 Exit Criteria
 
 **Code Location**:
-- [ ] IB code lives in `ib-host-service/ib/` (8 files)
-- [ ] `ktrdr/ib/` directory deleted
-- [ ] Host service imports from local `ib/` package
+
+- [x] IB code lives in `ib-host-service/ib/` (8 files) - ✅ Tasks 1.1-1.4
+- [x] Host service imports from local `ib/` package - ✅ Task 1.5
+- [ ] ~~`ktrdr/ib/` directory deleted~~ - **DEFERRED to Phase 2** (Task 2.4, after imports removed)
 
 **Import Rules**:
-- [ ] Backend has ZERO imports from `ktrdr/ib`
-- [ ] Host service imports from `ib/` (local)
-- [ ] Shared dependencies still work (logging, config, trading_hours)
 
-**Backend Rebuild**:
-- [ ] Backend Docker image rebuilt successfully (Task 1.7)
-- [ ] No import errors during build or startup
-- [ ] Backend runs without IB code
+- [x] Host service imports from `ib/` (local) - ✅ Task 1.5
+- [x] Host service works with local IB code - ✅ Task 1.5 (tested)
+- [ ] ~~Backend has ZERO imports from `ktrdr/ib`~~ - **DEFERRED to Phase 2** (Task 2.3 removes imports)
+- [x] Shared dependencies still work (logging, config) - ✅ Verified in Task 1.5
 
-**Functionality**:
-- [ ] Host service starts successfully
-- [ ] Host service endpoints respond (`/data/historical`, `/data/validate`, etc.)
-- [ ] Backend health check passes
+**Functionality** (Task 1.5 Verified):
 
-**End-to-End Testing** (Task 1.8):
-- [ ] Cache tests pass (D1.1-D1.4)
-- [ ] IB host health check passes (D2.1)
-- [ ] At least one IB download test passes (if IB available)
-- [ ] No regressions from Phase 0
+- [x] Host service starts successfully - ✅
+- [x] Host service endpoints respond (`/data/historical`, `/data/validate`) - ✅
+- [x] Integration test: Historical data download works - ✅ (D2.2 passed)
+- [x] Bug fix: IB duration format Error 321 fixed - ✅
+
+**What's NOT in Phase 1** (moved to Phase 2):
+
+- Backend rebuild without `ktrdr/ib/` - **Phase 2 Task 2.5** (after imports removed)
+- Deletion of `ktrdr/ib/` directory - **Phase 2 Task 2.4** (after imports removed)
+- End-to-end regression testing - **Phase 2 Task 2.6** (after deletion)
 
 **Quality Gates**:
-- [ ] All Phase 1 tests passing
-- [ ] Host service health check passes
-- [ ] Backend Docker builds and runs
-- [ ] Code review approved
-- [ ] Commit: `git commit -m "Phase 1: IB code moved to host service - tests pass"`
+
+- [x] Host service health check passes - ✅
+- [x] IB Host direct download test passes (D2.2) - ✅
+- [x] Code review approved - ✅
+- [x] Commit: `git commit -m "Phase 1: IB code moved to host service"` - ✅ (commits 791a5e4, c06b244, 297d124, 265edc7, 65b67fa, 72ecfe1)
+
+**Ready for Phase 2**: ✅ Host service is self-contained with local IB code
 
 ---
 
@@ -973,6 +887,7 @@ class IbDataProvider(ExternalDataProvider):
 ```
 
 **Acceptance Criteria**:
+
 - [ ] IbDataProvider created in `acquisition/ib_data_provider.py`
 - [ ] HTTP-only (no direct IB connection code)
 - [ ] No imports from `ktrdr/ib` (would fail)
@@ -984,7 +899,119 @@ class IbDataProvider(ExternalDataProvider):
 
 ---
 
-#### TASK 2.4: Update DataLoadingOrchestrator to Use Repository
+#### TASK 2.4: Delete ktrdr/ib/ Directory (Moved from Phase 1)
+
+**Objective**: Remove now-unused IB code from backend codebase.
+
+**Why Now**: Task 2.3 removed all imports from `ktrdr/ib`, making it safe to delete.
+
+**Scope**:
+
+- Delete entire `ktrdr/ib/` directory
+- Verify backend doesn't import from `ktrdr/ib` anywhere
+
+**Verification Steps**:
+
+```bash
+# Search for IB imports in backend
+grep -r "from ktrdr.ib" ktrdr/
+grep -r "import ktrdr.ib" ktrdr/
+
+# Should find ZERO results (Task 2.3 removed all imports)
+```
+
+**Files Deleted**:
+
+- `ktrdr/ib/` directory (entire)
+
+**Acceptance Criteria**:
+
+- [ ] Task 2.3 completed (IbDataProvider created, imports removed)
+- [ ] Verified: No imports from `ktrdr/ib` in backend code
+- [ ] `ktrdr/ib/` directory deleted
+- [ ] Git commit with clear message
+
+---
+
+#### TASK 2.5: Rebuild Backend Docker & Validate (Moved from Phase 1)
+
+**Objective**: Ensure backend works without ktrdr/ib/ code.
+
+**Why Now**: ktrdr/ib/ deleted in Task 2.4, now verify Docker build succeeds.
+
+**Scope**:
+
+- Rebuild backend Docker image (will succeed since no IB imports)
+- Start backend container
+- Verify no import errors during startup
+- Run basic health checks
+
+**Commands**:
+
+```bash
+# Rebuild backend Docker image
+docker-compose -f docker/docker-compose.yml build backend
+
+# Restart backend
+docker-compose -f docker/docker-compose.yml restart backend
+
+# Check logs for import errors
+docker-compose -f docker/docker-compose.yml logs backend --since 30s | grep -i "importerror\|modulenotfounderror"
+# Should be empty
+
+# Health check
+curl -s http://localhost:8000/api/v1/health | jq
+```
+
+**Acceptance Criteria**:
+
+- [ ] Task 2.4 completed (ktrdr/ib/ deleted)
+- [ ] Docker build succeeds (no import errors during build)
+- [ ] Backend container starts successfully
+- [ ] No import errors in logs
+- [ ] Health endpoint responds
+- [ ] Backend can serve requests
+
+---
+
+#### TASK 2.6: Run Deletion Verification Tests (Moved from Phase 1)
+
+**Objective**: Validate data operations still work after ktrdr/ib/ deletion.
+
+**Why Now**: After deletion and rebuild, verify no regressions.
+
+**Scope**:
+
+- Re-run subset of Phase 0 scenarios to detect regressions
+- Focus on scenarios that passed in Phase 0
+- Use integration-test-specialist agent if available
+- Document any regressions
+
+**Scenarios to Re-Run**:
+
+- **D1.1-D1.4**: Backend cache tests (must still pass)
+- **D2.1**: IB host health check (must still pass)
+- **D2.2 or D2.3**: One IB host download test (if IB available)
+- **D3.1**: Integration test (backend → IB host, if IB available)
+
+**Acceptance Criteria**:
+
+- [ ] Tasks 2.4-2.5 completed (deleted, rebuilt)
+- [ ] Cache tests (D1.1-D1.4) still pass (no regression)
+- [ ] IB host service still healthy (D2.1)
+- [ ] If IB available: At least one download test passes (D2.2 or D3.1)
+- [ ] No regressions from Phase 0 baseline
+- [ ] Results documented in SCENARIOS.md
+
+**If Regressions Found**:
+
+- Debug and fix before proceeding
+- Update code or tests as needed
+- Re-run until tests pass
+
+---
+
+#### TASK 2.7: Update DataLoadingOrchestrator to Use Repository
 
 **Objective**: Update orchestrator to use DataRepository instead of DataManager.
 
@@ -1030,7 +1057,7 @@ class DataLoadingOrchestrator:
 
 ---
 
-#### TASK 2.5: Create New API Endpoints (/data/acquire/*)
+#### TASK 2.8: Create New API Endpoints (/data/acquire/*)
 
 **Objective**: Create new explicit acquisition endpoints.
 
@@ -1096,7 +1123,7 @@ async def provider_health():
 
 ---
 
-#### TASK 2.6: Update Existing API Endpoints to Use DataRepository
+#### TASK 2.9: Update Existing API Endpoints to Use DataRepository
 
 **Objective**: Update existing `/data/*` endpoints to use DataRepository.
 
@@ -1160,7 +1187,7 @@ async def load_data_deprecated(request: LoadRequest):
 
 ---
 
-#### TASK 2.7: Create New CLI Commands (ktrdr data download)
+#### TASK 2.10: Create New CLI Commands (ktrdr data download)
 
 **Objective**: Create explicit CLI command for data acquisition.
 
@@ -1224,7 +1251,7 @@ def download_data(
 
 ---
 
-#### TASK 2.8: Update Internal Code to Use New Components
+#### TASK 2.11: Update Internal Code to Use New Components
 
 **Objective**: Update all internal code to use DataRepository and DataAcquisitionService.
 
@@ -1254,7 +1281,7 @@ grep -r "DataManager" ktrdr/ --exclude-dir=__pycache__
 
 ---
 
-#### TASK 2.9: Run Phase 2 End-to-End Tests (COMPREHENSIVE)
+#### TASK 2.12: Run Phase 2 End-to-End Tests (COMPREHENSIVE)
 
 **Objective**: **CRITICAL** - Validate ALL scenarios work with new architecture.
 
