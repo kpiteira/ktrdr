@@ -20,7 +20,7 @@ from ktrdr.async_infrastructure.service_adapter import (
     AsyncServiceAdapter,
     HostServiceConfig,
 )
-from ktrdr.data.external_data_interface import (
+from ktrdr.data.acquisition.external_data_interface import (
     DataProviderConnectionError,
 )
 from ktrdr.data.ib_data_adapter import IbDataAdapter

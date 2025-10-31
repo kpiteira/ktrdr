@@ -19,7 +19,7 @@ from typing import Any, Optional
 import pandas as pd
 
 from ktrdr.async_infrastructure.progress import GenericProgressManager
-from ktrdr.data.components.gap_classifier import GapClassification, GapClassifier
+from ktrdr.data.acquisition.gap_classifier import GapClassification, GapClassifier
 from ktrdr.data.loading_modes import DataLoadingMode
 from ktrdr.data.timeframe_constants import TimeframeConstants
 from ktrdr.logging import get_logger

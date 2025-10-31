@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pandas as pd
 
-from ktrdr.data.external_data_interface import (
+from ktrdr.data.acquisition.external_data_interface import (
     DataProviderConnectionError,
     DataProviderDataError,
     DataProviderError,

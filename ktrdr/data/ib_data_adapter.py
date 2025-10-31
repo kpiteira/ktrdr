@@ -21,18 +21,17 @@ from ktrdr.async_infrastructure.service_adapter import (
     AsyncServiceAdapter,
     HostServiceConfig,
 )
-
-# Import IB module components
-from ktrdr.ib import IbDataFetcher, IbErrorClassifier, IbErrorType
-from ktrdr.logging import get_logger
-
-from .external_data_interface import (
+from ktrdr.data.acquisition.external_data_interface import (
     DataProviderConnectionError,
     DataProviderDataError,
     DataProviderError,
     DataProviderRateLimitError,
     ExternalDataProvider,
 )
+
+# Import IB module components
+from ktrdr.ib import IbDataFetcher, IbErrorClassifier, IbErrorType
+from ktrdr.logging import get_logger
 
 # HTTP client for host service communication - Now handled by AsyncServiceAdapter
 HTTPX_AVAILABLE = True  # Assume available since AsyncServiceAdapter handles this

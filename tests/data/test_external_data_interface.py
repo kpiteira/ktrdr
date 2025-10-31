@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
-from ktrdr.data.external_data_interface import (
+from ktrdr.data.acquisition.external_data_interface import (
     DataProviderConfigError,
     DataProviderConnectionError,
     DataProviderDataError,

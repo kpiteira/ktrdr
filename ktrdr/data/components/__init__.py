@@ -1,16 +1,16 @@
 """Data components module."""
 
+from ktrdr.data.acquisition.gap_analyzer import GapAnalyzer
+from ktrdr.data.acquisition.gap_classifier import GapClassifier
+from ktrdr.data.acquisition.segment_manager import SegmentManager
 from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 
 from .data_health_checker import DataHealthChecker
-from .gap_analyzer import GapAnalyzer
-from .gap_classifier import GapClassifier
+from .timeframe_synchronizer import TimeframeSynchronizer
 
 # ProgressManager and ProgressState have been migrated to:
 # - ktrdr.async_infrastructure.progress.GenericProgressManager
 # - ktrdr.async_infrastructure.progress.GenericProgressState
-from .segment_manager import SegmentManager
-from .timeframe_synchronizer import TimeframeSynchronizer
 
 __all__ = [
     "DataHealthChecker",

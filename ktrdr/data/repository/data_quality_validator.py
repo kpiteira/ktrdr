@@ -541,7 +541,7 @@ class DataQualityValidator:
             return
 
         # Use the existing gap classifier for intelligent detection
-        from ktrdr.data.components.gap_classifier import (
+        from ktrdr.data.acquisition.gap_classifier import (
             GapClassification,
             GapClassifier,
         )

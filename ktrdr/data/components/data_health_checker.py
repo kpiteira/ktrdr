@@ -8,7 +8,7 @@ components, extracted to keep DataManager lean and maintain separation of concer
 import os
 from typing import TYPE_CHECKING, Any, Optional
 
-from ktrdr.data.components.gap_classifier import GapClassifier
+from ktrdr.data.acquisition.gap_classifier import GapClassifier
 from ktrdr.data.local_data_loader import LocalDataLoader
 from ktrdr.data.repository.data_quality_validator import DataQualityValidator
 

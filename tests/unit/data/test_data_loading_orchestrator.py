@@ -8,7 +8,7 @@ focusing on the architecture and integration patterns.
 from inspect import signature
 from unittest.mock import Mock
 
-from ktrdr.data.data_loading_orchestrator import DataLoadingOrchestrator
+from ktrdr.data.acquisition.data_loading_orchestrator import DataLoadingOrchestrator
 
 
 class TestDataLoadingOrchestrator:

@@ -124,7 +124,7 @@ def handle_cli_error(e: Exception, verbose: bool = False, quiet: bool = False) -
     # Check for DataProvider exceptions and format them with ServiceErrorFormatter
     # Import here to avoid circular imports
     try:
-        from ktrdr.data.external_data_interface import (
+        from ktrdr.data.acquisition.external_data_interface import (
             DataProviderConfigError,
             DataProviderConnectionError,
         )
