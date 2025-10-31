@@ -967,8 +967,8 @@ RESPONSE=$(curl -s -X POST http://localhost:5001/data/historical \
   -d '{
     "symbol": "EURUSD",
     "timeframe": "1h",
-    "start_date": "2024-12-01T00:00:00",
-    "end_date": "2024-12-31T23:59:59"
+    "start": "2024-12-01T00:00:00",
+    "end": "2024-12-31T23:59:59"
   }')
 
 BARS=$(echo "$RESPONSE" | jq '.bars_count')
@@ -992,18 +992,18 @@ tail -30 ib-host-service/logs/ib-host-service.log | grep -E "historical|download
 - All bars have OHLCV data
 - Duration: 30-90 seconds (varies with IB)
 
-### Actual Results (2025-10-28)
-✅ **PASSED** (after bug fix)
+### Actual Results (2025-10-31)
+✅ **PASSED** - IbDataProvider Validated
 
-**Initial Test**: ⚠️ Found bug (dtype comparison error)
-**Fix Applied**: ✅ 2025-10-28
-**Retest**: ✅ PASSED
+**Latest Test**: 2025-10-31 (Task 3.2: IbDataProvider integration test)
+**Response Time**: 1,334 ms
+**Status**: HTTP 200 OK
 
-**Test Results After Fix**:
+**Test Results**:
 ```json
 {
   "success": true,
-  "rows": 454,
+  "bars_count": 454,
   "error": null
 }
 ```
@@ -1021,17 +1021,24 @@ tail -30 ib-host-service/logs/ib-host-service.log | grep -E "historical|download
 }
 ```
 
-**Bug Found & Fixed**:
-- **Issue**: `TypeError: Invalid comparison between dtype=datetime64[ns, UTC] and datetime`
-- **Location**: `ktrdr/ib/data_fetcher.py:211`
-- **Root Cause**: Type mismatch (pandas DatetimeIndex vs Python datetime)
-- **Fix**: Convert datetime to `pd.Timestamp()` before comparison + normalize naive datetimes to UTC
-- **Details**: See [BUG_ANALYSIS_D2.2.md](BUG_ANALYSIS_D2.2.md)
+**IbDataProvider Validation**:
+- ✅ HTTP-only implementation (no direct IB imports)
+- ✅ 32/32 unit tests passing
+- ✅ Proper ExternalDataProvider interface implementation
+- ✅ AsyncServiceAdapter integration working
+- ✅ Error translation functioning correctly
 
 **Key Validation**:
 - ✅ Endpoint: `POST /data/historical` with fields `start`/`end`
 - ✅ IB Gateway responds (454 bars for Dec 2024 EURUSD 1h)
 - ✅ Data successfully converted to DataFrame
+- ✅ All OHLCV fields present and valid
+
+**Historical Bug (2025-10-28)**:
+- **Issue**: `TypeError: Invalid comparison between dtype=datetime64[ns, UTC] and datetime`
+- **Location**: `ktrdr/ib/data_fetcher.py:211`
+- **Fix**: Convert datetime to `pd.Timestamp()` before comparison + normalize naive datetimes to UTC
+- **Status**: ✅ Fixed and verified
 - ✅ UTC timestamps in ISO format
 - ✅ All OHLCV columns present
 
